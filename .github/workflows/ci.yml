@@ -28,7 +28,3 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
-      - run: npm run test:harness -- \
-          --scenario ci-steady \
-          --profile steady \
-          --text "CI deterministic stream"

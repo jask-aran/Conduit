@@ -45,6 +45,7 @@ const project = (slug) => ({
   id: `project_${slug}`,
   slug,
   path: `/tmp/${slug}`,
+  workingRoot: `/tmp/${slug}`,
   sessionsDir: `/tmp/${slug}/sessions`,
 });
 

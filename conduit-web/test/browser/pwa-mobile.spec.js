@@ -99,8 +99,7 @@ async function overlapWithComposer(page, marker) {
   }, marker);
 }
 
-test("acceptance: mobile chat shell fills the visual viewport", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile-chromium", "phone shell geometry");
+test("acceptance: mobile chat shell fills the visual viewport @mobile", async ({ page }) => {
   await openApp(page);
 
   const shell = page.locator("main.chat-main");
@@ -260,8 +259,7 @@ test("acceptance: header launchers distinguish chat search from the command pale
   await expect(palette).toHaveCount(0);
 });
 
-test("acceptance: mobile header hides identity and groups chat actions in More", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile-chromium", "phone header chrome");
+test("acceptance: mobile header hides identity and groups chat actions in More @mobile", async ({ page }) => {
   await openApp(page);
 
   await expect(page.locator(".chat-header-title")).toBeHidden();
@@ -309,8 +307,7 @@ test("acceptance: mobile header hides identity and groups chat actions in More",
   await expect(page.getByRole("complementary", { name: "Workspace panel" })).toBeHidden();
 });
 
-test("acceptance: update app checks the service worker before reloading", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile-chromium", "phone app update control");
+test("acceptance: update app checks the service worker before reloading @mobile", async ({ page }) => {
   await openApp(page);
 
   const result = await page.evaluate(async () => {
@@ -333,8 +330,7 @@ test("acceptance: update app checks the service worker before reloading", async 
   expect(result).toEqual({ updateCalls: ["update"], reloads: 1 });
 });
 
-test("acceptance: mobile runtime status stays quiet and context metrics live in More", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile-chromium", "phone runtime status rail");
+test("acceptance: mobile runtime status stays quiet and context metrics live in More @mobile", async ({ page }) => {
   await openApp(page);
 
   // "Stays quiet" is the point: the rail is a live region now, not a control.
@@ -358,8 +354,7 @@ test("acceptance: mobile runtime status stays quiet and context metrics live in 
   await expect(menu.locator(".chat-header-menu-context")).toContainText("No context metrics available yet.");
 });
 
-test("acceptance: mobile composer is one row with Plus-owned message options", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile-chromium", "phone composer options");
+test("acceptance: mobile composer is one row with Plus-owned message options @mobile", async ({ page }) => {
   await openApp(page);
 
   const composer = page.locator(".composer");
@@ -405,8 +400,7 @@ test("acceptance: mobile composer is one row with Plus-owned message options", a
   }
 });
 
-test("acceptance: tall narrow command and chat palettes fill the inset mobile frame", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "exact 523px responsive boundary");
+test("acceptance: tall narrow command and chat palettes fill the inset mobile frame @desktop", async ({ page }) => {
   await page.setViewportSize({ width: 523, height: 1100 });
   await openApp(page);
   await page.locator(".palette-trigger").click();
@@ -417,8 +411,7 @@ test("acceptance: tall narrow command and chat palettes fill the inset mobile fr
   await expectInsetPalette(page, palette);
 });
 
-test("acceptance: a narrow desktop window keeps the desktop shell", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "fine-pointer desktop layout");
+test("acceptance: a narrow desktop window keeps the desktop shell @desktop", async ({ page }) => {
   await page.setViewportSize({ width: 523, height: 1_100 });
   await openApp(page);
   expect(await page.evaluate((query) => matchMedia(query).matches, PHONE_LAYOUT_QUERY)).toBe(false);
@@ -439,8 +432,7 @@ test("acceptance: a narrow desktop window keeps the desktop shell", async ({ pag
   await expect(page.locator("html")).not.toHaveAttribute("data-mobile-overlay");
 });
 
-test("acceptance: mobile chat edit footer stays bounded and supports touch actions", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile-chromium", "touch palette actions");
+test("acceptance: mobile chat edit footer stays bounded and supports touch actions @mobile", async ({ page }) => {
   await openApp(page);
   await page.locator(".palette-trigger").tap();
   const palette = page.getByRole("dialog", { name: "Command Palette" });
@@ -480,8 +472,7 @@ test("acceptance: mobile chat edit footer stays bounded and supports touch actio
   await expect(palette).toHaveCount(0);
 });
 
-test("acceptance: mobile sidebar is a full-bleed exclusive overlay", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile-chromium", "phone overlay chrome");
+test("acceptance: mobile sidebar is a full-bleed exclusive overlay @mobile", async ({ page }) => {
   await openApp(page);
   await page.locator(".mobile-sidebar-trigger").click();
   const sidebar = page.locator(".conduit-sidebar");
@@ -494,8 +485,7 @@ test("acceptance: mobile sidebar is a full-bleed exclusive overlay", async ({ pa
   await expect(page.locator("html")).not.toHaveAttribute("data-mobile-overlay", "sidebar");
 });
 
-test("acceptance: mobile workspace is full-bleed and closes via panel X only", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile-chromium", "phone overlay chrome");
+test("acceptance: mobile workspace is full-bleed and closes via panel X only @mobile", async ({ page }) => {
   await openApp(page);
   const panel = page.getByRole("complementary", { name: "Workspace panel" });
   // The phone header carries no panel toggle; the palette command is the way in.
@@ -515,8 +505,7 @@ test("acceptance: mobile workspace is full-bleed and closes via panel X only", a
   await expect(page.getByRole("button", { name: "Toggle workspace panel" })).toHaveCount(0);
 });
 
-test("acceptance: long-press sidebar chat opens a viewport-bounded menu without navigating", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile-chromium", "touch long-press");
+test("acceptance: long-press sidebar chat opens a viewport-bounded menu without navigating @mobile", async ({ page }, testInfo) => {
   await openApp(page);
   await openSidebar(page, testInfo);
   const chat = page.getByRole("button", { name: "Existing chat" });
@@ -543,8 +532,7 @@ test("acceptance: long-press sidebar chat opens a viewport-bounded menu without 
   await expect(menu).toHaveCount(0);
 });
 
-test("acceptance: desktop keeps a docked sidebar and resizable workspace panel", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "desktop layout");
+test("acceptance: desktop keeps a docked sidebar and resizable workspace panel @desktop", async ({ page }) => {
   await openApp(page);
   const sidebar = page.locator('[data-slot="sidebar"]');
   await expect(sidebar).toHaveAttribute("data-state", "expanded");

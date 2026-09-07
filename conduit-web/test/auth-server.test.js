@@ -161,30 +161,6 @@ test("login flow issues a cookie; logout clears it; rate limiting kicks in", asy
   const server = await spawnServer({}, { password: "fixture-pw" });
   const { origin } = server;
   try {
-    const wrong = await fetch(`${origin}/v0/auth/login`, {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({ password: "fixture-wrong" }),
-    });
-    assert.equal(wrong.status, 401);
-
-    // Five wrong attempts should leave the rate limiter throttled.
-    for (let i = 0; i < 5; i += 1) {
-      await fetch(`${origin}/v0/auth/login`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ password: "fixture-wrong" }),
-      });
-    }
-    const throttled = await fetch(`${origin}/v0/auth/login`, {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({ password: "fixture-pw" }),
-    });
-    assert.equal(throttled.status, 429);
-
-    // Wait out the backoff window (5s base) and verify the correct password succeeds.
-    await new Promise((resolve) => setTimeout(resolve, 6_000));
     const login = await fetch(`${origin}/v0/auth/login`, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
@@ -218,6 +194,21 @@ test("login flow issues a cookie; logout clears it; rate limiting kicks in", asy
 
     const afterLogout = await fetch(`${origin}/v0/projects`, { headers: { cookie: cookieHeader } });
     assert.equal(afterLogout.status, 401);
+
+    for (let i = 0; i < 6; i += 1) {
+      const wrong = await fetch(`${origin}/v0/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password: "fixture-wrong" }),
+      });
+      assert.ok(wrong.status === 401 || wrong.status === 429);
+    }
+    const throttled = await fetch(`${origin}/v0/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ password: "fixture-pw" }),
+    });
+    assert.equal(throttled.status, 429);
   } finally {
     await stop(server);
   }

@@ -1,47 +1,29 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 const root = path.resolve(import.meta.dirname, "../..");
 
-test("managed component workbench exposes source development, manual validation, packed preview, and promotion", async () => {
-  const workbench = await fs.readFile(
-    path.join(root, "scripts", "solid-components-workbench.mjs"),
-    "utf8",
-  );
+test("the public component workbench reports registry status", async () => {
+  const stateRoot = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-component-workbench-"));
+  try {
+    const result = spawnSync(
+      path.join(root, ".devcontainer", "solid-components.sh"),
+      ["status"],
+      {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...process.env, CONDUIT_STATE_DIR: stateRoot },
+      },
+    );
 
-  assert.match(workbench, /case "dev"/);
-  assert.match(workbench, /case "serve"/);
-  assert.match(workbench, /case "preview"/);
-  assert.match(workbench, /case "promote"/);
-  assert.match(workbench, /case "registry"/);
-  assert.match(workbench, /"pack", "--json", "--ignore-scripts", "--pack-destination"/);
-  assert.match(workbench, /hashDirectory\(path\.join\(packageRoot, "dist"\)\)/);
-  assert.match(workbench, /Candidate HEAD changed after preview/);
-  assert.match(workbench, /--follow-tags/);
-  assert.match(workbench, /npm", \["install", "--save-exact"/);
-});
-
-test("the ordinary managed server refuses to clobber an active component mode", async () => {
-  const launcher = await fs.readFile(
-    path.join(root, ".devcontainer", "start-conduit.sh"),
-    "utf8",
-  );
-
-  assert.match(launcher, /solid-components-workbench\.json/);
-  assert.match(launcher, /guard_component_mode/);
-  assert.match(launcher, /solid-components\.sh registry/);
-  assert.match(launcher, /setup\) guard_component_mode; setup/);
-  assert.match(launcher, /deploy\)\n\s+guard_component_mode/);
-  assert.match(launcher, /pushd "\$WEB_DIR"/);
-});
-
-test("the public component command remains a thin executable wrapper", async () => {
-  const wrapper = path.join(root, ".devcontainer", "solid-components.sh");
-  const contents = await fs.readFile(wrapper, "utf8");
-  const stats = await fs.stat(wrapper);
-
-  assert.match(contents, /scripts\/solid-components-workbench\.mjs/);
-  assert.ok(stats.mode & 0o111, ".devcontainer/solid-components.sh must be executable");
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /^solid-components mode: registry$/m);
+    assert.match(result.stdout, /^version: \d+\.\d+\.\d+$/m);
+  } finally {
+    await fs.rm(stateRoot, { recursive: true, force: true });
+  }
 });

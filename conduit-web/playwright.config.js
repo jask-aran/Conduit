@@ -11,7 +11,9 @@ const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_SERVER === "1"
 // serialized, in their own pass, and never as part of the default run.
 const setpieces = process.env.CONDUIT_SETPIECES === "1";
 const SETPIECE = /@setpiece/;
-const scope = setpieces ? { grep: SETPIECE } : { grepInvert: SETPIECE };
+const projectScope = (excludedDevice) => setpieces
+  ? { grep: SETPIECE, grepInvert: excludedDevice }
+  : { grepInvert: [SETPIECE, excludedDevice] };
 
 export default defineConfig({
   testDir: "./test/browser",
@@ -42,8 +44,8 @@ export default defineConfig({
     video: "off",
   },
   projects: [
-    { name: "desktop-chromium", ...scope, use: { ...devices["Desktop Chrome"] } },
-    { name: "mobile-chromium", ...scope, use: { ...devices["Pixel 7"] } },
+    { name: "desktop-chromium", ...projectScope(/@mobile/), use: { ...devices["Desktop Chrome"] } },
+    { name: "mobile-chromium", ...projectScope(/@desktop/), use: { ...devices["Pixel 7"] } },
   ],
   webServer: {
     command: "npx vite --host 127.0.0.1 --port 4173",

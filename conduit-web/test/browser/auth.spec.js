@@ -118,8 +118,7 @@ test("unauthenticated visit lands on /login; wrong password surfaces an error", 
   await expect(page.getByRole("alert")).toContainText(/Incorrect password/);
 });
 
-test("correct password reaches the app, reload stays authenticated, logout returns to /login", async ({ page, server, isMobile }) => {
-  test.skip(isMobile, "sidebar footer is rendered behind the mobile sheet; covered by the desktop run");
+test("correct password reaches the app, reload stays authenticated, logout returns to /login @desktop", async ({ page, server }) => {
   await page.goto(server.origin, { waitUntil: "domcontentloaded" });
   await page.getByLabel("Password").fill("fixture-pw");
   await page.getByRole("button", { name: "Sign in" }).click();
@@ -138,4 +137,3 @@ test("correct password reaches the app, reload stays authenticated, logout retur
   await page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login$/);
 });
-

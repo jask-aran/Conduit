@@ -45,10 +45,10 @@ test("chat search sorts by latest activity by default and by created when asked"
     id: "project_chat", slug: "chat", name: "Chats",
     sessions: [{
       id: "older-active", projectId: "project_chat", status: "active", title: "Older",
-      createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-08-01T00:00:00.000Z",
+      createdAt: "2026-01-01T00:00:00.000Z", lastMessageAt: "2026-08-01T00:00:00.000Z",
     }, {
       id: "newer-quiet", projectId: "project_chat", status: "active", title: "Newer",
-      createdAt: "2026-07-01T00:00:00.000Z", updatedAt: "2026-07-01T00:00:00.000Z",
+      createdAt: "2026-07-01T00:00:00.000Z", lastMessageAt: "2026-07-01T00:00:00.000Z",
     }],
   }];
   const latest = resolvePaletteCommands(context(projects), { page: "chat-search" })
