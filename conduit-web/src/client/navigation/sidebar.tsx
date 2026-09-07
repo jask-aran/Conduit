@@ -62,7 +62,7 @@ import type { Pty } from "../remotes/terminal-pane";
 import type { RuntimeStore } from "../state/runtime";
 import { focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, restoreFocus } from "./mobile-layout";
 import { ProjectActivityIndicator, RuntimeIndicator } from "./runtime-indicator";
-import { dispatchPanelGeometryMotion, PANEL_MOTION_DURATION_MS } from "../panel-motion";
+import { dispatchPanelGeometryMotion } from "../panel-motion";
 import { compareChatsBySort, sortChats, useChatSort } from "../preferences/chat-sort";
 import { publishUiPreference, UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
@@ -207,6 +207,7 @@ export function Sidebar(props: {
   let sidebarMotionId = 0;
   let sidebarEdgeMotionId: number | null = null;
   let sidebarEdgeRaf = 0;
+  let finishSidebarMotion: (() => void) | null = null;
   let mobileReturnFocus: HTMLElement | null = null;
   let mobileWasOpen = false;
   const cancelSidebarEdgeMotion = () => {
@@ -216,6 +217,7 @@ export function Sidebar(props: {
     }
     const id = sidebarEdgeMotionId;
     sidebarEdgeMotionId = null;
+    finishSidebarMotion = null;
     sidebarRoot?.removeAttribute("data-edge-instant");
     if (id != null) dispatchPanelGeometryMotion({ phase: "end", id, source: "sidebar", size: shellWidth() });
   };
@@ -259,7 +261,6 @@ export function Sidebar(props: {
       size: startWidth,
     });
     setShellWidth(targetWidth);
-    const startedAt = performance.now();
     const sampleEdge = () => {
       if (!sidebarRoot || sidebarMotionId !== id || sidebarEdgeMotionId !== id) return;
       dispatchPanelGeometryMotion({
@@ -268,12 +269,14 @@ export function Sidebar(props: {
         source: "sidebar",
         size: sidebarRoot.getBoundingClientRect().width,
       });
-      if (performance.now() - startedAt < PANEL_MOTION_DURATION_MS) {
-        sidebarEdgeRaf = requestAnimationFrame(sampleEdge);
-        return;
-      }
+      sidebarEdgeRaf = requestAnimationFrame(sampleEdge);
+    };
+    finishSidebarMotion = () => {
+      if (sidebarEdgeMotionId !== id) return;
+      if (sidebarEdgeRaf) cancelAnimationFrame(sidebarEdgeRaf);
       sidebarEdgeRaf = 0;
       sidebarEdgeMotionId = null;
+      finishSidebarMotion = null;
       setVisualCollapsed(nextCollapsed);
       dispatchPanelGeometryMotion({ phase: "end", id, source: "sidebar", size: targetWidth });
     };
@@ -957,7 +960,7 @@ export function Sidebar(props: {
     <Show when={props.mobileOpen}>
       <button type="button" class="mobile-panel-backdrop" data-mobile-backdrop="sidebar" data-for="sidebar" aria-label="Dismiss sidebar" onClick={closeMobile} />
     </Show>
-    <aside ref={sidebarRoot} data-slot="sidebar" data-state={phoneLayout() ? "expanded" : collapsed() ? "collapsed" : "expanded"} data-visual-state={phoneLayout() ? "expanded" : visualCollapsed() ? "collapsed" : "expanded"} data-mobile-open={props.mobileOpen} class="conduit-sidebar" style={{ width: phoneLayout() ? undefined : `${shellWidth()}px` }} aria-hidden={phoneLayout() && !props.mobileOpen ? true : undefined} inert={phoneLayout() && !props.mobileOpen ? true : undefined}>
+    <aside ref={sidebarRoot} data-slot="sidebar" data-state={phoneLayout() ? "expanded" : collapsed() ? "collapsed" : "expanded"} data-visual-state={phoneLayout() ? "expanded" : visualCollapsed() ? "collapsed" : "expanded"} data-mobile-open={props.mobileOpen} class="conduit-sidebar" style={{ width: phoneLayout() ? undefined : `${shellWidth()}px` }} aria-hidden={phoneLayout() && !props.mobileOpen ? true : undefined} inert={phoneLayout() && !props.mobileOpen ? true : undefined} onTransitionEnd={(event) => { if (event.target === sidebarRoot && event.propertyName === "width") finishSidebarMotion?.(); }} onTransitionCancel={(event) => { if (event.target === sidebarRoot && event.propertyName === "width") finishSidebarMotion?.(); }}>
       <div ref={sidebarSurface} data-slot="sidebar-container" class="sidebar-container">
         <div data-sidebar="header">
           <Button variant="ghost" size="icon-sm" data-sidebar="trigger" aria-label="Toggle Sidebar" aria-expanded={isMobileLayout() ? props.mobileOpen : !collapsed()} onClick={onSidebarTrigger}><PanelLeftIcon /></Button>

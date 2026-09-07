@@ -1312,22 +1312,6 @@ test("rapid panel reversals continue from rendered geometry and release transcri
     };
     requestAnimationFrame(frame);
   }), { targetSelector: selector, targetEdge: edge, frameCount: count });
-  const sampleTransforms = (selector, count) => page.evaluate(({ targetSelector, frameCount }) => new Promise((resolve, reject) => {
-    const target = document.querySelector(targetSelector);
-    if (!target) {
-      reject(new Error(`Missing motion target: ${targetSelector}`));
-      return;
-    }
-    const samples = [];
-    const frame = () => {
-      const transform = getComputedStyle(target).transform;
-      samples.push(transform === "none" ? 0 : new DOMMatrixReadOnly(transform).m41);
-      if (samples.length === frameCount) resolve(samples);
-      else requestAnimationFrame(frame);
-    };
-    requestAnimationFrame(frame);
-  }), { targetSelector: selector, frameCount: count });
-
   await expect(page.locator(".thread")).toBeVisible();
   await expect(workspace).toBeAttached();
   await sidebarTrigger.evaluate((element) => element.click());
@@ -1348,19 +1332,14 @@ test("rapid panel reversals continue from rendered geometry and release transcri
 
   await page.getByRole("button", { name: "Toggle workspace panel" }).evaluate((element) => element.click());
   await waitFrames(3);
-  const workspaceMid = await page.evaluate(() => {
-    const surface = document.querySelector(".workspace-panel-surface");
-    if (!surface) return 0;
-    const transform = getComputedStyle(surface).transform;
-    return transform === "none" ? 0 : new DOMMatrixReadOnly(transform).m41;
-  });
+  const workspaceMid = await workspace.evaluate((element) => element.getBoundingClientRect().width);
   expect(workspaceMid).toBeGreaterThan(0);
   expect(workspaceMid).toBeLessThan(420);
   await workspace.getByRole("button", { name: "Close workspace panel" }).evaluate((element) => element.click());
-  const workspaceReverse = await sampleTransforms(".workspace-panel-surface", 8);
+  const workspaceReverse = await sampleEdges(".workspace-panel", "width", 8);
   expect(workspaceReverse[0]).toBeGreaterThan(0);
   expect(workspaceReverse.every((value, index) =>
-    index === 0 || value + 0.5 >= workspaceReverse[index - 1])).toBe(true);
+    index === 0 || value <= workspaceReverse[index - 1] + 0.5)).toBe(true);
   await expect(workspace).toHaveAttribute("aria-hidden", "true");
   await expect.poll(async () => Math.round((await workspace.boundingBox())?.width || 0)).toBe(0);
   await expect.poll(() => transcriptShell.evaluate((element) =>

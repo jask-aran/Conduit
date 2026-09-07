@@ -12,10 +12,9 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-panel-header strong { font-size: 11.2px; }
 .chat-main { flex: 1 1 auto; min-width: 0; }
 .chat-main.workspace-expanded { margin-inline: 0; pointer-events: none; }
-.workspace-panel.workspace-panel-expanded { width: calc(100% - 8px) !important; }
-/* Match the shell during expansion; retain the fixed surface for open/close. */
-.workspace-panel-expanded .workspace-panel-surface { inset: 0; width: auto; }
-.workspace-layout { overflow: hidden; }
+.workspace-layout { position: relative; overflow: hidden; container-type: inline-size; }
+.workspace-panel-surface { right: 0; left: auto; width: 100%; transition: width 260ms var(--panel-motion-easing); }
+.workspace-panel-expanded .workspace-panel-surface { width: calc(100cqw - 8px); }
 .workspace-panel-expanded .workspace-resize-handle { display: none; }
 .workspace-panel-tabs-space { display: flex; min-width: 0; flex: 1; justify-content: flex-end; overflow: hidden; }
 .workspace-panel-tabs { display: flex; width: max-content; flex: none; }

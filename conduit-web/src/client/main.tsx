@@ -432,24 +432,11 @@ function App() {
   const [dropActive, setDropActive] = createSignal(false);
   const [panelOpen, setPanelOpen] = createSignal(false);
   const [workspaceExpanded, setWorkspaceExpandedState] = createSignal(false);
-  const releaseExpansionWidth = () => {
-    if (!workspaceExpanded()) document.querySelector<HTMLElement>(".transcript-motion-shell")?.style.removeProperty("--workspace-transcript-width");
-  };
   const setWorkspaceExpanded = (next: boolean, persist = true) => {
     const scope = workspacePanelScope();
     if (persist && scope) writeSetting(scope, "expanded", String(next));
     if (next === workspaceExpanded()) return;
-    if (next && !isMobileLayout()) {
-      const shell = document.querySelector<HTMLElement>(".transcript-motion-shell");
-      if (shell && !shell.style.getPropertyValue("--workspace-transcript-width")) {
-        shell.style.setProperty("--workspace-transcript-width", `${shell.getBoundingClientRect().width}px`);
-      }
-    }
     setWorkspaceExpandedState(next);
-    requestAnimationFrame(() => {
-      // Instant geometry changes (close, reduced motion) have no transitionend.
-      if (!document.querySelector(".workspace-panel")?.getAnimations().length) releaseExpansionWidth();
-    });
   };
   const [workspaceViewRequest, setWorkspaceViewRequest] = createSignal<{ tab: WorkspaceView; terminalId?: string; nonce: number } | null>(null);
   const [workspaceFocusRequest, setWorkspaceFocusRequest] = createSignal(0);
@@ -463,7 +450,10 @@ function App() {
     initialComputerRoute ? "computer" : initialTerminalRoute ? "terminal" : initialDashboardRoute ? "dashboard" : initialProjectRouteId ? "project" : "chat",
   );
   const [terminalRouteId, setTerminalRouteId] = createSignal<string>();
-  const workspacePanelScope = createMemo(() => routeKind() === "computer" ? "computer" : catalogue.projectId() ? `project:${catalogue.projectId()}` : null);
+  const [terminalCanReturn, setTerminalCanReturn] = createSignal(false);
+  const workspacePanelScope = createMemo(() => routeKind() === "computer" ? "computer"
+    : ["chat", "project", "dashboard"].includes(routeKind()) && catalogue.projectId() ? `project:${catalogue.projectId()}`
+      : null);
   const [routeBootstrap, setRouteBootstrap] = createSignal<"loading" | "ready" | "error">("loading");
   const [routeBootstrapError, setRouteBootstrapError] = createSignal("");
   let dragDepth = 0;
@@ -905,7 +895,7 @@ function App() {
   };
 
   const openTerminalRoute = (historyMode: "push" | "replace" | "none" = "push", terminalId?: string) => {
-    setPanelOpenForChat(false);
+    if (historyMode !== "none" && routeKind() !== "terminal") setTerminalCanReturn(true);
     setMobileSidebarOpen(false);
     setRouteKind("terminal");
     setTerminalRouteId(terminalId);
@@ -913,6 +903,10 @@ function App() {
     setRouteBootstrap("ready");
     if (historyMode === "push") history.pushState({}, "", "/terminal");
     else if (historyMode === "replace") history.replaceState({}, "", "/terminal");
+  };
+  const leaveTerminalRoute = () => {
+    if (terminalCanReturn()) history.back();
+    else openComputer();
   };
 
   askRuntimeForError = async (diagnostic) => {
@@ -1762,9 +1756,7 @@ function App() {
       onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating()}
       onChangeServer={nativeApp ? () => { void clearNativeBearerToken().finally(() => { clearServerOrigin(); location.reload(); }); } : undefined}
       onLogout={() => void logout()} />
-    <div class="workspace-layout" onTransitionEnd={(event) => {
-      if (event.propertyName === "width" && event.target instanceof HTMLElement && event.target.classList.contains("workspace-panel")) releaseExpansionWidth();
-    }}>
+    <div class="workspace-layout">
     <main data-slot="sidebar-inset" data-shortcut-scope="chat" tabIndex={-1} onPointerDown={focusChatSurface} class={`chat-main${routeKind() === "chat" && emptyChat() ? " chat-main-empty" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
@@ -1910,7 +1902,7 @@ function App() {
     </div>
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>
-      <TerminalRoute terminalId={terminalRouteId()} onOpenConduit={() => openComputer()} />
+      <TerminalRoute terminalId={terminalRouteId()} onOpenConduit={leaveTerminalRoute} />
     </Show>
     <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} onPageChange={setPalettePage} initialPage={palettePage()} initialQuery={paletteInitialQuery()} launchNonce={paletteNonce()} directLaunch={paletteDirectLaunch()}
       context={paletteContext()} actions={paletteActions} onChooseModel={(spec) => void models.chooseModel(spec)} scopeModels={models.allModels()} enabledModelSpecs={models.enabledModels()} onToggleModelScope={(spec) => { const enabled = models.enabledModels(); void models.saveScope(enabled.includes(spec) ? enabled.filter((item) => item !== spec) : [...enabled, spec]); }} shortcuts={shortcutManager} />

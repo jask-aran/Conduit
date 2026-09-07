@@ -20,7 +20,7 @@ export function mountTranscriptPanelMotion(
   const activeIds = new Map<PanelGeometryMotionSource, number>();
   // Edge motions (resize + open/close shell easing) pin a preview width so the
   // heavy transcript does not take natural flex width on every frame.
-  const edgeStarts = new Map<PanelGeometryMotionSource, { size: number; width: number; shift: number }>();
+  const edgeStarts = new Map<PanelGeometryMotionSource, { size: number; width: number; contentWidth: number; gutter: number; canTranslate: boolean; shift: number }>();
   let transformSource: PanelGeometryMotionSource | null = null;
   const panelMotionMode = usePanelMotion();
 
@@ -93,10 +93,16 @@ export function mountTranscriptPanelMotion(
       }
       transformSource = null;
       const width = transcript.clientWidth;
+      const thread = transcript.querySelector<HTMLElement>(".thread");
+      const contentWidth = thread?.getBoundingClientRect().width || width;
+      const gutter = thread ? Number.parseFloat(getComputedStyle(thread).getPropertyValue("--transcript-column-gutter")) || 0 : 0;
       motionShell.style.width = `${width}px`;
       edgeStarts.set(detail.source, {
         size: detail.size,
         width,
+        contentWidth,
+        gutter,
+        canTranslate: contentWidth + gutter < width - 1,
         shift: 0,
       });
       transcript.dataset.panelMotion = "edge";
@@ -108,22 +114,19 @@ export function mountTranscriptPanelMotion(
       const start = edgeStarts.get(detail.source);
       if (!start) return;
       const delta = detail.size - start.size;
-      if (detail.source !== "workspace" || panelMotionMode() === "reflow") {
-        // The sidebar eases over a fixed distance, so it keeps taking real
-        // width: the transcript is meant to fill the space as the rail
-        // collapses, and freezing it leaves the thread visually static for the
-        // whole animation.
-        motionShell.style.width = `${Math.max(0, start.width - delta)}px`;
+      const availableWidth = Math.max(0, start.width - delta);
+      if (panelMotionMode() === "reflow" || !start.canTranslate) {
+        start.shift = 0;
+        motionShell.style.width = `${availableWidth}px`;
+        let shift = 0;
+        for (const entry of edgeStarts.values()) shift += entry.shift;
+        setTransform(shift);
         return;
       }
-      // A pointer drag is unbounded and commits a new width every frame. Every
-      // one of those re-laid out the whole transcript, and a long answer is
-      // many independent layout roots -- each Incremark message root, each
-      // scrolling KaTeX block, each code card. Measured on a 143Hz display
-      // against a formula-heavy answer that was 20.8ms a frame, every frame
-      // over budget. The shell keeps its width and moves on the compositor
-      // instead; the real width is committed once, on release. The "reflow"
-      // panel-motion preference opts back into taking real width every frame.
+      // Keep the transcript at its settled shape while a panel edge moves.
+      // The compositor follows the changing center, then one final layout
+      // commit adopts the target width. The "reflow" preference opts back
+      // into taking real width every frame.
       start.shift = -delta / 2;
       let shift = 0;
       for (const entry of edgeStarts.values()) shift += entry.shift;
