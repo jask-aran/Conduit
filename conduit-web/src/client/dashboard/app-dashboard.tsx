@@ -55,8 +55,6 @@ export function AppDashboard(props: {
   onOpenTerminal: (terminal: Pty) => void;
   onOpenTerminalMaximized: (terminal: Pty) => void;
   onPrefetchTerminal: () => void;
-  onOpenTerminalView: () => void;
-  onPrefetchTerminalView: () => void;
   onSearchChats: (scope: "unscoped" | "all") => void;
 }) {
   const [terminals, setTerminals] = createSignal<Pty[]>([]);
@@ -115,11 +113,6 @@ export function AppDashboard(props: {
       <div class="app-dashboard-composer-slot">{props.composer}</div>
       <aside class="app-dashboard-quick-actions" aria-label="Quick actions">
         <span>Quick actions</span>
-        <button type="button" onPointerEnter={props.onPrefetchTerminalView} onFocus={props.onPrefetchTerminalView} onClick={props.onOpenTerminalView}>
-          <TerminalIcon />
-          <strong>Terminal View</strong>
-          <ArrowRightIcon />
-        </button>
         <button type="button" onClick={() => props.onSearchChats("unscoped")}>
           <SearchIcon />
           <strong>Search chats</strong>

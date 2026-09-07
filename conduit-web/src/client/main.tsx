@@ -111,7 +111,6 @@ const ProjectDashboard = lazy(() => import("./project/dashboard"));
 const TerminalRoute = lazy(() => import("./remotes/terminal-route").then((module) => ({ default: module.TerminalRoute })));
 const Settings = lazy(() => import("./settings/settings").then((module) => ({ default: module.Settings })));
 const prefetchProjectDashboard = (project: Project) => void import("./project/dashboard").then((module) => module.prefetchProjectDashboard(project)).catch(() => {});
-const prefetchTerminalRoute = () => void import("./remotes/terminal-route");
 const prefetchWorkspaceTerminal = () => void import("./workspace/workspace-panel");
 
 function NativeServerSetup(props: { onAuthenticated: () => void }) {
@@ -463,6 +462,7 @@ function App() {
   const [routeKind, setRouteKind] = createSignal<"chat" | "project" | "dashboard" | "terminal" | "computer">(
     initialComputerRoute ? "computer" : initialTerminalRoute ? "terminal" : initialDashboardRoute ? "dashboard" : initialProjectRouteId ? "project" : "chat",
   );
+  const [terminalRouteId, setTerminalRouteId] = createSignal<string>();
   const workspacePanelScope = createMemo(() => routeKind() === "computer" ? "computer" : catalogue.projectId() ? `project:${catalogue.projectId()}` : null);
   const [routeBootstrap, setRouteBootstrap] = createSignal<"loading" | "ready" | "error">("loading");
   const [routeBootstrapError, setRouteBootstrapError] = createSignal("");
@@ -901,10 +901,11 @@ function App() {
     if (historyMode === "push") history.pushState({}, "", "/computer");
   };
 
-  const openTerminalRoute = (historyMode: "push" | "replace" | "none" = "push") => {
+  const openTerminalRoute = (historyMode: "push" | "replace" | "none" = "push", terminalId?: string) => {
     setPanelOpenForChat(false);
     setMobileSidebarOpen(false);
     setRouteKind("terminal");
+    setTerminalRouteId(terminalId);
     setRouteBootstrapError("");
     setRouteBootstrap("ready");
     if (historyMode === "push") history.pushState({}, "", "/terminal");
@@ -1713,7 +1714,7 @@ function App() {
       </DialogContent>
     </Dialog>
     <Show when={routeKind() !== "terminal"}>
-    <Sidebar projects={catalogue.projects()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} dashboard={routeKind() === "dashboard"} computer={routeKind() === "computer"} runtime={runtime} chatLimit={sidebarChatLimit()}
+    <Sidebar projects={catalogue.projects()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} dashboard={routeKind() === "dashboard"} computer={routeKind() === "computer"} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
@@ -1724,6 +1725,10 @@ function App() {
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
       onOpenTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
       onOpenPty={(terminal) => {
+        if (terminal.projectId.startsWith("computer:")) {
+          openTerminalRoute("push", terminal.id);
+          return;
+        }
         if ((terminal.projectId === "computer" || terminal.projectId.startsWith("computer:")) && terminal.cwd) {
           openComputer();
           void browseComputer(terminal.cwd).then(() => openWorkspaceView("terminal", terminal.id));
@@ -1736,6 +1741,7 @@ function App() {
         });
       }}
       onOpenComputer={() => openComputer()}
+      onOpenTerminalView={() => openTerminalRoute()}
       onOpenDashboard={() => openDashboard()}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
       onChangeServer={nativeApp ? () => { void clearNativeBearerToken().finally(() => { clearServerOrigin(); location.reload(); }); } : undefined}
@@ -1787,8 +1793,6 @@ function App() {
             onOpenWorkspaceIdentity={openWorkspaceIdentity}
             onOpenWorkspaceSettings={(project) => openSettings("workspaces", project.id)}
             onMoveProjectChats={(source, target) => void moveProjectChats(source, target)}
-            onPrefetchTerminalView={prefetchTerminalRoute}
-            onOpenTerminalView={() => openTerminalRoute()}
             onOpenChatTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
             onSearchChats={(scope) => openPalette("chat-search", scope === "unscoped" ? "scope:chats " : "", true)}
             onOpenTerminal={(terminal) => {
@@ -1822,7 +1826,7 @@ function App() {
         </Show>
         <Show when={routeKind() === "computer"}>
           <ChatHeader title="Computer" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard />
-          <ComputerDashboard projects={catalogue.projects()} location={computerLocation()} loading={computerLoading()} error={computerError()} onBrowse={(path) => void browseComputer(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => void designateComputerWorkspace()} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProject(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={(path) => { setComputerFile({ path }); openWorkspaceView("files"); }} />
+          <ComputerDashboard projects={catalogue.projects()} location={computerLocation()} loading={computerLoading()} error={computerError()} onBrowse={(path) => void browseComputer(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => void designateComputerWorkspace()} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProject(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={(path) => { setComputerFile({ path }); openWorkspaceView("files"); }} />
         </Show>
         <Show when={routeKind() !== "dashboard" && routeKind() !== "computer"}>
         <Show when={routeKind() === "chat" && meteorField()}>
@@ -1890,7 +1894,7 @@ function App() {
     </div>
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>
-      <TerminalRoute onOpenConduit={() => openDashboard()} />
+      <TerminalRoute terminalId={terminalRouteId()} onOpenConduit={() => openComputer()} />
     </Show>
     <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} onPageChange={setPalettePage} initialPage={palettePage()} initialQuery={paletteInitialQuery()} launchNonce={paletteNonce()} directLaunch={paletteDirectLaunch()}
       context={paletteContext()} actions={paletteActions} onChooseModel={(spec) => void models.chooseModel(spec)} scopeModels={models.allModels()} enabledModelSpecs={models.enabledModels()} onToggleModelScope={(spec) => { const enabled = models.enabledModels(); void models.saveScope(enabled.includes(spec) ? enabled.filter((item) => item !== spec) : [...enabled, spec]); }} shortcuts={shortcutManager} />
