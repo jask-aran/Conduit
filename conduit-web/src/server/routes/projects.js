@@ -119,7 +119,7 @@ export function registerProjectRoutes(app, {
       findComputerGitRoot(project.workingRoot),
       listWorkspaceDirectory(project.workingRoot),
     ]);
-    return { project, home: os.homedir(), parent: path.dirname(project.workingRoot), repository: Boolean(gitRoot), listing };
+    return { project, home: os.homedir(), parent: path.dirname(project.workingRoot), repository: Boolean(gitRoot), repositoryRoot: gitRoot, listing };
   };
   app.get("/v0/computer", async (request, response, next) => {
     try {

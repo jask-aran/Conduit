@@ -433,6 +433,13 @@ svg { stroke-width: 1.5; }
 .conduit-modal[data-state="closed"], .settings-dialog[data-state="closed"], .command-dialog[data-state="closed"], .external-link-dialog[data-state="closed"] { opacity: 0; visibility: hidden; pointer-events: none; transition-delay: 0s, 220ms; }
 .conduit-modal-card, .external-link-dialog-card { width: min(384px, 100%); max-height: calc(100dvh - 25.6px); overflow: auto; padding: 16px; border: 0.8px solid var(--border); border-radius: 9.6px; background: var(--background); box-shadow: 0 19.2px 56px rgb(0 0 0 / 35%); }
 .conduit-modal-card h2, .external-link-dialog-card h2 { margin: 0 0 4px; font-size: 15.2px; }
+.workspace-add-dialog { position: relative; width: min(1040px, calc(100vw - 32px)); }
+.workspace-add-dialog-explore { overflow: hidden; padding: 0; }
+.conduit-modal-close { position: absolute !important; top: 8px; right: 8px; z-index: 10; display: grid; width: 36px !important; height: 36px !important; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted-foreground); cursor: pointer; }
+.conduit-modal-close:hover { background: var(--accent); color: var(--foreground); }
+.conduit-modal-close svg { width: 15px; height: 15px; }
+.workspace-add-dialog-explore > h2 { margin: 0; padding: 14px 52px 10px 16px; border-bottom: 1px solid var(--border); }
+.workspace-add-dialog-explore > form, .workspace-add-dialog-explore > form > [data-slot="field-group"] { display: contents; }
 .external-link-url { display: block; max-height: 8rem; margin: 9.6px 0; overflow: auto; border-radius: 4.8px; background: var(--muted); padding: 8px; overflow-wrap: anywhere; }
 .conduit-modal select, .settings-content select, .workspace-settings-card [role="combobox"] { width: 100%; min-height: 28.8px; border: 0.8px solid var(--border); border-radius: 5.6px; background: var(--background); padding: 5.6px 7.2px; color: inherit; text-align: left; }
 .workspace-mode-picker { display: grid; gap: 5.6px; }
@@ -1237,12 +1244,22 @@ svg { stroke-width: 1.5; }
 .workspace-mode-picker small, .workspace-path-preview small { color: var(--muted-foreground); font-size: 12px; line-height: 1.35; }
 .workspace-path-preview { display: grid; gap: 4px; border-left: 2px solid var(--primary); background: var(--muted); padding: 9px 10px; }
 .workspace-path-preview strong { overflow-wrap: anywhere; font: 12px/1.35 ui-monospace, monospace; }
-.computer-workspace-picker { display: grid; width: 100%; min-height: 54px; grid-template-columns: 20px minmax(0, 1fr) 14px; align-items: center; gap: 10px; border: 1px solid color-mix(in oklch, var(--primary), var(--border) 55%); border-radius: 9px; background: color-mix(in oklch, var(--primary), var(--background) 94%); padding: 8px 10px; color: inherit; text-align: left; }
-.computer-workspace-picker:hover:not(:disabled) { background: color-mix(in oklch, var(--primary), var(--background) 90%); }
-.computer-workspace-picker > svg { width: 15px; height: 15px; color: var(--primary); }
-.computer-workspace-picker > span { display: grid; min-width: 0; gap: 2px; }
-.computer-workspace-picker strong { font-size: 12px; }
-.computer-workspace-picker small { color: var(--muted-foreground); font-size: 10px; }
+.workspace-add-dialog { width: min(1040px, calc(100vw - 32px)); }
+.workspace-add-dialog-explore { overflow: hidden; padding: 0; }
+.workspace-add-dialog { position: relative; }
+.conduit-modal-close { position: absolute !important; top: 8px; right: 8px; z-index: 10; display: grid; width: 36px !important; height: 36px !important; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted-foreground); cursor: pointer; }
+.conduit-modal-close:hover { background: var(--accent); color: var(--foreground); }
+.conduit-modal-close svg { width: 15px; height: 15px; }
+.workspace-add-dialog-explore > h2 { margin: 0; padding: 14px 52px 10px 16px; border-bottom: 1px solid var(--border); }
+.workspace-add-dialog-explore > form, .workspace-add-dialog-explore > form > [data-slot="field-group"] { display: contents; }
+@media (max-width: 640px) {
+  .conduit-modal:has(.workspace-add-dialog) { display: flex; align-items: stretch; justify-content: stretch; height: var(--app-height, 100dvh); padding: 4px; }
+  .workspace-add-dialog { width: 100%; height: 100%; max-height: none; border-radius: 12px; }
+  .workspace-add-dialog-explore { height: 100%; }
+  .workspace-add-dialog .conduit-modal-close { top: 7px; right: 7px; width: 44px !important; height: 44px !important; }
+  .workspace-add-dialog .conduit-modal-close svg { width: 20px; height: 20px; }
+  .workspace-add-dialog-explore > h2 { min-height: 52px; padding: 14px 58px 11px 16px; font-size: 20px; }
+}
 .workspace-path-hint { margin: -2px 0 0; color: var(--muted-foreground); font-size: 12px; line-height: 1.4; }
 .workspace-preview-error { margin: 0; color: var(--destructive); font-size: 13px; }
 
