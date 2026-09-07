@@ -962,32 +962,9 @@ export function Sidebar(props: {
         </div>
         <div data-sidebar="content" class="sidebar-content">
           <div data-sidebar="rail-actions" class="sidebar-rail-actions" aria-label="Quick navigation">
-            <RailAction label="Conduit Dashboard" current={props.dashboard} onClick={() => { closeMobile(); props.onOpenDashboard(); }}><LayoutDashboardIcon /></RailAction>
-            <div data-sidebar="rail-section" data-sidebar-section="chats" class="sidebar-rail-section">
-              <RailAction label="New chat" onClick={() => startNewChat()}><MessageSquarePlusIcon /></RailAction>
-              <For each={railChats()}>{(item) => <RailAction
-                label={`Chat: ${chatTitle(item.chat)}`}
-                current={props.selectedId === item.chat.id}
-                live={Boolean(processFor(item.chat))}
-                onClick={() => { closeMobile(); void props.onOpenChat(item.chat, item.project); }}
-              ><MessageSquareIcon /></RailAction>}</For>
-            </div>
-            <Show when={railFolders().length}>
-              <div data-sidebar="rail-divider" aria-hidden="true" />
-              <div data-sidebar="rail-section" data-sidebar-section="projects" class="sidebar-rail-section">
-                <For each={railFolders()}>{(project) => <RailAction
-                  label={`Project: ${project.name}`}
-                  current={railProjectIsActive(project)}
-                  live={railProjectIsLive(project)}
-                  onClick={() => { closeMobile(); void props.onOpenProject(project); }}
-                ><FolderIcon /></RailAction>}</For>
-              </div>
-            </Show>
-            <div data-sidebar="rail-divider" aria-hidden="true" />
             <RailAction label="Computer" current={props.computer} onClick={() => { closeMobile(); props.onOpenComputer(); }}><MonitorIcon /></RailAction>
             <RailAction label="Terminal View" current={props.terminal} onClick={() => { closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /></RailAction>
             <Show when={railWorkspaces().length}>
-              <div data-sidebar="rail-divider" aria-hidden="true" />
               <div data-sidebar="rail-section" data-sidebar-section="workspaces" class="sidebar-rail-section">
                 <For each={railWorkspaces()}>{(project) => <RailAction
                   label={project.name}
@@ -997,8 +974,38 @@ export function Sidebar(props: {
                 ><WorkspaceGlyph appearance={project.workspaceAppearance} /></RailAction>}</For>
               </div>
             </Show>
+            <div data-sidebar="rail-divider" aria-hidden="true" />
+            <RailAction label="Conduit Dashboard" current={props.dashboard} onClick={() => { closeMobile(); props.onOpenDashboard(); }}><LayoutDashboardIcon /></RailAction>
+            <Show when={railFolders().length}>
+              <div data-sidebar="rail-section" data-sidebar-section="projects" class="sidebar-rail-section">
+                <For each={railFolders()}>{(project) => <RailAction
+                  label={`Project: ${project.name}`}
+                  current={railProjectIsActive(project)}
+                  live={railProjectIsLive(project)}
+                  onClick={() => { closeMobile(); void props.onOpenProject(project); }}
+                ><FolderIcon /></RailAction>}</For>
+              </div>
+            </Show>
+            <div data-sidebar="rail-section" data-sidebar-section="chats" class="sidebar-rail-section">
+              <RailAction label="New chat" onClick={() => startNewChat()}><MessageSquarePlusIcon /></RailAction>
+              <For each={railChats()}>{(item) => <RailAction
+                label={`Chat: ${chatTitle(item.chat)}`}
+                current={props.selectedId === item.chat.id}
+                live={Boolean(processFor(item.chat))}
+                onClick={() => { closeMobile(); void props.onOpenChat(item.chat, item.project); }}
+              ><MessageSquareIcon /></RailAction>}</For>
+            </div>
           </div>
-          <div class="sidebar-area-label">Conduit App</div>
+          <div class="sidebar-area-label">Computer</div>
+          <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.computer ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenComputer(); }}><MonitorIcon /><span>Files</span></button>
+          <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.terminal ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /><span>Terminal View</span><ExternalLinkIcon class="sidebar-route-indicator" /></button>
+          <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" addLabel="New workspace" onAdd={() => openNewDialog("workspace")} />
+          <section class="sidebar-group">
+            <div class="sidebar-group-header"><div data-sidebar="group-label">Terminals</div></div>
+            <For each={terminals()}>{(terminal) => <TerminalRow terminal={terminal} />}</For>
+            <Show when={!terminals().length}><div class="sidebar-empty">No live terminals</div></Show>
+          </section>
+          <div class="sidebar-area-label sidebar-area-divider">Conduit App</div>
           <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.dashboard ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenDashboard(); }}>
             <LayoutDashboardIcon />
             <span>Conduit Dashboard</span>
@@ -1009,17 +1016,8 @@ export function Sidebar(props: {
               <For each={pinnedItems()}>{(item) => <PinnedRow item={item} />}</For>
             </section>
           </Show>
-          <Group label="Chats" projects={[]} chatRoot={chats()} addLabel="New chat" onAdd={() => startNewChat()} />
           <Group label="Projects" projects={folders()} emptyLabel="No projects" addLabel="New folder" onAdd={() => openNewDialog("folder")} />
-          <div class="sidebar-area-label sidebar-area-divider">Computer</div>
-          <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.computer ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenComputer(); }}><MonitorIcon /><span>Files</span></button>
-          <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.terminal ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /><span>Terminal View</span><ExternalLinkIcon class="sidebar-route-indicator" /></button>
-          <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" addLabel="New workspace" onAdd={() => openNewDialog("workspace")} />
-          <section class="sidebar-group">
-            <div class="sidebar-group-header"><div data-sidebar="group-label">Terminals</div></div>
-            <For each={terminals()}>{(terminal) => <TerminalRow terminal={terminal} />}</For>
-            <Show when={!terminals().length}><div class="sidebar-empty">No live terminals</div></Show>
-          </section>
+          <Group label="Chats" projects={[]} chatRoot={chats()} addLabel="New chat" onAdd={() => startNewChat()} />
         </div>
         <div data-sidebar="footer"><Menu><MenuTrigger class="sidebar-user" aria-label={`Conduit · ${connectionLabel()}`} title={connectionLabel()}><CableIcon /><span><strong>Conduit</strong><small>{connectionLabel()}</small></span><span class={`server-status-indicator runtime-indicator runtime-indicator-${connectionTone()}`} aria-hidden="true"><Show when={props.connectivity === "connecting" || props.connectivity === "reconnecting"} fallback={<span class="runtime-indicator-dot" />}><Spinner class="size-3" /></Show></span></MenuTrigger><MenuContent>
           <MenuItem onSelect={() => { closeMobile(); props.onOpenSettings("models"); }}>Manage settings</MenuItem>

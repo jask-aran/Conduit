@@ -1421,6 +1421,25 @@ test("creates a durable chat route and renders the primary surface", async ({ pa
   await expect(sendButton).toHaveAttribute("data-variant", "ghost");
 });
 
+test("creates a new dashboard draft after leaving an existing chat", async ({ page }) => {
+  await page.route("**/v0/projects/project_research/dashboard", (route) => route.fulfill({ json: {
+    identity: { path: "/tmp/research" },
+    stats: { activeChats: 0, liveChats: 0, lastActivityAt: null },
+    git: null,
+  } }));
+
+  await page.goto("/chat/session_existing");
+  await page.locator(".sidebar-project-link").filter({ hasText: "Research" }).click();
+  await expect(page.getByRole("region", { name: "Research dashboard" })).toBeVisible();
+
+  const composer = page.getByRole("textbox", { name: "Message Pi" });
+  await composer.fill("Start from the dashboard");
+  await page.getByRole("button", { name: "Send message" }).click();
+
+  await expect(page).toHaveURL(/\/chat\/550e8400-e29b-41d4-a716-446655440099$/);
+  await expect(page.getByText("Chat is not ready yet")).toHaveCount(0);
+});
+
 test("Workspace views use the nested palette page and terminal lives in the Workspace panel", async ({ page }, testInfo) => {
   const workspace = {
     id: "project_conduit",
@@ -1575,7 +1594,7 @@ test("uses compact sidebar groups and preserves a useful desktop rail", async ({
   // appear only when they have contents, so this must not be an exact set.
   await expect(page.locator('[data-sidebar="group-label"]')
     .filter({ hasText: /^(Chats|Projects|Workspaces)$/ }))
-    .toHaveText(["Chats", "Projects", "Workspaces"]);
+    .toHaveText(["Workspaces", "Projects", "Chats"]);
   await expect(page.locator('[data-sidebar="brand"] svg')).toHaveCount(0);
   await expect(page.locator('[data-sidebar="trigger"] svg')).toHaveCount(1);
 

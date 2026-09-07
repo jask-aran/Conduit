@@ -272,6 +272,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     openToken += 1;
     cancelReconnect();
     setConnectingId(null);
+    setLoadedId(null);
     socket?.close();
     socket = null;
     setLive(null);
