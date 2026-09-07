@@ -13,3 +13,4 @@
 }
 
 .terminal-route > .terminal-pane { min-height: 0; }
+.terminal-route-loading { display: grid; flex: 1; place-items: center; color: var(--muted-foreground); font-size: 12px; }

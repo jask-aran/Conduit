@@ -6,6 +6,7 @@ import {
   CableIcon,
   ChevronRightIcon,
   ClipboardCopyIcon,
+  ExternalLinkIcon,
   FolderIcon,
   FolderInputIcon,
   FolderPlusIcon,
@@ -151,6 +152,7 @@ export function Sidebar(props: {
   selectedId: string | null;
   dashboard: boolean;
   computer: boolean;
+  terminal: boolean;
   runtime: RuntimeStore;
   connectivity: string;
   workspaceSuggestions: WorkspaceSuggestion[];
@@ -176,6 +178,7 @@ export function Sidebar(props: {
   onOpenPty: (terminal: Pty) => void;
   onOpenDashboard: () => void;
   onOpenComputer: () => void;
+  onOpenTerminalView: () => void;
   onOpenWorkspaceIdentity: (project: Project) => void;
   onOpenSettings: (section?: string, workspaceId?: string | null) => void;
   onOpenPalette: (page?: string | null, initialQuery?: string | null) => void;
@@ -982,6 +985,7 @@ export function Sidebar(props: {
             </Show>
             <div data-sidebar="rail-divider" aria-hidden="true" />
             <RailAction label="Computer" current={props.computer} onClick={() => { closeMobile(); props.onOpenComputer(); }}><MonitorIcon /></RailAction>
+            <RailAction label="Terminal View" current={props.terminal} onClick={() => { closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /></RailAction>
             <Show when={railWorkspaces().length}>
               <div data-sidebar="rail-divider" aria-hidden="true" />
               <div data-sidebar="rail-section" data-sidebar-section="workspaces" class="sidebar-rail-section">
@@ -1007,8 +1011,9 @@ export function Sidebar(props: {
           </Show>
           <Group label="Chats" projects={[]} chatRoot={chats()} addLabel="New chat" onAdd={() => startNewChat()} />
           <Group label="Projects" projects={folders()} emptyLabel="No projects" addLabel="New folder" onAdd={() => openNewDialog("folder")} />
-          <div class="sidebar-area-label sidebar-area-divider" aria-hidden="true" />
-          <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.computer ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenComputer(); }}><MonitorIcon /><span>Computer</span></button>
+          <div class="sidebar-area-label sidebar-area-divider">Computer</div>
+          <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.computer ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenComputer(); }}><MonitorIcon /><span>Files</span></button>
+          <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.terminal ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /><span>Terminal View</span><ExternalLinkIcon class="sidebar-route-indicator" /></button>
           <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" addLabel="New workspace" onAdd={() => openNewDialog("workspace")} />
           <section class="sidebar-group">
             <div class="sidebar-group-header"><div data-sidebar="group-label">Terminals</div></div>

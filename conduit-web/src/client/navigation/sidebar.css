@@ -43,6 +43,7 @@
 .sidebar-chat[data-selected="true"] { background: var(--sidebar-accent); box-shadow: inset 1.6px 0 var(--accent-cool); color: var(--sidebar-accent-foreground); }
 .sidebar-row > svg { width: 12px; height: 12px; flex: none; color: var(--muted-foreground); }
 .sidebar-row:hover > svg, .sidebar-row[aria-current="page"] > svg { color: var(--sidebar-accent-foreground); }
+.sidebar-row > .sidebar-route-indicator { width: 10px; height: 10px; margin-left: auto; color: color-mix(in oklch, var(--sidebar-foreground), transparent 35%); }
 .sidebar-row span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-row span.runtime-indicator { min-width: 0; flex: none; width: 12.8px; overflow: visible; }
 .sidebar-project { font-weight: 500; }

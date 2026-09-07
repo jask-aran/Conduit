@@ -24,6 +24,7 @@ export function ComputerDashboard(props: {
   onManageWorkspace: (action: "rename" | "identity" | "unlink", project: Project) => void;
   onStartWorkspaceAction: (action: "created" | "cloned", path: string) => void;
   onOpenView: (view: "files" | "diff" | "terminal") => void;
+  onOpenTerminalView?: () => void;
   onOpenTerminalHere?: () => void;
   onOpenFile: (path: string) => void;
   dialog?: boolean;
@@ -122,6 +123,7 @@ export function ComputerDashboard(props: {
       <aside class="computer-explorer-sidebar">
         <h2>Locations</h2>
         <ContextMenu><ContextMenuTrigger as="button" type="button" data-active={props.location?.project.workingRoot === props.location?.home} onClick={() => props.onBrowse()}><HomeIcon /><span>Home</span></ContextMenuTrigger><ContextMenuContent><ContextMenuGroup><ContextMenuItem onSelect={() => props.onBrowse()}><FolderIcon />Open</ContextMenuItem><ContextMenuItem onSelect={() => copyPath(props.location?.home || "")}><CopyIcon />Copy path</ContextMenuItem></ContextMenuGroup></ContextMenuContent></ContextMenu>
+        <Show when={!props.dialog}><button type="button" onClick={props.onOpenTerminalView}><TerminalIcon /><span>Terminal</span></button></Show>
         <h2>Workspaces</h2>
         <div class="computer-workspace-shortcuts"><For each={workspaces()}>{(project) =>
           <ContextMenu><ContextMenuTrigger as="button" type="button" data-active={props.location?.project.workingRoot === project.workingRoot} title={project.workingRoot} onClick={() => props.onBrowse(project.workingRoot)}><WorkspaceGlyph appearance={project.workspaceAppearance} /><span>{project.name}</span></ContextMenuTrigger><ContextMenuContent><ContextMenuGroup>
