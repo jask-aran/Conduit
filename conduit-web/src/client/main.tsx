@@ -1632,7 +1632,7 @@ function App() {
       });
     void api<{ profiles: Array<{ id: string; label: string; description?: string; management: string; disabled?: boolean; agent: { implementation: string } }> }>("/v0/profiles")
       .then((payload) => setExternalProfiles((Array.isArray(payload.profiles) ? payload.profiles : [])
-        .filter((profile) => profile.management === "agent" && profile.agent?.implementation === "codex")
+        .filter((profile) => profile.management === "agent" && ["codex", "chatgpt-web"].includes(profile.agent?.implementation))
         .map((profile) => ({ id: profile.id, label: profile.label, description: profile.description, disabled: profile.disabled }))))
       .catch(() => setExternalProfiles([]));
     void api<{ partialContinue?: boolean; maxAttachmentBytes?: number }>("/v0/capabilities")
