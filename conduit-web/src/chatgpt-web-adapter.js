@@ -136,6 +136,7 @@ export class ChatGptWebAdapter extends EventEmitter {
           record.sessionId = { conversationId: event.conversationId || record.sessionId.conversationId,
             parentMessageId: event.parentMessageId || record.sessionId.parentMessageId,
             model: record.model, thinkingLevel: record.thinkingLevel };
+          record.title = String(event.title || "").trim() || record.title || "";
         } else if (event.type === "error") {
           throw adapterError(event.message || "ChatGPT Web response failed", event.error, event.status || 502,
             event.retryAfterMs ? { retryAfterMs: event.retryAfterMs } : {});
@@ -227,6 +228,7 @@ export class ChatGptWebAdapter extends EventEmitter {
     for (const event of record.events) if (socket.readyState === 1) socket.send(JSON.stringify(event)); return this.runtimeState(record); }
   view(record) { return { id: record.id, chatId: record.chatId, status: record.status, activity: record.activity, active: record.active,
     stopping: record.stopping, generation: record.generation, model: record.model, thinkingLevel: record.thinkingLevel,
+    title: record.title || null,
     capabilities: CHATGPT_WEB_CAPABILITIES,
     backend: { protocol: "native_api", implementation: "chatgpt-web", installationId: "user-chatgpt-account" },
     linkUrl: record.sessionId.conversationId ? `https://chatgpt.com/c/${record.sessionId.conversationId}` : null }; }

@@ -15,7 +15,7 @@ test("ChatGPT Web maps a streamed turn to neutral events and retains its cursor"
     return streamResponse([
       { type: "delta", text: "Hello" },
       { type: "delta", text: " world" },
-      { type: "done", conversationId: "conversation-1", parentMessageId: "message-1" },
+      { type: "done", conversationId: "conversation-1", parentMessageId: "message-1", title: "Greeting exchange" },
     ]);
   };
   try {
@@ -29,6 +29,7 @@ test("ChatGPT Web maps a streamed turn to neutral events and retains its cursor"
     await settled;
     assert.deepEqual(record.sessionId, { conversationId: "conversation-1", parentMessageId: "message-1",
       model: "gpt-test", thinkingLevel: "high" });
+    assert.equal(record.title, "Greeting exchange");
     assert.deepEqual(record.events.filter((event) => event.phase === "delta").map((event) => event.delta), ["Hello", " world"]);
     assert.equal(record.events.at(-1).detail, "settled");
     assert.equal(CHATGPT_WEB_CAPABILITIES.modelSwitch, true);
