@@ -36,7 +36,7 @@ export function createLiveSessionStream({
     const generationId = await adapter.prompt(record.id, prepared.prompt, options);
     await registry.markUserMessage(prepared.context.chat.id);
     if (prepared.context.chat.status === "draft") {
-      await registry.update(prepared.context.chat.id, record.adapterImplementation === "codex"
+      await registry.update(prepared.context.chat.id, record.adapterImplementation && record.adapterImplementation !== "conduit_pi" && record.adapterImplementation !== "native_pi"
         ? { status: "active", backend: { ...prepared.context.chat.backend, opaqueSession: record.sessionId } }
         : { status: "active", piSessionId: record.sessionId || null, piSessionFile: record.sessionFile });
     }

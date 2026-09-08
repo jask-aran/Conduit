@@ -134,10 +134,11 @@ export class PiRpcAdapter {
 }
 
 export class ChatBackendRegistry {
-  constructor(manager, codex = null) {
+  constructor(manager, codex = null, additional = []) {
     const pi = new PiRpcAdapter(manager);
     this.adapters = new Map([["conduit_pi", pi], ["native_pi", pi]]);
     if (codex) this.adapters.set("codex", codex);
+    for (const [implementation, adapter] of additional) this.adapters.set(implementation, adapter);
   }
   forImplementation(implementation) {
     const adapter = this.adapters.get(implementation);
