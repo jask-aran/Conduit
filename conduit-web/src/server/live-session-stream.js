@@ -19,6 +19,7 @@ export function createLiveSessionStream({
   const namingChats = new Set();
 
   function adapterFor(record) {
+    if (record.ephemeral) return backends.adapterForRecord(record);
     return backends.forChat(registry.metadata(record.chatId));
   }
 
@@ -78,6 +79,7 @@ export function createLiveSessionStream({
   async function handleClientCommand(record, command) {
     const adapter = adapterFor(record);
     if (command.type === "prompt") {
+      if (record.ephemeral) return adapter.prompt(record.id, String(command.message || ""));
       const prepared = await promptForChat(record, command, String(command.message || ""));
       const streamingBehavior = command.streamingBehavior === "steer" || command.streamingBehavior === "followUp"
         ? command.streamingBehavior

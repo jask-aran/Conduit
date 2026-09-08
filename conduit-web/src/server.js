@@ -48,6 +48,7 @@ import { registerPiAuthRoutes } from "./server/routes/pi-auth.js";
 import { registerPtyRoutes } from "./server/routes/ptys.js";
 import { registerRuntimeRoutes } from "./server/routes/runtime.js";
 import { registerChatRoutes } from "./server/routes/chats.js";
+import { registerHarnessRoutes } from "./server/routes/harnesses.js";
 import { registerLiveSessionRoutes } from "./server/routes/live-sessions.js";
 import { registerProjectRoutes } from "./server/routes/projects.js";
 import { registerSessionRoutes } from "./server/routes/sessions.js";
@@ -599,6 +600,7 @@ registerChatRoutes(app, {
   runtimeFor,
   templateForChat,
 });
+registerHarnessRoutes(app, { backends, projects });
 registerSessionRoutes(app, {
   backends,
   config,
