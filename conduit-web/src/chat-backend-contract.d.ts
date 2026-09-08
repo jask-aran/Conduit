@@ -41,6 +41,18 @@ export interface ChatCapabilities {
   replay: boolean;
 }
 
+export interface ChatBackendAdapter<LiveSession = unknown, ModelCatalog = unknown> {
+  create(options: unknown): Promise<LiveSession>;
+  restore(opaqueSession: unknown, options?: unknown): Promise<LiveSession>;
+  prompt(liveSessionId: string, message: string, options?: unknown): Promise<string>;
+  cancel(liveSessionId: string, generationId?: string | null): Promise<unknown>;
+  close(liveSessionId: string): Promise<unknown>;
+  respondHostUi(liveSessionId: string, response: unknown): Promise<unknown> | unknown;
+  replay(liveSessionId: string, since?: number): ChatBackendEvent | null;
+  getCapabilities(): ChatCapabilities;
+  listModels(liveSessionId?: string): Promise<ModelCatalog> | ModelCatalog;
+}
+
 export type ChatLifecycleState =
   | "creating"
   | "restoring"
