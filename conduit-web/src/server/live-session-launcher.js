@@ -43,17 +43,24 @@ export function createLiveSessionLauncher({
     if (resident) return { live: resident, modelRecovery: null };
 
     if (context.chat.backend?.protocol === "native_api") {
-      const model = context.chat.backend.model || "";
+      const selectedModel = text(model) || text(context.chat.backend.model);
+      const selectedThinkingLevel = text(thinkingLevel)
+        || text(context.chat.modelThinkingLevels?.[selectedModel]);
       const options = {
         chatId: context.chat.id,
         project: context.project,
-        model,
-        thinkingLevel: context.chat.modelThinkingLevels?.[model] || "",
+        model: selectedModel,
+        thinkingLevel: selectedThinkingLevel,
       };
       const live = context.chat.backend.opaqueSession
         ? await adapter.restore(context.chat.backend.opaqueSession, options)
         : await adapter.create(options);
-      await registry.update(context.chat.id, { backend: { ...context.chat.backend, opaqueSession: live.sessionId } });
+      await registry.update(context.chat.id, {
+        backend: { ...context.chat.backend, model: selectedModel, opaqueSession: live.sessionId },
+        ...(selectedThinkingLevel ? { modelThinkingLevels: {
+          ...(context.chat.modelThinkingLevels || {}), [selectedModel]: selectedThinkingLevel,
+        } } : {}),
+      });
       return { live, modelRecovery: null };
     }
 
