@@ -200,13 +200,9 @@ export function registerChatRoutes(app, {
         return response.status(400).json({ error: "invalid_model" });
       }
       if (context.chat.backend?.implementation === "codex") {
-        if (context.chat.status !== "draft" || context.chat.backend.opaqueSession || backends.getByChatId(context.chat.id)) {
-          return response.status(409).json({
-            error: "model_switch_unsupported",
-            message: "Start a new Codex chat to use a different model.",
-          });
-        }
         const model = spec || current.model;
+        const resident = backends.getByChatId(context.chat.id);
+        if (resident) await backends.forChat(context.chat).setModel(resident.id, model);
         await registry.update(context.chat.id, { backend: { ...context.chat.backend, model } });
         return response.json({ ...current, model, thinkingLevel: "off" });
       }

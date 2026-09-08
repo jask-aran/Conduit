@@ -96,10 +96,11 @@ input.on("line", (line) => {
     { id: "codex-other", displayName: "Codex Other", hidden: false, supportedReasoningEfforts: [] },
   ] } });
   if (message.method === "turn/start") {
+    const answer = message.params.model ? message.params.model + " works" : "Codex works";
     send({ method: "turn/started", params: { turn: { id: "turn-test" } } });
     send({ id: message.id, result: { turn: { id: "turn-test" } } });
-    send({ method: "item/agentMessage/delta", params: { turnId: "turn-test", itemId: "message-test", delta: "Codex works" } });
-    send({ method: "item/completed", params: { turnId: "turn-test", item: { id: "message-test", type: "agentMessage", text: "Codex works" } } });
+    send({ method: "item/agentMessage/delta", params: { turnId: "turn-test", itemId: "message-test", delta: answer } });
+    send({ method: "item/completed", params: { turnId: "turn-test", item: { id: "message-test", type: "agentMessage", text: answer } } });
     send({ method: "turn/completed", params: { turn: { id: "turn-test", status: "completed" } } });
     return;
   }

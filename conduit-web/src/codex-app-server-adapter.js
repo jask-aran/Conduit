@@ -5,7 +5,7 @@ import readline from "node:readline";
 
 export const CODEX_CAPABILITIES = Object.freeze({
   steer: false, followUpQueue: false, cancel: true, compaction: false,
-  thinkingLevels: false, modelSwitch: false, toolUse: true, permissions: false,
+  thinkingLevels: false, modelSwitch: true, toolUse: true, permissions: false,
   usage: false, replay: true,
 });
 
@@ -28,13 +28,15 @@ export class CodexAppServerAdapter extends EventEmitter {
     return record;
   }
 
-  async restore(opaqueSession, { chatId, project }) {
+  async restore(opaqueSession, { chatId, project, model = "" }) {
     const record = await this.start({ chatId, cwd: project.workingRoot });
     const threadId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!threadId) throw error("Codex thread identity is missing");
-    const result = await this.request(record, "thread/resume", { threadId, cwd: project.workingRoot });
+    const result = await this.request(record, "thread/resume", {
+      threadId, cwd: project.workingRoot, ...(model ? { model } : {}),
+    });
     record.sessionId = result.thread?.id || threadId;
-    record.model = result.model || result.thread?.model || "";
+    record.model = model || result.model || result.thread?.model || "";
     const restored = await this.request(record, "thread/read", { threadId: record.sessionId, includeTurns: true });
     this.hydrate(record, restored.thread);
     return record;
@@ -160,7 +162,11 @@ export class CodexAppServerAdapter extends EventEmitter {
   async prompt(id, message) {
     const record = this.get(id);
     if (!record?.sessionId) throw error("Codex thread is not ready");
-    const result = await this.request(record, "turn/start", { threadId: record.sessionId, input: [{ type: "text", text: message }] });
+    const result = await this.request(record, "turn/start", {
+      threadId: record.sessionId,
+      input: [{ type: "text", text: message }],
+      ...(record.model ? { model: record.model } : {}),
+    });
     this.publish(record, { type: "transcript_message", generationId: result.turn?.id || null,
       message: { id: crypto.randomUUID(), role: "user", content: message } });
     return result.turn?.id || record.generation?.id || null;
@@ -187,7 +193,12 @@ export class CodexAppServerAdapter extends EventEmitter {
   respondHostUi() { throw error("Codex does not expose host UI requests", "unsupported_interaction", 400); }
   queue() { throw error("Codex does not support steering or follow-up queues", "unsupported_interaction", 400); }
   fork() { throw error("Codex history forks are not available in this slice", "unsupported_interaction", 400); }
-  setModel() { throw error("Codex model switching is not available for a live thread", "unsupported_interaction", 400); }
+  async setModel(id, model) {
+    const record = this.get(id);
+    if (!record) throw error("Codex app-server is unavailable");
+    record.model = model;
+    return model;
+  }
   setThinkingLevel() { throw error("Codex thinking-level switching is not available", "unsupported_interaction", 400); }
   refreshContext() { return Promise.resolve(null); }
   sendPi() { throw error("Unsupported Codex command", "unsupported_interaction", 400); }
