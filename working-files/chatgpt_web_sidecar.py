@@ -81,38 +81,33 @@ def parse_cookie_header(value: str) -> dict[str, str]:
     return cookies
 
 
-def public_chat_models(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Collapse ChatGPT transport variants into the public Chat model choices."""
-    by_slug = {item.get("slug"): item for item in items if isinstance(item, dict) and item.get("slug")}
+def public_chat_models(catalog: dict[str, Any]) -> list[dict[str, Any]]:
+    """Read the account's enabled public choices from the model picker presets."""
     models: list[dict[str, Any]] = []
-    for item in items:
-        slug = item.get("slug") if isinstance(item, dict) else None
-        if not slug or item.get("is_work_mode_model") or item.get("reasoning_type") != "auto":
+    for version in catalog.get("versions", []):
+        if not isinstance(version, dict) or not version.get("enabled"):
             continue
-        thinking = by_slug.get(slug + "-thinking")
-        instant = by_slug.get(slug + "-instant")
-        if not thinking or not instant:
+        presets = [preset for preset in version.get("intelligence_presets", [])
+                   if isinstance(preset, dict) and preset.get("preset_type") == "available"
+                   and preset.get("title") and preset.get("model_slug")]
+        if not presets:
             continue
-        efforts = [entry.get("thinking_effort") for entry in thinking.get("thinking_efforts", [])
-                   if isinstance(entry, dict) and entry.get("thinking_effort")]
-        levels = ["instant", "medium"]
-        if "standard" in efforts:
-            levels.append("high")
-        if "extended" in efforts:
-            levels.append("xhigh")
-        models.append({"id": slug, "label": item.get("title") or slug,
-                       "thinkingLevels": levels, "defaultThinkingLevel": "medium"})
+        levels = [preset["title"].lower() for preset in presets]
+        model_id = "gpt-" + str(version.get("id", "")).replace(".", "-")
+        models.append({"id": model_id, "label": version.get("display_text_for_intelligence") or model_id,
+                       "thinkingLevels": levels,
+                       "defaultThinkingLevel": "medium" if "medium" in levels else levels[0]})
     return models
 
 
 def transport_selection(model: str, thinking_level: str) -> tuple[str, str]:
     if thinking_level == "instant":
         return model + "-instant", ""
-    if thinking_level == "high":
+    if thinking_level == "medium":
         return model + "-thinking", "standard"
-    if thinking_level == "xhigh":
+    if thinking_level == "high":
         return model + "-thinking", "extended"
-    return model, ""
+    raise ValueError("The selected ChatGPT thinking level is unavailable")
 
 
 def solve_pow(seed: str, difficulty: str, config: list[Any], limit: int = 500_000) -> str:
@@ -259,7 +254,7 @@ class Bridge:
                 raise self.upstream_error(response, "ChatGPT model catalog failed")
             data = response.json()
             items = data.get("models", data.get("data", data if isinstance(data, list) else []))
-            return public_chat_models(items)
+            return public_chat_models(data)
 
     def requirements(self, token: str) -> tuple[str, str]:
         if not self.dpl:

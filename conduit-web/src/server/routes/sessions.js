@@ -32,9 +32,13 @@ export function registerSessionRoutes(app, {
     try {
       const context = await findChatContext(request.params.id);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
-      if (!context.chat.piSessionFile) return response.json({
-        ...chatView(context.chat), messages: [], tools: [], attachments: [], page: { before: null },
-      });
+      if (!context.chat.piSessionFile) {
+        const adapter = context.chat.backend?.implementation === "chatgpt-web" ? backends.forChat(context.chat) : null;
+        return response.json({
+          ...chatView(context.chat), messages: adapter?.transcript?.(context.chat.id) || [],
+          tools: [], attachments: [], page: { before: null },
+        });
+      }
       let session;
       try {
         session = await readSessionPage(context.chat.piSessionFile, context.project, { before: request.query.before });
