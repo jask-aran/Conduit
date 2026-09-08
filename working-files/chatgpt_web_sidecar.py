@@ -38,6 +38,15 @@ RETAINED_COOKIES = {
 }
 
 
+def has_session_cookie(cookies: dict[str, str]) -> bool:
+    if cookies.get(SESSION_COOKIE):
+        return True
+    chunks = {int(match.group(1)): value for name, value in cookies.items()
+              if (match := re.fullmatch(re.escape(SESSION_COOKIE) + r"\.(\d+)", name))}
+    indexes = sorted(chunks)
+    return bool(indexes) and indexes == list(range(len(indexes))) and all(chunks.values())
+
+
 class UpstreamError(Exception):
     def __init__(self, message: str, code: str = "backend_unavailable", status: int = 502, retry_after_ms: int | None = None):
         super().__init__(message)
@@ -57,17 +66,17 @@ def parse_cookie_header(value: str) -> dict[str, str]:
         if name:
             cookies[name] = cookie_value
     chunks: dict[int, str] = {}
-    for name in list(cookies):
+    for name in cookies:
         match = re.fullmatch(re.escape(SESSION_COOKIE) + r"\.(\d+)", name)
         if match:
-            chunks[int(match.group(1))] = cookies.pop(name)
+            chunks[int(match.group(1))] = cookies[name]
     if SESSION_COOKIE not in cookies and chunks:
         indexes = sorted(chunks)
         if indexes != list(range(len(indexes))):
             raise ValueError("The ChatGPT session cookie chunks are incomplete")
-        cookies[SESSION_COOKIE] = "".join(chunks[index] for index in indexes)
-    cookies = {name: cookie_value for name, cookie_value in cookies.items() if name in RETAINED_COOKIES}
-    if SESSION_COOKIE not in cookies or not cookies[SESSION_COOKIE]:
+    cookies = {name: cookie_value for name, cookie_value in cookies.items()
+               if name in RETAINED_COOKIES or re.fullmatch(re.escape(SESSION_COOKIE) + r"\.\d+", name)}
+    if not has_session_cookie(cookies):
         raise ValueError("The ChatGPT session cookie is missing")
     return cookies
 
@@ -174,7 +183,7 @@ class Bridge:
     def health(self) -> dict[str, Any]:
         names = sorted(dict(self.session.cookies))
         return {"status": "ok", "protocolVersion": 1, "curlCffiVersion": CURL_CFFI_VERSION,
-                "impersonate": IMPERSONATE, "auth": "configured" if "__Secure-next-auth.session-token" in names else "missing",
+                "impersonate": IMPERSONATE, "auth": "configured" if has_session_cookie(dict(self.session.cookies)) else "missing",
                 "cookieNames": names, "cookieUpdates": self.cookie_updates}
 
     def headers(self) -> dict[str, str]:
@@ -193,7 +202,7 @@ class Bridge:
     def token(self) -> str:
         if self.access_token and time.time() < self.token_expires_at:
             return self.access_token
-        if "__Secure-next-auth.session-token" not in dict(self.session.cookies):
+        if not has_session_cookie(dict(self.session.cookies)):
             raise UpstreamError("Connect a ChatGPT account in Settings", "auth_expired", 401)
         response = self.session.get(BASE + "/api/auth/session", headers=self.headers(), timeout=20)
         if response.status_code == 403:
