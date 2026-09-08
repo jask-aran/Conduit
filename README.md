@@ -9,6 +9,10 @@ environments.
 
 ## Features
 
+Chats record their Pi profile and backend identity in the registry. The
+[profile API](conduit-web/README.md#chat-profile-identity) supports the current
+Conduit Pi profiles and Host Pi; Pi still owns transcripts and execution.
+
 - Persistent chats with attachments, forks, regeneration, queued prompts,
   model controls, and thinking controls.
 - Workspaces that link a local folder, create a managed folder, or clone a Git
