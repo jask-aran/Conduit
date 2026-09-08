@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
-import { ArrowRightIcon, ArrowUpIcon, CopyIcon, EyeIcon, EyeOffIcon, FolderIcon, GitBranchIcon, Grid2X2Icon, HomeIcon, ListIcon, PaletteIcon, PencilIcon, PlusIcon, RefreshCwIcon, SearchIcon, SquareIcon, TerminalIcon, UnlinkIcon, XIcon } from "lucide-solid";
-import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger } from "@/components/primitives";
+import { ArrowRightIcon, ArrowUpIcon, ChevronDownIcon, CopyIcon, EyeIcon, EyeOffIcon, FolderIcon, GitBranchIcon, Grid2X2Icon, HomeIcon, ListIcon, PaletteIcon, PencilIcon, PlusIcon, RefreshCwIcon, SearchIcon, SquareIcon, TerminalIcon, UnlinkIcon, XIcon } from "lucide-solid";
+import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, Menu, MenuContent, MenuGroup, MenuItem, MenuTrigger } from "@/components/primitives";
 import { api } from "../api/client";
 import type { BackendSessionSummary, ChatSummary, ComputerLocation, HarnessSummary, Project } from "../api/contracts";
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
@@ -169,9 +169,9 @@ export function ComputerDashboard(props: {
           <WorkspaceActions />
           <Show when={!props.dialog}>
             <button type="button" disabled={!props.location || props.loading} onClick={props.onOpenTerminalHere}><TerminalIcon />Terminal Here</button>
-            <For each={harnesses().filter((item) => item.available)}>{(harness) =>
-              <button type="button" disabled={!props.location || props.loading} onClick={() => props.onOpenHarnessHere?.(harness.id, props.location!.project.workingRoot)}><img class="computer-harness-mark" src={harness.id === "codex" ? "/codex-mark.svg" : "/chatgpt-mark.svg"} alt="" />{harness.label} Here</button>
-            }</For>
+            <Show when={harnesses().some((item) => item.available)}><Menu><MenuTrigger disabled={!props.location || props.loading} aria-label="Open harness here"><TerminalIcon />Harness Here<ChevronDownIcon /></MenuTrigger><MenuContent class="computer-harness-menu"><MenuGroup><For each={harnesses().filter((item) => item.available)}>{(harness) =>
+              <MenuItem onSelect={() => props.onOpenHarnessHere?.(harness.id, props.location!.project.workingRoot)}><img class="computer-harness-mark" src={harness.id === "codex" ? "/codex-mark.svg" : "/chatgpt-mark.svg"} alt="" />Open {harness.label} here</MenuItem>
+            }</For></MenuGroup></MenuContent></Menu></Show>
             <button type="button" disabled={!props.location?.repository || props.loading} onClick={() => props.onOpenView("diff")}><GitBranchIcon />Source Control</button>
           </Show>
         </div>
