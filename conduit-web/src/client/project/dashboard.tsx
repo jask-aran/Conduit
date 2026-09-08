@@ -445,7 +445,7 @@ export function ProjectDashboard(props: {
                 <Show when={backendSessions()?.adoptable.length} fallback={<div class="workspace-dashboard-empty">No untracked Codex sessions.</div>}>
                   <div class="workspace-dashboard-session-list">
                     <For each={backendSessions()!.adoptable.slice(0, 5)}>{(session) => <div class="workspace-dashboard-session-row">
-                      <span><strong>{session.title}</strong><small>{session.source} · full history</small></span>
+                      <span><strong>{session.title}</strong><small>Codex · full history</small></span>
                       <Button variant="outline" size="sm" disabled={Boolean(adoptingSessionId())} onClick={() => void adoptBackendSession(session.id)}>{adoptingSessionId() === session.id ? <Spinner /> : null}Track</Button>
                     </div>}</For>
                   </div>
