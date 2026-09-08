@@ -17,10 +17,14 @@ export function registerRuntimeRoutes(app, {
   promptStore,
 }) {
   app.get("/healthz", (request, response) => {
+    const activeGenerations = runtimeHub.snapshot().processes.filter((process) => process.active
+      || process.stopping || process.compacting || process.retrying
+      || process.generation && !process.generation.settled).length;
     response.status(isShuttingDown() ? 503 : 200).json({
       ok: !isShuttingDown(),
       status: isShuttingDown() ? "stopping" : "ready",
       release: config.release,
+      activeGenerations,
     });
   });
 
