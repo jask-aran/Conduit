@@ -35,3 +35,12 @@ test("source setup bootstraps pinned uv and managed Python", async () => {
     assert.match(launcher, /--managed-python/);
   }
 });
+
+test("production restart drains active assistant responses unless forced", async () => {
+  const shell = await fs.readFile(path.join(root, ".devcontainer/start-conduit.sh"), "utf8");
+  assert.match(shell, /restart \[--force\]/);
+  assert.match(shell, /activeGenerations/);
+  assert.match(shell, /wait_for_generations/);
+  assert.match(shell, /CONDUIT_RESTART_DRAIN_TIMEOUT_SECONDS/);
+  assert.match(shell, /build_if_needed\n\s+if \[\[ "\$\{1:-\}" == "--force"/);
+});

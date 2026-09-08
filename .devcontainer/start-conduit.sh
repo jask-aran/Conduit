@@ -30,6 +30,7 @@ export CONDUIT_SESSION_REGISTRY_FILE="${CONDUIT_SESSION_REGISTRY_FILE:-$ROOT/dat
 export CONDUIT_PI_AGENT_DIR="${CONDUIT_PI_AGENT_DIR:-$ROOT/data/pi}"
 export CONDUIT_PI_TEMPLATE="${CONDUIT_PI_TEMPLATE:-$ROOT/templates/assistant/template.json}"
 HEALTH_URL="http://127.0.0.1:${CONDUIT_PORT}/healthz"
+DRAIN_TIMEOUT_SECONDS="${CONDUIT_RESTART_DRAIN_TIMEOUT_SECONDS:-600}"
 
 usage() {
   cat <<EOF
@@ -41,7 +42,8 @@ Commands:
   start                 Start an existing production build.
   dev                   Start the server watcher and Vite hot reload.
   stop                  Stop Vite, Conduit, resident Pi, and terminal processes.
-  restart               Rebuild if sources changed, then restart (default).
+  restart [--force]     Rebuild, wait for assistant responses, then restart.
+                        --force skips the response drain.
   status                Report the managed process and health endpoint.
   logs [server|vite] [-f]
                         Show a managed log (follow with -f).
@@ -70,6 +72,39 @@ guard_component_mode() {
 
 is_healthy() {
   curl --silent --fail --max-time 2 "$HEALTH_URL" >/dev/null
+}
+
+active_generation_count() {
+  curl --silent --fail --max-time 2 "$HEALTH_URL" \
+    | node -e 'let value=""; process.stdin.on("data", chunk => value += chunk); process.stdin.on("end", () => { const count = JSON.parse(value).activeGenerations; if (!Number.isInteger(count)) process.exit(2); process.stdout.write(String(count)); })'
+}
+
+wait_for_generations() {
+  is_healthy || return
+  [[ "$DRAIN_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || {
+    echo "CONDUIT_RESTART_DRAIN_TIMEOUT_SECONDS must be a non-negative integer." >&2
+    return 1
+  }
+  local elapsed=0 count
+  while true; do
+    count="$(active_generation_count)" || {
+      echo "Could not read active generations; Conduit was not stopped." >&2
+      return 1
+    }
+    if [[ "$count" == "0" ]]; then
+      if (( elapsed > 0 )); then echo "Assistant responses settled."; fi
+      return
+    fi
+    if (( elapsed == 0 )); then
+      echo "Waiting for $count active assistant response(s) to settle. Use restart --force to skip this drain."
+    fi
+    if (( elapsed >= DRAIN_TIMEOUT_SECONDS )); then
+      echo "Assistant responses did not settle within ${DRAIN_TIMEOUT_SECONDS}s; Conduit was not stopped." >&2
+      return 1
+    fi
+    sleep 1
+    ((elapsed += 1))
+  done
 }
 
 process_is_running() {
@@ -297,8 +332,12 @@ case "$COMMAND" in
   stop) stop ;;
   restart)
     guard_component_mode
-    stop
     build_if_needed
+    if [[ "${1:-}" == "--force" ]]; then shift
+    elif [[ $# -gt 0 ]]; then echo "Unknown restart option: $1" >&2; usage >&2; exit 2
+    else wait_for_generations; fi
+    [[ $# -eq 0 ]] || { echo "Unknown restart option: $1" >&2; usage >&2; exit 2; }
+    stop
     start_server false
     ;;
   status) status ;;
