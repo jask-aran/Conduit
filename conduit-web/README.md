@@ -600,6 +600,11 @@ directions. This is the v0 event vocabulary: Pi JSONL remains the authoritative
 record, the rendered transcript is a projection of it, and changes to this
 vocabulary are additive and must update this section in the same change.
 
+The future backend-neutral vocabulary and lifecycle state machine are defined
+in `../docs/chat-backend-contract.md` and
+`src/chat-backend-contract.d.ts`. They are additive contract artifacts only;
+the current Pi transport does not emit them yet.
+
 The rendering migration's structured protocol lives in
 `src/pi-event-normalizer.js` and `src/active-generation.js`. It assigns
 generation-local assistant-message identities, preserves native

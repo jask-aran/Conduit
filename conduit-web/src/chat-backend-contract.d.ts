@@ -1,0 +1,167 @@
+/** Backend-neutral contract for future chat adapters. This file has no runtime effect. */
+
+export type SessionSurface = "chat" | "terminal";
+export type AgentProtocol = "pi_rpc" | "acp" | "native_api" | "pty";
+export type AgentImplementation = "conduit_pi" | "native_pi" | "codex" | "opencode" | "chatgpt-web" | (string & {});
+export type ProfileManagement = "conduit" | "agent";
+
+export interface AgentProfile {
+  id: string;
+  label: string;
+  management: ProfileManagement;
+  agent: {
+    protocol: AgentProtocol;
+    implementation: AgentImplementation;
+    installationId: string;
+  };
+}
+
+export interface PersistedChatBackend {
+  profileId: string;
+  profileRevision: string;
+  protocol: AgentProtocol;
+  implementation: AgentImplementation;
+  installationId: string;
+  opaqueSession: unknown;
+}
+
+export interface ChatCapabilities {
+  steer: boolean;
+  followUpQueue: boolean;
+  cancel: boolean;
+  compaction: boolean;
+  thinkingLevels: boolean;
+  modelSwitch: boolean;
+  toolUse: boolean;
+  permissions: boolean;
+  usage: boolean;
+  replay: boolean;
+}
+
+export type ChatLifecycleState =
+  | "creating"
+  | "restoring"
+  | "idle"
+  | "working"
+  | "stopping"
+  | "failed"
+  | "closed";
+
+export type ChatStatus = "working" | "stopping" | "idle" | "failed";
+export type ChatActivity =
+  | "idle"
+  | "starting"
+  | "working"
+  | "waiting_for_user"
+  | "retrying"
+  | "compacting"
+  | "stopping"
+  | "failed";
+
+interface EventBase {
+  generationId: string | null;
+}
+
+export type AssistantBlock =
+  | { kind: "text"; contentIndex: number; text: string }
+  | { kind: "thinking"; contentIndex: number; text: string; redacted: boolean }
+  | { kind: "tool_call"; contentIndex: number; toolCallId: string; name: string; input: unknown };
+
+export type AssistantContentEvent = EventBase & (
+  | {
+    type: "assistant_content";
+    phase: "delta";
+    sequence: number;
+    messageId: string;
+    contentIndex: number;
+    blockKind: AssistantBlock["kind"];
+    delta: string;
+  }
+  | {
+    type: "assistant_content";
+    phase: "final";
+    sequence: number;
+    messageId: string;
+    blocks: AssistantBlock[];
+    stopReason: string;
+    errorMessage: string | null;
+  }
+);
+
+export type ToolActivityEvent = EventBase & {
+  type: "tool_activity";
+  phase: "start" | "update" | "end";
+  sequence: number;
+  toolCallId: string;
+  name: string;
+  input?: unknown;
+  output?: unknown;
+  isError?: boolean;
+};
+
+export interface PermissionRequestEvent extends EventBase {
+  type: "permission_request";
+  requestId: string;
+  kind: "confirm" | "select" | "input" | "editor";
+  title: string;
+  message: string;
+  options: string[];
+  placeholder: string;
+  prefill: string;
+  timeoutMs: number | null;
+}
+
+export interface PermissionResolvedEvent extends EventBase {
+  type: "permission_resolved";
+  requestId: string;
+}
+
+export interface StatusEvent extends EventBase {
+  type: "status";
+  status: ChatStatus;
+  activity: ChatActivity;
+  detail: string | null;
+}
+
+export type ChatError =
+  | { code: "generation_limit" | "live_process_limit" | "rpc_timeout" | "auth_expired" | "backend_unavailable"; message: string }
+  | { code: "rate_limited"; message: string; retryAfterMs: number };
+
+export interface ErrorEvent extends EventBase {
+  type: "error";
+  error: ChatError;
+}
+
+export interface UsageEvent extends EventBase {
+  type: "usage";
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
+  costUsd: number | null;
+}
+
+export interface SessionCheckpointEvent extends EventBase {
+  type: "session_checkpoint";
+  sequence: number | null;
+}
+
+export interface RuntimeStateEvent extends EventBase {
+  type: "runtime_state";
+  lifecycle: ChatLifecycleState;
+  status: ChatStatus;
+  activity: ChatActivity;
+  capabilities: ChatCapabilities;
+}
+
+export type ChatBackendEvent =
+  | AssistantContentEvent
+  | ToolActivityEvent
+  | PermissionRequestEvent
+  | PermissionResolvedEvent
+  | StatusEvent
+  | ErrorEvent
+  | UsageEvent
+  | SessionCheckpointEvent
+  | RuntimeStateEvent;
