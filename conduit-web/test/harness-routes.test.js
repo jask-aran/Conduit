@@ -27,4 +27,5 @@ test("ephemeral Codex drive leaves the chat registry unchanged", async (t) => {
   assert.equal((await (await harness.request("/v0/projects")).json()).projects
     .find((item) => item.id === project.id).sessions.length, before);
   assert.equal((await harness.request(`/v0/live-sessions/${opened.id}/process`, { method: "DELETE" })).status, 202);
+  assert.equal((await (await harness.request("/v0/live-sessions")).json()).sessions.some((item) => item.id === opened.id), false);
 });
