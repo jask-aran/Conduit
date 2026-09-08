@@ -40,7 +40,7 @@ import {
   Spinner,
 } from "@/components/primitives";
 import { api } from "../api/client";
-import type { DashboardChat, Project, ProjectDashboardPayload, WorkspaceAppearance, WorkspaceOperation } from "../api/contracts";
+import type { BackendSessionDiscovery, DashboardChat, Project, ProjectDashboardPayload, WorkspaceAppearance, WorkspaceOperation } from "../api/contracts";
 import { RuntimeIndicator } from "../navigation/runtime-indicator";
 import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
@@ -139,6 +139,9 @@ export function ProjectDashboard(props: {
   const [destroyOpen, setDestroyOpen] = createSignal(false);
   const [destroyConfirmation, setDestroyConfirmation] = createSignal("");
   const [destroying, setDestroying] = createSignal(false);
+  const [backendSessions, setBackendSessions] = createSignal<BackendSessionDiscovery | null>(null);
+  const [backendSessionsLoading, setBackendSessionsLoading] = createSignal(true);
+  const [adoptingSessionId, setAdoptingSessionId] = createSignal("");
   const chatSort = useChatSort();
   const projectId = createMemo(() => props.project.id);
   const isWorkspace = createMemo(() => workspaceProject(props.project));
@@ -202,6 +205,19 @@ export function ProjectDashboard(props: {
       .catch((requestError) => {
         if (!disposed) setError((requestError as Error).message);
       });
+    onCleanup(() => { disposed = true; });
+  });
+
+  createEffect(() => {
+    const id = projectId();
+    refreshVersion();
+    if (cloning()) return;
+    let disposed = false;
+    setBackendSessionsLoading(true);
+    void api<BackendSessionDiscovery>(`/v0/projects/${encodeURIComponent(id)}/backend-sessions?implementation=codex`)
+      .then((value) => { if (!disposed) setBackendSessions(value); })
+      .catch(() => { if (!disposed) setBackendSessions(null); })
+      .finally(() => { if (!disposed) setBackendSessionsLoading(false); });
     onCleanup(() => { disposed = true; });
   });
 
@@ -290,6 +306,19 @@ export function ProjectDashboard(props: {
       }
     } finally {
       setDestroying(false);
+    }
+  };
+
+  const adoptBackendSession = async (sessionId: string) => {
+    if (adoptingSessionId()) return;
+    setAdoptingSessionId(sessionId);
+    try {
+      const adopted = await api<DashboardChat>(`/v0/projects/${encodeURIComponent(props.project.id)}/backend-sessions/${encodeURIComponent(sessionId)}/adopt`, { method: "POST" });
+      await props.onOpenChat(adopted, props.project);
+    } catch (adoptionError) {
+      props.onError((adoptionError as Error).message);
+    } finally {
+      setAdoptingSessionId("");
     }
   };
 
@@ -410,6 +439,19 @@ export function ProjectDashboard(props: {
           </section>
 
           <aside class="workspace-dashboard-rail">
+            <section class="workspace-dashboard-section workspace-dashboard-backend-sessions" aria-labelledby="workspace-codex-sessions-title">
+              <div class="workspace-dashboard-section-heading"><div><h2 id="workspace-codex-sessions-title">Codex sessions</h2><p>Untracked sessions in this workspace</p></div></div>
+              <Show when={!backendSessionsLoading()} fallback={<div class="workspace-dashboard-empty"><Spinner /><span>Finding sessions…</span></div>}>
+                <Show when={backendSessions()?.adoptable.length} fallback={<div class="workspace-dashboard-empty">No untracked Codex sessions.</div>}>
+                  <div class="workspace-dashboard-session-list">
+                    <For each={backendSessions()!.adoptable.slice(0, 5)}>{(session) => <div class="workspace-dashboard-session-row">
+                      <span><strong>{session.title}</strong><small>{session.source} · full history</small></span>
+                      <Button variant="outline" size="sm" disabled={Boolean(adoptingSessionId())} onClick={() => void adoptBackendSession(session.id)}>{adoptingSessionId() === session.id ? <Spinner /> : null}Track</Button>
+                    </div>}</For>
+                  </div>
+                </Show>
+              </Show>
+            </section>
             <Show when={isWorkspace()} fallback={
               <section class="workspace-dashboard-section workspace-dashboard-scope" aria-labelledby="workspace-scope-title">
                 <div class="workspace-dashboard-section-heading"><div><h2 id="workspace-scope-title">Project scope</h2><p>Managed by Conduit</p></div></div>

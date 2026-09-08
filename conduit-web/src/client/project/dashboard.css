@@ -390,6 +390,14 @@
 .workspace-dashboard .project-chat-copy small, .workspace-dashboard .project-chat-row time { font-size: 9px; }
 .workspace-dashboard .project-chat-row > svg { width: 13px; height: 13px; }
 .workspace-dashboard-rail { display: grid; align-content: start; gap: 14px; }
+.workspace-dashboard-session-list { padding: 4px; }
+.workspace-dashboard-session-row { display: grid; min-height: 45px; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 7px; }
+.workspace-dashboard-session-row + .workspace-dashboard-session-row { border-top: 1px solid var(--border); border-radius: 0; }
+.workspace-dashboard-session-row > span { display: grid; min-width: 0; gap: 2px; }
+.workspace-dashboard-session-row strong, .workspace-dashboard-session-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-dashboard-session-row strong { font-size: 10px; font-weight: 580; }
+.workspace-dashboard-session-row small { color: var(--muted-foreground); font-size: 8.5px; }
+.workspace-dashboard-session-row [data-slot="button"] { min-height: 25px; font-size: 8.5px; }
 .workspace-dashboard-repository-state { display: grid; gap: 10px; padding: 10px 11px; }
 .workspace-dashboard-repository-state > div { display: grid; min-width: 0; gap: 2px; }
 .workspace-dashboard-repository-state strong, .workspace-dashboard-repository-state small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

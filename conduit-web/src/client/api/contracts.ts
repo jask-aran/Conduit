@@ -94,6 +94,25 @@ export interface ProjectDashboardPayload {
   recentChats: DashboardChat[];
 }
 
+export interface BackendSessionSummary {
+  id: string;
+  title: string;
+  preview: string;
+  cwd: string;
+  createdAt: number | string | null;
+  updatedAt: number | string | null;
+  status: string;
+  source: string;
+  replayFidelity: "full" | "summary" | "from-now";
+}
+
+export interface BackendSessionDiscovery {
+  implementation: string;
+  replayFidelity: BackendSessionSummary["replayFidelity"];
+  tracked: ChatSummary[];
+  adoptable: BackendSessionSummary[];
+}
+
 export interface WorkspacePolicy {
   allowlist: string[];
   defaultRoot: string | null;
