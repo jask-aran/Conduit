@@ -3,6 +3,7 @@ name = "conduit-working-files"
 version = "0.1.0"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+  "curl-cffi==0.15.0",
   "odfpy",
   "openpyxl",
   "pandas",
