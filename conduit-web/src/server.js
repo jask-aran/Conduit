@@ -212,16 +212,22 @@ async function chatModelView(context) {
     if (!resident) {
       const models = await adapter.listAvailableModels(context.project.workingRoot);
       const model = context.chat.backend.model || models[0]?.spec || "";
+      const selected = models.find((item) => item.spec === model);
+      const defaultThinkingLevel = selected?.defaultThinkingLevel || selected?.thinkingLevels[0] || "";
+      const savedThinkingLevel = context.chat.modelThinkingLevels?.[model] || "";
+      const thinkingLevel = selected?.thinkingLevels.includes(savedThinkingLevel) ? savedThinkingLevel : defaultThinkingLevel;
       return {
         installationId: "host-codex", runtimeKind: "codex", models, model,
-        thinkingLevel: "off", defaultModel: models[0]?.spec || "", defaultThinkingLevel: "off",
-        modelThinkingLevels: {}, requiresAuthentication: false, warnings: [], source: "catalog",
+        thinkingLevel, defaultModel: models[0]?.spec || "", defaultThinkingLevel,
+        modelThinkingLevels: context.chat.modelThinkingLevels || {}, requiresAuthentication: false, warnings: [], source: "catalog",
       };
     }
     const [models, state] = await Promise.all([adapter.listModels(resident.id), adapter.getModelState(resident.id)]);
     return {
       installationId: "host-codex", runtimeKind: "codex", models, ...state,
-      defaultModel: models[0]?.spec || "", defaultThinkingLevel: "off", modelThinkingLevels: {},
+      defaultModel: models[0]?.spec || "",
+      defaultThinkingLevel: models.find((item) => item.spec === state.model)?.defaultThinkingLevel || "",
+      modelThinkingLevels: context.chat.modelThinkingLevels || {},
       requiresAuthentication: false, warnings: [], source: "live",
     };
   }

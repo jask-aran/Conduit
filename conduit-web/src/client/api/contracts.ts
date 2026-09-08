@@ -185,6 +185,7 @@ export interface ModelOption {
   spec: string;
   label: string;
   thinkingLevels: string[];
+  defaultThinkingLevel?: string;
   outsideScope?: boolean;
 }
 

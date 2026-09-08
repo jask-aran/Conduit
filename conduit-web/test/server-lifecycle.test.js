@@ -135,7 +135,7 @@ test("Codex app-server profile creates, streams, and reconnects through neutral 
     assert.equal(created.status, 201);
     const chat = await created.json();
     const selected = await harness.request(`/v0/chats/${chat.id}/models`, {
-      method: "PATCH", body: JSON.stringify({ model: "codex-other", thinkingLevel: "off" }),
+      method: "PATCH", body: JSON.stringify({ model: "codex-other", thinkingLevel: "high" }),
     });
     assert.equal(selected.status, 200);
     const launched = await harness.request("/v0/live-sessions", {
@@ -147,7 +147,7 @@ test("Codex app-server profile creates, streams, and reconnects through neutral 
     assert.equal(live.model, "codex-other");
     assert.equal(live.capabilities.steer, false);
     const switched = await harness.request(`/v0/chats/${chat.id}/models`, {
-      method: "PATCH", body: JSON.stringify({ model: "codex-test", thinkingLevel: "off" }),
+      method: "PATCH", body: JSON.stringify({ model: "codex-test", thinkingLevel: "low" }),
     });
     assert.equal(switched.status, 200);
     assert.equal((await switched.json()).model, "codex-test");
@@ -155,12 +155,12 @@ test("Codex app-server profile creates, streams, and reconnects through neutral 
     await stream.opened;
     await stream.next((event) => event.type === "runtime_state");
     stream.socket.send(JSON.stringify({ type: "prompt", message: "Test Codex" }));
-    assert.equal((await stream.next((event) => event.type === "assistant_content" && event.phase === "delta")).delta, "codex-test works");
+    assert.equal((await stream.next((event) => event.type === "assistant_content" && event.phase === "delta")).delta, "codex-test low works");
     await stream.next((event) => event.type === "status" && event.detail === "settled");
     stream.close();
     const reattached = harness.connectStream(live.id);
     await reattached.opened;
-    assert.equal((await reattached.next((event) => event.type === "assistant_content" && event.phase === "delta")).delta, "codex-test works");
+    assert.equal((await reattached.next((event) => event.type === "assistant_content" && event.phase === "delta")).delta, "codex-test low works");
   } finally {
     await harness.stop();
   }
