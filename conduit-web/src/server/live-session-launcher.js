@@ -5,6 +5,7 @@ import { resolvePiLaunch } from "../pi-launch.js";
 import { resolveThinkingLevel } from "../pi-model-catalog.js";
 import { publicModelProfile, resolveModelProfile } from "../model-profiles.js";
 import { usesWebSearchOverlay } from "../model-profile-runtime.js";
+import { ChatBackendRegistry } from "../pi-rpc-adapter.js";
 
 function launchError(code, message, status = 400) {
   return Object.assign(new Error(message), { code, status });
@@ -25,6 +26,7 @@ export function createLiveSessionLauncher({
   registry,
   runtimeFor,
   templateForChat,
+  backends = new ChatBackendRegistry(manager),
 }) {
   async function launchFromContext(context, {
     requestedProject = "",
@@ -33,6 +35,7 @@ export function createLiveSessionLauncher({
     forceModel = false,
   } = {}) {
     lifecycle.assertAvailable(context.chat.id, context.project.id);
+    const adapter = backends.forChat(context.chat);
     if (requestedProject && ![context.project.id, context.project.slug].includes(requestedProject)) {
       throw launchError("session_project_mismatch", "The requested project does not own this chat", 409);
     }
@@ -148,7 +151,7 @@ export function createLiveSessionLauncher({
     lifecycle.assertAvailable(context.chat.id, context.project.id);
     let live = null;
     try {
-      live = await manager.createWithCapacity({
+      const options = {
         project: context.project,
         chatId: context.chat.id,
         sessionFile: context.chat.piSessionFile,
@@ -156,13 +159,16 @@ export function createLiveSessionLauncher({
         thinkingLevel: processThinkingLevel,
         template: runtime.kind === "conduit_profile" ? template : null,
         launchSpec,
-      });
-      await manager.waitForSession(live.id);
+      };
+      live = context.chat.piSessionFile
+        ? await adapter.restore(context.chat.piSessionFile, options)
+        : await adapter.create(options);
+      await adapter.waitForSession(live.id);
       lifecycle.assertAvailable(context.chat.id, context.project.id);
-      if (persistedOutsideScope) await manager.setModel(live.id, processModel);
+      if (persistedOutsideScope) await adapter.setModel(live.id, processModel);
       if (runtime.kind === "native_pi" && seedModel) {
-        await manager.setModel(live.id, seedModel);
-        if (effectiveThinkingLevel) await manager.setThinkingLevel(live.id, effectiveThinkingLevel);
+        await adapter.setModel(live.id, seedModel);
+        if (effectiveThinkingLevel) await adapter.setThinkingLevel(live.id, effectiveThinkingLevel);
       }
       if (!live.sessionFile) throw launchError("invalid_session_mapping", "Pi did not report a session file", 409);
       const mapping = {
@@ -190,7 +196,7 @@ export function createLiveSessionLauncher({
         } : null,
       };
     } catch (error) {
-      if (live && ["starting", "running"].includes(live.status)) await manager.stopAndWait(live.id).catch(() => {});
+      if (live && ["starting", "running"].includes(live.status)) await adapter.close(live.id).catch(() => {});
       throw error;
     }
   }

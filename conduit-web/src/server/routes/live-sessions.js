@@ -2,6 +2,7 @@ import { messagesFromEntries } from "../../session-store.js";
 import { createLiveSessionLauncher } from "../live-session-launcher.js";
 
 export function registerLiveSessionRoutes(app, {
+  backends,
   catalogFor,
   config,
   findChatContext,
@@ -16,6 +17,7 @@ export function registerLiveSessionRoutes(app, {
   templateForChat,
 }) {
   const launchLiveSession = createLiveSessionLauncher({
+    backends,
     catalogFor,
     config,
     findChatContext,

@@ -2,6 +2,7 @@ import { CONTINUE_PROMPT } from "../continuation.js";
 import { messagesFromEntries } from "../session-store.js";
 import { chatView } from "../chat-store.js";
 import { serializeAttachmentEnvelope } from "../attachment-envelope.js";
+import { ChatBackendRegistry } from "../pi-rpc-adapter.js";
 
 export function createLiveSessionStream({
   manager,
@@ -12,9 +13,14 @@ export function createLiveSessionStream({
   findChatContext,
   findRegisteredSession,
   chatModelView,
+  backends = new ChatBackendRegistry(manager),
   autoNameSession = async () => {},
 }) {
   const namingChats = new Set();
+
+  function adapterFor(record) {
+    return backends.forChat(registry.metadata(record.chatId));
+  }
 
   async function promptForChat(record, command, message) {
     const context = await findChatContext(record.chatId);
@@ -26,7 +32,7 @@ export function createLiveSessionStream({
 
   async function sendPrompt(record, prepared, options) {
     const needsName = !prepared.context.chat.title && !namingChats.has(prepared.context.chat.id);
-    const generationId = await manager.promptAccepted(record.id, prepared.prompt, options);
+    const generationId = await adapterFor(record).prompt(record.id, prepared.prompt, options);
     await registry.markUserMessage(prepared.context.chat.id);
     if (prepared.context.chat.status === "draft") {
       await registry.update(prepared.context.chat.id, {
@@ -54,8 +60,9 @@ export function createLiveSessionStream({
     if (model && !current.models.some((item) => item.spec === model)) {
       throw Object.assign(new Error("Selected model is unavailable for this chat"), { code: "invalid_model" });
     }
-    if (model && model !== current.model) await manager.setModel(record.id, model);
-    if (thinkingLevel && thinkingLevel !== current.thinkingLevel) await manager.setThinkingLevel(record.id, thinkingLevel);
+    const adapter = adapterFor(record);
+    if (model && model !== current.model) await adapter.setModel(record.id, model);
+    if (thinkingLevel && thinkingLevel !== current.thinkingLevel) await adapter.setThinkingLevel(record.id, thinkingLevel);
   }
 
   async function syncForkedChat(record) {
@@ -70,6 +77,7 @@ export function createLiveSessionStream({
   }
 
   async function handleClientCommand(record, command) {
+    const adapter = adapterFor(record);
     if (command.type === "prompt") {
       const prepared = await promptForChat(record, command, String(command.message || ""));
       const streamingBehavior = command.streamingBehavior === "steer" || command.streamingBehavior === "followUp"
@@ -79,24 +87,24 @@ export function createLiveSessionStream({
     }
     if (command.type === "follow_up" || command.type === "steer") {
       const prepared = await promptForChat(record, command, String(command.message || ""));
-      await manager.queueAccepted(record.id, command.type, prepared.prompt);
+      await adapter.queue(record.id, command.type, prepared.prompt);
       return null;
     }
     if (command.type === "stop_generation" || command.type === "abort") {
-      return manager.abortGeneration(record.id, command.generationId || null);
+      return adapter.cancel(record.id, command.generationId || null);
     }
     if (command.type === "fork_and_prompt") {
-      await manager.fork(record.id, command.entryId);
+      await adapter.fork(record.id, command.entryId);
       await syncForkedChat(record);
       await applyComposerModel(record, command);
       const prepared = await promptForChat(record, command, String(command.message || ""));
       return sendPrompt(record, prepared);
     }
     if (command.type === "regenerate") {
-      const forked = await manager.fork(record.id, command.entryId);
+      const forked = await adapter.fork(record.id, command.entryId);
       await syncForkedChat(record);
       await applyComposerModel(record, command);
-      return manager.promptAccepted(record.id, forked.text);
+      return adapter.prompt(record.id, forked.text);
     }
     if (command.type === "continue") {
       if (!config.enablePartialContinue) throw Object.assign(new Error("Partial continuation is disabled"), { code: "partial_continue_disabled" });
@@ -104,22 +112,23 @@ export function createLiveSessionStream({
       const previous = persisted ? messagesFromEntries(persisted.entries).findLast((message) => message.role === "assistant") : null;
       const partial = previous?.content || record.generation?.partial || "";
       if (!partial || (!previous?.stopped && !record.generation?.closed)) throw new Error("There is no stopped response to continue");
-      return manager.promptAccepted(record.id, CONTINUE_PROMPT, { continuationBase: partial });
+      return adapter.prompt(record.id, CONTINUE_PROMPT, { continuationBase: partial });
     }
     if (command.type === "extension_ui_response" || command.type === "host_ui_response") {
-      manager.respondHostUi(record.id, command);
+      adapter.respondHostUi(record.id, command);
       return null;
     }
-    if (command.type === "refresh_context") return manager.refreshContextUsage(record.id);
-    manager.send(record.id, command);
+    if (command.type === "refresh_context") return adapter.refreshContext(record.id);
+    adapter.sendPi(record.id, command);
     return null;
   }
 
   const handleUpgrade = (id, request, socket, head) => wss.handleUpgrade(request, socket, head, (ws) => {
     const record = manager.get(id);
-    const generationResume = manager.attach(id, ws);
+    const adapter = adapterFor(record);
+    const generationResume = adapter.attach(id, ws);
     if (generationResume) ws.send(JSON.stringify(generationResume));
-    if (record.status === "running" && !record.contextUsage?.contextWindow) manager.refreshContextUsage(record.id).catch(() => {});
+    if (record.status === "running" && !record.contextUsage?.contextWindow) adapter.refreshContext(record.id).catch(() => {});
     ws.send(JSON.stringify({
       type: "runtime_state",
       session: manager.view(record),

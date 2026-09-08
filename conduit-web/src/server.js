@@ -59,6 +59,7 @@ import { VOICE_EXECUTION_CATALOG } from "./server/voice-execution-catalog.js";
 import { ModelProfileRuntime, usesWebSearchOverlay } from "./model-profile-runtime.js";
 import { publicModelProfile, resolveModelProfile } from "./model-profiles.js";
 import { PromptStore } from "./prompt-store.js";
+import { ChatBackendRegistry, serializePiV0 } from "./pi-rpc-adapter.js";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
@@ -131,6 +132,7 @@ if (startupViolation) {
   process.exit(1);
 }
 const manager = new PiManager({
+  serializeEvent: serializePiV0,
   command: config.piCommand,
   agentDir: config.piAgentDir,
   template: config.piTemplate,
@@ -138,6 +140,7 @@ const manager = new PiManager({
   maxGeneratingProcesses: runtimeSettings.get().maxGeneratingProcesses,
   idleProcessTtlMs: runtimeSettings.get().idleProcessTtlMs,
 });
+const backends = new ChatBackendRegistry(manager);
 async function recycleIdleIsolatedPiProcesses() {
   const candidates = manager.liveRecords().filter((record) => record.runtime?.kind === "conduit_profile"
     && manager.isReclaimable(record));
@@ -215,9 +218,10 @@ async function chatModelView(context) {
   const resident = manager.getByChatId(context.chat.id);
   let models = catalogView.models;
   if (resident) {
+    const adapter = backends.forChat(context.chat);
     const [available, state] = await Promise.all([
-      manager.getAvailableModels(resident.id),
-      manager.getModelState(resident.id),
+      adapter.listModels(resident.id),
+      adapter.getModelState(resident.id),
     ]);
     const enabled = new Set(catalogView.models.map((item) => item.spec));
     const liveModels = available.map((item) => catalog.modelView({ model: item }));
@@ -492,6 +496,7 @@ registerProjectRoutes(app, {
   lifecycle,
 });
 const launchLiveSession = registerLiveSessionRoutes(app, {
+  backends,
   catalogFor,
   config,
   findChatContext,
@@ -506,6 +511,7 @@ const launchLiveSession = registerLiveSessionRoutes(app, {
   templateForChat,
 });
 registerChatRoutes(app, {
+  backends,
   catalogFor,
   chatModelView,
   config,
@@ -631,6 +637,7 @@ const dictationStream = createDictationStream({
   },
 });
 const liveSessionStream = createLiveSessionStream({
+  backends,
   manager,
   wss,
   attachments,
