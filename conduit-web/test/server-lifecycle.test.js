@@ -120,7 +120,37 @@ test("the harness attaches a real client stream to a live Pi process", async () 
     assert.equal((await runtime.next((event) => event.type === "runtime_process" && event.process.id === live.id)).process.chatId, chat.id);
     const stream = harness.connectStream(live.id);
     await stream.opened;
-    assert.equal((await stream.next((event) => event.type === "runtime_state")).session.chatId, chat.id);
+    assert.equal((await stream.next((event) => event.type === "runtime_state")).capabilities.replay, true);
+  } finally {
+    await harness.stop();
+  }
+});
+
+test("Codex app-server profile creates, streams, and reconnects through neutral events", async () => {
+  const harness = await startConduitHarness();
+  try {
+    const created = await harness.request("/v0/chats", {
+      method: "POST", body: JSON.stringify({ profileId: "codex" }),
+    });
+    assert.equal(created.status, 201);
+    const chat = await created.json();
+    const launched = await harness.request("/v0/live-sessions", {
+      method: "POST", body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId }),
+    });
+    assert.equal(launched.status, 201);
+    const live = await launched.json();
+    assert.equal(live.backend.implementation, "codex");
+    assert.equal(live.capabilities.steer, false);
+    const stream = harness.connectStream(live.id);
+    await stream.opened;
+    await stream.next((event) => event.type === "runtime_state");
+    stream.socket.send(JSON.stringify({ type: "prompt", message: "Test Codex" }));
+    assert.equal((await stream.next((event) => event.type === "assistant_content" && event.phase === "delta")).delta, "Codex works");
+    await stream.next((event) => event.type === "status" && event.detail === "settled");
+    stream.close();
+    const reattached = harness.connectStream(live.id);
+    await reattached.opened;
+    assert.equal((await reattached.next((event) => event.type === "assistant_content" && event.phase === "delta")).delta, "Codex works");
   } finally {
     await harness.stop();
   }
@@ -168,12 +198,12 @@ test("reattachment receives a terminal generation and its durable checkpoint", a
       },
     }, { pid: prompt.pid });
     await harness.pi.emit({ type: "agent_settled" }, { pid: prompt.pid });
-    await original.next((event) => event.type === "generation_settled");
+    await original.next((event) => event.type === "status" && event.detail === "settled");
     original.close();
 
     const reattached = harness.connectStream(live.id);
     await reattached.opened;
-    const resume = await reattached.next((event) => event.type === "generation_resume");
+    const resume = await reattached.next((event) => event.type === "generation_replay");
     assert.equal(resume.generation.status, "complete");
     assert.equal(resume.generation.assistantMessages[0].blocks[0].text, "Terminal state survives reconnect");
     const checkpoint = await reattached.next((event) => event.type === "session_checkpoint", 5_000);

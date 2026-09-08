@@ -21,7 +21,7 @@ export function registerChatRoutes(app, {
   runtimeFor,
   templateForChat,
 }) {
-  app.get("/v0/profiles", (_request, response) => response.json({ profiles: agentProfiles(config.piTemplates) }));
+  app.get("/v0/profiles", (_request, response) => response.json({ profiles: agentProfiles(config.piTemplates, { codexAvailable: backends.adapters.has("codex") }) }));
   app.get("/v0/models", async (request, response, next) => {
     try {
       const project = await projects.get(request.query.projectId || "chat");
@@ -63,6 +63,14 @@ export function registerChatRoutes(app, {
       if (!project) return response.status(404).json({ error: "project_not_found" });
       await lifecycle.withProjects([project.id], async () => {
         await projects.validate(project);
+        if (request.body?.profileId === "codex") {
+          if (!backends.adapters.has("codex")) return response.status(409).json({ error: "codex_unavailable" });
+          const chat = await registry.create(project, { backend: {
+            profileId: "codex", profileRevision: null, management: "agent", protocol: "native_api",
+            implementation: "codex", installationId: "host-codex", opaqueSession: null,
+          } });
+          return response.status(201).json(chatView(chat));
+        }
         const hostDefault = project.defaultTemplateId === "host-pi" && request.body?.templateId == null && request.body?.runtimeKind == null;
         const hostAvailable = config.installations.get("host-pi").available;
         if (hostDefault && !hostAvailable) {
@@ -109,6 +117,20 @@ export function registerChatRoutes(app, {
       request.body = profileSelection(request.body);
       const context = await findChatContext(request.params.chatId);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
+      if (request.body?.profileId && (context.chat.status !== "draft" || context.chat.lastUserMessageAt)) {
+        return response.status(409).json({ error: "backend_locked", message: "Fork this chat to change its backend." });
+      }
+      if (request.body?.profileId === "codex") {
+        if (!backends.adapters.has("codex")) return response.status(409).json({ error: "codex_unavailable" });
+        await registry.update(context.chat.id, {
+          templateId: null,
+          templateVersion: null,
+          runtime: null,
+          backend: { profileId: "codex", profileRevision: null, management: "agent", protocol: "native_api",
+            implementation: "codex", installationId: "host-codex", opaqueSession: null },
+        });
+        return response.json(chatView(registry.metadata(context.chat.id)));
+      }
       if (lifecycle.isBusy(context.chat.id) && (request.body?.templateId != null || request.body?.runtimeKind != null)) {
         return response.status(409).json({ error: "runtime_locked", message: "Pi is already starting for this chat." });
       }
@@ -184,7 +206,7 @@ export function registerChatRoutes(app, {
           modelThinkingLevels: { ...(context.chat.modelThinkingLevels || {}), [targetModel]: thinkingLevel },
         });
       };
-      const resident = manager.getByChatId(context.chat.id);
+      const resident = backends.getByChatId(context.chat.id);
       if (resident) {
         const adapter = backends.forChat(context.chat);
         if (spec && spec !== current.model) {
@@ -214,7 +236,7 @@ export function registerChatRoutes(app, {
             await adapter.setModel(resident.id, spec);
           }
         }
-        const activeResident = manager.getByChatId(context.chat.id);
+        const activeResident = backends.getByChatId(context.chat.id);
         if (thinkingLevel && activeResident) await adapter.setThinkingLevel(activeResident.id, thinkingLevel);
       } else {
         if (context.chat.status !== "draft" || context.chat.piSessionFile) {

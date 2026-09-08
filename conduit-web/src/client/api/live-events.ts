@@ -1,4 +1,4 @@
-import type { CacheStats, ContextUsage, HostUiRequest, QueueState, RetryState, SessionStats } from "./contracts";
+import type { CacheStats, ChatCapabilities, ContextUsage, HostUiRequest, QueueState, RetryState, SessionStats } from "./contracts";
 import type { ProtocolMessage, ToolLifecycleEvent } from "../timeline-order";
 
 type UnknownRecord = Record<string, unknown>;
@@ -20,6 +20,7 @@ export interface SessionSnapshot {
   generation: GenerationHandle | null;
   stopping: boolean;
   active: boolean;
+  capabilities: ChatCapabilities | null;
 }
 
 interface EventBase { generationId: string | null }
@@ -149,6 +150,7 @@ function sessionSnapshot(value: unknown): SessionSnapshot {
     generation: generation(source.generation),
     stopping: Boolean(source.stopping),
     active: Boolean(source.active),
+    capabilities: Object.keys(record(source.capabilities)).length ? record(source.capabilities) as unknown as ChatCapabilities : null,
   };
 }
 
@@ -168,12 +170,63 @@ export function normalizeLiveEvent(value: unknown): LiveEvent {
   const source = record(value);
   const sourceType = text(source.type);
   const generationId = optionalText(source.generationId);
-  const seq = number(source.seq);
+  const seq = number(source.seq ?? source.sequence);
   if (STRUCTURED_GENERATION_TYPES.has(sourceType as StructuredGenerationType) && seq !== undefined) {
     return { ...source, type: sourceType as StructuredGenerationType, generationId, seq } as StructuredGenerationEvent;
   }
   switch (sourceType) {
+    case "generation_replay": return { type: "generation_resume", generationId, seq: seq ?? 0, generation: source.generation };
+    case "assistant_content": {
+      const phase = text(source.phase);
+      if (phase === "start") return { type: "assistant_message_started", generationId, seq: seq ?? 0, messageId: text(source.messageId) };
+      if (phase === "delta") return {
+        type: "content_block_delta", generationId, seq: seq ?? 0,
+        messageId: text(source.messageId), contentIndex: number(source.contentIndex) ?? 0,
+        blockType: text(source.blockKind), delta: text(source.delta),
+      };
+      return { type: "assistant_message_completed", generationId, seq: seq ?? 0,
+        messageId: text(source.messageId), blocks: list(source.blocks).map((block) => {
+          const item = record(block);
+          return { ...item, type: item.kind === "tool_call" ? "toolCall" : item.kind };
+        }), stopReason: text(source.stopReason || "stop"), errorMessage: optionalText(source.errorMessage) };
+    }
+    case "tool_activity": return {
+      type: source.phase === "start" ? "tool_execution_started" : source.phase === "update" ? "tool_execution_updated" : "tool_execution_completed",
+      generationId, seq: seq ?? 0, toolCallId: text(source.toolCallId), name: text(source.name),
+      arguments: source.input, partialResult: source.phase === "update" ? source.output : undefined,
+      result: source.phase === "end" ? source.output : undefined, isError: Boolean(source.isError),
+    };
+    case "status": {
+      const detail = text(source.detail);
+      const status = text(source.status);
+      const type = detail === "stopped" ? "generation_stopped"
+        : status === "idle" ? "generation_settled"
+          : status === "stopping" ? "generation_stopping"
+            : detail === "generation_running" ? "generation_running" : "generation_started";
+      return { type, generationId, seq: seq ?? 0, processTerminated: Boolean(source.processTerminated) };
+    }
+    case "error": {
+      const detail = record(source.error);
+      return { type: "runtime_error", generationId, code: text(detail.code), message: text(detail.message) };
+    }
+    case "permission_request": return { type: "extension_ui_request", generationId, request: normalizeHostUiRequest({
+      id: source.requestId, kind: source.kind, title: source.title, message: source.message,
+      options: source.options, placeholder: source.placeholder, prefill: source.prefill, timeoutMs: source.timeoutMs,
+    }) };
+    case "permission_resolved": return { type: "extension_ui_resolved", generationId, requestId: text(source.requestId) };
+    case "usage": return { type: "context_usage", generationId, contextUsage: contextUsage(source.contextUsage), sessionStats: sessionStats(source.sessionStats), cacheStats: cacheStats(source.cacheStats) };
+    case "queue_state": return { type: "queue_update", generationId, queue: queue(source.queue) || { steering: [], followUp: [] } };
+    case "compaction": return { type: source.active ? "compaction_start" : "compaction_end", generationId };
+    case "retry": return source.active
+      ? { type: "auto_retry_start", generationId, retry: retry(source.retry) || {} }
+      : { type: "auto_retry_end", generationId };
+    case "transcript_message": return { type: "message_end", generationId, message: protocolMessage(source.message) };
     case "runtime_state": {
+      if (!Object.keys(record(source.session)).length && source.lifecycle) {
+        const active = source.lifecycle === "working" || source.status === "working";
+        const session = sessionSnapshot({ active, stopping: source.status === "stopping", generation: generationId ? { id: generationId, closed: !active, settled: !active } : null, capabilities: source.capabilities });
+        return { type: "runtime_state", generationId, session, contextUsage: null, sessionStats: null, cacheStats: null, queue: null, hostUiRequests: null };
+      }
       const requests = source.hostUiRequests === undefined ? null : list(source.hostUiRequests).map(normalizeHostUiRequest).filter((item): item is HostUiRequest => Boolean(item));
       return { type: "runtime_state", generationId, session: sessionSnapshot(source.session), contextUsage: contextUsage(source.contextUsage), sessionStats: sessionStats(source.sessionStats), cacheStats: cacheStats(source.cacheStats), queue: queue(source.queue), hostUiRequests: requests };
     }
@@ -190,9 +243,9 @@ export function normalizeLiveEvent(value: unknown): LiveEvent {
       return {
         type: "session_checkpoint",
         generationId,
-        generationSeq: number(source.generationSeq) ?? null,
-        chatId: text(chat.id),
-        title: optionalText(chat.title),
+        generationSeq: number(source.generationSeq ?? source.sequence) ?? null,
+        chatId: text(chat.id || source.chatId),
+        title: optionalText(chat.title || source.title),
       };
     }
     case "message_end": return { type: "message_end", generationId, message: protocolMessage(source.message) };

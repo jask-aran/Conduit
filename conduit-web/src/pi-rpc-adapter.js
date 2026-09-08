@@ -15,12 +15,23 @@ export function normalizePiBackendEvent(event) {
       return { ...base, type: "assistant_content", phase: "delta", sequence: event.seq,
         messageId: event.messageId, contentIndex: event.contentIndex,
         blockKind: event.blockType === "toolCall" ? "tool_call" : event.blockType, delta: event.delta };
+    case "assistant_message_started":
+      return { ...base, type: "assistant_content", phase: "start", sequence: event.seq, messageId: event.messageId };
     case "assistant_message_completed":
       return { ...base, type: "assistant_content", phase: "final", sequence: event.seq,
         messageId: event.messageId, stopReason: event.stopReason, errorMessage: event.errorMessage,
         blocks: event.blocks.map(({ type, ...block }) => type === "toolCall"
           ? { kind: "tool_call", contentIndex: block.contentIndex, toolCallId: block.toolCallId, name: block.name, input: block.arguments }
           : { kind: type, ...block }) };
+    case "generation_started":
+    case "generation_running":
+      return { ...base, type: "status", sequence: event.seq, status: "working", activity: "working", detail: event.type };
+    case "generation_stopping":
+      return { ...base, type: "status", sequence: event.seq, status: "stopping", activity: "stopping", detail: event.type };
+    case "generation_stopped":
+      return { ...base, type: "status", sequence: event.seq, status: "idle", activity: "idle", detail: "stopped", processTerminated: event.processTerminated };
+    case "generation_settled":
+      return { ...base, type: "status", sequence: event.seq, status: "idle", activity: "idle", detail: "settled" };
     case "tool_execution_started":
     case "tool_execution_updated":
     case "tool_execution_completed":
@@ -46,10 +57,24 @@ export function normalizePiBackendEvent(event) {
         capabilities: PI_CAPABILITIES };
     }
     case "generation_resume":
-      return { ...base, type: "runtime_state", generationId: event.generationId,
-        sequence: event.seq, generation: event.generation, capabilities: PI_CAPABILITIES };
+      return { ...base, type: "generation_replay", generationId: event.generationId,
+        sequence: event.seq, generation: event.generation };
     case "session_checkpoint":
-      return { ...base, type: "session_checkpoint", sequence: event.generationSeq ?? null };
+      return { ...base, type: "session_checkpoint", sequence: event.generationSeq ?? null,
+        chatId: event.chat?.id || event.chatId || "", title: event.chat?.title || event.title || null };
+    case "queue_update":
+      return { ...base, type: "queue_state", queue: event.queue };
+    case "compaction_start":
+    case "compaction_end":
+      return { ...base, type: "compaction", active: event.type === "compaction_start" };
+    case "auto_retry_start":
+    case "generation_retry_started":
+      return { ...base, type: "retry", active: true, retry: event.retry || event };
+    case "auto_retry_end":
+    case "generation_retry_ended":
+      return { ...base, type: "retry", active: false };
+    case "message_end":
+      return { ...base, type: "transcript_message", message: event.message };
     case "context_usage":
       return { ...base, type: "usage", contextUsage: event.contextUsage,
         sessionStats: event.sessionStats, cacheStats: event.cacheStats };
@@ -71,7 +96,8 @@ export function normalizePiBackendEvent(event) {
 
 // The single existing browser protocol is a lossless projection of Pi events.
 export function serializePiV0(event) {
-  return JSON.stringify(normalizePiBackendEvent(event).pi);
+  const { pi: _pi, ...neutral } = normalizePiBackendEvent(event);
+  return JSON.stringify(neutral);
 }
 
 export class PiRpcAdapter {
@@ -87,27 +113,31 @@ export class PiRpcAdapter {
     return record ? this.manager.currentGenerationResume(record) : null;
   }
   getCapabilities() { return PI_CAPABILITIES; }
+  toClientEvent(event) { const { pi: _pi, ...neutral } = normalizePiBackendEvent(event); return neutral; }
   listModels(id) { return this.manager.getAvailableModels(id); }
   getModelState(id) { return this.manager.getModelState(id); }
   waitForSession(id) { return this.manager.waitForSession(id); }
-  attach(id, socket) { return this.manager.attach(id, socket); }
+  attach(id, socket) {
+    const replay = this.manager.attach(id, socket);
+    return replay ? normalizePiBackendEvent(replay) : null;
+  }
   queue(id, type, message) { return this.manager.queueAccepted(id, type, message); }
   fork(id, entryId) { return this.manager.fork(id, entryId); }
   setModel(id, model) { return this.manager.setModel(id, model); }
   setThinkingLevel(id, level) { return this.manager.setThinkingLevel(id, level); }
   refreshContext(id) { return this.manager.refreshContextUsage(id); }
   sendPi(id, command) { return this.manager.send(id, command); }
+  publish(record, event) { return this.manager.publish(record, event); }
   view(record) {
-    const { sessionFile, sessionId, runtime, template, ...session } = this.manager.view(record);
-    return { ...session, capabilities: PI_CAPABILITIES,
-      pi: { runtime, template } };
+    return { ...this.manager.view(record), capabilities: PI_CAPABILITIES };
   }
 }
 
 export class ChatBackendRegistry {
-  constructor(manager) {
+  constructor(manager, codex = null) {
     const pi = new PiRpcAdapter(manager);
     this.adapters = new Map([["conduit_pi", pi], ["native_pi", pi]]);
+    if (codex) this.adapters.set("codex", codex);
   }
   forImplementation(implementation) {
     const adapter = this.adapters.get(implementation);
@@ -118,9 +148,34 @@ export class ChatBackendRegistry {
     const implementation = chat?.backend?.implementation
       || (chat?.runtime?.kind === "native_pi" ? "native_pi" : "conduit_pi");
     const adapter = this.adapters.get(implementation);
-    if (!adapter || (chat?.backend && chat.backend.protocol !== "pi_rpc")) {
+    if (!adapter) {
       throw Object.assign(new Error("Chat backend is unavailable"), { code: "backend_unavailable", status: 409 });
     }
     return adapter;
+  }
+  adapterForRecord(record) { return this.adapters.get(record?.adapterImplementation || "conduit_pi"); }
+  get(id) {
+    for (const adapter of new Set(this.adapters.values())) {
+      const record = adapter.get ? adapter.get(id) : adapter.manager.get(id);
+      if (record) return record;
+    }
+    return null;
+  }
+  getByChatId(chatId) {
+    for (const adapter of new Set(this.adapters.values())) {
+      const record = adapter.getByChatId ? adapter.getByChatId(chatId) : adapter.manager.getByChatId(chatId);
+      if (record) return record;
+    }
+    return null;
+  }
+  list() {
+    return [...new Set(this.adapters.values())].flatMap((adapter) => adapter.list ? adapter.list() : adapter.manager.list());
+  }
+  view(record) { return this.adapterForRecord(record).view(record); }
+  stop(id) {
+    const record = this.get(id);
+    if (!record) return false;
+    void this.adapterForRecord(record).close(id);
+    return true;
   }
 }

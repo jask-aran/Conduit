@@ -29,7 +29,7 @@ export function registerLiveSessionRoutes(app, {
     runtimeFor,
     templateForChat,
   });
-  app.get("/v0/live-sessions", (_request, response) => response.json({ sessions: manager.list() }));
+  app.get("/v0/live-sessions", (_request, response) => response.json({ sessions: backends.list() }));
 
   app.get("/v0/runtime/settings", (_request, response) => {
     response.json({ ...runtimeSettings.get(), ...manager.policy() });
@@ -58,7 +58,7 @@ export function registerLiveSessionRoutes(app, {
         thinkingLevel: request.body?.thinkingLevel || "",
       });
       response.status(201).json({
-        ...manager.view(live),
+        ...backends.view(live),
         streamUrl: `/v0/live-sessions/${live.id}/stream`,
         ...(modelRecovery ? { modelRecovery } : {}),
       });
@@ -69,15 +69,15 @@ export function registerLiveSessionRoutes(app, {
 
   app.get("/v0/live-sessions/:id/snapshot", async (request, response, next) => {
     try {
-      const live = manager.get(request.params.id);
+      const live = backends.get(request.params.id);
       if (!live) return response.status(404).json({ error: "live_session_not_found" });
       const persisted = live.chatId ? await findRegisteredSession(live.chatId) : null;
-      response.json({ live: manager.view(live), events: live.events, messages: persisted ? messagesFromEntries(persisted.entries) : [] });
+      response.json({ live: backends.view(live), events: live.events, messages: persisted ? messagesFromEntries(persisted.entries) : [] });
     } catch (error) { next(error); }
   });
 
   app.delete("/v0/live-sessions/:id/process", (request, response) => {
-    const stopped = manager.stop(request.params.id);
+    const stopped = backends.stop(request.params.id);
     response.status(stopped ? 202 : 404).json({ stopped });
   });
 

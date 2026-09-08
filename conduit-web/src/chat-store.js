@@ -166,7 +166,8 @@ export class ChatStore {
       const active = legacyRegistry
         ? item.status === "active" || item.status === "persisted" || Boolean(item.file)
         : item.status === "active";
-      if (active && (!piSessionFile || !await fileExists(piSessionFile)) && !nativeRuntime) continue;
+      const externalBackend = item.backend && item.backend.protocol !== "pi_rpc";
+      if (active && (!piSessionFile || !await fileExists(piSessionFile)) && !nativeRuntime && !externalBackend) continue;
       let sessionMetadata = null;
       if (piSessionFile && await fileExists(piSessionFile)) {
         try { sessionMetadata = await readSessionMetadata(piSessionFile, project); }
@@ -183,7 +184,7 @@ export class ChatStore {
         templateVersion: typeof item.templateVersion === "string" && item.templateVersion.trim()
           ? item.templateVersion.trim()
           : null,
-        runtime: this.runtimeFor(item, item.templateId, item.templateVersion),
+        runtime: externalBackend ? null : this.runtimeFor(item, item.templateId, item.templateVersion),
         backend: item.backend || null,
         piSessionId: item.piSessionId || item.nativeId || (active ? item.id : null),
         piSessionFile,
@@ -353,7 +354,7 @@ export class ChatStore {
     catch (error) { if (error.code === "ENOENT") return null; throw error; }
   }
 
-  async create(project, { templateId = null, templateVersion = null, runtime = null } = {}) {
+  async create(project, { templateId = null, templateVersion = null, runtime = null, backend = null } = {}) {
     const timestamp = new Date(this.now()).toISOString();
     const chat = {
       id: crypto.randomUUID(),
@@ -364,7 +365,8 @@ export class ChatStore {
       templateVersion: typeof templateVersion === "string" && templateVersion.trim()
         ? templateVersion.trim()
         : null,
-      runtime: this.runtimeFor({ runtime }, templateId, templateVersion),
+      runtime: backend?.protocol === "pi_rpc" || !backend ? this.runtimeFor({ runtime }, templateId, templateVersion) : null,
+      backend,
       piSessionId: null,
       piSessionFile: null,
       modelThinkingLevels: {},
@@ -435,6 +437,7 @@ export class ChatStore {
       "templateId",
       "templateVersion",
       "runtime",
+      "backend",
       "piSessionId",
       "piSessionFile",
       "modelThinkingLevels",
@@ -453,7 +456,7 @@ export class ChatStore {
     if (chat.runtime) chat.runtime = this.runtimeFor(chat, chat.templateId, chat.templateVersion);
     if (patch.status === "draft" || patch.status === "active") chat.status = patch.status;
     if (chat.piSessionFile) chat.piSessionFile = path.resolve(chat.piSessionFile);
-    if (canSelectBackend && !patch.piSessionFile
+    if (canSelectBackend && patch.backend == null && !patch.piSessionFile
       && ["templateId", "templateVersion", "runtime"].some((key) => Object.hasOwn(patch, key))) {
       chat.backend = piBackendFor(chat);
     }
@@ -532,7 +535,8 @@ export class ChatStore {
 
   flush() {
     for (const chat of this.chats) {
-      chat.backend = { ...(chat.backend || piBackendFor(chat)), opaqueSession: chat.piSessionFile || null };
+      if (chat.backend?.protocol !== "pi_rpc") chat.backend ||= piBackendFor(chat);
+      else chat.backend = { ...(chat.backend || piBackendFor(chat)), opaqueSession: chat.piSessionFile || null };
     }
     const value = `${JSON.stringify({ version: 4, chats: this.chats }, null, 2)}\n`;
     this.writeQueue = this.writeQueue.then(async () => {

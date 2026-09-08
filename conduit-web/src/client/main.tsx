@@ -400,6 +400,7 @@ function App() {
     return scopes;
   };
   const [templates, setTemplates] = createSignal<Template[]>([]);
+  const [externalProfiles, setExternalProfiles] = createSignal<Template[]>([]);
   const [templatesLoading, setTemplatesLoading] = createSignal(true);
   const [installations, setInstallations] = createSignal<Installation[]>([]);
   const [installationsLoading, setInstallationsLoading] = createSignal(true);
@@ -564,14 +565,15 @@ function App() {
   const hostInstallation = createMemo(() => installations().find((item) => item.id === "host-pi"));
   const profiles = createMemo<Template[]>(() => {
     const ordinary = templates().filter((item) => item.defaultable !== false);
+    const available = [...ordinary, ...externalProfiles()];
     if (selectedProject()?.kind === "workspace" || ["linked", "created", "cloned"].includes(selectedProject()?.origin || "")) {
-      return [...ordinary, { id: "host-pi", label: "Host Pi", description: "Use the host Pi installation and native resources", disabled: !hostInstallation()?.available }];
+      return [...available, { id: "host-pi", label: "Host Pi", description: "Use the host Pi installation and native resources", disabled: !hostInstallation()?.available }];
     }
-    return ordinary;
+    return available;
   });
   const activeProfile = createMemo(() => chat.runtimeIdentity()?.kind === "native_pi"
     ? profiles().find((item) => item.id === "host-pi")
-    : templates().find((item) => item.id === chat.templateId()) || templates().find((item) => item.id === defaultTemplateId()) || null);
+    : profiles().find((item) => item.id === chat.templateId()) || profiles().find((item) => item.id === defaultTemplateId()) || null);
   const emptyChat = createMemo(() => chat.loadedId() === catalogue.selectedId() && !chat.messages().length && !chat.tools().length && !chat.activity()?.label);
   diagnosticContext = () => {
     const identity = chat.runtimeIdentity();
@@ -682,7 +684,7 @@ function App() {
       const profileId = launch.templateId || (project.defaultTemplateId === "host-pi" ? null : project.defaultTemplateId) || defaultTemplateId() || "assistant";
       const created = await api<ChatSummary>(profileId === "runtime" ? "/v0/runtime/chats" : "/v0/chats", {
         method: "POST",
-        body: JSON.stringify(profileId === "runtime" ? {} : hostDefault ? { projectId: project.id } : { projectId: project.id, templateId: profileId, runtimeKind: launch.runtimeKind || "conduit_profile" }),
+        body: JSON.stringify(profileId === "runtime" ? {} : hostDefault ? { projectId: project.id } : { projectId: project.id, profileId }),
       });
       const ownerProject = profileId === "runtime"
         ? catalogue.projects().find((item) => item.id === created.projectId)
@@ -1020,13 +1022,11 @@ function App() {
   const switchProfile = async (id: string) => {
     const selectedId = catalogue.selectedId();
     if (!selectedId || chat.status() !== "draft") return;
-    const project = selectedProject();
-    const host = id === "host-pi";
     const payload = await api<ChatSummary>(`/v0/chats/${encodeURIComponent(selectedId)}`, {
       method: "PATCH",
-      body: JSON.stringify({ templateId: host ? chat.templateId() : id, ...((project?.kind === "workspace" || ["linked", "created", "cloned"].includes(project?.origin || "")) ? { runtimeKind: host ? "native_pi" : "conduit_profile" } : {}) }),
+      body: JSON.stringify({ profileId: id }),
     });
-    chat.setTemplateId(payload.templateId || (host ? chat.templateId() : id));
+    chat.setTemplateId(payload.profileId || payload.templateId || id);
     chat.setRuntimeIdentity(payload.runtime || null);
     await models.reloadChat(selectedId);
   };
@@ -1630,6 +1630,11 @@ function App() {
         setTemplatesLoading(false);
         return payload;
       });
+    void api<{ profiles: Array<{ id: string; label: string; description?: string; management: string; disabled?: boolean; agent: { implementation: string } }> }>("/v0/profiles")
+      .then((payload) => setExternalProfiles((Array.isArray(payload.profiles) ? payload.profiles : [])
+        .filter((profile) => profile.management === "agent" && profile.agent?.implementation === "codex")
+        .map((profile) => ({ id: profile.id, label: profile.label, description: profile.description, disabled: profile.disabled }))))
+      .catch(() => setExternalProfiles([]));
     void api<{ partialContinue?: boolean; maxAttachmentBytes?: number }>("/v0/capabilities")
       .then((payload) => {
         setPartialContinue(payload.partialContinue !== false);
@@ -1769,11 +1774,11 @@ function App() {
               chat={chat}
               attachments={attachments}
               models={models}
-              profiles={templates().filter((item) => item.defaultable !== false)}
-              activeProfile={templates().find((item) => item.id === chat.templateId()) || templates().find((item) => item.id === defaultTemplateId()) || null}
+              profiles={profiles()}
+              activeProfile={activeProfile()}
               serverOnline={runtime.connectivity() === "online"}
               voiceSettings={voiceSettings()}
-              onChooseProfile={(id) => chat.setTemplateId(id)}
+              onChooseProfile={(id) => void switchProfile(id)}
               onOpenSettings={openSettings}
               onOpenAttachments={() => attachFileInput?.click()}
               onStatusChange={setComposerStatus}

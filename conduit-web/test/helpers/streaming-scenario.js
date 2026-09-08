@@ -137,7 +137,7 @@ export async function runDeterministicStreamingScenario(scenario) {
     stream.socket.send(JSON.stringify({ type: "prompt", message: scenario.prompt || `Run ${scenario.name}` }));
     const promptCommand = await harness.pi.waitForCommand("prompt", { after: commandOffset + 1 });
     await harness.pi.reply(promptCommand, {});
-    await stream.next((event) => event.type === "generation_started");
+    await stream.next((event) => event.type === "status" && event.status === "working");
 
     await harness.pi.emit({ type: "agent_start" }, { pid: promptCommand.pid });
     await harness.pi.emit({
@@ -188,11 +188,11 @@ export async function runDeterministicStreamingScenario(scenario) {
     }, { pid: promptCommand.pid });
     await harness.pi.emit({ type: "agent_end", willRetry: false }, { pid: promptCommand.pid });
     await harness.pi.emit({ type: "agent_settled" }, { pid: promptCommand.pid });
-    await stream.next((event) => event.type === "generation_settled", 5_000);
+    await stream.next((event) => event.type === "status" && event.detail === "settled", 5_000);
 
-    const deltaFrames = stream.frames.filter(({ event }) => event.type === "content_block_delta");
+    const deltaFrames = stream.frames.filter(({ event }) => event.type === "assistant_content" && event.phase === "delta");
     const firstDeltaAt = deltaFrames[0]?.receivedAt;
-    const completionFrame = stream.frames.find(({ event }) => event.type === "generation_settled");
+    const completionFrame = stream.frames.find(({ event }) => event.type === "status" && event.detail === "settled");
     const deliveredText = deltaFrames.map(({ event }) => event.delta).join("");
     const completionMs = (completionFrame?.receivedAt ?? performance.now()) - promptStarted;
     const sourceCharacters = finalText.length;
@@ -207,7 +207,7 @@ export async function runDeterministicStreamingScenario(scenario) {
       outcome: deliveredText === finalText ? "passed" : "failed",
       durationMs: performance.now() - started,
       transport: {
-        promptAcceptedMs: stream.frames.find(({ event }) => event.type === "generation_started")?.receivedAt - promptStarted,
+        promptAcceptedMs: stream.frames.find(({ event }) => event.type === "status" && event.status === "working")?.receivedAt - promptStarted,
         firstDeltaMs: firstDeltaAt == null ? null : firstDeltaAt - promptStarted,
         completionMs,
         sourceDeltaCount: scenario.cadence.deltas.length,

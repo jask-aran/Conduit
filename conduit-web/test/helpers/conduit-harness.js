@@ -64,6 +64,7 @@ function flushEvents() {
   }
   setTimeout(flushEvents, 5);
 }
+
 flushEvents();
 `);
   await fs.chmod(conduitPi, 0o755);
@@ -71,6 +72,38 @@ flushEvents();
   await fs.copyFile(conduitPi, nativePi);
   await fs.chmod(nativePi, 0o755);
   return { conduitPi, nativePi };
+}
+
+async function writeFakeCodex(root) {
+  const command = path.join(root, "codex");
+  await fs.writeFile(command, `#!/usr/bin/env node
+if (process.argv.includes("--version")) { console.log("codex-cli 0.test"); process.exit(0); }
+const readline = require("node:readline");
+const input = readline.createInterface({ input: process.stdin });
+const send = (message) => process.stdout.write(JSON.stringify(message) + "\\n");
+input.on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.method === "initialize") return send({ id: message.id, result: { userAgent: "conduit-test" } });
+  if (message.method === "thread/start" || message.method === "thread/resume") {
+    const id = message.params.threadId || "thread-test";
+    send({ id: message.id, result: { thread: { id, model: "codex-test", turns: [] }, model: "codex-test" } });
+    return;
+  }
+  if (message.method === "thread/read") return send({ id: message.id, result: { thread: { id: message.params.threadId, turns: [] } } });
+  if (message.method === "model/list") return send({ id: message.id, result: { data: [{ id: "codex-test", displayName: "Codex Test", hidden: false, supportedReasoningEfforts: [] }] } });
+  if (message.method === "turn/start") {
+    send({ method: "turn/started", params: { turn: { id: "turn-test" } } });
+    send({ id: message.id, result: { turn: { id: "turn-test" } } });
+    send({ method: "item/agentMessage/delta", params: { turnId: "turn-test", itemId: "message-test", delta: "Codex works" } });
+    send({ method: "item/completed", params: { turnId: "turn-test", item: { id: "message-test", type: "agentMessage", text: "Codex works" } } });
+    send({ method: "turn/completed", params: { turn: { id: "turn-test", status: "completed" } } });
+    return;
+  }
+  if (message.method === "turn/interrupt") return send({ id: message.id, result: {} });
+});
+`);
+  await fs.chmod(command, 0o755);
+  return command;
 }
 
 function deferredEvent(events, predicate, timeoutMs) {
@@ -102,6 +135,7 @@ export async function startConduitHarness({ env = {} } = {}) {
   const commandLog = path.join(root, "pi-commands.jsonl");
   const eventLog = path.join(root, "pi-events.jsonl");
   const { conduitPi, nativePi } = await writeFakePi(root);
+  const codexCommand = await writeFakeCodex(root);
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: path.resolve(import.meta.dirname, "../.."),
     stdio: ["ignore", "pipe", "pipe"],
@@ -123,6 +157,7 @@ export async function startConduitHarness({ env = {} } = {}) {
       CONDUIT_PI_COMMAND: conduitPi,
       CONDUIT_NATIVE_PI_COMMAND: nativePi,
       CONDUIT_NATIVE_PI_AGENT_DIR: path.join(root, "native-agent"),
+      CONDUIT_CODEX_COMMAND: codexCommand,
       CONDUIT_WORKSPACE_ALLOWLIST: root,
       TEST_PI_COMMAND_LOG: commandLog,
       TEST_PI_EVENT_LOG: eventLog,
@@ -214,7 +249,7 @@ export async function startConduitHarness({ env = {} } = {}) {
         const event = JSON.parse(String(data));
         messages.push(event);
         frames.push({ event, receivedAt: performance.now() });
-        if (event.type === "content_block_delta") {
+        if (event.type === "assistant_content" && event.phase === "delta") {
           deltaCount += 1;
           if (pauseAfterDelta != null && deltaCount === pauseAfterDelta && pauseMs > 0 && socket._socket) {
             pauseStartedAt = performance.now();
