@@ -220,8 +220,12 @@ async function chatModelView(context) {
     const resident = backends.getByChatId(context.chat.id);
     const models = await adapter.listModels(resident?.id);
     const model = resident?.model || context.chat.backend.model || models[0]?.spec || "";
-    return { installationId: "user-chatgpt-account", runtimeKind: "chatgpt-web", models, model, thinkingLevel: "",
-      defaultModel: models[0]?.spec || "", defaultThinkingLevel: "", modelThinkingLevels: {},
+    const selected = models.find((item) => item.spec === model);
+    const savedThinkingLevel = context.chat.modelThinkingLevels?.[model] || "";
+    const thinkingLevel = resident?.thinkingLevel || (selected?.thinkingLevels.includes(savedThinkingLevel) ? savedThinkingLevel : selected?.defaultThinkingLevel || "");
+    return { installationId: "user-chatgpt-account", runtimeKind: "chatgpt-web", models, model, thinkingLevel,
+      defaultModel: models[0]?.spec || "", defaultThinkingLevel: selected?.defaultThinkingLevel || "",
+      modelThinkingLevels: context.chat.modelThinkingLevels || {},
       requiresAuthentication: false, warnings: [], source: resident ? "live" : "catalog" };
   }
   if (context.chat.backend?.implementation === "codex") {

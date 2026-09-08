@@ -81,6 +81,40 @@ def parse_cookie_header(value: str) -> dict[str, str]:
     return cookies
 
 
+def public_chat_models(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse ChatGPT transport variants into the public Chat model choices."""
+    by_slug = {item.get("slug"): item for item in items if isinstance(item, dict) and item.get("slug")}
+    models: list[dict[str, Any]] = []
+    for item in items:
+        slug = item.get("slug") if isinstance(item, dict) else None
+        if not slug or item.get("is_work_mode_model") or item.get("reasoning_type") != "auto":
+            continue
+        thinking = by_slug.get(slug + "-thinking")
+        instant = by_slug.get(slug + "-instant")
+        if not thinking or not instant:
+            continue
+        efforts = [entry.get("thinking_effort") for entry in thinking.get("thinking_efforts", [])
+                   if isinstance(entry, dict) and entry.get("thinking_effort")]
+        levels = ["instant", "medium"]
+        if "standard" in efforts:
+            levels.append("high")
+        if "extended" in efforts:
+            levels.append("xhigh")
+        models.append({"id": slug, "label": item.get("title") or slug,
+                       "thinkingLevels": levels, "defaultThinkingLevel": "medium"})
+    return models
+
+
+def transport_selection(model: str, thinking_level: str) -> tuple[str, str]:
+    if thinking_level == "instant":
+        return model + "-instant", ""
+    if thinking_level == "high":
+        return model + "-thinking", "standard"
+    if thinking_level == "xhigh":
+        return model + "-thinking", "extended"
+    return model, ""
+
+
 def solve_pow(seed: str, difficulty: str, config: list[Any], limit: int = 500_000) -> str:
     target = bytes.fromhex(difficulty)
     width = len(target)
@@ -225,8 +259,7 @@ class Bridge:
                 raise self.upstream_error(response, "ChatGPT model catalog failed")
             data = response.json()
             items = data.get("models", data.get("data", data if isinstance(data, list) else []))
-            return [{"id": item.get("slug") or item.get("id"), "label": item.get("title") or item.get("name") or item.get("slug") or item.get("id")}
-                    for item in items if isinstance(item, dict) and (item.get("slug") or item.get("id"))]
+            return public_chat_models(items)
 
     def requirements(self, token: str) -> tuple[str, str]:
         if not self.dpl:
@@ -251,13 +284,16 @@ class Bridge:
             token = self.token()
             sentinel, proof = self.requirements(token)
             user_message_id = str(uuid.uuid4())
+            model, thinking_effort = transport_selection(body.get("model") or "auto", body.get("thinkingLevel") or "medium")
             payload: dict[str, Any] = {"action": "next", "messages": [{"id": user_message_id, "author": {"role": "user"},
                 "create_time": time.time(), "content": {"content_type": "text", "parts": [body.get("message", "")]},
                 "metadata": {"serialization_metadata": {"custom_symbol_offsets": []}}}],
-                "parent_message_id": body.get("parentMessageId") or str(uuid.uuid4()), "model": body.get("model") or "auto",
+                "parent_message_id": body.get("parentMessageId") or str(uuid.uuid4()), "model": model,
                 "client_prepare_state": "success", "timezone_offset_min": 0, "timezone": "UTC",
                 "conversation_mode": {"kind": "primary_assistant"}, "supports_buffering": True, "supported_encodings": ["v1"],
                 "history_and_training_disabled": False}
+            if thinking_effort:
+                payload["thinking_effort"] = thinking_effort
             if body.get("conversationId"):
                 payload["conversation_id"] = body["conversationId"]
             headers = {**self.headers(), "Authorization": "Bearer " + token, "Content-Type": "application/json", "Accept": "text/event-stream",

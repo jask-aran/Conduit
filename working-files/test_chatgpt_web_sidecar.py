@@ -5,7 +5,7 @@ import unittest
 
 os.environ.setdefault("CONDUIT_CHATGPT_WEB_COOKIE_FILE", tempfile.mktemp())
 
-from chatgpt_web_sidecar import SseDecoder, parse_cookie_header, solve_pow
+from chatgpt_web_sidecar import SseDecoder, parse_cookie_header, public_chat_models, solve_pow, transport_selection
 
 
 class SidecarProtocolTests(unittest.TestCase):
@@ -42,6 +42,23 @@ class SidecarProtocolTests(unittest.TestCase):
         config = [0] * 18
         token = solve_pow("seed", "ff", config, limit=1)
         self.assertTrue(token.startswith("gAAAAAB"))
+
+    def test_catalog_collapses_chat_variants_and_omits_work_models(self):
+        items = [
+            {"slug": "gpt-5-6", "title": "GPT-5.6 Sol", "reasoning_type": "auto", "is_work_mode_model": False},
+            {"slug": "gpt-5-6-instant", "reasoning_type": "none", "is_work_mode_model": False},
+            {"slug": "gpt-5-6-thinking", "reasoning_type": "reasoning", "is_work_mode_model": False,
+             "thinking_efforts": [{"thinking_effort": "standard"}, {"thinking_effort": "extended"}]},
+            {"slug": "gpt-5.6-terra-wm", "title": "GPT-5.6 Terra", "reasoning_type": "reasoning", "is_work_mode_model": True},
+        ]
+        self.assertEqual(public_chat_models(items), [{"id": "gpt-5-6", "label": "GPT-5.6 Sol",
+            "thinkingLevels": ["instant", "medium", "high", "xhigh"], "defaultThinkingLevel": "medium"}])
+
+    def test_public_effort_maps_to_chatgpt_transport_fields(self):
+        self.assertEqual(transport_selection("gpt-5-6", "instant"), ("gpt-5-6-instant", ""))
+        self.assertEqual(transport_selection("gpt-5-6", "medium"), ("gpt-5-6", ""))
+        self.assertEqual(transport_selection("gpt-5-6", "high"), ("gpt-5-6-thinking", "standard"))
+        self.assertEqual(transport_selection("gpt-5-6", "xhigh"), ("gpt-5-6-thinking", "extended"))
 
 
 if __name__ == "__main__":

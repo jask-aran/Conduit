@@ -8,7 +8,7 @@ import { EventEmitter } from "node:events";
 
 export const CHATGPT_WEB_CAPABILITIES = Object.freeze({
   steer: false, followUpQueue: false, cancel: true, compaction: false,
-  thinkingLevels: false, modelSwitch: false, toolUse: false, permissions: false,
+  thinkingLevels: true, modelSwitch: true, toolUse: false, permissions: false,
   usage: false, replay: true,
 });
 
@@ -77,7 +77,7 @@ export class ChatGptWebAdapter extends EventEmitter {
 
   create(options) { return this.start(null, options); }
   restore(opaqueSession, options) { return this.start(opaqueSession, options); }
-  async start(opaqueSession, { chatId, model = "" }) {
+  async start(opaqueSession, { chatId, model = "", thinkingLevel = "" }) {
     const existing = this.getByChatId(chatId);
     if (existing) return existing;
     await this.ensureSidecar();
@@ -85,7 +85,8 @@ export class ChatGptWebAdapter extends EventEmitter {
     const record = {
       id: crypto.randomUUID(), chatId, status: "running", activity: "idle", adapterImplementation: "chatgpt-web",
       active: false, stopping: false, sessionId: { conversationId: cursor.conversationId || "", parentMessageId: cursor.parentMessageId || "" },
-      model: model || cursor.model || "", thinkingLevel: "", generation: null, clients: new Set(), events: [], eventSequence: 0,
+      model: model || cursor.model || "", thinkingLevel: thinkingLevel || cursor.thinkingLevel || "medium",
+      generation: null, clients: new Set(), events: [], eventSequence: 0,
       abortController: null,
     };
     record.events = this.readJournal(chatId);
@@ -118,7 +119,8 @@ export class ChatGptWebAdapter extends EventEmitter {
     try {
       await this.ensureSidecar();
       const response = await fetch(this.origin + "/chat", { method: "POST", headers: { "Content-Type": "application/json" },
-        signal: record.abortController.signal, body: JSON.stringify({ message, model: record.model, ...record.sessionId }) });
+        signal: record.abortController.signal,
+        body: JSON.stringify({ message, ...record.sessionId, model: record.model, thinkingLevel: record.thinkingLevel }) });
       if (!response.ok || !response.body) throw adapterError("ChatGPT Web response failed", "backend_unavailable", response.status);
       const reader = readline.createInterface({ input: Readable.fromWeb(response.body) });
       for await (const line of reader) {
@@ -130,7 +132,8 @@ export class ChatGptWebAdapter extends EventEmitter {
             messageId, contentIndex: 0, blockKind: "text", delta: event.text });
         } else if (event.type === "done") {
           record.sessionId = { conversationId: event.conversationId || record.sessionId.conversationId,
-            parentMessageId: event.parentMessageId || record.sessionId.parentMessageId, model: record.model };
+            parentMessageId: event.parentMessageId || record.sessionId.parentMessageId,
+            model: record.model, thinkingLevel: record.thinkingLevel };
         } else if (event.type === "error") {
           throw adapterError(event.message || "ChatGPT Web response failed", event.error, event.status || 502,
             event.retryAfterMs ? { retryAfterMs: event.retryAfterMs } : {});
@@ -202,12 +205,13 @@ export class ChatGptWebAdapter extends EventEmitter {
   async listAvailableModels() {
     const result = await this.request("/models");
     return result.models.map((item) => ({ provider: "chatgpt-web", id: item.id, spec: item.id, label: item.label,
-      reasoning: false, thinkingLevels: [], defaultThinkingLevel: "" }));
+      reasoning: item.thinkingLevels.length > 0, thinkingLevels: item.thinkingLevels,
+      defaultThinkingLevel: item.defaultThinkingLevel || item.thinkingLevels[0] || "" }));
   }
   listModels() { return this.listAvailableModels(); }
-  setModel() { throw adapterError("ChatGPT Web models cannot change after a chat starts", "unsupported_interaction", 400); }
-  setThinkingLevel() { throw adapterError("ChatGPT Web has no separate thinking level", "unsupported_interaction", 400); }
-  getModelState(id) { const record = this.get(id); return Promise.resolve({ model: record?.model || "", thinkingLevel: "" }); }
+  async setModel(id, model) { const record = this.get(id); if (record) record.model = model; return model; }
+  async setThinkingLevel(id, thinkingLevel) { const record = this.get(id); if (record) record.thinkingLevel = thinkingLevel; return thinkingLevel; }
+  getModelState(id) { const record = this.get(id); return Promise.resolve({ model: record?.model || "", thinkingLevel: record?.thinkingLevel || "" }); }
   getCapabilities() { return CHATGPT_WEB_CAPABILITIES; }
   toClientEvent(event) { return event; }
   replay(id) { return this.runtimeState(this.get(id)); }
@@ -220,7 +224,8 @@ export class ChatGptWebAdapter extends EventEmitter {
   attach(id, socket) { const record = this.get(id); record.clients.add(socket); socket.once("close", () => record.clients.delete(socket));
     for (const event of record.events) if (socket.readyState === 1) socket.send(JSON.stringify(event)); return this.runtimeState(record); }
   view(record) { return { id: record.id, chatId: record.chatId, status: record.status, activity: record.activity, active: record.active,
-    stopping: record.stopping, generation: record.generation, model: record.model, capabilities: CHATGPT_WEB_CAPABILITIES,
+    stopping: record.stopping, generation: record.generation, model: record.model, thinkingLevel: record.thinkingLevel,
+    capabilities: CHATGPT_WEB_CAPABILITIES,
     backend: { protocol: "native_api", implementation: "chatgpt-web", installationId: "user-chatgpt-account" },
     linkUrl: record.sessionId.conversationId ? `https://chatgpt.com/c/${record.sessionId.conversationId}` : null }; }
   runtimeState(record) { return { type: "runtime_state", generationId: record?.generation?.id || null,
