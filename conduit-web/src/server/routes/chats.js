@@ -118,7 +118,11 @@ export function registerChatRoutes(app, {
       const context = await findChatContext(request.params.chatId);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
       if (request.body?.profileId && (context.chat.status !== "draft" || context.chat.lastUserMessageAt)) {
-        return response.status(409).json({ error: "backend_locked", message: "Fork this chat to change its backend." });
+        return response.status(409).json({
+          error: "backend_locked",
+          message: "Fork this chat to change its backend.",
+          fork: { required: true, profileId: request.body.profileId },
+        });
       }
       if (request.body?.profileId === "codex") {
         if (!backends.adapters.has("codex")) return response.status(409).json({ error: "codex_unavailable" });
