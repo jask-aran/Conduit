@@ -171,14 +171,14 @@ function socketBufferedAmount(socket) {
   return Number.isFinite(amount) && amount > 0 ? amount : 0;
 }
 
-function deliveryDeltaKey(event) {
+export function deliveryDeltaKey(event) {
   if (event.type === "content_block_delta") {
     return `structured:${event.generationId}:${event.messageId}:${event.blockType}:${event.contentIndex}`;
   }
   return null;
 }
 
-function mergeDeliveryDelta(previous, next) {
+export function mergeDeliveryDelta(previous, next) {
   if (next.type === "content_block_delta") {
     return { ...next, delta: `${previous.delta || ""}${next.delta || ""}` };
   }
