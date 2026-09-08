@@ -11,7 +11,7 @@ const configEnv = (overrides = {}) => ({
 
 test("default runtime paths are owned by the repository root", () => {
   const config = loadConfig(configEnv());
-  assert.equal(config.piTemplate.id, "chat");
+  assert.equal(config.piTemplate.id, "assistant");
   assert.equal(config.piTemplate.label, "Assistant");
   assert.deepEqual(config.piTemplate.tools, ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check"]);
   assert.deepEqual(config.piTemplate.models, [
@@ -20,14 +20,14 @@ test("default runtime paths are owned by the repository root", () => {
     "anthropic/claude-opus-4-8",
     "anthropic/claude-fable-5",
   ]);
-  assert.equal(config.piTemplate.templateFile.endsWith(path.join("templates", "chat", "template.json")), true);
-  assert.ok(config.piTemplates.some((template) => template.id === "chat"));
-  assert.ok(config.piTemplates.some((template) => template.id === "workspace"));
-  assert.ok(config.piTemplates.some((template) => template.id === "codemode"));
+  assert.equal(config.piTemplate.templateFile.endsWith(path.join("templates", "assistant", "template.json")), true);
+  assert.ok(config.piTemplates.some((template) => template.id === "assistant"));
+  assert.ok(config.piTemplates.some((template) => template.id === "coding"));
+  assert.ok(config.piTemplates.some((template) => template.id === "code-mode"));
   assert.ok(config.piTemplates.some((template) => template.id === "runtime"));
-  assert.equal(config.piTemplateById.get("workspace")?.label, "Coding");
-  assert.equal(config.piTemplateById.get("codemode")?.label, "Code Mode");
-  assert.ok(config.piTemplateById.get("workspace")?.skills?.length >= 1);
+  assert.equal(config.piTemplateById.get("coding")?.label, "Coding");
+  assert.equal(config.piTemplateById.get("code-mode")?.label, "Code Mode");
+  assert.ok(config.piTemplateById.get("coding")?.skills?.length >= 1);
   assert.ok(config.workspaceAllowlist.length >= 1);
   assert.equal(config.dataRoot.endsWith("data"), true);
   assert.equal(config.filesRoot.endsWith(path.join("data", "chat", "files")), true);

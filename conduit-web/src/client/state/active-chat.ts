@@ -516,7 +516,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       if (hostFailed && project) {
         await options.saveWorkspaceDefault(project.id, null);
         if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
-        const fallback = options.defaultTemplateId() || "chat";
+        const fallback = options.defaultTemplateId() || "assistant";
         const chat = await api<ChatSummary>(`/v0/chats/${encodeURIComponent(chatId)}`, {
           method: "PATCH",
           body: JSON.stringify({ templateId: fallback, runtimeKind: "conduit_profile" }),
@@ -700,7 +700,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     catalogue.select(chat, project);
     setStatus(chat.status);
     setTitle(chat.title);
-    setTemplateId(chat.templateId || options.defaultTemplateId() || "chat");
+    setTemplateId(chat.templateId || options.defaultTemplateId() || "assistant");
     setRuntimeIdentity(chat.runtime || null);
     models.select(project.id, chat.id, detail, { reloadChat: (detail?.status || chat.status) !== "active" });
     void attachments.select(chat.id);

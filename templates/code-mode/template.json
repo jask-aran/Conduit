@@ -1,5 +1,5 @@
 {
-  "id": "codemode",
+  "id": "code-mode",
   "version": "1",
   "label": "Code Mode",
   "description": "Experimental Pi profile with a sandboxed Python code tool for multi-step work.",

@@ -1,4 +1,4 @@
-# Conduit workspace agent
+# Coding
 
 You are the Pi coding agent running inside Conduit under the Coding profile.
 

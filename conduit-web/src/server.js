@@ -16,7 +16,7 @@ import { RuntimeHub } from "./runtime-hub.js";
 import { defaultsFromEnv, RuntimeSettingsStore } from "./runtime-settings.js";
 import { PreferencesStore } from "./preferences-store.js";
 import { SessionNameService } from "./session-name-service.js";
-import { templatePublicView } from "../../scripts/pi-runtime.mjs";
+import { normalizeTemplateId, templatePublicView } from "../../scripts/pi-runtime.mjs";
 import { formatWorkspacePath, isPathInside, listDirectorySuggestions } from "./workspace-paths.js";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "@earendil-works/pi-coding-agent";
 import fs from "node:fs/promises";
@@ -58,10 +58,15 @@ import { VoiceSettingsStore } from "./voice-settings.js";
 import { VOICE_EXECUTION_CATALOG } from "./server/voice-execution-catalog.js";
 import { ModelProfileRuntime, usesWebSearchOverlay } from "./model-profile-runtime.js";
 import { publicModelProfile, resolveModelProfile } from "./model-profiles.js";
+import { PromptStore } from "./prompt-store.js";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
 await projects.initialize();
+for (const project of await projects.list()) {
+  const normalized = normalizeTemplateId(project.defaultTemplateId);
+  if (normalized && normalized !== project.defaultTemplateId) await projects.update(project.id, { defaultTemplateId: normalized });
+}
 const terminals = new PtyManager({ filePath: config.remotesFile });
 await terminals.load();
 async function clearHostPiDefaults() {
@@ -84,6 +89,7 @@ const registry = new ChatStore(config.sessionRegistryFile, {
   },
 });
 await registry.initialize(await projects.list());
+await registry.migrateTemplateIds(normalizeTemplateId);
 const attachments = new AttachmentStore(registry, { maxBytes: config.maxAttachmentBytes });
 const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, defaultsFromEnv(process.env));
 await runtimeSettings.load();
@@ -98,6 +104,14 @@ const modelProfileRuntime = new ModelProfileRuntime({
   agentDir: config.piAgentDir,
   searchConfigFile: config.searchConfigFile,
 });
+const promptStore = new PromptStore({
+  root: config.promptOverridesRoot,
+  prompts: [
+    ...config.piTemplates.map((template) => ({ id: template.id, label: template.label, kind: "profile", defaultPath: template.systemPrompt })),
+    { id: "chat-naming", label: "Chat naming", kind: "service", defaultPath: config.sessionNamePrompt },
+  ],
+});
+config.promptStore = promptStore;
 const knownTemplateIds = config.piTemplates
   .filter((template) => template.defaultable !== false)
   .map((template) => template.id);
@@ -149,6 +163,7 @@ const sessionNames = new SessionNameService({
   file: config.sessionNameLogFile,
   modelCatalog,
   preferences,
+  promptStore,
 });
 const sessionNameTasks = new Map();
 const piAuth = new PiAuthBroker({
@@ -439,6 +454,7 @@ registerRuntimeRoutes(app, {
   runtimeHub,
   templatePublicView,
   projects,
+  promptStore,
 });
 
 registerPiAuthRoutes(app, {

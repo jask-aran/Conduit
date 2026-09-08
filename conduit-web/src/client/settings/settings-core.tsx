@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
 import * as KDialog from "@kobalte/core/dialog";
-import { ActivityIcon, BotIcon, ChevronRightIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon } from "lucide-solid";
+import { ActivityIcon, BotIcon, ChevronRightIcon, FileTextIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
 import { Button, Field, FieldGroup, FieldLabel, Input, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
@@ -37,7 +37,7 @@ import { ShortcutsSettings } from "./shortcuts-settings";
 
 const sectionGroups = [
   { label: "Personal", sections: [{ id: "ui", label: "Appearance", icon: MonitorIcon }, { id: "shortcuts", label: "Shortcuts", icon: KeyboardIcon }] },
-  { label: "AI", sections: [{ id: "models", label: "Models & accounts", icon: BotIcon }] },
+  { label: "AI", sections: [{ id: "models", label: "Models & accounts", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: FileTextIcon }] },
   { label: "System", sections: [{ id: "runtime", label: "Runtime", icon: ActivityIcon }] },
   { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: SearchIcon }] },
 ] as const;
@@ -47,6 +47,7 @@ const sectionLabels: Record<Section, string> = {
   ui: "Appearance",
   shortcuts: "Shortcuts",
   models: "Models & accounts",
+  prompts: "Prompts",
   runtime: "Runtime",
   workspaces: "Workspace profile",
   voice: "Voice",
@@ -57,6 +58,7 @@ const sectionDescriptions: Record<Section, string> = {
   ui: "Shape Conduit around how you read, write, and navigate.",
   shortcuts: "Make frequent actions immediate.",
   models: "Choose the models, defaults, and accounts that power your sessions.",
+  prompts: "Edit the instructions that shape profiles and automatic chat names.",
   runtime: "Control process capacity and inspect this server.",
   workspaces: "Choose how this workspace starts new sessions.",
   voice: "Configure dictation, audio input, and transcription.",
@@ -74,6 +76,14 @@ interface GeneralPreferences {
   defaultTemplateId: string;
   sessionNameModel: string;
   sessionNameThinkingLevel: string;
+}
+
+interface EditablePrompt {
+  id: string;
+  label: string;
+  kind: "profile" | "service";
+  content: string;
+  modified: boolean;
 }
 
 interface PiAuthProvider {
@@ -225,6 +235,13 @@ export function Settings(props: {
   const [sessionNameModel, setSessionNameModel] = createSignal("");
   const [sessionNameThinkingLevel, setSessionNameThinkingLevel] = createSignal("off");
   const [generalLoading, setGeneralLoading] = createSignal(false);
+  const [prompts, setPrompts] = createSignal<EditablePrompt[]>([]);
+  const [promptId, setPromptId] = createSignal("");
+  const [promptDraft, setPromptDraft] = createSignal("");
+  const [promptBaseline, setPromptBaseline] = createSignal("");
+  const [promptStatus, setPromptStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
+  const [promptSaving, setPromptSaving] = createSignal(false);
+  const [promptError, setPromptError] = createSignal("");
   const [detecting, setDetecting] = createSignal(false);
   const [workspaceId, setWorkspaceId] = createSignal<string | null>(null);
   const [authProviders, setAuthProviders] = createSignal<PiAuthProvider[]>([]);
@@ -411,6 +428,57 @@ export function Settings(props: {
     }
   };
   createEffect(() => { if (props.open && section() === "runtime") void loadRuntime(); });
+
+  const choosePrompt = (id: string, items = prompts()) => {
+    const selected = items.find((item) => item.id === id) || items[0];
+    if (!selected) return;
+    setPromptId(selected.id);
+    setPromptDraft(selected.content);
+    setPromptBaseline(selected.content);
+  };
+  const loadPrompts = async () => {
+    setPromptStatus("loading");
+    setPromptError("");
+    try {
+      const result = await api<{ prompts: EditablePrompt[] }>("/v0/prompts");
+      setPrompts(result.prompts);
+      choosePrompt(promptId(), result.prompts);
+      setPromptStatus("ready");
+    } catch (error) {
+      setPromptError((error as Error).message);
+      setPromptStatus("error");
+    }
+  };
+  createEffect(() => { if (props.open && section() === "prompts") void loadPrompts(); });
+  const savePrompt = async () => {
+    if (!promptId() || promptDraft() === promptBaseline()) return;
+    setPromptSaving(true);
+    setPromptError("");
+    try {
+      const saved = await api<EditablePrompt>(`/v0/prompts/${encodeURIComponent(promptId())}`, { method: "PUT", body: JSON.stringify({ content: promptDraft() }) });
+      setPrompts((items) => items.map((item) => item.id === saved.id ? saved : item));
+      setPromptDraft(saved.content);
+      setPromptBaseline(saved.content);
+      toast.success(`${saved.label} prompt saved`);
+    } catch (error) { setPromptError((error as Error).message); }
+    finally { setPromptSaving(false); }
+  };
+  const resetPrompt = async () => {
+    const current = prompts().find((item) => item.id === promptId());
+    if (!current) return;
+    if (!current.modified) { setPromptDraft(promptBaseline()); return; }
+    if (!window.confirm(`Reset ${current.label} to its shipped default?`)) return;
+    setPromptSaving(true);
+    setPromptError("");
+    try {
+      const reset = await api<EditablePrompt>(`/v0/prompts/${encodeURIComponent(current.id)}`, { method: "DELETE" });
+      setPrompts((items) => items.map((item) => item.id === reset.id ? reset : item));
+      setPromptDraft(reset.content);
+      setPromptBaseline(reset.content);
+      toast.success(`${reset.label} prompt reset`);
+    } catch (error) { setPromptError((error as Error).message); }
+    finally { setPromptSaving(false); }
+  };
 
   const applyAuthProviders = (next: PiAuthProvider[]) => {
     const configured = (providers: PiAuthProvider[]) => providers
@@ -958,6 +1026,28 @@ export function Settings(props: {
               <small>Choose the models that appear in chat model controls.</small>
             </Field>
           </FieldGroup></section></Show></Show>
+          <Show when={section() === "prompts"}>
+            <Show when={promptStatus() === "ready"} fallback={<Show when={promptStatus() === "error"} fallback={<div class="settings-loading"><Spinner /><span>Loading prompts…</span></div>}><div class="settings-error" role="alert">{promptError()}</div></Show>}>
+              <section class="prompt-editor">
+                <div class="prompt-editor-toolbar">
+                  <label for="prompt-selector">Prompt</label>
+                  <select id="prompt-selector" value={promptId()} onChange={(event) => choosePrompt(event.currentTarget.value)}>
+                    <For each={prompts()}>{(prompt) => <option value={prompt.id}>{prompt.label}{prompt.kind === "service" ? " · service" : ""}</option>}</For>
+                  </select>
+                  <span>{promptDraft() !== promptBaseline() ? "Unsaved" : prompts().find((item) => item.id === promptId())?.modified ? "Modified" : "Default"}</span>
+                </div>
+                <textarea aria-label="System prompt" spellcheck={false} value={promptDraft()} onInput={(event) => setPromptDraft(event.currentTarget.value)} />
+                <div class="prompt-editor-footer">
+                  <small>Changes apply when the next runtime or naming request starts.</small>
+                  <div>
+                    <Button variant="outline" disabled={promptSaving() || (!prompts().find((item) => item.id === promptId())?.modified && promptDraft() === promptBaseline())} onClick={() => void resetPrompt()}>Reset to default</Button>
+                    <Button disabled={promptSaving() || !promptDraft().trim() || promptDraft() === promptBaseline()} onClick={() => void savePrompt()}>{promptSaving() ? "Saving…" : "Save prompt"}</Button>
+                  </div>
+                </div>
+                <Show when={promptError() || promptStatus() === "error"}><p class="settings-inline-error" role="alert">{promptError()}</p></Show>
+              </section>
+            </Show>
+          </Show>
           <Show when={section() === "ui"}>
             <div class="settings-stack">
               <details class="settings-tile" open>

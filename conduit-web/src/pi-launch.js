@@ -42,6 +42,7 @@ export function resolvePiLaunch({
   bridgeSkill,
   runtimeAgentDir = "",
   modelProfile = null,
+  systemPrompt = null,
 }) {
   if (!installation?.available || !installation.command) {
     const error = new Error(installation?.error || "Pi installation is unavailable");
@@ -82,7 +83,7 @@ export function resolvePiLaunch({
     args: [
       ...processSpec.args,
       "--mode", "rpc",
-      ...buildPiResourceArgs(models ? { ...template, models } : template),
+      ...buildPiResourceArgs({ ...template, ...(models ? { models } : {}), ...(systemPrompt ? { systemPrompt } : {}) }),
       ...sessionArgs(chat.piSessionFile, model, thinkingLevel),
     ],
     cwd,
