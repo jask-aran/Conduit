@@ -1771,6 +1771,7 @@ function App() {
         });
       }}
       onOpenComputer={() => openComputer()}
+      onOpenHarness={(id) => openComputerHarness(id)} selectedHarness={computerHarness()}
       onOpenTerminalView={() => openTerminalRoute()}
       onOpenDashboard={() => openDashboard()}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}

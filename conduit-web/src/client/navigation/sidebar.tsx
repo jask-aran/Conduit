@@ -55,7 +55,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/primitives";
-import type { ChatSummary, ComputerLocation, Project, RuntimeProcess, WorkspacePolicy, WorkspaceSuggestion } from "../api/contracts";
+import type { ChatSummary, ComputerLocation, HarnessSummary, Project, RuntimeProcess, WorkspacePolicy, WorkspaceSuggestion } from "../api/contracts";
 import { api } from "../api/client";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import type { Pty } from "../remotes/terminal-pane";
@@ -179,6 +179,8 @@ export function Sidebar(props: {
   onOpenPty: (terminal: Pty) => void;
   onOpenDashboard: () => void;
   onOpenComputer: () => void;
+  onOpenHarness: (id: string) => void;
+  selectedHarness?: string;
   onOpenTerminalView: () => void;
   onOpenWorkspaceIdentity: (project: Project) => void;
   onOpenSettings: (section?: string, workspaceId?: string | null) => void;
@@ -200,6 +202,7 @@ export function Sidebar(props: {
   const [collapsedProjectIds, setCollapsedProjectIds] = createSignal(storedCollapsedProjects());
   const [selectedChatIds, setSelectedChatIds] = createSignal<Set<string>>(new Set());
   const [terminals, setTerminals] = createSignal<Pty[]>([]);
+  const [harnesses, setHarnesses] = createSignal<HarnessSummary[]>([]);
   const [activityClock, setActivityClock] = createSignal(Date.now());
   const [newKind, setNewKind] = createSignal<"folder" | "workspace" | null>(null);
   let sidebarRoot: HTMLElement | undefined;
@@ -324,6 +327,9 @@ export function Sidebar(props: {
     onCleanup(() => media.removeEventListener("change", sync));
   });
   onMount(() => {
+    void api<{ harnesses: HarnessSummary[] }>("/v0/harnesses")
+      .then((result) => setHarnesses(result.harnesses.filter((item) => item.available)))
+      .catch(() => {});
     const loadTerminals = () => void api<{ ptys: Pty[] }>("/v0/ptys")
       .then(({ ptys }) => setTerminals(ptys.filter((item) => item.status === "running" && !item.paneDead)))
       .catch(() => {});
@@ -1020,6 +1026,12 @@ export function Sidebar(props: {
           <div class="sidebar-area-label">Computer</div>
           <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.computer ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenComputer(); }}><MonitorIcon /><span>Files</span></button>
           <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.terminal ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /><span>Terminal View</span><span class="sidebar-action-slot"><ExternalLinkIcon class="sidebar-route-indicator" /></span></button>
+          <For each={harnesses()}>{(harness) =>
+            <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.selectedHarness === harness.id ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenHarness(harness.id); }}>
+              <img class="sidebar-harness-mark" src={harness.id === "codex" ? "/codex-mark.svg" : "/chatgpt-mark.svg"} alt="" />
+              <span>{harness.label}</span><span class="sidebar-action-slot"><i class="sidebar-harness-status" data-status={harness.status || "ready"} /></span>
+            </button>
+          }</For>
           <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" addLabel="New workspace" onAdd={() => openNewDialog("workspace")} />
           <section class="sidebar-group">
             <div class="sidebar-group-header"><div data-sidebar="group-label">Terminals</div></div>
