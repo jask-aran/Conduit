@@ -6,6 +6,7 @@ import { usesWebSearchOverlay } from "../../model-profile-runtime.js";
 import { agentProfiles, profileSelection } from "../../chat-backend.js";
 
 export function registerChatRoutes(app, {
+  backends,
   catalogFor,
   chatModelView,
   config,
@@ -185,6 +186,7 @@ export function registerChatRoutes(app, {
       };
       const resident = manager.getByChatId(context.chat.id);
       if (resident) {
+        const adapter = backends.forChat(context.chat);
         if (spec && spec !== current.model) {
           const template = templateForChat(context.chat, context.project);
           const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });
@@ -200,8 +202,8 @@ export function registerChatRoutes(app, {
                 message: "Finish the current response before changing to a model with different runtime settings.",
               });
             }
-            await manager.setModel(resident.id, spec);
-            await manager.stopAndWait(resident.id);
+            await adapter.setModel(resident.id, spec);
+            await adapter.close(resident.id);
             await launchLiveSession({
               chatId: context.chat.id,
               model: spec,
@@ -209,11 +211,11 @@ export function registerChatRoutes(app, {
               forceModel: true,
             });
           } else {
-            await manager.setModel(resident.id, spec);
+            await adapter.setModel(resident.id, spec);
           }
         }
         const activeResident = manager.getByChatId(context.chat.id);
-        if (thinkingLevel && activeResident) await manager.setThinkingLevel(activeResident.id, thinkingLevel);
+        if (thinkingLevel && activeResident) await adapter.setThinkingLevel(activeResident.id, thinkingLevel);
       } else {
         if (context.chat.status !== "draft" || context.chat.piSessionFile) {
           return response.status(409).json({ error: "live_session_required" });
