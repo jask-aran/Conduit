@@ -220,6 +220,7 @@ export class PiManager extends EventEmitter {
     deliveryMaxNotifications = 32,
     deliveryMaxNotificationBytes = 64 * 1024,
     now = () => Date.now(),
+    serializeEvent = JSON.stringify,
   } = {}) {
     super();
     if (!agentDir) throw new Error("PiManager requires an isolated agent directory");
@@ -231,6 +232,7 @@ export class PiManager extends EventEmitter {
     this.bySessionFile = new Map();
     this.requestSequence = 0;
     this.now = now;
+    this.serializeEvent = serializeEvent;
     this.maxLiveProcesses = Math.max(1, Math.trunc(Number(maxLiveProcesses) || 12));
     this.maxGeneratingProcesses = Math.max(1, Math.trunc(Number(maxGeneratingProcesses) || 2));
     this.idleProcessTtlMs = Math.max(30_000, Math.trunc(Number(idleProcessTtlMs) || 120_000));
@@ -1052,7 +1054,7 @@ export class PiManager extends EventEmitter {
 
   sendClientEvent(socket, event) {
     if (!socketIsOpen(socket)) return false;
-    socket.send(JSON.stringify(event));
+    socket.send(this.serializeEvent(event));
     return true;
   }
 

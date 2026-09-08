@@ -91,5 +91,7 @@ process. Durable transcript deletion remains a separate, confirmed operation.
 | `session_checkpoint`, `generation_resume` | `session_checkpoint`, `runtime_state` |
 
 The current v0 event names and client commands stay documented in
-`conduit-web/README.md`. Slice 3 owns the mapping and cutover. Pi parity is a
-gate for that later slice, not an assumption in this one.
+`conduit-web/README.md`. `PiRpcAdapter` now owns the lifecycle mapping. The
+v0 serializer normalizes each event, then sends its unchanged `pi` payload.
+This keeps the browser protocol and Pi delivery mechanics byte-for-byte equal
+while the neutral boundary becomes the server control path.
