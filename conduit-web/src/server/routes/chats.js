@@ -268,13 +268,21 @@ export function registerChatRoutes(app, {
         return response.status(400).json({ error: "invalid_thinking_level" });
       }
       if (context.chat.backend?.implementation === "chatgpt-web") {
-        if (context.chat.status !== "draft" || context.chat.lastUserMessageAt) {
-          return response.status(409).json({ error: "model_locked", message: "ChatGPT Web models cannot change after the first message." });
-        }
+        const effort = thinkingLevel || context.chat.modelThinkingLevels?.[targetModel]
+          || target?.defaultThinkingLevel || target?.thinkingLevels[0] || "";
         const resident = backends.getByChatId(context.chat.id);
-        if (resident) resident.model = targetModel;
-        await registry.update(context.chat.id, { backend: { ...context.chat.backend, model: targetModel } });
-        return response.json({ ...current, model: targetModel, thinkingLevel: "" });
+        if (resident) {
+          const adapter = backends.forChat(context.chat);
+          await adapter.setModel(resident.id, targetModel);
+          if (effort) await adapter.setThinkingLevel(resident.id, effort);
+        }
+        const modelThinkingLevels = effort
+          ? { ...(context.chat.modelThinkingLevels || {}), [targetModel]: effort }
+          : context.chat.modelThinkingLevels || {};
+        await registry.update(context.chat.id, {
+          backend: { ...context.chat.backend, model: targetModel }, modelThinkingLevels,
+        });
+        return response.json({ ...current, model: targetModel, thinkingLevel: effort, modelThinkingLevels });
       }
       if (context.chat.backend?.implementation === "codex") {
         const model = targetModel;
