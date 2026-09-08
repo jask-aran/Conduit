@@ -100,7 +100,8 @@
 .computer-explorer-sidebar button:hover, .computer-explorer-sidebar button[data-active="true"] { background: var(--accent); color: var(--foreground); }
 .computer-explorer-sidebar button span { overflow: hidden; font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; }
 .computer-explorer-sidebar svg, .computer-explorer-sidebar .workspace-glyph { width: 13px; height: 13px; flex: none; }
-.computer-explorer-sidebar .computer-harness-mark { width: 14px; height: 14px; flex: none; filter: invert(1); }
+.computer-harness-mark { width: 14px; height: 14px; flex: none; object-fit: contain; filter: invert(1); }
+.computer-harness-menu { min-width: 160px; }
 .computer-explorer-sidebar button > i { width: 5px; height: 5px; flex: none; margin-left: auto; border-radius: 50%; background: var(--live); }
 .computer-explorer-sidebar button > i[data-status="authentication_required"], .computer-explorer-sidebar button > i[data-status="unavailable"] { background: var(--warn); }
 .computer-explorer-sidebar p { margin: 6px 7px; color: var(--muted-foreground); font-size: 9px; }
