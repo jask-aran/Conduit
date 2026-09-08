@@ -449,6 +449,7 @@ starting, and browser-attached processes remain resident.
   the local Tailscale CLI; the client appends the selected chat path before
   copying it.
 - `POST /v0/chats`
+- `GET /v0/profiles` lists profile identity and backend metadata
 - `GET|DELETE /v0/chats/:id` (draft cleanup requires `?ifEmpty=true`)
 - `PUT|GET /v0/chats/:id/attachments/:attachment-id` uploads raw bytes or downloads;
   `?preview=1` serves supported raster images inline
@@ -593,7 +594,39 @@ eligible hit rate, and derived cache-read or uncached-input percentages.
 Derived values are display calculations only; Pi remains the source of token
 and cost values.
 
+## Chat profile identity
+
+`GET /v0/profiles` returns `profiles[]` with `id`, `label`, `management`, and
+`agent: { protocol, implementation, installationId }`. Assistant, Coding,
+Code Mode, and the special Runtime profile use `conduit_pi` on
+`conduit-pinned`. Host Pi uses `native_pi` on `host-pi`, with agent-owned
+configuration. Both use `pi_rpc`. Runtime still requires its dedicated create
+route; Host Pi still requires a Workspace and an available host installation.
+
+`POST /v0/chats` and draft `PATCH /v0/chats/:id` accept `profileId`.
+The existing `templateId` and `runtimeKind` inputs remain supported. Conflicting
+neutral and legacy selections return `400 profile_conflict`. Existing draft,
+session, and special-profile restrictions apply to both forms.
+
+Chat responses add `profileId`, `profileRevision`, and `backend` identity while
+retaining existing fields. The server omits `backend.opaqueSession` from all
+chat views. The version 4 registry stores it as the current Pi session path;
+the existing Pi mapping remains the execution source and updates it on fork
+and checkpoint. Pi JSONL remains the sole transcript authority.
+
+Startup adds identity to legacy rows through the existing atomic registry
+write. It does not rewrite JSONL. Identity records the selected profile revision
+and survives ordinary resume, checkpoint, and current-template version changes.
+Draft selection can change it before a Pi session is mapped. Imported chats
+without an assigned profile can have null profile identity until the existing
+profile-assignment path runs. Host Pi has no Conduit profile revision.
+The existing editable prompt service still supplies current prompt content;
+profile revision is identity metadata, not a snapshot of prompt contents.
+
 ## Live session protocol
+
+See [chat profile identity](#chat-profile-identity) for the additive HTTP and
+persistence contract.
 
 `WS /v0/live-sessions/:id/stream` carries newline-free JSON objects in both
 directions. This is the v0 event vocabulary: Pi JSONL remains the authoritative
