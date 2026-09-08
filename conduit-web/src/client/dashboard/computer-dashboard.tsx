@@ -221,6 +221,10 @@ function HarnessDashboard(props: {
   cwd: string;
   onOpenChat?: (chat: ChatSummary, project: Project, prompt?: string) => void;
 }) {
+  const sessionDate = (value: number | string | null) => {
+    const timestamp = typeof value === "number" && value < 1_000_000_000_000 ? value * 1_000 : value;
+    return timestamp ? new Date(timestamp).toLocaleString() : "";
+  };
   const initialProject = () => props.projects.find((project) => project.workingRoot === props.cwd) || props.projects[0];
   const [projectId, setProjectId] = createSignal(initialProject()?.id || "");
   const [sessions, setSessions] = createSignal<BackendSessionSummary[]>([]);
@@ -292,7 +296,7 @@ function HarnessDashboard(props: {
         <section class="computer-harness-ledger"><div class="computer-harness-heading"><div><h2>Sessions</h2><p>Metadata from {harness().label}</p></div><select aria-label="Workspace" value={projectId()} onChange={(event) => setProjectId(event.currentTarget.value)}><For each={props.projects}>{(item) => <option value={item.id}>{item.name}</option>}</For></select></div>
           <Show when={!loading()} fallback={<p>Finding sessions…</p>}>
             <Show when={tracked().length}><h3>Tracked</h3><For each={tracked()}>{(chat) => <button type="button" onClick={() => project() && props.onOpenChat?.(chat, project()!)}><span><strong>{chat.title || "Untitled chat"}</strong><small>Conduit chat</small></span><ArrowRightIcon /></button>}</For></Show>
-            <Show when={sessions().length}><h3>Adoptable</h3><For each={sessions()}>{(session) => <button type="button" onClick={() => void openDrive(session)}><span><strong>{session.title}</strong><small>{session.updatedAt ? new Date(session.updatedAt).toLocaleString() : session.id}</small></span><ArrowRightIcon /></button>}</For></Show>
+            <Show when={sessions().length}><h3>Adoptable</h3><For each={sessions()}>{(session) => <button type="button" onClick={() => void openDrive(session)}><span><strong>{session.title}</strong><small>{sessionDate(session.updatedAt) || session.id}</small></span><ArrowRightIcon /></button>}</For></Show>
             <Show when={!tracked().length && !sessions().length}><p>No sessions in this workspace.</p></Show>
           </Show>
         </section>
