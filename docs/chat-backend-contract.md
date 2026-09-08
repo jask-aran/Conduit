@@ -19,7 +19,7 @@ after an adapter moves behind this contract.
 
 | Event | Contract |
 | --- | --- |
-| `assistant_content` | `delta` preserves generation, message, block, index, and sequence identity. `final` contains the complete ordered blocks. |
+| `assistant_content` | `start` assigns message identity. `delta` preserves generation, message, block, index, and sequence identity. `final` contains the complete ordered blocks. |
 | `tool_activity` | `start`, `update`, and `end` use one `toolCallId`. Unknown tool names remain valid. |
 | `permission_request` / `permission_resolved` | A blocking host request and its resolution. Adapters without `permissions` do not emit these events. |
 | `status` | Reports `working`, `stopping`, `idle`, or `failed`, plus the coarse Conduit activity. |
@@ -90,8 +90,7 @@ process. Durable transcript deletion remains a separate, confirmed operation.
 | `context_usage` and session/cache statistics | `usage` |
 | `session_checkpoint`, `generation_resume` | `session_checkpoint`, `runtime_state` |
 
-The current v0 event names and client commands stay documented in
-`conduit-web/README.md`. `PiRpcAdapter` now owns the lifecycle mapping. The
-v0 serializer normalizes each event, then sends its unchanged `pi` payload.
-This keeps the browser protocol and Pi delivery mechanics byte-for-byte equal
-while the neutral boundary becomes the server control path.
+The current client commands stay documented in `conduit-web/README.md`.
+`PiRpcAdapter` and `CodexAppServerAdapter` own backend event mapping. The
+browser receives only the neutral projection. Pi delivery mechanics and its
+private native payload remain unchanged inside the server adapter.
