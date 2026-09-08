@@ -92,6 +92,9 @@ input.on("line", (line) => {
     return;
   }
   if (message.method === "thread/read") return send({ id: message.id, result: { thread: { id: message.params.threadId, turns: [] } } });
+  if (message.method === "thread/list") return send({ id: message.id, result: { data: [
+    { id: "foreign-thread", name: "Foreign thread", preview: "Existing Codex work", cwd: message.params.cwd, createdAt: 1, updatedAt: 2, status: { type: "idle" }, source: "vscode" },
+  ] } });
   if (message.method === "model/list") return send({ id: message.id, result: { data: [
     { id: "codex-test", displayName: "Codex Test", hidden: false, defaultReasoningEffort: "medium", supportedReasoningEfforts: [{ reasoningEffort: "low" }, { reasoningEffort: "medium" }, { reasoningEffort: "high" }] },
     { id: "codex-other", displayName: "Codex Other", hidden: false, defaultReasoningEffort: "low", supportedReasoningEfforts: [{ reasoningEffort: "low" }, { reasoningEffort: "high" }] },
