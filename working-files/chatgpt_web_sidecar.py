@@ -304,8 +304,18 @@ class Bridge:
                 for delta in decoder.feed(line):
                     yield {"type": "delta", "text": delta}
             self._save_cookies()
-            yield {"type": "done", "conversationId": decoder.conversation_id or body.get("conversationId", ""),
-                   "parentMessageId": decoder.message_id}
+            conversation_id = decoder.conversation_id or body.get("conversationId", "")
+            title = ""
+            if conversation_id:
+                try:
+                    conversation = self.session.get(BASE + "/backend-api/conversation/" + conversation_id,
+                        headers={**self.headers(), "Authorization": "Bearer " + token}, timeout=20)
+                    if conversation.status_code == 200:
+                        title = conversation.json().get("title", "")
+                except Exception:
+                    pass
+            yield {"type": "done", "conversationId": conversation_id,
+                   "parentMessageId": decoder.message_id, "title": title}
 
     @staticmethod
     def upstream_error(response: Any, message: str) -> UpstreamError:

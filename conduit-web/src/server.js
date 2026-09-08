@@ -511,6 +511,7 @@ manager.on("event", ({ record, event }) => {
 function checkpointNativeAdapter(adapter, record) {
   const completedAt = new Date().toISOString();
   void registry.update(record.chatId, { backend: { ...registry.metadata(record.chatId)?.backend, opaqueSession: record.sessionId },
+    ...(record.title ? { title: record.title } : {}),
     lastAssistantCompletedAt: completedAt, lastMessageAt: completedAt, unread: true })
     .then((chat) => {
       record.lastCheckpoint = { type: "session_checkpoint", generationId: record.generation?.id || null,
