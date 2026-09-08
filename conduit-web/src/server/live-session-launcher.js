@@ -43,7 +43,13 @@ export function createLiveSessionLauncher({
     if (resident) return { live: resident, modelRecovery: null };
 
     if (context.chat.backend?.implementation === "codex") {
-      const options = { chatId: context.chat.id, project: context.project, model: context.chat.backend.model || "" };
+      const model = context.chat.backend.model || "";
+      const options = {
+        chatId: context.chat.id,
+        project: context.project,
+        model,
+        thinkingLevel: context.chat.modelThinkingLevels?.[model] || "",
+      };
       const live = context.chat.backend.opaqueSession
         ? await adapter.restore(context.chat.backend.opaqueSession, options)
         : await adapter.create(options);

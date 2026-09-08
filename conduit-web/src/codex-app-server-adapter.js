@@ -5,7 +5,7 @@ import readline from "node:readline";
 
 export const CODEX_CAPABILITIES = Object.freeze({
   steer: false, followUpQueue: false, cancel: true, compaction: false,
-  thinkingLevels: false, modelSwitch: true, toolUse: true, permissions: false,
+  thinkingLevels: true, modelSwitch: true, toolUse: true, permissions: false,
   usage: false, replay: true,
 });
 
@@ -20,23 +20,31 @@ export class CodexAppServerAdapter extends EventEmitter {
     this.byChatId = new Map();
   }
 
-  async create({ chatId, project, model = "" }) {
+  async create({ chatId, project, model = "", thinkingLevel = "" }) {
     const record = await this.start({ chatId, cwd: project.workingRoot });
-    const result = await this.request(record, "thread/start", { cwd: project.workingRoot, ...(model ? { model } : {}) });
+    const result = await this.request(record, "thread/start", {
+      cwd: project.workingRoot,
+      ...(model ? { model } : {}),
+      ...(thinkingLevel ? { effort: thinkingLevel } : {}),
+    });
     record.sessionId = result.thread.id;
     record.model = result.model || model;
+    record.thinkingLevel = result.thread?.reasoningEffort || thinkingLevel;
     return record;
   }
 
-  async restore(opaqueSession, { chatId, project, model = "" }) {
+  async restore(opaqueSession, { chatId, project, model = "", thinkingLevel = "" }) {
     const record = await this.start({ chatId, cwd: project.workingRoot });
     const threadId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!threadId) throw error("Codex thread identity is missing");
     const result = await this.request(record, "thread/resume", {
-      threadId, cwd: project.workingRoot, ...(model ? { model } : {}),
+      threadId, cwd: project.workingRoot,
+      ...(model ? { model } : {}),
+      ...(thinkingLevel ? { effort: thinkingLevel } : {}),
     });
     record.sessionId = result.thread?.id || threadId;
     record.model = model || result.model || result.thread?.model || "";
+    record.thinkingLevel = thinkingLevel || result.thread?.reasoningEffort || "";
     const restored = await this.request(record, "thread/read", { threadId: record.sessionId, includeTurns: true });
     this.hydrate(record, restored.thread);
     return record;
@@ -66,7 +74,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     if (existing) return existing;
     const record = {
       id: crypto.randomUUID(), chatId, cwd, status: "starting", activity: "starting", adapterImplementation: "codex",
-      active: false, stopping: false, sessionId: null, model: "", generation: null,
+      active: false, stopping: false, sessionId: null, model: "", thinkingLevel: "", generation: null,
       clients: new Set(), events: [], pending: new Map(), sequence: 0, eventSequence: 0, messageIds: new Set(),
     };
     const child = spawn(this.command, ["app-server", "--stdio"], { cwd, stdio: ["pipe", "pipe", "pipe"] });
@@ -166,6 +174,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       threadId: record.sessionId,
       input: [{ type: "text", text: message }],
       ...(record.model ? { model: record.model } : {}),
+      ...(record.thinkingLevel ? { effort: record.thinkingLevel } : {}),
     });
     this.publish(record, { type: "transcript_message", generationId: result.turn?.id || null,
       message: { id: crypto.randomUUID(), role: "user", content: message } });
@@ -199,7 +208,12 @@ export class CodexAppServerAdapter extends EventEmitter {
     record.model = model;
     return model;
   }
-  setThinkingLevel() { throw error("Codex thinking-level switching is not available", "unsupported_interaction", 400); }
+  async setThinkingLevel(id, thinkingLevel) {
+    const record = this.get(id);
+    if (!record) throw error("Codex app-server is unavailable");
+    record.thinkingLevel = thinkingLevel;
+    return thinkingLevel;
+  }
   refreshContext() { return Promise.resolve(null); }
   sendPi() { throw error("Unsupported Codex command", "unsupported_interaction", 400); }
   waitForSession() { return Promise.resolve(); }
@@ -210,10 +224,14 @@ export class CodexAppServerAdapter extends EventEmitter {
     const record = id ? this.get(id) : [...this.records.values()][0];
     if (!record) return [];
     const result = await this.request(record, "model/list", {});
-    return (result.data || []).filter((item) => !item.hidden).map((item) => ({
-      provider: "openai", id: item.id, spec: item.id, label: item.displayName || item.id,
-      reasoning: false, thinkingLevels: ["off"],
-    }));
+    return (result.data || []).filter((item) => !item.hidden).map((item) => {
+      const thinkingLevels = (item.supportedReasoningEfforts || []).map((effort) => effort.reasoningEffort);
+      return {
+        provider: "openai", id: item.id, spec: item.id, label: item.displayName || item.id,
+        reasoning: thinkingLevels.length > 0, thinkingLevels,
+        defaultThinkingLevel: item.defaultReasoningEffort || thinkingLevels[0] || "",
+      };
+    });
   }
   async listAvailableModels(cwd) {
     const chatId = `catalog-${crypto.randomUUID()}`;
@@ -230,7 +248,9 @@ export class CodexAppServerAdapter extends EventEmitter {
       }
     }
   }
-  getModelState(id) { const record = this.get(id); return Promise.resolve({ model: record?.model || "", thinkingLevel: "" }); }
+  getModelState(id) { const record = this.get(id); return Promise.resolve({
+    model: record?.model || "", thinkingLevel: record?.thinkingLevel || "",
+  }); }
   attach(id, socket) { const record = this.get(id); record.clients.add(socket); socket.once("close", () => record.clients.delete(socket));
     for (const event of record.events) if (socket.readyState === 1) socket.send(JSON.stringify(event)); return this.runtimeState(record); }
   view(record) { return { id: record.id, chatId: record.chatId, status: record.status, activity: record.activity, active: record.active,

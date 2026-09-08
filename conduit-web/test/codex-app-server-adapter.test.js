@@ -25,7 +25,7 @@ test("Codex notifications map to neutral streaming events", () => {
 test("Codex adapter advertises only implemented capabilities", () => {
   assert.deepEqual(CODEX_CAPABILITIES, {
     steer: false, followUpQueue: false, cancel: true, compaction: false,
-    thinkingLevels: false, modelSwitch: true, toolUse: true, permissions: false,
+    thinkingLevels: true, modelSwitch: true, toolUse: true, permissions: false,
     usage: false, replay: true,
   });
 });
@@ -37,10 +37,12 @@ test("Codex prompt writes the installed app-server turn/start shape", async () =
   live.child = { stdin: { writable: true, write: (line) => writes.push(JSON.parse(line)) } };
   adapter.records.set(live.id, live);
   await adapter.setModel(live.id, "codex-other");
+  await adapter.setThinkingLevel(live.id, "high");
   const pending = adapter.prompt(live.id, "Test prompt");
   assert.deepEqual(writes[0], { id: 1, method: "turn/start", params: {
     threadId: "thread-1", input: [{ type: "text", text: "Test prompt" }],
     model: "codex-other",
+    effort: "high",
   } });
   adapter.receive(live, JSON.stringify({ id: 1, result: { turn: { id: "turn-1" } } }));
   assert.equal(await pending, "turn-1");

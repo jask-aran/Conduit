@@ -199,17 +199,28 @@ export function registerChatRoutes(app, {
       if (spec && !current.models.some((item) => item.spec === spec && !item.outsideScope)) {
         return response.status(400).json({ error: "invalid_model" });
       }
-      if (context.chat.backend?.implementation === "codex") {
-        const model = spec || current.model;
-        const resident = backends.getByChatId(context.chat.id);
-        if (resident) await backends.forChat(context.chat).setModel(resident.id, model);
-        await registry.update(context.chat.id, { backend: { ...context.chat.backend, model } });
-        return response.json({ ...current, model, thinkingLevel: "off" });
-      }
       const targetModel = spec || current.model;
       const target = current.models.find((item) => item.spec === targetModel);
       if (thinkingLevel && target && !target.thinkingLevels.includes(thinkingLevel)) {
         return response.status(400).json({ error: "invalid_thinking_level" });
+      }
+      if (context.chat.backend?.implementation === "codex") {
+        const model = targetModel;
+        const effort = thinkingLevel || context.chat.modelThinkingLevels?.[model]
+          || target?.defaultThinkingLevel || target?.thinkingLevels[0] || "";
+        const resident = backends.getByChatId(context.chat.id);
+        if (resident) {
+          const adapter = backends.forChat(context.chat);
+          await adapter.setModel(resident.id, model);
+          if (effort) await adapter.setThinkingLevel(resident.id, effort);
+        }
+        const modelThinkingLevels = effort
+          ? { ...(context.chat.modelThinkingLevels || {}), [model]: effort }
+          : context.chat.modelThinkingLevels || {};
+        await registry.update(context.chat.id, {
+          backend: { ...context.chat.backend, model }, modelThinkingLevels,
+        });
+        return response.json({ ...current, model, thinkingLevel: effort, modelThinkingLevels });
       }
       const saveThinkingPreference = async () => {
         if (!targetModel || !thinkingLevel) return context.chat;

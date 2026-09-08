@@ -123,11 +123,17 @@ test("public profile selection and legacy chat creation keep the same Pi identit
   assert.equal(modelsResponse.status, 200);
   const models = await modelsResponse.json();
   assert.deepEqual(models.models.map((model) => model.spec), ["codex-test", "codex-other"]);
+  assert.deepEqual(models.models[0].thinkingLevels, ["low", "medium", "high"]);
+  assert.equal(models.thinkingLevel, "medium");
   assert.equal(models.model, "codex-test");
   const selectedResponse = await harness.request(`/v0/chats/${codexChat.id}/models`, {
-    method: "PATCH", body: JSON.stringify({ model: "codex-other", thinkingLevel: "off" }),
+    method: "PATCH", body: JSON.stringify({ model: "codex-other", thinkingLevel: "high" }),
   });
   assert.equal(selectedResponse.status, 200);
-  assert.equal((await selectedResponse.json()).model, "codex-other");
-  assert.equal((await (await harness.request(`/v0/chats/${codexChat.id}/models`)).json()).model, "codex-other");
+  const selected = await selectedResponse.json();
+  assert.equal(selected.model, "codex-other");
+  assert.equal(selected.thinkingLevel, "high");
+  const persisted = await (await harness.request(`/v0/chats/${codexChat.id}/models`)).json();
+  assert.equal(persisted.model, "codex-other");
+  assert.equal(persisted.thinkingLevel, "high");
 });

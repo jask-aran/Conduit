@@ -154,6 +154,7 @@ export function createModelSettings(onError: ErrorHandler, onThinkingLevelRecove
       const levels = asList<string>(selected?.thinkingLevels);
       const remembered = previousLevels[spec];
       const nextEffort = remembered && levels.includes(remembered) ? remembered
+        : levels.includes(selected?.defaultThinkingLevel || "") ? selected!.defaultThinkingLevel!
         : levels.includes("medium") ? "medium" : levels[0] || "off";
       setEffort(nextEffort);
       const payload = await api<ModelState>(`/v0/chats/${encodeURIComponent(activeChatId)}/models`, {

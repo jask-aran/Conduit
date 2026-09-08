@@ -87,16 +87,17 @@ input.on("line", (line) => {
   if (message.method === "thread/start" || message.method === "thread/resume") {
     const id = message.params.threadId || "thread-test";
     const model = message.params.model || "codex-test";
-    send({ id: message.id, result: { thread: { id, model, turns: [] }, model } });
+    const reasoningEffort = message.params.effort || "medium";
+    send({ id: message.id, result: { thread: { id, model, reasoningEffort, turns: [] }, model } });
     return;
   }
   if (message.method === "thread/read") return send({ id: message.id, result: { thread: { id: message.params.threadId, turns: [] } } });
   if (message.method === "model/list") return send({ id: message.id, result: { data: [
-    { id: "codex-test", displayName: "Codex Test", hidden: false, supportedReasoningEfforts: [] },
-    { id: "codex-other", displayName: "Codex Other", hidden: false, supportedReasoningEfforts: [] },
+    { id: "codex-test", displayName: "Codex Test", hidden: false, defaultReasoningEffort: "medium", supportedReasoningEfforts: [{ reasoningEffort: "low" }, { reasoningEffort: "medium" }, { reasoningEffort: "high" }] },
+    { id: "codex-other", displayName: "Codex Other", hidden: false, defaultReasoningEffort: "low", supportedReasoningEfforts: [{ reasoningEffort: "low" }, { reasoningEffort: "high" }] },
   ] } });
   if (message.method === "turn/start") {
-    const answer = message.params.model ? message.params.model + " works" : "Codex works";
+    const answer = [message.params.model, message.params.effort, "works"].filter(Boolean).join(" ");
     send({ method: "turn/started", params: { turn: { id: "turn-test" } } });
     send({ id: message.id, result: { turn: { id: "turn-test" } } });
     send({ method: "item/agentMessage/delta", params: { turnId: "turn-test", itemId: "message-test", delta: answer } });
