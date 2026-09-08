@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { chatView } from "../../chat-store.js";
 
 const SUPPORTED = new Set(["codex", "chatgpt-web"]);
 
@@ -9,7 +10,11 @@ export function harnessCatalog(backends) {
   ];
 }
 
-export function registerHarnessRoutes(app, { backends, projects }) {
+const opaqueSessionId = (chat) => typeof chat.backend?.opaqueSession === "string"
+  ? chat.backend.opaqueSession
+  : chat.backend?.opaqueSession?.threadId || null;
+
+export function registerHarnessRoutes(app, { backends, projects, registry }) {
   app.get("/v0/harnesses", async (_request, response) => {
     const harnesses = await Promise.all(harnessCatalog(backends).map(async (item) => {
       if (!item.available || item.id !== "chatgpt-web") return item;
@@ -33,8 +38,12 @@ export function registerHarnessRoutes(app, { backends, projects }) {
       if (!project) return response.status(404).json({ error: "project_not_found" });
       await projects.validate(project);
       const adapter = backends.forImplementation(implementation);
-      if (!adapter.listSessions) return response.json({ sessions: [], replayFidelity: "from-now" });
-      response.json({ sessions: await adapter.listSessions({ cwd: project.workingRoot }), replayFidelity: "full" });
+      if (!adapter.listSessions) return response.json({ tracked: [], sessions: [], replayFidelity: "from-now" });
+      const sessions = await adapter.listSessions({ cwd: project.workingRoot });
+      const tracked = registry.list({ includeHidden: true }).filter((chat) =>
+        chat.projectId === project.id && chat.backend?.implementation === implementation);
+      const trackedIds = new Set(tracked.map(opaqueSessionId).filter(Boolean));
+      response.json({ tracked: tracked.map(chatView), sessions: sessions.filter((session) => !trackedIds.has(session.id)), replayFidelity: "full" });
     } catch (error) { next(error); }
   });
 

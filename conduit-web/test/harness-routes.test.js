@@ -19,6 +19,7 @@ test("ephemeral Codex drive leaves the chat registry unchanged", async (t) => {
     .find((item) => item.id === project.id).sessions.length;
   const sessions = await (await harness.request(`/v0/harnesses/codex/sessions?projectId=${project.id}`)).json();
   assert.equal(sessions.sessions[0].id, "foreign-thread");
+  assert.deepEqual(sessions.tracked, []);
   const opened = await (await harness.request("/v0/harnesses/codex/drive", {
     method: "POST", body: JSON.stringify({ projectId: project.id, sessionId: "foreign-thread" }),
   })).json();
@@ -28,4 +29,9 @@ test("ephemeral Codex drive leaves the chat registry unchanged", async (t) => {
     .find((item) => item.id === project.id).sessions.length, before);
   assert.equal((await harness.request(`/v0/live-sessions/${opened.id}/process`, { method: "DELETE" })).status, 202);
   assert.equal((await (await harness.request("/v0/live-sessions")).json()).sessions.some((item) => item.id === opened.id), false);
+  assert.equal((await harness.request(`/v0/projects/${project.id}/backend-sessions/foreign-thread/adopt`, { method: "POST" })).status, 201);
+  const mounted = await (await harness.request(`/v0/harnesses/codex/sessions?projectId=${project.id}`)).json();
+  assert.equal(mounted.tracked.length, 1);
+  assert.equal(mounted.tracked[0].backend.opaqueSession, undefined);
+  assert.deepEqual(mounted.sessions, []);
 });

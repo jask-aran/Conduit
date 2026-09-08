@@ -600,7 +600,7 @@ registerChatRoutes(app, {
   runtimeFor,
   templateForChat,
 });
-registerHarnessRoutes(app, { backends, projects });
+registerHarnessRoutes(app, { backends, projects, registry });
 registerSessionRoutes(app, {
   backends,
   config,
