@@ -5,6 +5,7 @@ import readline from "node:readline";
 import { Readable } from "node:stream";
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
+import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 
 export const CHATGPT_WEB_CAPABILITIES = Object.freeze({
   steer: false, followUpQueue: false, cancel: true, compaction: false,
@@ -99,6 +100,7 @@ export class ChatGptWebAdapter extends EventEmitter {
     const record = this.get(id);
     if (!record || record.active) throw adapterError("ChatGPT Web session is busy", "generation_limit", 409);
     if (!record.model) throw adapterError("Select a ChatGPT model before sending a message", "invalid_model", 400);
+    const userMessage = parseAttachmentEnvelope(message).message;
     const generationId = crypto.randomUUID();
     const messageId = `assistant-${generationId}`;
     record.active = true;
@@ -107,10 +109,10 @@ export class ChatGptWebAdapter extends EventEmitter {
     record.generation = { id: generationId, closed: false, settled: false };
     record.abortController = new AbortController();
     this.publish(record, { type: "transcript_message", generationId,
-      message: { id: crypto.randomUUID(), role: "user", content: message } });
+      message: { id: crypto.randomUUID(), role: "user", content: userMessage } });
     this.publish(record, { type: "status", generationId, sequence: ++record.eventSequence, status: "working", activity: "working", detail: null });
     this.publish(record, { type: "assistant_content", generationId, phase: "start", sequence: ++record.eventSequence, messageId });
-    void this.runPrompt(record, { generationId, messageId, message });
+    void this.runPrompt(record, { generationId, messageId, message: userMessage });
     return generationId;
   }
 
@@ -237,6 +239,20 @@ export class ChatGptWebAdapter extends EventEmitter {
   journalPath(chatId) { return path.join(this.dataDir, "journals", `${chatId}.jsonl`); }
   appendJournal(chatId, event) { const file = this.journalPath(chatId); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.appendFileSync(file, JSON.stringify(event) + "\n", { mode: 0o600 }); }
   readJournal(chatId) { try { return fs.readFileSync(this.journalPath(chatId), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)); } catch { return []; } }
+  transcript(chatId) {
+    const messages = [];
+    for (const event of this.readJournal(chatId)) {
+      if (event.type === "transcript_message" && event.message?.role === "user") messages.push({
+        ...event.message, content: parseAttachmentEnvelope(event.message.content).message,
+      });
+      if (event.type === "assistant_content" && event.phase === "final") messages.push({
+        id: event.messageId, role: "assistant",
+        content: (event.blocks || []).filter((block) => block.kind === "text").map((block) => block.text || "").join(""),
+        stopped: event.stopReason === "aborted", stopReason: event.stopReason || null,
+      });
+    }
+    return messages;
+  }
   get(id) { return this.records.get(id) || null; }
   getByChatId(chatId) { const id = this.byChatId.get(chatId); return id ? this.get(id) : null; }
   list() { return [...this.records.values()].map((record) => this.view(record)); }
