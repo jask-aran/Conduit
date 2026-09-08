@@ -3,6 +3,7 @@ import { chatView, isChatId } from "../../chat-store.js";
 import { stopSessionProcesses } from "../../session-operations.js";
 import { resolveModelProfile } from "../../model-profiles.js";
 import { usesWebSearchOverlay } from "../../model-profile-runtime.js";
+import { agentProfiles, profileSelection } from "../../chat-backend.js";
 
 export function registerChatRoutes(app, {
   catalogFor,
@@ -19,6 +20,7 @@ export function registerChatRoutes(app, {
   runtimeFor,
   templateForChat,
 }) {
+  app.get("/v0/profiles", (_request, response) => response.json({ profiles: agentProfiles(config.piTemplates) }));
   app.get("/v0/models", async (request, response, next) => {
     try {
       const project = await projects.get(request.query.projectId || "chat");
@@ -55,6 +57,7 @@ export function registerChatRoutes(app, {
 
   app.post("/v0/chats", async (request, response, next) => {
     try {
+      request.body = profileSelection(request.body);
       const project = await projects.get(request.body?.projectId || "chat");
       if (!project) return response.status(404).json({ error: "project_not_found" });
       await lifecycle.withProjects([project.id], async () => {
@@ -102,6 +105,7 @@ export function registerChatRoutes(app, {
 
   app.patch("/v0/chats/:chatId", async (request, response, next) => {
     try {
+      request.body = profileSelection(request.body);
       const context = await findChatContext(request.params.chatId);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
       if (lifecycle.isBusy(context.chat.id) && (request.body?.templateId != null || request.body?.runtimeKind != null)) {
@@ -130,7 +134,7 @@ export function registerChatRoutes(app, {
         selectedTemplate = template;
       }
       if (request.body?.runtimeKind != null) {
-        if (context.project.kind !== "workspace") {
+        if (request.body.runtimeKind === "native_pi" && context.project.kind !== "workspace") {
           return response.status(400).json({ error: "native_pi_requires_workspace" });
         }
         if (context.chat.status !== "draft" || context.chat.piSessionFile) {
