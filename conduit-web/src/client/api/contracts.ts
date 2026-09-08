@@ -113,6 +113,16 @@ export interface BackendSessionDiscovery {
   adoptable: BackendSessionSummary[];
 }
 
+export interface HarnessSummary {
+  id: "codex" | "chatgpt-web";
+  label: string;
+  available: boolean;
+  sessions: boolean;
+  drive: boolean;
+  status?: "ready" | "authentication_required" | "unavailable";
+  version?: string | null;
+}
+
 export interface WorkspacePolicy {
   allowlist: string[];
   defaultRoot: string | null;
