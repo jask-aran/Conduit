@@ -508,6 +508,9 @@ starting, and browser-attached processes remain resident.
 - `GET /v0/live-sessions/:id/snapshot`
 - `DELETE /v0/live-sessions/:id/process`
 - `WS /v0/live-sessions/:id/stream`
+- `GET /v0/harnesses` lists installed adapter dashboards and available controls
+- `GET /v0/harnesses/:implementation/sessions?projectId=...` lists bounded backend metadata for one validated Workspace
+- `POST /v0/harnesses/:implementation/drive` opens an ephemeral backend session without creating a Conduit chat
 - `GET|POST /v0/ptys` lists or creates a shell for a chat project
 - `POST /v0/ptys/:id/rename` and `DELETE /v0/ptys/:id` rename or stop/remove it
 - `WS /v0/ptys/:id/attach` attaches a terminal renderer
@@ -625,6 +628,20 @@ without an assigned profile can have null profile identity until the existing
 profile-assignment path runs. Host Pi has no Conduit profile revision.
 The existing editable prompt service still supplies current prompt content;
 profile revision is identity metadata, not a snapshot of prompt contents.
+
+## Adapter dashboards and drive mode
+
+Computer shows one dashboard row for each installed adapter. The Codex
+dashboard lists session metadata for the selected Workspace and can start a
+tracked chat or drive an existing native thread. Drive mode uses the normal
+backend-neutral live-session stream but creates no chat, transcript journal, or
+sidebar entry. Closing drive mode stops and removes its resident adapter
+record. **Track this thread** closes the ephemeral driver before it uses the
+explicit adoption route, so a thread never has two Conduit writers.
+
+The ChatGPT Web dashboard reports adapter and authentication status. Session
+listing and drive mode stay unavailable because that adapter does not expose
+backend history discovery.
 
 ## Live session protocol
 

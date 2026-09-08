@@ -100,7 +100,7 @@
 .computer-explorer-sidebar button:hover, .computer-explorer-sidebar button[data-active="true"] { background: var(--accent); color: var(--foreground); }
 .computer-explorer-sidebar button span { overflow: hidden; font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; }
 .computer-explorer-sidebar svg, .computer-explorer-sidebar .workspace-glyph { width: 13px; height: 13px; flex: none; }
-.computer-explorer-sidebar .computer-harness-mark { width: 14px; height: 14px; flex: none; color: var(--foreground); }
+.computer-explorer-sidebar .computer-harness-mark { width: 14px; height: 14px; flex: none; filter: invert(1); }
 .computer-explorer-sidebar button > i { width: 5px; height: 5px; flex: none; margin-left: auto; border-radius: 50%; background: var(--live); }
 .computer-explorer-sidebar button > i[data-status="authentication_required"], .computer-explorer-sidebar button > i[data-status="unavailable"] { background: var(--warn); }
 .computer-explorer-sidebar p { margin: 6px 7px; color: var(--muted-foreground); font-size: 9px; }
@@ -154,7 +154,7 @@
 .computer-error { margin: 0; padding: 7px 9px; border-bottom: 1px solid var(--border); color: var(--destructive); font-size: 9px; }
 .computer-harness-dashboard { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: auto; padding: 22px; }
 .computer-harness-dashboard > header { display: flex; align-items: center; gap: 11px; padding: 4px 2px 20px; }
-.computer-harness-dashboard > header > img { width: 28px; height: 28px; }
+.computer-harness-dashboard > header > img { width: 28px; height: 28px; filter: invert(1); }
 .computer-harness-dashboard h1, .computer-harness-dashboard h2, .computer-harness-dashboard p { margin: 0; }
 .computer-harness-dashboard h1 { font-size: 19px; }
 .computer-harness-dashboard h2 { font-size: 12px; }
@@ -167,6 +167,7 @@
 .computer-harness-heading { display: flex; min-height: 48px; align-items: center; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid var(--border); }
 .computer-harness-heading select { max-width: 180px; border: 1px solid var(--border); border-radius: 6px; background: var(--background); padding: 5px; color: var(--foreground); font-size: 9px; }
 .computer-harness-ledger > button { display: grid; width: 100%; min-height: 46px; grid-template-columns: minmax(0, 1fr) 14px; align-items: center; gap: 8px; border: 0; border-bottom: 1px solid var(--border); background: transparent; padding: 7px 10px; color: var(--foreground); text-align: left; }
+.computer-harness-ledger > h3 { margin: 0; padding: 7px 10px 4px; color: var(--muted-foreground); font-size: 8px; text-transform: uppercase; }
 .computer-harness-ledger > button:hover { background: var(--accent); }
 .computer-harness-ledger > button > span { display: grid; gap: 2px; }
 .computer-harness-ledger > p { padding: 22px; text-align: center; }

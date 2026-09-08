@@ -224,6 +224,7 @@ function HarnessDashboard(props: {
   const initialProject = () => props.projects.find((project) => project.workingRoot === props.cwd) || props.projects[0];
   const [projectId, setProjectId] = createSignal(initialProject()?.id || "");
   const [sessions, setSessions] = createSignal<BackendSessionSummary[]>([]);
+  const [tracked, setTracked] = createSignal<ChatSummary[]>([]);
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal("");
   const [prompt, setPrompt] = createSignal("");
@@ -231,11 +232,11 @@ function HarnessDashboard(props: {
   let socket: WebSocket | null = null;
   const project = () => props.projects.find((item) => item.id === projectId());
   const load = async () => {
-    if (!props.harness?.sessions || !projectId()) return setSessions([]);
+    if (!props.harness?.sessions || !projectId()) { setTracked([]); setSessions([]); return; }
     setLoading(true); setError("");
     try {
-      const result = await api<{ sessions: BackendSessionSummary[] }>(`/v0/harnesses/${props.harness.id}/sessions?projectId=${encodeURIComponent(projectId())}`);
-      setSessions(result.sessions);
+      const result = await api<{ tracked: ChatSummary[]; sessions: BackendSessionSummary[] }>(`/v0/harnesses/${props.harness.id}/sessions?projectId=${encodeURIComponent(projectId())}`);
+      setTracked(result.tracked); setSessions(result.sessions);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Sessions could not be loaded"); }
     finally { setLoading(false); }
   };
@@ -289,7 +290,11 @@ function HarnessDashboard(props: {
       <Show when={drive()} fallback={<>
         <section class="computer-harness-launch"><input aria-label="Initial prompt" placeholder="Optional initial prompt" value={prompt()} onInput={(event) => setPrompt(event.currentTarget.value)} /><button type="button" disabled={!project()} onClick={() => void launch()}>Start tracked chat <ArrowRightIcon /></button></section>
         <section class="computer-harness-ledger"><div class="computer-harness-heading"><div><h2>Sessions</h2><p>Metadata from {harness().label}</p></div><select aria-label="Workspace" value={projectId()} onChange={(event) => setProjectId(event.currentTarget.value)}><For each={props.projects}>{(item) => <option value={item.id}>{item.name}</option>}</For></select></div>
-          <Show when={!loading()} fallback={<p>Finding sessions…</p>}><For each={sessions()}>{(session) => <button type="button" onClick={() => void openDrive(session)}><span><strong>{session.title}</strong><small>{session.updatedAt ? new Date(session.updatedAt).toLocaleString() : session.id}</small></span><ArrowRightIcon /></button>}</For><Show when={!sessions().length}><p>No sessions in this workspace.</p></Show></Show>
+          <Show when={!loading()} fallback={<p>Finding sessions…</p>}>
+            <Show when={tracked().length}><h3>Tracked</h3><For each={tracked()}>{(chat) => <button type="button" onClick={() => project() && props.onOpenChat?.(chat, project()!)}><span><strong>{chat.title || "Untitled chat"}</strong><small>Conduit chat</small></span><ArrowRightIcon /></button>}</For></Show>
+            <Show when={sessions().length}><h3>Adoptable</h3><For each={sessions()}>{(session) => <button type="button" onClick={() => void openDrive(session)}><span><strong>{session.title}</strong><small>{session.updatedAt ? new Date(session.updatedAt).toLocaleString() : session.id}</small></span><ArrowRightIcon /></button>}</For></Show>
+            <Show when={!tracked().length && !sessions().length}><p>No sessions in this workspace.</p></Show>
+          </Show>
         </section>
       </>}>
         {(current) => <section class="computer-harness-drive"><header><div><strong>Driving {harness().label} thread — not tracked</strong><small>{current().nativeSessionId}</small></div><button type="button" onClick={() => void track()}>Track this thread</button><button type="button" aria-label="Close drive mode" onClick={() => void closeDrive()}><XIcon /></button></header><div class="computer-harness-transcript"><For each={current().messages}>{(message) => <article data-role={message.role}>{message.content}</article>}</For></div><div class="computer-harness-composer"><textarea aria-label="Message" value={prompt()} onInput={(event) => setPrompt(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send(); } }} /><button type="button" aria-label={current().active ? "Stop response" : "Send message"} onClick={() => current().active ? socket?.send(JSON.stringify({ type: "stop_generation" })) : send()}><SquareIcon /></button></div></section>}
