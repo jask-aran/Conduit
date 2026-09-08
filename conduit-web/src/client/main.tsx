@@ -899,8 +899,13 @@ function App() {
   };
   const openComputerHarness = (id: string | null, historyMode: "push" | "none" = "push") => {
     if (!id) return openComputer(historyMode);
+    chat.reset();
+    setMobileSidebarOpen(false);
+    setWorkspaceViewRequest(null);
     setRouteKind("computer");
     setComputerHarness(id);
+    setRouteBootstrapError("");
+    setRouteBootstrap("ready");
     if (!computerLocation()) void browseComputer();
     if (historyMode === "push") history.pushState({}, "", `/computer/harness/${encodeURIComponent(id)}`);
   };
