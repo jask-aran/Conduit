@@ -16,6 +16,20 @@ class SidecarProtocolTests(unittest.TestCase):
             "_puid": "user", "__Secure-next-auth.session-token": "secret",
         })
 
+    def test_cookie_parser_joins_browser_chunked_session_token(self):
+        self.assertEqual(parse_cookie_header(
+            "unrelated=discarded; __Secure-next-auth.session-token.1=second; "
+            "_puid=user; __Secure-next-auth.session-token.0=first; oai-sc=challenge"
+        ), {
+            "__Secure-next-auth.session-token": "firstsecond",
+            "_puid": "user",
+            "oai-sc": "challenge",
+        })
+
+    def test_cookie_parser_rejects_incomplete_session_token_chunks(self):
+        with self.assertRaisesRegex(ValueError, "chunks are incomplete"):
+            parse_cookie_header("__Secure-next-auth.session-token.0=first; __Secure-next-auth.session-token.2=third")
+
     def test_v1_sse_decoder_emits_only_assistant_text(self):
         decoder = SseDecoder()
         initial = {"conversation_id": "c1", "v": {"message": {"id": "m1", "author": {"role": "assistant"}, "content": {"parts": ["Hi"]}}}}

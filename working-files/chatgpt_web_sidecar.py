@@ -24,6 +24,18 @@ IMPERSONATE = os.environ.get("CONDUIT_CHATGPT_WEB_IMPERSONATE", "safari260")
 COOKIE_FILE = Path(os.environ["CONDUIT_CHATGPT_WEB_COOKIE_FILE"])
 PORT = int(os.environ.get("CONDUIT_CHATGPT_WEB_PORT", "0"))
 MAX_BODY = 1_000_000
+SESSION_COOKIE = "__Secure-next-auth.session-token"
+RETAINED_COOKIES = {
+    SESSION_COOKIE,
+    "_puid",
+    "oai-sc",
+    "oai-did",
+    "cf_clearance",
+    "__cf_bm",
+    "_cfuvid",
+    "__cflb",
+    "__oailb",
+}
 
 
 class UpstreamError(Exception):
@@ -44,7 +56,18 @@ def parse_cookie_header(value: str) -> dict[str, str]:
         name, cookie_value = part.strip().split("=", 1)
         if name:
             cookies[name] = cookie_value
-    if "__Secure-next-auth.session-token" not in cookies:
+    chunks: dict[int, str] = {}
+    for name in list(cookies):
+        match = re.fullmatch(re.escape(SESSION_COOKIE) + r"\.(\d+)", name)
+        if match:
+            chunks[int(match.group(1))] = cookies.pop(name)
+    if SESSION_COOKIE not in cookies and chunks:
+        indexes = sorted(chunks)
+        if indexes != list(range(len(indexes))):
+            raise ValueError("The ChatGPT session cookie chunks are incomplete")
+        cookies[SESSION_COOKIE] = "".join(chunks[index] for index in indexes)
+    cookies = {name: cookie_value for name, cookie_value in cookies.items() if name in RETAINED_COOKIES}
+    if SESSION_COOKIE not in cookies or not cookies[SESSION_COOKIE]:
         raise ValueError("The ChatGPT session cookie is missing")
     return cookies
 
