@@ -633,9 +633,12 @@ profile revision is identity metadata, not a snapshot of prompt contents.
 
 Computer shows one dashboard row for each installed adapter. The Codex
 dashboard lists session metadata for the selected Workspace and can start a
-tracked chat or drive an existing native thread. Drive mode uses the normal
+tracked chat or drive an existing native thread. Computer folder actions can
+open an installed harness with that exact directory preset; starting a chat
+links the directory as a Workspace first when required. Drive mode uses the normal
 backend-neutral live-session stream but creates no chat, transcript journal, or
-sidebar entry. Closing drive mode stops and removes its resident adapter
+sidebar entry. It renders assistant content through Conduit's shared Markdown
+renderer and uses the standard message and composer visual language. Closing drive mode stops and removes its resident adapter
 record. **Track this thread** closes the ephemeral driver before it uses the
 explicit adoption route, so a thread never has two Conduit writers.
 

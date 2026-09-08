@@ -6,6 +6,7 @@ import type { BackendSessionSummary, ChatSummary, ComputerLocation, HarnessSumma
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { FileTypeIcon } from "../workspace/file-type-icon";
+import { ChatMarkdown } from "../chat/markdown";
 import "./app-dashboard.css";
 
 type Entry = { name: string; path: string; type: "directory" | "file" | "other" };
@@ -29,7 +30,9 @@ export function ComputerDashboard(props: {
   onOpenFile: (path: string) => void;
   selectedHarness?: string | null;
   onOpenHarness?: (id: string | null) => void;
+  onOpenHarnessHere?: (id: string, cwd: string) => void;
   onOpenHarnessChat?: (chat: ChatSummary, project: Project, prompt?: string) => void;
+  onLaunchHarnessChat?: (harness: HarnessSummary, cwd: string, prompt?: string) => Promise<void>;
   dialog?: boolean;
   onSelectFolder?: () => void;
   onCreateFolder?: () => void;
@@ -147,7 +150,7 @@ export function ComputerDashboard(props: {
       </aside>
       <div class="computer-sidebar-resize" role="separator" aria-label="Resize locations sidebar" aria-orientation="vertical" aria-valuemin="120" aria-valuemax="280" aria-valuenow={sidebarWidth()} onPointerDown={startSidebarResize} />
 
-      <Show when={!props.selectedHarness} fallback={<HarnessDashboard harness={harnesses().find((item) => item.id === props.selectedHarness)} projects={workspaces()} cwd={props.location?.project.workingRoot || ""} onOpenChat={props.onOpenHarnessChat} />}>
+      <Show when={!props.selectedHarness} fallback={<HarnessDashboard harness={harnesses().find((item) => item.id === props.selectedHarness)} projects={workspaces()} cwd={props.location?.project.workingRoot || ""} onOpenChat={props.onOpenHarnessChat} onLaunchChat={props.onLaunchHarnessChat} />}>
       <div class="computer-explorer-main">
         <div class="computer-explorer-toolbar">
           <button type="button" aria-label="Home folder" title="Home folder" disabled={props.loading} onClick={() => props.onBrowse()}><HomeIcon /></button>
@@ -166,6 +169,9 @@ export function ComputerDashboard(props: {
           <WorkspaceActions />
           <Show when={!props.dialog}>
             <button type="button" disabled={!props.location || props.loading} onClick={props.onOpenTerminalHere}><TerminalIcon />Terminal Here</button>
+            <For each={harnesses().filter((item) => item.available)}>{(harness) =>
+              <button type="button" disabled={!props.location || props.loading} onClick={() => props.onOpenHarnessHere?.(harness.id, props.location!.project.workingRoot)}><img class="computer-harness-mark" src={harness.id === "codex" ? "/codex-mark.svg" : "/chatgpt-mark.svg"} alt="" />{harness.label} Here</button>
+            }</For>
             <button type="button" disabled={!props.location?.repository || props.loading} onClick={() => props.onOpenView("diff")}><GitBranchIcon />Source Control</button>
           </Show>
         </div>
@@ -181,6 +187,7 @@ export function ComputerDashboard(props: {
               <Show when={view() === "details"}><small>{entry.type === "directory" ? "Folder" : entry.type === "file" ? "File" : "Other"}</small></Show>
             </ContextMenuTrigger><ContextMenuContent><ContextMenuGroup>
               <ContextMenuItem onSelect={() => openEntry(entry)}><FolderIcon />Open</ContextMenuItem>
+              <Show when={!props.dialog && entry.type === "directory"}><For each={harnesses().filter((item) => item.available)}>{(harness) => <ContextMenuItem onSelect={() => props.onOpenHarnessHere?.(harness.id, `${props.location!.project.workingRoot}/${entry.path}`)}><img class="computer-harness-mark" src={harness.id === "codex" ? "/codex-mark.svg" : "/chatgpt-mark.svg"} alt="" />Open {harness.label} here</ContextMenuItem>}</For></Show>
               <Show when={!props.dialog && entry.type === "directory" && !workspaceFor(entry)}><ContextMenuItem onSelect={() => props.onCreateWorkspace(`${props.location!.project.workingRoot}/${entry.path}`)}><PlusIcon />Make workspace</ContextMenuItem></Show>
               <Show when={workspaceFor(entry)}>{(workspace) => <>
                 <ContextMenuItem onSelect={() => props.onOpenWorkspace(workspace())}><WorkspaceGlyph appearance={workspace().workspaceAppearance} />Open workspace</ContextMenuItem>
@@ -196,6 +203,7 @@ export function ComputerDashboard(props: {
           <ContextMenuItem disabled={!props.location} onSelect={() => props.dialog ? props.onSelectFolder?.() : props.onStartWorkspaceAction("created", props.location!.project.workingRoot)}><FolderIcon />{props.dialog ? "Select this folder" : "Create workspace folder here"}</ContextMenuItem>
           <ContextMenuItem disabled={!props.location} onSelect={() => props.dialog ? props.onCreateFolder?.() : props.onStartWorkspaceAction("cloned", props.location!.project.workingRoot)}><PlusIcon />{props.dialog ? "Create folder here" : "Clone repository here"}</ContextMenuItem>
           <Show when={props.dialog}><ContextMenuItem disabled={!props.location} onSelect={props.onCloneRepository}><GitBranchIcon />Clone repository here</ContextMenuItem></Show>
+          <Show when={!props.dialog}><For each={harnesses().filter((item) => item.available)}>{(harness) => <ContextMenuItem disabled={!props.location} onSelect={() => props.onOpenHarnessHere?.(harness.id, props.location!.project.workingRoot)}><img class="computer-harness-mark" src={harness.id === "codex" ? "/codex-mark.svg" : "/chatgpt-mark.svg"} alt="" />Open {harness.label} here</ContextMenuItem>}</For></Show>
           <ContextMenuItem onSelect={() => void refresh()}><RefreshCwIcon />Refresh</ContextMenuItem>
           <ContextMenuItem onSelect={() => setShowHidden((value) => !value)}><EyeIcon />{showHidden() ? "Hide hidden files" : "Show hidden files"}</ContextMenuItem>
           <ContextMenuItem onSelect={() => props.onOpenView("terminal")}><TerminalIcon />Terminal here</ContextMenuItem>
@@ -213,12 +221,13 @@ function HarnessDashboard(props: {
   projects: Project[];
   cwd: string;
   onOpenChat?: (chat: ChatSummary, project: Project, prompt?: string) => void;
+  onLaunchChat?: (harness: HarnessSummary, cwd: string, prompt?: string) => Promise<void>;
 }) {
   const sessionDate = (value: number | string | null) => {
     const timestamp = typeof value === "number" && value < 1_000_000_000_000 ? value * 1_000 : value;
     return timestamp ? new Date(timestamp).toLocaleString() : "";
   };
-  const initialProject = () => props.projects.find((project) => project.workingRoot === props.cwd) || props.projects[0];
+  const initialProject = () => props.projects.find((project) => project.workingRoot === props.cwd);
   const [projectId, setProjectId] = createSignal(initialProject()?.id || "");
   const [sessions, setSessions] = createSignal<BackendSessionSummary[]>([]);
   const [tracked, setTracked] = createSignal<ChatSummary[]>([]);
@@ -228,6 +237,7 @@ function HarnessDashboard(props: {
   const [drive, setDrive] = createSignal<{ id: string; nativeSessionId: string; messages: { role: string; content: string }[]; active: boolean } | null>(null);
   let socket: WebSocket | null = null;
   const project = () => props.projects.find((item) => item.id === projectId());
+  const launchCwd = () => project()?.workingRoot || props.cwd;
   const load = async () => {
     if (!props.harness?.sessions || !projectId()) { setTracked([]); setSessions([]); return; }
     setLoading(true); setError("");
@@ -275,9 +285,14 @@ function HarnessDashboard(props: {
     props.onOpenChat?.(chat, selectedProject);
   };
   const launch = async () => {
-    const selectedProject = project(); if (!selectedProject || !props.harness) return;
-    const chat = await api<ChatSummary>("/v0/chats", { method: "POST", body: JSON.stringify({ projectId: selectedProject.id, profileId: props.harness.id }) });
-    props.onOpenChat?.(chat, selectedProject, prompt().trim() || undefined);
+    if (!props.harness) return;
+    setError("");
+    try {
+      if (props.onLaunchChat) return await props.onLaunchChat(props.harness, launchCwd(), prompt().trim() || undefined);
+      const selectedProject = project(); if (!selectedProject) return;
+      const chat = await api<ChatSummary>("/v0/chats", { method: "POST", body: JSON.stringify({ projectId: selectedProject.id, profileId: props.harness.id }) });
+      props.onOpenChat?.(chat, selectedProject, prompt().trim() || undefined);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Chat could not be started"); }
   };
   const send = () => { const value = prompt().trim(); if (!value || !socket || socket.readyState !== WebSocket.OPEN) return; socket.send(JSON.stringify({ type: "prompt", message: value })); setPrompt(""); };
 
@@ -285,8 +300,8 @@ function HarnessDashboard(props: {
     <Show when={props.harness} fallback={<p class="computer-error">Harness is unavailable.</p>}>{(harness) => <>
       <header><img src={harness().id === "codex" ? "/codex-mark.svg" : "/chatgpt-mark.svg"} alt="" /><div><h1>{harness().label}</h1><p>{harness().version || "Installed adapter"} · {harness().status === "authentication_required" ? "Authentication required" : "Ready"}</p></div></header>
       <Show when={drive()} fallback={<>
-        <section class="computer-harness-launch"><input aria-label="Initial prompt" placeholder="Optional initial prompt" value={prompt()} onInput={(event) => setPrompt(event.currentTarget.value)} /><button type="button" disabled={!project()} onClick={() => void launch()}>Start tracked chat <ArrowRightIcon /></button></section>
-        <section class="computer-harness-ledger"><div class="computer-harness-heading"><div><h2>Sessions</h2><p>Metadata from {harness().label}</p></div><select aria-label="Workspace" value={projectId()} onChange={(event) => setProjectId(event.currentTarget.value)}><For each={props.projects}>{(item) => <option value={item.id}>{item.name}</option>}</For></select></div>
+        <section class="computer-harness-launch"><div><input aria-label="Initial prompt" placeholder="Optional initial prompt" value={prompt()} onInput={(event) => setPrompt(event.currentTarget.value)} /><small title={launchCwd()}>{launchCwd()}</small></div><button type="button" disabled={!launchCwd()} onClick={() => void launch()}>Start tracked chat <ArrowRightIcon /></button></section>
+        <section class="computer-harness-ledger"><div class="computer-harness-heading"><div><h2>Sessions</h2><p>Metadata from {harness().label}</p></div><select aria-label="Workspace" value={projectId()} onChange={(event) => setProjectId(event.currentTarget.value)}><option value="">Current folder · new workspace</option><For each={props.projects}>{(item) => <option value={item.id}>{item.name}</option>}</For></select></div>
           <Show when={!loading()} fallback={<p>Finding sessions…</p>}>
             <Show when={tracked().length}><h3>Tracked</h3><For each={tracked()}>{(chat) => <button type="button" onClick={() => project() && props.onOpenChat?.(chat, project()!)}><span><strong>{chat.title || "Untitled chat"}</strong><small>Conduit chat</small></span><ArrowRightIcon /></button>}</For></Show>
             <Show when={sessions().length}><h3>Adoptable</h3><For each={sessions()}>{(session) => <button type="button" onClick={() => void openDrive(session)}><span><strong>{session.title}</strong><small>{sessionDate(session.updatedAt) || session.id}</small></span><ArrowRightIcon /></button>}</For></Show>
@@ -294,7 +309,7 @@ function HarnessDashboard(props: {
           </Show>
         </section>
       </>}>
-        {(current) => <section class="computer-harness-drive"><header><div><strong>Driving {harness().label} thread — not tracked</strong><small>{current().nativeSessionId}</small></div><button type="button" onClick={() => void track()}>Track this thread</button><button type="button" aria-label="Close drive mode" onClick={() => void closeDrive()}><XIcon /></button></header><div class="computer-harness-transcript"><For each={current().messages}>{(message) => <article data-role={message.role}>{message.content}</article>}</For></div><div class="computer-harness-composer"><textarea aria-label="Message" value={prompt()} onInput={(event) => setPrompt(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send(); } }} /><button type="button" aria-label={current().active ? "Stop response" : "Send message"} onClick={() => current().active ? socket?.send(JSON.stringify({ type: "stop_generation" })) : send()}><SquareIcon /></button></div></section>}
+        {(current) => <section class="computer-harness-drive"><header><div><strong>Driving {harness().label} thread — not tracked</strong><small>{current().nativeSessionId}</small></div><button type="button" onClick={() => void track()}>Track this thread</button><button type="button" aria-label="Close drive mode" onClick={() => void closeDrive()}><XIcon /></button></header><div class="computer-harness-transcript" data-slot="message-scroller-viewport"><For each={current().messages}>{(message, index) => <article data-role={message.role} data-slot="message-content"><Show when={message.role === "assistant"} fallback={<span class="user-message-text">{message.content}</span>}><div data-slot="bubble-content"><ChatMarkdown streaming={current().active && index() === current().messages.length - 1}>{message.content}</ChatMarkdown></div></Show></article>}</For></div><div class="computer-harness-composer composer" data-composer-surface="frost"><textarea aria-label="Message" placeholder={`Message ${harness().label}`} value={prompt()} onInput={(event) => setPrompt(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send(); } }} /><button type="button" aria-label={current().active ? "Stop response" : "Send message"} onClick={() => current().active ? socket?.send(JSON.stringify({ type: "stop_generation" })) : send()}><Show when={current().active} fallback={<ArrowUpIcon />}><SquareIcon /></Show></button></div></section>}
       </Show>
       <Show when={error()}><p class="computer-error" role="alert">{error()}</p></Show>
     </>}</Show>

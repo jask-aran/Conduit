@@ -160,7 +160,9 @@
 .computer-harness-dashboard h2 { font-size: 12px; }
 .computer-harness-dashboard p, .computer-harness-dashboard small { color: var(--muted-foreground); font-size: 9px; }
 .computer-harness-launch { display: flex; gap: 7px; margin-bottom: 14px; padding: 9px; border: 1px solid var(--border); border-radius: 10px; }
-.computer-harness-launch input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--foreground); font-size: 11px; }
+.computer-harness-launch > div { display: grid; min-width: 0; flex: 1; gap: 2px; }
+.computer-harness-launch input { min-width: 0; border: 0; outline: 0; background: transparent; color: var(--foreground); font-size: 11px; }
+.computer-harness-launch small { overflow: hidden; font: 8px ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .computer-harness-launch button, .computer-harness-drive header button { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); border-radius: 7px; background: transparent; padding: 6px 9px; color: var(--foreground); font-size: 9px; }
 .computer-harness-launch svg, .computer-harness-ledger svg, .computer-harness-drive header svg { width: 12px; height: 12px; }
 .computer-harness-ledger { overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
@@ -176,7 +178,8 @@
 .computer-harness-drive > header > div { display: grid; min-width: 0; flex: 1; gap: 2px; }
 .computer-harness-drive > header small { overflow: hidden; font: 8px ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .computer-harness-transcript { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 14px; overflow-y: auto; padding: 24px max(18px, calc((100% - 720px) / 2)); }
-.computer-harness-transcript article { white-space: pre-wrap; font-size: 13px; line-height: 1.55; }
+.computer-harness-transcript article { font-size: 13px; line-height: 1.55; }
+.computer-harness-transcript article[data-role="assistant"] { width: 100%; }
 .computer-harness-transcript article[data-role="user"] { max-width: 80%; align-self: flex-end; border: 1px solid var(--glass-border); border-radius: 15px; background: var(--glass-bg); padding: 9px 12px; }
 .computer-harness-composer { display: flex; width: min(720px, calc(100% - 28px)); align-items: end; gap: 7px; margin: 8px auto 12px; border: 1px solid var(--glass-border); border-radius: 18px; background: var(--glass-bg); padding: 8px 9px; backdrop-filter: blur(21px); }
 .computer-harness-composer textarea { min-height: 36px; flex: 1; resize: none; border: 0; outline: 0; background: transparent; color: var(--foreground); font: inherit; }
