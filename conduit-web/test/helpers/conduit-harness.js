@@ -86,11 +86,15 @@ input.on("line", (line) => {
   if (message.method === "initialize") return send({ id: message.id, result: { userAgent: "conduit-test" } });
   if (message.method === "thread/start" || message.method === "thread/resume") {
     const id = message.params.threadId || "thread-test";
-    send({ id: message.id, result: { thread: { id, model: "codex-test", turns: [] }, model: "codex-test" } });
+    const model = message.params.model || "codex-test";
+    send({ id: message.id, result: { thread: { id, model, turns: [] }, model } });
     return;
   }
   if (message.method === "thread/read") return send({ id: message.id, result: { thread: { id: message.params.threadId, turns: [] } } });
-  if (message.method === "model/list") return send({ id: message.id, result: { data: [{ id: "codex-test", displayName: "Codex Test", hidden: false, supportedReasoningEfforts: [] }] } });
+  if (message.method === "model/list") return send({ id: message.id, result: { data: [
+    { id: "codex-test", displayName: "Codex Test", hidden: false, supportedReasoningEfforts: [] },
+    { id: "codex-other", displayName: "Codex Other", hidden: false, supportedReasoningEfforts: [] },
+  ] } });
   if (message.method === "turn/start") {
     send({ method: "turn/started", params: { turn: { id: "turn-test" } } });
     send({ id: message.id, result: { turn: { id: "turn-test" } } });

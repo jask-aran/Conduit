@@ -25,6 +25,8 @@ export interface PersistedChatBackend {
   protocol: AgentProtocol;
   implementation: AgentImplementation;
   installationId: string;
+  /** Adapter-owned model choice made before the backend session starts. */
+  model?: string;
   opaqueSession: unknown;
 }
 
