@@ -27,6 +27,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 - **Scope:** Local development and branch-validation servers only. This permission does not apply to production services or other user data.
 - **Evidence:** The operator explicitly approved unconditional development restarts after a terminal session blocked deployment of the validated reconnect fix.
 
+### Queue drain-aware development restarts
+
+- **Type:** Preference.
+- **Rule:** Start `.devcontainer/start-conduit.sh restart` in a background terminal and continue or end the agent turn. Let the script wait for active assistant responses; use `--force` only when the operator requests an immediate restart.
+- **Scope:** Local Conduit restarts during development and user testing.
+- **Evidence:** A live test on 2026-09-08 detected an active generation, kept Conduit available until it settled, and then restarted without disrupting the conversation. The operator accepted this behavior.
+
 ### Keep transcript and catalog ownership singular
 
 - **Type:** Invariant.

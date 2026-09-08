@@ -1352,6 +1352,13 @@ export function Settings(props: {
           <Show when={section() === "models"}>
             <details class="settings-disclosure" open><summary><span><BotIcon /><strong>ChatGPT Web</strong><small>{chatGptStatus()?.auth === "configured" ? "Connected" : "Not connected"}</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary><div class="pi-auth-panel">
               <p>Paste the cookie string from a signed-in ChatGPT browser. Conduit stores it on this server and never returns its values.</p>
+              <ol>
+                <li>Sign in at <a href="https://chatgpt.com" target="_blank" rel="noreferrer">chatgpt.com</a>.</li>
+                <li>Open browser developer tools, select Network, then reload ChatGPT.</li>
+                <li>Select a request to <code>chatgpt.com</code>. In Request Headers, copy the complete <code>Cookie</code> value.</li>
+                <li>Paste that value below. It must include <code>__Secure-next-auth.session-token</code>.</li>
+              </ol>
+              <p><strong>Treat this value like a password.</strong> Do not paste it into a chat, issue, or log.</p>
               <Field><FieldLabel for="chatgpt-web-cookie">ChatGPT cookies</FieldLabel><textarea id="chatgpt-web-cookie" rows="3" autocomplete="off" value={chatGptCookie()} onInput={(event) => setChatGptCookie(event.currentTarget.value)} placeholder={chatGptStatus()?.auth === "configured" ? "A ChatGPT session is connected" : "__Secure-next-auth.session-token=…"} /></Field>
               <div><Button disabled={chatGptBusy() || !chatGptCookie().trim()} onClick={() => void saveChatGptCookie()}>{chatGptBusy() ? <Spinner /> : null}Save cookies</Button><Show when={chatGptStatus()?.auth === "configured"}><Button variant="outline" disabled={chatGptBusy()} onClick={() => void removeChatGptCookie()}>Remove cookies</Button></Show></div>
               <Show when={chatGptStatus()}><small>Transport: curl_cffi {chatGptStatus()!.curlCffiVersion}, {chatGptStatus()!.impersonate}. Stored cookie names: {chatGptStatus()!.cookieNames.join(", ") || "none"}.</small></Show>
