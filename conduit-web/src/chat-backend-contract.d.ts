@@ -17,8 +17,11 @@ export interface AgentProfile {
 }
 
 export interface PersistedChatBackend {
-  profileId: string;
-  profileRevision: string;
+  /** Null for imported Pi chats whose profile has not yet been assigned. */
+  profileId: string | null;
+  /** Host Pi has no Conduit profile revision. */
+  profileRevision: string | null;
+  management: ProfileManagement;
   protocol: AgentProtocol;
   implementation: AgentImplementation;
   installationId: string;

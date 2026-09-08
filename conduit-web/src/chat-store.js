@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { readSessionMetadata, readSessionParentSession, validateSessionFile } from "./session-store.js";
 import { ensureChatTree } from "./owned-paths.js";
+import { piBackendFor, withPiCompatibilityFields } from "./chat-backend.js";
 
 const CHAT_ID = /^[a-zA-Z0-9_-]{8,128}$/;
 const COMPLETED_ATTACHMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}--.+$/i;
@@ -32,8 +33,9 @@ export function chatDirectory(project, chatId) {
 
 export function chatView(chat) {
   if (!chat) return null;
-  const { piSessionId, piSessionFile, ...view } = chat;
-  return view;
+  const { piSessionId, piSessionFile, backend, ...view } = chat;
+  const { opaqueSession, ...identity } = backend || piBackendFor(chat);
+  return { ...view, backend: identity, profileId: identity.profileId, profileRevision: identity.profileRevision };
 }
 
 function sessionFileFor(item) {
@@ -115,7 +117,8 @@ export class ChatStore {
   async initialize(projects) {
     const stored = await readJson(this.file, { version: 2, sessions: [] });
     const legacyRegistry = !Array.isArray(stored.chats);
-    const rows = Array.isArray(stored.chats) ? stored.chats : Array.isArray(stored.sessions) ? stored.sessions : [];
+    const rows = (Array.isArray(stored.chats) ? stored.chats : Array.isArray(stored.sessions) ? stored.sessions : [])
+      .map(withPiCompatibilityFields);
     const projectById = new Map(projects.map((project) => [project.id, project]));
     const discoveredFiles = new Map();
 
@@ -181,6 +184,7 @@ export class ChatStore {
           ? item.templateVersion.trim()
           : null,
         runtime: this.runtimeFor(item, item.templateId, item.templateVersion),
+        backend: item.backend || null,
         piSessionId: item.piSessionId || item.nativeId || (active ? item.id : null),
         piSessionFile,
         modelThinkingLevels: modelThinkingLevelsFor(item),
@@ -305,7 +309,11 @@ export class ChatStore {
     for (const chat of this.chats) {
       const templateId = normalize(chat.templateId);
       const profileId = normalize(chat.runtime?.profileId);
-      if (templateId && templateId !== chat.templateId) { chat.templateId = templateId; changed = true; }
+      if (templateId && templateId !== chat.templateId) {
+        chat.templateId = templateId;
+        if (chat.backend?.implementation === "conduit_pi") chat.backend.profileId = templateId;
+        changed = true;
+      }
       if (chat.runtime?.kind === "conduit_profile" && profileId && profileId !== chat.runtime.profileId) {
         chat.runtime.profileId = profileId;
         changed = true;
@@ -331,6 +339,7 @@ export class ChatStore {
       chat.runtime.profileVersion = chat.templateVersion;
     }
     chat.updatedAt = new Date(this.now()).toISOString();
+    chat.backend = piBackendFor(chat);
     await this.flush();
     return chat;
   }
@@ -419,6 +428,7 @@ export class ChatStore {
   async update(chatId, patch) {
     const chat = this.metadata(chatId);
     if (!chat) return null;
+    const canSelectBackend = chat.status === "draft" && !chat.piSessionFile && !chat.lastUserMessageAt;
     const allowed = [
       "projectId",
       "title",
@@ -443,6 +453,10 @@ export class ChatStore {
     if (chat.runtime) chat.runtime = this.runtimeFor(chat, chat.templateId, chat.templateVersion);
     if (patch.status === "draft" || patch.status === "active") chat.status = patch.status;
     if (chat.piSessionFile) chat.piSessionFile = path.resolve(chat.piSessionFile);
+    if (canSelectBackend && !patch.piSessionFile
+      && ["templateId", "templateVersion", "runtime"].some((key) => Object.hasOwn(patch, key))) {
+      chat.backend = piBackendFor(chat);
+    }
     if (!patch.updatedAt) chat.updatedAt = new Date(this.now()).toISOString();
     await this.flush();
     return chat;
@@ -517,7 +531,10 @@ export class ChatStore {
   }
 
   flush() {
-    const value = `${JSON.stringify({ version: 3, chats: this.chats }, null, 2)}\n`;
+    for (const chat of this.chats) {
+      chat.backend = { ...(chat.backend || piBackendFor(chat)), opaqueSession: chat.piSessionFile || null };
+    }
+    const value = `${JSON.stringify({ version: 4, chats: this.chats }, null, 2)}\n`;
     this.writeQueue = this.writeQueue.then(async () => {
       await fs.mkdir(path.dirname(this.file), { recursive: true });
       const temporary = `${this.file}.tmp`;
