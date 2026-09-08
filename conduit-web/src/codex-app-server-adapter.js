@@ -195,6 +195,10 @@ export class CodexAppServerAdapter extends EventEmitter {
     if (!record) return false;
     record.status = "stopped";
     record.child.kill("SIGTERM");
+    if (record.ephemeral) {
+      this.records.delete(record.id);
+      this.byChatId.delete(record.chatId);
+    }
     return true;
   }
   async shutdown() { const records = [...this.records.values()].filter((record) => record.status !== "stopped"); await Promise.all(records.map((record) => this.close(record.id))); return records.length; }
