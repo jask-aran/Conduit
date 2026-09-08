@@ -445,11 +445,12 @@ function App() {
   const initialRouteId = pathChatId();
   const initialProjectRouteId = pathProjectId();
   const initialTerminalRoute = location.pathname === "/terminal";
-  const initialComputerRoute = location.pathname === "/computer";
+  const initialComputerRoute = location.pathname === "/computer" || location.pathname.startsWith("/computer/harness/");
   const initialDashboardRoute = location.pathname === "/";
   const [routeKind, setRouteKind] = createSignal<"chat" | "project" | "dashboard" | "terminal" | "computer">(
     initialComputerRoute ? "computer" : initialTerminalRoute ? "terminal" : initialDashboardRoute ? "dashboard" : initialProjectRouteId ? "project" : "chat",
   );
+  const [computerHarness, setComputerHarness] = createSignal(location.pathname.match(/^\/computer\/harness\/([^/]+)$/)?.[1] || "");
   const [terminalRouteId, setTerminalRouteId] = createSignal<string>();
   const [terminalCanReturn, setTerminalCanReturn] = createSignal(false);
   const workspacePanelScope = createMemo(() => routeKind() === "computer" ? "computer"
@@ -890,10 +891,18 @@ function App() {
     setMobileSidebarOpen(false);
     setWorkspaceViewRequest(null);
     setRouteKind("computer");
+    setComputerHarness("");
     setRouteBootstrapError("");
     setRouteBootstrap("ready");
     if (!computerLocation()) void browseComputer();
     if (historyMode === "push") history.pushState({}, "", "/computer");
+  };
+  const openComputerHarness = (id: string | null, historyMode: "push" | "none" = "push") => {
+    if (!id) return openComputer(historyMode);
+    setRouteKind("computer");
+    setComputerHarness(id);
+    if (!computerLocation()) void browseComputer();
+    if (historyMode === "push") history.pushState({}, "", `/computer/harness/${encodeURIComponent(id)}`);
   };
 
   const openTerminalRoute = (historyMode: "push" | "replace" | "none" = "push", terminalId?: string) => {
@@ -1588,8 +1597,9 @@ function App() {
           openDashboard("none");
           return;
         }
-        if (location.pathname === "/computer") {
-          openComputer("none");
+        if (location.pathname === "/computer" || location.pathname.startsWith("/computer/harness/")) {
+          const id = location.pathname.match(/^\/computer\/harness\/([^/]+)$/)?.[1];
+          if (id) openComputerHarness(decodeURIComponent(id), "none"); else openComputer("none");
           return;
         }
         if (location.pathname === "/terminal") {
@@ -1682,7 +1692,8 @@ function App() {
         setRouteKind("project");
         setRouteBootstrap("ready");
       } else if (initialComputerRoute) {
-        openComputer("none");
+        const id = location.pathname.match(/^\/computer\/harness\/([^/]+)$/)?.[1];
+        if (id) openComputerHarness(decodeURIComponent(id), "none"); else openComputer("none");
       } else if (initialTerminalRoute) {
         setRouteKind("terminal");
         setRouteBootstrap("ready");
@@ -1839,7 +1850,7 @@ function App() {
         </Show>
         <Show when={routeKind() === "computer"}>
           <ChatHeader title="Computer" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard />
-          <ComputerDashboard projects={catalogue.projects()} location={computerLocation()} loading={computerLoading()} error={computerError()} onBrowse={(path) => void browseComputer(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => void designateComputerWorkspace()} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProject(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={(path) => { setComputerFile({ path }); openWorkspaceView("files"); }} />
+          <ComputerDashboard projects={catalogue.projects()} location={computerLocation()} loading={computerLoading()} error={computerError()} selectedHarness={computerHarness()} onOpenHarness={(id) => openComputerHarness(id)} onOpenHarnessChat={(target, project, prompt) => { void openChat(target, project).then(() => { if (prompt) { chat.setDraft(prompt); void chat.send(); } }); }} onBrowse={(path) => void browseComputer(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => void designateComputerWorkspace()} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProject(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={(path) => { setComputerFile({ path }); openWorkspaceView("files"); }} />
         </Show>
         <Show when={routeKind() !== "dashboard" && routeKind() !== "computer"}>
         <Show when={routeKind() === "chat" && meteorField()}>
