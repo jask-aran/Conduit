@@ -17,6 +17,7 @@ import {
 } from "../../session-operations.js";
 
 export function registerSessionRoutes(app, {
+  backends,
   config,
   findChatContext,
   findRegisteredSession,
@@ -138,6 +139,7 @@ export function registerSessionRoutes(app, {
         return lifecycle.withProjects([context.project.id, target.id], async () => {
           const current = await findChatContext(request.params.id);
           if (!current) return null;
+          if (current.chat.backend?.protocol !== "pi_rpc") return { error: "chat_move_not_supported", status: 409, message: "Agent-managed chats cannot move between working roots." };
           if (current.chat.runtime?.kind === "native_pi") return { error: "chat_move_not_supported", status: 409, message: "Host Pi chats cannot move between working roots." };
           if (current.chat.projectId === target.id) return { error: "session_project_unchanged", status: 409 };
           await projects.validate(target);
@@ -163,6 +165,8 @@ export function registerSessionRoutes(app, {
         if (!context) return false;
         return lifecycle.withProjects([context.project.id], async () => {
           const session = await findDeletableSession(registry, await projects.list(), context.chat);
+          const external = backends?.getByChatId(context.chat.id);
+          if (external?.adapterImplementation) await backends.adapterForRecord(external).close(external.id);
           const installationRoot = sessionDirectoryRootForChat(config, context.chat);
           const sessionOptions = session && installationRoot
             ? { sessionsDir: path.dirname(session.file), allowedRoot: installationRoot }

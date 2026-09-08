@@ -72,6 +72,25 @@ test("profile selection uses current names and rejects conflicting legacy fields
   assert.throws(() => profileSelection({ profileId: "host-pi", runtimeKind: "conduit_profile" }), { code: "profile_conflict" });
   assert.throws(() => profileSelection({ profileId: {} }), { code: "invalid_profile" });
   assert.equal(agentProfiles([{ id: "assistant", label: "Assistant" }])[0].agent.implementation, "conduit_pi");
+  assert.deepEqual(profileSelection({ profileId: "codex" }), { profileId: "codex" });
+});
+
+test("agent-managed Codex identity persists without Pi compatibility fields", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-codex-backend-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const project = { id: "project_codex", workingRoot: root, sessionsDir: path.join(root, "pi-sessions") };
+  await fs.mkdir(project.sessionsDir);
+  const registry = path.join(root, "registry.json");
+  const backend = { profileId: "codex", profileRevision: null, management: "agent", protocol: "native_api",
+    implementation: "codex", installationId: "host-codex", opaqueSession: "thread-1" };
+  const store = new ChatStore(registry);
+  const chat = await store.create(project, { backend });
+  await store.update(chat.id, { status: "active", lastUserMessageAt: new Date().toISOString() });
+  const restored = new ChatStore(registry);
+  await restored.initialize([project]);
+  assert.deepEqual(restored.metadata(chat.id).backend, backend);
+  assert.equal(restored.metadata(chat.id).runtime, null);
+  assert.equal(restored.metadata(chat.id).piSessionFile, null);
 });
 
 test("public profile selection and legacy chat creation keep the same Pi identity", async (t) => {
@@ -79,6 +98,7 @@ test("public profile selection and legacy chat creation keep the same Pi identit
   t.after(() => harness.stop());
   const profiles = await (await harness.request("/v0/profiles")).json();
   assert.ok(profiles.profiles.some((profile) => profile.id === "assistant"));
+  assert.ok(profiles.profiles.some((profile) => profile.id === "codex" && profile.management === "agent"));
   for (const selection of [{ profileId: "assistant" }, { templateId: "assistant" }]) {
     const response = await harness.request("/v0/chats", { method: "POST", body: JSON.stringify(selection) });
     assert.equal(response.status, 201);
@@ -92,4 +112,11 @@ test("public profile selection and legacy chat creation keep the same Pi identit
     assert.equal(changed.status, 200);
     assert.equal((await changed.json()).profileId, "code-mode");
   }
+  const codexResponse = await harness.request("/v0/chats", {
+    method: "POST", body: JSON.stringify({ profileId: "codex" }),
+  });
+  assert.equal(codexResponse.status, 201);
+  const codexChat = await codexResponse.json();
+  assert.equal(codexChat.profileId, "codex");
+  assert.equal(codexChat.backend.implementation, "codex");
 });

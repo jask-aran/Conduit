@@ -1,4 +1,9 @@
-export type RuntimeKind = "conduit_profile" | "native_pi";
+export type RuntimeKind = "conduit_profile" | "native_pi" | "codex";
+export interface ChatCapabilities {
+  steer: boolean; followUpQueue: boolean; cancel: boolean; compaction: boolean;
+  thinkingLevels: boolean; modelSwitch: boolean; toolUse: boolean; permissions: boolean;
+  usage: boolean; replay: boolean;
+}
 export type ChatStatus = "draft" | "active";
 
 export interface RuntimeIdentity {
@@ -14,6 +19,8 @@ export interface ChatSummary {
   title: string;
   templateId?: string;
   runtime?: RuntimeIdentity;
+  profileId?: string | null;
+  backend?: { protocol: string; implementation: string; installationId: string };
   createdAt?: string;
   updatedAt?: string;
   lastUserMessageAt?: string | null;
@@ -342,6 +349,7 @@ export interface LiveRecord {
     to: string;
     reason: "outside_scope";
   };
+  capabilities?: ChatCapabilities;
 }
 
 export type VoiceExecution = "stop" | "eager" | "live";

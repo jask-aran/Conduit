@@ -60,6 +60,8 @@ import { ModelProfileRuntime, usesWebSearchOverlay } from "./model-profile-runti
 import { publicModelProfile, resolveModelProfile } from "./model-profiles.js";
 import { PromptStore } from "./prompt-store.js";
 import { ChatBackendRegistry, serializePiV0 } from "./pi-rpc-adapter.js";
+import { CodexAppServerAdapter } from "./codex-app-server-adapter.js";
+import { spawnSync } from "node:child_process";
 
 const config = loadConfig();
 const projects = new ProjectStore(config);
@@ -140,7 +142,11 @@ const manager = new PiManager({
   maxGeneratingProcesses: runtimeSettings.get().maxGeneratingProcesses,
   idleProcessTtlMs: runtimeSettings.get().idleProcessTtlMs,
 });
-const backends = new ChatBackendRegistry(manager);
+const codexCommand = process.env.CONDUIT_CODEX_COMMAND || "codex";
+const codexProbe = spawnSync(codexCommand, ["--version"], { encoding: "utf8", timeout: 3_000 });
+const codexAvailable = codexProbe.status === 0;
+const codex = new CodexAppServerAdapter({ command: codexCommand });
+const backends = new ChatBackendRegistry(manager, codexAvailable ? codex : null);
 async function recycleIdleIsolatedPiProcesses() {
   const candidates = manager.liveRecords().filter((record) => record.runtime?.kind === "conduit_profile"
     && manager.isReclaimable(record));
@@ -149,7 +155,7 @@ async function recycleIdleIsolatedPiProcesses() {
   }
   return { restartedIdleProcesses: candidates.length };
 }
-const runtimeHub = new RuntimeHub({ listViews: () => manager.list() });
+const runtimeHub = new RuntimeHub({ listViews: () => backends.list() });
 manager.on("process_changed", ({ record, reason }) => {
   runtimeHub.publishProcess(manager.view(record), reason || "update");
 });
@@ -200,6 +206,13 @@ function catalogFor(runtime, template) {
 }
 
 async function chatModelView(context) {
+  if (context.chat.backend?.implementation === "codex") {
+    const adapter = backends.forChat(context.chat);
+    const resident = backends.getByChatId(context.chat.id);
+    if (!resident) return { installationId: "host-codex", runtimeKind: "codex", models: [], model: "", thinkingLevel: "", source: "offline" };
+    const [models, state] = await Promise.all([adapter.listModels(resident.id), adapter.getModelState(resident.id)]);
+    return { installationId: "host-codex", runtimeKind: "codex", models, ...state, source: "live" };
+  }
   const template = templateForChat(context.chat, context.project);
   const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });
   const catalog = catalogFor(runtime, template);
@@ -215,7 +228,7 @@ async function chatModelView(context) {
       source = "jsonl";
     } catch (error) { if (error.code !== "ENOENT") throw error; }
   }
-  const resident = manager.getByChatId(context.chat.id);
+  const resident = backends.getByChatId(context.chat.id);
   let models = catalogView.models;
   if (resident) {
     const adapter = backends.forChat(context.chat);
@@ -373,6 +386,7 @@ async function nativePreflight(project) {
 
 async function ensureChatTemplate(chat, project = null) {
   if (!chat) return null;
+  if (chat.backend?.protocol !== "pi_rpc") return chat;
   if (chat.templateId) return chat;
   const template = templateForChat(chat, project);
   return registry.ensureTemplate(chat.id, {
@@ -443,6 +457,17 @@ manager.on("event", ({ record, event }) => {
       .catch((error) => console.error("Could not checkpoint the session registry", error))
       .finally(() => pendingCheckpoints.delete(checkpointId));
   }, 50).unref();
+});
+codex.on("settled", ({ record }) => {
+  const completedAt = new Date().toISOString();
+  void registry.update(record.chatId, { lastAssistantCompletedAt: completedAt, lastMessageAt: completedAt, unread: true })
+    .then((chat) => {
+      record.lastCheckpoint = { type: "session_checkpoint", generationId: record.generation?.id || null,
+        sequence: record.eventSequence, chatId: chat.id, title: chat.title || null };
+      codex.publish(record, record.lastCheckpoint);
+      runtimeHub.publish({ type: "chat_changed", chat: chatView(chat), at: completedAt });
+    })
+    .catch((cause) => console.error("Could not checkpoint the Codex chat", cause));
 });
 registerRuntimeRoutes(app, {
   attachments,
@@ -527,6 +552,7 @@ registerChatRoutes(app, {
   templateForChat,
 });
 registerSessionRoutes(app, {
+  backends,
   config,
   findChatContext,
   findRegisteredSession,
@@ -656,7 +682,7 @@ const liveSessionStream = createLiveSessionStream({
         const currentTitle = registry.metadata(context.chat.id)?.title;
         if (currentTitle && currentTitle !== "New chat") return "not_applied_title_already_set";
         await registry.update(context.chat.id, { title: name });
-        manager.publish(record, {
+        backends.adapterForRecord(record).publish(record, {
           type: "session_checkpoint",
           chat: chatView(registry.metadata(context.chat.id)),
           generationId: record.generation?.id || null,
@@ -677,10 +703,10 @@ const liveSessionStream = createLiveSessionStream({
 server.on("upgrade", async (request, socket, head) => {
   const requestUrl = new URL(request.url, "http://localhost");
   const pathname = requestUrl.pathname;
-  const match = pathname.match(/^\/v0\/live-sessions\/([a-f0-9]{24})\/stream$/);
+  const match = pathname.match(/^\/v0\/live-sessions\/([a-f0-9-]{24,36})\/stream$/);
   const ptyMatch = pathname.match(/^\/v0\/ptys\/([a-f0-9-]{36})\/attach$/);
   const dictationMatch = pathname === "/v0/dictation/stream";
-  if ((!match || !manager.get(match[1])) && (!ptyMatch || !terminals.get(ptyMatch[1])) && !dictationMatch) return socket.destroy();
+  if ((!match || !backends.get(match[1])) && (!ptyMatch || !terminals.get(ptyMatch[1])) && !dictationMatch) return socket.destroy();
   try {
     if (authStore.hasPassword()) {
       const ticket = requestUrl.searchParams.get("ticket");
@@ -717,12 +743,14 @@ async function shutdown(signal) {
   server.closeIdleConnections?.();
   server.closeAllConnections?.();
   const stoppedProcesses = await manager.shutdown();
+  const stoppedCodexProcesses = await codex.shutdown();
   const stoppedTerminals = await terminals.stopAll();
   await voiceModel.stop();
   await closed;
   const archiveResult = await archiveDrain;
   console.log(JSON.stringify({ type: "conduit.voice-archive-drain", ...archiveResult }));
   console.log(`Conduit stopped ${stoppedProcesses} Pi process${stoppedProcesses === 1 ? "" : "es"}`);
+  console.log(`Conduit stopped ${stoppedCodexProcesses} Codex process${stoppedCodexProcesses === 1 ? "" : "es"}`);
   console.log(`Conduit stopped ${stoppedTerminals} terminal session${stoppedTerminals === 1 ? "" : "s"}`);
 }
 

@@ -13,7 +13,7 @@ import {
   MenuTrigger,
   Spinner,
 } from "@/components/primitives";
-import type { Template } from "../api/contracts";
+import type { ChatCapabilities, Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import { filesFromDataTransfer } from "../state/attachments";
 import type { AttachmentsStore } from "../state/attachments";
@@ -75,11 +75,13 @@ export function Composer(props: {
   let pendingDictationLaunch: { inputFocused: boolean; keyboardOpen: boolean; acceptedAt: number } | null = null;
 
   const busy = createMemo(() => props.chat.streaming());
+  const supports = (capability: keyof ChatCapabilities) => props.chat.capabilities()?.[capability] !== false;
   const hasText = createMemo(() => Boolean(props.chat.draft().trim()));
   const dictating = createMemo(() => ["starting", "listening", "finishing", "waiting", "transcribing"].includes(dictationState()));
   const recording = createMemo(() => dictationState() === "listening");
   const recorderMonitorState = createMemo(() => dictationState() === "starting" ? "connecting" : dictationState() === "listening" ? "listening" : "stopped");
-  const canSend = createMemo(() => hasText() && props.serverOnline && props.chat.generation() !== "stopping" && !dictating());
+  const canSend = createMemo(() => hasText() && props.serverOnline && props.chat.generation() !== "stopping"
+    && (!busy() || supports("followUpQueue")) && !dictating());
   const activity = createMemo(() => props.chat.activity());
   const dictationLabel = createMemo(() => {
     if (dictationState() === "completed" && !dictatedRange()) return "";
@@ -371,7 +373,7 @@ export function Composer(props: {
             <div class="composer-actions-left">
               <Button class="composer-desktop-attachment" variant="ghost" size="icon-sm" aria-label={`Attach files${props.attachments.items().length ? ` (${props.attachments.items().length})` : ""}`} disabled={!props.serverOnline} onClick={attach}><PaperclipIcon /></Button>
               <div class="composer-desktop-setting">
-                <ModelSelector models={props.models.models()} model={props.models.model()} thinkingLevel={props.models.effort()} notice={props.models.notice()} disabled={!props.serverOnline} onModelChange={(value) => void props.models.chooseModel(value)} onThinkingLevelChange={(value) => void props.models.chooseEffort(value)} onManageModels={() => props.onOpenSettings("models")} />
+                <ModelSelector models={props.models.models()} model={props.models.model()} thinkingLevel={props.models.effort()} notice={props.models.notice()} disabled={!props.serverOnline || !supports("modelSwitch")} onModelChange={(value) => void props.models.chooseModel(value)} onThinkingLevelChange={(value) => void props.models.chooseEffort(value)} onManageModels={() => props.onOpenSettings("models")} />
               </div>
               <Show when={props.profiles.length}><div class="composer-desktop-setting"><Menu><MenuTrigger class="model-trigger" aria-label={`Profile ${props.activeProfile?.label || "General"}`} disabled={!props.serverOnline || props.chat.status() !== "draft"}><span>{props.activeProfile?.label || "Profile"}</span><ChevronDownIcon /></MenuTrigger><MenuContent class="w-72"><MenuGroup><MenuLabel>Profile</MenuLabel><Show when={props.chat.status() !== "draft"}><div class="px-2 pb-2 text-xs text-muted-foreground">Locked for this chat after the first message.</div></Show><MenuRadioGroup value={props.activeProfile?.id || ""} onChange={props.onChooseProfile}><For each={props.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={props.chat.status() !== "draft" || item.disabled}>{item.label}</MenuRadioItem>}</For></MenuRadioGroup></MenuGroup><MenuSeparator /><MenuItem onSelect={() => props.onOpenSettings("profiles")}>Manage profiles…</MenuItem></MenuContent></Menu></div></Show>
             </div>
@@ -379,9 +381,9 @@ export function Composer(props: {
             <div ref={mobileActions} class="composer-actions-right">
               <Show when={!recording()}><span class="composer-status-state composer-actions-status" role="status" aria-live="polite"><Show when={dictationLabel()} fallback={<><Show when={SPINNING_ACTIVITY.has(activity()?.kind || "")}><Spinner /></Show><Show when={["request_failed", "runtime_failed"].includes(activity()?.kind || "")}><TriangleAlertIcon aria-hidden="true" /></Show>{activity()?.label || "Ready"}</>}>{dictationLabel()}</Show></span></Show>
               <Button variant={recording() ? "default" : "ghost"} size="icon-sm" class="dictation-trigger" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || ["finishing", "waiting", "transcribing"].includes(dictationState())} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={["starting", "finishing", "waiting", "transcribing"].includes(dictationState())} fallback={<MicIcon />}><Spinner /></Show></Button>
-              <Show when={busy() && hasText() && !dictating()}><Button variant="outline" size="icon-sm" aria-label="Steer after tools" onClick={() => sendMessage("steer")}><WaypointsIcon /></Button></Show>
+              <Show when={supports("steer") && busy() && hasText() && !dictating()}><Button variant="outline" size="icon-sm" aria-label="Steer after tools" onClick={() => sendMessage("steer")}><WaypointsIcon /></Button></Show>
               <Show when={busy() || props.chat.stopping()} fallback={<Button variant="ghost" size="icon-sm" class="composer-send-trigger" aria-label="Send message" disabled={!canSend()} onClick={() => sendMessage()}><ArrowUpIcon /></Button>}>
-                <Button variant="default" size="icon-sm" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button>
+                <Show when={supports("cancel")}><Button variant="default" size="icon-sm" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button></Show>
               </Show>
             </div>
           </div>

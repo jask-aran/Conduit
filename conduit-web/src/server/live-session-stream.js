@@ -32,14 +32,13 @@ export function createLiveSessionStream({
 
   async function sendPrompt(record, prepared, options) {
     const needsName = !prepared.context.chat.title && !namingChats.has(prepared.context.chat.id);
-    const generationId = await adapterFor(record).prompt(record.id, prepared.prompt, options);
+    const adapter = adapterFor(record);
+    const generationId = await adapter.prompt(record.id, prepared.prompt, options);
     await registry.markUserMessage(prepared.context.chat.id);
     if (prepared.context.chat.status === "draft") {
-      await registry.update(prepared.context.chat.id, {
-        status: "active",
-        piSessionId: record.sessionId || null,
-        piSessionFile: record.sessionFile,
-      });
+      await registry.update(prepared.context.chat.id, record.adapterImplementation === "codex"
+        ? { status: "active", backend: { ...prepared.context.chat.backend, opaqueSession: record.sessionId } }
+        : { status: "active", piSessionId: record.sessionId || null, piSessionFile: record.sessionFile });
     }
     if (needsName) {
       namingChats.add(prepared.context.chat.id);
@@ -124,25 +123,25 @@ export function createLiveSessionStream({
   }
 
   const handleUpgrade = (id, request, socket, head) => wss.handleUpgrade(request, socket, head, (ws) => {
-    const record = manager.get(id);
+    const record = backends.get(id);
     const adapter = adapterFor(record);
     const generationResume = adapter.attach(id, ws);
     if (generationResume) ws.send(JSON.stringify(generationResume));
     if (record.status === "running" && !record.contextUsage?.contextWindow) adapter.refreshContext(record.id).catch(() => {});
-    ws.send(JSON.stringify({
+    ws.send(JSON.stringify(adapter.toClientEvent({
       type: "runtime_state",
-      session: manager.view(record),
+      session: adapter.view(record),
       hostUiRequests: record.hostUiRequests || [],
       queue: record.queue || { steering: [], followUp: [] },
       contextUsage: record.contextUsage || null,
       sessionStats: record.sessionStats || null,
       cacheStats: record.cacheStats || null,
-    }));
-    if (record.lastCheckpoint) ws.send(JSON.stringify(record.lastCheckpoint));
+    })));
+    if (record.lastCheckpoint) ws.send(JSON.stringify(adapter.toClientEvent(record.lastCheckpoint)));
     ws.on("message", (data) => {
       Promise.resolve()
         .then(() => handleClientCommand(record, JSON.parse(String(data))))
-        .catch((error) => ws.send(JSON.stringify({ type: "client_error", code: error.code, message: error.message })));
+        .catch((error) => ws.send(JSON.stringify(adapter.toClientEvent({ type: "client_error", code: error.code, message: error.message }))));
     });
   });
 

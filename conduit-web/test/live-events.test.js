@@ -93,3 +93,20 @@ test("preserves reduced-generation events and their sequence at the client bound
   assert.equal(event.messageId, "m1");
   assert.equal(event.delta, "hello");
 });
+
+test("maps neutral adapter events into the existing generation reducer", () => {
+  const delta = normalizeLiveEvent({
+    type: "assistant_content", phase: "delta", generationId: "g1", sequence: 2,
+    messageId: "m1", contentIndex: 0, blockKind: "text", delta: "hello",
+  });
+  assert.equal(delta.type, "content_block_delta");
+  assert.equal(delta.seq, 2);
+  assert.equal(delta.delta, "hello");
+  const state = normalizeLiveEvent({
+    type: "runtime_state", generationId: null, lifecycle: "idle", status: "idle", activity: "idle",
+    capabilities: { steer: false, replay: true },
+  });
+  assert.equal(state.type, "runtime_state");
+  assert.equal(state.session.capabilities.steer, false);
+  assert.equal(state.session.capabilities.replay, true);
+});

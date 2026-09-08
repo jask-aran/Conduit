@@ -17,7 +17,7 @@ export function withPiCompatibilityFields(item) {
   const backend = item.backend;
   if (!backend) return item;
   if (backend.protocol !== "pi_rpc" || !["conduit_pi", "native_pi"].includes(backend.implementation)) {
-    throw Object.assign(new Error("Unsupported persisted chat backend"), { code: "unsupported_backend" });
+    return item;
   }
   const native = backend.implementation === "native_pi";
   return {
@@ -34,7 +34,7 @@ export function withPiCompatibilityFields(item) {
   };
 }
 
-export function agentProfiles(templates) {
+export function agentProfiles(templates, { codexAvailable = true } = {}) {
   return [
     ...templates.map((template) => ({
       id: template.id,
@@ -48,6 +48,14 @@ export function agentProfiles(templates) {
       management: "agent",
       agent: { protocol: "pi_rpc", implementation: "native_pi", installationId: "host-pi" },
     },
+    {
+      id: "codex",
+      label: "Codex CLI",
+      description: "Use the installed Codex app-server and its native configuration",
+      management: "agent",
+      disabled: !codexAvailable,
+      agent: { protocol: "native_api", implementation: "codex", installationId: "host-codex" },
+    },
   ];
 }
 
@@ -58,6 +66,12 @@ export function profileSelection(body = {}) {
     throw Object.assign(new Error("profileId must be a non-empty string"), { code: "invalid_profile", status: 400 });
   }
   const profileId = body.profileId.trim();
+  if (profileId === "codex") {
+    if (body.runtimeKind != null || body.templateId != null) {
+      throw Object.assign(new Error("Profile selection conflicts with legacy fields"), { code: "profile_conflict", status: 400 });
+    }
+    return { ...body, profileId };
+  }
   const runtimeKind = profileId === "host-pi" ? "native_pi" : "conduit_profile";
   if ((body.runtimeKind != null && body.runtimeKind !== runtimeKind)
     || (profileId !== "host-pi" && body.templateId != null && body.templateId !== profileId)) {

@@ -8,6 +8,7 @@ import type {
   ChatStatus,
   ChatSummary,
   CacheStats,
+  ChatCapabilities,
   ContextUsage,
   GenerationState,
   HostUiRequest,
@@ -91,6 +92,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   const [compacting, setCompacting] = createSignal(false);
   const [hostUiRequests, setHostUiRequests] = createSignal<HostUiRequest[]>([]);
   const [queue, setQueue] = createSignal<QueueState>({ steering: [], followUp: [] });
+  const [capabilities, setCapabilities] = createSignal<ChatCapabilities | null>(null);
   const [thinking, setThinking] = createSignal(false);
   const [responding, setResponding] = createSignal(false);
   const [activeToolName, setActiveToolName] = createSignal<string | null>(null);
@@ -285,6 +287,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     setLoadingOlder(false);
     setHostUiRequests([]);
     setQueue({ steering: [], followUp: [] });
+    setCapabilities(null);
     resetLiveFlags();
     clearPendingLiveEvents();
     generationStore.clear();
@@ -406,7 +409,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       setPageBefore(detail.page?.before || null);
       setStatus(detail.status || "draft");
       setTitle(detail.title ?? "");
-      if (detail.templateId) setTemplateId(detail.templateId);
+      if (detail.profileId || detail.templateId) setTemplateId(detail.profileId || detail.templateId || null);
       if (detail.runtime) setRuntimeIdentity(detail.runtime);
     });
   };
@@ -426,6 +429,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (event.hostUiRequests || session.hostUiRequests) setHostUiRequests(event.hostUiRequests || session.hostUiRequests!);
     if (session.compacting != null) setCompacting(session.compacting);
     if (session.retry !== undefined) setRetry(session.retry);
+    if (session.capabilities) setCapabilities(session.capabilities);
     const turnOpen = Boolean(session.generation && !session.generation.closed && !session.generation.settled);
     if (session.stopping) setGeneration("stopping");
     else if (turnOpen || session.active) setGeneration("active");
@@ -487,6 +491,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       });
       if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
       setLive(record);
+      if (record.capabilities) setCapabilities(record.capabilities);
       if (record.modelRecovery) options.onModelRecovered(record.modelRecovery);
       if (record.runtime) setRuntimeIdentity(record.runtime);
       if (record.contextUsage) setContextUsage(record.contextUsage);
@@ -862,7 +867,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   return {
     status, setStatus, title, setTitle, templateId, setTemplateId, runtimeIdentity, setRuntimeIdentity,
     live, messages, setMessages, tools, loadedId, pageBefore, loadingOlder, draft, setDraft,
-    generation, editingEntryId, contextUsage, sessionStats, cacheStats, compacting, hostUiRequests, queue, activeGeneration, activeGenerationChange,
+    generation, editingEntryId, contextUsage, sessionStats, cacheStats, compacting, hostUiRequests, queue, capabilities, activeGeneration, activeGenerationChange,
     connectingId, streaming, stopping, activity,
     initialize, select, prefetch, loadDetail, openLive, ensureLive, reset, send, stop, regenerate,
     continueResponse, loadOlder, edit, respondHostUi, clearQueue,

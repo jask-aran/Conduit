@@ -83,6 +83,7 @@ export type AssistantBlock =
   | { kind: "tool_call"; contentIndex: number; toolCallId: string; name: string; input: unknown };
 
 export type AssistantContentEvent = EventBase & (
+  | { type: "assistant_content"; phase: "start"; sequence: number; messageId: string }
   | {
     type: "assistant_content";
     phase: "delta";
@@ -170,6 +171,14 @@ export interface RuntimeStateEvent extends EventBase {
   capabilities: ChatCapabilities;
 }
 
+export type OptionalCapabilityEvent = EventBase & (
+  | { type: "queue_state"; queue: { steering: unknown[]; followUp: unknown[] } }
+  | { type: "compaction"; active: boolean }
+  | { type: "retry"; active: boolean; retry?: unknown }
+  | { type: "transcript_message"; message: unknown }
+  | { type: "generation_replay"; sequence: number; generation: unknown }
+);
+
 export type ChatBackendEvent =
   | AssistantContentEvent
   | ToolActivityEvent
@@ -179,4 +188,5 @@ export type ChatBackendEvent =
   | ErrorEvent
   | UsageEvent
   | SessionCheckpointEvent
-  | RuntimeStateEvent;
+  | RuntimeStateEvent
+  | OptionalCapabilityEvent;

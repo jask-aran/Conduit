@@ -39,8 +39,17 @@ export function createLiveSessionLauncher({
     if (requestedProject && ![context.project.id, context.project.slug].includes(requestedProject)) {
       throw launchError("session_project_mismatch", "The requested project does not own this chat", 409);
     }
-    const resident = manager.getByChatId(context.chat.id);
+    const resident = backends.getByChatId(context.chat.id);
     if (resident) return { live: resident, modelRecovery: null };
+
+    if (context.chat.backend?.implementation === "codex") {
+      const options = { chatId: context.chat.id, project: context.project };
+      const live = context.chat.backend.opaqueSession
+        ? await adapter.restore(context.chat.backend.opaqueSession, options)
+        : await adapter.create(options);
+      await registry.update(context.chat.id, { backend: { ...context.chat.backend, opaqueSession: live.sessionId } });
+      return { live, modelRecovery: null };
+    }
 
     const template = templateForChat(context.chat, context.project);
     const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });

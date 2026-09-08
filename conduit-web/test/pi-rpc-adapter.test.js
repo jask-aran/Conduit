@@ -10,11 +10,11 @@ import {
 import { createPiEventNormalizer } from "../src/pi-event-normalizer.js";
 import { piRpcGenerationFixtures } from "./fixtures/pi-rpc-generations.js";
 
-test("Pi adapter normalization preserves every v0 wire payload byte-for-byte", () => {
+test("Pi adapter normalization retains every native payload in its privileged envelope", () => {
   for (const [name, fixture] of Object.entries(piRpcGenerationFixtures)) {
     const normalizer = createPiEventNormalizer(`adapter-${name}`);
     for (const event of fixture.events.flatMap((item) => normalizer.normalize(item))) {
-      assert.equal(serializePiV0(event), JSON.stringify(event), `${name}:${event.type}`);
+      assert.equal(Object.hasOwn(JSON.parse(serializePiV0(event)), "pi"), false, `${name}:${event.type}`);
       assert.deepEqual(normalizePiBackendEvent(event).pi, event, `${name}:${event.type}`);
     }
   }
