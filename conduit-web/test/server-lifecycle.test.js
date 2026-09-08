@@ -146,21 +146,21 @@ test("Codex app-server profile creates, streams, and reconnects through neutral 
     assert.equal(live.backend.implementation, "codex");
     assert.equal(live.model, "codex-other");
     assert.equal(live.capabilities.steer, false);
-    const locked = await harness.request(`/v0/chats/${chat.id}/models`, {
+    const switched = await harness.request(`/v0/chats/${chat.id}/models`, {
       method: "PATCH", body: JSON.stringify({ model: "codex-test", thinkingLevel: "off" }),
     });
-    assert.equal(locked.status, 409);
-    assert.equal((await locked.json()).error, "model_switch_unsupported");
+    assert.equal(switched.status, 200);
+    assert.equal((await switched.json()).model, "codex-test");
     const stream = harness.connectStream(live.id);
     await stream.opened;
     await stream.next((event) => event.type === "runtime_state");
     stream.socket.send(JSON.stringify({ type: "prompt", message: "Test Codex" }));
-    assert.equal((await stream.next((event) => event.type === "assistant_content" && event.phase === "delta")).delta, "Codex works");
+    assert.equal((await stream.next((event) => event.type === "assistant_content" && event.phase === "delta")).delta, "codex-test works");
     await stream.next((event) => event.type === "status" && event.detail === "settled");
     stream.close();
     const reattached = harness.connectStream(live.id);
     await reattached.opened;
-    assert.equal((await reattached.next((event) => event.type === "assistant_content" && event.phase === "delta")).delta, "Codex works");
+    assert.equal((await reattached.next((event) => event.type === "assistant_content" && event.phase === "delta")).delta, "codex-test works");
   } finally {
     await harness.stop();
   }
