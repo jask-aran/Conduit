@@ -109,6 +109,13 @@ interface PiAuthAttempt {
   owned: boolean;
 }
 
+interface ChatGptWebStatus {
+  auth: "configured" | "missing";
+  cookieNames: string[];
+  curlCffiVersion: string;
+  impersonate: string;
+}
+
 interface SearchProvider {
   id: string;
   label: string;
@@ -252,6 +259,10 @@ export function Settings(props: {
   const [authLoading, setAuthLoading] = createSignal(false);
   const [authError, setAuthError] = createSignal("");
   const [authUnavailable, setAuthUnavailable] = createSignal(false);
+  const [chatGptStatus, setChatGptStatus] = createSignal<ChatGptWebStatus | null>(null);
+  const [chatGptCookie, setChatGptCookie] = createSignal("");
+  const [chatGptBusy, setChatGptBusy] = createSignal(false);
+  const [chatGptError, setChatGptError] = createSignal("");
   const [searchSettings, setSearchSettings] = createSignal<SearchSettings | null>(null);
   const [searchStatus, setSearchStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
   const [searchError, setSearchError] = createSignal("");
@@ -510,6 +521,26 @@ export function Settings(props: {
     } finally { setAuthLoading(false); }
   };
   createEffect(() => { if (props.open && section() === "models") void loadPiAuth(); });
+  const loadChatGptStatus = async () => {
+    try { setChatGptStatus(await api<ChatGptWebStatus>("/v0/chatgpt-web/status")); setChatGptError(""); }
+    catch (error) { setChatGptError((error as Error).message); }
+  };
+  const saveChatGptCookie = async () => {
+    setChatGptBusy(true);
+    try {
+      setChatGptStatus(await api<ChatGptWebStatus>("/v0/chatgpt-web/credential", { method: "PUT", body: JSON.stringify({ cookie: chatGptCookie() }) }));
+      setChatGptCookie("");
+      setChatGptError("");
+    } catch (error) { setChatGptError((error as Error).message); }
+    finally { setChatGptBusy(false); }
+  };
+  const removeChatGptCookie = async () => {
+    setChatGptBusy(true);
+    try { setChatGptStatus(await api<ChatGptWebStatus>("/v0/chatgpt-web/credential", { method: "DELETE" })); setChatGptError(""); }
+    catch (error) { setChatGptError((error as Error).message); }
+    finally { setChatGptBusy(false); }
+  };
+  createEffect(() => { if (props.open && section() === "models") void loadChatGptStatus(); });
   createEffect(() => {
     if (!props.open || section() !== "models" || !authAttempt()?.active) return;
     const timer = window.setInterval(() => {
@@ -1319,6 +1350,13 @@ export function Settings(props: {
             </Show>
           </Show>
           <Show when={section() === "models"}>
+            <details class="settings-disclosure" open><summary><span><BotIcon /><strong>ChatGPT Web</strong><small>{chatGptStatus()?.auth === "configured" ? "Connected" : "Not connected"}</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary><div class="pi-auth-panel">
+              <p>Paste the cookie string from a signed-in ChatGPT browser. Conduit stores it on this server and never returns its values.</p>
+              <Field><FieldLabel for="chatgpt-web-cookie">ChatGPT cookies</FieldLabel><textarea id="chatgpt-web-cookie" rows="3" autocomplete="off" value={chatGptCookie()} onInput={(event) => setChatGptCookie(event.currentTarget.value)} placeholder={chatGptStatus()?.auth === "configured" ? "A ChatGPT session is connected" : "__Secure-next-auth.session-token=…"} /></Field>
+              <div><Button disabled={chatGptBusy() || !chatGptCookie().trim()} onClick={() => void saveChatGptCookie()}>{chatGptBusy() ? <Spinner /> : null}Save cookies</Button><Show when={chatGptStatus()?.auth === "configured"}><Button variant="outline" disabled={chatGptBusy()} onClick={() => void removeChatGptCookie()}>Remove cookies</Button></Show></div>
+              <Show when={chatGptStatus()}><small>Transport: curl_cffi {chatGptStatus()!.curlCffiVersion}, {chatGptStatus()!.impersonate}. Stored cookie names: {chatGptStatus()!.cookieNames.join(", ") || "none"}.</small></Show>
+              <Show when={chatGptError()}><p role="alert" class="settings-inline-error">{chatGptError()}</p></Show>
+            </div></details>
             <details class="settings-disclosure"><summary><span><BotIcon /><strong>Provider accounts</strong><small>{authProviders().filter((provider) => provider.auth.configured).length} connected</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary><div class="pi-auth-panel">
               <p>Credentials are stored only in the Isolated Pi runtime. Host Pi accounts and environment credentials are never exposed or changed here.</p>
               <Show when={authUnavailable()}><p role="alert" class="settings-inline-error">Set a Conduit password with <code>node scripts/conduit-auth.mjs set-password</code>, then sign in to manage Pi credentials here.</p></Show>
