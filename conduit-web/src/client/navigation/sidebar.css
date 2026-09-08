@@ -263,3 +263,19 @@
 .sidebar-area-label { padding: 8px 8px 4px; color: var(--muted-foreground); font-size: 9px; font-weight: 600; }
 .sidebar-area-divider { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
 .conduit-sidebar[data-visual-state="collapsed"] .sidebar-area-label { display: none; }
+.sidebar-harness-mark {
+  width: 1rem;
+  height: 1rem;
+  object-fit: contain;
+}
+
+.sidebar-harness-status {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: var(--muted-foreground);
+}
+
+.sidebar-harness-status[data-status="ready"] {
+  background: var(--success, #45a56b);
+}

@@ -132,13 +132,6 @@ export function ComputerDashboard(props: {
         <h2>Locations</h2>
         <ContextMenu><ContextMenuTrigger as="button" type="button" data-active={props.location?.project.workingRoot === props.location?.home} onClick={() => props.onBrowse()}><HomeIcon /><span>Home</span></ContextMenuTrigger><ContextMenuContent><ContextMenuGroup><ContextMenuItem onSelect={() => props.onBrowse()}><FolderIcon />Open</ContextMenuItem><ContextMenuItem onSelect={() => copyPath(props.location?.home || "")}><CopyIcon />Copy path</ContextMenuItem></ContextMenuGroup></ContextMenuContent></ContextMenu>
         <Show when={!props.dialog}><button type="button" onClick={props.onOpenTerminalView}><TerminalIcon /><span>Terminal</span></button></Show>
-        <Show when={!props.dialog && harnesses().some((item) => item.available)}><h2>Harnesses</h2></Show>
-        <Show when={!props.dialog}><For each={harnesses().filter((item) => item.available)}>{(harness) =>
-          <button type="button" data-active={props.selectedHarness === harness.id} onClick={() => props.onOpenHarness?.(harness.id)}>
-            <img class="computer-harness-mark" src={harness.id === "codex" ? "/codex-mark.svg" : "/chatgpt-mark.svg"} alt="" />
-            <span>{harness.label}</span><i data-status={harness.status || "ready"} />
-          </button>
-        }</For></Show>
         <h2>Workspaces</h2>
         <div class="computer-workspace-shortcuts"><For each={workspaces()}>{(project) =>
           <ContextMenu><ContextMenuTrigger as="button" type="button" data-active={props.location?.project.workingRoot === project.workingRoot} title={project.workingRoot} onClick={() => props.onBrowse(project.workingRoot)}><WorkspaceGlyph appearance={project.workspaceAppearance} /><span>{project.name}</span></ContextMenuTrigger><ContextMenuContent><ContextMenuGroup>
