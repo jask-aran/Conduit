@@ -3,7 +3,7 @@ name: web-research
 description: Research current facts, public web pages, documentation, and changelogs with Conduit's configured web tools. Load before external research.
 ---
 
-# Web research
+# Web research skill
 
 Use the configured web tools for ordinary external research. Do not use shell
 commands as an alternate search path or send secrets in URLs or logs.

@@ -14,6 +14,7 @@ export function registerRuntimeRoutes(app, {
   runtimeHub,
   templatePublicView,
   projects,
+  promptStore,
 }) {
   app.get("/healthz", (request, response) => {
     response.status(isShuttingDown() ? 503 : 200).json({
@@ -97,6 +98,21 @@ export function registerRuntimeRoutes(app, {
       defaultTemplateId: prefs.defaultTemplateId,
       templates: config.piTemplates.map((template) => templatePublicView(template)),
     });
+  });
+
+  app.get("/v0/prompts", async (_request, response, next) => {
+    try { response.json({ prompts: await promptStore.list() }); }
+    catch (error) { next(error); }
+  });
+
+  app.put("/v0/prompts/:id", async (request, response, next) => {
+    try { response.json(await promptStore.save(request.params.id, request.body?.content)); }
+    catch (error) { next(error); }
+  });
+
+  app.delete("/v0/prompts/:id", async (request, response, next) => {
+    try { response.json(await promptStore.reset(request.params.id)); }
+    catch (error) { next(error); }
   });
 
   app.get("/v0/preferences", (_request, response) => {

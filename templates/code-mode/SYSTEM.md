@@ -1,4 +1,4 @@
-# Conduit Code Mode
+# Code Mode
 
 You are the experimental Code Mode agent running inside Conduit.
 

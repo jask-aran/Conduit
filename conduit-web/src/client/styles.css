@@ -1802,6 +1802,15 @@ svg { stroke-width: 1.5; }
 .settings-dialog .settings-content > header > div { display: grid; gap: 3px; }
 .settings-dialog .settings-content > header h2 { margin: 0; font-size: 20px; letter-spacing: -.025em; }
 .settings-dialog .settings-content > header p { margin: 0 0 14px; color: var(--muted-foreground); font-size: 12px; }
+.settings-dialog .settings-content[data-section="prompts"] { display: flex; overflow: hidden; flex-direction: column; }
+.prompt-editor { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
+.prompt-editor-toolbar { display: grid; grid-template-columns: auto minmax(180px, 320px) 1fr; align-items: center; gap: 10px; min-height: 48px; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+.prompt-editor-toolbar > label { color: var(--muted-foreground); font-size: 11px; }
+.prompt-editor-toolbar > span { justify-self: end; color: var(--muted-foreground); font-size: 10px; }
+.settings-dialog .prompt-editor textarea { min-width: 0; min-height: 0; flex: 1; resize: none; border: 0; outline: 0; background: color-mix(in oklch, var(--background), black 5%); padding: 18px 20px; color: var(--foreground); font: 12px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; tab-size: 2; }
+.prompt-editor-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 54px; padding: 8px 10px; border-top: 1px solid var(--border); }
+.prompt-editor-footer > small { color: var(--muted-foreground); }
+.prompt-editor-footer > div { display: flex; gap: 8px; }
 /* Settings content follows the dashboard tile pattern: hairline groups of
    stacked rows. No multi-column card grids as chrome. */
 .settings-stack { display: grid; gap: 10px; }
@@ -1935,4 +1944,8 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   .settings-rows > .settings-row:nth-child(-n+2) { border-top: 1px solid var(--border); }
   .settings-rows > .settings-row:first-child { border-top: 0; }
   .settings-row { grid-template-columns: minmax(0, 1fr) minmax(110px, 160px); gap: 8px; padding-inline: 10px; }
+  .prompt-editor-toolbar { grid-template-columns: 1fr auto; }
+  .prompt-editor-toolbar > label { display: none; }
+  .prompt-editor-footer { align-items: stretch; flex-direction: column; }
+  .prompt-editor-footer > div { justify-content: flex-end; }
 }

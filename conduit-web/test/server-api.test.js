@@ -123,11 +123,21 @@ exit 0
     const templatesResponse = await fetch(`${origin}/v0/templates`);
     assert.equal(templatesResponse.status, 200);
     const templateCatalog = await templatesResponse.json();
-    assert.ok(templateCatalog.templates.some((item) => item.id === "chat"));
-    assert.ok(templateCatalog.templates.some((item) => item.id === "workspace"));
+    assert.ok(templateCatalog.templates.some((item) => item.id === "assistant"));
+    assert.ok(templateCatalog.templates.some((item) => item.id === "coding"));
     assert.ok(templateCatalog.templates.some((item) => item.id === "runtime"));
-    assert.equal(templateCatalog.defaultTemplateId, "chat");
+    assert.equal(templateCatalog.defaultTemplateId, "assistant");
     assert.equal(templateCatalog.templates.find((item) => item.id === "runtime").defaultable, false);
+    const promptCatalog = await fetch(`${origin}/v0/prompts`).then((response) => response.json());
+    assert.ok(promptCatalog.prompts.some((item) => item.id === "assistant" && item.modified === false));
+    assert.ok(promptCatalog.prompts.some((item) => item.id === "chat-naming" && item.kind === "service"));
+    const savedPrompt = await fetch(`${origin}/v0/prompts/chat-naming`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content: "Name this conversation." }),
+    }).then((response) => response.json());
+    assert.equal(savedPrompt.modified, true);
+    assert.equal((await fetch(`${origin}/v0/prompts/chat-naming`, { method: "DELETE" }).then((response) => response.json())).modified, false);
 
     const installations = await (await fetch(`${origin}/v0/pi-installations`)).json();
     const isolatedInstallation = installations.installations.find((item) => item.id === "conduit-pinned");
@@ -345,13 +355,13 @@ exit 0
     const isolatedSwitch = await fetch(`${origin}/v0/chats/${nativeChat.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ templateId: "chat", runtimeKind: "conduit_profile" }),
+      body: JSON.stringify({ templateId: "assistant", runtimeKind: "conduit_profile" }),
     });
     assert.equal(isolatedSwitch.status, 200);
     const isolatedChat = await isolatedSwitch.json();
-    assert.equal(isolatedChat.templateId, "chat");
+    assert.equal(isolatedChat.templateId, "assistant");
     assert.equal(isolatedChat.runtime.kind, "conduit_profile");
-    assert.equal(isolatedChat.runtime.profileId, "chat");
+    assert.equal(isolatedChat.runtime.profileId, "assistant");
 
     const invalidNative = await fetch(`${origin}/v0/chats`, {
       method: "POST",
@@ -380,7 +390,7 @@ exit 0
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        defaultTemplateId: "workspace",
+        defaultTemplateId: "coding",
         sessionNameModel: "example/cheap",
         sessionNameThinkingLevel: "low",
         terminalShortcuts: [{ id: "herdr", label: "Herdr", command: "herdr", target: "new" }],
@@ -393,7 +403,7 @@ exit 0
     });
     assert.equal(prefsPatch.status, 200);
     const savedPreferences = await prefsPatch.json();
-    assert.equal(savedPreferences.defaultTemplateId, "workspace");
+    assert.equal(savedPreferences.defaultTemplateId, "coding");
     assert.equal(savedPreferences.sessionNameModel, "example/cheap");
     assert.equal(savedPreferences.sessionNameThinkingLevel, "low");
     assert.deepEqual(savedPreferences.terminalShortcuts, [{ id: "herdr", label: "Herdr", command: "herdr", target: "new" }]);
@@ -451,19 +461,19 @@ exit 0
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ projectId: linked.id }),
     });
-    assert.equal((await inheritedWorkspaceChat.json()).templateId, "workspace");
+    assert.equal((await inheritedWorkspaceChat.json()).templateId, "coding");
     const workspaceOverride = await fetch(`${origin}/v0/projects/${linked.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ defaultTemplateId: "chat" }),
+      body: JSON.stringify({ defaultTemplateId: "assistant" }),
     });
-    assert.equal((await workspaceOverride.json()).defaultTemplateId, "chat");
+    assert.equal((await workspaceOverride.json()).defaultTemplateId, "assistant");
     const overriddenWorkspaceChat = await fetch(`${origin}/v0/chats`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ projectId: linked.id }),
     });
-    assert.equal((await overriddenWorkspaceChat.json()).templateId, "chat");
+    assert.equal((await overriddenWorkspaceChat.json()).templateId, "assistant");
     const clearedOverride = await fetch(`${origin}/v0/projects/${linked.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -483,7 +493,7 @@ exit 0
     });
     const hostDefaultChatBody = await hostDefaultChat.json();
     assert.equal(hostDefaultChatBody.runtime.kind, "native_pi");
-    assert.equal(hostDefaultChatBody.templateId, "workspace");
+    assert.equal(hostDefaultChatBody.templateId, "coding");
     const appearancePatch = await fetch(`${origin}/v0/projects/${linked.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -519,7 +529,7 @@ exit 0
     assert.equal(createdResponse.status, 201);
     const chat = await createdResponse.json();
     assert.equal(chat.status, "draft");
-    assert.equal(chat.templateId, "workspace");
+    assert.equal(chat.templateId, "coding");
     assert.equal("piSessionId" in chat, false);
 
     const chatModels = await (await fetch(`${origin}/v0/chats/${chat.id}/models`)).json();
@@ -537,10 +547,10 @@ exit 0
     const switched = await fetch(`${origin}/v0/chats/${chat.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ templateId: "chat" }),
+      body: JSON.stringify({ templateId: "assistant" }),
     });
     assert.equal(switched.status, 200);
-    assert.equal((await switched.json()).templateId, "chat");
+    assert.equal((await switched.json()).templateId, "assistant");
 
     const ordinaryRuntime = await fetch(`${origin}/v0/chats`, {
       method: "POST",
@@ -562,7 +572,7 @@ exit 0
     const runtimeSwitch = await fetch(`${origin}/v0/chats/${runtimeChatBody.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ templateId: "workspace" }),
+      body: JSON.stringify({ templateId: "coding" }),
     });
     assert.equal(runtimeSwitch.status, 409);
     assert.equal((await runtimeSwitch.json()).error, "special_chat_locked");

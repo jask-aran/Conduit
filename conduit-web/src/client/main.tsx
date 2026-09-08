@@ -101,7 +101,7 @@ applyTranscriptAppearance({
 });
 if (import.meta.env.PROD && !nativeApp) registerSW({ immediate: true, onRegisteredSW: (_url, registration) => rememberPwaRegistration(registration) });
 
-type SettingsSection = "ui" | "shortcuts" | "models" | "runtime" | "workspaces" | "voice" | "search";
+type SettingsSection = "ui" | "shortcuts" | "models" | "prompts" | "runtime" | "workspaces" | "voice" | "search";
 type WorkspaceView = "files" | "diff" | "artifacts" | "terminal";
 const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field";
 const selectedMeteorField = () => localStorage.getItem(METEOR_FIELD_STORAGE_KEY) !== "false";
@@ -405,7 +405,7 @@ function App() {
   const [installationsLoading, setInstallationsLoading] = createSignal(true);
   const [workspaceSuggestions, setWorkspaceSuggestions] = createSignal<WorkspaceSuggestion[]>([]);
   const [workspacePolicy, setWorkspacePolicy] = createSignal<WorkspacePolicy | null>(null);
-  const [defaultTemplateId, setDefaultTemplateId] = createSignal("chat");
+  const [defaultTemplateId, setDefaultTemplateId] = createSignal("assistant");
   const [voiceSettings, setVoiceSettings] = createSignal<VoiceDictationSettings>(loadVoiceDictationSettings());
   const updateVoiceSettings = (next: VoiceDictationSettings) => setVoiceSettings(saveVoiceDictationSettings(next));
   const [partialContinue, setPartialContinue] = createSignal(true);
@@ -679,7 +679,7 @@ function App() {
     const fromDashboard = routeKind() === "project" || routeKind() === "dashboard" || routeKind() === "computer";
     try {
       const hostDefault = project.defaultTemplateId === "host-pi" && !launch.templateId && !launch.runtimeKind;
-      const profileId = launch.templateId || (project.defaultTemplateId === "host-pi" ? null : project.defaultTemplateId) || defaultTemplateId() || "chat";
+      const profileId = launch.templateId || (project.defaultTemplateId === "host-pi" ? null : project.defaultTemplateId) || defaultTemplateId() || "assistant";
       const created = await api<ChatSummary>(profileId === "runtime" ? "/v0/runtime/chats" : "/v0/chats", {
         method: "POST",
         body: JSON.stringify(profileId === "runtime" ? {} : hostDefault ? { projectId: project.id } : { projectId: project.id, templateId: profileId, runtimeKind: launch.runtimeKind || "conduit_profile" }),
@@ -737,7 +737,7 @@ function App() {
       : catalogue.projects().find((item) => item.slug === "chat") || catalogue.projects()[0];
     if (!project || project.state === "cloning") return;
     const hostDefault = project.defaultTemplateId === "host-pi";
-    const templateId = hostDefault ? defaultTemplateId() || "chat" : project.defaultTemplateId || defaultTemplateId() || "chat";
+    const templateId = hostDefault ? defaultTemplateId() || "assistant" : project.defaultTemplateId || defaultTemplateId() || "assistant";
     const expectedRoute = route;
     const expectedProjectId = project.id;
     let scopeChanged = false;
@@ -1048,7 +1048,7 @@ function App() {
       }
       await refresh();
       if (["link", "linked", "create", "created"].includes(input.mode)) await openProject(created);
-      else await createChat(created, { templateId: created.defaultTemplateId || defaultTemplateId() || "chat" });
+      else await createChat(created, { templateId: created.defaultTemplateId || defaultTemplateId() || "assistant" });
       return true;
     } catch (error) { showError(error); return false; }
   };
@@ -1623,10 +1623,10 @@ function App() {
     window.addEventListener("popstate", onPopState);
     onCleanup(() => window.removeEventListener("popstate", onPopState));
     const templateRequest = api<{ templates: Template[]; defaultTemplateId?: string }>("/v0/templates")
-      .catch(() => ({ templates: [], defaultTemplateId: "chat" }))
+      .catch(() => ({ templates: [], defaultTemplateId: "assistant" }))
       .then((payload) => {
         setTemplates(asList<Template>(payload.templates));
-        setDefaultTemplateId(payload.defaultTemplateId || "chat");
+        setDefaultTemplateId(payload.defaultTemplateId || "assistant");
         setTemplatesLoading(false);
         return payload;
       });
@@ -1688,7 +1688,7 @@ function App() {
         const templatePayload = await templateRequest;
         const project = projects.find((item) => item.slug === "chat") || projects[0];
         if (!project) throw new Error("Conduit has no chat project");
-        const created = await api<ChatSummary>("/v0/chats", { method: "POST", body: JSON.stringify({ projectId: project.id, templateId: templatePayload.defaultTemplateId || "chat" }) });
+        const created = await api<ChatSummary>("/v0/chats", { method: "POST", body: JSON.stringify({ projectId: project.id, templateId: templatePayload.defaultTemplateId || "assistant" }) });
         history.replaceState({}, "", `/chat/${created.id}`);
         chat.initialize(created, project);
         setRouteKind("chat");

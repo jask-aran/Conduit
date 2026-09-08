@@ -28,7 +28,7 @@
     "CONDUIT_FILES_ROOT": "/workspaces/Conduit/data/chat/files",
     "CONDUIT_CATALOG_FILE": "/workspaces/Conduit/data/conduit.json",
     "CONDUIT_PI_AGENT_DIR": "/workspaces/Conduit/data/pi",
-    "CONDUIT_PI_TEMPLATE": "/workspaces/Conduit/templates/chat/template.json"
+    "CONDUIT_PI_TEMPLATE": "/workspaces/Conduit/templates/assistant/template.json"
   },
   "postCreateCommand": "bash .devcontainer/setup.sh",
   "postStartCommand": "bash .devcontainer/start-conduit.sh",

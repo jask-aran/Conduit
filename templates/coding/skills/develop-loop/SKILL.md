@@ -1,6 +1,6 @@
 ---
 name: develop-loop
-description: Inspect, implement, test, and report inside one Conduit workspace chat. Load for feature work, bug fixes, and refactors.
+description: Inspect, implement, test, and report inside one Conduit Coding profile chat. Load for feature work, bug fixes, and refactors.
 ---
 
 # Develop loop

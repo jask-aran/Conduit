@@ -5,7 +5,7 @@ description: Use git and the GitHub CLI for status, branches, commits, PRs, and 
 
 # Git and GitHub
 
-Work only inside the current Conduit workspace (`cwd`). Prefer non-destructive inspection first.
+Work only inside the current Conduit Coding profile workspace (`cwd`). Prefer non-destructive inspection first.
 
 ## Inspect
 

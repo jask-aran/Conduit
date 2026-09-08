@@ -10,7 +10,7 @@ description: Manage Conduit Pi templates, preferences, and package installs. Loa
 Typical repository roots (resolve from cwd / git root):
 
 ```text
-templates/<id>/template.json   # profile manifest
+templates/<id>/template.json   # profile manifest; id matches the profile name
 templates/<id>/SYSTEM.md
 templates/<id>/skills/...
 data/pi/                       # PI_CODING_AGENT_DIR

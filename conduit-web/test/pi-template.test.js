@@ -18,12 +18,12 @@ import {
 test("repository templates are discoverable launch presets", () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../templates");
   const templates = listPiTemplates(root);
-  assert.ok(templates.some((template) => template.id === "chat"));
-  assert.ok(templates.some((template) => template.id === "workspace"));
-  assert.ok(templates.some((template) => template.id === "codemode"));
+  assert.ok(templates.some((template) => template.id === "assistant"));
+  assert.ok(templates.some((template) => template.id === "coding"));
+  assert.ok(templates.some((template) => template.id === "code-mode"));
   assert.ok(templates.some((template) => template.id === "runtime"));
-  const workspace = templates.find((template) => template.id === "workspace");
-  const general = templates.find((template) => template.id === "chat");
+  const workspace = templates.find((template) => template.id === "coding");
+  const general = templates.find((template) => template.id === "assistant");
   const view = templatePublicView(workspace);
   assert.equal(view.label, "Coding");
   assert.equal(workspace.version, "6");
@@ -33,11 +33,11 @@ test("repository templates are discoverable launch presets", () => {
   assert.deepEqual(workspace.runtimeOverlays, ["web-search"]);
   assert.deepEqual(view.runtimeOverlays, ["web-search"]);
   assert.ok(view.skillCount >= 1);
-  assert.deepEqual(workspace.skills, [path.resolve(root, "workspace/skills/git-github"), path.resolve(root, "workspace/skills/web-research"), path.resolve(root, "workspace/skills/develop-loop")]);
+  assert.deepEqual(workspace.skills, [path.resolve(root, "coding/skills/git-github"), path.resolve(root, "coding/skills/web-research"), path.resolve(root, "coding/skills/develop-loop")]);
   assert.equal(general.label, "Assistant");
   assert.equal(general.version, "9");
   assert.deepEqual(general.runtimeOverlays, ["web-search"]);
-  assert.deepEqual(general.skills, [path.resolve(root, "workspace/skills/web-research")]);
+  assert.deepEqual(general.skills, [path.resolve(root, "coding/skills/web-research")]);
   assert.deepEqual(general.tools, ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check"]);
   assert.deepEqual(general.extensions, [path.resolve(root, "../conduit-web/node_modules/pi-web-access")]);
   const systemPrompt = fs.readFileSync(general.systemPrompt, "utf8");
@@ -45,7 +45,7 @@ test("repository templates are discoverable launch presets", () => {
   assert.match(systemPrompt, /use `python` from Bash/);
   assert.match(systemPrompt, /Use this sequence:/);
   assert.match(systemPrompt, /fetch_content.*selected pages/s);
-  const codemode = templates.find((template) => template.id === "codemode");
+  const codemode = templates.find((template) => template.id === "code-mode");
   assert.equal(codemode.label, "Code Mode");
   assert.equal(codemode.version, "1");
   assert.deepEqual(codemode.tools, ["code"]);
@@ -215,7 +215,7 @@ test("create can launch a non-default template and exposes it on the process vie
       return child;
     },
     template: {
-      id: "chat",
+      id: "assistant",
       version: "1",
       label: "Assistant",
       tools: ["read"],
@@ -228,7 +228,7 @@ test("create can launch a non-default template and exposes it on the process vie
   });
   const project = { id: "project_test", slug: "test", path: "/tmp/project", workingRoot: "/tmp/project", sessionsDir: "/tmp/sessions" };
   const workspace = {
-    id: "workspace",
+    id: "coding",
     version: "1",
     label: "Workspace",
     posture: "read / edit / shell",
@@ -241,7 +241,7 @@ test("create can launch a non-default template and exposes it on the process vie
   };
   const record = manager.create({ project, chatId: "chat-workspace", template: workspace });
   const view = manager.view(record);
-  assert.equal(view.template.id, "workspace");
+  assert.equal(view.template.id, "coding");
   assert.equal(view.template.label, "Workspace");
   assert.deepEqual(view.template.tools, ["read", "bash", "edit", "write"]);
 });

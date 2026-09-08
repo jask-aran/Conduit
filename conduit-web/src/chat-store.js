@@ -300,6 +300,20 @@ export class ChatStore {
     return this.list(options).filter((chat) => chat.projectId === projectId);
   }
 
+  async migrateTemplateIds(normalize) {
+    let changed = false;
+    for (const chat of this.chats) {
+      const templateId = normalize(chat.templateId);
+      const profileId = normalize(chat.runtime?.profileId);
+      if (templateId && templateId !== chat.templateId) { chat.templateId = templateId; changed = true; }
+      if (chat.runtime?.kind === "conduit_profile" && profileId && profileId !== chat.runtime.profileId) {
+        chat.runtime.profileId = profileId;
+        changed = true;
+      }
+    }
+    if (changed) await this.flush();
+  }
+
   metadata(id) {
     return this.chats.find((chat) => chat.id === id) || null;
   }

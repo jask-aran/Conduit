@@ -91,7 +91,7 @@ Set-DefaultEnvironment "CONDUIT_FILES_ROOT" (Join-Path $root "data\chat\files")
 Set-DefaultEnvironment "CONDUIT_CATALOG_FILE" (Join-Path $root "data\conduit.json")
 Set-DefaultEnvironment "CONDUIT_SESSION_REGISTRY_FILE" (Join-Path $root "data\sessions.json")
 Set-DefaultEnvironment "CONDUIT_PI_AGENT_DIR" (Join-Path $root "data\pi")
-Set-DefaultEnvironment "CONDUIT_PI_TEMPLATE" (Join-Path $root "templates\chat\template.json")
+Set-DefaultEnvironment "CONDUIT_PI_TEMPLATE" (Join-Path $root "templates\assistant\template.json")
 $healthUrl = "http://127.0.0.1:$($env:CONDUIT_PORT)/healthz"
 
 function Prepare-Directories {

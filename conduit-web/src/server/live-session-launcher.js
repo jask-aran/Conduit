@@ -129,6 +129,7 @@ export function createLiveSessionLauncher({
       bridgeSkill: config.bridgeSkill,
       runtimeAgentDir,
       modelProfile: publicModelProfile(modelProfile),
+      systemPrompt: runtime.kind === "conduit_profile" && config.promptStore ? await config.promptStore.pathFor(template.id) : null,
     });
     console.info("Launching Pi", {
       chatId: context.chat.id,

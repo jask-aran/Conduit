@@ -4,6 +4,17 @@ import { fileURLToPath } from "node:url";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+const LEGACY_TEMPLATE_IDS = new Map([
+  ["chat", "assistant"],
+  ["workspace", "coding"],
+  ["codemode", "code-mode"],
+]);
+
+export function normalizeTemplateId(value) {
+  const id = String(value || "").trim();
+  return LEGACY_TEMPLATE_IDS.get(id) || id;
+}
+
 function requireString(value, name) {
   if (typeof value !== "string" || !value.trim()) throw new Error(`Pi template requires ${name}`);
   return value.trim();

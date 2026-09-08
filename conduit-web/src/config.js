@@ -1,7 +1,8 @@
 import os from "node:os";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { listPiTemplates, loadPiTemplate } from "../../scripts/pi-runtime.mjs";
+import { listPiTemplates, loadPiTemplate, normalizeTemplateId } from "../../scripts/pi-runtime.mjs";
 import { loadModelProfiles } from "./model-profiles.js";
 import { expandHome, parseAllowlist } from "./workspace-paths.js";
 import { PiInstallationRegistry } from "./pi-installations.js";
@@ -29,8 +30,12 @@ function boundedMultiplier(value, fallback) {
 
 export function loadConfig(env = process.env) {
   const templatesRoot = absolute(env.CONDUIT_TEMPLATES_ROOT || path.join(repositoryRoot, "templates"));
-  const defaultTemplateFile = env.CONDUIT_PI_TEMPLATE
-    || path.join(templatesRoot, "chat", "template.json");
+  let defaultTemplateFile = absolute(env.CONDUIT_PI_TEMPLATE || path.join(templatesRoot, "assistant", "template.json"));
+  if (!fs.existsSync(defaultTemplateFile) && path.basename(defaultTemplateFile) === "template.json") {
+    const legacyId = path.basename(path.dirname(defaultTemplateFile));
+    const normalizedId = normalizeTemplateId(legacyId);
+    if (normalizedId !== legacyId) defaultTemplateFile = path.join(templatesRoot, normalizedId, "template.json");
+  }
   const piTemplate = loadPiTemplate(defaultTemplateFile);
   const discovered = listPiTemplates(templatesRoot);
   const byId = new Map(discovered.map((template) => [template.id, template]));
@@ -67,6 +72,8 @@ export function loadConfig(env = process.env) {
     catalogFile: absolute(env.CONDUIT_CATALOG_FILE || path.join(dataRoot, "conduit.json")),
     sessionRegistryFile: absolute(env.CONDUIT_SESSION_REGISTRY_FILE || path.join(dataRoot, "sessions.json")),
     sessionNameLogFile: absolute(env.CONDUIT_SESSION_NAME_LOG_FILE || path.join(dataRoot, "session-name-requests.jsonl")),
+    promptOverridesRoot: absolute(env.CONDUIT_PROMPT_OVERRIDES_ROOT || path.join(dataRoot, "prompt-overrides")),
+    sessionNamePrompt: path.join(templatesRoot, "chat-naming", "SYSTEM.md"),
     preferencesFile: absolute(env.CONDUIT_PREFERENCES_FILE || path.join(dataRoot, "preferences.json")),
     piAgentDir,
     modelProfilesFile,
@@ -101,8 +108,9 @@ export function loadConfig(env = process.env) {
 }
 
 export function resolveTemplate(config, templateId) {
-  if (templateId && config.piTemplateById.has(templateId)) {
-    return config.piTemplateById.get(templateId);
+  const normalized = normalizeTemplateId(templateId);
+  if (normalized && config.piTemplateById.has(normalized)) {
+    return config.piTemplateById.get(normalized);
   }
   return null;
 }

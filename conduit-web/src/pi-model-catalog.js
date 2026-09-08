@@ -211,13 +211,13 @@ export class PiModelCatalog {
     return this.list(cwd);
   }
 
-  async generateSessionName(cwd, spec, thinkingLevel, message) {
+  async generateSessionName(cwd, spec, thinkingLevel, message, systemPrompt) {
     const snapshot = await this.snapshot(cwd);
     const entry = snapshot.entries.find(({ model }) => `${model.provider}/${model.id}` === spec);
     if (!entry) throw Object.assign(new Error("The session naming model is not in this Pi profile's enabled scope"), { code: "invalid_model" });
     const effectiveThinkingLevel = clampThinkingLevel(entry.model, thinkingLevel || "off");
     const response = await (this.modelRuntime || this.modelRegistry).completeSimple(entry.model, {
-      systemPrompt: "Create a short descriptive name for this chat. Use 2-6 words in Title Case. Respond with only the name.",
+      systemPrompt,
       messages: [{
         role: "user",
         content: [{ type: "text", text: String(message || "").trim() }],

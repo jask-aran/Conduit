@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 const DEFAULTS = {
-  defaultTemplateId: "chat",
+  defaultTemplateId: "assistant",
   sessionNameModel: "",
   sessionNameThinkingLevel: "off",
   terminalShortcuts: [],
