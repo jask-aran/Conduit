@@ -5,6 +5,19 @@ import { resolveModelProfile } from "../../model-profiles.js";
 import { usesWebSearchOverlay } from "../../model-profile-runtime.js";
 import { agentProfiles, profileSelection } from "../../chat-backend.js";
 
+const opaqueSessionId = (chat) => typeof chat.backend?.opaqueSession === "string"
+  ? chat.backend.opaqueSession
+  : chat.backend?.opaqueSession?.threadId || null;
+
+export function projectBackendSessions({ chats, sessions, projectId, implementation }) {
+  const backendChats = chats.filter((chat) => chat.backend?.implementation === implementation);
+  const trackedIds = new Set(backendChats.map(opaqueSessionId).filter(Boolean));
+  return {
+    tracked: backendChats.filter((chat) => chat.projectId === projectId).map(chatView),
+    adoptable: sessions.filter((session) => !trackedIds.has(session.id)),
+  };
+}
+
 export function registerChatRoutes(app, {
   backends,
   catalogFor,
@@ -21,6 +34,50 @@ export function registerChatRoutes(app, {
   runtimeFor,
   templateForChat,
 }) {
+  app.get("/v0/projects/:projectId/backend-sessions", async (request, response, next) => {
+    try {
+      const project = await projects.get(request.params.projectId);
+      if (!project) return response.status(404).json({ error: "project_not_found" });
+      await projects.validate(project);
+      const implementation = String(request.query.implementation || "codex");
+      if (implementation !== "codex" || !backends.adapters.has(implementation)) {
+        return response.status(409).json({ error: "backend_discovery_unavailable" });
+      }
+      const adapter = backends.forImplementation(implementation);
+      const sessions = await adapter.listSessions({ cwd: project.workingRoot });
+      const projection = projectBackendSessions({ chats: registry.list({ includeHidden: true }), sessions,
+        projectId: project.id, implementation });
+      response.json({ implementation, replayFidelity: "full",
+        ...projection });
+    } catch (error) { next(error); }
+  });
+
+  app.post("/v0/projects/:projectId/backend-sessions/:sessionId/adopt", async (request, response, next) => {
+    try {
+      const project = await projects.get(request.params.projectId);
+      if (!project) return response.status(404).json({ error: "project_not_found" });
+      await lifecycle.withProjects([project.id], async () => {
+        await projects.validate(project);
+        if (!backends.adapters.has("codex")) return response.status(409).json({ error: "backend_discovery_unavailable" });
+        const adapter = backends.forImplementation("codex");
+        const session = (await adapter.listSessions({ cwd: project.workingRoot }))
+          .find((item) => item.id === request.params.sessionId);
+        if (!session) return response.status(404).json({ error: "backend_session_not_found" });
+        const alreadyTracked = registry.list({ includeHidden: true }).find((chat) =>
+          chat.backend?.implementation === "codex" && opaqueSessionId(chat) === session.id);
+        if (alreadyTracked) return response.status(409).json({ error: "backend_session_already_tracked", chatId: alreadyTracked.id });
+        const chat = await registry.create(project, { backend: {
+          profileId: "codex", profileRevision: null, management: "agent", protocol: "native_api",
+          implementation: "codex", installationId: "host-codex", opaqueSession: { threadId: session.id },
+        } });
+        const timestamp = new Date().toISOString();
+        await registry.update(chat.id, { status: "active", title: session.title,
+          lastMessageAt: session.updatedAt || timestamp, updatedAt: timestamp });
+        response.status(201).json(chatView(registry.metadata(chat.id)));
+      });
+    } catch (error) { next(error); }
+  });
+
   app.get("/v0/profiles", (_request, response) => response.json({ profiles: agentProfiles(config.piTemplates, {
     codexAvailable: backends.adapters.has("codex"), chatgptWebAvailable: backends.adapters.has("chatgpt-web"),
   }) }));

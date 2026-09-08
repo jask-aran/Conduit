@@ -248,6 +248,35 @@ export class CodexAppServerAdapter extends EventEmitter {
       }
     }
   }
+  async listSessions({ cwd, limit = 50 } = {}) {
+    if (!cwd) throw error("Codex session discovery requires a workspace", "session_cwd_mismatch", 400);
+    const chatId = `discovery-${crypto.randomUUID()}`;
+    let record = null;
+    try {
+      record = await this.start({ chatId, cwd });
+      const result = await this.request(record, "thread/list", {
+        cwd, limit, sortKey: "recency_at", sortDirection: "desc", useStateDbOnly: true,
+      });
+      return (result.data || []).map((thread) => ({
+        id: thread.id,
+        title: thread.name || thread.preview || "Untitled Codex session",
+        preview: thread.preview || "",
+        cwd: thread.cwd,
+        createdAt: thread.createdAt || null,
+        updatedAt: thread.recencyAt || thread.updatedAt || thread.createdAt || null,
+        status: thread.status?.type || "unknown",
+        source: thread.source?.type || thread.source || "unknown",
+        replayFidelity: "full",
+      })).filter((thread) => thread.id && thread.cwd === cwd);
+    } finally {
+      record ||= this.getByChatId(chatId);
+      if (record) {
+        await this.close(record.id);
+        this.records.delete(record.id);
+        this.byChatId.delete(chatId);
+      }
+    }
+  }
   getModelState(id) { const record = this.get(id); return Promise.resolve({
     model: record?.model || "", thinkingLevel: record?.thinkingLevel || "",
   }); }

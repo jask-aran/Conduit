@@ -47,3 +47,23 @@ test("Codex prompt writes the installed app-server turn/start shape", async () =
   adapter.receive(live, JSON.stringify({ id: 1, result: { turn: { id: "turn-1" } } }));
   assert.equal(await pending, "turn-1");
 });
+
+test("Codex discovery uses the metadata database and exact workspace filter", async () => {
+  const adapter = new CodexAppServerAdapter();
+  const live = record();
+  live.id = "discovery";
+  adapter.start = async ({ cwd }) => { live.cwd = cwd; return live; };
+  adapter.close = async () => true;
+  adapter.request = async (_record, method, params) => {
+    assert.equal(method, "thread/list");
+    assert.deepEqual(params, { cwd: "/workspace", limit: 50, sortKey: "recency_at", sortDirection: "desc", useStateDbOnly: true });
+    return { data: [
+      { id: "inside", cwd: "/workspace", preview: "Inside", recencyAt: 20, status: { type: "notLoaded" } },
+      { id: "outside", cwd: "/other", preview: "Outside", recencyAt: 10 },
+    ] };
+  };
+  assert.deepEqual(await adapter.listSessions({ cwd: "/workspace" }), [{
+    id: "inside", title: "Inside", preview: "Inside", cwd: "/workspace", createdAt: null,
+    updatedAt: 20, status: "notLoaded", source: "unknown", replayFidelity: "full",
+  }]);
+});
