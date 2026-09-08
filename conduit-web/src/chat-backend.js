@@ -34,7 +34,7 @@ export function withPiCompatibilityFields(item) {
   };
 }
 
-export function agentProfiles(templates, { codexAvailable = true } = {}) {
+export function agentProfiles(templates, { codexAvailable = true, chatgptWebAvailable = true } = {}) {
   return [
     ...templates.map((template) => ({
       id: template.id,
@@ -56,6 +56,14 @@ export function agentProfiles(templates, { codexAvailable = true } = {}) {
       disabled: !codexAvailable,
       agent: { protocol: "native_api", implementation: "codex", installationId: "host-codex" },
     },
+    {
+      id: "chatgpt-web",
+      label: "ChatGPT Web",
+      description: "Use models from a connected ChatGPT account",
+      management: "agent",
+      disabled: !chatgptWebAvailable,
+      agent: { protocol: "native_api", implementation: "chatgpt-web", installationId: "user-chatgpt-account" },
+    },
   ];
 }
 
@@ -66,7 +74,7 @@ export function profileSelection(body = {}) {
     throw Object.assign(new Error("profileId must be a non-empty string"), { code: "invalid_profile", status: 400 });
   }
   const profileId = body.profileId.trim();
-  if (profileId === "codex") {
+  if (["codex", "chatgpt-web"].includes(profileId)) {
     if (body.runtimeKind != null || body.templateId != null) {
       throw Object.assign(new Error("Profile selection conflicts with legacy fields"), { code: "profile_conflict", status: 400 });
     }

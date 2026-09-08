@@ -21,7 +21,9 @@ export function registerChatRoutes(app, {
   runtimeFor,
   templateForChat,
 }) {
-  app.get("/v0/profiles", (_request, response) => response.json({ profiles: agentProfiles(config.piTemplates, { codexAvailable: backends.adapters.has("codex") }) }));
+  app.get("/v0/profiles", (_request, response) => response.json({ profiles: agentProfiles(config.piTemplates, {
+    codexAvailable: backends.adapters.has("codex"), chatgptWebAvailable: backends.adapters.has("chatgpt-web"),
+  }) }));
   app.get("/v0/models", async (request, response, next) => {
     try {
       const project = await projects.get(request.query.projectId || "chat");
@@ -63,11 +65,13 @@ export function registerChatRoutes(app, {
       if (!project) return response.status(404).json({ error: "project_not_found" });
       await lifecycle.withProjects([project.id], async () => {
         await projects.validate(project);
-        if (request.body?.profileId === "codex") {
-          if (!backends.adapters.has("codex")) return response.status(409).json({ error: "codex_unavailable" });
+        if (["codex", "chatgpt-web"].includes(request.body?.profileId)) {
+          const profileId = request.body.profileId;
+          if (!backends.adapters.has(profileId)) return response.status(409).json({ error: `${profileId}_unavailable` });
+          const installationId = profileId === "codex" ? "host-codex" : "user-chatgpt-account";
           const chat = await registry.create(project, { backend: {
-            profileId: "codex", profileRevision: null, management: "agent", protocol: "native_api",
-            implementation: "codex", installationId: "host-codex", opaqueSession: null,
+            profileId, profileRevision: null, management: "agent", protocol: "native_api",
+            implementation: profileId, installationId, opaqueSession: null,
           } });
           return response.status(201).json(chatView(chat));
         }
@@ -124,14 +128,16 @@ export function registerChatRoutes(app, {
           fork: { required: true, profileId: request.body.profileId },
         });
       }
-      if (request.body?.profileId === "codex") {
-        if (!backends.adapters.has("codex")) return response.status(409).json({ error: "codex_unavailable" });
+      if (["codex", "chatgpt-web"].includes(request.body?.profileId)) {
+        const profileId = request.body.profileId;
+        if (!backends.adapters.has(profileId)) return response.status(409).json({ error: `${profileId}_unavailable` });
+        const installationId = profileId === "codex" ? "host-codex" : "user-chatgpt-account";
         await registry.update(context.chat.id, {
           templateId: null,
           templateVersion: null,
           runtime: null,
-          backend: { profileId: "codex", profileRevision: null, management: "agent", protocol: "native_api",
-            implementation: "codex", installationId: "host-codex", opaqueSession: null },
+          backend: { profileId, profileRevision: null, management: "agent", protocol: "native_api",
+            implementation: profileId, installationId, opaqueSession: null },
         });
         return response.json(chatView(registry.metadata(context.chat.id)));
       }
@@ -203,6 +209,15 @@ export function registerChatRoutes(app, {
       const target = current.models.find((item) => item.spec === targetModel);
       if (thinkingLevel && target && !target.thinkingLevels.includes(thinkingLevel)) {
         return response.status(400).json({ error: "invalid_thinking_level" });
+      }
+      if (context.chat.backend?.implementation === "chatgpt-web") {
+        if (context.chat.status !== "draft" || context.chat.lastUserMessageAt) {
+          return response.status(409).json({ error: "model_locked", message: "ChatGPT Web models cannot change after the first message." });
+        }
+        const resident = backends.getByChatId(context.chat.id);
+        if (resident) resident.model = targetModel;
+        await registry.update(context.chat.id, { backend: { ...context.chat.backend, model: targetModel } });
+        return response.json({ ...current, model: targetModel, thinkingLevel: "" });
       }
       if (context.chat.backend?.implementation === "codex") {
         const model = targetModel;

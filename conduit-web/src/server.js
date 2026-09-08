@@ -61,6 +61,7 @@ import { publicModelProfile, resolveModelProfile } from "./model-profiles.js";
 import { PromptStore } from "./prompt-store.js";
 import { ChatBackendRegistry, serializePiV0 } from "./pi-rpc-adapter.js";
 import { CodexAppServerAdapter } from "./codex-app-server-adapter.js";
+import { ChatGptWebAdapter } from "./chatgpt-web-adapter.js";
 import { spawnSync } from "node:child_process";
 
 const config = loadConfig();
@@ -146,7 +147,14 @@ const codexCommand = process.env.CONDUIT_CODEX_COMMAND || "codex";
 const codexProbe = spawnSync(codexCommand, ["--version"], { encoding: "utf8", timeout: 3_000 });
 const codexAvailable = codexProbe.status === 0;
 const codex = new CodexAppServerAdapter({ command: codexCommand });
-const backends = new ChatBackendRegistry(manager, codexAvailable ? codex : null);
+const chatgptWebPython = process.env.CONDUIT_CHATGPT_WEB_PYTHON || path.join(config.repositoryRoot, "working-files/.venv/bin/python");
+const chatgptWebScript = process.env.CONDUIT_CHATGPT_WEB_SIDECAR || path.join(config.repositoryRoot, "working-files/chatgpt_web_sidecar.py");
+const chatgptWebProbe = spawnSync(chatgptWebPython, ["-c", "import curl_cffi"], { encoding: "utf8", timeout: 3_000 });
+const chatgptWebAvailable = chatgptWebProbe.status === 0;
+const chatgptWeb = new ChatGptWebAdapter({ python: chatgptWebPython, script: chatgptWebScript,
+  dataDir: path.join(config.dataRoot, "chatgpt-web") });
+const backends = new ChatBackendRegistry(manager, codexAvailable ? codex : null,
+  chatgptWebAvailable ? [["chatgpt-web", chatgptWeb]] : []);
 async function recycleIdleIsolatedPiProcesses() {
   const candidates = manager.liveRecords().filter((record) => record.runtime?.kind === "conduit_profile"
     && manager.isReclaimable(record));
@@ -206,6 +214,15 @@ function catalogFor(runtime, template) {
 }
 
 async function chatModelView(context) {
+  if (context.chat.backend?.implementation === "chatgpt-web") {
+    const adapter = backends.forChat(context.chat);
+    const resident = backends.getByChatId(context.chat.id);
+    const models = await adapter.listModels(resident?.id);
+    const model = resident?.model || context.chat.backend.model || models[0]?.spec || "";
+    return { installationId: "user-chatgpt-account", runtimeKind: "chatgpt-web", models, model, thinkingLevel: "",
+      defaultModel: models[0]?.spec || "", defaultThinkingLevel: "", modelThinkingLevels: {},
+      requiresAuthentication: false, warnings: [], source: resident ? "live" : "catalog" };
+  }
   if (context.chat.backend?.implementation === "codex") {
     const adapter = backends.forChat(context.chat);
     const resident = backends.getByChatId(context.chat.id);
@@ -439,6 +456,16 @@ registerAttachmentRoutes(app, { attachments, findChatContext });
 app.use(express.json({ limit: "128kb" }));
 app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 
+app.get("/v0/chatgpt-web/status", async (_request, response, next) => {
+  try { response.json(await chatgptWeb.health()); } catch (error) { next(error); }
+});
+app.put("/v0/chatgpt-web/credential", async (request, response, next) => {
+  try { response.json(await chatgptWeb.setCredential(String(request.body?.cookie || ""))); } catch (error) { next(error); }
+});
+app.delete("/v0/chatgpt-web/credential", async (_request, response, next) => {
+  try { response.json(await chatgptWeb.removeCredential()); } catch (error) { next(error); }
+});
+
 registerAuthRoutes(app, { authStore, socketTickets });
 
 const pendingCheckpoints = new Set();
@@ -476,17 +503,20 @@ manager.on("event", ({ record, event }) => {
       .finally(() => pendingCheckpoints.delete(checkpointId));
   }, 50).unref();
 });
-codex.on("settled", ({ record }) => {
+function checkpointNativeAdapter(adapter, record) {
   const completedAt = new Date().toISOString();
-  void registry.update(record.chatId, { lastAssistantCompletedAt: completedAt, lastMessageAt: completedAt, unread: true })
+  void registry.update(record.chatId, { backend: { ...registry.metadata(record.chatId)?.backend, opaqueSession: record.sessionId },
+    lastAssistantCompletedAt: completedAt, lastMessageAt: completedAt, unread: true })
     .then((chat) => {
       record.lastCheckpoint = { type: "session_checkpoint", generationId: record.generation?.id || null,
         sequence: record.eventSequence, chatId: chat.id, title: chat.title || null };
-      codex.publish(record, record.lastCheckpoint);
+      adapter.publish(record, record.lastCheckpoint);
       runtimeHub.publish({ type: "chat_changed", chat: chatView(chat), at: completedAt });
     })
-    .catch((cause) => console.error("Could not checkpoint the Codex chat", cause));
-});
+    .catch((cause) => console.error("Could not checkpoint native chat", cause));
+}
+codex.on("settled", ({ record }) => checkpointNativeAdapter(codex, record));
+chatgptWeb.on("settled", ({ record }) => checkpointNativeAdapter(chatgptWeb, record));
 registerRuntimeRoutes(app, {
   attachments,
   config,
@@ -762,6 +792,7 @@ async function shutdown(signal) {
   server.closeAllConnections?.();
   const stoppedProcesses = await manager.shutdown();
   const stoppedCodexProcesses = await codex.shutdown();
+  await chatgptWeb.shutdown();
   const stoppedTerminals = await terminals.stopAll();
   await voiceModel.stop();
   await closed;

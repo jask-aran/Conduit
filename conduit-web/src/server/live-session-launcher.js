@@ -42,7 +42,7 @@ export function createLiveSessionLauncher({
     const resident = backends.getByChatId(context.chat.id);
     if (resident) return { live: resident, modelRecovery: null };
 
-    if (context.chat.backend?.implementation === "codex") {
+    if (context.chat.backend?.protocol === "native_api") {
       const model = context.chat.backend.model || "";
       const options = {
         chatId: context.chat.id,
