@@ -209,9 +209,21 @@ async function chatModelView(context) {
   if (context.chat.backend?.implementation === "codex") {
     const adapter = backends.forChat(context.chat);
     const resident = backends.getByChatId(context.chat.id);
-    if (!resident) return { installationId: "host-codex", runtimeKind: "codex", models: [], model: "", thinkingLevel: "", source: "offline" };
+    if (!resident) {
+      const models = await adapter.listAvailableModels(context.project.workingRoot);
+      const model = context.chat.backend.model || models[0]?.spec || "";
+      return {
+        installationId: "host-codex", runtimeKind: "codex", models, model,
+        thinkingLevel: "off", defaultModel: models[0]?.spec || "", defaultThinkingLevel: "off",
+        modelThinkingLevels: {}, requiresAuthentication: false, warnings: [], source: "catalog",
+      };
+    }
     const [models, state] = await Promise.all([adapter.listModels(resident.id), adapter.getModelState(resident.id)]);
-    return { installationId: "host-codex", runtimeKind: "codex", models, ...state, source: "live" };
+    return {
+      installationId: "host-codex", runtimeKind: "codex", models, ...state,
+      defaultModel: models[0]?.spec || "", defaultThinkingLevel: "off", modelThinkingLevels: {},
+      requiresAuthentication: false, warnings: [], source: "live",
+    };
   }
   const template = templateForChat(context.chat, context.project);
   const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });

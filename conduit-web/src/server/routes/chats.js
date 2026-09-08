@@ -199,6 +199,17 @@ export function registerChatRoutes(app, {
       if (spec && !current.models.some((item) => item.spec === spec && !item.outsideScope)) {
         return response.status(400).json({ error: "invalid_model" });
       }
+      if (context.chat.backend?.implementation === "codex") {
+        if (context.chat.status !== "draft" || context.chat.backend.opaqueSession || backends.getByChatId(context.chat.id)) {
+          return response.status(409).json({
+            error: "model_switch_unsupported",
+            message: "Start a new Codex chat to use a different model.",
+          });
+        }
+        const model = spec || current.model;
+        await registry.update(context.chat.id, { backend: { ...context.chat.backend, model } });
+        return response.json({ ...current, model, thinkingLevel: "off" });
+      }
       const targetModel = spec || current.model;
       const target = current.models.find((item) => item.spec === targetModel);
       if (thinkingLevel && target && !target.thinkingLevels.includes(thinkingLevel)) {

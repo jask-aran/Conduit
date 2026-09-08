@@ -201,8 +201,23 @@ export class CodexAppServerAdapter extends EventEmitter {
     const result = await this.request(record, "model/list", {});
     return (result.data || []).filter((item) => !item.hidden).map((item) => ({
       provider: "openai", id: item.id, spec: item.id, label: item.displayName || item.id,
-      reasoning: true, thinkingLevels: (item.supportedReasoningEfforts || []).map((effort) => effort.reasoningEffort),
+      reasoning: false, thinkingLevels: ["off"],
     }));
+  }
+  async listAvailableModels(cwd) {
+    const chatId = `catalog-${crypto.randomUUID()}`;
+    let record = null;
+    try {
+      record = await this.start({ chatId, cwd });
+      return await this.listModels(record.id);
+    } finally {
+      record ||= this.getByChatId(chatId);
+      if (record) {
+        await this.close(record.id);
+        this.records.delete(record.id);
+        this.byChatId.delete(chatId);
+      }
+    }
   }
   getModelState(id) { const record = this.get(id); return Promise.resolve({ model: record?.model || "", thinkingLevel: "" }); }
   attach(id, socket) { const record = this.get(id); record.clients.add(socket); socket.once("close", () => record.clients.delete(socket));

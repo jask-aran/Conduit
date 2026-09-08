@@ -134,13 +134,23 @@ test("Codex app-server profile creates, streams, and reconnects through neutral 
     });
     assert.equal(created.status, 201);
     const chat = await created.json();
+    const selected = await harness.request(`/v0/chats/${chat.id}/models`, {
+      method: "PATCH", body: JSON.stringify({ model: "codex-other", thinkingLevel: "off" }),
+    });
+    assert.equal(selected.status, 200);
     const launched = await harness.request("/v0/live-sessions", {
       method: "POST", body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId }),
     });
     assert.equal(launched.status, 201);
     const live = await launched.json();
     assert.equal(live.backend.implementation, "codex");
+    assert.equal(live.model, "codex-other");
     assert.equal(live.capabilities.steer, false);
+    const locked = await harness.request(`/v0/chats/${chat.id}/models`, {
+      method: "PATCH", body: JSON.stringify({ model: "codex-test", thinkingLevel: "off" }),
+    });
+    assert.equal(locked.status, 409);
+    assert.equal((await locked.json()).error, "model_switch_unsupported");
     const stream = harness.connectStream(live.id);
     await stream.opened;
     await stream.next((event) => event.type === "runtime_state");

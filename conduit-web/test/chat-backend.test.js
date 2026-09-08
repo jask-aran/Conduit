@@ -119,4 +119,15 @@ test("public profile selection and legacy chat creation keep the same Pi identit
   const codexChat = await codexResponse.json();
   assert.equal(codexChat.profileId, "codex");
   assert.equal(codexChat.backend.implementation, "codex");
+  const modelsResponse = await harness.request(`/v0/chats/${codexChat.id}/models`);
+  assert.equal(modelsResponse.status, 200);
+  const models = await modelsResponse.json();
+  assert.deepEqual(models.models.map((model) => model.spec), ["codex-test", "codex-other"]);
+  assert.equal(models.model, "codex-test");
+  const selectedResponse = await harness.request(`/v0/chats/${codexChat.id}/models`, {
+    method: "PATCH", body: JSON.stringify({ model: "codex-other", thinkingLevel: "off" }),
+  });
+  assert.equal(selectedResponse.status, 200);
+  assert.equal((await selectedResponse.json()).model, "codex-other");
+  assert.equal((await (await harness.request(`/v0/chats/${codexChat.id}/models`)).json()).model, "codex-other");
 });
