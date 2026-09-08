@@ -16,12 +16,13 @@ class SidecarProtocolTests(unittest.TestCase):
             "_puid": "user", "__Secure-next-auth.session-token": "secret",
         })
 
-    def test_cookie_parser_joins_browser_chunked_session_token(self):
+    def test_cookie_parser_preserves_browser_chunked_session_token(self):
         self.assertEqual(parse_cookie_header(
             "unrelated=discarded; __Secure-next-auth.session-token.1=second; "
             "_puid=user; __Secure-next-auth.session-token.0=first; oai-sc=challenge"
         ), {
-            "__Secure-next-auth.session-token": "firstsecond",
+            "__Secure-next-auth.session-token.1": "second",
+            "__Secure-next-auth.session-token.0": "first",
             "_puid": "user",
             "oai-sc": "challenge",
         })
