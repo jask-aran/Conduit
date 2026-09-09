@@ -126,19 +126,48 @@ const editorTheme = EditorView.theme({
   },
 }, { dark: true });
 
+const oneDarkPro = {
+  foreground: "#abb2bf",
+  comment: "#5c6370",
+  red: "#e06c75",
+  orange: "#d19a66",
+  yellow: "#e5c07b",
+  green: "#98c379",
+  cyan: "#56b6c2",
+  blue: "#61afef",
+  purple: "#c678dd",
+  invalid: "#f44747",
+} as const;
+
 const workspaceHighlightStyle = HighlightStyle.define([
-  { tag: [tags.comment, tags.quote], color: "var(--muted-foreground)", fontStyle: "italic" },
-  { tag: [tags.keyword, tags.bool, tags.null, tags.atom, tags.docComment], color: "oklch(0.72 0.15 305)" },
-  { tag: [tags.string, tags.regexp, tags.inserted], color: "oklch(0.75 0.14 145)" },
-  { tag: [tags.number, tags.integer, tags.float, tags.character, tags.escape], color: "oklch(0.78 0.13 65)" },
-  { tag: [tags.heading, tags.function(tags.variableName), tags.labelName], color: "oklch(0.78 0.13 240)" },
-  { tag: [tags.attributeName, tags.propertyName, tags.variableName], color: "oklch(0.8 0.09 200)" },
-  { tag: [tags.typeName, tags.className, tags.standard(tags.name)], color: "oklch(0.8 0.11 90)" },
-  { tag: tags.meta, color: "oklch(0.68 0.07 260)" },
-  { tag: tags.deleted, color: "var(--destructive)" },
+  { tag: tags.content, color: oneDarkPro.foreground },
+  { tag: tags.punctuation, color: oneDarkPro.foreground },
+  { tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment, tags.quote], color: oneDarkPro.comment, fontStyle: "italic" },
+  { tag: [tags.variableName, tags.propertyName, tags.labelName, tags.self], color: oneDarkPro.red },
+  { tag: [tags.definition(tags.variableName), tags.definition(tags.propertyName)], color: oneDarkPro.red },
+  { tag: [tags.constant(tags.variableName), tags.constant(tags.propertyName), tags.macroName], color: oneDarkPro.orange },
+  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName), tags.standard(tags.function(tags.variableName))], color: oneDarkPro.blue },
+  { tag: [tags.typeName, tags.className, tags.namespace, tags.standard(tags.name)], color: oneDarkPro.yellow },
+  { tag: tags.tagName, color: oneDarkPro.red },
+  { tag: tags.attributeName, color: oneDarkPro.orange },
+  { tag: [tags.string, tags.docString, tags.character, tags.attributeValue], color: oneDarkPro.green },
+  { tag: [tags.regexp, tags.special(tags.string)], color: oneDarkPro.green },
+  { tag: tags.escape, color: oneDarkPro.cyan },
+  { tag: [tags.number, tags.integer, tags.float, tags.bool, tags.null, tags.atom, tags.unit, tags.color], color: oneDarkPro.orange },
+  { tag: [tags.keyword, tags.modifier, tags.controlKeyword, tags.definitionKeyword, tags.moduleKeyword, tags.operatorKeyword], color: oneDarkPro.purple },
+  { tag: [tags.operator, tags.derefOperator, tags.arithmeticOperator, tags.logicOperator, tags.bitwiseOperator, tags.compareOperator, tags.updateOperator, tags.definitionOperator, tags.typeOperator, tags.controlOperator], color: oneDarkPro.cyan },
+  { tag: [tags.meta, tags.documentMeta, tags.annotation, tags.processingInstruction], color: oneDarkPro.orange },
+  { tag: [tags.heading, tags.heading1, tags.heading2, tags.heading3, tags.heading4, tags.heading5, tags.heading6], color: oneDarkPro.blue, fontWeight: "600" },
+  { tag: [tags.link, tags.url], color: oneDarkPro.cyan, textDecoration: "underline" },
+  { tag: tags.monospace, color: oneDarkPro.green },
+  { tag: tags.inserted, color: oneDarkPro.green },
+  { tag: tags.changed, color: oneDarkPro.yellow },
+  { tag: tags.deleted, color: oneDarkPro.red },
+  { tag: tags.invalid, color: "#ffffff", backgroundColor: oneDarkPro.invalid },
   { tag: tags.emphasis, fontStyle: "italic" },
   { tag: tags.strong, fontWeight: "600" },
-]);
+  { tag: tags.strikethrough, textDecoration: "line-through" },
+], { themeType: "dark" });
 
 function createFoldMarker(open: boolean): HTMLElement {
   const marker = document.createElement("span");
