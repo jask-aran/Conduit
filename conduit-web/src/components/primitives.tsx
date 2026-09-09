@@ -88,8 +88,12 @@ export function MenuContent(props: ParentProps<{ class?: string; onOpenAutoFocus
   const portalMount = createFullscreenPortalMount();
   return <KMenu.Portal mount={portalMount()}><KMenu.Content data-slot="menu-content" onOpenAutoFocus={props.onOpenAutoFocus} onCloseAutoFocus={props.onCloseAutoFocus} onFocusOutside={props.onFocusOutside} onPointerDown={props.onPointerDown} onClick={props.onClick} class={cn(menuContentClass, props.class)}>{props.children}</KMenu.Content></KMenu.Portal>;
 }
-export function MenuItem(props: ParentProps<{ class?: string; disabled?: boolean; variant?: "destructive"; onSelect?: () => void; textValue?: string; "aria-label"?: string }>) {
-  return <KMenu.Item disabled={props.disabled} onSelect={props.onSelect} textValue={props.textValue} aria-label={props["aria-label"]} data-variant={props.variant} class={cn(menuItemClass, props.class)}>{props.children}</KMenu.Item>;
+export function MenuSubContent(props: ParentProps<{ class?: string; onFocusOutside?: (event: FocusOutsideEvent) => void; onPointerDown?: (event: PointerEvent) => void }>) {
+  const portalMount = createFullscreenPortalMount();
+  return <KMenu.Portal mount={portalMount()}><KMenu.SubContent data-slot="menu-content" onFocusOutside={props.onFocusOutside} onPointerDown={props.onPointerDown} class={cn(menuSubContentClass, props.class)}>{props.children}</KMenu.SubContent></KMenu.Portal>;
+}
+export function MenuItem(props: ParentProps<{ class?: string; disabled?: boolean; closeOnSelect?: boolean; variant?: "destructive"; onSelect?: () => void; textValue?: string; "aria-label"?: string }>) {
+  return <KMenu.Item disabled={props.disabled} closeOnSelect={props.closeOnSelect} onSelect={props.onSelect} textValue={props.textValue} aria-label={props["aria-label"]} data-variant={props.variant} class={cn(menuItemClass, props.class)}>{props.children}</KMenu.Item>;
 }
 export function MenuRadioItem(props: ParentProps<{ class?: string; value: string; disabled?: boolean; closeOnSelect?: boolean; onSelect?: () => void }>) {
   /* Conduit menus close after a selection by default; persistent pickers can

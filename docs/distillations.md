@@ -120,6 +120,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 
 ## UI and component heuristics
 
+### Keep persistent mobile pickers inside one dismissal boundary
+
+- **Type:** Gotcha.
+- **Rule:** Put touch pickers that must allow repeated selection inside one root Kobalte menu. Render child panels within that root, keep `closeOnSelect={false}`, dim the parent as a Back target, and let only the root handle outside dismissal. Do not use `MenuSubContent` for this pattern: its focus transition can dismiss the child between touch start and touch end.
+- **Scope:** Mobile composer model/profile pickers and future layered touch menus that remain open after selection.
+- **Evidence:** Windows Chrome touch emulation reproduced `pointerdown` on a radio item followed by submenu removal before `pointerup`. The accepted single-boundary implementation kept repeated selections open, returned through the exposed parent, and closed on outside touch on 2026-09-09.
+
 ### Animate panel layout through its flex shell
 
 - **Type:** Invariant.
