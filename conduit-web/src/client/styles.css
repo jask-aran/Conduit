@@ -1931,3 +1931,14 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   .prompt-editor-footer { align-items: stretch; flex-direction: column; }
   .prompt-editor-footer > div { justify-content: flex-end; }
 }
+
+.harness-mark { display: block; flex: none; object-fit: contain; }
+.harness-mark-tinted {
+  background: currentColor;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+}

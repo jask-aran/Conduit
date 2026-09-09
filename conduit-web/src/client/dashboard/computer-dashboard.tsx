@@ -7,6 +7,7 @@ import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { FileTypeIcon } from "../workspace/file-type-icon";
 import { ChatMarkdown } from "../chat/markdown";
+import { HarnessMark } from "../harness-brand";
 import "./app-dashboard.css";
 
 type Entry = { name: string; path: string; type: "directory" | "file" | "other" };
@@ -170,7 +171,7 @@ export function ComputerDashboard(props: {
           <Show when={!props.dialog}>
             <button type="button" disabled={!props.location || props.loading} onClick={props.onOpenTerminalHere}><TerminalIcon />Terminal Here</button>
             <Show when={harnesses().some((item) => item.available)}><Menu><MenuTrigger disabled={!props.location || props.loading} aria-label="Open harness here"><TerminalIcon />Harness Here<ChevronDownIcon /></MenuTrigger><MenuContent class="computer-harness-menu"><MenuGroup><For each={harnesses().filter((item) => item.available)}>{(harness) =>
-              <MenuItem onSelect={() => props.onOpenHarnessHere?.(harness.id, props.location!.project.workingRoot)}><img class="computer-harness-mark" src={harness.id === "codex" ? "/codex-mark.svg" : "/chatgpt-mark.svg"} alt="" />Open {harness.label} here</MenuItem>
+              <MenuItem onSelect={() => props.onOpenHarnessHere?.(harness.id, props.location!.project.workingRoot)}><HarnessMark id={harness.id} class="computer-harness-mark" />Open {harness.label} here</MenuItem>
             }</For></MenuGroup></MenuContent></Menu></Show>
             <button type="button" disabled={!props.location?.repository || props.loading} onClick={() => props.onOpenView("diff")}><GitBranchIcon />Source Control</button>
           </Show>
@@ -187,7 +188,7 @@ export function ComputerDashboard(props: {
               <Show when={view() === "details"}><small>{entry.type === "directory" ? "Folder" : entry.type === "file" ? "File" : "Other"}</small></Show>
             </ContextMenuTrigger><ContextMenuContent><ContextMenuGroup>
               <ContextMenuItem onSelect={() => openEntry(entry)}><FolderIcon />Open</ContextMenuItem>
-              <Show when={!props.dialog && entry.type === "directory"}><For each={harnesses().filter((item) => item.available)}>{(harness) => <ContextMenuItem onSelect={() => props.onOpenHarnessHere?.(harness.id, `${props.location!.project.workingRoot}/${entry.path}`)}><img class="computer-harness-mark" src={harness.id === "codex" ? "/codex-mark.svg" : "/chatgpt-mark.svg"} alt="" />Open {harness.label} here</ContextMenuItem>}</For></Show>
+              <Show when={!props.dialog && entry.type === "directory"}><For each={harnesses().filter((item) => item.available)}>{(harness) => <ContextMenuItem onSelect={() => props.onOpenHarnessHere?.(harness.id, `${props.location!.project.workingRoot}/${entry.path}`)}><HarnessMark id={harness.id} class="computer-harness-mark" />Open {harness.label} here</ContextMenuItem>}</For></Show>
               <Show when={!props.dialog && entry.type === "directory" && !workspaceFor(entry)}><ContextMenuItem onSelect={() => props.onCreateWorkspace(`${props.location!.project.workingRoot}/${entry.path}`)}><PlusIcon />Make workspace</ContextMenuItem></Show>
               <Show when={workspaceFor(entry)}>{(workspace) => <>
                 <ContextMenuItem onSelect={() => props.onOpenWorkspace(workspace())}><WorkspaceGlyph appearance={workspace().workspaceAppearance} />Open workspace</ContextMenuItem>
@@ -203,7 +204,7 @@ export function ComputerDashboard(props: {
           <ContextMenuItem disabled={!props.location} onSelect={() => props.dialog ? props.onSelectFolder?.() : props.onStartWorkspaceAction("created", props.location!.project.workingRoot)}><FolderIcon />{props.dialog ? "Select this folder" : "Create workspace folder here"}</ContextMenuItem>
           <ContextMenuItem disabled={!props.location} onSelect={() => props.dialog ? props.onCreateFolder?.() : props.onStartWorkspaceAction("cloned", props.location!.project.workingRoot)}><PlusIcon />{props.dialog ? "Create folder here" : "Clone repository here"}</ContextMenuItem>
           <Show when={props.dialog}><ContextMenuItem disabled={!props.location} onSelect={props.onCloneRepository}><GitBranchIcon />Clone repository here</ContextMenuItem></Show>
-          <Show when={!props.dialog}><For each={harnesses().filter((item) => item.available)}>{(harness) => <ContextMenuItem disabled={!props.location} onSelect={() => props.onOpenHarnessHere?.(harness.id, props.location!.project.workingRoot)}><img class="computer-harness-mark" src={harness.id === "codex" ? "/codex-mark.svg" : "/chatgpt-mark.svg"} alt="" />Open {harness.label} here</ContextMenuItem>}</For></Show>
+          <Show when={!props.dialog}><For each={harnesses().filter((item) => item.available)}>{(harness) => <ContextMenuItem disabled={!props.location} onSelect={() => props.onOpenHarnessHere?.(harness.id, props.location!.project.workingRoot)}><HarnessMark id={harness.id} class="computer-harness-mark" />Open {harness.label} here</ContextMenuItem>}</For></Show>
           <ContextMenuItem onSelect={() => void refresh()}><RefreshCwIcon />Refresh</ContextMenuItem>
           <ContextMenuItem onSelect={() => setShowHidden((value) => !value)}><EyeIcon />{showHidden() ? "Hide hidden files" : "Show hidden files"}</ContextMenuItem>
           <ContextMenuItem onSelect={() => props.onOpenView("terminal")}><TerminalIcon />Terminal here</ContextMenuItem>
@@ -298,7 +299,7 @@ function HarnessDashboard(props: {
 
   return <main class="computer-harness-dashboard">
     <Show when={props.harness} fallback={<p class="computer-error">Harness is unavailable.</p>}>{(harness) => <>
-      <header><img src={harness().id === "codex" ? "/codex-mark.svg" : "/chatgpt-mark.svg"} alt="" /><div><h1>{harness().label}</h1><p>{harness().version || "Installed adapter"} · {harness().status === "authentication_required" ? "Authentication required" : "Ready"}</p></div></header>
+      <header><HarnessMark id={harness().id} class="computer-harness-hero-mark" /><div><h1>{harness().label}</h1><p>{harness().version || "Installed adapter"} · {harness().status === "authentication_required" ? "Authentication required" : "Ready"}</p></div></header>
       <Show when={drive()} fallback={<>
         <section class="computer-harness-launch"><div><input aria-label="Initial prompt" placeholder="Optional initial prompt" value={prompt()} onInput={(event) => setPrompt(event.currentTarget.value)} /><small title={launchCwd()}>{launchCwd()}</small></div><button type="button" disabled={!launchCwd()} onClick={() => void launch()}>Start tracked chat <ArrowRightIcon /></button></section>
         <section class="computer-harness-ledger"><div class="computer-harness-heading"><div><h2>Sessions</h2><p>Metadata from {harness().label}</p></div><select aria-label="Workspace" value={projectId()} onChange={(event) => setProjectId(event.currentTarget.value)}><option value="">Current folder · new workspace</option><For each={props.projects}>{(item) => <option value={item.id}>{item.name}</option>}</For></select></div>

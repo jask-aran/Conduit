@@ -66,6 +66,7 @@ import { dispatchPanelGeometryMotion } from "../panel-motion";
 import { compareChatsBySort, sortChats, useChatSort } from "../preferences/chat-sort";
 import { publishUiPreference, UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
+import { HarnessMark, harnessStatusLabel } from "../harness-brand";
 import "./sidebar.css";
 
 const ComputerExplorer = lazy(() => import("../dashboard/computer-dashboard").then((module) => ({ default: module.ComputerExplorer })));
@@ -1026,12 +1027,16 @@ export function Sidebar(props: {
           <div class="sidebar-area-label">Computer</div>
           <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.computer ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenComputer(); }}><MonitorIcon /><span>Files</span></button>
           <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.terminal ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /><span>Terminal View</span><span class="sidebar-action-slot"><ExternalLinkIcon class="sidebar-route-indicator" /></span></button>
-          <For each={harnesses()}>{(harness) =>
-            <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.selectedHarness === harness.id ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenHarness(harness.id); }}>
-              <img class="sidebar-harness-mark" src={harness.id === "codex" ? "/codex-mark.svg" : "/chatgpt-mark.svg"} alt="" />
-              <span>{harness.label}</span><span class="sidebar-action-slot"><i class="sidebar-harness-status" data-status={harness.status || "ready"} /></span>
-            </button>
-          }</For>
+          <Show when={harnesses().length}>
+            <div class="sidebar-harness-tiles">
+              <For each={harnesses()}>{(harness) =>
+                <button type="button" class="sidebar-harness-tile" aria-current={props.selectedHarness === harness.id ? "page" : undefined} aria-label={`${harness.label} · ${harnessStatusLabel(harness.status)}`} title={`${harness.label} · ${harnessStatusLabel(harness.status)}`} onClick={() => { closeMobile(); props.onOpenHarness(harness.id); }}>
+                  <HarnessMark id={harness.id} class="sidebar-harness-mark" />
+                  <i class="sidebar-harness-status" data-status={harness.status || "ready"} aria-hidden="true" />
+                </button>
+              }</For>
+            </div>
+          </Show>
           <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" addLabel="New workspace" onAdd={() => openNewDialog("workspace")} />
           <section class="sidebar-group">
             <div class="sidebar-group-header"><div data-sidebar="group-label">Terminals</div></div>
