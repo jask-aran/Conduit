@@ -800,7 +800,10 @@ svg { stroke-width: 1.5; }
     backdrop-filter: blur(17.6px) saturate(125%);
     -webkit-backdrop-filter: blur(17.6px) saturate(125%);
   }
-  .composer-options-submenu { width: min(206.4px, calc(100vw - 25.6px)); max-height: min(60dvh, 336px); overflow-y: auto; }
+  .composer-options-menu { position: relative; }
+  .composer-options-parent { transition: opacity .16s ease, filter .16s ease; }
+  .composer-options-parent[data-panel-open="true"] { opacity: .38; filter: saturate(.6); }
+  .composer-options-submenu { position: absolute; bottom: 0; left: 51.2px; z-index: 1; width: min(206.4px, calc(100vw - 25.6px)); max-height: min(60dvh, 336px); overflow-y: auto; }
   [data-slot="menu-content"].composer-options-menu [role="menuitem"],
   [data-slot="menu-content"].composer-options-submenu [role="menuitem"],
   [data-slot="menu-content"].composer-options-submenu [role="menuitemradio"] {
@@ -810,8 +813,8 @@ svg { stroke-width: 1.5; }
     border-radius: 7.2px;
     font-size: 10.4px;
   }
-  [data-slot="menu-content"].composer-options-submenu [role="menuitemradio"] { padding-left: 24px; }
-  [data-slot="menu-content"].composer-options-submenu [role="menuitemradio"] > .absolute { color: var(--muted-foreground); font-size: 8.8px; font-weight: 600; }
+  .composer-options-submenu [role="menuitemradio"] { padding-left: 24px; }
+  .composer-options-submenu [role="menuitemradio"] > .absolute { color: var(--muted-foreground); font-size: 8.8px; font-weight: 600; }
   [data-slot="menu-content"].composer-options-menu .composer-options-label,
   [data-slot="menu-content"].composer-options-submenu .composer-options-label {
     padding: 4.8px 6.4px 4px;
@@ -821,18 +824,6 @@ svg { stroke-width: 1.5; }
     text-transform: uppercase;
   }
   .composer-options-submenu .composer-option-note { margin: 0 6.4px 4px; color: var(--muted-foreground); font-size: 8.8px; line-height: 1.4; }
-  /* Kobalte positions submenu content in a transformed portal. On a phone
-     there is no room for a side-by-side panel, so turn it into one compact
-     popover above the composer and leave only that surface visible. */
-  [data-popper-positioner]:has(> [data-slot="menu-content"].composer-options-submenu) {
-    position: fixed !important;
-    top: auto !important;
-    right: 12.8px !important;
-    bottom: calc(44.8px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))) !important;
-    left: auto !important;
-    transform: none !important;
-  }
-  body:has(.composer-options-submenu) [data-popper-positioner]:has(> [data-slot="menu-content"].composer-options-menu) { visibility: hidden; }
   .mobile-header-leading > .mobile-sidebar-trigger,
   .mobile-header-leading > .mobile-new-chat-trigger,
   .chat-header-actions > [data-slot="button"],
@@ -1612,7 +1603,10 @@ svg { stroke-width: 1.5; }
     backdrop-filter: blur(22px) saturate(125%);
     -webkit-backdrop-filter: blur(22px) saturate(125%);
   }
-  .composer-options-submenu { width: min(258px, calc(100vw - 32px)); max-height: min(60dvh, 420px); overflow-y: auto; }
+  .composer-options-menu { position: relative; }
+  .composer-options-parent { transition: opacity .16s ease, filter .16s ease; }
+  .composer-options-parent[data-panel-open="true"] { opacity: .38; filter: saturate(.6); }
+  .composer-options-submenu { position: absolute; bottom: 0; left: 64px; z-index: 1; width: min(258px, calc(100vw - 32px)); max-height: min(60dvh, 420px); overflow-y: auto; }
   [data-slot="menu-content"].composer-options-menu [role="menuitem"],
   [data-slot="menu-content"].composer-options-submenu [role="menuitem"],
   [data-slot="menu-content"].composer-options-submenu [role="menuitemradio"] {
@@ -1622,8 +1616,8 @@ svg { stroke-width: 1.5; }
     border-radius: 9px;
     font-size: 13px;
   }
-  [data-slot="menu-content"].composer-options-submenu [role="menuitemradio"] { padding-left: 30px; }
-  [data-slot="menu-content"].composer-options-submenu [role="menuitemradio"] > .absolute { color: var(--muted-foreground); font-size: 11px; font-weight: 600; }
+  .composer-options-submenu [role="menuitemradio"] { padding-left: 30px; }
+  .composer-options-submenu [role="menuitemradio"] > .absolute { color: var(--muted-foreground); font-size: 11px; font-weight: 600; }
   [data-slot="menu-content"].composer-options-menu .composer-options-label,
   [data-slot="menu-content"].composer-options-submenu .composer-options-label {
     padding: 6px 8px 5px;
@@ -1633,18 +1627,6 @@ svg { stroke-width: 1.5; }
     text-transform: uppercase;
   }
   .composer-options-submenu .composer-option-note { margin: 0 8px 5px; color: var(--muted-foreground); font-size: 11px; line-height: 1.4; }
-  /* Kobalte positions submenu content in a transformed portal. On a phone
-     there is no room for a side-by-side panel, so turn it into one compact
-     popover above the composer and leave only that surface visible. */
-  [data-popper-positioner]:has(> [data-slot="menu-content"].composer-options-submenu) {
-    position: fixed !important;
-    top: auto !important;
-    right: 16px !important;
-    bottom: calc(56px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))) !important;
-    left: auto !important;
-    transform: none !important;
-  }
-  body:has(.composer-options-submenu) [data-popper-positioner]:has(> [data-slot="menu-content"].composer-options-menu) { visibility: hidden; }
   .mobile-header-leading > .mobile-sidebar-trigger,
   .mobile-header-leading > .mobile-new-chat-trigger,
   .chat-header-actions > [data-slot="button"],
