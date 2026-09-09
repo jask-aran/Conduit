@@ -136,6 +136,7 @@ export function buildLiveProjectionIndex(
         answerBlocks.add(block.identity);
       }
     }
+    if (assistant.stopReason === "error") segmentIndex += 1;
     if (answerBlocks.size) {
       const rowKey = answerDisplayKey(owner, answerIndex, `live:${generation.id}`);
       answerRowKeys.set(assistant.id, rowKey);
@@ -216,6 +217,26 @@ export function buildLiveToolSegment(
   };
 }
 
+function buildLiveErrorSegment(
+  assistant: ActiveGenerationView["assistantMessages"][number],
+): Extract<TraceSegment, { kind: "error" }> {
+  return {
+    kind: "error",
+    id: `error:${assistant.id}`,
+    message: {
+      id: assistant.id,
+      key: assistant.id,
+      role: "assistant",
+      content: "",
+      stopReason: "error",
+      errorMessage: assistant.errorMessage || "The model request failed.",
+      provider: assistant.provider || null,
+      model: assistant.model || null,
+      timestamp: assistant.timestamp || undefined,
+    },
+  };
+}
+
 export function buildLiveToolItem(
   toolCallId: string,
   execution: ActiveGenerationView["toolExecutions"][string] = {},
@@ -251,6 +272,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, index
         segments.push(buildLiveToolSegment(generation, block));
       }
     }
+    if (assistant.stopReason === "error") segments.push(buildLiveErrorSegment(assistant));
     const terminalError = generation.status === "failed"
       && assistant.stopReason === "error"
       && generation.assistantMessages.at(-1) === assistant;
