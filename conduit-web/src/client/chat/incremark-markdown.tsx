@@ -655,12 +655,12 @@ function TableNode(props: { node: MarkdownNode | NodeAccessor; context: Renderer
   const node = () => readNode(props.node);
   const head = () => node()?.children?.[0];
   const body = () => node()?.children?.slice(1) || [];
-  return <table>
-    <Show when={head()}>{(value) => <thead><TableRow node={() => value()} context={props.context} header /></thead>}</Show>
-    {/* Streaming Markdown appends rows but replaces AST row objects on every update.
-        Index keeps each logical row and its cells mounted while the active row grows. */}
-    <tbody><Index each={body()}>{(row) => <TableRow node={row} context={props.context} />}</Index></tbody>
-  </table>;
+  return <div class="markdown-table-scroll"><table>
+      <Show when={head()}>{(value) => <thead><TableRow node={() => value()} context={props.context} header /></thead>}</Show>
+      {/* Streaming Markdown appends rows but replaces AST row objects on every update.
+          Index keeps each logical row and its cells mounted while the active row grows. */}
+      <tbody><Index each={body()}>{(row) => <TableRow node={row} context={props.context} />}</Index></tbody>
+    </table></div>;
 }
 
 function TableRow(props: { node: MarkdownNode | NodeAccessor; context: RendererContext; header?: boolean }) {
@@ -683,7 +683,7 @@ function containsMath(node: MarkdownNode): boolean {
 }
 
 function TextNode(props: { node: NodeAccessor }) {
-  return <>{props.node()?.value || ""}</>;
+  return <>{(props.node()?.value || "").replaceAll("&nbsp;", " ")}</>;
 }
 
 function AstNode(props: { node: MarkdownNode | NodeAccessor; context: RendererContext }) {
