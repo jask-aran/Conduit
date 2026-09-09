@@ -17,6 +17,11 @@ export const workspaceLanguages: readonly LanguageDescription[] = [
     load: () => import("@codemirror/lang-css").then(({ css }) => css()),
   }),
   LanguageDescription.of({
+    name: "DAX",
+    extensions: ["dax"],
+    load: () => import("./workspace-dax").then(({ daxLanguage }) => new LanguageSupport(daxLanguage)),
+  }),
+  LanguageDescription.of({
     name: "Go",
     extensions: ["go"],
     load: () => import("@codemirror/lang-go").then(({ go }) => go()),
