@@ -120,6 +120,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 
 ## UI and component heuristics
 
+### Reconcile transcript visibility after scroll momentum
+
+- **Type:** Gotcha.
+- **Rule:** Keep transcript virtualization off the active scroll path, but run its existing measurement pass once on native `scrollend`. Do not rely only on IntersectionObserver delivery after fast upward momentum.
+- **Scope:** `transcript-visibility.ts` and other content-visibility projection inside the transcript viewport.
+- **Evidence:** Fast upward scrolling could leave visible Incremark blocks hidden until a downward nudge. The accepted scroll-end reconciliation repaired the viewport without adding per-frame layout work on 2026-09-09.
+
 ### Keep persistent mobile pickers inside one dismissal boundary
 
 - **Type:** Gotcha.

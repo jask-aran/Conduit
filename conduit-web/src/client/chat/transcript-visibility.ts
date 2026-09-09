@@ -366,8 +366,10 @@ export function mountTranscriptVisibility(
     }
     scheduleRefresh(true);
   };
+  const onScrollEnd = () => scheduleRefresh();
   window.addEventListener(PANEL_GEOMETRY_MOTION_EVENT, onMotion);
   document.addEventListener("visibilitychange", onVisibility);
+  viewport.addEventListener("scrollend", onScrollEnd);
   mutationObserver.observe(thread, {
     childList: true,
     subtree: true,
@@ -394,6 +396,7 @@ export function mountTranscriptVisibility(
     destroy: () => {
       window.removeEventListener(PANEL_GEOMETRY_MOTION_EVENT, onMotion);
       document.removeEventListener("visibilitychange", onVisibility);
+      viewport.removeEventListener("scrollend", onScrollEnd);
       mutationObserver.disconnect();
       viewportObserver.disconnect();
       visibilityObserver.disconnect();
