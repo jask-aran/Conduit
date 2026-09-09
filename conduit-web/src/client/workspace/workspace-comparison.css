@@ -1,0 +1,24 @@
+.workspace-comparison { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.workspace-comparison-header { display: flex; flex: none; align-items: center; gap: 7px; height: 32px; padding: 0 10px; border-bottom: 1px solid var(--border); font-size: 10px; }
+.workspace-comparison-header > svg { width: 13px; height: 13px; flex: none; }
+.workspace-comparison-path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-comparison-counts { display: flex; gap: 8px; flex: none; font: 10px ui-monospace, monospace; }
+.workspace-comparison-counts > :first-child { color: var(--destructive); }
+.workspace-comparison-counts > :last-child { color: var(--workspace-git-added); }
+.workspace-comparison-content { flex: 1; min-height: 0; overflow: hidden; font-size: 11px; }
+.workspace-comparison-content .cm-mergeView { height: 100%; overflow: auto; }
+.workspace-comparison-content .cm-mergeViewEditor { min-width: 0; }
+.workspace-comparison-content .cm-mergeViewEditor + .cm-mergeViewEditor { border-left: 1px solid var(--border); }
+.workspace-comparison-content .cm-merge-a .cm-changedLine,
+.workspace-comparison-content .cm-deletedChunk { background: color-mix(in srgb, var(--destructive) 14%, transparent); }
+.workspace-comparison-content .cm-merge-b .cm-changedLine { background: color-mix(in srgb, var(--workspace-git-added) 14%, transparent); }
+.workspace-comparison-content .cm-merge-a .cm-changedText,
+.workspace-comparison-content .cm-deletedChunk .cm-deletedText { background: color-mix(in srgb, var(--destructive) 28%, transparent); border-radius: 2px; }
+.workspace-comparison-content .cm-merge-b .cm-changedText { background: color-mix(in srgb, var(--workspace-git-added) 28%, transparent); border-radius: 2px; }
+.workspace-comparison-content .cm-merge-a .cm-changedLineGutter,
+.workspace-comparison-content .cm-deletedLineGutter { background: var(--destructive); }
+.workspace-comparison-content .cm-merge-b .cm-changedLineGutter { background: var(--workspace-git-added); }
+.workspace-comparison-content .cm-mergeSpacer { background: repeating-linear-gradient(135deg, transparent, transparent 3px, var(--border) 3px, var(--border) 4px); opacity: .45; }
+.workspace-comparison-content .cm-collapsedLines { border: 0; border-block: 1px solid var(--border); background: transparent; color: var(--muted-foreground); padding: 4px 10px; font: 10px var(--font-sans); cursor: pointer; }
+.workspace-comparison-content .cm-collapsedLines:hover { background: var(--accent); color: var(--foreground); }
+.workspace-comparison-content .cm-deletedLine { text-decoration: none; }

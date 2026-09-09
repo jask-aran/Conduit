@@ -17,7 +17,7 @@ export function isVisualMarkdownFile(path: string) {
   return /\.(?:md|markdown)$/i.test(path);
 }
 
-const editorTheme = EditorView.theme({
+export const editorTheme = EditorView.theme({
   "&": {
     height: "100%",
     backgroundColor: "transparent",
@@ -139,7 +139,7 @@ const oneDarkPro = {
   invalid: "#f44747",
 } as const;
 
-const workspaceHighlightStyle = HighlightStyle.define([
+export const workspaceHighlightStyle = HighlightStyle.define([
   { tag: tags.content, color: oneDarkPro.foreground },
   { tag: tags.punctuation, color: oneDarkPro.foreground },
   { tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment, tags.quote], color: oneDarkPro.comment, fontStyle: "italic" },
