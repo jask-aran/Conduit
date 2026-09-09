@@ -177,6 +177,12 @@ function renderMarkdownFragment(source: string, inline: boolean, render: () => s
   }
   const parsedAt = recorder ? performance.now() : 0;
   const fragment = sanitizeMarkdownFragment(html, { inline });
+  for (const table of fragment.querySelectorAll("table")) {
+    const scroller = document.createElement("div");
+    scroller.className = "markdown-table-scroll";
+    table.before(scroller);
+    scroller.append(table);
+  }
   const sanitisedAt = recorder ? performance.now() : 0;
   if (recorder) {
     recordHarnessMetric(recorder, {

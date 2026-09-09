@@ -1,6 +1,6 @@
 const EDGE = 16;
 const DWELL = 180;
-const HIDDEN = ".message-scroller-viewport, .xterm-viewport, .terminal-shortcuts, .terminal-mobile-keys, .katex-display, .incremark-math-block";
+const HIDDEN = ".message-scroller-viewport, .xterm-viewport, .terminal-shortcuts, .terminal-mobile-keys, .katex-display, .incremark-math-block, .markdown-table-scroll";
 type Target = { element: HTMLElement; axis: "x" | "y" };
 
 export function scrollbarGeometry(view: number, content: number, position: number, track: number) {

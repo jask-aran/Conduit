@@ -375,6 +375,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 - **Scope:** Incremark tables containing progressive text or KaTeX.
 - **Evidence:** Fixed `colgroup` percentages caused narrow first columns, KaTeX overflow, and different streaming/final layouts. Automatic layout removed the fixed-width regression.
 
+### Keep Markdown table scrolling native
+
+- **Type:** Gotcha.
+- **Rule:** Put wide Markdown tables in an `overflow-x: auto` wrapper with a visible native scrollbar. Do not intercept `wheel` events, translate axes, or implement momentum; let horizontal input scroll the table and vertical input chain to the transcript.
+- **Scope:** Final and streaming Markdown table wrappers in both renderer paths.
+- **Evidence:** Three wheel handlers caused axis capture, delayed vertical recovery, low-frame-rate scrolling, paused momentum, and broken horizontal mouse-wheel input. The operator accepted the CSS-only wrapper on 2026-09-09.
+
 ### Keep synthetic math repair out of the source stream
 
 - **Type:** Invariant.

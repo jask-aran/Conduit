@@ -1912,8 +1912,8 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 }
 
 /* Mouse overlays never reserve a gutter or intercept input while hidden. */
-:root[data-overlay-scrollbars], :root[data-overlay-scrollbars] * { scrollbar-width: none !important; scrollbar-gutter: auto !important; }
-:root[data-overlay-scrollbars] ::-webkit-scrollbar { display: none !important; }
+:root[data-overlay-scrollbars], :root[data-overlay-scrollbars] *:not(.markdown-table-scroll) { scrollbar-width: none !important; scrollbar-gutter: auto !important; }
+:root[data-overlay-scrollbars] *:not(.markdown-table-scroll)::-webkit-scrollbar { display: none !important; }
 .overlay-scrollbar {
   position: fixed; inset: auto; margin: 0; padding: 0; border: 0;
   background: transparent; overflow: hidden; box-sizing: border-box;
