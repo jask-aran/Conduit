@@ -630,10 +630,49 @@ async function inspectOverview(root, { signal, runGit }) {
     if (isAbort(error)) throw error;
     return { repository: false, files: [], diff: "" };
   }
-  const [{ stdout: status }, { stdout: branch }] = await Promise.all([
+  const readCounts = async (staged) => {
+    const { stdout } = await runGit(root, ["diff", ...(staged ? ["--cached"] : []), "--numstat", "-z", "--no-renames", "--no-ext-diff", "--no-textconv"], { signal, maxBuffer: 2 * 1024 * 1024 });
+    return new Map(stdout.split("\0").filter(Boolean).map((record) => {
+      const first = record.indexOf("\t");
+      const second = record.indexOf("\t", first + 1);
+      const added = record.slice(0, first);
+      const removed = record.slice(first + 1, second);
+      return [record.slice(second + 1), added === "-" || removed === "-" ? null : { added: Number(added), removed: Number(removed) }];
+    }));
+  };
+  const [{ stdout: status }, { stdout: branch }, stagedCounts, workingCounts] = await Promise.all([
     runGit(root, ["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=normal"], { signal, maxBuffer: 2 * 1024 * 1024 }),
     runGit(root, ["branch", "--show-current"], { signal }),
+    readCounts(true),
+    readCounts(false),
   ]);
+  const files = parseStatus(status).map((file) => ({ ...file, stagedCounts: stagedCounts.get(file.path) ?? null, workingCounts: workingCounts.get(file.path) ?? null }));
+  // Git numstat excludes untracked files. Bound their total read cost, and do
+  // not traverse grouped folders just to paint a count in the list.
+  let remainingBytes = 4 * 1024 * 1024;
+  let remainingFiles = 100;
+  for (const file of files) {
+    if (file.status !== "??" || file.path.endsWith("/") || remainingFiles-- <= 0 || remainingBytes <= 0) continue;
+    if (signal?.aborted) throw abortError();
+    try {
+      const resolved = await resolveInspectorPath(root, file.path, { kind: "file" });
+      if (resolved.stat.size > Math.min(1024 * 1024, remainingBytes)) continue;
+      const handle = await fs.open(resolved.path, "r");
+      try {
+        const buffer = Buffer.alloc(Math.min(1024 * 1024, remainingBytes) + 1);
+        const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+        remainingBytes -= bytesRead;
+        if (bytesRead === buffer.length) continue;
+        const content = buffer.subarray(0, bytesRead);
+        if (content.includes(0)) continue;
+        new TextDecoder("utf-8", { fatal: true }).decode(content);
+        let added = 0;
+        for (const byte of content) if (byte === 10) added++;
+        if (content.length && content.at(-1) !== 10) added++;
+        file.workingCounts = { added, removed: 0 };
+      } finally { await handle.close(); }
+    } catch (error) { if (isAbort(error)) throw error; }
+  }
   let upstream = null;
   let ahead = 0;
   let behind = 0;
@@ -650,7 +689,7 @@ async function inspectOverview(root, { signal, runGit }) {
     upstream,
     ahead,
     behind,
-    files: parseStatus(status),
+    files,
     diff: "",
   };
 }

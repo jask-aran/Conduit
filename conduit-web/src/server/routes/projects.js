@@ -1,4 +1,5 @@
 import os from "node:os";
+import { readWorkspaceComparison } from "../../workspace-comparison.js";
 import { computerContext, findComputerGitRoot, resolveComputerContext } from "../../computer-context.js";
 import path from "node:path";
 import fs from "node:fs/promises";
@@ -404,7 +405,11 @@ export function registerProjectRoutes(app, {
       const project = await inspectionContext(request.params.id, true);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (project.kind !== "workspace") return response.status(403).json({ error: "source_control_disabled", message: "Source Control is available only for Workspaces." });
-      response.json(await readWorkspaceDiff(project.workingRoot, { filePath: typeof request.query.path === "string" ? request.query.path : null, staged: request.query.staged === "1", includePatch: request.query.patch === "1", includeHistory: request.query.history !== "0", reuse: request.query.reuse === "1", signal: controller.signal }));
+      if (request.query.compare === "1") {
+        response.json(await readWorkspaceComparison(project.workingRoot, request.query.path, { staged: request.query.staged === "1", signal: controller.signal }));
+      } else {
+        response.json(await readWorkspaceDiff(project.workingRoot, { filePath: typeof request.query.path === "string" ? request.query.path : null, staged: request.query.staged === "1", includePatch: request.query.patch === "1", includeHistory: request.query.history !== "0", reuse: request.query.reuse === "1", signal: controller.signal }));
+      }
     } catch (error) {
       if (!request.aborted && !response.destroyed) next(error);
     } finally {
