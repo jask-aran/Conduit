@@ -12,7 +12,7 @@ import { TerminalPane } from "../remotes/terminal-pane";
 import { dispatchPanelGeometryMotion } from "../panel-motion";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import { FileTypeIcon, FolderTypeIcon } from "./file-type-icon";
-import WorkspaceFileSlot, { type FileSlotHandle, type FileSummary } from "./workspace-file-slot";
+import WorkspaceFileSlot, { preloadWorkspaceEditor, type FileSlotHandle, type FileSummary } from "./workspace-file-slot";
 import { readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace-panel-storage";
 import "./workspace.css";
 
@@ -604,7 +604,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       setFocusedSlot(slot);
       return;
     }
-    if (handle?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and open another file?")) return;
+    if (handle?.hasUnsavedChanges()) {
+      if (!window.confirm("Discard unsaved changes and open another file?")) return;
+      handle.discardChanges();
+    }
     setSlotPath(slot, path);
     setFocusedSlot(slot);
   };
@@ -1483,7 +1486,13 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             data-selected={isFileOpen(entry.path)}
             data-focused-file={openPaths()[focusedSlot()] === entry.path}
             tabIndex={treeTabStop() === entry.path ? 0 : -1}
-            onFocus={() => setTreeFocusPath(entry.path)}
+            onFocus={() => {
+              setTreeFocusPath(entry.path);
+              if (entry.type === "file") void preloadWorkspaceEditor().catch(() => undefined);
+            }}
+            onPointerEnter={() => {
+              if (entry.type === "file") void preloadWorkspaceEditor().catch(() => undefined);
+            }}
             onKeyDown={onTreeKeyDown}
             onDblClick={() => { if (entry.type === "directory") props.onBrowseDirectory?.(entry.path); }}
             onClick={(event) => entry.type === "directory" ? void toggleDirectory(entry.path) : entry.type === "file" ? (event.altKey ? openFileToSide(entry.path) : openFile(entry.path)) : undefined}

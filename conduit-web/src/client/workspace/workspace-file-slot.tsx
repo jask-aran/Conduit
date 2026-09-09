@@ -1,5 +1,5 @@
 import { batch, createEffect, createSignal, lazy, on, onCleanup, Show, Suspense, type JSX } from "solid-js";
-import { CopyIcon, DownloadIcon, PencilIcon, SaveIcon, Trash2Icon, UploadIcon, WrapTextIcon, XIcon } from "lucide-solid";
+import { CopyIcon, DownloadIcon, PencilIcon, SaveIcon, Trash2Icon, UploadIcon, XIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
@@ -7,8 +7,18 @@ import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
 import { FileTypeIcon } from "./file-type-icon";
 import { Capacitor } from "@capacitor/core";
+import type { WorkspaceEditorHandle } from "./workspace-editor";
 
-const WorkspaceEditor = lazy(() => import("./workspace-editor"));
+let workspaceEditorPromise: Promise<typeof import("./workspace-editor")> | undefined;
+export const preloadWorkspaceEditor = () => {
+  workspaceEditorPromise ??= import("./workspace-editor").catch((cause: unknown) => {
+    workspaceEditorPromise = undefined;
+    throw cause;
+  });
+  return workspaceEditorPromise;
+};
+const loadWorkspaceEditor = preloadWorkspaceEditor;
+const WorkspaceEditor = lazy(loadWorkspaceEditor);
 
 // Rendered through an <img> on a blob URL: that carries the Bearer header the
 // native builds need, and never executes script inside an SVG.
@@ -50,8 +60,23 @@ function formatKind(kind: Exclude<FileKind, "text">): string {
   return kind === "binary" ? "Binary file" : `${kind.charAt(0).toUpperCase()}${kind.slice(1)} file`;
 }
 
-function isAssetKind(kind: FileKind): kind is Exclude<FileKind, "text"> {
-  return kind !== "text";
+function metadataFromError(path: string, cause: unknown): FileMetadata | null {
+  if (!cause || typeof cause !== "object") return null;
+  const value = cause as Record<string, unknown>;
+  if (typeof value.size !== "number" || typeof value.modifiedAt !== "number") return null;
+  const kind = typeof value.kind === "string" && ["text", "image", "pdf", "audio", "video", "binary"].includes(value.kind)
+    ? value.kind as FileKind
+    : undefined;
+  return {
+    path,
+    size: value.size,
+    createdAt: typeof value.createdAt === "number" ? value.createdAt : null,
+    modifiedAt: value.modifiedAt,
+    revision: typeof value.revision === "string" ? value.revision : undefined,
+    kind,
+    mime: typeof value.mime === "string" ? value.mime : undefined,
+    head: typeof value.head === "string" ? value.head : undefined,
+  };
 }
 
 function formatHexHead(head = ""): string {
@@ -61,6 +86,7 @@ function formatHexHead(head = ""): string {
 export interface FilePreview {
   path: string;
   size: number;
+  createdAt?: number | null;
   modifiedAt: number;
   revision: string;
   kind: "text";
@@ -70,18 +96,19 @@ export interface FilePreview {
   readOnly?: boolean;
 }
 export interface FileSummary { path: string; size: number; kind?: FileKind; mime?: string; }
-interface FileMetadata { path: string; size: number; modifiedAt: number; revision?: string; kind?: FileKind; mime?: string; head?: string; }
+interface FileMetadata { path: string; size: number; createdAt?: number | null; modifiedAt: number; revision?: string; kind?: FileKind; mime?: string; head?: string; }
 interface FileAsset extends FileMetadata { kind: Exclude<FileKind, "text">; mime: string; url: string; oversize: boolean; }
-interface FileWriteResult { path: string; size: number; modifiedAt: number; revision: string; }
+interface FileWriteResult { path: string; size: number; createdAt?: number | null; modifiedAt: number; revision: string; }
 
 // The parent owns which paths are open; a slot owns everything about the file at
-// its own path, so two slots never share load, draft, or save state.
+// its own path, so two slots never share load, document, or save state.
 export interface FileSlotHandle {
   path: () => string | null;
   hasUnsavedChanges: () => boolean;
   reload: () => Promise<void>;
   edit: () => void;
   save: () => Promise<void>;
+  discardChanges: () => void;
 }
 
 function formatFileSize(bytes: number) {
@@ -93,6 +120,22 @@ function formatFileSize(bytes: number) {
     unit += 1;
   }
   return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: value < 10 ? 1 : 0 }).format(value)} ${units[unit]}`;
+}
+
+function formatFileTime(value?: number | null) {
+  if (!value || !Number.isFinite(value)) return null;
+  return new Intl.DateTimeFormat(undefined, {
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function fileTimeMetadata(file: { createdAt?: number | null; modifiedAt: number }) {
+  const modified = formatFileTime(file.modifiedAt);
+  const created = formatFileTime(file.createdAt);
+  return [modified && `Modified ${modified}`, created && `Created ${created}`].filter(Boolean).join(" · ");
 }
 
 function errorCode(cause: unknown): string {
@@ -125,14 +168,15 @@ export default function WorkspaceFileSlot(props: {
   const [preview, setPreview] = createSignal<FilePreview | null>(null);
   const [asset, setAsset] = createSignal<FileAsset | null>(null);
   const [imageDimensions, setImageDimensions] = createSignal<{ width: number; height: number } | null>(null);
-  const [draft, setDraft] = createSignal("");
+  const [editorDirty, setEditorDirty] = createSignal(false);
   const [editing, setEditing] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
-  const hasUnsavedChanges = () => Boolean(preview() && !preview()!.readOnly && !preview()!.truncated && draft() !== preview()!.content);
+  const hasUnsavedChanges = () => Boolean(preview() && !preview()!.readOnly && !preview()!.truncated && editorDirty());
   const label = props.slot === "primary" ? "File preview" : "Second file preview";
   const closeLabel = props.slot === "primary" ? "Close file" : "Close second file";
 
   let controller: AbortController | null = null;
+  let editor: WorkspaceEditorHandle | undefined;
   let loadToken = 0;
   const releaseAsset = () => {
     const current = asset();
@@ -143,7 +187,7 @@ export default function WorkspaceFileSlot(props: {
     batch(() => {
       setPreview(null);
       setAsset(null);
-      setDraft("");
+      setEditorDirty(false);
       setEditing(false);
       setImageDimensions(null);
     });
@@ -163,7 +207,7 @@ export default function WorkspaceFileSlot(props: {
         releaseAsset();
         batch(() => {
           setPreview(null);
-          setDraft("");
+          setEditorDirty(false);
           setEditing(false);
           setImageDimensions(null);
           setAsset({ ...metadata, url, oversize: false });
@@ -199,7 +243,7 @@ export default function WorkspaceFileSlot(props: {
     releaseAsset();
     batch(() => {
       setPreview(null);
-      setDraft("");
+      setEditorDirty(false);
       setEditing(false);
       setImageDimensions(null);
       setAsset({ ...metadata, url: URL.createObjectURL(blob), oversize: false });
@@ -208,20 +252,24 @@ export default function WorkspaceFileSlot(props: {
   };
 
   const loadText = async (path: string, projectId: string, owns: () => boolean, options: { forceText?: boolean; preview?: boolean }) => {
+    const replacesOpenDocument = preview()?.path === path;
     const query = [options.forceText && "force=text", options.preview && "preview=1"].filter(Boolean).join("&");
     const payload = await api<FilePreview>(
       `/v0/projects/${encodeURIComponent(projectId)}/file?path=${encodeURIComponent(path)}${query ? `&${query}` : ""}`,
       { signal: controller?.signal },
     );
     if (!owns()) return;
+    if (replacesOpenDocument && editorDirty()) return;
     releaseAsset();
     batch(() => {
       setAsset(null);
       setImageDimensions(null);
       setPreview({ ...payload, kind: "text", mime: payload.mime || "text/plain" });
-      setDraft(payload.content);
+      setEditorDirty(false);
       setEditing(false);
     });
+    if (replacesOpenDocument) editor?.replaceDocument(payload.content);
+    else editor?.openDocument(payload.path, payload.content);
     props.onLoaded?.({ path: payload.path, size: payload.size, kind: "text", mime: payload.mime });
   };
 
@@ -236,52 +284,69 @@ export default function WorkspaceFileSlot(props: {
     controller = new AbortController();
     const token = ++loadToken;
     const owns = () => token === loadToken && props.path === path && props.projectId === projectId;
+    if (fallbackKind(path) === "text") void loadWorkspaceEditor().catch(() => undefined);
     if (asset()?.path !== path && preview()?.path !== path) {
-      clear();
       const kind = fallbackKind(path);
-      if (kind !== "text" && kind !== "binary") {
-        setAsset({ path, kind, mime: fallbackMime(path, kind), size: 0, modifiedAt: 0, url: "", oversize: false });
-      }
-    }
-    try {
-      const metadata = normalizeMetadata(path, await api<FileMetadata>(
-        `/v0/projects/${encodeURIComponent(projectId)}/file?path=${encodeURIComponent(path)}&metadata=1`,
-        { signal: controller.signal },
-      ));
-      if (!owns()) return;
-      if (metadata.kind !== "text" && metadata.kind !== "binary" && !options.forceText) {
-        await loadMedia({ ...metadata, kind: metadata.kind }, projectId, owns);
-        return;
-      }
-      const kind = metadata.kind;
-      if (isAssetKind(kind) && !options.forceText) {
-        releaseAsset();
-        batch(() => {
-          setPreview(null);
-          setAsset({ ...metadata, kind, mime: metadata.mime, url: "", oversize: false });
-          setDraft("");
-          setEditing(false);
-          setImageDimensions(null);
-        });
-        props.onLoaded?.({ path, size: metadata.size, kind, mime: metadata.mime });
-        return;
-      }
-      if (metadata.size > MAX_PREVIEW_BYTES && !options.preview) {
+      if (kind === "text" && preview()) {
         releaseAsset();
         batch(() => {
           setAsset(null);
-          setPreview({ ...metadata, kind: "text", mime: metadata.mime, revision: metadata.revision || "", content: "", truncated: true, readOnly: true });
-          setDraft("");
-          setEditing(false);
+          setImageDimensions(null);
         });
-        props.onLoaded?.({ path, size: metadata.size, kind: "text", mime: metadata.mime });
-        return;
+      } else {
+        clear();
       }
+      if (kind !== "text" && kind !== "binary") {
+        setAsset({ path, kind, mime: fallbackMime(path, kind), size: 0, createdAt: null, modifiedAt: 0, url: "", oversize: false });
+      }
+    }
+    try {
       await loadText(path, projectId, owns, options);
     } catch (cause) {
       if (controller?.signal.aborted || !owns()) return;
+      const code = errorCode(cause);
+      if (["file_not_text", "file_too_large"].includes(code)) {
+        const metadataPayload = metadataFromError(path, cause) ?? await api<FileMetadata>(
+          `/v0/projects/${encodeURIComponent(projectId)}/file?path=${encodeURIComponent(path)}&metadata=1`,
+          { signal: controller.signal },
+        ).catch(() => null);
+        if (!metadataPayload) {
+          clear();
+          if (!background) props.onError((cause as Error).message);
+          return;
+        }
+        if (!owns()) return;
+        const metadata = normalizeMetadata(path, metadataPayload);
+        if (code === "file_not_text" && metadata.kind !== "binary" && metadata.kind !== "text" && !options.forceText) {
+          await loadMedia({ ...metadata, kind: metadata.kind }, projectId, owns);
+          return;
+        }
+        if (code === "file_not_text" && metadata.kind === "binary" && !options.forceText) {
+          releaseAsset();
+          batch(() => {
+            setPreview(null);
+            setAsset({ ...metadata, kind: "binary", mime: metadata.mime, url: "", oversize: false });
+            setEditorDirty(false);
+            setEditing(false);
+            setImageDimensions(null);
+          });
+          props.onLoaded?.({ path, size: metadata.size, kind: "binary", mime: metadata.mime });
+          return;
+        }
+        if (code === "file_too_large" && !options.preview) {
+          releaseAsset();
+          batch(() => {
+            setAsset(null);
+            setPreview({ ...metadata, kind: "text", mime: metadata.mime, revision: metadata.revision || "", content: "", truncated: true, readOnly: true });
+            setEditorDirty(false);
+            setEditing(false);
+          });
+          props.onLoaded?.({ path, size: metadata.size, kind: "text", mime: metadata.mime });
+          return;
+        }
+      }
       clear();
-      if (errorCode(cause) === "path_not_found") props.onRemoved(path, false);
+      if (code === "path_not_found") props.onRemoved(path, false);
       else if (!background) props.onError((cause as Error).message);
     }
   };
@@ -291,7 +356,7 @@ export default function WorkspaceFileSlot(props: {
 
   // Reload only when this slot's own file actually changes: the parent hands
   // down a fresh object whenever *either* slot moves, and a re-read of an
-  // unchanged path must never discard this slot's draft.
+  // unchanged path must never discard this slot's local document.
   let loadedKey: string | null = null;
   createEffect(on(() => [props.projectId, props.path] as const, ([projectId, path]) => {
     const key = `${projectId}\u0000${path ?? ""}`;
@@ -300,19 +365,23 @@ export default function WorkspaceFileSlot(props: {
     void load();
   }));
 
-  const save = async () => {
+  const save = async (content?: string) => {
     const file = preview();
     if (!file || !hasUnsavedChanges() || saving()) return;
-    const submittedContent = draft();
+    const submittedEditor = editor;
+    const submittedContent = content ?? submittedEditor?.getValue() ?? file.content;
     setSaving(true);
     try {
       const written = await api<FileWriteResult>(
         `/v0/projects/${encodeURIComponent(props.projectId)}/file?path=${encodeURIComponent(file.path)}`,
         { method: "PUT", headers: { "content-type": "application/octet-stream", "if-match": file.revision }, body: submittedContent },
       );
-      const next = { ...file, ...written, content: submittedContent };
-      setPreview(next);
-      props.onLoaded?.(next);
+      if (preview()?.path === file.path) {
+        const next = { ...file, ...written, content: submittedContent };
+        setPreview(next);
+        if (editor === submittedEditor) submittedEditor?.acknowledgeSaved(submittedContent);
+        props.onLoaded?.(next);
+      }
     } catch (cause) {
       props.onError((cause as Error).message);
     } finally {
@@ -352,6 +421,12 @@ export default function WorkspaceFileSlot(props: {
     reload: async () => { if (!hasUnsavedChanges()) await load(true); },
     edit: () => { if (preview() && !preview()!.readOnly && !preview()!.truncated) setEditing(true); },
     save,
+    discardChanges: () => {
+      const file = preview();
+      if (!file) return;
+      editor?.replaceDocument(file.content);
+      setEditorDirty(false);
+    },
   });
 
   onCleanup(() => {
@@ -360,6 +435,7 @@ export default function WorkspaceFileSlot(props: {
     props.onDispose?.();
   });
 
+  const currentText = () => editor?.getValue() ?? preview()?.content ?? "";
   const copy = (value?: string) => { if (value) void navigator.clipboard.writeText(value); };
 
   const editable = () => Boolean(preview() && !preview()!.readOnly && !preview()!.truncated);
@@ -379,7 +455,7 @@ export default function WorkspaceFileSlot(props: {
         <header class="workspace-preview-header">
           <Show when={props.headerPrefix}>{props.headerPrefix}</Show>
           <div class="workspace-preview-file" title={file().path}><FileTypeIcon name={file().path} /><span>{file().path}</span></div>
-          <small>{[file().kind === "image" && imageDimensions() && `${imageDimensions()!.width} × ${imageDimensions()!.height}`, formatFileSize(file().size), file().mime].filter(Boolean).join(" · ")}</small>
+          <small>{[file().kind === "image" && imageDimensions() && `${imageDimensions()!.width} × ${imageDimensions()!.height}`, formatFileSize(file().size), file().mime, fileTimeMetadata(file())].filter(Boolean).join(" · ")}</small>
           <button type="button" class="workspace-preview-action" aria-label="Download file" title="Download file" onClick={() => void download()}><DownloadIcon /></button>
           <button type="button" class="workspace-preview-copy" aria-label="Copy file path" title="Copy file path" onClick={() => copy(file().path)}><CopyIcon /></button>
           <Show when={props.closable}>
@@ -424,7 +500,7 @@ export default function WorkspaceFileSlot(props: {
         <Show when={file().kind === "binary"}>
           <div class="workspace-file-kind-card">
             <strong>{formatKind(file().kind)}</strong>
-            <span>{file().mime} · {formatFileSize(file().size)}</span>
+            <span>{file().mime} · {formatFileSize(file().size)} · {fileTimeMetadata(file())}</span>
             <Show when={file().kind === "binary"}>
               <code>{formatHexHead(file().head)}</code>
               <button type="button" class="workspace-file-kind-action" onClick={openAsText}>Open as text anyway</button>
@@ -441,16 +517,12 @@ export default function WorkspaceFileSlot(props: {
           <header class="workspace-preview-header">
             <Show when={props.headerPrefix}>{props.headerPrefix}</Show>
             <div class="workspace-preview-file" title={file().path}><FileTypeIcon name={file().path} /><span>{file().path}</span></div>
-            <small>{hasUnsavedChanges() ? "Unsaved" : file().truncated ? "Truncated" : formatFileSize(file().size)}</small>
-            <Show when={!file().truncated}>
-              <button type="button" class="workspace-preview-action" aria-label={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} title={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={props.wrap} onClick={props.onToggleWrap}><WrapTextIcon /></button>
-            </Show>
             <Show when={editable()}>
-              <button type="button" class="workspace-preview-action" aria-label={editing() ? "Close editor" : "Edit file"} title={editing() ? "Close editor" : "Edit file"} aria-pressed={editing()} onClick={() => editing() ? setEditing(false) : void edit()}><Show when={editing()} fallback={<PencilIcon />}><XIcon /></Show></button>
-              <button type="button" class="workspace-preview-action" aria-label="Save file" title="Save file (Ctrl+S)" disabled={!hasUnsavedChanges() || saving()} onClick={() => void save()}><Show when={saving()} fallback={<SaveIcon />}><Spinner /></Show></button>
+              <span class="workspace-preview-dirty" data-dirty={hasUnsavedChanges()} aria-hidden="true" />
+              <button type="button" class="workspace-preview-action" aria-label={hasUnsavedChanges() ? "Save file with unsaved changes" : "Save file"} title={hasUnsavedChanges() ? "Save file — unsaved changes (Ctrl+S)" : "Save file (Ctrl+S)"} disabled={!hasUnsavedChanges() || saving()} onClick={() => void save()}><Show when={saving()} fallback={<SaveIcon />}><Spinner /></Show></button>
             </Show>
+            <button type="button" class="workspace-preview-copy" aria-label="Copy file contents" title="Copy file contents" onClick={() => copy(currentText())}><CopyIcon /></button>
             <button type="button" class="workspace-preview-action" aria-label="Download file" title="Download file" onClick={() => void download()}><DownloadIcon /></button>
-            <button type="button" class="workspace-preview-copy" aria-label="Copy file contents" title="Copy file contents" onClick={() => copy(draft())}><CopyIcon /></button>
             <Show when={props.closable}>
               <button type="button" class="workspace-preview-action workspace-preview-close" aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><XIcon /></button>
             </Show>
@@ -459,9 +531,22 @@ export default function WorkspaceFileSlot(props: {
             <div class="workspace-file-readonly-notice">Opened as text. Editing is disabled.</div>
           </Show>
           <Show when={file().truncated} fallback={<div class="workspace-preview-editor" data-editing={editing()} data-wrap={props.wrap}>
-            <Show when={file().path} keyed>{(path) =>
+            <Show when={file().path}>{(path) =>
               <Suspense fallback={<div class="workspace-panel-empty">Loading preview…</div>}>
-                <WorkspaceEditor path={path} value={draft()} wrap={props.wrap} editable={editing()} onInput={setDraft} onSave={() => void save()} />
+                <WorkspaceEditor
+                  ref={(handle) => { editor = handle; }}
+                  path={path()}
+                  value={file().content}
+                  wrap={props.wrap}
+                  editable={editing()}
+                  canEdit={editable()}
+                  statusText={[hasUnsavedChanges() ? "Unsaved" : formatFileSize(file().size), formatFileTime(file().modifiedAt)].filter(Boolean).join(" · ")}
+                  statusTitle={[hasUnsavedChanges() ? "Unsaved" : formatFileSize(file().size), fileTimeMetadata(file())].filter(Boolean).join(" · ")}
+                  onDirtyChange={setEditorDirty}
+                  onSave={(value) => void save(value)}
+                  onToggleEditing={() => editing() ? setEditing(false) : void edit()}
+                  onToggleWrap={props.onToggleWrap}
+                />
               </Suspense>
             }</Show>
           </div>}>
@@ -480,7 +565,7 @@ export default function WorkspaceFileSlot(props: {
           <Show when={preview()}>
             <ContextMenuItem disabled={!editable()} onSelect={() => void edit()}><PencilIcon />Edit</ContextMenuItem>
             <ContextMenuItem disabled={!hasUnsavedChanges() || saving()} onSelect={() => void save()}><SaveIcon />Save</ContextMenuItem>
-            <ContextMenuItem onSelect={() => copy(draft())}><CopyIcon />Copy contents</ContextMenuItem>
+            <ContextMenuItem onSelect={() => copy(currentText())}><CopyIcon />Copy contents</ContextMenuItem>
           </Show>
           <ContextMenuItem onSelect={() => void download()}><DownloadIcon />Download</ContextMenuItem>
           <ContextMenuItem disabled={props.busy || saving()} onSelect={() => props.onReplace(file().path)}><UploadIcon />Replace with upload…</ContextMenuItem>

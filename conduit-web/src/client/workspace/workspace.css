@@ -99,6 +99,8 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-preview-copy:focus-visible, .workspace-preview-action:focus-visible { outline: 1px solid var(--ring); outline-offset: -1px; }
 .workspace-preview-copy:disabled, .workspace-preview-action:disabled { opacity: 0.4; }
 .workspace-preview-copy svg, .workspace-preview-action svg { width: 11.2px; height: 11.2px; }
+.workspace-preview-dirty { width: 5px; height: 5px; flex: none; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 2px color-mix(in oklch, var(--warn), transparent 84%); opacity: 0; transform: scale(.7); transition: opacity 120ms ease, transform 160ms ease; }
+.workspace-preview-dirty[data-dirty="true"] { opacity: .9; transform: scale(1); }
 /* Fits either slot at any split ratio; the checker ground shows transparency. */
 .workspace-preview-image { display: grid; min-width: 0; min-height: 0; flex: 1; place-items: center; overflow: auto; padding: 9.6px;
   background-color: color-mix(in oklch, var(--background), black 3%);
@@ -132,12 +134,45 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-preview-code-row { display: grid; grid-template-columns: 32px minmax(0, 1fr); min-height: 1.55em; }
 .workspace-preview-code-row > span { padding-inline: 6.4px; border-right: 1px solid color-mix(in oklch, var(--border), transparent 35%); background: color-mix(in oklch, var(--background), var(--accent) 14%); color: var(--muted-foreground); text-align: right; user-select: none; }
 .workspace-preview-code-row > code { min-width: 0; padding-inline: 8px; overflow-wrap: anywhere; white-space: pre-wrap; }
-.workspace-code-editor { min-width: 0; min-height: 0; flex: 1; overflow: hidden; font-size: 9.2px; }
+.workspace-code-surface { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; background: color-mix(in oklch, var(--background), black 3%); }
+.workspace-code-editor { min-width: 0; min-height: 0; flex: 1; overflow: hidden; font-size: 10px; }
+.workspace-code-surface[data-editable="true"] .workspace-code-editor { box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--ring), transparent 76%); }
 .workspace-code-editor .cm-editor { height: 100%; }
 .workspace-code-editor .cm-scroller { color-scheme: dark; scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
 .workspace-code-editor[data-wrap="false"] .cm-content { white-space: pre !important; }
 .workspace-code-editor[data-markdown="true"] .cm-content { font-family: var(--font-sans); }
 .workspace-code-editor[data-markdown="true"] .cm-line { padding-inline: 12px; }
+.workspace-code-editor .workspace-search-panel { padding: 0; }
+.workspace-search-controls { display: flex; min-width: 0; min-height: 28px; align-items: center; gap: 3px; overflow-x: auto; padding: 3.2px 4.8px; background: color-mix(in oklch, var(--background), var(--accent) 20%); color-scheme: dark; scrollbar-width: none; }
+.workspace-search-controls::-webkit-scrollbar { display: none; }
+.workspace-search-controls .workspace-search-field { width: clamp(104px, 24%, 220px); height: 22.4px; flex: 1 0 104px; border: 1px solid var(--input); border-radius: 4.8px; background: color-mix(in oklch, var(--background), black 2%); padding: 2px 6px; color: var(--foreground); font: 8.8px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.workspace-search-controls .workspace-search-field:focus { border-color: var(--ring); box-shadow: none; }
+.workspace-search-controls .workspace-search-field::placeholder { color: var(--muted-foreground); }
+.workspace-search-actions { display: flex; height: 22.4px; flex: none; align-items: center; gap: 2.4px; }
+.workspace-search-actions [data-slot="button"] { width: 22.4px; height: 22.4px; min-width: 22.4px; border-radius: 4.8px; padding: 0; color: var(--muted-foreground); }
+.workspace-search-actions [data-slot="button"]:hover, .workspace-search-actions [data-slot="button"]:focus-visible, .workspace-search-actions [data-slot="button"][aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
+.workspace-search-actions [data-slot="button"]:focus-visible { outline: 1px solid var(--ring); outline-offset: -1px; box-shadow: none; }
+.workspace-search-actions svg { width: 11.2px; height: 11.2px; }
+.workspace-editor-status { display: flex; min-height: 28px; flex: none; align-items: center; gap: 2.4px; overflow: hidden; border-top: 1px solid var(--border); background: color-mix(in oklch, var(--background), black 3%); padding: 3.2px 4.8px; color: var(--muted-foreground); font: 8px/1 ui-monospace, SFMono-Regular, Consolas, monospace; user-select: none; }
+.workspace-editor-command-group, .workspace-editor-detail-group { display: flex; min-width: 0; height: 22.4px; flex: none; align-items: center; gap: 2.4px; overflow-x: auto; scrollbar-width: none; }
+.workspace-editor-command-group::-webkit-scrollbar, .workspace-editor-detail-group::-webkit-scrollbar { display: none; }
+.workspace-editor-detail-group { flex: 1; justify-content: flex-end; }
+.workspace-editor-metadata { flex: none; padding-inline: 5px; white-space: nowrap; }
+.workspace-editor-status button { display: grid; min-width: 22.4px; height: 22.4px; flex: none; place-items: center; border: 0; border-radius: 4.8px; outline: 0; background: transparent; padding: 0 6px; color: var(--muted-foreground); font: inherit; }
+.workspace-editor-status button:hover:not(:disabled), .workspace-editor-status button:focus-visible, .workspace-editor-status button[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
+.workspace-editor-status button:focus-visible { outline: 1px solid var(--ring); outline-offset: -1px; }
+.workspace-editor-status button:disabled { opacity: 0.28; }
+.workspace-editor-status button svg { width: 11px; height: 11px; }
+.workspace-editor-status .workspace-editor-picker { display: flex; max-width: 96px; gap: 5px; }
+.workspace-editor-picker span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-editor-picker svg { flex: none; }
+.workspace-editor-picker-menu { min-width: 144px; font-family: var(--font-sans); }
+.workspace-editor-language-menu { max-height: min(420px, calc(100dvh - 24px)); overflow-y: auto; }
+.workspace-editor-status .workspace-editor-mode { display: flex; align-items: center; gap: 5px; color: var(--foreground); font-weight: 600; }
+.workspace-editor-command-group .workspace-editor-mode { min-width: 66px; height: 22.4px; padding-inline: 5px; }
+.workspace-editor-mode svg { width: 10px; height: 10px; }
+.workspace-editor-status .workspace-editor-mode:disabled { color: var(--muted-foreground); opacity: 1; }
+.workspace-code-surface[data-editable="false"] .workspace-edit-command { display: none; }
 .workspace-preview-code .hljs-comment, .workspace-preview-code .hljs-quote { color: var(--muted-foreground); font-style: italic; }
 .workspace-preview-code .hljs-keyword, .workspace-preview-code .hljs-selector-tag, .workspace-preview-code .hljs-literal, .workspace-preview-code .hljs-doctag { color: oklch(0.72 0.15 305); }
 .workspace-preview-code .hljs-string, .workspace-preview-code .hljs-regexp, .workspace-preview-code .hljs-addition { color: oklch(0.75 0.14 145); }
@@ -444,6 +479,17 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
   .workspace-tree, .workspace-preview, .workspace-diff, .workspace-changes, .workspace-git-graph, .workspace-diff-content { overscroll-behavior: contain; }
   .workspace-resize-handle { display: none; }
   .workspace-files { grid-template-rows: minmax(160px, 42%) 1fr; }
+  .workspace-editor-status { min-height: 35px; gap: 3px; padding: 4px 6px; font-size: 10px; }
+  .workspace-editor-command-group, .workspace-editor-detail-group { height: 28px; gap: 3px; }
+  .workspace-editor-status button { min-width: 28px; height: 28px; padding-inline: 8px; border-radius: 6px; }
+  .workspace-editor-status button svg { width: 14px; height: 14px; }
+  .workspace-editor-command-group .workspace-editor-mode { min-width: 68px; height: 28px; padding-inline: 7px; }
+  .workspace-editor-status .workspace-editor-picker { max-width: 112px; }
+  .workspace-search-controls { min-height: 35px; gap: 4px; padding: 4px 6px; }
+  .workspace-search-controls .workspace-search-field { height: 28px; flex-basis: 120px; border-radius: 6px; padding-inline: 8px; font-size: 10px; }
+  .workspace-search-actions { height: 28px; gap: 3px; }
+  .workspace-search-actions [data-slot="button"] { width: 28px; height: 28px; min-width: 28px; border-radius: 6px; }
+  .workspace-search-actions svg { width: 14px; height: 14px; }
   html[data-vv-shell] .workspace-panel { height: var(--app-height, 100dvh); }
 }
 
