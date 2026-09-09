@@ -2,10 +2,15 @@
 .workspace-comparison-header { display: flex; flex: none; align-items: center; gap: 7px; height: 32px; padding: 0 10px; border-bottom: 1px solid var(--border); font-size: 10px; }
 .workspace-comparison-header > svg { width: 13px; height: 13px; flex: none; }
 .workspace-comparison-path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-comparison-open { display: flex; align-items: center; gap: 5px; flex: none; border: 0; border-radius: 4px; background: transparent; color: var(--muted-foreground); padding: 4px 6px; font: inherit; cursor: pointer; }
+.workspace-comparison-open:hover, .workspace-comparison-open:focus-visible { background: var(--accent); color: var(--foreground); }
+.workspace-comparison-open:focus-visible { outline: 1px solid var(--ring); }
+.workspace-comparison-open svg { width: 12px; height: 12px; }
 .workspace-comparison-counts { display: flex; gap: 8px; flex: none; font: 10px ui-monospace, monospace; }
 .workspace-comparison-counts > :first-child { color: var(--destructive); }
 .workspace-comparison-counts > :last-child { color: var(--workspace-git-added); }
-.workspace-comparison-content { flex: 1; min-height: 0; overflow: hidden; font-size: 11px; }
+.workspace-comparison-content { flex: 1; min-height: 0; overflow: hidden; }
+.workspace-comparison[data-in-files="true"] { background: color-mix(in oklch, var(--background), black 3%); }
 .workspace-comparison-content .cm-mergeView { height: 100%; overflow: auto; }
 .workspace-comparison-content .cm-mergeViewEditor { min-width: 0; }
 .workspace-comparison-content .cm-mergeViewEditor + .cm-mergeViewEditor { border-left: 1px solid var(--border); }
