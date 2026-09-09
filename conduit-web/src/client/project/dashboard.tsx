@@ -419,7 +419,7 @@ export function ProjectDashboard(props: {
               <div class="project-chat-list">
                 <For each={visibleChats()}>{(item) =>
                   <ContextMenu><ContextMenuTrigger as="button" class="project-chat-row" onPointerEnter={() => props.onPrefetchChat(item)} onFocus={() => props.onPrefetchChat(item)} onClick={() => void props.onOpenChat(item, props.project)}>
-                    <span class="project-chat-runtime"><RuntimeIndicator process={props.runtime.getProcess(item.id)} stale={props.runtime.stale()} /></span>
+                    <span class="project-chat-runtime"><RuntimeIndicator process={props.runtime.getProcess(item.id)} stale={props.runtime.stale()} unread={item.unread} /></span>
                     <span class="project-chat-copy">
                       <strong>{item.title || "Untitled chat"}</strong>
                       <small>{props.project.name}{compactDate(item.createdAt) ? ` · ${compactDate(item.createdAt)}` : ""}</small>
