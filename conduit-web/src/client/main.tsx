@@ -1430,7 +1430,14 @@ function App() {
     window.addEventListener(UI_PREFERENCE_CHANGE_EVENT, persistUiPreference);
     const applyChangedChat = (event: Event) => {
       const changed = (event as CustomEvent<ChatSummary>).detail;
-      if (changed?.id) catalogue.patchChat(changed.id, changed);
+      if (!changed?.id) return;
+      catalogue.patchChat(changed.id, changed);
+      if (changed.unread && changed.id === catalogue.selectedId() && routeKind() === "chat" && document.visibilityState === "visible") {
+        catalogue.patchChat(changed.id, { unread: false });
+        void api<ChatSummary>(`/v0/sessions/${encodeURIComponent(changed.id)}/read`, { method: "POST" })
+          .then((read) => catalogue.patchChat(read.id, read))
+          .catch(showError);
+      }
     };
     window.addEventListener("conduit:chat-changed", applyChangedChat);
     onCleanup(() => {
