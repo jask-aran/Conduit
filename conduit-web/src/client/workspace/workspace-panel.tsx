@@ -12,10 +12,10 @@ import { TerminalPane } from "../remotes/terminal-pane";
 import { dispatchPanelGeometryMotion } from "../panel-motion";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import { FileTypeIcon, FolderTypeIcon } from "./file-type-icon";
-import WorkspaceFileSlot, { preloadWorkspaceEditor, type FileSlotHandle, type FileSummary } from "./workspace-file-slot";
+import WorkspaceFileSlot, { preloadWorkspaceEditor, type FileSlotHandle, type FileSummary, type TemporaryComparison } from "./workspace-file-slot";
 import { readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace-panel-storage";
 import "./workspace.css";
-import type { ComparisonPayload } from "./workspace-comparison";
+import type { ComparisonPayload, ComparisonViewState } from "./workspace-comparison";
 
 const WorkspaceComparison = lazy(() => import("./workspace-comparison"));
 
@@ -250,6 +250,21 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const [diffDetailOpen, setDiffDetailOpen] = createSignal(detailOpenFor("diff") === "true");
   const [fileDiffMode, setFileDiffMode] = createSignal(false);
   const [selectedDiff, setSelectedDiff] = createSignal<{ path: string; staged: boolean } | null>(null);
+  const comparisonViewState = createMemo<ComparisonViewState>(() => {
+    props.projectId();
+    selectedDiff();
+    return { layout: "unified", file: false, wrap: false, top: 0, left: 0, position: 0 };
+  });
+  const [fileNavigation, setFileNavigation] = createSignal<{ projectId: string; slot: FileSlotId; path: string; source: string; position: number } | null>(null);
+  const [temporaryComparisons, setTemporaryComparisons] = createSignal<Partial<Record<FileSlotId, TemporaryComparison & { projectId: string }>>>({});
+  const comparisonFor = (slot: FileSlotId) => {
+    const entry = temporaryComparisons()[slot];
+    return entry?.projectId === props.projectId() && entry.comparison.path === openPaths()[slot] ? entry : undefined;
+  };
+  const navigationFor = (slot: FileSlotId) => {
+    const request = fileNavigation();
+    return request && request.projectId === props.projectId() && request.slot === slot && request.path === openPaths()[slot] ? request : undefined;
+  };
   const [fileComparison, setFileComparison] = createSignal<ComparisonPayload | null>(null);
   const [fileDiffError, setFileDiffError] = createSignal("");
   const [fileDiffBusy, setFileDiffBusy] = createSignal(false);
@@ -636,6 +651,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const slotForPath = (path: string): FileSlotId | null =>
     openPaths().primary === path ? "primary" : openPaths().secondary === path ? "secondary" : null;
   const setSlotPath = (slot: FileSlotId, path: string | null) => {
+    setTemporaryComparisons((current) => ({ ...current, [slot]: undefined }));
     setOpenPaths((current) => ({ ...current, [slot]: path }));
     writeSetting(fileScope(), slot === "primary" ? "file" : "file-secondary", path);
   };
@@ -644,15 +660,65 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const openInSlot = (slot: FileSlotId, path: string) => {
     const handle = slotHandles.get(slot);
     if (openPaths()[slot] === path) {
+      setTemporaryComparisons((current) => ({ ...current, [slot]: undefined }));
       setFocusedSlot(slot);
-      return;
+      return true;
     }
     if (handle?.hasUnsavedChanges()) {
-      if (!window.confirm("Discard unsaved changes and open another file?")) return;
+      if (!window.confirm("Discard unsaved changes and open another file?")) return false;
       handle.discardChanges();
     }
     setSlotPath(slot, path);
     setFocusedSlot(slot);
+    return true;
+  };
+  const openComparisonFile = (viewState: ComparisonViewState) => {
+    const comparison = fileComparison();
+    if (!comparison) return;
+    const slot = slotForPath(comparison.path) ?? focusedSlot();
+    const handle = slotHandles.get(slot);
+    if (handle?.hasUnsavedChanges()) {
+      if (!window.confirm("Discard unsaved changes and open this comparison?")) return;
+      handle.discardChanges();
+    }
+    if (!openInSlot(slot, comparison.path)) return;
+    setFileNavigation(null);
+    setTemporaryComparisons((current) => ({ ...current, [slot]: { projectId: props.projectId(), comparison, viewState: { ...viewState, file: false } } }));
+    selectTab("files");
+    setDetailOpen(true);
+  };
+  const editComparisonFile = async (slot: FileSlotId, source: string, position: number) => {
+    const temporary = comparisonFor(slot);
+    const projectId = props.projectId();
+    if (!temporary) return;
+    const path = temporary.comparison.path;
+    try {
+      // Validate existence before replacing an open file. Deleted files must
+      // not silently turn an existing editor slot into an empty preview.
+      await api(`/v0/projects/${encodeURIComponent(projectId)}/file?path=${encodeURIComponent(path)}&metadata=1`);
+      if (props.projectId() !== projectId || comparisonFor(slot) !== temporary) return;
+      setFileNavigation({ projectId, slot, path, source, position });
+      setTemporaryComparisons((current) => ({ ...current, [slot]: undefined }));
+      setFocusedSlot(slot);
+    } catch (cause) {
+      reportError(errorCode(cause) === "path_not_found" ? "This file no longer exists in the working copy." : (cause as Error).message);
+    }
+  };
+  const showFileDiff = async (slot: FileSlotId, staged: boolean) => {
+    const path = openPaths()[slot];
+    const projectId = props.projectId();
+    if (!path) return;
+    try {
+      const comparison = await api<ComparisonPayload>(`/v0/projects/${encodeURIComponent(projectId)}/diff?compare=1&path=${encodeURIComponent(path)}&staged=${staged ? "1" : "0"}`);
+      if (props.projectId() !== projectId || openPaths()[slot] !== path) return;
+      const handle = slotHandles.get(slot);
+      if (handle?.hasUnsavedChanges()) {
+        if (!window.confirm("Discard unsaved changes and show the saved file's diff?")) return;
+        handle.discardChanges();
+      }
+      setFileNavigation(null);
+      setTemporaryComparisons((current) => ({ ...current, [slot]: { projectId, comparison, viewState: { layout: "unified", file: false, wrap: wrapLines(), top: 0, left: 0, position: 0 } } }));
+    } catch (cause) { reportError((cause as Error).message); }
   };
   const openFile = (path: string) => openInSlot(focusedSlot(), path);
   const openFileToSide = (path: string) => openInSlot("secondary", path);
@@ -683,10 +749,12 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       return;
     }
     const promoted = openPaths().secondary;
+    const promotedComparison = comparisonFor("secondary");
     const losesDraft = slotHandles.get("primary")?.hasUnsavedChanges() || (promoted && slotHandles.get("secondary")?.hasUnsavedChanges());
     if (losesDraft && !window.confirm("Discard unsaved changes and close this file?")) return;
     setSlotPath("primary", promoted);
     setSlotPath("secondary", null);
+    if (promotedComparison) setTemporaryComparisons((current) => ({ ...current, primary: promotedComparison }));
     setFocusedSlot("primary");
   };
   const dropOpenPath = (path: string) => {
@@ -966,7 +1034,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     await Promise.all(slotsToRefresh.map((handle) => handle.reload()));
     if (props.projectId() !== projectId) return;
     if (treeChanged) toast.info("Workspace files updated");
-    if (tabVisible("diff")) await loadDiff(sourceDetailOpen() && diffDetailOpen(), sourceDetailOpen() && !diffDetailOpen(), false, true);
+    if (props.sourceControlEnabled() && (tabVisible("diff") || tabVisible("files"))) await loadDiff(tabVisible("diff") && sourceDetailOpen() && diffDetailOpen(), tabVisible("diff") && sourceDetailOpen() && !diffDetailOpen(), false, true);
     else {
       // Hidden Git data is stale; refresh it only when Source Control opens.
       setDiff(null);
@@ -1298,7 +1366,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       const filesVisible = activeTab === "files" || (panelExpanded && companionTab === "files");
       const diffVisible = activeTab === "diff" || (panelExpanded && companionTab === "diff");
       if (filesVisible && !directories()[""] && !filesLoading()) void loadDirectory("", false);
-      if (diffVisible) {
+      if (diffVisible || (filesVisible && props.sourceControlEnabled())) {
         const includePatch = sourceDetailOpen() && diffDetailOpen();
         const includeHistory = sourceDetailOpen() && !diffDetailOpen();
         const current = diff();
@@ -1760,6 +1828,14 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             onReplace={(path) => chooseUpload({ kind: "replacement", path })}
             onDelete={(path) => void deleteFile(path)}
             onLoaded={(file) => noteSlotLoaded("primary", file)}
+            navigation={navigationFor("primary")}
+            comparison={comparisonFor("primary")}
+            gitFile={props.sourceControlEnabled() ? diff()?.files.find((file) => file.path === openPaths().primary) : undefined}
+            onShowDiff={(staged) => void showFileDiff("primary", staged)}
+            onShowFile={() => { setFileNavigation(null); setTemporaryComparisons((current) => ({ ...current, primary: undefined })); }}
+            onEditComparison={(source, position) => void editComparisonFile("primary", source, position)}
+            onNavigated={() => setFileNavigation(null)}
+            onSaved={() => { if (props.sourceControlEnabled()) void loadDiff(false, false); }}
             ref={(handle) => slotHandles.set("primary", handle)}
             onDispose={() => slotHandles.delete("primary")}
           />
@@ -1789,6 +1865,14 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
               onReplace={(path) => chooseUpload({ kind: "replacement", path })}
               onDelete={(path) => void deleteFile(path)}
               onLoaded={(file) => noteSlotLoaded("secondary", file)}
+              navigation={navigationFor("secondary")}
+              comparison={comparisonFor("secondary")}
+              gitFile={props.sourceControlEnabled() ? diff()?.files.find((file) => file.path === openPaths().secondary) : undefined}
+              onShowDiff={(staged) => void showFileDiff("secondary", staged)}
+              onShowFile={() => { setFileNavigation(null); setTemporaryComparisons((current) => ({ ...current, secondary: undefined })); }}
+              onEditComparison={(source, position) => void editComparisonFile("secondary", source, position)}
+              onNavigated={() => setFileNavigation(null)}
+              onSaved={() => { if (props.sourceControlEnabled()) void loadDiff(false, false); }}
               ref={(handle) => slotHandles.set("secondary", handle)}
               onDispose={() => slotHandles.delete("secondary")}
             />
@@ -1849,7 +1933,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
           <Show when={selectedDiff()} fallback={<div class="workspace-panel-empty">Select a file in Changes or Staged changes.</div>}>
             <Show when={!fileDiffBusy()} fallback={<div class="workspace-panel-empty" role="status">Loading diff…</div>}>
               <Show when={fileComparison()} fallback={<div class="workspace-panel-empty" role="alert">{fileDiffError()}</div>}>{(comparison) =>
-                <Suspense fallback={<div class="workspace-panel-empty">Loading comparison…</div>}><WorkspaceComparison comparison={comparison()} /></Suspense>
+                <Suspense fallback={<div class="workspace-panel-empty">Loading comparison…</div>}><WorkspaceComparison comparison={comparison()} viewState={comparisonViewState()} onOpenFile={(_source, _position, state) => openComparisonFile(state)} /></Suspense>
               }</Show>
             </Show>
           </Show>

@@ -301,6 +301,9 @@ export default function WorkspaceEditor(props: {
   onSave: (value: string) => void;
   onToggleEditing?: () => void;
   onToggleWrap: () => void;
+  reveal?: { source: string; position: number };
+  onRevealed?: () => void;
+  onShowDiff?: () => void;
   ref?: (handle: WorkspaceEditorHandle) => void;
 }) {
   let host: HTMLDivElement | undefined;
@@ -545,6 +548,35 @@ export default function WorkspaceEditor(props: {
     });
   });
 
+  createEffect(() => {
+    const request = props.reveal;
+    const path = props.path;
+    if (!request) return;
+    let cancelled = false;
+    onCleanup(() => { cancelled = true; });
+    // A staged or original-side location must be mapped into the live buffer,
+    // which may also contain unsaved edits. Load diffing only for this action.
+    void import("@codemirror/merge").then(({ diff }) => {
+      if (cancelled || !view || activePath !== path) return;
+      const source = request.source.replace(/\r\n?/g, "\n");
+      const target = view.state.doc.toString();
+      const position = Math.max(0, Math.min(request.position, source.length));
+      let mapped = position;
+      for (const change of diff(source, target, { scanLimit: 500, timeout: 40 })) {
+        if (position < change.fromA) break;
+        if (position <= change.toA) {
+          mapped = change.fromB + Math.min(position - change.fromA, change.toB - change.fromB);
+          break;
+        }
+        mapped = position + change.toB - change.toA;
+      }
+      const anchor = Math.max(0, Math.min(mapped, view.state.doc.length));
+      view.dispatch({ selection: { anchor }, effects: EditorView.scrollIntoView(anchor, { y: "center" }) });
+      view.focus();
+      props.onRevealed?.();
+    });
+  });
+
   return <div class="workspace-code-surface" data-editable={editable()}>
     <div ref={host} class="workspace-code-editor" data-markdown={isVisualMarkdownFile(props.path)} data-wrap={props.wrap} />
     <footer class="workspace-editor-status" aria-label="Editor status">
@@ -553,6 +585,7 @@ export default function WorkspaceEditor(props: {
           <Show when={editable()} fallback={<PencilOffIcon />}><PencilIcon /></Show>
           <span>{editable() ? "Editing" : "Preview"}</span>
         </button>
+        <Show when={props.onShowDiff}><button type="button" aria-pressed="true">File</button><button type="button" aria-pressed="false" onClick={() => props.onShowDiff?.()}>Diff</button></Show>
         <button type="button" aria-label="Find or replace" title="Find or replace (Ctrl+F)" onClick={() => runCommand(openSearchPanel)}><SearchIcon /></button>
         <button ref={undoButton} type="button" class="workspace-edit-command" aria-label="Undo" title="Undo (Ctrl+Z)" disabled onClick={() => runEditCommand(undo)}><Undo2Icon /></button>
         <button ref={redoButton} type="button" class="workspace-edit-command" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled onClick={() => runEditCommand(redo)}><Redo2Icon /></button>

@@ -254,6 +254,12 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-change-counts { display: flex; flex: none; gap: 5px; margin-left: auto; font: 8px ui-monospace, monospace; white-space: nowrap; }
 .workspace-git-added { color: var(--workspace-git-added); }
 .workspace-git-removed { color: var(--destructive); }
+.workspace-file-git-status { flex: none; color: var(--workspace-git-modified); font: 9px ui-monospace, monospace; }
+.workspace-file-git-status[data-status="U"], .workspace-file-git-status[data-status="A"] { color: var(--workspace-git-added); }
+.workspace-file-git-status[data-status="D"] { color: var(--destructive); }
+.workspace-file-diff-button { display: flex; align-items: center; gap: 4px; flex: none; border: 0; border-radius: 4px; background: transparent; color: var(--muted-foreground); padding: 4px; font: 9px ui-monospace, monospace; }
+.workspace-file-diff-button:hover, .workspace-file-diff-button:focus-visible { background: var(--accent); color: var(--foreground); }
+.workspace-file-diff-button svg { width: 12px; height: 12px; }
 .workspace-change-row .workspace-file-icon, .workspace-change-row .workspace-file-icon-generic { width: 12px; height: 12px; flex: none; }
 .workspace-changes svg { width: 10.4px; height: 10.4px; }
 .workspace-clean-state { display: grid; min-height: 64px; flex: 1; place-items: center; color: var(--muted-foreground); font-size: 8.8px; }
