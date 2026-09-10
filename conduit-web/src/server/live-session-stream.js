@@ -10,6 +10,7 @@ export function createLiveSessionStream({
   attachments,
   registry,
   config,
+  turnCheckpoints,
   findChatContext,
   findRegisteredSession,
   chatModelView,
@@ -34,7 +35,21 @@ export function createLiveSessionStream({
   async function sendPrompt(record, prepared, options) {
     const needsName = !prepared.context.chat.title && !namingChats.has(prepared.context.chat.id);
     const adapter = adapterFor(record);
+    let checkpoint = null;
+    try {
+      checkpoint = await turnCheckpoints?.capture({
+        chatId: prepared.context.chat.id,
+        projectId: prepared.context.project.id,
+        workingRoot: prepared.context.project.workingRoot,
+      });
+    } catch (error) {
+      console.warn("Could not capture turn checkpoint", error.message);
+    }
     const generationId = await adapter.prompt(record.id, prepared.prompt, options);
+    if (checkpoint && generationId) {
+      try { await turnCheckpoints.assignTurn(checkpoint, generationId); }
+      catch (error) { console.warn("Could not assign turn checkpoint", error.message); }
+    }
     await registry.markUserMessage(prepared.context.chat.id);
     if (prepared.context.chat.status === "draft") {
       await registry.update(prepared.context.chat.id, record.adapterImplementation && record.adapterImplementation !== "conduit_pi" && record.adapterImplementation !== "native_pi"
