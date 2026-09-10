@@ -15,10 +15,10 @@ export class TurnCheckpointStore {
     this.queues = new Map();
   }
 
-  async capture({ chatId, projectId, workingRoot }) {
+  async capture({ chatId, projectId, projectKind, workingRoot }) {
     const chatKey = keyFor(chatId);
     const previous = this.queues.get(chatKey) || Promise.resolve();
-    const task = previous.then(() => this.#capture({ chatId, projectId, workingRoot, chatKey }));
+    const task = previous.then(() => this.#capture({ chatId, projectId, projectKind, workingRoot, chatKey }));
     const queued = task.catch(() => {});
     this.queues.set(chatKey, queued);
     try { return await task; }
@@ -44,9 +44,11 @@ export class TurnCheckpointStore {
     const checkpoint = await this.latest(chatId);
     if (!checkpoint || path.resolve(workingRoot) !== checkpoint.workingRoot) return null;
     const git = (args, maxBuffer = 2 * 1024 * 1024) => runBoundedGit(checkpoint.workingRoot, args, { maxBuffer });
-    const current = await git(["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"]);
-    const paths = new Set([...Object.keys(checkpoint.entries), ...current.stdout.split("\0").filter(Boolean).map((record) => record.slice(3))]);
-    if (checkpoint.head) {
+    const currentPaths = checkpoint.repository
+      ? (await git(["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"])).stdout.split("\0").filter(Boolean).map((record) => record.slice(3))
+      : await this.#workspacePaths(checkpoint.workingRoot);
+    const paths = new Set([...Object.keys(checkpoint.entries), ...currentPaths]);
+    if (checkpoint.repository && checkpoint.head) {
       const changed = await git(["diff", checkpoint.head, "--name-only", "-z", "--no-renames", "--no-ext-diff"]);
       for (const relativePath of changed.stdout.split("\0").filter(Boolean)) paths.add(relativePath);
     }
@@ -68,14 +70,24 @@ export class TurnCheckpointStore {
     return this.#compare(checkpoint, relativePath, git);
   }
 
-  async #capture({ chatId, projectId, workingRoot, chatKey }) {
+  async #capture({ chatId, projectId, projectKind, workingRoot, chatKey }) {
     const root = path.resolve(workingRoot);
     const git = (args, maxBuffer = 2 * 1024 * 1024) => runBoundedGit(root, args, { maxBuffer });
-    const [{ stdout: status }, head] = await Promise.all([
-      git(["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"]),
-      git(["rev-parse", "--verify", "HEAD"]).then(({ stdout }) => stdout.trim(), () => null),
-    ]);
-    const paths = status.split("\0").filter(Boolean).map((record) => record.slice(3));
+    const repository = projectKind === "workspace";
+    let head = null;
+    let paths;
+    if (repository) {
+      const [{ stdout: topLevel }, { stdout: status }, revision] = await Promise.all([
+        git(["rev-parse", "--show-toplevel"]),
+        git(["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"]),
+        git(["rev-parse", "--verify", "HEAD"]).then(({ stdout }) => stdout.trim(), () => null),
+      ]);
+      if (path.resolve(topLevel.trim()) !== root) throw new Error("Workspace root is not the Git repository root");
+      head = revision;
+      paths = status.split("\0").filter(Boolean).map((record) => record.slice(3));
+    } else {
+      paths = await this.#workspacePaths(root);
+    }
     const entries = {};
     let byteLength = 0;
     for (const relativePath of paths) {
@@ -89,7 +101,7 @@ export class TurnCheckpointStore {
       }
       if (!stat.isFile()) { entries[relativePath] = { kind: "unsupported" }; continue; }
       if (stat.size > MAX_FILE_BYTES || byteLength + stat.size > MAX_CHECKPOINT_BYTES) {
-        entries[relativePath] = { kind: "unavailable", size: stat.size };
+        entries[relativePath] = { kind: "unavailable", size: stat.size, modifiedAt: stat.mtimeMs };
         continue;
       }
       const content = await fs.readFile(target);
@@ -101,7 +113,7 @@ export class TurnCheckpointStore {
     const directory = path.join(this.root, chatKey);
     const file = path.join(directory, `${createdAt.replaceAll(":", "-")}-${id}.json`);
     await fs.mkdir(directory, { recursive: true });
-    await this.#write(file, { version: 1, id, chatId, projectId, workingRoot: root, turnId: null, createdAt, head, entries });
+    await this.#write(file, { version: 1, id, chatId, projectId, workingRoot: root, repository, turnId: null, createdAt, head, entries });
     const names = (await fs.readdir(directory)).filter((name) => name.endsWith(".json")).sort();
     await Promise.all(names.slice(0, -MAX_CHECKPOINTS_PER_CHAT).map((name) => fs.unlink(path.join(directory, name))));
     return { id, file, turnId: null };
@@ -109,7 +121,12 @@ export class TurnCheckpointStore {
 
   async #compare(checkpoint, relativePath, git) {
     const stored = checkpoint.entries[relativePath];
-    if (stored?.kind === "unavailable" || stored?.kind === "unsupported") return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "turn", status: "M", reason: stored.kind, message: "The turn baseline is unavailable for this file." };
+    if (stored?.kind === "unavailable") {
+      const stat = await fs.stat(path.join(checkpoint.workingRoot, relativePath)).catch(() => null);
+      if (stat?.isFile() && stat.size === stored.size && stat.mtimeMs === stored.modifiedAt) return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "turn", status: "M", reason: "unchanged", message: "This file did not change during the turn." };
+      return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "turn", status: "M", reason: "unavailable", message: "The turn baseline is unavailable for this file." };
+    }
+    if (stored?.kind === "unsupported") return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "turn", status: "M", reason: "unsupported", message: "The turn baseline is unavailable for this file." };
     let original = Buffer.alloc(0);
     if (stored?.kind === "file") original = Buffer.from(stored.content, "base64");
     else if (!stored && checkpoint.head) {
@@ -138,6 +155,24 @@ export class TurnCheckpointStore {
     try { originalText = decode(original); modifiedText = decode(modified); }
     catch { return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "turn", status: "M", reason: "binary", message: "Binary or non-UTF-8 files cannot be shown as a text comparison." }; }
     return { kind: "text", path: relativePath, oldPath: relativePath, scope: "turn", status: original.length === 0 ? "A" : modified.length === 0 ? "D" : "M", original: originalText, modified: modifiedText };
+  }
+
+  async #workspacePaths(root) {
+    const files = [];
+    const pending = [""];
+    while (pending.length && files.length < 10_000) {
+      const relativeDirectory = pending.pop();
+      const directory = path.join(root, relativeDirectory);
+      const entries = await fs.readdir(directory, { withFileTypes: true }).catch((error) => error.code === "ENOENT" ? [] : Promise.reject(error));
+      for (const entry of entries) {
+        if (!relativeDirectory && (entry.name === ".conduit" || entry.name === ".git")) continue;
+        const relativePath = relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name;
+        if (entry.isDirectory()) pending.push(relativePath);
+        else if (entry.isFile()) files.push(relativePath);
+        if (files.length >= 10_000) break;
+      }
+    }
+    return files;
   }
 
   async #write(file, value) {

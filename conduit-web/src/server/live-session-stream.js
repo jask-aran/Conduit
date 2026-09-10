@@ -40,6 +40,7 @@ export function createLiveSessionStream({
       checkpoint = await turnCheckpoints?.capture({
         chatId: prepared.context.chat.id,
         projectId: prepared.context.project.id,
+        projectKind: prepared.context.project.kind,
         workingRoot: prepared.context.project.workingRoot,
       });
     } catch (error) {
