@@ -91,6 +91,7 @@ export function registerProjectRoutes(app, {
   registry,
   terminals,
   lifecycle,
+  turnCheckpoints,
 }) {
   const workspaceVersionPaths = (value) => {
     if (value == null) return [];
@@ -417,6 +418,20 @@ export function registerProjectRoutes(app, {
       request.removeListener("aborted", abort);
       response.removeListener("close", close);
     }
+  });
+
+  app.get("/v0/projects/:id/turn-artifact", async (request, response, next) => {
+    try {
+      const project = await inspectionContext(request.params.id);
+      if (!project) return response.status(404).json({ error: "project_not_found" });
+      const chatId = typeof request.query.chatId === "string" ? request.query.chatId : "";
+      const chat = registry.metadata(chatId);
+      if (!chat || chat.projectId !== project.id) return response.status(404).json({ error: "chat_not_found" });
+      const artifact = request.query.path
+        ? await turnCheckpoints.compare(chatId, project.workingRoot, request.query.path)
+        : await turnCheckpoints.review(chatId, project.workingRoot);
+      response.json(artifact);
+    } catch (error) { next(error); }
   });
 
   app.get("/v0/projects/:id/commits/:hash", async (request, response, next) => {

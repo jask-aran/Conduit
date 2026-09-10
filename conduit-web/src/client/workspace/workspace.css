@@ -343,13 +343,14 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-resizing { cursor: col-resize; user-select: none; }
 .workspace-detail-resizing { cursor: row-resize; user-select: none; }
 .workspace-artifacts { display: flex; min-height: 0; flex: 1; flex-direction: column; }
-.workspace-artifact-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 3.2px; padding: 4.8px; border-bottom: 1px solid var(--border); }
+.workspace-artifact-modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3.2px; padding: 4.8px; border-bottom: 1px solid var(--border); }
 .workspace-artifact-modes button { min-height: 24px; border: 0; border-radius: 4.8px; background: transparent; color: var(--muted-foreground); font-size: 8.8px; }
 .workspace-artifact-modes button[aria-checked="true"] { background: var(--accent); color: var(--foreground); }
 .workspace-artifacts .workspace-panel-empty > div { display: grid; max-width: 224px; justify-items: center; gap: 5.6px; }
 .workspace-artifacts .workspace-panel-empty svg { width: 19.2px; height: 19.2px; }
 .workspace-artifacts .workspace-panel-empty strong { color: var(--foreground); }
 .workspace-artifacts .workspace-panel-empty p { margin: 0; line-height: 1.5; }
+.workspace-artifact-review { min-height: 0; flex: 1; }
 
 @media (--conduit-wide-layout) {
   .workspace-files[data-wide="true"] { display: grid; grid-template-columns: var(--workspace-tree-width, 160px) 9px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
@@ -485,7 +486,7 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-resizing { cursor: col-resize; user-select: none; }
 .workspace-detail-resizing { cursor: row-resize; user-select: none; }
 .workspace-artifacts { display: flex; min-height: 0; flex: 1; flex-direction: column; }
-.workspace-artifact-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 6px; border-bottom: 1px solid var(--border); }
+.workspace-artifact-modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 6px; border-bottom: 1px solid var(--border); }
 .workspace-artifact-modes button { min-height: 30px; border: 0; border-radius: 6px; background: transparent; color: var(--muted-foreground); font-size: 11px; }
 .workspace-artifact-modes button[aria-checked="true"] { background: var(--accent); color: var(--foreground); }
 .workspace-artifacts .workspace-panel-empty > div { display: grid; max-width: 280px; justify-items: center; gap: 7px; }
