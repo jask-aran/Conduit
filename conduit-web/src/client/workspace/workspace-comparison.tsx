@@ -1,9 +1,9 @@
-import { MergeView, unifiedMergeView, getChunks, goToNextChunk, goToPreviousChunk } from "@codemirror/merge";
-import { Compartment, EditorState, type Extension } from "@codemirror/state";
+import { MergeView, unifiedMergeView, getChunks, goToNextChunk, goToPreviousChunk, getOriginalDoc, originalDocChangeEffect } from "@codemirror/merge";
+import { ChangeSet, Compartment, EditorState, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { openSearchPanel } from "@codemirror/search";
 import { ChevronDownIcon, ChevronUpIcon, Columns2Icon, PencilIcon, PencilOffIcon, Rows2Icon, SearchIcon, WrapTextIcon, XIcon } from "lucide-solid";
-import { createEffect, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js";
 import { workspaceReadOnlySetup } from "./workspace-editor-base";
 import { workspaceLanguageForFilename } from "./workspace-languages";
 import { FileTypeIcon } from "./file-type-icon";
@@ -24,7 +24,7 @@ export interface ComparisonViewState {
   position: number;
 }
 
-export default function WorkspaceComparison(props: { comparison: ComparisonPayload; viewState: ComparisonViewState; inFiles?: boolean; header?: JSX.Element; footerControl?: JSX.Element; onShowFile?: () => void; onClose?: () => void; onOpenFile: (source: string, position: number, state: ComparisonViewState) => void }) {
+export default function WorkspaceComparison(props: { comparison: ComparisonPayload; viewState: ComparisonViewState; inFiles?: boolean; header?: JSX.Element; footerControl?: JSX.Element; onViewStateChange?: (state: ComparisonViewState) => void; onShowFile?: () => void; onClose?: () => void; onOpenFile: (source: string, position: number, state: ComparisonViewState) => void }) {
   let host!: HTMLDivElement;
   let activeView: EditorView | undefined;
   let captureReview = () => ({ ...props.viewState });
@@ -34,8 +34,11 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
   const [summary, setSummary] = createSignal({ added: 0, removed: 0, precise: true });
   const [languageName, setLanguageName] = createSignal("Plain text");
 
+  let savedReview = { ...props.viewState };
+  const identity = createMemo(() => `${props.comparison.kind}:\u0000${props.comparison.path}`);
   createEffect(() => {
-    const data = props.comparison;
+    identity();
+    const data = untrack(() => props.comparison);
     const split = layout() === "split" && !file();
     const showFile = file();
     if (data.kind !== "text") return;
@@ -60,23 +63,49 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
     }
     const views = merge ? [merge.a, merge.b] : [view];
     activeView = view;
-    const review = props.viewState;
+    const review = savedReview;
     const scroller = merge?.dom ?? view.scrollDOM;
     captureReview = () => ({ layout: layout(), file: file(), wrap: wrap(), top: scroller.scrollTop, left: scroller.scrollLeft, position: view.state.selection.main.head });
     view.dispatch({ selection: { anchor: Math.min(review.position, view.state.doc.length) } });
     const restoreFrame = requestAnimationFrame(() => {
       if (!disposed) { scroller.scrollTop = review.top; scroller.scrollLeft = review.left; }
     });
-    const chunks = getChunks(view.state)?.chunks ?? [];
-    if (!showFile) {
-      const original = merge?.a.state.doc ?? EditorState.create({ doc: data.original }).doc;
-      const count = (doc: typeof original, from: number, to: number) => to <= from ? 0 : doc.lineAt(Math.min(to - 1, doc.length)).number - doc.lineAt(from).number + 1;
-      setSummary({
-        added: chunks.reduce((n, chunk) => n + count(view.state.doc, chunk.fromB, chunk.toB), 0),
-        removed: chunks.reduce((n, chunk) => n + count(original, chunk.fromA, chunk.toA), 0),
-        precise: chunks.every((chunk) => chunk.precise),
-      });
-    }
+    createEffect(() => {
+      const next = props.comparison;
+      if (next.kind !== "text") return;
+      // A narrow replacement maps selections and preserves unaffected folds.
+      const changesFor = (current: string, value: string) => {
+        let from = 0;
+        while (from < current.length && from < value.length && current[from] === value[from]) from++;
+        let end = current.length, nextEnd = value.length;
+        while (end > from && nextEnd > from && current[end - 1] === value[nextEnd - 1]) { end--; nextEnd--; }
+        return { from, to: end, insert: value.slice(from, nextEnd) };
+      };
+      const top = scroller.scrollTop, left = scroller.scrollLeft;
+      if (merge) {
+        if (merge.a.state.doc.toString() !== next.original) merge.a.dispatch({ changes: changesFor(merge.a.state.doc.toString(), next.original) });
+        if (merge.b.state.doc.toString() !== next.modified) merge.b.dispatch({ changes: changesFor(merge.b.state.doc.toString(), next.modified) });
+      } else {
+        const original = showFile ? undefined : getOriginalDoc(view.state);
+        const effects = original && original.toString() !== next.original
+          ? [originalDocChangeEffect(view.state, ChangeSet.of(changesFor(original.toString(), next.original), original.length))]
+          : [];
+        const changed = view.state.doc.toString() !== next.modified;
+        if (changed || effects.length) view.dispatch({ changes: changed ? changesFor(view.state.doc.toString(), next.modified) : undefined, effects });
+      }
+      scroller.scrollTop = top;
+      scroller.scrollLeft = left;
+      const chunks = getChunks(view.state)?.chunks ?? [];
+      if (!showFile) {
+        const original = merge?.a.state.doc ?? getOriginalDoc(view.state);
+        const count = (doc: typeof original, from: number, to: number) => to <= from ? 0 : doc.lineAt(Math.min(to - 1, doc.length)).number - doc.lineAt(from).number + 1;
+        setSummary({
+          added: chunks.reduce((n, chunk) => n + count(view.state.doc, chunk.fromB, chunk.toB), 0),
+          removed: chunks.reduce((n, chunk) => n + count(original, chunk.fromA, chunk.toA), 0),
+          precise: chunks.every((chunk) => chunk.precise),
+        });
+      }
+    });
     createEffect(() => {
       for (const item of views) item.dispatch({ effects: wrapping.reconfigure(wrap() ? EditorView.lineWrapping : []) });
     });
@@ -86,7 +115,10 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
       if (!disposed) for (const item of views) item.dispatch({ effects: language.reconfigure(support) });
     }).catch(() => { if (!disposed) setLanguageName("Plain text"); });
     onCleanup(() => {
-      untrack(() => Object.assign(review, { layout: layout(), file: file(), wrap: wrap(), top: scroller.scrollTop, left: scroller.scrollLeft, position: view.state.selection.main.head }));
+      untrack(() => {
+        savedReview = captureReview();
+        props.onViewStateChange?.(savedReview);
+      });
       cancelAnimationFrame(restoreFrame);
       disposed = true;
       activeView = undefined;
