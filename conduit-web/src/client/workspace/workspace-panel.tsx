@@ -34,6 +34,7 @@ interface DiffPayload { repository: boolean; branch?: string; upstream?: string 
 interface GitCommitDetail { hash: string; content: string; }
 interface TurnArtifactFile { path: string; status: string; available: boolean; }
 interface TurnArtifactPayload { id: string; turnId: string | null; createdAt: string; files: TurnArtifactFile[]; }
+interface TurnCheckpointSummary { id: string; turnId: string | null; createdAt: string; }
 type PanelTab = "files" | "diff" | "artifacts" | "terminal";
 type ArtifactMode = "changes" | "outputs" | "interactive";
 type ArtifactBaseline = "chat" | "turn";
@@ -295,6 +296,63 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     void loadTurnArtifact();
   };
   const artifactBaselineControl = () => <div class="workspace-artifact-baseline" role="radiogroup" aria-label="Agent changes baseline"><button type="button" role="radio" aria-checked={artifactBaseline() === "chat"} onClick={() => selectArtifactBaseline("chat")}>Chat start</button><button type="button" role="radio" aria-checked={artifactBaseline() === "turn"} onClick={() => selectArtifactBaseline("turn")}>Latest turn</button></div>;
+  const [fileAgentTimeline, setFileAgentTimeline] = createSignal<TurnCheckpointSummary[]>([]);
+  const [fileAgentOffset, setFileAgentOffset] = createSignal(0);
+  const [fileAgentArtifact, setFileAgentArtifact] = createSignal<TurnArtifactPayload | null>(null);
+  const fileAgentReview = createReviewController(reportError);
+  let fileAgentTimelineRequest = 0;
+  const loadFileAgentComparison = async (path: string) => {
+    fileAgentReview.select(path);
+    const projectId = props.projectId();
+    const chatId = props.artifactChatId?.();
+    const checkpointId = fileAgentArtifact()?.id;
+    if (!chatId || !checkpointId) return;
+    await fileAgentReview.refresh({
+      isCurrent: () => props.projectId() === projectId && props.artifactChatId?.() === chatId && fileAgentArtifact()?.id === checkpointId,
+      load: (selectedPath, signal) => api<ComparisonPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&path=${encodeURIComponent(selectedPath)}&baseline=turn&checkpointId=${encodeURIComponent(checkpointId)}`, { signal }),
+    });
+  };
+  const loadFileAgentCheckpoint = async (checkpoint: TurnCheckpointSummary | undefined) => {
+    const projectId = props.projectId();
+    const chatId = props.artifactChatId?.();
+    if (!chatId || !checkpoint) {
+      setFileAgentArtifact(null);
+      fileAgentReview.select(null);
+      return;
+    }
+    const result = await api<TurnArtifactPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&baseline=turn&checkpointId=${encodeURIComponent(checkpoint.id)}`);
+    if (props.projectId() !== projectId || props.artifactChatId?.() !== chatId || fileAgentTimeline()[fileAgentOffset()]?.id !== checkpoint.id) return;
+    setFileAgentArtifact(result);
+    const path = fileAgentReview.reconcile(result?.files ?? []);
+    if (path) void loadFileAgentComparison(path);
+  };
+  const loadFileAgentTimeline = async () => {
+    const projectId = props.projectId();
+    const chatId = props.artifactChatId?.();
+    const request = ++fileAgentTimelineRequest;
+    if (!chatId) {
+      setFileAgentTimeline([]);
+      setFileAgentOffset(0);
+      setFileAgentArtifact(null);
+      fileAgentReview.select(null);
+      return;
+    }
+    const currentOffset = fileAgentOffset();
+    const currentId = fileAgentTimeline()[currentOffset]?.id;
+    const result = await api<TurnCheckpointSummary[]>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&timeline=1`);
+    if (request !== fileAgentTimelineRequest || props.projectId() !== projectId || props.artifactChatId?.() !== chatId) return;
+    const nextOffset = currentOffset === 0 ? 0 : Math.max(0, result.findIndex((checkpoint) => checkpoint.id === currentId));
+    setFileAgentTimeline(result);
+    setFileAgentOffset(nextOffset);
+    await loadFileAgentCheckpoint(result[nextOffset]);
+  };
+  const moveFileAgentTimeline = (offset: number) => {
+    const next = Math.max(0, Math.min(fileAgentTimeline().length - 1, fileAgentOffset() + offset));
+    if (next === fileAgentOffset()) return;
+    fileAgentReview.cancel();
+    setFileAgentOffset(next);
+    void loadFileAgentCheckpoint(fileAgentTimeline()[next]);
+  };
   const [terminalFocusRequest, setTerminalFocusRequest] = createSignal(0);
   const detailOpenName = () => `${tab()}:detail-open`;
   const detailHeightName = () => `${tab()}:detail-height`;
@@ -674,7 +732,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     setFocusedSlot(slot);
     return true;
   };
-  const openComparisonInFiles = (comparison: ComparisonPayload, viewState: ComparisonViewState) => {
+  const openComparisonInFiles = (comparison: ComparisonPayload, viewState: ComparisonViewState, origin?: TemporaryComparison["origin"]) => {
     const slot = slotForPath(comparison.path) ?? focusedSlot();
     const handle = slotHandles.get(slot);
     if (handle?.hasUnsavedChanges()) {
@@ -683,14 +741,19 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     }
     if (!openInSlot(slot, comparison.path)) return;
     setFileNavigation(null);
-    setTemporaryComparisons((current) => ({ ...current, [slot]: { projectId: props.projectId(), comparison, viewState: { ...viewState, file: false } } }));
+    setTemporaryComparisons((current) => ({ ...current, [slot]: { projectId: props.projectId(), comparison, viewState: { ...viewState, file: false }, origin } }));
     selectTab("files");
     setDetailOpen(true);
   };
   const openArtifactFileInFiles = async (path: string) => {
     await loadArtifactComparison(path);
     const comparison = artifactComparison();
-    if (comparison?.path === path) openComparisonInFiles(comparison, artifactViewState());
+    if (comparison?.path === path) openComparisonInFiles(comparison, artifactViewState(), "artifact");
+  };
+  const openFileAgentTurn = async (path: string) => {
+    await loadFileAgentComparison(path);
+    const comparison = fileAgentReview.comparison();
+    if (comparison?.path === path) openComparisonInFiles(comparison, fileAgentReview.viewState(), "timeline");
   };
   createEffect(() => {
     const comparison = artifactComparison();
@@ -700,7 +763,22 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       const next = { ...current };
       for (const slot of ["primary", "secondary"] as const) {
         const entry = current[slot];
-        if (entry?.projectId !== props.projectId() || entry.comparison.path !== comparison.path || !["turn", "session"].includes(entry.comparison.scope)) continue;
+        if (entry?.projectId !== props.projectId() || entry.origin !== "artifact" || entry.comparison.path !== comparison.path) continue;
+        next[slot] = { ...entry, comparison };
+        changed = true;
+      }
+      return changed ? next : current;
+    });
+  });
+  createEffect(() => {
+    const comparison = fileAgentReview.comparison();
+    if (!comparison) return;
+    setTemporaryComparisons((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const slot of ["primary", "secondary"] as const) {
+        const entry = current[slot];
+        if (entry?.projectId !== props.projectId() || entry.origin !== "timeline" || entry.comparison.path !== comparison.path) continue;
         next[slot] = { ...entry, comparison };
         changed = true;
       }

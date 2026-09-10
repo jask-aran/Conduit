@@ -23,6 +23,7 @@ import { AppDashboard } from "./dashboard/app-dashboard";
 import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_STORAGE_KEY, selectedComposerSurface, type ComposerSurfaceMode } from "./chat/composer-surface";
 import type { VoiceDictationSettings } from "./chat/voice-dictation-types";
 import { CONTEXT_METRIC_STORAGE_KEY, contextUsagePercent, formatContextMetrics, saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
+import { isOptimisticId } from "./reconcile-messages";
 import { HostUiRequests } from "./chat/host-ui-card";
 import {
   MARKDOWN_RENDERER_STORAGE_KEY,
@@ -1342,7 +1343,10 @@ function App() {
   });
   const lastUserEntryId = createMemo(() => {
     const list = chat.messages();
-    for (let index = list.length - 1; index >= 0; index -= 1) { const message = list[index]!; if (message.role === "user" && !message.pending) return message.id; }
+    // An optimistic id is one the backend never persisted - a message sent and
+    // then interrupted before it was written. Forking one fails, so it cannot
+    // be the target of regenerate or edit.
+    for (let index = list.length - 1; index >= 0; index -= 1) { const message = list[index]!; if (message.role === "user" && !message.pending && !isOptimisticId(message.id)) return message.id; }
     return null;
   });
   const thinkingLevels = createMemo(() => models.models().find((item) => item.spec === models.model())?.thinkingLevels ?? []);

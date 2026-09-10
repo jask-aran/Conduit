@@ -1943,39 +1943,57 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   -webkit-mask-size: contain;
 }
 
-/* Messages sent while the agent is working, parked above the composer.
+/* Messages sent while the agent is working, floating above the composer.
 
-   Same frosted glass as a sent user bubble, so a queued message reads as the
-   message it will become rather than as a separate kind of notice. Each line
-   is clamped to one line; the expander in queued-messages.tsx appears only
-   when the text is actually clipped. */
-.queued-messages {
-  display: flex; align-items: flex-start; gap: 8px;
-  /* Sits inside the composer wrapper and overlaps its top edge, so the two read
-     as one object rather than a notice floating above the input. */
-  position: relative; z-index: 0;
-  margin: 0 0 calc(-1 * var(--composer-radius, 12px));
-  padding: 6px 8px calc(6px + var(--composer-radius, 12px));
-  border-radius: var(--composer-radius, 12px) var(--composer-radius, 12px) 0 0;
+   Floating rather than docked: it is absolutely positioned against the
+   composer wrapper, so it never takes layout space and the composer does not
+   move when a message is queued or taken. Frosted glass matches the composer
+   surface, so it reads as belonging to the composer rather than to the
+   transcript scrolling behind it. */
+.queued-float {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  left: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 11px 8px;
   border: 1px solid var(--glass-border);
-  border-bottom: none;
+  border-radius: var(--composer-radius, 12px);
   background: linear-gradient(180deg, oklch(1 0 0 / 9%), oklch(1 0 0 / 2%) 58%), var(--glass-bg);
   backdrop-filter: blur(24px) saturate(168%) brightness(1.05);
   -webkit-backdrop-filter: blur(24px) saturate(168%) brightness(1.05);
-  box-shadow: inset 0 0.8px 0 oklch(1 0 0 / 30%), inset 0 -1px 0.8px oklch(0 0 0 / 18%), 0 6.4px 19.2px -18px rgb(0 0 0 / 62%);
+  box-shadow:
+    inset 0 0.8px 0 oklch(1 0 0 / 30%),
+    inset 0 -1px 0.8px oklch(0 0 0 / 18%),
+    0 12px 32px -12px rgb(0 0 0 / 70%);
 }
-.queued-message-list { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
-.queued-message { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
-.queued-message-kind {
-  flex: none; margin-top: 1px; padding: 1px 5px; border-radius: 999px;
-  background: oklch(1 0 0 / 8%); color: var(--muted-foreground);
-  font-size: 8.8px; text-transform: uppercase; letter-spacing: 0.04em;
-}
-.queued-message-body {
+.queued-float-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.queued-float-title { font-size: 11px; font-weight: 600; }
+.queued-float-hint { color: var(--muted-foreground); font-size: 9.6px; }
+
+.queued-float-list { display: flex; flex-direction: column; gap: 3px; margin: 0; padding: 0; list-style: none; }
+.queued-line { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
+.queued-line-body {
   flex: 1; min-width: 0; margin: 0; font-size: 12px; line-height: 1.45;
   white-space: pre-wrap; overflow-wrap: anywhere;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden;
 }
-.queued-message[data-expanded="true"] .queued-message-body { -webkit-line-clamp: unset; overflow: visible; }
-.queued-messages-actions { flex: none; display: flex; align-items: center; gap: 4px; }
-.composer-wrap .composer-surface-shell { position: relative; z-index: 1; }
+.queued-line[data-expanded="true"] .queued-line-body { -webkit-line-clamp: unset; overflow: visible; }
+.queued-line-expander {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; margin-top: 1px; padding: 0;
+  border: 0; border-radius: 4px; background: transparent;
+  color: var(--muted-foreground); cursor: pointer;
+}
+.queued-line-expander:hover { background: oklch(1 0 0 / 10%); color: inherit; }
+.queued-line-expander svg { width: 12px; height: 12px; }
+
+.queued-float-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px; }
+
+@media (--conduit-phone-layout) {
+  .queued-float { bottom: calc(100% + 6px); padding: 8px 9px; }
+  .queued-float-actions > * { flex: 1 1 auto; }
+}

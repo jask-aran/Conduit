@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show } from "solid-js";
-import { ArrowUpIcon, ChevronDownIcon, MicIcon, PaperclipIcon, SquareIcon, TriangleAlertIcon, WaypointsIcon } from "lucide-solid";
+import { ArrowUpIcon, ChevronDownIcon, MicIcon, PaperclipIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
 import {
   Button,
   Menu,
@@ -365,8 +365,9 @@ export function Composer(props: {
       messages={props.chat.pendingMessages()}
       busy={busy()}
       canInterrupt={supports("cancel")}
-      onInterrupt={props.chat.stop}
-      onClear={props.chat.clearQueue}
+      onInterruptAndSend={() => void props.chat.interruptAndSend()}
+      onEdit={props.chat.editQueued}
+      onDiscard={props.chat.discardQueued}
     />
     <div class="composer-surface-shell" data-composer-surface={composerSurface()}>
       <div class="composer composer-surface-material" data-composer-surface={composerSurface()}>
@@ -390,7 +391,6 @@ export function Composer(props: {
             <div ref={mobileActions} class="composer-actions-right">
               <Show when={!recording()}><span class="composer-status-state composer-actions-status" role="status" aria-live="polite"><Show when={dictationLabel()} fallback={<><Show when={SPINNING_ACTIVITY.has(activity()?.kind || "")}><Spinner /></Show><Show when={["request_failed", "runtime_failed"].includes(activity()?.kind || "")}><TriangleAlertIcon aria-hidden="true" /></Show>{activity()?.label || "Ready"}</>}>{dictationLabel()}</Show></span></Show>
               <Button variant={recording() ? "default" : "ghost"} size="icon-sm" class="dictation-trigger" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || ["finishing", "waiting", "transcribing"].includes(dictationState())} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={["starting", "finishing", "waiting", "transcribing"].includes(dictationState())} fallback={<MicIcon />}><Spinner /></Show></Button>
-              <Show when={supports("steer") && busy() && hasText() && !dictating()}><Button variant="default" size="icon-sm" class="composer-steer-trigger" aria-label="Steer the agent" title="Steer: the agent reads this as soon as the running tool call settles" onClick={() => sendMessage("steer")}><WaypointsIcon /></Button></Show>
               <Show when={busy() || props.chat.stopping()} fallback={<Button variant="ghost" size="icon-sm" class="composer-send-trigger" aria-label="Send message" disabled={!canSend()} onClick={() => sendMessage()}><ArrowUpIcon /></Button>}>
                 <Show when={supports("cancel")}><Button variant="default" size="icon-sm" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button></Show>
               </Show>
