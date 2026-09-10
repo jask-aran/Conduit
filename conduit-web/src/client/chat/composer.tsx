@@ -17,7 +17,7 @@ import type { ChatCapabilities, Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import { filesFromDataTransfer } from "../state/attachments";
 import type { AttachmentsStore } from "../state/attachments";
-import type { ModelSettings } from "../state/model-settings";
+import type { ComposerModels } from "./composer-models";
 import type { VoiceDictationSettings } from "./voice-dictation-types";
 import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../navigation/mobile-layout";
 import { AttachmentCards } from "./attachments";
@@ -46,7 +46,9 @@ export interface ComposerStatus {
 export function Composer(props: {
   chat: ActiveChatStore;
   attachments: AttachmentsStore;
-  models: ModelSettings;
+  models: ComposerModels;
+  /** Surfaces without a Conduit chat behind them cannot carry attachments. */
+  attachmentsSupported?: boolean;
   profiles: Template[];
   activeProfile?: Template | null;
   serverOnline: boolean;
@@ -355,7 +357,9 @@ export function Composer(props: {
   });
 
   return <div class="composer-wrap">
-    <AttachmentCards items={props.attachments.items()} chatId={props.chat.loadedId()} label="Attachments" removable onRemove={(item) => void props.attachments.remove(item)} />
+    <Show when={props.attachmentsSupported !== false}>
+      <AttachmentCards items={props.attachments.items()} chatId={props.chat.loadedId()} label="Attachments" removable onRemove={(item) => void props.attachments.remove(item)} />
+    </Show>
     <Show when={props.chat.queue().steering.length || props.chat.queue().followUp.length}>
       <div class="composer-queue"><span>Queued messages</span><Button variant="ghost" size="sm" onClick={props.chat.clearQueue}>Restore to draft</Button></div>
     </Show>
@@ -371,7 +375,7 @@ export function Composer(props: {
           </Show>
           <div class="composer-actions" data-mobile-actions-stacked={mobileActionsStacked()}>
             <div class="composer-actions-left">
-              <Button class="composer-desktop-attachment" variant="ghost" size="icon-sm" aria-label={`Attach files${props.attachments.items().length ? ` (${props.attachments.items().length})` : ""}`} disabled={!props.serverOnline} onClick={attach}><PaperclipIcon /></Button>
+              <Show when={props.attachmentsSupported !== false}><Button class="composer-desktop-attachment" variant="ghost" size="icon-sm" aria-label={`Attach files${props.attachments.items().length ? ` (${props.attachments.items().length})` : ""}`} disabled={!props.serverOnline} onClick={attach}><PaperclipIcon /></Button></Show>
               <div class="composer-desktop-setting">
                 <ModelSelector models={props.models.models()} model={props.models.model()} thinkingLevel={props.models.effort()} notice={props.models.notice()} disabled={!props.serverOnline || !supports("modelSwitch")} onModelChange={(value) => void props.models.chooseModel(value)} onThinkingLevelChange={(value) => void props.models.chooseEffort(value)} onManageModels={() => props.onOpenSettings("models")} />
               </div>

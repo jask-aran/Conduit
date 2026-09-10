@@ -92,9 +92,18 @@ input.on("line", (line) => {
     return;
   }
   if (message.method === "thread/read") return send({ id: message.id, result: { thread: { id: message.params.threadId, turns: [] } } });
-  if (message.method === "thread/list") return send({ id: message.id, result: { data: [
-    { id: "foreign-thread", name: "Foreign thread", preview: "Existing Codex work", cwd: message.params.cwd, createdAt: 1, updatedAt: 2, status: { type: "idle" }, source: "vscode" },
-  ] } });
+  if (message.method === "thread/list") {
+    const elsewhere = process.env.CONDUIT_TEST_ELSEWHERE || require("node:os").tmpdir();
+    // The workspace thread echoes the requested cwd so workspace-scoped lookups
+    // find it, except when the request is scoped to the unrelated folder.
+    const workspace = message.params.cwd && message.params.cwd !== elsewhere ? message.params.cwd : process.cwd();
+    const threads = [
+      { id: "foreign-thread", name: "Foreign thread", preview: "Existing Codex work", cwd: workspace, createdAt: 1, updatedAt: 2, status: { type: "idle" }, source: "vscode", gitInfo: { branch: "main" } },
+      { id: "elsewhere-thread", name: "Elsewhere thread", preview: "Work in another folder", cwd: elsewhere, createdAt: 3, updatedAt: 4, status: { type: "idle" }, source: "cli" },
+    ];
+    // Codex filters by cwd server-side; machine-wide listing omits the param.
+    return send({ id: message.id, result: { data: message.params.cwd ? threads.filter((thread) => thread.cwd === message.params.cwd) : threads } });
+  }
   if (message.method === "model/list") return send({ id: message.id, result: { data: [
     { id: "codex-test", displayName: "Codex Test", hidden: false, defaultReasoningEffort: "medium", supportedReasoningEfforts: [{ reasoningEffort: "low" }, { reasoningEffort: "medium" }, { reasoningEffort: "high" }] },
     { id: "codex-other", displayName: "Codex Other", hidden: false, defaultReasoningEffort: "low", supportedReasoningEfforts: [{ reasoningEffort: "low" }, { reasoningEffort: "high" }] },

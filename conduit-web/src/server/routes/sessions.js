@@ -33,7 +33,9 @@ export function registerSessionRoutes(app, {
       const context = await findChatContext(request.params.id);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
       if (!context.chat.piSessionFile) {
-        const adapter = context.chat.backend?.implementation === "chatgpt-web" ? backends.forChat(context.chat) : null;
+        // Backends without a Pi session file keep their own history; any adapter
+        // that can hand one over serves the transcript here.
+        const adapter = backends.forChat(context.chat);
         return response.json({
           ...chatView(context.chat), messages: adapter?.transcript?.(context.chat.id) || [],
           tools: [], attachments: [], page: { before: null },

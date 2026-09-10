@@ -103,3 +103,14 @@ test("sanitizes separators, controls, dot-only names, and UTF-8 byte length", ()
   assert.ok(Buffer.byteLength(safeAttachmentName("😀".repeat(100)), "utf8") <= 180);
   assert.equal(safeAttachmentName("😀".repeat(100)).includes("�"), false);
 });
+
+test("resolved attachments expose the real file path adapters can send natively", async () => {
+  const { project, chat, store } = await fixture();
+  const id = crypto.randomUUID();
+  await store.write(project, chat.id, id, "shot.png", Readable.from([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00])]));
+  const [item] = await store.resolveMany(project, chat.id, [id]);
+  const file = store.pathFor(project, chat.id, item);
+  assert.equal(path.basename(file), item.storedName);
+  assert.equal(item.type, "image/png");
+  assert.equal((await fs.stat(file)).size, 9);
+});

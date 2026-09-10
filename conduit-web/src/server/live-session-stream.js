@@ -29,7 +29,12 @@ export function createLiveSessionStream({
     if (!context) throw new Error("Chat no longer exists");
     const selectedAttachments = await attachments.resolveMany(context.project, context.chat.id, command.attachmentIds);
     const prompt = serializeAttachmentEnvelope({ chatId: context.chat.id, attachments: selectedAttachments, message });
-    return { context, prompt, message };
+    // The envelope stays the prompt text - it is what the transcript renders
+    // chips from - but adapters that accept files natively get real paths too.
+    const files = selectedAttachments.map((item) => ({
+      ...item, path: attachments.pathFor(context.project, context.chat.id, item),
+    }));
+    return { context, prompt, message, attachments: files };
   }
 
   async function sendPrompt(record, prepared, options) {
@@ -46,7 +51,7 @@ export function createLiveSessionStream({
     } catch (error) {
       console.warn("Could not capture turn checkpoint", error.message);
     }
-    const generationId = await adapter.prompt(record.id, prepared.prompt, options);
+    const generationId = await adapter.prompt(record.id, prepared.prompt, { ...options, attachments: prepared.attachments });
     if (checkpoint && generationId) {
       try { await turnCheckpoints.assignTurn(checkpoint, generationId); }
       catch (error) { console.warn("Could not assign turn checkpoint", error.message); }

@@ -535,6 +535,31 @@ export function createActiveChat(options: ActiveChatOptions) {
     } finally { if (token === openToken) setConnectingId(null); }
   };
 
+  /**
+   * Adopt a live record somebody else created - a harness thread being driven
+   * from the Computer, which the server opened through its own endpoint. The
+   * chat id must already be selected, so the same guards and the same
+   * applyLiveEvent path serve it exactly as they serve a Conduit chat.
+   */
+  const attachLive = async (record: LiveRecord, detail?: TranscriptDetail) => {
+    const chatId = selectedId();
+    if (!chatId) throw new Error("Chat is not ready yet");
+    const selection = selectionToken;
+    // A thread with no Conduit chat brings its own settled history; without it
+    // only the live generation would survive, because each one replaces the last.
+    if (detail) applyDetail({ ...detail, id: chatId });
+    setLive({ ...record, chatId });
+    setLoadedId(chatId);
+    if (record.capabilities) setCapabilities(record.capabilities);
+    if (record.runtime) setRuntimeIdentity(record.runtime);
+    if (record.contextUsage) setContextUsage(record.contextUsage);
+    if (record.sessionStats) setSessionStats(record.sessionStats);
+    if (record.cacheStats) setCacheStats(record.cacheStats);
+    setStatus("active");
+    await connect({ ...record, chatId }, chatId, selection);
+    return record;
+  };
+
   const ensureLive = async (intent = "open") => {
     if (live() && live()!.chatId === selectedId() && socket?.readyState === WebSocket.OPEN) return live()!;
     const chatId = selectedId();
@@ -869,7 +894,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     live, messages, setMessages, tools, loadedId, pageBefore, loadingOlder, draft, setDraft,
     generation, editingEntryId, contextUsage, sessionStats, cacheStats, compacting, hostUiRequests, queue, capabilities, activeGeneration, activeGenerationChange,
     connectingId, streaming, stopping, activity,
-    initialize, select, prefetch, loadDetail, openLive, ensureLive, reset, send, stop, regenerate,
+    initialize, select, prefetch, loadDetail, openLive, attachLive, ensureLive, reset, send, stop, regenerate,
     continueResponse, loadOlder, edit, respondHostUi, clearQueue,
   };
 }
