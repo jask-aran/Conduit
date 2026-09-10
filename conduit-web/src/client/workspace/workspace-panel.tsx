@@ -251,6 +251,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const [fileSplitRatio, setFileSplitRatio] = createSignal(Math.max(25, Math.min(75, Number(readSetting(projectScope(), "file-split-ratio")) || 50)));
   const [artifactMode, setArtifactMode] = createSignal<ArtifactMode>("changes");
   const [artifactBaseline, setArtifactBaseline] = createSignal<ArtifactBaseline>("chat");
+  const [artifactTimeline, setArtifactTimeline] = createSignal<TurnCheckpointSummary[]>([]);
+  const [artifactOffset, setArtifactOffset] = createSignal(0);
   const [turnArtifact, setTurnArtifact] = createSignal<TurnArtifactPayload | null>(null);
   const artifactReview = createReviewController(reportError);
   const artifactPath = artifactReview.selectedPath;
@@ -282,20 +284,36 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     const projectId = props.projectId();
     const baseline = artifactBaseline();
     try {
-      const result = await api<TurnArtifactPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&baseline=${baseline}`);
-      if (props.projectId() !== projectId || props.artifactChatId?.() !== chatId || artifactBaseline() !== baseline) return;
+      const currentOffset = artifactOffset();
+      const currentId = artifactTimeline()[currentOffset]?.id;
+      const timeline = await api<TurnCheckpointSummary[]>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&timeline=1`);
+      const nextOffset = currentOffset === 0 ? 0 : Math.max(0, timeline.findIndex((checkpoint) => checkpoint.id === currentId));
+      const checkpointId = baseline === "turn" ? timeline[nextOffset]?.id : undefined;
+      const result = await api<TurnArtifactPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&baseline=${baseline}${checkpointId ? `&checkpointId=${encodeURIComponent(checkpointId)}` : ""}`);
+      if (props.projectId() !== projectId || props.artifactChatId?.() !== chatId || artifactBaseline() !== baseline || (baseline === "turn" && artifactOffset() !== currentOffset)) return;
+      setArtifactTimeline(timeline);
+      setArtifactOffset(nextOffset);
       setTurnArtifact(result);
       const next = artifactReview.reconcile(result?.files ?? []);
       if (next) void loadArtifactComparison(next);
     } catch (cause) { reportError((cause as Error).message); }
   };
   const selectArtifactBaseline = (baseline: ArtifactBaseline) => {
-    if (baseline === artifactBaseline()) return;
+    if (baseline === artifactBaseline() && (baseline !== "turn" || artifactOffset() === 0)) return;
     artifactReview.cancel();
+    if (baseline === "turn") setArtifactOffset(0);
     setArtifactBaseline(baseline);
     void loadTurnArtifact();
   };
-  const artifactBaselineControl = () => <div class="workspace-artifact-baseline" role="radiogroup" aria-label="Agent changes baseline"><button type="button" role="radio" aria-checked={artifactBaseline() === "chat"} onClick={() => selectArtifactBaseline("chat")}>Chat start</button><button type="button" role="radio" aria-checked={artifactBaseline() === "turn"} onClick={() => selectArtifactBaseline("turn")}>Latest turn</button></div>;
+  const moveArtifactTimeline = (offset: number) => {
+    const next = Math.max(0, Math.min(artifactTimeline().length - 1, artifactOffset() + offset));
+    if (artifactBaseline() === "turn" && next === artifactOffset()) return;
+    artifactReview.cancel();
+    setArtifactBaseline("turn");
+    setArtifactOffset(next);
+    void loadTurnArtifact();
+  };
+  const artifactBaselineControl = () => <div class="workspace-artifact-baseline" role="radiogroup" aria-label="Agent changes baseline"><button type="button" role="radio" aria-checked={artifactBaseline() === "chat"} onClick={() => selectArtifactBaseline("chat")}>Chat start</button><button type="button" aria-label="Older turn" title="Older turn" disabled={!artifactTimeline().length || artifactOffset() >= artifactTimeline().length - 1} onClick={() => moveArtifactTimeline(1)}><ChevronLeftIcon /></button><button type="button" role="radio" aria-checked={artifactBaseline() === "turn"} onClick={() => selectArtifactBaseline("turn")}>{`Turn ${artifactOffset() === 0 ? "0" : `−${artifactOffset()}`}`}</button><button type="button" aria-label="Newer turn" title="Newer turn" disabled={!artifactTimeline().length || artifactOffset() === 0} onClick={() => moveArtifactTimeline(-1)}><ChevronRightIcon /></button></div>;
   const [fileAgentTimeline, setFileAgentTimeline] = createSignal<TurnCheckpointSummary[]>([]);
   const [fileAgentOffset, setFileAgentOffset] = createSignal(0);
   const [fileAgentArtifact, setFileAgentArtifact] = createSignal<TurnArtifactPayload | null>(null);
@@ -2066,9 +2084,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     <Show when={tabVisible("artifacts")}><section class="workspace-artifacts" data-position={panePosition("artifacts")}>
       <div class="workspace-artifact-modes" role="radiogroup" aria-label="Artifact modality"><div><button role="radio" aria-checked={artifactMode() === "changes"} onClick={() => { setArtifactMode("changes"); void loadTurnArtifact(); }}>Agent changes</button><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div></div>
       <Show when={artifactMode() === "changes"} fallback={<div class="workspace-panel-empty"><div><BoxesIcon /><strong>{artifactMode() === "outputs" ? "No artifacts in the loaded transcript" : "Interactive artifacts are not enabled"}</strong><p>{artifactMode() === "outputs" ? "Code blocks and file outputs will appear here as transcript artifact projection lands." : "This boundary is reserved for sandboxed, explicitly trusted generated interfaces."}</p></div></div>}>
-        <Show when={turnArtifact()?.files.length} fallback={<div class="workspace-panel-empty"><div><GitCompareArrowsIcon /><strong>No agent changes in this chat</strong><p>This view updates when the agent changes a workspace file.</p></div></div>}>
-          <WorkspaceReview full title="Agent changes" files={(turnArtifact()?.files || []).map((file) => ({ path: file.path, status: file.status }))} selectedPath={artifactPath()} comparison={artifactComparison()} viewState={artifactViewState()} onViewStateChange={artifactReview.setViewState} busy={artifactBusy()} empty="No agent changes in this chat." footerControl={artifactBaselineControl()} onSelect={selectArtifactFile} onOpenFile={openComparisonInFiles} />
-        </Show>
+        <WorkspaceReview full title="Agent changes" files={(turnArtifact()?.files || []).map((file) => ({ path: file.path, status: file.status }))} selectedPath={artifactPath()} comparison={artifactComparison()} viewState={artifactViewState()} onViewStateChange={artifactReview.setViewState} busy={artifactBusy()} empty={artifactBaseline() === "turn" ? "No agent changes in this turn." : "No agent changes in this chat."} footerControl={artifactBaselineControl()} comparisonLabel={artifactBaseline() === "turn" && artifactOffset() > 0 ? "Turn start → Turn end" : undefined} onSelect={selectArtifactFile} onOpenFile={openComparisonInFiles} />
       </Show>
     </section></Show>
     <Show when={tabVisible("terminal")}><section class="workspace-terminal-slot" data-position={panePosition("terminal")}><TerminalPane projectId={props.settingsScope?.() === "computer" ? "computer" : props.projectId()} projectName={props.settingsScope?.() === "computer" ? "Computer" : props.projectName()} workingRoot={props.settingsScope?.() === "computer" ? props.workingRoot() : undefined} terminalId={props.requestedTab?.()?.terminalId} focusRequest={terminalFocusRequest()} /></section></Show>
