@@ -14,7 +14,7 @@ import "./workspace-comparison.css";
 export type ComparisonPayload = {
   path: string;
   oldPath: string;
-  scope: "changes" | "staged" | "head" | "turn";
+  scope: "changes" | "staged" | "head" | "turn" | "session";
 } & ({ kind: "text"; original: string; modified: string } | { kind: "unavailable"; message: string });
 
 export interface ComparisonViewState {
@@ -130,7 +130,7 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
           <button type="button" aria-label="Previous change" disabled={file()} onClick={() => move(false)}><ChevronUpIcon /></button>
           <button type="button" aria-label="Next change" disabled={file()} onClick={() => move(true)}><ChevronDownIcon /></button>
         </div>
-        <div class="workspace-editor-detail-group"><span class="workspace-editor-metadata">{{ changes: "Index → Working copy", staged: "HEAD → Index", head: "HEAD → Working copy", turn: "Turn start → Working copy" }[props.comparison.scope]}</span><button type="button" aria-label="Wrap lines" aria-pressed={wrap()} onClick={() => setWrap(!wrap())}><WrapTextIcon /></button><span class="workspace-editor-metadata">{languageName()} · Read-only</span></div>
+        <div class="workspace-editor-detail-group"><span class="workspace-editor-metadata">{{ changes: "Index → Working copy", staged: "HEAD → Index", head: "HEAD → Working copy", turn: "Turn start → Working copy", session: "Chat start → Working copy" }[props.comparison.scope]}</span><button type="button" aria-label="Wrap lines" aria-pressed={wrap()} onClick={() => setWrap(!wrap())}><WrapTextIcon /></button><span class="workspace-editor-metadata">{languageName()} · Read-only</span></div>
       </footer>
     </Show>
   </section>;

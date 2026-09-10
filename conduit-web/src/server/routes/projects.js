@@ -428,7 +428,7 @@ export function registerProjectRoutes(app, {
       const chat = registry.metadata(chatId);
       if (!chat || chat.projectId !== project.id) return response.json(null);
       const artifact = request.query.path
-        ? await turnCheckpoints.compare(chatId, project.workingRoot, request.query.path)
+        ? await turnCheckpoints.compare(chatId, project.workingRoot, request.query.path, typeof request.query.checkpointId === "string" ? request.query.checkpointId : null)
         : await turnCheckpoints.review(chatId, project.workingRoot);
       response.json(artifact);
     } catch (error) { next(error); }
