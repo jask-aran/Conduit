@@ -1954,6 +1954,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             navigation={navigationFor("primary")}
             comparison={comparisonFor("primary")}
             comparisonFooterControl={comparisonFor("primary")?.origin === "artifact" ? artifactBaselineControl() : undefined}
+            comparisonLabel={comparisonFor("primary")?.origin === "timeline" && fileAgentOffset() > 0 ? "Turn start → Turn end" : undefined}
             gitFile={props.sourceControlEnabled() ? diff()?.files.find((file) => file.path === openPaths().primary) : undefined}
             onShowDiff={(staged) => void showFileDiff("primary", staged)}
             onShowFile={() => { setFileNavigation(null); setTemporaryComparisons((current) => ({ ...current, primary: undefined })); }}
@@ -1993,6 +1994,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
               navigation={navigationFor("secondary")}
               comparison={comparisonFor("secondary")}
               comparisonFooterControl={comparisonFor("secondary")?.origin === "artifact" ? artifactBaselineControl() : undefined}
+              comparisonLabel={comparisonFor("secondary")?.origin === "timeline" && fileAgentOffset() > 0 ? "Turn start → Turn end" : undefined}
               gitFile={props.sourceControlEnabled() ? diff()?.files.find((file) => file.path === openPaths().secondary) : undefined}
               onShowDiff={(staged) => void showFileDiff("secondary", staged)}
               onShowFile={() => { setFileNavigation(null); setTemporaryComparisons((current) => ({ ...current, secondary: undefined })); }}

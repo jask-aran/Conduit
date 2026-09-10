@@ -172,6 +172,7 @@ export default function WorkspaceFileSlot(props: {
   onSaved?: () => void;
   comparison?: TemporaryComparison;
   comparisonFooterControl?: JSX.Element;
+  comparisonLabel?: JSX.Element;
   onEditComparison?: (source: string, position: number) => void;
   gitFile?: { status: string; stagedCounts?: { added: number; removed: number } | null; workingCounts?: { added: number; removed: number } | null };
   onShowDiff?: (staged: boolean) => void;
@@ -510,7 +511,7 @@ export default function WorkspaceFileSlot(props: {
     >
       <div class="workspace-file-representation" hidden={!props.comparison}>
         <Show when={retainedComparison()}>{(temporary) => <Suspense fallback={<div class="workspace-panel-empty">Loading comparison…</div>}>
-          <WorkspaceComparison comparison={temporary().comparison} viewState={temporary().viewState} wrap={props.wrap} onToggleWrap={props.onToggleWrap} inFiles header={textHeader()} footerControl={props.comparisonFooterControl} onViewStateChange={(viewState) => setRetainedComparison((current) => current ? { ...current, viewState } : current)} onShowFile={props.onShowFile} onOpenFile={(source, position) => props.onEditComparison?.(source, position)} />
+          <WorkspaceComparison comparison={temporary().comparison} viewState={temporary().viewState} wrap={props.wrap} onToggleWrap={props.onToggleWrap} inFiles header={textHeader()} footerControl={props.comparisonFooterControl} comparisonLabel={props.comparisonLabel} onViewStateChange={(viewState) => setRetainedComparison((current) => current ? { ...current, viewState } : current)} onShowFile={props.onShowFile} onOpenFile={(source, position) => props.onEditComparison?.(source, position)} />
         </Suspense>}</Show>
       </div>
       <div class="workspace-file-representation" hidden={Boolean(props.comparison)}>
