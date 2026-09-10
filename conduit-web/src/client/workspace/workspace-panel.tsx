@@ -181,7 +181,7 @@ function cacheWorkspace(projectId: string, patch: Partial<WorkspaceCacheEntry>) 
   while (workspaceCache.size > MAX_CACHED_WORKSPACES) workspaceCache.delete(workspaceCache.keys().next().value!);
 }
 
-export default function WorkspacePanel(props: { projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onToggleExpanded: () => void; onClose: () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing> }) {
+export default function WorkspacePanel(props: { projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onToggleExpanded: () => void; onClose: () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing> }) {
   let projectGeneration = 0;
   let requestVersion = 0;
   let projectController = new AbortController();
@@ -267,11 +267,12 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   });
   const loadArtifactComparison = async (path: string) => {
     const projectId = props.projectId();
-    const chatId = props.chatId();
+    const chatId = props.artifactChatId?.();
+    if (!chatId) return;
     setArtifactBusy(true);
     try {
       const result = await api<ComparisonPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&path=${encodeURIComponent(path)}`);
-      if (props.projectId() === projectId && props.chatId() === chatId && artifactPath() === path) setArtifactComparison(result);
+      if (props.projectId() === projectId && props.artifactChatId?.() === chatId && artifactPath() === path) setArtifactComparison(result);
     } catch (cause) { reportError((cause as Error).message); }
     finally { if (props.projectId() === projectId && artifactPath() === path) setArtifactBusy(false); }
   };
@@ -281,12 +282,17 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     void loadArtifactComparison(path);
   };
   const loadTurnArtifact = async () => {
-    if (props.chatId() === "computer") return;
+    const chatId = props.artifactChatId?.();
+    if (!chatId) {
+      setTurnArtifact(null);
+      setArtifactPath(null);
+      setArtifactComparison(null);
+      return;
+    }
     const projectId = props.projectId();
-    const chatId = props.chatId();
     try {
       const result = await api<TurnArtifactPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}`);
-      if (props.projectId() !== projectId || props.chatId() !== chatId) return;
+      if (props.projectId() !== projectId || props.artifactChatId?.() !== chatId) return;
       setTurnArtifact(result);
       const current = artifactPath();
       const next = current && result?.files.some((file) => file.path === current) ? current : result?.files[0]?.path ?? null;

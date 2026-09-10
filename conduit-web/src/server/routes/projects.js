@@ -426,7 +426,7 @@ export function registerProjectRoutes(app, {
       if (!project) return response.status(404).json({ error: "project_not_found" });
       const chatId = typeof request.query.chatId === "string" ? request.query.chatId : "";
       const chat = registry.metadata(chatId);
-      if (!chat || chat.projectId !== project.id) return response.status(404).json({ error: "chat_not_found" });
+      if (!chat || chat.projectId !== project.id) return response.json(null);
       const artifact = request.query.path
         ? await turnCheckpoints.compare(chatId, project.workingRoot, request.query.path)
         : await turnCheckpoints.review(chatId, project.workingRoot);
