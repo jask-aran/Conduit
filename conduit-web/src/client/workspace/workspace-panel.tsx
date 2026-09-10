@@ -255,24 +255,32 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     artifactPath();
     return { layout: "unified", file: false, wrap: false, top: 0, left: 0, position: 0 };
   });
+  let artifactComparisonRequest = 0;
   const loadArtifactComparison = async (path: string, foreground = false) => {
     const projectId = props.projectId();
     const chatId = props.artifactChatId?.();
     if (!chatId) return;
+    const request = ++artifactComparisonRequest;
+    const checkpointId = turnArtifact()?.id;
+    const baseline = artifactBaseline();
+    const ownsRequest = () => artifactComparisonRequest === request
+      && props.projectId() === projectId
+      && props.artifactChatId?.() === chatId
+      && artifactPath() === path
+      && artifactBaseline() === baseline
+      && turnArtifact()?.id === checkpointId;
     if (foreground) setArtifactBusy(true);
     try {
-      const checkpointId = turnArtifact()?.id;
-      const baseline = artifactBaseline();
       const result = await api<ComparisonPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&path=${encodeURIComponent(path)}&baseline=${baseline}${checkpointId ? `&checkpointId=${encodeURIComponent(checkpointId)}` : ""}`);
-      if (props.projectId() === projectId && props.artifactChatId?.() === chatId && artifactPath() === path) setArtifactComparison((previous) => {
+      if (ownsRequest()) setArtifactComparison((previous) => {
         if (previous && result && previous.path === result.path && previous.oldPath === result.oldPath && previous.scope === result.scope) {
           if (previous.kind === "text" && result.kind === "text" && previous.original === result.original && previous.modified === result.modified) return previous;
           if (previous.kind === "unavailable" && result.kind === "unavailable" && previous.message === result.message) return previous;
         }
         return result;
       });
-    } catch (cause) { reportError((cause as Error).message); }
-    finally { if (props.projectId() === projectId && artifactPath() === path) setArtifactBusy(false); }
+    } catch (cause) { if (ownsRequest()) reportError((cause as Error).message); }
+    finally { if (ownsRequest()) setArtifactBusy(false); }
   };
   const selectArtifactFile = (path: string) => {
     setArtifactPath(path);
@@ -282,6 +290,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const loadTurnArtifact = async () => {
     const chatId = props.artifactChatId?.();
     if (!chatId) {
+      artifactComparisonRequest += 1;
+      setArtifactBusy(false);
       setTurnArtifact(null);
       setArtifactPath(null);
       setArtifactComparison(null);
@@ -304,6 +314,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   };
   const selectArtifactBaseline = (baseline: ArtifactBaseline) => {
     if (baseline === artifactBaseline()) return;
+    artifactComparisonRequest += 1;
+    setArtifactBusy(false);
     setArtifactBaseline(baseline);
     void loadTurnArtifact();
   };
