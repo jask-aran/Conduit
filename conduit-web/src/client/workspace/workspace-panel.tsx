@@ -17,7 +17,7 @@ import { readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./works
 import "./workspace.css";
 import type { ComparisonPayload, ComparisonViewState } from "./workspace-comparison";
 import { createReviewController } from "./workspace-review-controller";
-import WorkspaceReview, { type WorkspaceReviewFile } from "./workspace-review";
+import WorkspaceReview, { WorkspaceReviewNavigator, type WorkspaceReviewFile } from "./workspace-review";
 
 
 interface TreeEntry { name: string; path: string; type: "directory" | "file" | "other"; }
@@ -37,6 +37,7 @@ interface TurnArtifactPayload { id: string; turnId: string | null; createdAt: st
 type PanelTab = "files" | "diff" | "artifacts" | "terminal";
 type ArtifactMode = "changes" | "outputs" | "interactive";
 type ArtifactBaseline = "chat" | "turn";
+type FileNavigatorMode = "explorer" | "agent-changes";
 type SourceControlMode = "changes" | "review" | "graph" | "patch";
 type GitAction = "stage" | "stage-all" | "unstage" | "unstage-all" | "commit" | "fetch" | "pull" | "push";
 type FileSlotId = "primary" | "secondary";
@@ -243,6 +244,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const [shellGap, setShellGap] = createSignal(props.open() && !isMobileLayout() ? 8 : 0);
   const [treeWidth, setTreeWidth] = createSignal(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(readSetting(projectScope(), "tree-width")) || DEFAULT_TREE_WIDTH)));
   const [treeCollapsed, setTreeCollapsed] = createSignal(readSetting(projectScope(), "tree-collapsed") === "true");
+  const [fileNavigatorMode, setFileNavigatorMode] = createSignal<FileNavigatorMode>("explorer");
   const [splitRatio, setSplitRatio] = createSignal(Math.max(0, Math.min(100, Number(readSetting(projectScope(), "split-ratio")) || 50)));
   const [splitWidth, setSplitWidth] = createSignal(0);
   const [fileSplitRatio, setFileSplitRatio] = createSignal(Math.max(25, Math.min(75, Number(readSetting(projectScope(), "file-split-ratio")) || 50)));
@@ -292,6 +294,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     setArtifactBaseline(baseline);
     void loadTurnArtifact();
   };
+  const artifactBaselineControl = () => <div class="workspace-artifact-baseline" role="radiogroup" aria-label="Agent changes baseline"><button type="button" role="radio" aria-checked={artifactBaseline() === "chat"} onClick={() => selectArtifactBaseline("chat")}>Chat start</button><button type="button" role="radio" aria-checked={artifactBaseline() === "turn"} onClick={() => selectArtifactBaseline("turn")}>Latest turn</button></div>;
   const [terminalFocusRequest, setTerminalFocusRequest] = createSignal(0);
   const detailOpenName = () => `${tab()}:detail-open`;
   const detailHeightName = () => `${tab()}:detail-height`;
@@ -684,6 +687,26 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     selectTab("files");
     setDetailOpen(true);
   };
+  const openArtifactFileInFiles = async (path: string) => {
+    await loadArtifactComparison(path);
+    const comparison = artifactComparison();
+    if (comparison?.path === path) openComparisonInFiles(comparison, artifactViewState());
+  };
+  createEffect(() => {
+    const comparison = artifactComparison();
+    if (!comparison) return;
+    setTemporaryComparisons((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const slot of ["primary", "secondary"] as const) {
+        const entry = current[slot];
+        if (entry?.projectId !== props.projectId() || entry.comparison.path !== comparison.path || !["turn", "session"].includes(entry.comparison.scope)) continue;
+        next[slot] = { ...entry, comparison };
+        changed = true;
+      }
+      return changed ? next : current;
+    });
+  });
   const openComparisonFile = (viewState: ComparisonViewState) => {
     const comparison = fileComparison();
     if (comparison) openComparisonInFiles(comparison, viewState);
@@ -1340,7 +1363,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     if (request && request !== previous && props.open()) focusTabDefault(tab());
   }));
   createEffect(on(
-    () => [props.projectId(), tab(), secondaryTab(), props.open(), props.expanded(), sourceControlMode()] as const,
+    () => [props.projectId(), tab(), secondaryTab(), props.open(), props.expanded(), sourceControlMode(), fileNavigatorMode()] as const,
     ([projectId, activeTab, companionTab, open, panelExpanded]) => {
       if (!open) return;
       const projectChanged = loadedProjectId !== projectId;
@@ -1371,7 +1394,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         const needsHistory = diffVisible && includeHistory;
         if (!current || (needsPatch && !current.diff) || (needsHistory && !current.commits)) void loadDiff(needsPatch, needsHistory, Boolean(current));
       }
-      if (artifactsVisible && artifactMode() === "changes") void loadTurnArtifact();
+      if ((artifactsVisible && artifactMode() === "changes") || (filesVisible && fileNavigatorMode() === "agent-changes")) void loadTurnArtifact();
     }));
 
   createEffect(on(() => props.initialDirectory?.(), (listing) => {
@@ -1733,7 +1756,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         data-position={panePosition("files")}
         data-wide={filesWide()}
         data-files={openPaths().secondary ? "2" : "1"}
-        data-tree-collapsed={treeCollapsed()}
+        data-tree-collapsed={treeCollapsed() && fileNavigatorMode() === "explorer"}
         style={{
           "--workspace-tree-width": `${treeWidth()}px`,
           "--workspace-file-a": `${fileSplitRatio()}fr`,
@@ -1745,6 +1768,11 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         </Show>
         <div class="workspace-tree-pane">
           <div class="workspace-tree-tools workspace-tree-search">
+            <div class="workspace-tree-modes" role="radiogroup" aria-label="File navigator">
+              <button type="button" role="radio" aria-label="Explore files" aria-checked={fileNavigatorMode() === "explorer"} title="Explore files" onClick={() => setFileNavigatorMode("explorer")}><FolderIcon /></button>
+              <button type="button" role="radio" aria-label="Review agent changes" aria-checked={fileNavigatorMode() === "agent-changes"} title="Review agent changes" onClick={() => setFileNavigatorMode("agent-changes")}><GitCompareArrowsIcon /></button>
+            </div>
+            <Show when={fileNavigatorMode() === "explorer"}>
             <label class="workspace-tree-filter">
               <SearchIcon />
               <input
@@ -1758,8 +1786,12 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
                 onKeyDown={onFileFilterKeyDown}
               />
             </label>
+            </Show>
           </div>
           <Show when={workspaceStale()}><div class="workspace-freshness-notice" role="status" aria-live="polite"><span>Not updating</span><span aria-hidden="true">·</span><button type="button" onClick={retryWorkspacePoll}>Retry</button></div></Show>
+          <Show when={fileNavigatorMode() === "explorer"} fallback={
+            <WorkspaceReviewNavigator title="Agent changes" files={(turnArtifact()?.files || []).map((file) => ({ path: file.path, status: file.status }))} selectedPath={artifactPath()} empty="No agent changes in this chat." onSelect={(path) => void openArtifactFileInFiles(path)} />
+          }>
           <nav ref={(element) => {
             treeElement = element;
             queueMicrotask(() => { element.scrollTop = workspaceCache.get(props.projectId())?.treeScrollTop || 0; });
@@ -1768,6 +1800,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             <Tree directory="" />
             <Show when={directories()[""] && !directories()[""]?.oversize && visibleEntries("").length === 0}><div class="workspace-tree-empty">{fileFilter() ? "No loaded files match this filter." : "No files to show."}</div></Show>
           </nav>
+          </Show>
+          <Show when={fileNavigatorMode() === "explorer"}>
           <div class="workspace-tree-tools workspace-tree-actions" role="toolbar" aria-label="File tree actions">
             <button type="button" aria-label="New file" title="Create a file in the workspace root" disabled={uploading()} onClick={() => void createFile()}><FilePlusIcon /></button>
             <button type="button" aria-label="New folder" title="Create a folder in the workspace root" disabled={uploading()} onClick={() => void createDirectory()}><FolderPlusIcon /></button>
@@ -1780,6 +1814,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             <Show when={filesWide()}><button type="button" aria-label="Hide file tree" title="Hide file tree" onClick={toggleTreeCollapsed}><PanelLeftCloseIcon /></button></Show>
             <input ref={fileUploadInput} class="workspace-file-input" type="file" multiple={uploadTarget().kind === "directory"} onChange={(event) => void uploadFiles(event.currentTarget.files)} />
           </div>
+          </Show>
         </div>
         <Show when={filesWide()}>
           <div
@@ -1828,6 +1863,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             onLoaded={(file) => noteSlotLoaded("primary", file)}
             navigation={navigationFor("primary")}
             comparison={comparisonFor("primary")}
+            comparisonFooterControl={["turn", "session"].includes(comparisonFor("primary")?.comparison.scope ?? "") ? artifactBaselineControl() : undefined}
             gitFile={props.sourceControlEnabled() ? diff()?.files.find((file) => file.path === openPaths().primary) : undefined}
             onShowDiff={(staged) => void showFileDiff("primary", staged)}
             onShowFile={() => { setFileNavigation(null); setTemporaryComparisons((current) => ({ ...current, primary: undefined })); }}
@@ -1866,6 +1902,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
               onLoaded={(file) => noteSlotLoaded("secondary", file)}
               navigation={navigationFor("secondary")}
               comparison={comparisonFor("secondary")}
+              comparisonFooterControl={["turn", "session"].includes(comparisonFor("secondary")?.comparison.scope ?? "") ? artifactBaselineControl() : undefined}
               gitFile={props.sourceControlEnabled() ? diff()?.files.find((file) => file.path === openPaths().secondary) : undefined}
               onShowDiff={(staged) => void showFileDiff("secondary", staged)}
               onShowFile={() => { setFileNavigation(null); setTemporaryComparisons((current) => ({ ...current, secondary: undefined })); }}
@@ -1938,7 +1975,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       <div class="workspace-artifact-modes" role="radiogroup" aria-label="Artifact modality"><div><button role="radio" aria-checked={artifactMode() === "changes"} onClick={() => { setArtifactMode("changes"); void loadTurnArtifact(); }}>Agent changes</button><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div></div>
       <Show when={artifactMode() === "changes"} fallback={<div class="workspace-panel-empty"><div><BoxesIcon /><strong>{artifactMode() === "outputs" ? "No artifacts in the loaded transcript" : "Interactive artifacts are not enabled"}</strong><p>{artifactMode() === "outputs" ? "Code blocks and file outputs will appear here as transcript artifact projection lands." : "This boundary is reserved for sandboxed, explicitly trusted generated interfaces."}</p></div></div>}>
         <Show when={turnArtifact()?.files.length} fallback={<div class="workspace-panel-empty"><div><GitCompareArrowsIcon /><strong>No agent changes in this chat</strong><p>This view updates when the agent changes a workspace file.</p></div></div>}>
-          <WorkspaceReview full title="Agent changes" files={(turnArtifact()?.files || []).map((file) => ({ path: file.path, status: file.status }))} selectedPath={artifactPath()} comparison={artifactComparison()} viewState={artifactViewState()} onViewStateChange={artifactReview.setViewState} busy={artifactBusy()} empty="No agent changes in this chat." footerControl={<div class="workspace-artifact-baseline" role="radiogroup" aria-label="Agent changes baseline"><button type="button" role="radio" aria-checked={artifactBaseline() === "chat"} onClick={() => selectArtifactBaseline("chat")}>Chat start</button><button type="button" role="radio" aria-checked={artifactBaseline() === "turn"} onClick={() => selectArtifactBaseline("turn")}>Latest turn</button></div>} onSelect={selectArtifactFile} onOpenFile={openComparisonInFiles} />
+          <WorkspaceReview full title="Agent changes" files={(turnArtifact()?.files || []).map((file) => ({ path: file.path, status: file.status }))} selectedPath={artifactPath()} comparison={artifactComparison()} viewState={artifactViewState()} onViewStateChange={artifactReview.setViewState} busy={artifactBusy()} empty="No agent changes in this chat." footerControl={artifactBaselineControl()} onSelect={selectArtifactFile} onOpenFile={openComparisonInFiles} />
         </Show>
       </Show>
     </section></Show>
