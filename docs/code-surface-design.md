@@ -37,7 +37,7 @@ that file.
 | File | Current working-copy file; can enter editing |
 | Changes | Git index → working copy |
 | Staged | `HEAD` → Git index |
-| Agent changes | Chat start or latest turn → working copy |
+| Agent changes | Chat start → working copy, latest turn → working copy, or historical turn start → turn end |
 
 File, Changes, Staged and Agent changes use the same CodeMirror-based surface.
 Comparisons are read-only.
@@ -49,7 +49,9 @@ area. Opening a review file in Files selects that file and its Diff
 representation. Files can switch between File and Diff without changing file
 identity. Files also has an Agent changes navigator. Its compact turn control
 uses `0` for the latest turn and negative offsets for earlier checkpoints. A
-selected checkpoint compares that turn's start with the current working copy.
+historical checkpoint ends at the next checkpoint, so it isolates that turn.
+The latest checkpoint still ends at the current working copy because no later
+checkpoint exists yet.
 There is no accordion surface in the current plan.
 
 ## Settled decisions
