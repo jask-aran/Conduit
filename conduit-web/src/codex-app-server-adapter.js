@@ -3,6 +3,8 @@ import { EventEmitter } from "node:events";
 import os from "node:os";
 import { spawn } from "node:child_process";
 import readline from "node:readline";
+import { SessionRecords } from "./harnesses/session-records.js";
+import { unsupported } from "./harnesses/unsupported.js";
 
 export const CODEX_CAPABILITIES = Object.freeze({
   steer: false, followUpQueue: false, cancel: true, compaction: false,
@@ -37,8 +39,14 @@ export class CodexAppServerAdapter extends EventEmitter {
     this.discoveryId = null;
     this.discoveryStart = null;
     this.discoveryTimer = null;
-    this.records = new Map();
-    this.byChatId = new Map();
+    this.sessions = new SessionRecords({
+      capabilities: CODEX_CAPABILITIES,
+      backend: { protocol: "native_api", implementation: "codex", installationId: "host-codex" },
+    });
+    // `start` indexes records directly; these are the store's own maps.
+    this.records = this.sessions.records;
+    this.byChatId = this.sessions.byChatId;
+    Object.assign(this, unsupported(CODEX_CAPABILITIES, { label: "Codex" }));
   }
 
   async create({ chatId, project, model = "", thinkingLevel = "" }) {
@@ -404,9 +412,6 @@ export class CodexAppServerAdapter extends EventEmitter {
     clearTimeout(this.discoveryTimer);
     this.discoveryId = null; const records = [...this.records.values()].filter((record) => record.status !== "stopped"); await Promise.all(records.map((record) => this.close(record.id))); return records.length; }
 
-  respondHostUi() { throw error("Codex does not expose host UI requests", "unsupported_interaction", 400); }
-  queue() { throw error("Codex does not support steering or follow-up queues", "unsupported_interaction", 400); }
-  fork() { throw error("Codex history forks are not available in this slice", "unsupported_interaction", 400); }
   async setModel(id, model) {
     const record = this.get(id);
     if (!record) throw error("Codex app-server is unavailable");
@@ -419,8 +424,6 @@ export class CodexAppServerAdapter extends EventEmitter {
     record.thinkingLevel = thinkingLevel;
     return thinkingLevel;
   }
-  refreshContext() { return Promise.resolve(null); }
-  sendPi() { throw error("Unsupported Codex command", "unsupported_interaction", 400); }
   waitForSession() { return Promise.resolve(); }
   replay(id) { return this.runtimeState(this.get(id)); }
   getCapabilities() { return CODEX_CAPABILITIES; }
@@ -521,19 +524,13 @@ export class CodexAppServerAdapter extends EventEmitter {
   getModelState(id) { const record = this.get(id); return Promise.resolve({
     model: record?.model || "", thinkingLevel: record?.thinkingLevel || "",
   }); }
-  attach(id, socket) { const record = this.get(id); record.clients.add(socket); socket.once("close", () => record.clients.delete(socket));
-    for (const event of record.events) if (socket.readyState === 1) socket.send(JSON.stringify(event)); return this.runtimeState(record); }
-  view(record) { return { id: record.id, chatId: record.chatId, status: record.status, activity: record.activity, active: record.active,
-    stopping: record.stopping, generation: record.generation, model: record.model, capabilities: CODEX_CAPABILITIES,
-    backend: { protocol: "native_api", implementation: "codex", installationId: "host-codex" } }; }
-  runtimeState(record) { return { type: "runtime_state", generationId: record?.generation?.id || null,
-    lifecycle: record?.status === "stopped" ? "closed" : record?.status === "starting" ? "creating" : record?.active ? "working" : "idle",
-    status: record?.stopping ? "stopping" : record?.activity === "failed" ? "failed" : record?.active ? "working" : "idle",
-    activity: record?.activity || "idle", capabilities: CODEX_CAPABILITIES }; }
-  publish(record, event) { record.events.push(event); for (const socket of record.clients) if (socket.readyState === 1) socket.send(JSON.stringify(event)); }
-  get(id) { return this.records.get(id) || null; }
-  getByChatId(chatId) { const id = this.byChatId.get(chatId); return id ? this.get(id) : null; }
-  list() { return [...this.records.values()].map((record) => this.view(record)); }
+  attach(id, socket) { return this.sessions.attach(id, socket); }
+  view(record) { return this.sessions.view(record); }
+  runtimeState(record) { return this.sessions.runtimeState(record); }
+  publish(record, event) { return this.sessions.publish(record, event); }
+  get(id) { return this.sessions.get(id); }
+  getByChatId(chatId) { return this.sessions.getByChatId(chatId); }
+  list() { return this.sessions.list(); }
   stop(id) { void this.close(id); return Boolean(this.get(id)); }
   fail(record, cause) { for (const pending of record.pending.values()) { clearTimeout(pending.timer); pending.reject(error(cause.message)); } record.pending.clear(); }
   exit(record, code) { if (record.status !== "stopped" && code) this.publish(record, { type: "error", generationId: record.generation?.id || null,

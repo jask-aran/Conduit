@@ -6,6 +6,8 @@ import { Readable } from "node:stream";
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
+import { SessionRecords } from "./harnesses/session-records.js";
+import { unsupported } from "./harnesses/unsupported.js";
 
 export const CHATGPT_WEB_CAPABILITIES = Object.freeze({
   steer: false, followUpQueue: false, cancel: true, compaction: false,
@@ -23,8 +25,20 @@ export class ChatGptWebAdapter extends EventEmitter {
     this.script = script;
     this.dataDir = dataDir;
     this.requestTimeoutMs = requestTimeoutMs;
-    this.records = new Map();
-    this.byChatId = new Map();
+    this.sessions = new SessionRecords({
+      capabilities: CHATGPT_WEB_CAPABILITIES,
+      backend: { protocol: "native_api", implementation: "chatgpt-web", installationId: "user-chatgpt-account" },
+      extras: (record) => ({
+        thinkingLevel: record.thinkingLevel, title: record.title || null,
+        linkUrl: record.sessionId.conversationId ? `https://chatgpt.com/c/${record.sessionId.conversationId}` : null,
+      }),
+      // This backend has no server-side history to re-read, so its own journal
+      // is the transcript: every published event is durable before broadcast.
+      onPublish: (record, event) => this.appendJournal(record.chatId, event),
+    });
+    this.records = this.sessions.records;
+    this.byChatId = this.sessions.byChatId;
+    Object.assign(this, unsupported(CHATGPT_WEB_CAPABILITIES, { label: "ChatGPT Web" }));
     this.child = null;
     this.origin = "";
     this.starting = null;
@@ -222,25 +236,10 @@ export class ChatGptWebAdapter extends EventEmitter {
   toClientEvent(event) { return event; }
   replay(id) { return this.runtimeState(this.get(id)); }
   waitForSession() { return Promise.resolve(); }
-  respondHostUi() { throw adapterError("ChatGPT Web does not expose host UI requests", "unsupported_interaction", 400); }
-  queue() { throw adapterError("ChatGPT Web does not support queues", "unsupported_interaction", 400); }
-  fork() { throw adapterError("ChatGPT Web history forks are unavailable", "unsupported_interaction", 400); }
-  refreshContext() { return Promise.resolve(null); }
-  sendPi() { throw adapterError("Unsupported ChatGPT Web command", "unsupported_interaction", 400); }
-  attach(id, socket) { const record = this.get(id); record.clients.add(socket); socket.once("close", () => record.clients.delete(socket));
-    for (const event of record.events) if (socket.readyState === 1) socket.send(JSON.stringify(event)); return this.runtimeState(record); }
-  view(record) { return { id: record.id, chatId: record.chatId, status: record.status, activity: record.activity, active: record.active,
-    stopping: record.stopping, generation: record.generation, model: record.model, thinkingLevel: record.thinkingLevel,
-    title: record.title || null,
-    capabilities: CHATGPT_WEB_CAPABILITIES,
-    backend: { protocol: "native_api", implementation: "chatgpt-web", installationId: "user-chatgpt-account" },
-    linkUrl: record.sessionId.conversationId ? `https://chatgpt.com/c/${record.sessionId.conversationId}` : null }; }
-  runtimeState(record) { return { type: "runtime_state", generationId: record?.generation?.id || null,
-    lifecycle: record?.status === "stopped" ? "closed" : record?.active ? "working" : "idle",
-    status: record?.stopping ? "stopping" : record?.activity === "failed" ? "failed" : record?.active ? "working" : "idle",
-    activity: record?.activity || "idle", capabilities: CHATGPT_WEB_CAPABILITIES }; }
-  publish(record, event) { record.events.push(event); this.appendJournal(record.chatId, event);
-    for (const socket of record.clients) if (socket.readyState === 1) socket.send(JSON.stringify(event)); }
+  attach(id, socket) { return this.sessions.attach(id, socket); }
+  view(record) { return this.sessions.view(record); }
+  runtimeState(record) { return this.sessions.runtimeState(record); }
+  publish(record, event) { return this.sessions.publish(record, event); }
   journalPath(chatId) { return path.join(this.dataDir, "journals", `${chatId}.jsonl`); }
   appendJournal(chatId, event) { const file = this.journalPath(chatId); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.appendFileSync(file, JSON.stringify(event) + "\n", { mode: 0o600 }); }
   readJournal(chatId) { try { return fs.readFileSync(this.journalPath(chatId), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)); } catch { return []; } }
@@ -258,8 +257,8 @@ export class ChatGptWebAdapter extends EventEmitter {
     }
     return messages;
   }
-  get(id) { return this.records.get(id) || null; }
-  getByChatId(chatId) { const id = this.byChatId.get(chatId); return id ? this.get(id) : null; }
-  list() { return [...this.records.values()].map((record) => this.view(record)); }
+  get(id) { return this.sessions.get(id); }
+  getByChatId(chatId) { return this.sessions.getByChatId(chatId); }
+  list() { return this.sessions.list(); }
   stop(id) { void this.close(id); return Boolean(this.get(id)); }
 }
