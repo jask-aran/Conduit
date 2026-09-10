@@ -61,9 +61,8 @@ import { ModelProfileRuntime, usesWebSearchOverlay } from "./model-profile-runti
 import { publicModelProfile, resolveModelProfile } from "./model-profiles.js";
 import { PromptStore } from "./prompt-store.js";
 import { ChatBackendRegistry, serializePiV0 } from "./pi-rpc-adapter.js";
-import { CodexAppServerAdapter } from "./codex-app-server-adapter.js";
-import { ChatGptWebAdapter } from "./chatgpt-web-adapter.js";
-import { spawnSync } from "node:child_process";
+import { MANIFESTS } from "./harnesses/index.js";
+import { detect } from "./harnesses/probe.js";
 import { TurnCheckpointStore } from "./turn-checkpoint-store.js";
 
 const config = loadConfig();
@@ -146,18 +145,26 @@ const manager = new PiManager({
   maxGeneratingProcesses: runtimeSettings.get().maxGeneratingProcesses,
   idleProcessTtlMs: runtimeSettings.get().idleProcessTtlMs,
 });
-const codexCommand = process.env.CONDUIT_CODEX_COMMAND || "codex";
-const codexProbe = spawnSync(codexCommand, ["--version"], { encoding: "utf8", timeout: 3_000 });
-const codexAvailable = codexProbe.status === 0;
-const codex = new CodexAppServerAdapter({ command: codexCommand });
-const chatgptWebPython = process.env.CONDUIT_CHATGPT_WEB_PYTHON || path.join(config.repositoryRoot, "working-files/.venv/bin/python");
-const chatgptWebScript = process.env.CONDUIT_CHATGPT_WEB_SIDECAR || path.join(config.repositoryRoot, "working-files/chatgpt_web_sidecar.py");
-const chatgptWebProbe = spawnSync(chatgptWebPython, ["-c", "import curl_cffi"], { encoding: "utf8", timeout: 3_000 });
-const chatgptWebAvailable = chatgptWebProbe.status === 0;
-const chatgptWeb = new ChatGptWebAdapter({ python: chatgptWebPython, script: chatgptWebScript,
-  dataDir: path.join(config.dataRoot, "chatgpt-web") });
-const backends = new ChatBackendRegistry(manager, codexAvailable ? codex : null,
-  chatgptWebAvailable ? [["chatgpt-web", chatgptWeb]] : []);
+// Everything a harness manifest needs to probe and build itself. Backends are
+// no longer named here: they come from MANIFESTS, and detection runs in
+// parallel so four three-second timeouts cost three seconds, not twelve.
+const harnessConfig = {
+  manager,
+  codexCommand: process.env.CONDUIT_CODEX_COMMAND || "codex",
+  chatgptWebPython: process.env.CONDUIT_CHATGPT_WEB_PYTHON
+    || path.join(config.repositoryRoot, "working-files/.venv/bin/python"),
+  chatgptWebScript: process.env.CONDUIT_CHATGPT_WEB_SIDECAR
+    || path.join(config.repositoryRoot, "working-files/chatgpt_web_sidecar.py"),
+  chatgptWebDataDir: path.join(config.dataRoot, "chatgpt-web"),
+};
+const backends = ChatBackendRegistry.fromManifests(MANIFESTS, await detect(MANIFESTS, harnessConfig), harnessConfig);
+// Distinct adapter instances: Pi answers to two implementation keys.
+const adapterInstances = () => new Set(backends.adapters.values());
+const chatgptWeb = backends.adapters.get("chatgpt-web") || null;
+const requireChatgptWeb = () => {
+  if (!chatgptWeb) throw Object.assign(new Error("ChatGPT Web is not installed"), { code: "backend_unavailable", status: 409 });
+  return chatgptWeb;
+};
 async function recycleIdleIsolatedPiProcesses() {
   const candidates = manager.liveRecords().filter((record) => record.runtime?.kind === "conduit_profile"
     && manager.isReclaimable(record));
@@ -464,13 +471,13 @@ app.use(express.json({ limit: "128kb" }));
 app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 
 app.get("/v0/chatgpt-web/status", async (_request, response, next) => {
-  try { response.json(await chatgptWeb.health()); } catch (error) { next(error); }
+  try { response.json(await requireChatgptWeb().health()); } catch (error) { next(error); }
 });
 app.put("/v0/chatgpt-web/credential", async (request, response, next) => {
-  try { response.json(await chatgptWeb.setCredential(String(request.body?.cookie || ""))); } catch (error) { next(error); }
+  try { response.json(await requireChatgptWeb().setCredential(String(request.body?.cookie || ""))); } catch (error) { next(error); }
 });
 app.delete("/v0/chatgpt-web/credential", async (_request, response, next) => {
-  try { response.json(await chatgptWeb.removeCredential()); } catch (error) { next(error); }
+  try { response.json(await requireChatgptWeb().removeCredential()); } catch (error) { next(error); }
 });
 
 registerAuthRoutes(app, { authStore, socketTickets });
@@ -523,8 +530,11 @@ function checkpointNativeAdapter(adapter, record) {
     })
     .catch((cause) => console.error("Could not checkpoint native chat", cause));
 }
-codex.on("settled", ({ record }) => checkpointNativeAdapter(codex, record));
-chatgptWeb.on("settled", ({ record }) => checkpointNativeAdapter(chatgptWeb, record));
+// Every native adapter checkpoints the same way. PiRpcAdapter is not an event
+// emitter and simply has no `on`, so this covers the backends that need it.
+for (const adapter of adapterInstances()) {
+  adapter.on?.("settled", ({ record }) => checkpointNativeAdapter(adapter, record));
+}
 registerRuntimeRoutes(app, {
   attachments,
   config,
@@ -802,8 +812,12 @@ async function shutdown(signal) {
   server.closeIdleConnections?.();
   server.closeAllConnections?.();
   const stoppedProcesses = await manager.shutdown();
-  const stoppedCodexProcesses = await codex.shutdown();
-  await chatgptWeb.shutdown();
+  const codexAdapter = backends.adapters.get("codex");
+  let stoppedCodexProcesses = 0;
+  for (const adapter of adapterInstances()) {
+    const stopped = await adapter.shutdown?.();
+    if (adapter === codexAdapter) stoppedCodexProcesses = stopped || 0;
+  }
   const stoppedTerminals = await terminals.stopAll();
   await voiceModel.stop();
   await closed;

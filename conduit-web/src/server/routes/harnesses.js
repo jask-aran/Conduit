@@ -3,17 +3,25 @@ import fs from "node:fs/promises";
 import { chatView } from "../../chat-store.js";
 import { computerContext } from "../../computer-context.js";
 import { groupThreadsByFolder, trackedByThread } from "../../harness-threads.js";
+import { MANIFESTS } from "../../harnesses/index.js";
 
-const SUPPORTED = new Set(["codex", "chatgpt-web"]);
+// Pi is built in rather than a harness the dashboard offers, so it is the one
+// manifest this surface excludes.
+const HARNESS_MANIFESTS = MANIFESTS.filter((manifest) => !manifest.builtIn);
+const SUPPORTED = new Set(HARNESS_MANIFESTS.map((manifest) => manifest.id));
 
 // `discovery` says how far a harness can see: "machine" lists every thread it
 // knows about, "none" has no history to offer. The dashboard renders from this
 // rather than special-casing an implementation.
 export function harnessCatalog(backends) {
-  return [
-    { id: "codex", label: "Codex", available: backends.adapters.has("codex"), sessions: true, drive: true, discovery: "machine" },
-    { id: "chatgpt-web", label: "ChatGPT Web", available: backends.adapters.has("chatgpt-web"), sessions: false, drive: false, discovery: "none" },
-  ];
+  return HARNESS_MANIFESTS.map((manifest) => ({
+    id: manifest.id,
+    label: manifest.label,
+    available: backends.adapters.has(manifest.id),
+    sessions: manifest.discovery !== "none",
+    drive: manifest.drive,
+    discovery: manifest.discovery,
+  }));
 }
 
 const isDirectory = (target) => fs.stat(target).then((stat) => stat.isDirectory(), () => false);
@@ -34,14 +42,22 @@ const opaqueSessionId = (chat) => typeof chat.backend?.opaqueSession === "string
   : chat.backend?.opaqueSession?.threadId || null;
 
 export function registerHarnessRoutes(app, { backends, projects, registry }) {
-  app.get("/v0/harnesses", async (_request, response) => {
+  // `?refresh=1` re-probes, so installing a harness does not need a restart.
+  app.get("/v0/harnesses", async (request, response) => {
+    if (request.query.refresh) await backends.refreshDetection?.();
     const harnesses = await Promise.all(harnessCatalog(backends).map(async (item) => {
-      if (!item.available || item.id !== "chatgpt-web") return item;
+      // Detection already answered installed / version / signed-in for every
+      // harness; only a backend that can report live health refines it.
+      const probe = backends.detection?.get(item.id) || null;
+      const row = probe ? { ...item, status: probe.status, version: probe.version } : item;
+      const adapter = item.available ? backends.adapters.get(item.id) : null;
+      if (!adapter?.health) return row;
       try {
-        const health = await backends.forImplementation(item.id).health();
-        return { ...item, status: health.configured ? "ready" : "authentication_required", version: health.transportVersion || null };
+        const health = await adapter.health();
+        return { ...row, status: health.configured ? "ready" : "authentication_required",
+          version: health.transportVersion || row.version || null };
       } catch {
-        return { ...item, status: "unavailable" };
+        return { ...row, status: "unavailable" };
       }
     }));
     response.json({ harnesses });
@@ -90,7 +106,7 @@ export function registerHarnessRoutes(app, { backends, projects, registry }) {
   app.post("/v0/harnesses/:implementation/drive", async (request, response, next) => {
     try {
       const implementation = request.params.implementation;
-      if (implementation !== "codex" || !backends.adapters.has(implementation)) {
+      if (!backends.manifestFor?.(implementation)?.drive || !backends.adapters.has(implementation)) {
         return response.status(409).json({ error: "harness_drive_unavailable" });
       }
       // A drive target is either a registered project or any folder on the
