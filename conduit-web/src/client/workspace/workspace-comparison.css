@@ -17,9 +17,8 @@
 .workspace-comparison-content .cm-merge-a .cm-changedLine,
 .workspace-comparison-content .cm-deletedChunk { background: color-mix(in srgb, var(--destructive) 14%, transparent); }
 .workspace-comparison-content .cm-merge-b .cm-changedLine { background: color-mix(in srgb, var(--workspace-git-added) 14%, transparent); }
-.workspace-comparison-content .cm-merge-a .cm-changedText,
-.workspace-comparison-content .cm-deletedChunk .cm-deletedText { background: color-mix(in srgb, var(--destructive) 28%, transparent); border-radius: 2px; }
-.workspace-comparison-content .cm-merge-b .cm-changedText { background: color-mix(in srgb, var(--workspace-git-added) 28%, transparent); border-radius: 2px; }
+.workspace-comparison-content .cm-changedText,
+.workspace-comparison-content .cm-deletedText { background: transparent; }
 .workspace-comparison-content .cm-merge-a .cm-changedLineGutter,
 .workspace-comparison-content .cm-deletedLineGutter { background: var(--destructive); }
 .workspace-comparison-content .cm-merge-b .cm-changedLineGutter { background: var(--workspace-git-added); }
