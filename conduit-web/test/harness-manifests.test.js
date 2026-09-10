@@ -152,8 +152,12 @@ test("a backend without usage reports no context rather than failing the chat", 
 test("the migrated adapters expose exactly the refusals their flags imply", async () => {
   const { CodexAppServerAdapter, CODEX_CAPABILITIES } = await import("../src/codex-app-server-adapter.js");
   const codex = new CodexAppServerAdapter({ command: "codex" });
-  assert.equal(CODEX_CAPABILITIES.permissions, false);
-  assert.throws(() => codex.respondHostUi(), { code: "unsupported_interaction" });
+  // Codex answers approval requests, so respondHostUi must be real rather than
+  // a refusal - the flag and the method have to agree.
+  assert.equal(CODEX_CAPABILITIES.permissions, true);
+  assert.throws(() => codex.respondHostUi("missing-session", {}), { code: "backend_unavailable" },
+    "it fails on the missing session, not because the interaction is unsupported");
+  assert.equal(CODEX_CAPABILITIES.steer, false);
   assert.throws(() => codex.queue(), { code: "unsupported_interaction" });
   assert.equal(CODEX_CAPABILITIES.modelSwitch, true);
   assert.equal(typeof codex.setModel, "function");
