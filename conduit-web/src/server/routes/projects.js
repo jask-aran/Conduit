@@ -427,10 +427,12 @@ export function registerProjectRoutes(app, {
       const chatId = typeof request.query.chatId === "string" ? request.query.chatId : "";
       const chat = registry.metadata(chatId);
       if (!chat || chat.projectId !== project.id) return response.json(null);
+      if (request.query.timeline === "1") return response.json(await turnCheckpoints.timeline(chatId, project.workingRoot));
       const baseline = request.query.baseline === "turn" ? "turn" : "chat";
+      const checkpointId = typeof request.query.checkpointId === "string" ? request.query.checkpointId : null;
       const artifact = request.query.path
-        ? await turnCheckpoints.compare(chatId, project.workingRoot, request.query.path, typeof request.query.checkpointId === "string" ? request.query.checkpointId : null, baseline)
-        : await turnCheckpoints.review(chatId, project.workingRoot, baseline);
+        ? await turnCheckpoints.compare(chatId, project.workingRoot, request.query.path, checkpointId, baseline)
+        : await turnCheckpoints.review(chatId, project.workingRoot, baseline, checkpointId);
       response.json(artifact);
     } catch (error) { next(error); }
   });
