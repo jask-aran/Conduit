@@ -137,7 +137,7 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Tran
   let copyButton: HTMLButtonElement | undefined;
   const assistant = () => props.message.role !== "user";
   return <div class="response-actions">
-    <Show when={!assistant() && !props.message.id.startsWith("user_")}>
+    <Show when={!assistant() && !isOptimisticId(props.message.id)}>
       <Button variant="ghost" size="icon-sm" aria-label={props.chat.editingEntryId() === props.message.id ? "Cancel editing" : "Edit from here"} onClick={() => props.chat.edit(props.message)}><PencilIcon /></Button>
     </Show>
     <Show when={assistant()}>
