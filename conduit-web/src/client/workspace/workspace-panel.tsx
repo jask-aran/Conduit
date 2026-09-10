@@ -1,5 +1,5 @@
 import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, Show, type Accessor } from "solid-js";
-import { BoxesIcon, Columns2Icon, CheckIcon, ChevronsUpIcon, ChevronDownIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileDiffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, FolderUpIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, Maximize2Icon, Minimize2Icon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, SendIcon, TerminalIcon, Trash2Icon, Undo2Icon, UploadIcon, XIcon } from "lucide-solid";
+import { BoxesIcon, Columns2Icon, CheckIcon, ChevronsUpIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileDiffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, FolderUpIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, Maximize2Icon, Minimize2Icon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, SendIcon, TerminalIcon, Trash2Icon, Undo2Icon, UploadIcon, XIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
 import { Button, ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Spinner } from "@/components/primitives";
 import { api, asList } from "../api/client";
@@ -320,11 +320,13 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       fileAgentReview.select(null);
       return;
     }
-    const result = await api<TurnArtifactPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&baseline=turn&checkpointId=${encodeURIComponent(checkpoint.id)}`);
-    if (props.projectId() !== projectId || props.artifactChatId?.() !== chatId || fileAgentTimeline()[fileAgentOffset()]?.id !== checkpoint.id) return;
-    setFileAgentArtifact(result);
-    const path = fileAgentReview.reconcile(result?.files ?? []);
-    if (path) void loadFileAgentComparison(path);
+    try {
+      const result = await api<TurnArtifactPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&baseline=turn&checkpointId=${encodeURIComponent(checkpoint.id)}`);
+      if (props.projectId() !== projectId || props.artifactChatId?.() !== chatId || fileAgentTimeline()[fileAgentOffset()]?.id !== checkpoint.id) return;
+      setFileAgentArtifact(result);
+      const path = fileAgentReview.reconcile(result?.files ?? []);
+      if (path) void loadFileAgentComparison(path);
+    } catch (cause) { reportError((cause as Error).message); }
   };
   const loadFileAgentTimeline = async () => {
     const projectId = props.projectId();
@@ -339,12 +341,14 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     }
     const currentOffset = fileAgentOffset();
     const currentId = fileAgentTimeline()[currentOffset]?.id;
-    const result = await api<TurnCheckpointSummary[]>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&timeline=1`);
-    if (request !== fileAgentTimelineRequest || props.projectId() !== projectId || props.artifactChatId?.() !== chatId) return;
-    const nextOffset = currentOffset === 0 ? 0 : Math.max(0, result.findIndex((checkpoint) => checkpoint.id === currentId));
-    setFileAgentTimeline(result);
-    setFileAgentOffset(nextOffset);
-    await loadFileAgentCheckpoint(result[nextOffset]);
+    try {
+      const result = await api<TurnCheckpointSummary[]>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&timeline=1`);
+      if (request !== fileAgentTimelineRequest || props.projectId() !== projectId || props.artifactChatId?.() !== chatId) return;
+      const nextOffset = currentOffset === 0 ? 0 : Math.max(0, result.findIndex((checkpoint) => checkpoint.id === currentId));
+      setFileAgentTimeline(result);
+      setFileAgentOffset(nextOffset);
+      await loadFileAgentCheckpoint(result[nextOffset]);
+    } catch (cause) { if (request === fileAgentTimelineRequest) reportError((cause as Error).message); }
   };
   const moveFileAgentTimeline = (offset: number) => {
     const next = Math.max(0, Math.min(fileAgentTimeline().length - 1, fileAgentOffset() + offset));
@@ -1143,6 +1147,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       cacheWorkspace(projectId, { diff: null });
     }
     if (tabVisible("artifacts") && artifactMode() === "changes") await loadTurnArtifact();
+    if (tabVisible("files") && fileNavigatorMode() === "agent-changes") await loadFileAgentTimeline();
   };
   const pollWorkspace = async () => {
     if (pollingWorkspace || uploading()) return true;
@@ -1472,7 +1477,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         const needsHistory = diffVisible && includeHistory;
         if (!current || (needsPatch && !current.diff) || (needsHistory && !current.commits)) void loadDiff(needsPatch, needsHistory, Boolean(current));
       }
-      if ((artifactsVisible && artifactMode() === "changes") || (filesVisible && fileNavigatorMode() === "agent-changes")) void loadTurnArtifact();
+      if (artifactsVisible && artifactMode() === "changes") void loadTurnArtifact();
+      if (filesVisible && fileNavigatorMode() === "agent-changes") void loadFileAgentTimeline();
     }));
 
   createEffect(on(() => props.initialDirectory?.(), (listing) => {
@@ -1867,8 +1873,14 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             </Show>
           </div>
           <Show when={workspaceStale()}><div class="workspace-freshness-notice" role="status" aria-live="polite"><span>Not updating</span><span aria-hidden="true">·</span><button type="button" onClick={retryWorkspacePoll}>Retry</button></div></Show>
-          <Show when={fileNavigatorMode() === "explorer"} fallback={
-            <WorkspaceReviewNavigator title="Agent changes" files={(turnArtifact()?.files || []).map((file) => ({ path: file.path, status: file.status }))} selectedPath={artifactPath()} empty="No agent changes in this chat." onSelect={(path) => void openArtifactFileInFiles(path)} />
+          <Show when={fileNavigatorMode() === "explorer"} fallback={<>
+            <WorkspaceReviewNavigator title="Agent changes" files={(fileAgentArtifact()?.files || []).map((file) => ({ path: file.path, status: file.status }))} selectedPath={fileAgentReview.selectedPath()} empty="No agent changes for this turn." onSelect={(path) => void openFileAgentTurn(path)} />
+            <div class="workspace-agent-timeline" role="toolbar" aria-label="Agent turn timeline">
+              <button type="button" aria-label="Older turn" title="Older turn" disabled={fileAgentOffset() >= fileAgentTimeline().length - 1} onClick={() => moveFileAgentTimeline(1)}><ChevronLeftIcon /></button>
+              <span title={fileAgentTimeline()[fileAgentOffset()]?.createdAt}>{fileAgentTimeline().length ? `Turn ${fileAgentOffset() === 0 ? "0" : `−${fileAgentOffset()}`}` : "No turns"}</span>
+              <button type="button" aria-label="Newer turn" title="Newer turn" disabled={fileAgentOffset() === 0} onClick={() => moveFileAgentTimeline(-1)}><ChevronRightIcon /></button>
+            </div>
+          </>
           }>
           <nav ref={(element) => {
             treeElement = element;
@@ -1941,7 +1953,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             onLoaded={(file) => noteSlotLoaded("primary", file)}
             navigation={navigationFor("primary")}
             comparison={comparisonFor("primary")}
-            comparisonFooterControl={["turn", "session"].includes(comparisonFor("primary")?.comparison.scope ?? "") ? artifactBaselineControl() : undefined}
+            comparisonFooterControl={comparisonFor("primary")?.origin === "artifact" ? artifactBaselineControl() : undefined}
             gitFile={props.sourceControlEnabled() ? diff()?.files.find((file) => file.path === openPaths().primary) : undefined}
             onShowDiff={(staged) => void showFileDiff("primary", staged)}
             onShowFile={() => { setFileNavigation(null); setTemporaryComparisons((current) => ({ ...current, primary: undefined })); }}
@@ -1980,7 +1992,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
               onLoaded={(file) => noteSlotLoaded("secondary", file)}
               navigation={navigationFor("secondary")}
               comparison={comparisonFor("secondary")}
-              comparisonFooterControl={["turn", "session"].includes(comparisonFor("secondary")?.comparison.scope ?? "") ? artifactBaselineControl() : undefined}
+              comparisonFooterControl={comparisonFor("secondary")?.origin === "artifact" ? artifactBaselineControl() : undefined}
               gitFile={props.sourceControlEnabled() ? diff()?.files.find((file) => file.path === openPaths().secondary) : undefined}
               onShowDiff={(staged) => void showFileDiff("secondary", staged)}
               onShowFile={() => { setFileNavigation(null); setTemporaryComparisons((current) => ({ ...current, secondary: undefined })); }}
