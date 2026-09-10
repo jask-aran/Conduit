@@ -1,7 +1,7 @@
 import type { Message } from "./api/contracts";
 
 const OPTIMISTIC_PREFIXES = ["user_", "live_", "end_"];
-const isOptimisticId = (id: string) => OPTIMISTIC_PREFIXES.some((prefix) => id.startsWith(prefix));
+export const isOptimisticId = (id: string) => OPTIMISTIC_PREFIXES.some((prefix) => id.startsWith(prefix));
 const keyOf = (message: Message) => message.key ?? message.id;
 
 function sameMessage(left: Message, right: Message) {

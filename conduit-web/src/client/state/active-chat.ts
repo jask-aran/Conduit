@@ -860,6 +860,43 @@ export function createActiveChat(options: ActiveChatOptions) {
   // waiting for the backend to echo its queue back.
   const pendingMessages = createMemo(() => messages().filter((message) => message.role === "user" && message.pending));
 
+  /** Take the queued messages out of the transcript, returning their text. */
+  const takeQueued = () => {
+    const text = pendingMessages().map((message) => message.content).filter(Boolean).join("\n");
+    setMessages((current) => current.filter((message) => !message.pending));
+    return text;
+  };
+
+  const waitForIdle = (timeoutMs = 8_000) => new Promise<void>((resolve) => {
+    const startedAt = Date.now();
+    const tick = () => {
+      if (!streaming() || Date.now() - startedAt > timeoutMs) return resolve();
+      setTimeout(tick, 50);
+    };
+    tick();
+  });
+
+  /**
+   * Stop the turn and send the queued text as a fresh prompt. Steering waits
+   * for the running tool call; this does not, which is the point of it.
+   */
+  const interruptAndSend = async () => {
+    const text = takeQueued();
+    stop();
+    await waitForIdle();
+    if (!text) return;
+    setDraft((current) => current ? `${current}\n${text}` : text);
+    await send();
+  };
+
+  /** Put the queued text back in the composer so it can be reworded. */
+  const editQueued = () => {
+    const text = takeQueued();
+    if (text) setDraft((current) => current ? `${current}\n${text}` : text);
+  };
+
+  const discardQueued = () => { takeQueued(); };
+
   const clearQueue = () => {
     const restored = pendingMessages().map((message) => message.content).filter(Boolean).join("\n");
     setQueue({ steering: [], followUp: [] });
@@ -903,7 +940,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     generation, editingEntryId, contextUsage, sessionStats, cacheStats, compacting, hostUiRequests, queue, pendingMessages, capabilities, activeGeneration, activeGenerationChange,
     connectingId, streaming, stopping, activity,
     initialize, select, prefetch, loadDetail, openLive, attachLive, ensureLive, reset, send, stop, regenerate,
-    continueResponse, loadOlder, edit, respondHostUi, clearQueue,
+    continueResponse, loadOlder, edit, respondHostUi, clearQueue, interruptAndSend, editQueued, discardQueued,
   };
 }
 

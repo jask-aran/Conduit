@@ -12,7 +12,7 @@ import type { WorkspaceEditorHandle } from "./workspace-editor";
 import type { ComparisonPayload, ComparisonViewState } from "./workspace-comparison";
 
 const WorkspaceComparison = lazy(() => import("./workspace-comparison"));
-export interface TemporaryComparison { comparison: ComparisonPayload; viewState: ComparisonViewState; }
+export interface TemporaryComparison { comparison: ComparisonPayload; viewState: ComparisonViewState; origin?: "artifact" | "timeline"; }
 
 let workspaceEditorPromise: Promise<typeof import("./workspace-editor")> | undefined;
 export const preloadWorkspaceEditor = () => {
