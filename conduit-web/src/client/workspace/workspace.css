@@ -1,5 +1,16 @@
 /* Workspace panel geometry, file views, and artifact surfaces. */
-.workspace-panel { --workspace-git-added: #98c379; --workspace-git-modified: #d19a66; }
+.workspace-panel {
+  --workspace-git-added: #98c379;
+  --workspace-git-modified: #d19a66;
+  --workbench-bar-height: 28px;
+  --workbench-control-size: 22.4px;
+  --workbench-gap: 2.4px;
+  --workbench-padding-block: 3.2px;
+  --workbench-padding-inline: 4.8px;
+  --workbench-icon-size: 11px;
+  --workbench-font-size: 8px;
+  --workbench-divider: var(--border);
+}
 .workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 0 6.4px 0; flex: none; overflow: visible; pointer-events: none; border-radius: 12.8px; transition: width 220ms var(--panel-motion-easing), margin-right 220ms var(--panel-motion-easing); }
 .workspace-panel[data-shortcut-scope="workspace-panel"]:focus-within .workspace-panel-header strong,
 body:has(.workspace-file-menu[data-expanded]) .workspace-panel[data-shortcut-scope="workspace-panel"] .workspace-panel-header strong { color: var(--shortcut-focus); }
@@ -154,23 +165,23 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-search-actions [data-slot="button"]:hover, .workspace-search-actions [data-slot="button"]:focus-visible, .workspace-search-actions [data-slot="button"][aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
 .workspace-search-actions [data-slot="button"]:focus-visible { outline: 1px solid var(--ring); outline-offset: -1px; box-shadow: none; }
 .workspace-search-actions svg { width: 11.2px; height: 11.2px; }
-.workspace-editor-status { display: flex; min-height: 28px; flex: none; align-items: center; gap: 2.4px; overflow: hidden; border-top: 1px solid var(--border); background: color-mix(in oklch, var(--background), black 3%); padding: 3.2px 4.8px; color: var(--muted-foreground); font: 8px/1 ui-monospace, SFMono-Regular, Consolas, monospace; user-select: none; }
-.workspace-editor-command-group, .workspace-editor-detail-group { display: flex; min-width: 0; height: 22.4px; flex: none; align-items: center; gap: 2.4px; overflow-x: auto; scrollbar-width: none; }
+.workspace-editor-status { display: flex; min-height: var(--workbench-bar-height); flex: none; align-items: center; gap: var(--workbench-gap); overflow: hidden; border-top: 1px solid var(--workbench-divider); background: color-mix(in oklch, var(--background), black 3%); padding: var(--workbench-padding-block) var(--workbench-padding-inline); color: var(--muted-foreground); font: var(--workbench-font-size)/1 ui-monospace, SFMono-Regular, Consolas, monospace; user-select: none; }
+.workspace-editor-command-group, .workspace-editor-detail-group { display: flex; min-width: 0; height: var(--workbench-control-size); flex: none; align-items: center; gap: var(--workbench-gap); overflow-x: auto; scrollbar-width: none; }
 .workspace-editor-command-group::-webkit-scrollbar, .workspace-editor-detail-group::-webkit-scrollbar { display: none; }
 .workspace-editor-detail-group { flex: 1; justify-content: flex-end; }
 .workspace-editor-metadata { flex: none; padding-inline: 5px; white-space: nowrap; }
-.workspace-editor-status button { display: grid; min-width: 22.4px; height: 22.4px; flex: none; place-items: center; border: 0; border-radius: 4.8px; outline: 0; background: transparent; padding: 0 6px; color: var(--muted-foreground); font: inherit; }
+.workspace-editor-status button { display: grid; min-width: var(--workbench-control-size); height: var(--workbench-control-size); flex: none; place-items: center; border: 0; border-radius: 4.8px; outline: 0; background: transparent; padding: 0 6px; color: var(--muted-foreground); font: inherit; }
 .workspace-editor-status button:hover:not(:disabled), .workspace-editor-status button:focus-visible, .workspace-editor-status button[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
 .workspace-editor-status button:focus-visible { outline: 1px solid var(--ring); outline-offset: -1px; }
 .workspace-editor-status button:disabled { opacity: 0.28; }
-.workspace-editor-status button svg { width: 11px; height: 11px; }
+.workspace-editor-status button svg { width: var(--workbench-icon-size); height: var(--workbench-icon-size); }
 .workspace-editor-status .workspace-editor-picker { display: flex; max-width: 96px; gap: 5px; }
 .workspace-editor-picker span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-editor-picker svg { flex: none; }
 .workspace-editor-picker-menu { min-width: 144px; font-family: var(--font-sans); }
 .workspace-editor-language-menu { max-height: min(420px, calc(100dvh - 24px)); overflow-y: auto; }
 .workspace-editor-status .workspace-editor-mode { display: flex; align-items: center; gap: 5px; color: var(--foreground); font-weight: 600; }
-.workspace-editor-command-group .workspace-editor-mode { min-width: 66px; height: 22.4px; padding-inline: 5px; }
+.workspace-editor-command-group .workspace-editor-mode { min-width: 66px; height: var(--workbench-control-size); padding-inline: 5px; }
 .workspace-editor-mode svg { width: 10px; height: 10px; }
 .workspace-editor-status .workspace-editor-mode:disabled { color: var(--muted-foreground); opacity: 1; }
 .workspace-code-surface[data-editable="false"] .workspace-edit-command { display: none; }
@@ -515,11 +526,17 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
   .workspace-tree, .workspace-preview, .workspace-diff, .workspace-changes, .workspace-git-graph, .workspace-diff-content { overscroll-behavior: contain; }
   .workspace-resize-handle { display: none; }
   .workspace-files { grid-template-rows: minmax(160px, 42%) 1fr; }
-  .workspace-editor-status { min-height: 35px; gap: 3px; padding: 4px 6px; font-size: 10px; }
-  .workspace-editor-command-group, .workspace-editor-detail-group { height: 28px; gap: 3px; }
-  .workspace-editor-status button { min-width: 28px; height: 28px; padding-inline: 8px; border-radius: 6px; }
-  .workspace-editor-status button svg { width: 14px; height: 14px; }
-  .workspace-editor-command-group .workspace-editor-mode { min-width: 68px; height: 28px; padding-inline: 7px; }
+  .workspace-panel {
+    --workbench-bar-height: 35px;
+    --workbench-control-size: 28px;
+    --workbench-gap: 3px;
+    --workbench-padding-block: 4px;
+    --workbench-padding-inline: 6px;
+    --workbench-icon-size: 14px;
+    --workbench-font-size: 10px;
+  }
+  .workspace-editor-status button { padding-inline: 8px; border-radius: 6px; }
+  .workspace-editor-command-group .workspace-editor-mode { min-width: 68px; padding-inline: 7px; }
   .workspace-editor-status .workspace-editor-picker { max-width: 112px; }
   .workspace-search-controls { min-height: 35px; gap: 4px; padding: 4px 6px; }
   .workspace-search-controls .workspace-search-field { height: 28px; flex-basis: 120px; border-radius: 6px; padding-inline: 8px; font-size: 10px; }
