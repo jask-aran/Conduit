@@ -1124,12 +1124,12 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     if (props.projectId() !== projectId) return;
     if (treeChanged) toast.info("Workspace files updated");
     if (props.sourceControlEnabled() && (tabVisible("diff") || tabVisible("files"))) await loadDiff(tabVisible("diff") && sourceDetailOpen() && diffDetailOpen(), tabVisible("diff") && sourceDetailOpen() && !diffDetailOpen(), false, true);
-    if (tabVisible("artifacts") && artifactMode() === "changes") await loadTurnArtifact();
     else {
       // Hidden Git data is stale; refresh it only when Source Control opens.
       setDiff(null);
       cacheWorkspace(projectId, { diff: null });
     }
+    if (tabVisible("artifacts") && artifactMode() === "changes") await loadTurnArtifact();
   };
   const pollWorkspace = async () => {
     if (pollingWorkspace || uploading()) return true;
