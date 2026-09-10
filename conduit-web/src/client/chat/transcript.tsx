@@ -195,8 +195,11 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
   const rendererUsesTypewriter = () => isIncremarkRenderer(markdownRenderer());
   const rendererUsesInertialTailFollow = () => rendererUsesTypewriter();
   const rendererMetric = () => markdownRenderer();
+  // A queued message lives in the composer bubble until the model takes it, so
+  // the transcript does not also show it as a sent turn.
+  const settledMessages = createMemo(() => props.chat.messages().filter((message) => !message.pending));
   const timeline = createTimelineStore(
-    props.chat.messages,
+    settledMessages,
     props.chat.tools,
     props.chat.activeGeneration,
     props.chat.activeGenerationChange,
@@ -847,7 +850,7 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
                     </>}><UserMessageText text={message().content || ""} /></Show>
                   </div>
                 </div>
-                <Show when={user() && message().pending}><div class="marker">{message().queueMode === "steer" ? "Queued · steer (after tools)" : "Queued · follow-up (after turn)"}</div></Show>
+
                 <Show when={user() && message().attachments?.length}><AttachmentCards items={message().attachments!} chatId={props.chat.loadedId()} label="Message attachments" /></Show>
                 <Show when={message().stopped}><div class="marker">{message().status === "stopping" ? "Stopping…" : "Stopped"}</div></Show>
                 <Actions message={message()} precedingUserId={precedingUserId()} chat={props.chat} partialContinue={props.partialContinue} />

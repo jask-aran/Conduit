@@ -7,7 +7,7 @@ import { SessionRecords } from "./harnesses/session-records.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 export const CODEX_CAPABILITIES = Object.freeze({
-  steer: false, followUpQueue: false, cancel: true, compaction: false,
+  steer: true, followUpQueue: true, cancel: true, compaction: false,
   thinkingLevels: true, modelSwitch: true, toolUse: true, permissions: true,
   // `replay` means resuming a generation in progress, which Codex cannot do:
   // its `replay` returns the current runtime state, not a generation.
@@ -289,6 +289,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       id: crypto.randomUUID(), chatId, cwd, status: "starting", activity: "starting", adapterImplementation: "codex",
       active: false, stopping: false, sessionId: null, model: "", thinkingLevel: "", generation: null,
       clients: new Set(), events: [], pending: new Map(), approvals: new Map(),
+      steering: [], followUp: [],
       sequence: 0, eventSequence: 0, messageIds: new Set(),
     };
     const child = spawn(this.command, ["app-server", "--stdio"], { cwd, stdio: ["pipe", "pipe", "pipe"] });
@@ -471,6 +472,7 @@ export class CodexAppServerAdapter extends EventEmitter {
         ? { type: "error", generationId: turnId, error: { code: "backend_unavailable", message: params.turn?.error?.message || "Codex turn failed" } }
         : { type: "status", generationId: turnId, sequence: ++record.eventSequence, status: "idle", activity: "idle", detail: "settled" });
       this.emit("settled", { record });
+      if (record.followUp.length) void this.flushFollowUp(record);
     }
   }
 
@@ -479,6 +481,58 @@ export class CodexAppServerAdapter extends EventEmitter {
    * are sent as files rather than only as paths inside the envelope text. It has
    * no generic file variant, so anything else stays a path the model can read.
    */
+  /**
+   * Take a message sent while a turn is running.
+   *
+   * Steering hands it to Codex immediately - `turn/steer` delivers as soon as
+   * the running tool call settles, rather than after the whole turn. A
+   * follow-up waits for the turn to finish, which Codex has no endpoint for, so
+   * Conduit holds it and starts the next turn itself.
+   */
+  async queue(id, type, message) {
+    const record = this.get(id);
+    if (!record) throw error("Codex session is not running");
+    if (!String(message || "").trim()) throw error("Queued message is empty", "invalid_request", 400);
+    if (type === "follow_up") {
+      record.followUp.push(message);
+      this.publishQueue(record);
+      return { queued: "follow_up" };
+    }
+    const turnId = record.generation?.id;
+    if (!turnId) throw error("Codex is not running a turn to steer", "invalid_request", 409);
+    record.steering.push(message);
+    this.publishQueue(record);
+    try {
+      await this.request(record, "turn/steer", {
+        threadId: record.sessionId, expectedTurnId: turnId,
+        input: CodexAppServerAdapter.inputItems(message, []),
+      });
+    } finally {
+      // Steering is delivered rather than parked, so it leaves the queue as
+      // soon as Codex has it - successfully or not.
+      record.steering = record.steering.filter((item) => item !== message);
+      this.publishQueue(record);
+    }
+    return { queued: "steer" };
+  }
+
+  /** Start the next turn from the messages that waited for this one to finish. */
+  async flushFollowUp(record) {
+    const message = record.followUp.shift();
+    if (message === undefined) return;
+    this.publishQueue(record);
+    try { await this.prompt(record.id, message, {}); }
+    catch (cause) {
+      this.publish(record, { type: "error", generationId: record.generation?.id || null,
+        error: { code: "backend_unavailable", message: cause?.message || "Queued message could not be sent" } });
+    }
+  }
+
+  publishQueue(record) {
+    this.publish(record, { type: "queue_state", generationId: record.generation?.id || null,
+      queue: { steering: [...record.steering], followUp: [...record.followUp] } });
+  }
+
   /**
    * Approval and sandbox policy for a thread. Omitted keys let Codex fall back
    * to the user's own `~/.codex/config.toml`, so Conduit only overrides what it

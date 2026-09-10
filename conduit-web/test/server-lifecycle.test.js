@@ -145,7 +145,7 @@ test("Codex app-server profile creates, streams, and reconnects through neutral 
     const live = await launched.json();
     assert.equal(live.backend.implementation, "codex");
     assert.equal(live.model, "codex-other");
-    assert.equal(live.capabilities.steer, false);
+    assert.equal(live.capabilities.steer, true);
     const switched = await harness.request(`/v0/chats/${chat.id}/models`, {
       method: "PATCH", body: JSON.stringify({ model: "codex-test", thinkingLevel: "low" }),
     });
