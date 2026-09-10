@@ -1951,8 +1951,14 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
    when the text is actually clipped. */
 .queued-messages {
   display: flex; align-items: flex-start; gap: 8px;
-  margin: 0 0 6px; padding: 6px 8px; border-radius: 12px;
+  /* Sits inside the composer wrapper and overlaps its top edge, so the two read
+     as one object rather than a notice floating above the input. */
+  position: relative; z-index: 0;
+  margin: 0 0 calc(-1 * var(--composer-radius, 12px));
+  padding: 6px 8px calc(6px + var(--composer-radius, 12px));
+  border-radius: var(--composer-radius, 12px) var(--composer-radius, 12px) 0 0;
   border: 1px solid var(--glass-border);
+  border-bottom: none;
   background: linear-gradient(180deg, oklch(1 0 0 / 9%), oklch(1 0 0 / 2%) 58%), var(--glass-bg);
   backdrop-filter: blur(24px) saturate(168%) brightness(1.05);
   -webkit-backdrop-filter: blur(24px) saturate(168%) brightness(1.05);
@@ -1972,3 +1978,4 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 }
 .queued-message[data-expanded="true"] .queued-message-body { -webkit-line-clamp: unset; overflow: visible; }
 .queued-messages-actions { flex: none; display: flex; align-items: center; gap: 4px; }
+.composer-wrap .composer-surface-shell { position: relative; z-index: 1; }

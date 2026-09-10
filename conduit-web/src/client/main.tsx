@@ -23,7 +23,6 @@ import { AppDashboard } from "./dashboard/app-dashboard";
 import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_STORAGE_KEY, selectedComposerSurface, type ComposerSurfaceMode } from "./chat/composer-surface";
 import type { VoiceDictationSettings } from "./chat/voice-dictation-types";
 import { CONTEXT_METRIC_STORAGE_KEY, contextUsagePercent, formatContextMetrics, saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
-import { QueuedMessages } from "./chat/queued-messages";
 import { HostUiRequests } from "./chat/host-ui-card";
 import {
   MARKDOWN_RENDERER_STORAGE_KEY,
@@ -1896,7 +1895,6 @@ function App() {
             <section class="work-area-conversation" aria-label="Conversation">
               <Transcript chat={chat} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} />
               <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-                <QueuedMessages messages={chat.pendingMessages()} busy={chat.streaming()} canInterrupt={chat.capabilities()?.cancel !== false} onInterrupt={chat.stop} onClear={chat.clearQueue} />
                 <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
             </section>
           </div>
