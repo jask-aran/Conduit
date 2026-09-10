@@ -1,4 +1,4 @@
-import { batch, createMemo, createSignal, onCleanup } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { deriveFineActivity } from "../../activity.js";
 import { api, asList } from "../api/client";
 import { webSocketUrl } from "../api/transport";
@@ -867,29 +867,33 @@ export function createActiveChat(options: ActiveChatOptions) {
     return text;
   };
 
-  const waitForIdle = (timeoutMs = 8_000) => new Promise<void>((resolve) => {
-    const startedAt = Date.now();
-    const tick = () => {
-      // `streaming` goes false the moment a stop is requested, while the
-      // generation is still "stopping" - and send() refuses to run then. Wait
-      // for the stop to finish, not merely to start.
-      if ((!streaming() && !stopping()) || Date.now() - startedAt > timeoutMs) return resolve();
-      setTimeout(tick, 50);
-    };
-    tick();
+  // Interrupting is stop-then-send, but the stop is not synchronous: the
+  // generation sits in "stopping" until the backend's terminal event lands, and
+  // send() refuses to run in that state. Polling for it raced and failed
+  // silently, so the send is held and fired when the stop actually completes.
+  let sendAfterStop: string | null = null;
+  createEffect(() => {
+    const state = generation();
+    if (!sendAfterStop || state === "stopping" || state === "active" || state === "submitting") return;
+    const text = sendAfterStop;
+    sendAfterStop = null;
+    setDraft((current) => current ? `${current}\n${text}` : text);
+    void send();
   });
 
   /**
-   * Stop the turn and send the queued text as a fresh prompt. Steering waits
-   * for the running tool call; this does not, which is the point of it.
+   * Stop the turn and send the queued text straight away. Steering waits for
+   * the running tool call to settle; this does not, which is the point of it.
    */
-  const interruptAndSend = async () => {
+  const interruptAndSend = () => {
     const text = takeQueued();
-    stop();
-    await waitForIdle();
     if (!text) return;
-    setDraft((current) => current ? `${current}\n${text}` : text);
-    await send();
+    if (!streaming() && !stopping()) {
+      setDraft((current) => current ? `${current}\n${text}` : text);
+      return void send();
+    }
+    sendAfterStop = text;
+    stop();
   };
 
   /** Put the queued text back in the composer so it can be reworded. */
