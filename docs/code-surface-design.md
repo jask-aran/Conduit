@@ -47,7 +47,10 @@ by default. Source Control has Changes, Review, Graph and Patch modes. Review
 uses the shared file comparison surface across the full Source Control content
 area. Opening a review file in Files selects that file and its Diff
 representation. Files can switch between File and Diff without changing file
-identity. There is no accordion surface in the current plan.
+identity. Files also has an Agent changes navigator. Its compact turn control
+uses `0` for the latest turn and negative offsets for earlier checkpoints. A
+selected checkpoint compares that turn's start with the current working copy.
+There is no accordion surface in the current plan.
 
 ## Settled decisions
 
