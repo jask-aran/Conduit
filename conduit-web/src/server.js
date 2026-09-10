@@ -64,8 +64,10 @@ import { ChatBackendRegistry, serializePiV0 } from "./pi-rpc-adapter.js";
 import { CodexAppServerAdapter } from "./codex-app-server-adapter.js";
 import { ChatGptWebAdapter } from "./chatgpt-web-adapter.js";
 import { spawnSync } from "node:child_process";
+import { TurnCheckpointStore } from "./turn-checkpoint-store.js";
 
 const config = loadConfig();
+const turnCheckpoints = new TurnCheckpointStore(path.join(config.dataRoot, "turn-checkpoints"));
 const projects = new ProjectStore(config);
 await projects.initialize();
 for (const project of await projects.list()) {
@@ -724,6 +726,7 @@ const liveSessionStream = createLiveSessionStream({
   attachments,
   registry,
   config,
+  turnCheckpoints,
   findChatContext,
   findRegisteredSession,
   chatModelView,
