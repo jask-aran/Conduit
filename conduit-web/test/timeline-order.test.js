@@ -44,7 +44,7 @@ test("buildTimeline keeps tools between messages when timestamps order them", ()
   ]);
 });
 
-test("promotePendingUser clears queue pending on delivery", () => {
+test("a queued message stays queued when Pi echoes it, and adopts its identity", () => {
   const current = [
     { id: "user_1", role: "user", content: "after tools", pending: true, queueMode: "steer" },
   ];
@@ -54,9 +54,22 @@ test("promotePendingUser clears queue pending on delivery", () => {
     id: "entry_user",
     timestamp: "2026-01-01T00:00:05.000Z",
   });
+  assert.equal(next.length, 1, "the echo is not a second message");
+  assert.equal(next[0].id, "entry_user", "it takes the identity Pi gave it");
+  // Pi echoes a queued message on receipt, which is not the model reading it.
+  // Clearing the flag here dropped it out of the composer bubble mid-turn and
+  // left nothing for "interrupt and send now" to send.
+  assert.equal(next[0].pending, true, "it is still waiting for the model");
+  assert.equal(next[0].queueMode, "steer");
+});
+
+test("an ordinary pending message is promoted on delivery", () => {
+  const current = [{ id: "user_1", role: "user", content: "hello", pending: true }];
+  const next = promotePendingUser(current, {
+    role: "user", content: "hello", id: "entry_user", timestamp: "2026-01-01T00:00:05.000Z",
+  });
   assert.equal(next.length, 1);
   assert.equal(next[0].pending, false);
-  assert.equal(next[0].queueMode, undefined);
   assert.equal(next[0].id, "entry_user");
 });
 
