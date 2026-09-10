@@ -83,7 +83,7 @@ export function Composer(props: {
   const recording = createMemo(() => dictationState() === "listening");
   const recorderMonitorState = createMemo(() => dictationState() === "starting" ? "connecting" : dictationState() === "listening" ? "listening" : "stopped");
   const canSend = createMemo(() => hasText() && props.serverOnline && props.chat.generation() !== "stopping"
-    && (!busy() || supports("followUpQueue")) && !dictating());
+    && (!busy() || supports("steer") || supports("followUpQueue")) && !dictating());
   const activity = createMemo(() => props.chat.activity());
   const dictationLabel = createMemo(() => {
     if (dictationState() === "completed" && !dictatedRange()) return "";

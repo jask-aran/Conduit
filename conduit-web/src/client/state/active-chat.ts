@@ -749,7 +749,10 @@ export function createActiveChat(options: ActiveChatOptions) {
     const local: Message = { id: `user_${Date.now()}`, role: "user", content: text, timestamp: new Date().toISOString(), attachments: sentAttachments };
 
     if (busy) {
-      const queueMode = mode === "steer" ? "steer" : "follow_up";
+      // Sending while the agent works steers by default: the message reaches
+      // the model as soon as the current tool call settles, rather than waiting
+      // for the whole turn. Backends without steering fall back to the queue.
+      const queueMode = mode || (capabilities()?.steer === false ? "follow_up" : "steer");
       local.pending = true;
       local.queueMode = queueMode;
       setDraft("");
@@ -852,8 +855,13 @@ export function createActiveChat(options: ActiveChatOptions) {
     setHostUiRequests((current) => current.filter((item) => item.id !== response.id));
   };
 
+  // Messages the user sent while the agent was working, not yet taken by the
+  // model. These are local and immediate, so the composer can show them without
+  // waiting for the backend to echo its queue back.
+  const pendingMessages = createMemo(() => messages().filter((message) => message.role === "user" && message.pending));
+
   const clearQueue = () => {
-    const restored = [...queue().steering, ...queue().followUp].map(String).join("\n");
+    const restored = pendingMessages().map((message) => message.content).filter(Boolean).join("\n");
     setQueue({ steering: [], followUp: [] });
     setMessages((current) => current.filter((message) => !message.pending));
     if (restored) setDraft((current) => current ? `${current}\n${restored}` : restored);
@@ -892,7 +900,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   return {
     status, setStatus, title, setTitle, templateId, setTemplateId, runtimeIdentity, setRuntimeIdentity,
     live, messages, setMessages, tools, loadedId, pageBefore, loadingOlder, draft, setDraft,
-    generation, editingEntryId, contextUsage, sessionStats, cacheStats, compacting, hostUiRequests, queue, capabilities, activeGeneration, activeGenerationChange,
+    generation, editingEntryId, contextUsage, sessionStats, cacheStats, compacting, hostUiRequests, queue, pendingMessages, capabilities, activeGeneration, activeGenerationChange,
     connectingId, streaming, stopping, activity,
     initialize, select, prefetch, loadDetail, openLive, attachLive, ensureLive, reset, send, stop, regenerate,
     continueResponse, loadOlder, edit, respondHostUi, clearQueue,

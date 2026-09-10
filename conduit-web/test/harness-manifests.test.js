@@ -157,8 +157,9 @@ test("the migrated adapters expose exactly the refusals their flags imply", asyn
   assert.equal(CODEX_CAPABILITIES.permissions, true);
   assert.throws(() => codex.respondHostUi("missing-session", {}), { code: "backend_unavailable" },
     "it fails on the missing session, not because the interaction is unsupported");
-  assert.equal(CODEX_CAPABILITIES.steer, false);
-  assert.throws(() => codex.queue(), { code: "unsupported_interaction" });
+  // Codex steers and queues, so `queue` must be real rather than a refusal.
+  assert.equal(CODEX_CAPABILITIES.steer, true);
+  assert.rejects(() => codex.queue("missing-session", "steer", "hi"), { code: "backend_unavailable" });
   assert.equal(CODEX_CAPABILITIES.modelSwitch, true);
   assert.equal(typeof codex.setModel, "function");
   assert.equal(await codex.refreshContext(), null);

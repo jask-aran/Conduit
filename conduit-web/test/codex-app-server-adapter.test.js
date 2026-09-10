@@ -6,7 +6,7 @@ function record() {
   return {
     id: "live", chatId: "chat", status: "running", activity: "idle", active: false, stopping: false,
     sessionId: "thread-1", generation: null, clients: new Set(), events: [], pending: new Map(),
-    approvals: new Map(), sequence: 0, eventSequence: 0, messageIds: new Set(),
+    approvals: new Map(), steering: [], followUp: [], sequence: 0, eventSequence: 0, messageIds: new Set(),
   };
 }
 
@@ -24,7 +24,7 @@ test("Codex notifications map to neutral streaming events", () => {
 
 test("Codex adapter advertises only implemented capabilities", () => {
   assert.deepEqual(CODEX_CAPABILITIES, {
-    steer: false, followUpQueue: false, cancel: true, compaction: false,
+    steer: true, followUpQueue: true, cancel: true, compaction: false,
     thinkingLevels: true, modelSwitch: true, toolUse: true, permissions: true,
     usage: false, replay: false,
   });
@@ -328,4 +328,51 @@ test("thread policy overrides only what Conduit was asked for", () => {
     CodexAppServerAdapter.policy("never", { type: "workspace-write", networkAccess: false, writableRoots: ["/repo"] }),
     { approvalPolicy: "never", sandbox: { type: "workspace-write", networkAccess: false, writableRoots: ["/repo"] } },
   );
+});
+
+test("steering reaches Codex immediately and leaves the queue once delivered", async () => {
+  const adapter = new CodexAppServerAdapter();
+  const live = record();
+  live.active = true;
+  live.generation = { id: "turn-1", closed: false, settled: false };
+  adapter.records.set(live.id, live);
+  const sent = [];
+  adapter.request = (_record, method, params) => { sent.push({ method, params }); return Promise.resolve({}); };
+
+  const result = await adapter.queue(live.id, "steer", "use the other file");
+  assert.deepEqual(result, { queued: "steer" });
+  assert.equal(sent[0].method, "turn/steer");
+  assert.equal(sent[0].params.expectedTurnId, "turn-1");
+  assert.equal(sent[0].params.threadId, "thread-1");
+  assert.deepEqual(sent[0].params.input, [{ type: "text", text: "use the other file" }]);
+
+  const queues = live.events.filter((event) => event.type === "queue_state").map((event) => event.queue.steering);
+  assert.deepEqual(queues, [["use the other file"], []], "it appears while in flight, then clears");
+});
+
+test("steering a settled turn is refused rather than silently dropped", async () => {
+  const adapter = new CodexAppServerAdapter();
+  const live = record();
+  adapter.records.set(live.id, live);
+  await assert.rejects(() => adapter.queue(live.id, "steer", "too late"), { code: "invalid_request" });
+  await assert.rejects(() => adapter.queue(live.id, "follow_up", "   "), { code: "invalid_request" });
+});
+
+test("a follow-up waits for the turn and then starts the next one", async () => {
+  const adapter = new CodexAppServerAdapter();
+  const live = record();
+  live.active = true;
+  live.generation = { id: "turn-1", closed: false, settled: false };
+  adapter.records.set(live.id, live);
+  const prompted = [];
+  adapter.prompt = (id, message) => { prompted.push({ id, message }); return Promise.resolve("turn-2"); };
+
+  assert.deepEqual(await adapter.queue(live.id, "follow_up", "then run the tests"), { queued: "follow_up" });
+  assert.deepEqual(live.events.at(-1).queue.followUp, ["then run the tests"]);
+  assert.deepEqual(prompted, [], "nothing is sent while the turn is running");
+
+  adapter.notification(live, "turn/completed", { turn: { id: "turn-1", status: "completed" } });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(prompted, [{ id: live.id, message: "then run the tests" }]);
+  assert.deepEqual(live.events.at(-1).queue.followUp, [], "the queue empties as it is sent");
 });
