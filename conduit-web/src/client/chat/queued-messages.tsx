@@ -41,6 +41,7 @@ function QueuedLine(props: { text: string }) {
  */
 export function QueuedMessages(props: {
   messages: Message[];
+  surface: string;
   busy: boolean;
   canInterrupt: boolean;
   onInterruptAndSend: () => void;
@@ -50,7 +51,7 @@ export function QueuedMessages(props: {
   const lines = () => props.messages.map((message) => message.content || "").filter((text) => text.trim());
 
   return <Show when={lines().length}>
-    <aside class="queued-float" aria-label="Messages waiting for the agent">
+    <aside class="queued-float composer-surface-material" data-composer-surface={props.surface} aria-label="Messages waiting for the agent">
       <header class="queued-float-head">
         <span class="queued-float-title">{props.busy ? "Steering the agent" : "Waiting to send"}</span>
         <span class="queued-float-hint">{props.busy ? "Sent when the current step finishes" : "Sends next"}</span>
