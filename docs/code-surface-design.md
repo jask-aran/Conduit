@@ -4,7 +4,8 @@ A Conduit-native file workbench built on CodeMirror 6. It starts with file
 viewing and editing, then adds file comparisons through CodeMirror's merge
 support.
 
-Status: approved direction, not yet implemented.
+Status: editor and comparison layers implemented; semantic IDE behavior is
+deferred.
 
 ## User outcome
 
@@ -36,15 +37,17 @@ that file.
 | File | Current working-copy file; can enter editing |
 | Changes | Git index → working copy |
 | Staged | `HEAD` → Git index |
-| Proposal | Current file → agent-proposed content |
+| Agent changes | Chat start or latest turn → working copy |
 
-This implementation starts with File. Changes, Staged and Proposal arrive
-after the editor layer is stable. Comparisons remain read-only at first.
+File, Changes, Staged and Agent changes use the same CodeMirror-based surface.
+Comparisons are read-only.
 
 The Files tab and Source Control keep separate selection state. Files opens File
-by default. In a later phase, selecting a Source Control row mounts the same
-workbench in its Diff details pane and selects Changes or Staged. There is no
-accordion surface in the current plan.
+by default. Source Control has Changes, Review, Graph and Patch modes. Review
+uses the shared file comparison surface across the full Source Control content
+area. Opening a review file in Files selects that file and its Diff
+representation. Files can switch between File and Diff without changing file
+identity. There is no accordion surface in the current plan.
 
 ## Settled decisions
 
@@ -66,13 +69,11 @@ header, representation controls, file status, save actions, menus and errors.
 The editor theme maps CodeMirror elements to `DESIGN.md` tokens so the pane does
 not look like an embedded third-party product.
 
-### CodeMirror will also get first refusal on diffs
+### CodeMirror owns diff rendering
 
-The later comparison phase will test `@codemirror/merge` and its unified merge
-view before building a separate diff renderer. It already supports changed
-chunks, collapsed unchanged ranges, inline changes, wrapping and bounded diff
-work. The comparison phase must measure its bundle and runtime cost inside the
-real pane before adoption.
+Comparisons use `@codemirror/merge` for unified and side-by-side views. It owns
+changed chunks, collapsed unchanged ranges, wrapping and bounded diff work.
+Conduit owns range selection, file navigation and workbench controls.
 
 ### Chat highlighting remains separate
 
@@ -106,16 +107,19 @@ uses this approach.
 Keep the first change inside the existing ownership boundaries.
 
 ```text
-workspace-file-slot.tsx   file load/save, selected representation, dirty state
-workspace-editor.tsx      one EditorView and its lifecycle
-workspace-languages.ts    curated filename → lazy language-support registry
-workspace.css             Conduit-owned workbench and CodeMirror presentation
+workspace-file-slot.tsx          file load/save, representation and dirty state
+workspace-editor.tsx             editable file EditorView lifecycle
+workspace-editor-base.ts         shared read-only CodeMirror configuration
+workspace-comparison.tsx         unified and side-by-side comparison lifecycle
+workspace-review-controller.ts  shared review selection and request ownership
+workspace-languages.ts           filename → lazy language-support registry
+workspace.css                    workbench layout and CodeMirror presentation
 ```
 
-Do not add a general workbench framework or a renderer abstraction before a
-second implementation needs one. `workspace-file-slot.tsx` already owns file
-identity, draft and save state. `workspace-editor.tsx` already switches wrapping
-and editability through compartments. Build on those seams.
+`workspace-file-slot.tsx` owns file identity, draft and save state. The shared
+workbench primitives define compact buttons, representation controls and status
+layout. The review controller shares request and selection behavior without
+merging Git and chat-checkpoint domain models.
 
 ### Editor state ownership
 
@@ -128,7 +132,6 @@ only when it must cross an ownership boundary:
 - Save.
 - Copy complete file.
 - Leave or dispose an edited file while preserving its draft.
-- Build a Proposal comparison.
 
 External content enters the editor only when the project, path or server
 revision changes. A local keystroke must not cause a full-document equality
@@ -145,10 +148,11 @@ selection, history and scroll position. Changing the selected project or path
 loads then commits the new file; it does not show the old file under a new
 label.
 
-Only visible workbenches own live `EditorView` instances. Inactive Workspace
-tabs retain their selection and draft state without continuing layout,
-highlight or observer work in hidden editors. Two visible file slots can each
-own one editor.
+An open file slot retains File and Diff representation state so switching does
+not reload either representation. Inactive Workspace tabs retain selection and
+draft state. Comparison document updates use CodeMirror transactions rather
+than recreating the view. A layout switch between unified and side-by-side can
+recreate the comparison because CodeMirror uses different view types.
 
 ### Language loading
 
@@ -266,10 +270,9 @@ Each phase is independently shippable.
 3. **Curated language loading.** Replace the broad language catalogue with lazy
    filename-to-language imports. Measure the built chunks and retain plain-text
    fallback.
-4. **Comparison representations.** Test `@codemirror/merge` in the real pane.
-   If it meets bundle, interaction and visual requirements, use its unified
-   merge view for Changes, Staged and Proposal. Define the selected-file server
-   contract in that phase; do not make editor phase 1 carry it.
+4. **Comparison representations.** Use `@codemirror/merge` for Changes, Staged
+   and Agent changes. Share review behavior between Source Control and
+   Artifacts. Preserve the active comparison view when its documents update.
 5. **Semantic IDE behaviour.** Write a separate design for language-server
    lifecycle, document synchronization, completion, diagnostics, hover,
    navigation, rename, formatting and code actions.
@@ -307,22 +310,18 @@ lazy chunks before and after phases 2 and 3.
   CodeMirror while mounted and synchronize only at named boundaries.
 - **Broad language support can restore the current bundle cost.** Keep the
   registry explicit and each grammar lazy.
-- **Hidden editors can retain observers and layout work.** Only visible
-  workbenches own views; retain data state outside the DOM.
-- **Diff integration can expand editor scope.** Keep it in phase 4 and require a
-  real-pane measurement before adopting `@codemirror/merge`.
+- **Retained representations can keep observers alive.** Keep the number of
+  open file slots bounded. Measure idle work before increasing this limit.
+- **Diff integration can expand editor scope.** Keep comparison controls
+  read-only until an editing workflow has a separate product design.
 - **VS Code-level wording can imply semantic IDE features.** The current scope
   is the editor layer only; language services require their own design.
 
 ## Deferred work
 
 - Semantic IDE behaviour and language-server integration.
-- Changes, Staged and Proposal representations until phase 4.
-- Source Control mounting of the workbench until phase 4.
-- Accordion review surface and per-file `+N / -M` counts.
+- Accordion review surface.
 - Word-level review controls beyond what the chosen merge view provides.
-- Side-by-side comparison; unified comparison gets first priority in the narrow
-  details pane.
 - Per-hunk stage and revert actions.
 - Chat adoption of the editor renderer.
 
@@ -330,9 +329,6 @@ lazy chunks before and after phases 2 and 3.
 
 - Which languages belong in the first curated registry? Use repository evidence,
   not the size of the old catalogue.
-- Can CodeMirror's unified merge view match the narrow Source Control pane and
-  Conduit visual language within the existing lazy-chunk budget? Decide in
-  phase 4 from a measured prototype.
 - Which editor features should load by default and which should load on first
   use? Decide from interaction latency and bundle evidence during phases 2 and
   3.

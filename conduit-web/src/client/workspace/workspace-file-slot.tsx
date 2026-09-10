@@ -180,6 +180,7 @@ export default function WorkspaceFileSlot(props: {
   ref?: (handle: FileSlotHandle) => void;
 }) {
   const [retainedComparison, setRetainedComparison] = createSignal<TemporaryComparison>();
+  let retainedProject = props.projectId;
   createEffect(() => {
     const incoming = props.comparison;
     const path = props.path;
@@ -187,7 +188,6 @@ export default function WorkspaceFileSlot(props: {
     setRetainedComparison((previous) => incoming ?? (retainedProject === projectId && previous?.comparison.path === path ? previous : undefined));
     retainedProject = projectId;
   });
-  let retainedProject = props.projectId;
   const [preview, setPreview] = createSignal<FilePreview | null>(null);
   const [asset, setAsset] = createSignal<FileAsset | null>(null);
   const [imageDimensions, setImageDimensions] = createSignal<{ width: number; height: number } | null>(null);
