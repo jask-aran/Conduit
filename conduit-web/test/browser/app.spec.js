@@ -348,6 +348,33 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+// A width commit that lands in one step -- restoring a stored width when the
+// project changes -- used its own 256..496 clamp while drag and keyboard used
+// clampWidth (240..65% of the viewport). A panel dragged wider than 496 came
+// back narrower, and the commit dispatched no geometry motion, so the
+// transcript stayed laid out for the width it never learned had changed.
+test("restores a stored panel width past the old clamp and announces the commit @desktop @setpiece", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    // The compact-UI migration rescales stored widths by 0.8 exactly once.
+    // Claim it, or the seeded width arrives as 480 and proves nothing.
+    localStorage.setItem("conduit:compact-ui-v2", "true");
+    localStorage.setItem("conduit:workspace-panel:project_chat:width", "600");
+    window.__geometry = [];
+    window.addEventListener("conduit:panel-geometry-motion", (event) => {
+      window.__geometry.push({ phase: event.detail.phase, source: event.detail.source, size: event.detail.size, targetSize: event.detail.targetSize ?? null });
+    });
+  });
+  await openChatSurface(page);
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  await expect(panel).toBeVisible();
+  await expect.poll(async () => Math.round((await panel.boundingBox()).width)).toBe(600);
+
+  const commits = await page.evaluate(() => window.__geometry.filter((entry) => entry.source === "workspace" && entry.targetSize != null));
+  expect(commits.length).toBeGreaterThan(0);
+  expect(commits.at(-1).targetSize).toBeGreaterThan(600);
+});
+
 test("workspace directory pages append and survive refresh with honest filtering @desktop", async ({ page }, testInfo) => {
   let nextPageRequests = 0;
   await page.route("**/v0/projects/*/tree?*", (route) => {
@@ -1261,6 +1288,91 @@ test("terminal recovery states expose one action for conflict, stop, and network
   await expect(terminal.locator(".terminal-header-status")).toHaveText("Active Now");
 });
 
+test("rapid panel reversals continue from rendered geometry and release transcript locks @desktop @setpiece", async ({ page }, testInfo) => {
+  await openChatSurface(page);
+  const sidebar = page.locator(".conduit-sidebar");
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+  // Captured from the settled sidebar rather than written down: the expanded
+  // width is an interface-scale decision and has already moved twice.
+  const expandedWidth = (await sidebar.boundingBox()).width;
+  const sidebarTrigger = sidebar.locator('[data-sidebar="trigger"]');
+  const workspace = page.locator("aside.workspace-panel");
+  const transcriptShell = page.locator(".transcript-motion-shell");
+  const waitFrames = (count) => page.evaluate((frameCount) => new Promise((resolve) => {
+    let remaining = frameCount;
+    const frame = () => {
+      remaining -= 1;
+      if (remaining <= 0) resolve();
+      else requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }), count);
+  const sampleEdges = (selector, edge, count) => page.evaluate(({ targetSelector, targetEdge, frameCount }) => new Promise((resolve, reject) => {
+    const target = document.querySelector(targetSelector);
+    if (!target) {
+      reject(new Error(`Missing motion target: ${targetSelector}`));
+      return;
+    }
+    const samples = [];
+    const frame = () => {
+      samples.push(target.getBoundingClientRect()[targetEdge]);
+      if (samples.length === frameCount) resolve(samples);
+      else requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }), { targetSelector: selector, targetEdge: edge, frameCount: count });
+  await expect(page.locator(".thread")).toBeVisible();
+  await expect(workspace).toBeAttached();
+  await sidebarTrigger.evaluate((element) => element.click());
+  await waitFrames(3);
+  const sidebarMid = await page.evaluate(() => {
+    const shell = document.querySelector(".conduit-sidebar");
+    return shell ? shell.getBoundingClientRect().width : 0;
+  });
+  expect(sidebarMid).toBeGreaterThan(52);
+  expect(sidebarMid).toBeLessThanOrEqual(Math.round(expandedWidth));
+  await sidebarTrigger.evaluate((element) => element.click());
+  const sidebarReverse = await sampleEdges(".conduit-sidebar", "width", 8);
+  expect(sidebarReverse[0]).toBeLessThanOrEqual(Math.round(expandedWidth));
+  expect(sidebarReverse.every((value, index) =>
+    index === 0 || value + 0.5 >= sidebarReverse[index - 1])).toBe(true);
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+  await expect.poll(async () => Math.round((await sidebar.boundingBox()).width)).toBe(Math.round(expandedWidth));
+
+  await page.getByRole("button", { name: "Toggle workspace panel" }).evaluate((element) => element.click());
+  await waitFrames(3);
+  const workspaceMid = await workspace.evaluate((element) => element.getBoundingClientRect().width);
+  expect(workspaceMid).toBeGreaterThan(0);
+  expect(workspaceMid).toBeLessThan(420);
+  await workspace.getByRole("button", { name: "Close workspace panel" }).evaluate((element) => element.click());
+  const workspaceReverse = await sampleEdges(".workspace-panel", "width", 8);
+  expect(workspaceReverse[0]).toBeGreaterThan(0);
+  expect(workspaceReverse.every((value, index) =>
+    index === 0 || value <= workspaceReverse[index - 1] + 0.5)).toBe(true);
+  await expect(workspace).toHaveAttribute("aria-hidden", "true");
+  await expect.poll(async () => Math.round((await workspace.boundingBox())?.width || 0)).toBe(0);
+  await expect.poll(() => transcriptShell.evaluate((element) =>
+    new DOMMatrixReadOnly(getComputedStyle(element).transform).m41)).toBe(0);
+  await expect(page.locator(".transcript")).not.toHaveAttribute("data-panel-motion");
+});
+
+test("desktop panel surfaces settle immediately with reduced motion @desktop @setpiece", async ({ page }, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await openChatSurface(page);
+  const sidebar = page.locator(".conduit-sidebar");
+  await page.locator('[data-sidebar="trigger"]').click();
+  await expect(sidebar).toHaveAttribute("data-state", "collapsed");
+  expect(await sidebar.evaluate((element) => element.getAnimations().filter((animation) =>
+    animation.effect instanceof KeyframeEffect && animation.effect.target === element).length)).toBe(0);
+  await page.getByRole("button", { name: "Toggle workspace panel" }).click();
+  const panel = page.locator("aside.workspace-panel");
+  const surface = panel.locator(".workspace-panel-surface");
+  await expect(panel).toHaveAttribute("aria-hidden", "false");
+  await expect(surface).toBeVisible();
+  expect(await surface.evaluate((element) => element.getAnimations().every((animation) =>
+    Number(animation.effect?.getTiming().duration || 0) <= 1))).toBe(true);
+});
+
 test.afterEach(async ({ page }) => {
   expect(unhandledApiRequests.get(page) || [], "all browser API requests must use deterministic mocks").toEqual([]);
 });
@@ -1636,6 +1748,421 @@ test("renders persisted assistant Markdown with safe interactive controls", asyn
   await expect(dialog).toContainText("https://example.com/docs");
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toHaveCount(0);
+});
+
+test("repairs unfinished Markdown while an assistant response streams @setpiece", async ({ page }) => {
+  const streamedContent = "## Live response\n\n**still streaming**\n\nRead [the documentation][docs].\n\n```javascript\nconst answer = 42;\n```\n\n$$\nE = mc^2\n$$\n\n- **first item**\n\n  continued first item\n\n- `second item`\n\n[docs]: https://example.com/docs";
+  await page.addInitScript((finalContent) => {
+    class MockWebSocket extends EventTarget {
+      static OPEN = 1;
+
+      constructor() {
+        super();
+        this.readyState = 0;
+        queueMicrotask(() => {
+          this.readyState = MockWebSocket.OPEN;
+          this.dispatchEvent(new Event("open"));
+        });
+      }
+
+      close() {
+        this.readyState = 3;
+      }
+
+      send(data) {
+        const request = JSON.parse(data);
+        if (request.type !== "prompt") return;
+        const emit = (payload, delay = 0) => setTimeout(() => this.onmessage?.({ data: JSON.stringify(payload) }), delay);
+        emit({ type: "generation_started", generationId: "g1", seq: 1 });
+        emit({ type: "assistant_message_started", generationId: "g1", seq: 2, messageId: "m1" });
+        emit({ type: "content_block_started", generationId: "g1", seq: 3, messageId: "m1", block: { type: "text", contentIndex: 0, text: "" } });
+        setTimeout(() => {
+          emit({ type: "content_block_delta", generationId: "g1", seq: 4, messageId: "m1", blockType: "text", contentIndex: 0, delta: "## Live response\n\n" }, 0);
+          emit({ type: "content_block_delta", generationId: "g1", seq: 5, messageId: "m1", blockType: "text", contentIndex: 0, delta: "**still streaming**\n\nRead [the documentation][docs].\n\n" }, 150);
+          emit({ type: "content_block_delta", generationId: "g1", seq: 6, messageId: "m1", blockType: "text", contentIndex: 0, delta: "```javascript\nconst answer = 42;\n```\n\n" }, 300);
+          emit({ type: "content_block_delta", generationId: "g1", seq: 7, messageId: "m1", blockType: "text", contentIndex: 0, delta: "$$\nE = mc^2\n$$" }, 450);
+          emit({ type: "content_block_delta", generationId: "g1", seq: 8, messageId: "m1", blockType: "text", contentIndex: 0, delta: "\n\n- **first item**\n\n  continued first item\n\n- `second item`" }, 550);
+          window.__releaseStreamFinal = () => {
+            this.onmessage?.({ data: JSON.stringify({
+              type: "assistant_message_completed",
+              generationId: "g1",
+              seq: 9,
+              messageId: "m1",
+              stopReason: "stop",
+              blocks: [{ type: "text", contentIndex: 0, text: finalContent }],
+            }) });
+            setTimeout(() => this.onmessage?.({ data: JSON.stringify({
+              type: "generation_settled",
+              generationId: "g1",
+              seq: 10,
+            }) }), 50);
+            setTimeout(() => this.onmessage?.({ data: JSON.stringify({
+              type: "session_checkpoint",
+              generationId: "g1",
+              generationSeq: 10,
+              chat: { id: "550e8400-e29b-41d4-a716-446655440099" },
+            }) }), 100);
+          };
+        }, 0);
+      }
+    }
+
+    Object.defineProperty(window, "WebSocket", {
+      configurable: true,
+      value: MockWebSocket,
+    });
+  }, streamedContent);
+  await page.route("**/v0/sessions/550e8400-e29b-41d4-a716-446655440099", async (route) => {
+    await route.fulfill({ json: {
+      id: "550e8400-e29b-41d4-a716-446655440099",
+      projectId: "project_chat",
+      status: "active",
+      title: "New chat",
+      messages: [
+        { id: "entry-user", role: "user", content: "Start streaming" },
+        { id: "entry-assistant", role: "assistant", content: streamedContent },
+      ],
+      tools: [],
+      page: { before: null },
+    } });
+  });
+  await page.route("**/v0/live-sessions", async (route) => {
+    await route.fulfill({ status: 201, json: { id: "live_stream", chatId: "550e8400-e29b-41d4-a716-446655440099", streamUrl: "/v0/live-sessions/live_stream/stream" } });
+  });
+  await openChatSurface(page);
+  await page.getByRole("textbox", { name: "Message Pi" }).fill("Start streaming");
+  const checkpointReload = page.waitForRequest((request) =>
+    request.url().endsWith("/v0/sessions/550e8400-e29b-41d4-a716-446655440099"));
+  await page.getByRole("button", { name: "Send message" }).click();
+
+  await expect(page.getByRole("heading", { name: "Live response" })).toBeVisible();
+  const liveHeading = page.getByRole("heading", { name: "Live response" });
+  const liveHeadingNode = await liveHeading.elementHandle();
+  expect(liveHeadingNode).not.toBeNull();
+  await liveHeadingNode.evaluate((node) => node.setAttribute("data-stable-stream-node", "true"));
+  const liveMarkdown = page.locator(".chat-markdown");
+  await expect(liveMarkdown).toContainText("still streaming");
+  const liveMarkdownNode = await liveMarkdown.elementHandle();
+  expect(liveMarkdownNode).not.toBeNull();
+  await liveMarkdownNode.evaluate((node) => node.setAttribute("data-before-final", "true"));
+  await expect(page.locator('[data-language="javascript"]')).toBeVisible();
+  await expect(page.locator('[data-language="javascript"] button[aria-label="Copy code"]')).toBeVisible();
+  await expect(page.locator(".katex-display")).toBeVisible();
+  await expect(liveMarkdown).toContainText("continued first item");
+  await expect(page.locator(".chat-markdown li")).toHaveCount(2);
+  await expect(page.locator(".chat-markdown strong", { hasText: "first item" })).toBeVisible();
+  await expect(page.locator(".chat-markdown code", { hasText: "second item" })).toBeVisible();
+  const liveListGap = await page.locator(".chat-markdown li").evaluateAll((items) => {
+    const [first, second] = items.map((item) => item.getBoundingClientRect());
+    return second.top - first.top;
+  });
+  const liveMarkdownHeight = await liveMarkdown.evaluate((element) => element.getBoundingClientRect().height);
+  await expect(page.getByRole("button", { name: "the documentation" })).toHaveCount(0);
+  await expect(page.locator("[data-stable-stream-node]")).toHaveCount(1);
+  expect(await liveHeadingNode.evaluate((node) => node.isConnected && node === document.querySelector("[data-stable-stream-node]"))).toBe(true);
+  await page.evaluate(() => window.__releaseStreamFinal());
+  await expect(page.getByRole("button", { name: "the documentation" })).toBeVisible();
+  await expect(page.locator(".chat-markdown li")).toHaveCount(2);
+  await expect(page.locator(".chat-markdown li").first()).toContainText("continued first item");
+  const settledListGap = await page.locator(".chat-markdown li").evaluateAll((items) => {
+    const [first, second] = items.map((item) => item.getBoundingClientRect());
+    return second.top - first.top;
+  });
+  expect(Math.abs(liveListGap - settledListGap)).toBeLessThanOrEqual(2);
+  const settledMarkdownHeight = await liveMarkdown.evaluate((element) => element.getBoundingClientRect().height);
+  expect(Math.abs(liveMarkdownHeight - settledMarkdownHeight)).toBeLessThanOrEqual(4);
+  await expect(page.locator("[data-stable-stream-node]")).toHaveCount(1);
+  expect(await liveHeadingNode.evaluate((node) => node.isConnected)).toBe(true);
+  const canonicalHeading = page.getByRole("heading", { name: "Live response" });
+  const canonicalHeadingNode = await canonicalHeading.elementHandle();
+  expect(canonicalHeadingNode).not.toBeNull();
+  await canonicalHeadingNode.evaluate((node) => node.setAttribute("data-canonical-stream-node", "true"));
+  await expect(page.getByRole("button", { name: "Copy Markdown" })).toBeVisible();
+  await expect(page.locator(".chat-markdown[data-before-final]")).toHaveCount(1);
+  expect(await liveMarkdownNode.evaluate((node) => node.isConnected && node === document.querySelector(".chat-markdown"))).toBe(true);
+  await expect(page.locator(".server-markdown")).toHaveCount(0);
+  await expect(page.locator('[data-language="javascript"]')).toBeVisible();
+  await expect(page.locator(".katex-display")).toBeVisible();
+
+  // Finalization and the durable checkpoint both reconcile in place: the live
+  // canonical node survives and the welcome screen never flashes.
+  await checkpointReload;
+  await expect(page.locator(".chat-markdown[data-before-final]")).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "How can I help you today?" })).toHaveCount(0);
+  expect(await liveMarkdownNode.evaluate((node) => node.isConnected && node === document.querySelector(".chat-markdown"))).toBe(true);
+  expect(await canonicalHeadingNode.evaluate((node) => node.isConnected && node === document.querySelector("[data-canonical-stream-node]"))).toBe(true);
+  await expect(page.locator('[data-language="javascript"]')).toBeVisible();
+  await expect(page.locator(".katex-display")).toBeVisible();
+});
+
+// The symptom, not the mechanism. A message full of KaTeX renders each formula
+// from a growing partial, and every one of those renders is a different size,
+// so the block above the caret can get shorter mid-generation. When it does the
+// browser clamps scrollTop to the new bottom, the transcript stops following,
+// and the reader is left behind while the answer keeps arriving. This watches
+// for exactly that: content that shrinks under the reader, and a tail that
+// stops tracking the bottom. It asserts nothing about how many times KaTeX runs
+// or in what order, so it survives any change that keeps the page steady.
+test("keeps a math-heavy answer steady and followed while it streams @setpiece", async ({ page }) => {
+  const formulas = [
+    "\\frac{\\partial u}{\\partial t} = \\alpha \\nabla^{2} u",
+    "\\int_{-\\infty}^{\\infty} e^{-x^{2}}\\,dx = \\sqrt{\\pi}",
+    "\\sum_{k=1}^{n} k^{3} = \\left(\\frac{n(n+1)}{2}\\right)^{2}",
+    "\\begin{aligned} A &= \\begin{bmatrix} a & b \\\\ c & d \\end{bmatrix} \\\\ \\det A &= ad - bc \\end{aligned}",
+  ];
+  const paragraph = "Each step below follows from the previous one, and the derivation continues across several lines of prose so the transcript is long enough to scroll.";
+  const finalContent = formulas
+    .map((formula, index) => `### Step ${index + 1}\n\n${paragraph}\n\n$$\n${formula}\n$$\n\nWhich gives an inline result of $x_{${index}} = ${index + 1}$ for this step.`)
+    .join("\n\n");
+
+  await page.addInitScript((content) => {
+    // Small deltas on purpose: each one lands mid-formula, which is the state
+    // that produces a fresh KaTeX render of a different size.
+    const deltas = [];
+    for (let cursor = 0; cursor < content.length; cursor += 18) deltas.push(content.slice(cursor, cursor + 18));
+
+    class MockWebSocket extends EventTarget {
+      static OPEN = 1;
+
+      constructor() {
+        super();
+        this.readyState = 0;
+        queueMicrotask(() => {
+          this.readyState = MockWebSocket.OPEN;
+          this.dispatchEvent(new Event("open"));
+        });
+      }
+
+      close() {
+        this.readyState = 3;
+      }
+
+      send(data) {
+        const request = JSON.parse(data);
+        if (request.type !== "prompt") return;
+        const emit = (payload, delay) => setTimeout(() => this.onmessage?.({ data: JSON.stringify(payload) }), delay);
+        emit({ type: "generation_started", generationId: "g1", seq: 1 }, 0);
+        emit({ type: "assistant_message_started", generationId: "g1", seq: 2, messageId: "m1" }, 0);
+        emit({ type: "content_block_started", generationId: "g1", seq: 3, messageId: "m1", block: { type: "text", contentIndex: 0, text: "" } }, 0);
+        let seq = 4;
+        deltas.forEach((delta, index) => {
+          emit({ type: "content_block_delta", generationId: "g1", seq: seq += 1, messageId: "m1", blockType: "text", contentIndex: 0, delta }, index * 12);
+        });
+        const settledAt = deltas.length * 12 + 40;
+        emit({
+          type: "assistant_message_completed",
+          generationId: "g1",
+          seq: seq += 1,
+          messageId: "m1",
+          stopReason: "stop",
+          blocks: [{ type: "text", contentIndex: 0, text: content }],
+        }, settledAt);
+        emit({ type: "generation_settled", generationId: "g1", seq: seq += 1 }, settledAt + 40);
+      }
+    }
+
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: MockWebSocket });
+
+    // Sample every frame from first paint to the end of the run. Recording the
+    // worst case rather than a snapshot is what makes this a symptom watch: a
+    // single shrink anywhere during generation is the defect, and polling from
+    // the test side would step straight over it.
+    window.__mathWatch = { shrinkPx: 0, detached: false, frames: 0 };
+    const tick = () => {
+      const markdown = document.querySelector(".chat-markdown");
+      if (markdown) {
+        const watch = window.__mathWatch;
+        const height = markdown.getBoundingClientRect().height;
+        if (watch.height != null) watch.shrinkPx = Math.max(watch.shrinkPx, watch.height - height);
+        watch.height = height;
+        // The button exists only while the app has handed the tail to the
+        // reader. That is the detachment itself, not a proxy for it -- and
+        // unlike a distance-from-bottom threshold it cannot be tripped by a
+        // slow machine dropping frames, because a dropped frame does not
+        // transfer scroll ownership.
+        if (document.querySelector('[aria-label="Scroll to latest"]')) watch.detached = true;
+        watch.frames += 1;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }, finalContent);
+
+  await page.route("**/v0/live-sessions", async (route) => {
+    await route.fulfill({ status: 201, json: { id: "live_math", chatId: "550e8400-e29b-41d4-a716-446655440099", streamUrl: "/v0/live-sessions/live_math/stream" } });
+  });
+
+  await openChatSurface(page);
+  await page.getByRole("textbox", { name: "Message Pi" }).fill("Derive it");
+  // Wait for the composer to arm rather than letting click() sit on a disabled
+  // button until the test times out: on a loaded machine the model and template
+  // fetches this depends on can still be in flight, and a bare click reports
+  // that as an unexplained 45s hang.
+  const send = page.getByRole("button", { name: "Send message" });
+  await expect(send).toBeEnabled({ timeout: 20000 });
+  await send.click();
+
+  // Every formula rendered, and the last one only exists after the whole
+  // message has streamed, so reaching it means the run completed.
+  await expect(page.locator(".katex-display")).toHaveCount(formulas.length, { timeout: 20000 });
+  await expect(page.getByRole("heading", { name: `Step ${formulas.length}` })).toBeVisible();
+  await expect(page.locator(".chat-markdown[data-settled='true']")).toHaveCount(1, { timeout: 10000 });
+  await expect(page.locator(".chat-markdown[data-streaming]")).toHaveCount(0);
+  await expect(page.locator("[data-streaming-pending]")).toHaveCount(0);
+  await expect(page.locator(".katex-error")).toHaveCount(0);
+
+  const watch = await page.evaluate(() => window.__mathWatch);
+  expect(watch.frames).toBeGreaterThan(30);
+  // One layout pass can legitimately reclaim a sub-pixel row. A formula
+  // collapsing to a shorter render is tens of pixels, and that is the symptom.
+  expect(watch.shrinkPx).toBeLessThan(8);
+  // Nobody scrolled, so nothing should ever have taken the tail from the app.
+  expect(watch.detached).toBe(false);
+  // And it arrived at the bottom rather than merely never letting go. Polled,
+  // not sampled: the tail is a spring, so on a loaded machine it can still be
+  // travelling when the last assertion resolves.
+  await expect.poll(async () => page.locator('[data-slot="message-scroller-viewport"]')
+    .evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop),
+  { timeout: 10000 }).toBeLessThan(24);
+});
+
+// Streaming cost is dominated by how much DOM each delta touches, and that is a
+// number no frame-time assertion can pin down on a loaded machine. Count the
+// mutations instead: a renderer that patches the tail touches a handful of nodes
+// per character, one that rebuilds the message touches the whole tree every
+// delta, and the ratio separates them by an order of magnitude regardless of how
+// fast the machine is.
+test("streams by patching the tail rather than rebuilding the message @setpiece", async ({ page }) => {
+  const paragraph = "The derivation proceeds one clause at a time, and each sentence adds enough prose that the renderer has to lay out a fresh line rather than merely extending the last word on the current one.";
+  const finalContent = Array.from({ length: 6 }, (_, index) => `### Part ${index + 1}\n\n${paragraph}`).join("\n\n");
+
+  await page.addInitScript((content) => {
+    const deltas = [];
+    for (let cursor = 0; cursor < content.length; cursor += 8) deltas.push(content.slice(cursor, cursor + 8));
+
+    class MockWebSocket extends EventTarget {
+      static OPEN = 1;
+
+      constructor() {
+        super();
+        this.readyState = 0;
+        queueMicrotask(() => {
+          this.readyState = MockWebSocket.OPEN;
+          this.dispatchEvent(new Event("open"));
+        });
+      }
+
+      close() { this.readyState = 3; }
+
+      send(data) {
+        const request = JSON.parse(data);
+        if (request.type !== "prompt") return;
+        const emit = (payload, delay) => setTimeout(() => this.onmessage?.({ data: JSON.stringify(payload) }), delay);
+        emit({ type: "generation_started", generationId: "g1", seq: 1 }, 0);
+        emit({ type: "assistant_message_started", generationId: "g1", seq: 2, messageId: "m1" }, 0);
+        emit({ type: "content_block_started", generationId: "g1", seq: 3, messageId: "m1", block: { type: "text", contentIndex: 0, text: "" } }, 0);
+        let seq = 4;
+        deltas.forEach((delta, index) => {
+          emit({ type: "content_block_delta", generationId: "g1", seq: seq += 1, messageId: "m1", blockType: "text", contentIndex: 0, delta }, index * 10);
+        });
+        const settledAt = deltas.length * 10 + 40;
+        emit({ type: "assistant_message_completed", generationId: "g1", seq: seq += 1, messageId: "m1", stopReason: "stop", blocks: [{ type: "text", contentIndex: 0, text: content }] }, settledAt);
+        emit({ type: "generation_settled", generationId: "g1", seq: seq += 1 }, settledAt + 40);
+      }
+    }
+
+    Object.defineProperty(window, "WebSocket", { configurable: true, value: MockWebSocket });
+
+    window.__domWatch = { mutations: 0, characters: content.length, attached: false };
+    const attach = () => {
+      const markdown = document.querySelector(".chat-markdown");
+      if (!markdown) return requestAnimationFrame(attach);
+      window.__domWatch.attached = true;
+      new MutationObserver((records) => {
+        for (const record of records) {
+          window.__domWatch.mutations += record.type === "childList"
+            ? record.addedNodes.length + record.removedNodes.length
+            : 1;
+        }
+      }).observe(markdown, { childList: true, subtree: true, characterData: true });
+    };
+    requestAnimationFrame(attach);
+  }, finalContent);
+
+  await page.route("**/v0/live-sessions", async (route) => {
+    await route.fulfill({ status: 201, json: { id: "live_dom", chatId: "550e8400-e29b-41d4-a716-446655440099", streamUrl: "/v0/live-sessions/live_dom/stream" } });
+  });
+
+  await openChatSurface(page);
+  await page.getByRole("textbox", { name: "Message Pi" }).fill("Explain it");
+  const send = page.getByRole("button", { name: "Send message" });
+  await expect(send).toBeEnabled({ timeout: 20000 });
+  await send.click();
+
+  await expect(page.getByRole("heading", { name: "Part 6" })).toBeVisible({ timeout: 20000 });
+  await expect(page.locator(".chat-markdown[data-settled='true']")).toHaveCount(1, { timeout: 10000 });
+
+  const watch = await page.evaluate(() => window.__domWatch);
+  expect(watch.attached).toBe(true);
+  // Ceiling, not a target. Patching the tail measures ~0.12 mutations per
+  // streamed character; rebuilding the message on each delta puts it two orders
+  // of magnitude higher. 0.5 leaves room for markup churn without going blind.
+  expect(watch.mutations / watch.characters).toBeLessThan(0.5);
+});
+
+// This is the shape that was silently broken for months. A message containing
+// display math is deliberately kept fully laid out until it settles, because
+// virtualising a KaTeX block before the root has inline-size containment shifts
+// the equations. The escape hatch -- virtualise it once settled -- depended on a
+// settled signal that never fired, so every math-heavy message stayed fully laid
+// out forever, and panel motion over a long transcript paid to lay all of it out
+// again. Text-only transcripts were unaffected, which is exactly how it stayed
+// hidden. Assert the structure rather than a frame time: a loaded transcript
+// settles, and its offscreen math blocks are virtualised.
+test("virtualizes a settled math-heavy transcript loaded from history @setpiece", async ({ page }, testInfo) => {
+  const heavy = (index) => [
+    "## Section " + index,
+    "",
+    "Prose for section " + index + " with **strong**, *emphasis*, `inline code` and inline math $x_{" + index + "} = \\alpha^{2}$ so the line carries real content.",
+    "",
+    "$$",
+    "\\sum_{k=1}^{n} \\frac{k^{" + (index % 5 + 1) + "}}{\\sqrt{k+1}} = \\int_{0}^{\\infty} e^{-t} t^{" + (index % 3) + "} \\, dt",
+    "$$",
+    "",
+    "```javascript",
+    ...Array.from({ length: 18 }, (_, line) => "const value" + line + " = compute(" + index + ", " + line + "); // a reasonably long line of code"),
+    "```",
+  ].join("\n");
+  const messages = [];
+  for (let index = 0; index < 30; index += 1) {
+    messages.push({ id: "u" + index, role: "user", content: "Question " + index });
+    messages.push({ id: "a" + index, role: "assistant", content: heavy(index) });
+  }
+  await page.route("**/v0/sessions/session_existing", async (route) => {
+    await route.fulfill({ json: { messages, tools: [], page: { before: null } } });
+  });
+  await openChatSurface(page);
+  await openSidebar(page, testInfo);
+  await page.locator('.sidebar-chat[aria-label="Existing chat"]').click();
+  await expect(page.locator(".katex-display").first()).toBeVisible();
+
+  // Every restored message settles. One leftover streaming marker anywhere in a
+  // message is enough to hold it open forever, which is what happened.
+  await expect.poll(async () => page.locator(".chat-markdown[data-settled='true']").count(), { timeout: 20000 })
+    .toBe(30);
+  await expect(page.locator("[data-streaming-pending]")).toHaveCount(0);
+
+  // And settlement actually reaches the virtualizer: offscreen blocks inside
+  // math-containing messages are the ones that were never being managed.
+  const virtualizedMathMessages = await page.evaluate(() => {
+    let count = 0;
+    for (const root of document.querySelectorAll(".chat-markdown")) {
+      if (!root.querySelector(".katex-display")) continue;
+      if (root.querySelector('.incremark > [data-transcript-visibility="hidden"]')) count += 1;
+    }
+    return count;
+  });
+  expect(virtualizedMathMessages).toBeGreaterThan(5);
 });
 
 const harnessThreadGroups = [{
