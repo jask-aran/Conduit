@@ -505,7 +505,14 @@ export interface VoiceServerSettings {
 }
 
 export interface ComputerDirectoryListing {
-  entries: { name: string; path: string; type: "directory" | "file" | "other" }[];
+  entries: {
+    name: string;
+    path: string;
+    type: "directory" | "file" | "other";
+    size?: number | null;
+    createdAt?: number | null;
+    modifiedAt?: number | null;
+  }[];
   cursor?: string | null;
   truncated: boolean;
   total?: number | null;

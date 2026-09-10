@@ -139,8 +139,8 @@
 .computer-file-grid > button > span { width: 100%; overflow: hidden; font-size: 9px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
 .computer-file-grid > button > .computer-file-workspace-mark { position: absolute; top: 4px; right: 4px; display: grid; width: 14px; height: 14px; place-items: center; overflow: visible; }
 .computer-file-workspace-mark .workspace-glyph { width: 12px; height: 12px; font-size: 7px; }
-.computer-file-grid[data-view="details"] { display: block; padding: 4px; }
-.computer-detail-heading, .computer-file-grid[data-view="details"] > button { display: grid; width: 100%; min-height: 25px; grid-template-columns: minmax(0, 1fr) 90px; align-items: center; border-radius: 4px; }
+.computer-file-grid[data-view="details"] { display: block; overflow: auto; padding: 4px; }
+.computer-detail-heading, .computer-file-grid[data-view="details"] > button { display: grid; width: 100%; min-width: 620px; min-height: 25px; grid-template-columns: minmax(160px, 1fr) 72px 68px 124px 124px; align-items: center; border-radius: 4px; }
 .computer-detail-heading { min-height: 22px; padding: 2px 8px 2px 27px; color: var(--muted-foreground); font-size: 8px; }
 .computer-file-grid[data-view="details"] > button { position: relative; padding: 3px 8px 3px 27px; }
 .computer-file-grid[data-view="details"] > button > svg, .computer-file-grid[data-view="details"] .workspace-file-icon { position: absolute; left: 8px; width: 12px; height: 12px; }

@@ -159,6 +159,7 @@ async function readWorkspaceFileMetadataAt(resolved) {
   return {
     path: resolved.relativePath,
     size: resolved.stat.size,
+    createdAt: Number.isFinite(resolved.stat.birthtimeMs) && resolved.stat.birthtimeMs > 0 ? resolved.stat.birthtimeMs : null,
     modifiedAt: resolved.stat.mtimeMs,
     revision: metadataRevision(resolved.stat),
     ...classification,
@@ -353,8 +354,17 @@ export async function listWorkspaceDirectory(root, relativePath = "", { after = 
   };
   accepted.sort(compare);
   const remaining = cursorKey ? accepted.filter((entry) => compare(entry, { type: cursorKey[0], name: cursorKey[1] }) > 0) : accepted;
-  const entries = remaining.slice(0, MAX_DIRECTORY_ENTRIES).map((entry) => ({ ...entry,
-    path: resolved.relativePath ? `${resolved.relativePath}/${entry.name}` : entry.name,
+  const entries = await Promise.all(remaining.slice(0, MAX_DIRECTORY_ENTRIES).map(async (entry) => {
+    const itemPath = path.join(resolved.path, entry.name);
+    const itemStat = await fs.lstat(itemPath).catch(() => null);
+    const stat = itemStat?.isSymbolicLink() ? null : itemStat;
+    return {
+      ...entry,
+      path: resolved.relativePath ? `${resolved.relativePath}/${entry.name}` : entry.name,
+      size: stat?.size ?? null,
+      createdAt: stat && Number.isFinite(stat.birthtimeMs) && stat.birthtimeMs > 0 ? stat.birthtimeMs : null,
+      modifiedAt: stat?.mtimeMs ?? null,
+    };
   }));
   const truncated = remaining.length > entries.length;
   const last = entries.at(-1);
@@ -523,7 +533,13 @@ export async function writeWorkspaceFile(root, relativePath, content, { expected
   }
   await fs.writeFile(target, content, existing ? undefined : { flag: "wx" });
   const written = await fs.stat(target);
-  return { path: segments.join("/"), size: content.byteLength, modifiedAt: written.mtimeMs, revision: fileRevision(content) };
+  return {
+    path: segments.join("/"),
+    size: content.byteLength,
+    createdAt: Number.isFinite(written.birthtimeMs) && written.birthtimeMs > 0 ? written.birthtimeMs : null,
+    modifiedAt: written.mtimeMs,
+    revision: fileRevision(content),
+  };
 }
 
 export async function deleteWorkspaceFile(root, relativePath) {

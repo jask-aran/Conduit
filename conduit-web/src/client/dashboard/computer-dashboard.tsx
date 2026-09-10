@@ -15,8 +15,37 @@ import { loadVoiceDictationSettings } from "../chat/voice-dictation.js";
 import type { RuntimeStore } from "../state/runtime";
 import "./app-dashboard.css";
 
-type Entry = { name: string; path: string; type: "directory" | "file" | "other" };
+type Entry = {
+  name: string;
+  path: string;
+  type: "directory" | "file" | "other";
+  size?: number | null;
+  createdAt?: number | null;
+  modifiedAt?: number | null;
+};
 type Listing = { entries: Entry[]; cursor?: string | null; oversize?: boolean };
+type ComputerView = "tiles" | "details";
+type ComputerOrder = "name" | "name-desc" | "type";
+
+const storedComputerView = (): ComputerView => localStorage.getItem("conduit.computer.view") === "details" ? "details" : "tiles";
+const storedComputerOrder = (): ComputerOrder => {
+  const value = localStorage.getItem("conduit.computer.order");
+  return value === "name" || value === "name-desc" ? value : "type";
+};
+
+const formatFileSize = (value?: number | null) => {
+  if (value == null) return "—";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = value;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) { size /= 1024; unit += 1; }
+  return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: size < 10 && unit > 0 ? 1 : 0 }).format(size)} ${units[unit]}`;
+};
+
+const formatFileDate = (value?: number | null) => value
+  ? new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(value))
+  : "—";
+
 export function ComputerDashboard(props: {
   projects: Project[];
   location: ComputerLocation | null;
@@ -51,8 +80,8 @@ export function ComputerDashboard(props: {
   const [showHidden, setShowHidden] = createSignal(false);
   const [listingError, setListingError] = createSignal("");
   const [refreshing, setRefreshing] = createSignal(false);
-  const [view, setView] = createSignal<"tiles" | "details">("tiles");
-  const [order, setOrder] = createSignal<"name" | "name-desc" | "type">("name");
+  const [view, setView] = createSignal<ComputerView>(storedComputerView());
+  const [order, setOrder] = createSignal<ComputerOrder>(storedComputerOrder());
   const [sidebarWidth, setSidebarWidth] = createSignal(Number(localStorage.getItem("conduit.computer.sidebar-width")) || 168);
   const [harnesses, setHarnesses] = createSignal<HarnessSummary[]>([]);
   let controller: AbortController | undefined;
@@ -85,6 +114,8 @@ export function ComputerDashboard(props: {
     if (props.dialog) return;
     void api<{ harnesses: HarnessSummary[] }>("/v0/harnesses").then((result) => setHarnesses(result.harnesses));
   });
+  createEffect(() => localStorage.setItem("conduit.computer.view", view()));
+  createEffect(() => localStorage.setItem("conduit.computer.order", order()));
   onCleanup(() => { controller?.abort(); stopSidebarResize?.(); });
 
   const go = () => {
@@ -180,7 +211,7 @@ export function ComputerDashboard(props: {
           <button type="button" aria-label="Parent folder" title="Parent folder" disabled={props.loading || !props.location || props.location.parent === props.location.project.workingRoot} onClick={() => props.onBrowse(props.location!.parent)}><ArrowUpIcon /></button>
           <input class="computer-address" aria-label="Folder path" value={address()} onInput={(event) => setAddress(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); go(); } }} />
           <label class="computer-search"><SearchIcon /><input type="search" aria-label="Search this folder" placeholder="Search" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} /></label>
-          <select aria-label="Order files" value={order()} onChange={(event) => setOrder(event.currentTarget.value as "name" | "name-desc" | "type")}><option value="name">Name A–Z</option><option value="name-desc">Name Z–A</option><option value="type">Type</option></select>
+          <select aria-label="Order files" value={order()} onChange={(event) => setOrder(event.currentTarget.value as ComputerOrder)}><option value="name">Name A–Z</option><option value="name-desc">Name Z–A</option><option value="type">Type</option></select>
           <button type="button" aria-label={view() === "tiles" ? "Use details view" : "Use tile view"} title={view() === "tiles" ? "Details view" : "Tile view"} onClick={() => setView((value) => value === "tiles" ? "details" : "tiles")}><Show when={view() === "tiles"} fallback={<Grid2X2Icon />}><ListIcon /></Show></button>
           <button type="button" aria-label="Refresh folder" title="Refresh folder" disabled={refreshing()} onClick={() => void refresh()}><RefreshCwIcon /></button>
           <button type="button" aria-label={showHidden() ? "Hide hidden files" : "Show hidden files"} title={showHidden() ? "Hide hidden files" : "Show hidden files"} aria-pressed={showHidden()} onClick={() => setShowHidden((value) => !value)}><Show when={showHidden()} fallback={<EyeOffIcon />}><EyeIcon /></Show></button>
@@ -201,13 +232,18 @@ export function ComputerDashboard(props: {
 
         <Show when={props.error || listingError()}><p class="computer-error" role="alert">{props.error || listingError()}</p></Show>
         <ContextMenu><ContextMenuTrigger as="div" class="computer-file-grid" data-view={view()} aria-busy={props.loading || refreshing()}>
-          <Show when={view() === "details"}><div class="computer-detail-heading"><span>Name</span><span>Type</span></div></Show>
+          <Show when={view() === "details"}><div class="computer-detail-heading"><span>Name</span><span>Type</span><span>Size</span><span>Created</span><span>Modified</span></div></Show>
           <For each={visibleEntries()}>{(entry) =>
             <ContextMenu><ContextMenuTrigger as="button" type="button" disabled={entry.type === "other" || props.loading} title={entry.name} onPointerEnter={() => entry.type === "directory" && props.onPrefetch(entry.path)} onFocus={() => entry.type === "directory" && props.onPrefetch(entry.path)} onClick={() => openEntry(entry)}>
               <Show when={entry.type === "directory"} fallback={<FileTypeIcon name={entry.name} />}><FolderIcon /></Show>
               <span>{entry.name}</span>
               <Show when={workspaceFor(entry)}>{(workspace) => <span class="computer-file-workspace-mark" title={`${workspace().name} workspace`}><WorkspaceGlyph appearance={workspace().workspaceAppearance} /></span>}</Show>
-              <Show when={view() === "details"}><small>{entry.type === "directory" ? "Folder" : entry.type === "file" ? "File" : "Other"}</small></Show>
+              <Show when={view() === "details"}><>
+                <small>{entry.type === "directory" ? "Folder" : entry.type === "file" ? "File" : "Other"}</small>
+                <small>{entry.type === "file" ? formatFileSize(entry.size) : "—"}</small>
+                <small>{formatFileDate(entry.createdAt)}</small>
+                <small>{formatFileDate(entry.modifiedAt)}</small>
+              </></Show>
             </ContextMenuTrigger><ContextMenuContent><ContextMenuGroup>
               <ContextMenuItem onSelect={() => openEntry(entry)}><FolderIcon />Open</ContextMenuItem>
               <Show when={!props.dialog && entry.type === "directory"}><For each={harnesses().filter((item) => item.available)}>{(harness) => <ContextMenuItem onSelect={() => props.onOpenHarnessHere?.(harness.id, `${props.location!.project.workingRoot}/${entry.path}`)}><HarnessMark id={harness.id} class="computer-harness-mark" />Open {harness.label} here</ContextMenuItem>}</For></Show>
