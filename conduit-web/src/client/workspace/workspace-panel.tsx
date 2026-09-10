@@ -35,6 +35,7 @@ interface TurnArtifactFile { path: string; status: string; available: boolean; }
 interface TurnArtifactPayload { id: string; turnId: string | null; createdAt: string; files: TurnArtifactFile[]; }
 type PanelTab = "files" | "diff" | "artifacts" | "terminal";
 type ArtifactMode = "changes" | "outputs" | "interactive";
+type ArtifactBaseline = "chat" | "turn";
 type GitAction = "stage" | "stage-all" | "unstage" | "unstage-all" | "commit" | "fetch" | "pull" | "push";
 type FileSlotId = "primary" | "secondary";
 type OpenFiles = { primary: string | null; secondary: string | null };
@@ -240,6 +241,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const [splitWidth, setSplitWidth] = createSignal(0);
   const [fileSplitRatio, setFileSplitRatio] = createSignal(Math.max(25, Math.min(75, Number(readSetting(projectScope(), "file-split-ratio")) || 50)));
   const [artifactMode, setArtifactMode] = createSignal<ArtifactMode>("changes");
+  const [artifactBaseline, setArtifactBaseline] = createSignal<ArtifactBaseline>("chat");
   const [turnArtifact, setTurnArtifact] = createSignal<TurnArtifactPayload | null>(null);
   const [artifactPath, setArtifactPath] = createSignal<string | null>(null);
   const [artifactComparison, setArtifactComparison] = createSignal<ComparisonPayload | null>(null);
@@ -255,7 +257,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     if (foreground) setArtifactBusy(true);
     try {
       const checkpointId = turnArtifact()?.id;
-      const result = await api<ComparisonPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&path=${encodeURIComponent(path)}${checkpointId ? `&checkpointId=${encodeURIComponent(checkpointId)}` : ""}`);
+      const baseline = artifactBaseline();
+      const result = await api<ComparisonPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&path=${encodeURIComponent(path)}&baseline=${baseline}${checkpointId ? `&checkpointId=${encodeURIComponent(checkpointId)}` : ""}`);
       if (props.projectId() === projectId && props.artifactChatId?.() === chatId && artifactPath() === path) setArtifactComparison((previous) => {
         if (previous && result && previous.path === result.path && previous.oldPath === result.oldPath && previous.scope === result.scope) {
           if (previous.kind === "text" && result.kind === "text" && previous.original === result.original && previous.modified === result.modified) return previous;
@@ -280,9 +283,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       return;
     }
     const projectId = props.projectId();
+    const baseline = artifactBaseline();
     try {
-      const result = await api<TurnArtifactPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}`);
-      if (props.projectId() !== projectId || props.artifactChatId?.() !== chatId) return;
+      const result = await api<TurnArtifactPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&baseline=${baseline}`);
+      if (props.projectId() !== projectId || props.artifactChatId?.() !== chatId || artifactBaseline() !== baseline) return;
       setTurnArtifact(result);
       const current = artifactPath();
       const next = current && result?.files.some((file) => file.path === current) ? current : result?.files[0]?.path ?? null;
@@ -292,6 +296,14 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       }
       if (next) void loadArtifactComparison(next);
     } catch (cause) { reportError((cause as Error).message); }
+  };
+  const selectArtifactBaseline = (baseline: ArtifactBaseline) => {
+    if (baseline === artifactBaseline()) return;
+    setArtifactBaseline(baseline);
+    setTurnArtifact(null);
+    setArtifactPath(null);
+    setArtifactComparison(null);
+    void loadTurnArtifact();
   };
   const [terminalFocusRequest, setTerminalFocusRequest] = createSignal(0);
   const detailOpenName = () => `${tab()}:detail-open`;
@@ -1981,7 +1993,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         </Show></Show>
     </section></Show>
     <Show when={tabVisible("artifacts")}><section class="workspace-artifacts" data-position={panePosition("artifacts")}>
-      <div class="workspace-artifact-modes" role="radiogroup" aria-label="Artifact modality"><button role="radio" aria-checked={artifactMode() === "changes"} onClick={() => { setArtifactMode("changes"); void loadTurnArtifact(); }}>Agent changes</button><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div>
+      <div class="workspace-artifact-modes"><div role="radiogroup" aria-label="Artifact modality"><button role="radio" aria-checked={artifactMode() === "changes"} onClick={() => { setArtifactMode("changes"); void loadTurnArtifact(); }}>Agent changes</button><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div><Show when={artifactMode() === "changes"}><div class="workspace-artifact-baseline" role="radiogroup" aria-label="Agent changes baseline"><button role="radio" aria-checked={artifactBaseline() === "chat"} onClick={() => selectArtifactBaseline("chat")}>Chat start</button><button role="radio" aria-checked={artifactBaseline() === "turn"} onClick={() => selectArtifactBaseline("turn")}>Latest turn</button></div></Show></div>
       <Show when={artifactMode() === "changes"} fallback={<div class="workspace-panel-empty"><div><BoxesIcon /><strong>{artifactMode() === "outputs" ? "No artifacts in the loaded transcript" : "Interactive artifacts are not enabled"}</strong><p>{artifactMode() === "outputs" ? "Code blocks and file outputs will appear here as transcript artifact projection lands." : "This boundary is reserved for sandboxed, explicitly trusted generated interfaces."}</p></div></div>}>
         <Show when={turnArtifact()?.files.length} fallback={<div class="workspace-panel-empty"><div><GitCompareArrowsIcon /><strong>No agent changes in this chat</strong><p>This view updates when the agent changes a workspace file.</p></div></div>}>
           <WorkspaceReview full title="Agent changes" files={(turnArtifact()?.files || []).map((file) => ({ path: file.path, status: file.status }))} selectedPath={artifactPath()} comparison={artifactComparison()} viewState={artifactViewState()} busy={artifactBusy()} empty="No agent changes in this chat." onSelect={selectArtifactFile} onOpenFile={openComparisonInFiles} />
