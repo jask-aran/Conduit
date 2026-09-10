@@ -64,7 +64,12 @@ export function normalizePiBackendEvent(event) {
       return { ...base, type: "session_checkpoint", sequence: event.generationSeq ?? null,
         chatId: event.chat?.id || event.chatId || "", title: event.chat?.title || event.title || null };
     case "queue_update":
-      return { ...base, type: "queue_state", queue: event.queue };
+      // Pi reports its queue as top-level arrays, not a nested object, so the
+      // browser has always been told the queue was empty. activity.js reads the
+      // arrays correctly, which is why the server record was right and only the
+      // neutral event was wrong.
+      return { ...base, type: "queue_state", queue: event.queue
+        || { steering: event.steering || [], followUp: event.followUp || [] } };
     case "compaction_start":
     case "compaction_end":
       return { ...base, type: "compaction", active: event.type === "compaction_start" };

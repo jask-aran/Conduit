@@ -125,12 +125,8 @@ export function promotePendingUser(messages: Message[], eventMessage: ProtocolMe
     const previous = copy[pendingIndex]!;
     copy[pendingIndex] = {
       ...previous,
-      // Pi echoes a queued message as soon as it receives it, which is not the
-      // same as the model reading it. A steered message stays queued - and so
-      // stays in the composer bubble, where it can still be interrupted or
-      // withdrawn - until the turn it was aimed at settles.
-      pending: Boolean(previous.queueMode),
-      queueMode: previous.queueMode,
+      pending: false,
+      queueMode: undefined,
       content: previous.content || content,
       timestamp: eventMessage.timestamp || previous.timestamp,
       id: eventMessage.id || previous.id,
