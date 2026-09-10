@@ -158,6 +158,19 @@ export function createActiveChat(options: ActiveChatOptions) {
   const streaming = createMemo(() => generation() === "active" || generation() === "submitting");
   const stopping = createMemo(() => generation() === "stopping");
 
+  // A queued message is held out of the transcript while it is in flight; once
+  // the turn ends it is an ordinary message and belongs in the conversation.
+  const settleQueuedMessages = () => setMessages((current) => {
+    if (!current.some((message) => message.pending)) return current;
+    const settled = current.filter((message) => !message.pending);
+    const queued = current.filter((message) => message.pending)
+      .map((message) => ({ ...message, pending: false, queueMode: undefined }));
+    // Queued messages were appended when they were typed, which is before this
+    // turn's answer arrived. The backend records them after it, so they move to
+    // the end rather than sitting above the reply they were aimed at.
+    return [...settled, ...queued];
+  });
+
   const resetLiveFlags = () => {
     setThinking(false);
     setResponding(false);
@@ -381,9 +394,10 @@ export function createActiveChat(options: ActiveChatOptions) {
       setRetry((next as { retry?: RetryState | null }).retry || null);
     }
     if (next.status === "stopping") setGeneration("stopping");
-    else if (next.status === "failed") setGeneration("failed");
+    else if (next.status === "failed") { settleQueuedMessages(); setGeneration("failed"); }
     else if (next.status === "stopped") {
       stopPending = false;
+      settleQueuedMessages();
       setGeneration("interrupted");
       if (event.type === "generation_stopped" && Boolean(event.processTerminated)) {
         setLive(null);
@@ -392,6 +406,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       }
     } else if (next.status === "complete") {
       stopPending = false;
+      settleQueuedMessages();
       setGeneration("idle");
     } else {
       stopPending = false;
