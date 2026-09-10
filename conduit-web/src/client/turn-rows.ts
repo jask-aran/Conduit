@@ -1,5 +1,4 @@
 import { textBlockClassifications } from "../active-generation.js";
-import { isOptimisticId } from "./reconcile-messages.ts";
 import { mergeContinuation } from "../continuation.js";
 import type { Message, ToolItem } from "./api/contracts";
 
@@ -102,8 +101,7 @@ export interface LiveProjectionIndex {
 }
 
 const liveOwner = (messages: Message[], generation: ActiveGenerationView) =>
-  [...messages].reverse().find((message) => message.role === "user" && !message.pending
-    && !isOptimisticId(message.id)) || null;
+  [...messages].reverse().find((message) => message.role === "user" && !message.pending) || null;
 
 export function buildLiveProjectionIndex(
   generation: ActiveGenerationView,
@@ -359,8 +357,7 @@ export function buildTurnRows(
   }
 
   const liveOwner = opts.activeGeneration
-    ? [...messages].reverse().find((message) => message.role === "user" && !message.pending
-      && !isOptimisticId(message.id)) || null
+    ? [...messages].reverse().find((message) => message.role === "user" && !message.pending) || null
     : null;
   const rows: TurnRow[] = [];
   let renderedLive = false;

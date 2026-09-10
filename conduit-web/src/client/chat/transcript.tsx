@@ -5,6 +5,7 @@ import type { Message, RuntimeActivity, ToolItem } from "../api/contracts";
 import type { TranscriptSource } from "./transcript-source";
 import { AttachmentCards } from "./attachments";
 import { TurnTrace } from "./turn-trace";
+import { isOptimisticId } from "../reconcile-messages";
 import { createTimelineStore } from "../state/timeline-store";
 import type { MarkdownRendererId } from "./markdown-settings";
 import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_OPTIONS, saveComposerSurface, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
@@ -154,7 +155,7 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Tran
           setTimeout(() => setCopied(false), 1600);
         }}
       >{copied() ? <CheckIcon /> : <CopyIcon />}</Button>
-      <Show when={props.precedingUserId}><Button variant="ghost" size="icon-sm" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(props.precedingUserId!)}><RefreshCwIcon /></Button></Show>
+      <Show when={props.precedingUserId && !isOptimisticId(props.precedingUserId)}><Button variant="ghost" size="icon-sm" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(props.precedingUserId!)}><RefreshCwIcon /></Button></Show>
       <Show when={props.partialContinue && props.message.stopped}><Button variant="ghost" size="icon-sm" aria-label="Continue stopped response" onClick={() => void props.chat.continueResponse()}><PlayIcon /></Button></Show>
     </Show>
   </div>;

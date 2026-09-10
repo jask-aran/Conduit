@@ -870,7 +870,10 @@ export function createActiveChat(options: ActiveChatOptions) {
   const waitForIdle = (timeoutMs = 8_000) => new Promise<void>((resolve) => {
     const startedAt = Date.now();
     const tick = () => {
-      if (!streaming() || Date.now() - startedAt > timeoutMs) return resolve();
+      // `streaming` goes false the moment a stop is requested, while the
+      // generation is still "stopping" - and send() refuses to run then. Wait
+      // for the stop to finish, not merely to start.
+      if ((!streaming() && !stopping()) || Date.now() - startedAt > timeoutMs) return resolve();
       setTimeout(tick, 50);
     };
     tick();

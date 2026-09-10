@@ -363,6 +363,7 @@ export function Composer(props: {
     </Show>
     <QueuedMessages
       messages={props.chat.pendingMessages()}
+      surface={composerSurface()}
       busy={busy()}
       canInterrupt={supports("cancel")}
       onInterruptAndSend={() => void props.chat.interruptAndSend()}
