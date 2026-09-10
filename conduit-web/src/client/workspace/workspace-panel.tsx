@@ -1891,6 +1891,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             gitFile={props.sourceControlEnabled() ? diff()?.files.find((file) => file.path === openPaths().primary) : undefined}
             onShowDiff={(staged) => void showFileDiff("primary", staged)}
             onShowFile={() => { setFileNavigation(null); setTemporaryComparisons((current) => ({ ...current, primary: undefined })); }}
+            onRestoreComparison={(comparison) => setTemporaryComparisons((current) => ({ ...current, primary: { ...comparison, projectId: props.projectId() } }))}
             onEditComparison={(source, position) => void editComparisonFile("primary", source, position)}
             onNavigated={() => setFileNavigation(null)}
             onSaved={() => { if (props.sourceControlEnabled()) void loadDiff(false, false); }}
@@ -1928,6 +1929,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
               gitFile={props.sourceControlEnabled() ? diff()?.files.find((file) => file.path === openPaths().secondary) : undefined}
               onShowDiff={(staged) => void showFileDiff("secondary", staged)}
               onShowFile={() => { setFileNavigation(null); setTemporaryComparisons((current) => ({ ...current, secondary: undefined })); }}
+              onRestoreComparison={(comparison) => setTemporaryComparisons((current) => ({ ...current, secondary: { ...comparison, projectId: props.projectId() } }))}
               onEditComparison={(source, position) => void editComparisonFile("secondary", source, position)}
               onNavigated={() => setFileNavigation(null)}
               onSaved={() => { if (props.sourceControlEnabled()) void loadDiff(false, false); }}

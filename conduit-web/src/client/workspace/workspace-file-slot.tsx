@@ -174,9 +174,19 @@ export default function WorkspaceFileSlot(props: {
   gitFile?: { status: string; stagedCounts?: { added: number; removed: number } | null; workingCounts?: { added: number; removed: number } | null };
   onShowDiff?: (staged: boolean) => void;
   onShowFile?: () => void;
+  onRestoreComparison?: (comparison: TemporaryComparison) => void;
   onDispose?: () => void;
   ref?: (handle: FileSlotHandle) => void;
 }) {
+  const [retainedComparison, setRetainedComparison] = createSignal<TemporaryComparison>();
+  createEffect(() => {
+    const incoming = props.comparison;
+    const path = props.path;
+    const projectId = props.projectId;
+    setRetainedComparison((previous) => incoming ?? (retainedProject === projectId && previous?.comparison.path === path ? previous : undefined));
+    retainedProject = projectId;
+  });
+  let retainedProject = props.projectId;
   const [preview, setPreview] = createSignal<FilePreview | null>(null);
   const [asset, setAsset] = createSignal<FileAsset | null>(null);
   const [imageDimensions, setImageDimensions] = createSignal<{ width: number; height: number } | null>(null);
@@ -373,11 +383,13 @@ export default function WorkspaceFileSlot(props: {
   let loadedKey: string | null = null;
   createEffect(on(() => [props.projectId, props.path, Boolean(props.comparison)] as const, ([projectId, path, comparison]) => {
     if (comparison) {
-      loadedKey = null;
-      controller?.abort();
-      loadToken++;
-      clear();
-      editor = undefined;
+      const key = `${projectId}\u0000${path ?? ""}`;
+      if (key !== loadedKey) {
+        controller?.abort();
+        loadToken++;
+        clear();
+        loadedKey = null;
+      }
       return;
     }
     const key = `${projectId}\u0000${path ?? ""}`;
@@ -494,11 +506,12 @@ export default function WorkspaceFileSlot(props: {
       onFocusIn={props.onFocus}
       onPointerDown={props.onFocus}
     >
-      <Show when={!props.comparison} fallback={
-        <Show when={props.comparison}>{(temporary) => <Suspense fallback={<div class="workspace-panel-empty">Loading comparison…</div>}>
-          <WorkspaceComparison comparison={temporary().comparison} viewState={temporary().viewState} inFiles header={textHeader()} onShowFile={props.onShowFile} onOpenFile={(source, position) => props.onEditComparison?.(source, position)} />
+      <div class="workspace-file-representation" hidden={!props.comparison}>
+        <Show when={retainedComparison()}>{(temporary) => <Suspense fallback={<div class="workspace-panel-empty">Loading comparison…</div>}>
+          <WorkspaceComparison comparison={temporary().comparison} viewState={temporary().viewState} inFiles header={textHeader()} onViewStateChange={(viewState) => setRetainedComparison((current) => current ? { ...current, viewState } : current)} onShowFile={props.onShowFile} onOpenFile={(source, position) => props.onEditComparison?.(source, position)} />
         </Suspense>}</Show>
-      }>
+      </div>
+      <div class="workspace-file-representation" hidden={Boolean(props.comparison)}>
       <Show when={asset()}>{(file) => <>
         <header class="workspace-preview-header">
           <Show when={props.headerPrefix}>{props.headerPrefix}</Show>
@@ -577,7 +590,11 @@ export default function WorkspaceFileSlot(props: {
                   wrap={props.wrap}
                   reveal={file().path === props.path ? props.navigation : undefined}
                   onRevealed={props.onNavigated}
-                  onShowDiff={props.gitFile ? () => props.onShowDiff?.(!hasChanges()) : undefined}
+                  onShowDiff={props.gitFile || retainedComparison() ? () => {
+                    const retained = retainedComparison();
+                    if (retained && props.onRestoreComparison) props.onRestoreComparison(retained);
+                    else props.onShowDiff?.(!hasChanges());
+                  } : undefined}
                   editable={editing()}
                   canEdit={editable()}
                   statusText={[hasUnsavedChanges() ? "Unsaved" : formatFileSize(file().size), formatFileTime(file().modifiedAt)].filter(Boolean).join(" · ")}
@@ -598,7 +615,7 @@ export default function WorkspaceFileSlot(props: {
           </Show>
         </>}</Show>
       </Show>
-      </Show>
+      </div>
     </ContextMenuTrigger>
     <Show when={preview() || asset()}>{(file) =>
       <ContextMenuContent shortcutScope="workspace-panel" class="w-48 workspace-file-menu">
