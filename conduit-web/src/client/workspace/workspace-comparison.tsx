@@ -25,7 +25,7 @@ export interface ComparisonViewState {
   position: number;
 }
 
-export default function WorkspaceComparison(props: { comparison: ComparisonPayload; viewState: ComparisonViewState; inFiles?: boolean; header?: JSX.Element; footerControl?: JSX.Element; onViewStateChange?: (state: ComparisonViewState) => void; wrap?: boolean; onToggleWrap?: () => void; onShowFile?: () => void; onClose?: () => void; onOpenFile: (source: string, position: number, state: ComparisonViewState) => void }) {
+export default function WorkspaceComparison(props: { comparison: ComparisonPayload; viewState: ComparisonViewState; inFiles?: boolean; header?: JSX.Element; footerControl?: JSX.Element; comparisonLabel?: JSX.Element; onViewStateChange?: (state: ComparisonViewState) => void; wrap?: boolean; onToggleWrap?: () => void; onShowFile?: () => void; onClose?: () => void; onOpenFile: (source: string, position: number, state: ComparisonViewState) => void }) {
   let host!: HTMLDivElement;
   let activeView: EditorView | undefined;
   let captureReview = () => ({ ...props.viewState });
@@ -176,7 +176,7 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
           <WorkbenchButton type="button" aria-label="Side-by-side diff" aria-pressed={layout() === "split"} disabled={file()} onClick={() => setLayout("split")}><Columns2Icon /></WorkbenchButton>
           <WorkbenchButton type="button" aria-label="Previous change" disabled={file()} onClick={() => move(false)}><ChevronUpIcon /></WorkbenchButton>
           <WorkbenchButton type="button" aria-label="Next change" disabled={file()} onClick={() => move(true)}><ChevronDownIcon /></WorkbenchButton></Show>
-        </>}><span class="workspace-editor-metadata">{{ changes: "Index → Working copy", staged: "HEAD → Index", head: "HEAD → Working copy", turn: "Turn start → Working copy", session: "Chat start → Working copy" }[props.comparison.scope]}</span>{props.footerControl}<WorkbenchButton aria-label="Go to line" title="Go to line (Alt+G)" onClick={() => { if (activeView) gotoLine(activeView); }}>{position()}</WorkbenchButton><WorkbenchButton type="button" aria-label="Wrap lines" aria-pressed={wrap()} onClick={() => props.onToggleWrap ? props.onToggleWrap() : setWrap(!wrap())}><WrapTextIcon /></WorkbenchButton><span class="workspace-editor-metadata">{languageName()} · Read-only</span>
+        </>}><span class="workspace-editor-metadata">{props.comparisonLabel ?? { changes: "Index → Working copy", staged: "HEAD → Index", head: "HEAD → Working copy", turn: "Turn start → Working copy", session: "Chat start → Working copy" }[props.comparison.scope]}</span>{props.footerControl}<WorkbenchButton aria-label="Go to line" title="Go to line (Alt+G)" onClick={() => { if (activeView) gotoLine(activeView); }}>{position()}</WorkbenchButton><WorkbenchButton type="button" aria-label="Wrap lines" aria-pressed={wrap()} onClick={() => props.onToggleWrap ? props.onToggleWrap() : setWrap(!wrap())}><WrapTextIcon /></WorkbenchButton><span class="workspace-editor-metadata">{languageName()} · Read-only</span>
       </WorkbenchStatus>
     </Show>
   </section>;
