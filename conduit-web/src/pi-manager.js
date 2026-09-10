@@ -596,6 +596,15 @@ export class PiManager extends EventEmitter {
           record.cachePreviousPromptTokens = null;
         }
 
+        // Pi runs a turn of its own when it takes a message off its queue: a
+        // steer lands after the turn it was aimed at, and an abort makes it
+        // take the next one immediately. Conduit never asked for that
+        // generation, so without opening one here its events are discarded as
+        // belonging to the closed generation, and the reply never arrives.
+        if (event.type === "turn_start" && (!record.generation || record.generation.closed)) {
+          this.beginQueuedGeneration(record);
+        }
+
         this.ingestGenerationEvent(record, event);
 
         if (event.type === "extension_ui_request" && isBlockingHostUi(event)) {
@@ -791,6 +800,19 @@ export class PiManager extends EventEmitter {
   restoreActiveGeneration(record, previous) {
     record.activeGeneration = previous.activeGeneration;
     record.generationNormalizer = previous.generationNormalizer;
+  }
+
+  /** Open a generation for a turn Pi started itself, from its own queue. */
+  beginQueuedGeneration(record) {
+    const generationId = `g${++record.generationSequence}`;
+    const structured = this.beginActiveGeneration(record, generationId, "");
+    record.generation = { id: generationId, closed: false, settled: false, continuationBase: "" };
+    record.active = true;
+    record.stopping = false;
+    record.activity = "working";
+    this.publishTransient(record, structured.started);
+    this.publishState(record);
+    return generationId;
   }
 
   ingestGenerationEvent(record, source, { allowClosed = false } = {}) {

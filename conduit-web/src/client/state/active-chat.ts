@@ -158,19 +158,6 @@ export function createActiveChat(options: ActiveChatOptions) {
   const streaming = createMemo(() => generation() === "active" || generation() === "submitting");
   const stopping = createMemo(() => generation() === "stopping");
 
-  // A queued message is held out of the transcript while it is in flight; once
-  // the turn ends it is an ordinary message and belongs in the conversation.
-  const settleQueuedMessages = () => setMessages((current) => {
-    if (!current.some((message) => message.pending)) return current;
-    const settled = current.filter((message) => !message.pending);
-    const queued = current.filter((message) => message.pending)
-      .map((message) => ({ ...message, pending: false, queueMode: undefined }));
-    // Queued messages were appended when they were typed, which is before this
-    // turn's answer arrived. The backend records them after it, so they move to
-    // the end rather than sitting above the reply they were aimed at.
-    return [...settled, ...queued];
-  });
-
   const resetLiveFlags = () => {
     setThinking(false);
     setResponding(false);
@@ -394,10 +381,9 @@ export function createActiveChat(options: ActiveChatOptions) {
       setRetry((next as { retry?: RetryState | null }).retry || null);
     }
     if (next.status === "stopping") setGeneration("stopping");
-    else if (next.status === "failed") { settleQueuedMessages(); setGeneration("failed"); }
+    else if (next.status === "failed") setGeneration("failed")
     else if (next.status === "stopped") {
       stopPending = false;
-      settleQueuedMessages();
       setGeneration("interrupted");
       if (event.type === "generation_stopped" && Boolean(event.processTerminated)) {
         setLive(null);
@@ -406,7 +392,6 @@ export function createActiveChat(options: ActiveChatOptions) {
       }
     } else if (next.status === "complete") {
       stopPending = false;
-      settleQueuedMessages();
       setGeneration("idle");
     } else {
       stopPending = false;
@@ -768,15 +753,12 @@ export function createActiveChat(options: ActiveChatOptions) {
       // the model as soon as the current tool call settles, rather than waiting
       // for the whole turn. Backends without steering fall back to the queue.
       const queueMode = mode || (capabilities()?.steer === false ? "follow_up" : "steer");
-      local.pending = true;
-      local.queueMode = queueMode;
       setDraft("");
-      setMessages((current) => [...current, local]);
       try {
         await ensureLive();
         socket!.send(JSON.stringify({ type: queueMode === "steer" ? "steer" : "follow_up", message: text, attachmentIds }));
         attachments.markAnnounced(attachmentIds);
-      } catch (error) { setMessages((current) => current.filter((item) => item.id !== local.id)); setDraft(text); onError(error); }
+      } catch (error) { setDraft(text); onError(error); }
       return;
     }
 
@@ -873,43 +855,35 @@ export function createActiveChat(options: ActiveChatOptions) {
   // Messages the user sent while the agent was working, not yet taken by the
   // model. These are local and immediate, so the composer can show them without
   // waiting for the backend to echo its queue back.
-  const pendingMessages = createMemo(() => messages().filter((message) => message.role === "user" && message.pending));
+  // What is still waiting comes from the backend's queue, not from guessing at
+  // local state: it reports a message as queued when it takes it and drops it
+  // when the model actually reads it, which is the moment the bubble should
+  // clear. Pi sends queue_update; Codex sends thread/queue/changed.
+  const pendingMessages = createMemo(() => {
+    const waiting = [...queue().steering, ...queue().followUp];
+    return waiting.map((item, index) => ({
+      id: `queued_${index}`,
+      role: "user" as const,
+      content: typeof item === "string" ? item : String((item as { message?: string })?.message ?? item ?? ""),
+      timestamp: "",
+      pending: true,
+      queueMode: index < queue().steering.length ? ("steer" as const) : ("follow_up" as const),
+    }));
+  });
 
   /** Take the queued messages out of the transcript, returning their text. */
   const takeQueued = () => {
     const text = pendingMessages().map((message) => message.content).filter(Boolean).join("\n");
-    setMessages((current) => current.filter((message) => !message.pending));
+    setQueue({ steering: [], followUp: [] });
     return text;
   };
 
-  // Interrupting is stop-then-send, but the stop is not synchronous: the
-  // generation sits in "stopping" until the backend's terminal event lands, and
-  // send() refuses to run in that state. Polling for it raced and failed
-  // silently, so the send is held and fired when the stop actually completes.
-  let sendAfterStop: string | null = null;
-  createEffect(() => {
-    const state = generation();
-    if (!sendAfterStop || state === "stopping" || state === "active" || state === "submitting") return;
-    const text = sendAfterStop;
-    sendAfterStop = null;
-    setDraft((current) => current ? `${current}\n${text}` : text);
-    void send();
-  });
-
   /**
-   * Stop the turn and send the queued text straight away. Steering waits for
-   * the running tool call to settle; this does not, which is the point of it.
+   * Stop the turn. Nothing else: Pi takes the next message off its own queue
+   * as soon as the turn ends, inserts it as a user message and answers it, so
+   * sending it again here would deliver it twice.
    */
-  const interruptAndSend = () => {
-    const text = takeQueued();
-    if (!text) return;
-    if (!streaming() && !stopping()) {
-      setDraft((current) => current ? `${current}\n${text}` : text);
-      return void send();
-    }
-    sendAfterStop = text;
-    stop();
-  };
+  const interruptAndSend = () => stop();
 
   /** Put the queued text back in the composer so it can be reworded. */
   const editQueued = () => {
