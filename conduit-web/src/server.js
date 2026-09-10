@@ -575,6 +575,7 @@ registerProjectRoutes(app, {
   registry,
   terminals,
   lifecycle,
+  turnCheckpoints,
 });
 const launchLiveSession = registerLiveSessionRoutes(app, {
   backends,

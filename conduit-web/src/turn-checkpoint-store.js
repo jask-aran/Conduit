@@ -40,6 +40,34 @@ export class TurnCheckpointStore {
     return name ? JSON.parse(await fs.readFile(path.join(directory, name), "utf8")) : null;
   }
 
+  async review(chatId, workingRoot) {
+    const checkpoint = await this.latest(chatId);
+    if (!checkpoint || path.resolve(workingRoot) !== checkpoint.workingRoot) return null;
+    const git = (args, maxBuffer = 2 * 1024 * 1024) => runBoundedGit(checkpoint.workingRoot, args, { maxBuffer });
+    const current = await git(["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"]);
+    const paths = new Set([...Object.keys(checkpoint.entries), ...current.stdout.split("\0").filter(Boolean).map((record) => record.slice(3))]);
+    if (checkpoint.head) {
+      const changed = await git(["diff", checkpoint.head, "--name-only", "-z", "--no-renames", "--no-ext-diff"]);
+      for (const relativePath of changed.stdout.split("\0").filter(Boolean)) paths.add(relativePath);
+    }
+    const files = [];
+    for (const relativePath of [...paths].sort()) {
+      const comparison = await this.#compare(checkpoint, relativePath, git);
+      if (comparison.kind === "text" && comparison.original === comparison.modified) continue;
+      if (comparison.kind === "unavailable" && comparison.reason === "unchanged") continue;
+      files.push({ path: relativePath, status: comparison.status, available: comparison.kind === "text" });
+    }
+    return { id: checkpoint.id, turnId: checkpoint.turnId, createdAt: checkpoint.createdAt, files };
+  }
+
+  async compare(chatId, workingRoot, relativePath) {
+    const checkpoint = await this.latest(chatId);
+    if (!checkpoint || path.resolve(workingRoot) !== checkpoint.workingRoot) return null;
+    if (typeof relativePath !== "string" || !relativePath || relativePath.includes("\0") || relativePath.split("/").some((part) => !part || part === "." || part === "..")) throw new Error("Invalid checkpoint path");
+    const git = (args, maxBuffer = 2 * 1024 * 1024) => runBoundedGit(checkpoint.workingRoot, args, { maxBuffer });
+    return this.#compare(checkpoint, relativePath, git);
+  }
+
   async #capture({ chatId, projectId, workingRoot, chatKey }) {
     const root = path.resolve(workingRoot);
     const git = (args, maxBuffer = 2 * 1024 * 1024) => runBoundedGit(root, args, { maxBuffer });
@@ -77,6 +105,39 @@ export class TurnCheckpointStore {
     const names = (await fs.readdir(directory)).filter((name) => name.endsWith(".json")).sort();
     await Promise.all(names.slice(0, -MAX_CHECKPOINTS_PER_CHAT).map((name) => fs.unlink(path.join(directory, name))));
     return { id, file, turnId: null };
+  }
+
+  async #compare(checkpoint, relativePath, git) {
+    const stored = checkpoint.entries[relativePath];
+    if (stored?.kind === "unavailable" || stored?.kind === "unsupported") return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "turn", status: "M", reason: stored.kind, message: "The turn baseline is unavailable for this file." };
+    let original = Buffer.alloc(0);
+    if (stored?.kind === "file") original = Buffer.from(stored.content, "base64");
+    else if (!stored && checkpoint.head) {
+      try {
+        const { stdout: size } = await git(["cat-file", "-s", `${checkpoint.head}:${relativePath}`]);
+        if (Number(size) > MAX_FILE_BYTES) return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "turn", status: "M", reason: "size", message: "This file exceeds the 1 MiB turn comparison limit." };
+        original = Buffer.from((await git(["cat-file", "blob", `${checkpoint.head}:${relativePath}`], MAX_FILE_BYTES + 1)).stdout);
+      } catch { original = Buffer.alloc(0); }
+    }
+    let modified = Buffer.alloc(0);
+    try {
+      const target = path.resolve(checkpoint.workingRoot, relativePath);
+      if (target !== checkpoint.workingRoot && target.startsWith(`${checkpoint.workingRoot}${path.sep}`)) {
+        const stat = await fs.stat(target);
+        if (!stat.isFile()) throw Object.assign(new Error(), { code: "unsupported" });
+        if (stat.size > MAX_FILE_BYTES) return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "turn", status: "M", reason: "size", message: "This file exceeds the 1 MiB turn comparison limit." };
+        modified = await fs.readFile(target);
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT") return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "turn", status: "M", reason: "unsupported", message: "Turn comparison is available for regular files only." };
+    }
+    if (original.equals(modified)) return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "turn", status: "M", reason: "unchanged", message: "This file did not change during the turn." };
+    const decode = (value) => new TextDecoder("utf-8", { fatal: true }).decode(value);
+    let originalText;
+    let modifiedText;
+    try { originalText = decode(original); modifiedText = decode(modified); }
+    catch { return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "turn", status: "M", reason: "binary", message: "Binary or non-UTF-8 files cannot be shown as a text comparison." }; }
+    return { kind: "text", path: relativePath, oldPath: relativePath, scope: "turn", status: original.length === 0 ? "A" : modified.length === 0 ? "D" : "M", original: originalText, modified: modifiedText };
   }
 
   async #write(file, value) {
