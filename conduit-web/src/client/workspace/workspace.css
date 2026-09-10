@@ -66,6 +66,11 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-tree-tools > button:focus-visible { outline: 1px solid var(--ring); outline-offset: -1px; }
 .workspace-tree-tools > button:disabled { opacity: 0.45; }
 .workspace-tree-tools svg { width: 11.2px; height: 11.2px; }
+.workspace-tree-modes { display: flex; flex: none; gap: 2.4px; padding-right: 4.8px; border-right: 1px solid var(--border); }
+.workspace-tree-modes button { display: grid; width: 22.4px; height: 22.4px; place-items: center; border: 0; border-radius: 4.8px; background: transparent; color: var(--muted-foreground); }
+.workspace-tree-modes button:hover, .workspace-tree-modes button:focus-visible, .workspace-tree-modes button[aria-checked="true"] { background: var(--accent); color: var(--foreground); }
+.workspace-tree-modes button:focus-visible { outline: 1px solid var(--ring); outline-offset: -1px; }
+.workspace-tree-pane > .workspace-review-files { width: 100%; min-height: 0; flex: 1; border-right: 0; }
 .workspace-file-input { display: none; }
 .workspace-tree-filter { position: relative; display: flex; min-width: 0; flex: 1; align-items: center; }
 .workspace-tree-filter > svg { position: absolute; left: 6.4px; color: var(--muted-foreground); pointer-events: none; }
