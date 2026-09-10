@@ -6,6 +6,18 @@ import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { CONTINUE_PROMPT, mergeContinuation } from "./continuation.js";
 import { isPathInside } from "./workspace-paths.js";
 
+
+// Stopping a turn cancels the in-flight provider request, and the provider
+// reports that cancellation as a failure - "This operation was aborted". A stop
+// the user asked for is not a failure, so it is read back as one: an abort
+// carries no error, and renders as "Stopped" rather than a red failure card.
+const ABORT_SIGNATURE = /\b(aborted|cancell?ed)\b/i;
+
+function wasAborted(message) {
+  if (message?.stopReason === "aborted") return true;
+  return message?.stopReason === "error" && ABORT_SIGNATURE.test(message?.errorMessage || "");
+}
+
 export function sessionDirectoryFor(cwd, agentDir) {
   const resolvedCwd = path.resolve(cwd);
   const encodedCwd = `--${resolvedCwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
@@ -543,6 +555,7 @@ export function messagesFromEntries(entries) {
       return;
     }
     const envelope = role === "user" ? parseAttachmentEnvelope(rawContent) : null;
+    const aborted = wasAborted(entry.message);
     const message = {
       id: entry.id || `entry_${index}`,
       role,
@@ -550,11 +563,11 @@ export function messagesFromEntries(entries) {
       blocks: Array.isArray(entry.message.content) ? entry.message.content : [],
       usage: entry.message.usage || null,
       timestamp: entry.timestamp || null,
-      stopReason: entry.message.stopReason || null,
-      errorMessage: entry.message.errorMessage || null,
+      stopReason: aborted ? "aborted" : (entry.message.stopReason || null),
+      errorMessage: aborted ? null : (entry.message.errorMessage || null),
       provider: entry.message.provider || null,
       model: entry.message.model || null,
-      stopped: entry.message.stopReason === "aborted",
+      stopped: aborted,
       attachments: envelope?.attachments || [],
     };
     if (role === "assistant" && continuation) {

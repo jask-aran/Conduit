@@ -386,3 +386,34 @@ test("renames, duplicates, and moves sessions through Pi's native session manage
   assert.equal((await discoverSessions([target])).length, 2);
   await fs.rm(root, { recursive: true, force: true });
 });
+
+test("a turn the user stopped reads back as stopped, not as a provider failure", () => {
+  const entry = (message) => ({ type: "message", id: "m1", timestamp: "2026-01-01T00:00:00.000Z", message });
+
+  // Stopping cancels the in-flight request, and the provider reports the
+  // cancellation as an error. That is not a failure the user needs to see.
+  const [cancelled] = messagesFromEntries([entry({
+    role: "assistant", content: "partial answer",
+    stopReason: "error", errorMessage: "This operation was aborted",
+  })]);
+  assert.equal(cancelled.stopped, true);
+  assert.equal(cancelled.stopReason, "aborted");
+  assert.equal(cancelled.errorMessage, null, "a deliberate stop carries no error");
+
+  // A backend that reports the abort properly is unchanged.
+  const [native] = messagesFromEntries([entry({ role: "assistant", content: "x", stopReason: "aborted" })]);
+  assert.equal(native.stopped, true);
+  assert.equal(native.stopReason, "aborted");
+
+  // A real failure keeps its error, and is still rendered as one.
+  const [failed] = messagesFromEntries([entry({
+    role: "assistant", content: "", stopReason: "error", errorMessage: "upstream returned 500",
+  })]);
+  assert.equal(failed.stopped, false);
+  assert.equal(failed.stopReason, "error");
+  assert.equal(failed.errorMessage, "upstream returned 500");
+
+  const [ok] = messagesFromEntries([entry({ role: "assistant", content: "done", stopReason: "stop" })]);
+  assert.equal(ok.stopped, false);
+  assert.equal(ok.stopReason, "stop");
+});
