@@ -46,22 +46,23 @@ export class TurnCheckpointStore {
   }
 
   async review(chatId, workingRoot, baseline = "chat", checkpointId = null) {
-    const checkpoint = checkpointId
-      ? (await this.#checkpoints(chatId)).find((item) => item.id === checkpointId)
-      : await this.#checkpoint(chatId, workingRoot, baseline);
+    const { checkpoint, targetCheckpoint } = await this.#comparisonRange(chatId, workingRoot, baseline, checkpointId);
     if (!checkpoint || path.resolve(workingRoot) !== checkpoint.workingRoot) return null;
     const git = (args, maxBuffer = 2 * 1024 * 1024) => runBoundedGit(checkpoint.workingRoot, args, { maxBuffer });
-    const currentPaths = checkpoint.repository
-      ? (await git(["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"])).stdout.split("\0").filter(Boolean).map((record) => record.slice(3))
-      : await this.#workspacePaths(checkpoint.workingRoot);
-    const paths = new Set([...Object.keys(checkpoint.entries), ...currentPaths]);
-    if (checkpoint.repository && checkpoint.head) {
-      const changed = await git(["diff", checkpoint.head, "--name-only", "-z", "--no-renames", "--no-ext-diff"]);
+    const targetPaths = targetCheckpoint
+      ? Object.keys(targetCheckpoint.entries)
+      : checkpoint.repository
+        ? (await git(["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"])).stdout.split("\0").filter(Boolean).map((record) => record.slice(3))
+        : await this.#workspacePaths(checkpoint.workingRoot);
+    const paths = new Set([...Object.keys(checkpoint.entries), ...targetPaths]);
+    if (checkpoint.repository && checkpoint.head && (!targetCheckpoint || targetCheckpoint.head !== checkpoint.head)) {
+      const target = targetCheckpoint?.head || undefined;
+      const changed = await git(["diff", checkpoint.head, ...(target ? [target] : []), "--name-only", "-z", "--no-renames", "--no-ext-diff"]);
       for (const relativePath of changed.stdout.split("\0").filter(Boolean)) paths.add(relativePath);
     }
     const files = [];
     for (const relativePath of [...paths].sort()) {
-      const comparison = await this.#compare(checkpoint, relativePath, git, baseline === "turn" ? "turn" : "session");
+      const comparison = await this.#compare(checkpoint, relativePath, git, baseline === "turn" ? "turn" : "session", targetCheckpoint);
       if (comparison.kind === "text" && comparison.original === comparison.modified) continue;
       if (comparison.kind === "unavailable" && comparison.reason === "unchanged") continue;
       const stat = await fs.stat(path.join(checkpoint.workingRoot, relativePath)).catch(() => null);
@@ -72,13 +73,11 @@ export class TurnCheckpointStore {
   }
 
   async compare(chatId, workingRoot, relativePath, checkpointId, baseline = "chat") {
-    const checkpoint = checkpointId
-      ? (await this.#checkpoints(chatId)).find((item) => item.id === checkpointId)
-      : await this.#checkpoint(chatId, workingRoot, baseline);
+    const { checkpoint, targetCheckpoint } = await this.#comparisonRange(chatId, workingRoot, baseline, checkpointId);
     if (!checkpoint || path.resolve(workingRoot) !== checkpoint.workingRoot) return null;
     if (typeof relativePath !== "string" || !relativePath || relativePath.includes("\0") || relativePath.split("/").some((part) => !part || part === "." || part === "..")) throw new Error("Invalid checkpoint path");
     const git = (args, maxBuffer = 2 * 1024 * 1024) => runBoundedGit(checkpoint.workingRoot, args, { maxBuffer });
-    return this.#compare(checkpoint, relativePath, git, baseline === "turn" ? "turn" : "session");
+    return this.#compare(checkpoint, relativePath, git, baseline === "turn" ? "turn" : "session", targetCheckpoint);
   }
 
   async #capture({ chatId, projectId, projectKind, workingRoot, chatKey }) {
@@ -130,9 +129,14 @@ export class TurnCheckpointStore {
     return { id, file, turnId: null };
   }
 
-  async #compare(checkpoint, relativePath, git, scope = "session") {
+  async #compare(checkpoint, relativePath, git, scope = "session", targetCheckpoint = null) {
     const stored = checkpoint.entries[relativePath];
     if (stored?.kind === "unavailable") {
+      if (targetCheckpoint) {
+        const targetStored = targetCheckpoint.entries[relativePath];
+        if (targetStored?.kind === "unavailable" && targetStored.size === stored.size && targetStored.modifiedAt === stored.modifiedAt) return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope, status: "M", reason: "unchanged", message: "This file did not change from the selected checkpoint." };
+        return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope, status: "M", reason: "unavailable", message: "The selected checkpoint is unavailable for this file." };
+      }
       const stat = await fs.stat(path.join(checkpoint.workingRoot, relativePath)).catch(() => null);
       if (stat?.isFile() && stat.size === stored.size && stat.mtimeMs === stored.modifiedAt) return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope, status: "M", reason: "unchanged", message: "This file did not change from the selected checkpoint." };
       return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope, status: "M", reason: "unavailable", message: "The selected checkpoint is unavailable for this file." };
@@ -148,16 +152,29 @@ export class TurnCheckpointStore {
       } catch { original = Buffer.alloc(0); }
     }
     let modified = Buffer.alloc(0);
-    try {
-      const target = path.resolve(checkpoint.workingRoot, relativePath);
-      if (target !== checkpoint.workingRoot && target.startsWith(`${checkpoint.workingRoot}${path.sep}`)) {
-        const stat = await fs.stat(target);
-        if (!stat.isFile()) throw Object.assign(new Error(), { code: "unsupported" });
-        if (stat.size > MAX_FILE_BYTES) return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope, status: "M", reason: "size", message: "This file exceeds the 1 MiB checkpoint comparison limit." };
-        modified = await fs.readFile(target);
+    if (targetCheckpoint) {
+      const targetStored = targetCheckpoint.entries[relativePath];
+      if (targetStored?.kind === "unavailable" || targetStored?.kind === "unsupported") return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope, status: "M", reason: targetStored.kind, message: "The ending checkpoint is unavailable for this file." };
+      if (targetStored?.kind === "file") modified = Buffer.from(targetStored.content, "base64");
+      else if (!targetStored && targetCheckpoint.head) {
+        try {
+          const { stdout: size } = await git(["cat-file", "-s", `${targetCheckpoint.head}:${relativePath}`]);
+          if (Number(size) > MAX_FILE_BYTES) return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope, status: "M", reason: "size", message: "This file exceeds the 1 MiB checkpoint comparison limit." };
+          modified = Buffer.from((await git(["cat-file", "blob", `${targetCheckpoint.head}:${relativePath}`], MAX_FILE_BYTES + 1)).stdout);
+        } catch { modified = Buffer.alloc(0); }
       }
-    } catch (error) {
-      if (error.code !== "ENOENT") return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope, status: "M", reason: "unsupported", message: "Checkpoint comparison is available for regular files only." };
+    } else {
+      try {
+        const target = path.resolve(checkpoint.workingRoot, relativePath);
+        if (target !== checkpoint.workingRoot && target.startsWith(`${checkpoint.workingRoot}${path.sep}`)) {
+          const stat = await fs.stat(target);
+          if (!stat.isFile()) throw Object.assign(new Error(), { code: "unsupported" });
+          if (stat.size > MAX_FILE_BYTES) return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope, status: "M", reason: "size", message: "This file exceeds the 1 MiB checkpoint comparison limit." };
+          modified = await fs.readFile(target);
+        }
+      } catch (error) {
+        if (error.code !== "ENOENT") return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope, status: "M", reason: "unsupported", message: "Checkpoint comparison is available for regular files only." };
+      }
     }
     if (original.equals(modified)) return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope, status: "M", reason: "unchanged", message: "This file did not change from the selected checkpoint." };
     const decode = (value) => new TextDecoder("utf-8", { fatal: true }).decode(value);
@@ -168,10 +185,15 @@ export class TurnCheckpointStore {
     return { kind: "text", path: relativePath, oldPath: relativePath, scope, status: original.length === 0 ? "A" : modified.length === 0 ? "D" : "M", original: originalText, modified: modifiedText };
   }
 
-  async #checkpoint(chatId, workingRoot, baseline) {
+  async #comparisonRange(chatId, workingRoot, baseline, checkpointId) {
     const root = path.resolve(workingRoot);
     const checkpoints = (await this.#checkpoints(chatId)).filter((checkpoint) => checkpoint.version === 1 && typeof checkpoint.repository === "boolean" && checkpoint.workingRoot === root);
-    return (baseline === "turn" ? checkpoints.at(-1) : checkpoints[0]) || null;
+    const index = checkpointId ? checkpoints.findIndex((checkpoint) => checkpoint.id === checkpointId) : baseline === "turn" ? checkpoints.length - 1 : 0;
+    if (index < 0) return { checkpoint: null, targetCheckpoint: null };
+    return {
+      checkpoint: checkpoints[index],
+      targetCheckpoint: baseline === "turn" && checkpointId ? checkpoints[index + 1] || null : null,
+    };
   }
 
   async #checkpoints(chatId) {
