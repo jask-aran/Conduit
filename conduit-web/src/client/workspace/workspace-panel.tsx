@@ -73,7 +73,6 @@ interface WorkspaceCacheEntry {
 const MAX_CACHED_WORKSPACES = 6;
 const workspaceCache = new Map<string, WorkspaceCacheEntry>();
 const MIN_DETAIL_HEIGHT = 32;
-const MIN_SOURCE_DETAIL_HEIGHT = 96;
 const MIN_WORKSPACE_PANE_WIDTH = 240;
 const WORKSPACE_SPLIT_GUTTER_WIDTH = 9;
 const WIDE_FILES_MIN_WIDTH = 720;
@@ -175,7 +174,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   let panelRoot: HTMLElement | undefined;
   let resizeHandle: HTMLDivElement | undefined;
   let detailHost: HTMLElement | undefined;
-  let sourceDetailHost: HTMLElement | undefined;
   let filesHost: HTMLElement | undefined;
   let treeElement: HTMLElement | undefined;
   let treeResizeHandle: HTMLDivElement | undefined;
@@ -299,7 +297,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const detailOpenName = () => `${tab()}:detail-open`;
   const detailHeightName = () => `${tab()}:detail-height`;
   const sourceDetailOpenName = "diff:source-detail-open";
-  const sourceDetailHeightName = "diff:source-detail-height";
   const detailOpenFor = (nextTab: PanelTab) => readSetting(panelScope(), `${nextTab}:detail-open`) ?? (nextTab === "diff" ? "false" : "true");
   const [detailOpen, setDetailOpen] = createSignal(detailOpenFor(tab()) === "true");
   const [diffDetailOpen, setDiffDetailOpen] = createSignal(detailOpenFor("diff") === "true");
@@ -365,7 +362,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   });
   const [sourceDetailOpen, setSourceDetailOpen] = createSignal(readSetting(panelScope(), sourceDetailOpenName) === "true");
   const [detailHeight, setDetailHeight] = createSignal(Math.max(128, Number(readSetting(panelScope(), detailHeightName())) || 288));
-  const [sourceDetailHeight, setSourceDetailHeight] = createSignal(Math.max(MIN_SOURCE_DETAIL_HEIGHT, Number(readSetting(panelScope(), sourceDetailHeightName)) || 224));
   const hasPending = (operation?: string) => [...pending().keys()].some((version) => !operation || requests.get(operation)?.version === version);
   const diffLoading = () => hasPending("diff");
   const filesLoading = () => [...requests.keys()].some((operation) => operation.startsWith("directory:") && hasPending(operation));
@@ -590,7 +586,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     setSourceDetailOpen(open);
     writeSetting(panelScope(), sourceDetailOpenName, String(open));
   };
-  const toggleSourceDetail = () => setSourceDetailVisible(!sourceDetailOpen());
   const selectSourceDetail = (patch: boolean) => {
     setFileDiffMode(false);
     setSourceDetailVisible(true);
@@ -600,8 +595,12 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     if (patch && !diff()?.diff) void loadDiff(true, false, true);
     if (!patch && !diff()?.commits) void loadDiff(false, true, true);
   };
+  const selectSourceChanges = () => {
+    setFileDiffMode(false);
+    setSourceDetailVisible(false);
+    setCommitDetail(null);
+  };
   let stopDetailResize: (() => void) | undefined;
-  let stopSourceDetailResize: (() => void) | undefined;
   const maxDetailHeight = () => Math.max(MIN_DETAIL_HEIGHT, (detailHost?.clientHeight || window.innerHeight) -
     (detailHost?.querySelector<HTMLElement>(".workspace-detail-dock-header, .workspace-preview-header")?.offsetHeight || 32) -
     MIN_DETAIL_HEIGHT);
@@ -648,46 +647,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         : clampDetailHeight(detailHeight() + (event.key === "ArrowUp" ? 16 : -16));
     setDetailHeight(next);
     writeSetting(panelScope(), detailHeightName(), String(next));
-  };
-  const maxSourceDetailHeight = () => Math.max(MIN_SOURCE_DETAIL_HEIGHT, (sourceDetailHost?.clientHeight || window.innerHeight) - 112);
-  const clampSourceDetailHeight = (value: number) => Math.max(MIN_SOURCE_DETAIL_HEIGHT, Math.min(maxSourceDetailHeight(), value));
-  const startSourceDetailResize = (event: PointerEvent) => {
-    stopSourceDetailResize?.();
-    event.preventDefault();
-    const startY = event.clientY;
-    const startHeight = sourceDetailHeight();
-    let pendingHeight = startHeight;
-    let frame = 0;
-    const apply = () => { frame = 0; setSourceDetailHeight(clampSourceDetailHeight(pendingHeight)); };
-    const move = (moveEvent: PointerEvent) => {
-      pendingHeight = startHeight + startY - moveEvent.clientY;
-      if (!frame) frame = requestAnimationFrame(apply);
-    };
-    const stop = () => {
-      if (frame) cancelAnimationFrame(frame);
-      const next = clampSourceDetailHeight(pendingHeight);
-      setSourceDetailHeight(next);
-      writeSetting(panelScope(), sourceDetailHeightName, String(next));
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-      window.removeEventListener("pointercancel", stop);
-      document.body.classList.remove("workspace-detail-resizing");
-      stopSourceDetailResize = undefined;
-    };
-    stopSourceDetailResize = stop;
-    document.body.classList.add("workspace-detail-resizing");
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop, { once: true });
-    window.addEventListener("pointercancel", stop, { once: true });
-  };
-  const resizeSourceDetailByKey = (event: KeyboardEvent) => {
-    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
-    event.preventDefault();
-    const next = event.key === "Home" ? MIN_SOURCE_DETAIL_HEIGHT : event.key === "End"
-      ? maxSourceDetailHeight()
-      : clampSourceDetailHeight(sourceDetailHeight() + (event.key === "ArrowUp" ? 16 : -16));
-    setSourceDetailHeight(next);
-    writeSetting(panelScope(), sourceDetailHeightName, String(next));
   };
   const loadDirectory = async (directory = "", background = false, more = false) => {
     if (background && requests.has(`directory:${directory}`)) return false;
@@ -1377,7 +1336,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     resetRequestScope();
     stopResize?.();
       stopDetailResize?.();
-      stopSourceDetailResize?.();
     filesResizeObserver?.disconnect();
     splitResizeObserver?.disconnect();
     document.removeEventListener("visibilitychange", updateDocumentVisibility);
@@ -1406,7 +1364,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       setDiffDetailOpen(detailOpenFor("diff") === "true");
       setSourceDetailOpen(readSetting(panelScope(), sourceDetailOpenName) === "true");
       setDetailHeight(Math.max(MIN_DETAIL_HEIGHT, Number(readSetting(panelScope(), `${nextTab}:detail-height`)) || 288));
-      setSourceDetailHeight(Math.max(MIN_SOURCE_DETAIL_HEIGHT, Number(readSetting(panelScope(), sourceDetailHeightName)) || 224));
       setCommitDetail(null);
       if (projectChanged) {
         pendingWidthCommit = Number(readSetting(projectScope(), "width")) || 336;
@@ -1969,7 +1926,22 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         </></Show>
       </div>
     </Show>
-    <Show when={tabVisible("diff")}><section ref={(element) => { sourceDetailHost = element; }} class="workspace-diff" data-position={panePosition("diff")}>
+    <Show when={tabVisible("diff")}><section class="workspace-diff" data-position={panePosition("diff")}>
+      <header class="workspace-detail-dock-header workspace-source-header">
+        <div class="workspace-source-modes" role="tablist" aria-label="Source Control">
+          <button type="button" role="tab" aria-selected={!sourceDetailOpen()} onClick={selectSourceChanges}><CheckIcon />Changes</button>
+          <button type="button" role="tab" aria-selected={fileDiffMode()} onClick={beginReview}><GitCompareArrowsIcon />Review</button>
+          <button type="button" role="tab" aria-selected={sourceDetailOpen() && !fileDiffMode() && !diffDetailOpen()} onClick={() => selectSourceDetail(false)}><GitCommitHorizontalIcon />Graph</button>
+          <button type="button" role="tab" aria-selected={sourceDetailOpen() && !fileDiffMode() && diffDetailOpen()} onClick={() => selectSourceDetail(true)}><FileDiffIcon />Patch</button>
+        </div>
+        <small>{fileDiffMode() ? `${reviewFiles().length} changed` : sourceDetailOpen() && !diffDetailOpen() ? `${diff()?.commits?.length || 0} recent` : `${diff()?.files.length || 0} changed`}</small>
+        <div class="workspace-source-actions">
+          <button type="button" aria-label="Fetch all remotes" title="Fetch all remotes" disabled={Boolean(gitAction())} onClick={() => void runGitAction("fetch")}><Show when={gitAction() === "fetch"} fallback={<RefreshCwIcon />}><Spinner /></Show><span>Fetch</span></button>
+          <button type="button" aria-label="Pull current branch" title="Pull current branch (fast-forward only)" disabled={!diff()?.upstream || Boolean(gitAction())} onClick={() => void runGitAction("pull")}><DownloadIcon /><span>Pull</span></button>
+          <button type="button" aria-label="Push current branch" title="Push current branch" disabled={!diff()?.upstream || Boolean(gitAction())} onClick={() => void runGitAction("push")}><SendIcon /><span>Push</span></button>
+        </div>
+      </header>
+      <Show when={!sourceDetailOpen()}>
       <div class="workspace-diff-overview">
       <div class="workspace-status-strip">
         <div><GitBranchIcon /><strong>{diff() ? diff()!.repository ? diff()!.branch : "Not a Git repository" : "Loading Git status…"}</strong><Show when={diff()?.upstream}><small>{diff()?.upstream}</small></Show></div>
@@ -2002,27 +1974,11 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         </div>
       </Show>
       </div>
-      <section class="workspace-source-workbench" data-open={sourceDetailOpen()} style={sourceDetailOpen() ? { height: `${sourceDetailHeight()}px` } : undefined}>
-        <header class="workspace-detail-dock-header">
-          <Show when={sourceDetailOpen()}><div class="workspace-source-resize-handle" role="separator" aria-label="Resize details" aria-orientation="horizontal" aria-valuemin={MIN_SOURCE_DETAIL_HEIGHT} aria-valuemax={maxSourceDetailHeight()} aria-valuenow={sourceDetailHeight()} tabIndex={0} onPointerDown={startSourceDetailResize} onKeyDown={resizeSourceDetailByKey} /></Show>
-          <button type="button" class="workspace-detail-disclosure" aria-expanded={sourceDetailOpen()} onClick={toggleSourceDetail}><ChevronDownIcon data-open={sourceDetailOpen()} /><span>Details</span></button>
-          <div class="workspace-source-modes" role="tablist" aria-label="Source Control detail">
-            <button type="button" role="tab" aria-selected={!fileDiffMode() && !diffDetailOpen()} onClick={() => selectSourceDetail(false)}><GitCommitHorizontalIcon />Graph</button>
-            <button type="button" role="tab" aria-selected={!fileDiffMode() && diffDetailOpen()} onClick={() => selectSourceDetail(true)}><FileDiffIcon />Patch</button>
-            <button type="button" role="tab" aria-selected={fileDiffMode()} onClick={beginReview}><GitCompareArrowsIcon />Review</button>
-          </div>
-          <small>{diffDetailOpen() ? `${diff()?.files.length || 0} changed` : `${diff()?.commits?.length || 0} recent`}</small>
-          <div class="workspace-source-actions">
-            <button type="button" aria-label="Fetch all remotes" title="Fetch all remotes" disabled={Boolean(gitAction())} onClick={() => void runGitAction("fetch")}><Show when={gitAction() === "fetch"} fallback={<RefreshCwIcon />}><Spinner /></Show><span>Fetch</span></button>
-            <button type="button" aria-label="Pull current branch" title="Pull current branch (fast-forward only)" disabled={!diff()?.upstream || Boolean(gitAction())} onClick={() => void runGitAction("pull")}><DownloadIcon /><span>Pull</span></button>
-            <button type="button" aria-label="Push current branch" title="Push current branch" disabled={!diff()?.upstream || Boolean(gitAction())} onClick={() => void runGitAction("push")}><SendIcon /><span>Push</span></button>
-          </div>
-        </header>
+      </Show>
         <Show when={sourceDetailOpen() && fileDiffMode()}><WorkspaceReview title="Working changes" files={reviewViewFiles()} selectedPath={selectedDiff()?.path ?? null} comparison={fileComparison()} viewState={comparisonViewState()} busy={fileDiffBusy()} empty={fileDiffError() || "No changed files to review."} onSelect={(path) => { const file = reviewFiles().find((item) => item.path === path); if (file) inspectFileDiff(path, file.status[0] !== " " && file.status[0] !== "?"); }} onOpenFile={(_comparison, state) => openComparisonFile(state)} /></Show>
         <Show when={sourceDetailOpen() && !fileDiffMode()}><Show when={diffDetailOpen()} fallback={<Show when={Boolean(diff()?.commits?.length)} fallback={<div class="workspace-panel-empty">No commit history available.</div>}><CommitHistory commits={diff()?.commits || []} refs={diff()?.refs || []} branch={diff()?.branch} onCopy={copy} onInspect={inspectCommit} /></Show>}>
           <div class="workspace-patch"><Show when={commitDetailLoading()} fallback={<Show when={commitDetail()} fallback={<Show when={diff()?.diff} fallback={<div class="workspace-panel-empty">{diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</div>}>{(content) => <PatchView content={content()} />}</Show>}>{(detail) => <PatchView content={detail().content} />}</Show>}><div class="workspace-panel-empty">Loading commit…</div></Show></div>
         </Show></Show>
-      </section>
     </section></Show>
     <Show when={tabVisible("artifacts")}><section class="workspace-artifacts" data-position={panePosition("artifacts")}>
       <div class="workspace-artifact-modes" role="radiogroup" aria-label="Artifact modality"><button role="radio" aria-checked={artifactMode() === "changes"} onClick={() => { setArtifactMode("changes"); void loadTurnArtifact(); }}>Agent changes</button><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div>
