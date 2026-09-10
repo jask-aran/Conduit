@@ -1,3 +1,4 @@
+import { WorkbenchButton } from "./workspace-workbench";
 import { batch, createEffect, createSignal, lazy, on, onCleanup, Show, Suspense, type JSX } from "solid-js";
 import { CopyIcon, DownloadIcon, GitCompareArrowsIcon, PencilIcon, SaveIcon, Trash2Icon, UploadIcon, XIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
@@ -481,18 +482,18 @@ export default function WorkspaceFileSlot(props: {
   const hasStaged = () => Boolean(props.gitFile && props.gitFile.status[0] !== " " && props.gitFile.status[0] !== "?");
   const gitControls = () => <Show when={props.gitFile}>{(file) => <>
     <code class="workspace-file-git-status" data-status={file().status === "??" ? "U" : file().status.trim()} title="Git status">{file().status === "??" ? "U" : file().status.trim()}</code>
-    <Show when={hasChanges()}><button type="button" class="workspace-file-diff-button" title="Show working-copy changes" aria-label="Show Changes diff" onClick={() => props.onShowDiff?.(false)}><GitCompareArrowsIcon /><span>Changes</span><Show when={file().workingCounts}>{(count) => <><span class="workspace-git-removed">−{count().removed}</span><span class="workspace-git-added">+{count().added}</span></>}</Show></button></Show>
-    <Show when={hasStaged()}><button type="button" class="workspace-file-diff-button" title="Show staged changes" aria-label="Show Staged diff" onClick={() => props.onShowDiff?.(true)}><GitCompareArrowsIcon /><span>Staged</span><Show when={file().stagedCounts}>{(count) => <><span class="workspace-git-removed">−{count().removed}</span><span class="workspace-git-added">+{count().added}</span></>}</Show></button></Show>
+    <Show when={hasChanges()}><WorkbenchButton type="button" class="workspace-file-diff-button" title="Show working-copy changes" aria-label="Show Changes diff" onClick={() => props.onShowDiff?.(false)}><GitCompareArrowsIcon /><span>Changes</span><Show when={file().workingCounts}>{(count) => <><span class="workspace-git-removed">−{count().removed}</span><span class="workspace-git-added">+{count().added}</span></>}</Show></WorkbenchButton></Show>
+    <Show when={hasStaged()}><WorkbenchButton type="button" class="workspace-file-diff-button" title="Show staged changes" aria-label="Show Staged diff" onClick={() => props.onShowDiff?.(true)}><GitCompareArrowsIcon /><span>Staged</span><Show when={file().stagedCounts}>{(count) => <><span class="workspace-git-removed">−{count().removed}</span><span class="workspace-git-added">+{count().added}</span></>}</Show></WorkbenchButton></Show>
   </>}</Show>;
   const textHeader = () => <header class="workspace-preview-header">
     <Show when={props.headerPrefix}>{props.headerPrefix}</Show>
     <div class="workspace-preview-file" title={props.path ?? ""}><FileTypeIcon name={props.path ?? ""} /><span>{props.path}</span></div>
     {gitControls()}
     <span class="workspace-preview-dirty" data-dirty={hasUnsavedChanges()} aria-hidden="true" />
-    <button type="button" class="workspace-preview-action" aria-label="Save file" title="Save file (Ctrl+S)" disabled={Boolean(props.comparison) || !hasUnsavedChanges() || saving()} onClick={() => void save()}><Show when={saving()} fallback={<SaveIcon />}><Spinner /></Show></button>
-    <button type="button" class="workspace-preview-copy" aria-label="Copy file contents" title="Copy file contents" onClick={() => { const compared = props.comparison?.comparison; void copy(compared?.kind === "text" ? compared.modified : currentText()); }}><CopyIcon /></button>
-    <button type="button" class="workspace-preview-action" aria-label="Download file" title="Download working file" onClick={() => void download()}><DownloadIcon /></button>
-    <Show when={props.closable}><button type="button" class="workspace-preview-action workspace-preview-close" aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><XIcon /></button></Show>
+    <WorkbenchButton type="button" class="workspace-preview-action" aria-label="Save file" title="Save file (Ctrl+S)" disabled={Boolean(props.comparison) || !hasUnsavedChanges() || saving()} onClick={() => void save()}><Show when={saving()} fallback={<SaveIcon />}><Spinner /></Show></WorkbenchButton>
+    <WorkbenchButton type="button" class="workspace-preview-copy" aria-label="Copy file contents" title="Copy file contents" onClick={() => { const compared = props.comparison?.comparison; void copy(compared?.kind === "text" ? compared.modified : currentText()); }}><CopyIcon /></WorkbenchButton>
+    <WorkbenchButton type="button" class="workspace-preview-action" aria-label="Download file" title="Download working file" onClick={() => void download()}><DownloadIcon /></WorkbenchButton>
+    <Show when={props.closable}><WorkbenchButton type="button" class="workspace-preview-action workspace-preview-close" aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><XIcon /></WorkbenchButton></Show>
   </header>;
 
   return <ContextMenu>
@@ -518,10 +519,10 @@ export default function WorkspaceFileSlot(props: {
           <div class="workspace-preview-file" title={file().path}><FileTypeIcon name={file().path} /><span>{file().path}</span></div>
           {gitControls()}
           <small>{[file().kind === "image" && imageDimensions() && `${imageDimensions()!.width} × ${imageDimensions()!.height}`, formatFileSize(file().size), file().mime, fileTimeMetadata(file())].filter(Boolean).join(" · ")}</small>
-          <button type="button" class="workspace-preview-action" aria-label="Download file" title="Download file" onClick={() => void download()}><DownloadIcon /></button>
-          <button type="button" class="workspace-preview-copy" aria-label="Copy file path" title="Copy file path" onClick={() => copy(file().path)}><CopyIcon /></button>
+          <WorkbenchButton type="button" class="workspace-preview-action" aria-label="Download file" title="Download file" onClick={() => void download()}><DownloadIcon /></WorkbenchButton>
+          <WorkbenchButton type="button" class="workspace-preview-copy" aria-label="Copy file path" title="Copy file path" onClick={() => copy(file().path)}><CopyIcon /></WorkbenchButton>
           <Show when={props.closable}>
-            <button type="button" class="workspace-preview-action workspace-preview-close" aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><XIcon /></button>
+            <WorkbenchButton type="button" class="workspace-preview-action workspace-preview-close" aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><XIcon /></WorkbenchButton>
           </Show>
         </header>
         <Show when={!file().url && !file().oversize && file().kind !== "binary"}>
@@ -553,7 +554,7 @@ export default function WorkspaceFileSlot(props: {
               </Show>
               <Show when={file().kind === "pdf"}>
                 <object data={file().url} type="application/pdf" aria-label={file().path}>
-                  <button type="button" class="workspace-file-kind-action" onClick={() => void download()}>Download PDF</button>
+                  <WorkbenchButton type="button" class="workspace-file-kind-action" onClick={() => void download()}>Download PDF</WorkbenchButton>
                 </object>
               </Show>
             </div>
@@ -565,7 +566,7 @@ export default function WorkspaceFileSlot(props: {
             <span>{file().mime} · {formatFileSize(file().size)} · {fileTimeMetadata(file())}</span>
             <Show when={file().kind === "binary"}>
               <code>{formatHexHead(file().head)}</code>
-              <button type="button" class="workspace-file-kind-action" onClick={openAsText}>Open as text anyway</button>
+              <WorkbenchButton type="button" class="workspace-file-kind-action" onClick={openAsText}>Open as text anyway</WorkbenchButton>
             </Show>
           </div>
         </Show>
@@ -610,7 +611,7 @@ export default function WorkspaceFileSlot(props: {
             <div class="workspace-file-kind-card">
               <strong>This text file is larger than the 25 MiB preview limit.</strong>
               <span>Download the complete file, or load the first 25 MiB as read-only text.</span>
-              <button type="button" class="workspace-file-kind-action" onClick={loadLargeText}>Load first 25 MiB</button>
+              <WorkbenchButton type="button" class="workspace-file-kind-action" onClick={loadLargeText}>Load first 25 MiB</WorkbenchButton>
             </div>
           </Show>
         </>}</Show>
