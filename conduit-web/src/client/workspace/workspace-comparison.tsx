@@ -1,3 +1,4 @@
+import { WorkbenchButton, WorkbenchStatus, FileRepresentationControl } from "./workspace-workbench";
 import { MergeView, unifiedMergeView, getChunks, goToNextChunk, goToPreviousChunk, getOriginalDoc, originalDocChangeEffect } from "@codemirror/merge";
 import { ChangeSet, Compartment, EditorState, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
@@ -139,28 +140,25 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
       <Show when={props.comparison.kind === "text"}>
         <span class="workspace-comparison-counts" title={summary().precise ? "Changed lines" : "Approximate changes: detailed comparison reached its work limit"}><span>−{summary().removed}</span><span>+{summary().added}</span></span>
       </Show>
-      <button type="button" class="workspace-comparison-open" title={props.inFiles ? "Edit the current working copy" : "Open this comparison in Files"} aria-label={props.inFiles ? "Edit working file" : "Open in Files"} onClick={() => {
+      <WorkbenchButton type="button" class="workspace-comparison-open" title={props.inFiles ? "Edit the current working copy" : "Open this comparison in Files"} aria-label={props.inFiles ? "Edit working file" : "Open in Files"} onClick={() => {
         const view = activeView;
         props.onOpenFile(view?.state.doc.toString() ?? "", view ? view.state.selection.main.head || view.viewport.from : 0, captureReview());
-      }}><PencilIcon /><span>{props.inFiles ? "Edit working file" : "Open in Files"}</span></button>
-      <Show when={props.onClose}><button type="button" class="workspace-comparison-open" aria-label="Close comparison" title="Close comparison" onClick={() => props.onClose?.()}><XIcon /></button></Show>
+      }}><PencilIcon /><span>{props.inFiles ? "Edit working file" : "Open in Files"}</span></WorkbenchButton>
+      <Show when={props.onClose}><WorkbenchButton type="button" class="workspace-comparison-open" aria-label="Close comparison" title="Close comparison" onClick={() => props.onClose?.()}><XIcon /></WorkbenchButton></Show>
     </header>
     }>{props.header}</Show>
     <Show when={props.comparison.kind === "text"} fallback={<div class="workspace-panel-empty">{props.comparison.kind === "unavailable" ? props.comparison.message : ""}</div>}>
       <div ref={host} class="workspace-comparison-content workspace-code-editor" data-layout={file() ? "file" : layout()} />
-      <footer class="workspace-editor-status">
-        <div class="workspace-editor-command-group">
-          <Show when={props.inFiles}><button type="button" class="workspace-editor-mode" aria-label="Edit file" title="Edit working file" onClick={() => { const view = activeView; props.onOpenFile(view?.state.doc.toString() ?? "", view?.state.selection.main.head ?? 0, captureReview()); }}><PencilOffIcon />Preview</button></Show>
-          <button type="button" aria-pressed={file()} title={props.inFiles ? "Show working file" : "Show compared file version"} onClick={() => props.onShowFile ? props.onShowFile() : setFile(true)}>File</button>
-          <button type="button" aria-pressed={!file()} title="Show changes" onClick={() => setFile(false)}>Diff</button>
-          <button type="button" aria-label="Find or replace" title="Find in focused version (Ctrl+F)" onClick={() => { if (activeView) openSearchPanel(activeView); }}><SearchIcon /></button>
-          <button type="button" aria-label="Unified diff" aria-pressed={layout() === "unified"} disabled={file()} onClick={() => setLayout("unified")}><Rows2Icon /></button>
-          <button type="button" aria-label="Side-by-side diff" aria-pressed={layout() === "split"} disabled={file()} onClick={() => setLayout("split")}><Columns2Icon /></button>
-          <button type="button" aria-label="Previous change" disabled={file()} onClick={() => move(false)}><ChevronUpIcon /></button>
-          <button type="button" aria-label="Next change" disabled={file()} onClick={() => move(true)}><ChevronDownIcon /></button>
-        </div>
-        <div class="workspace-editor-detail-group"><span class="workspace-editor-metadata">{{ changes: "Index → Working copy", staged: "HEAD → Index", head: "HEAD → Working copy", turn: "Turn start → Working copy", session: "Chat start → Working copy" }[props.comparison.scope]}</span>{props.footerControl}<button type="button" aria-label="Wrap lines" aria-pressed={wrap()} onClick={() => setWrap(!wrap())}><WrapTextIcon /></button><span class="workspace-editor-metadata">{languageName()} · Read-only</span></div>
-      </footer>
+      <WorkbenchStatus commands={<>
+          <Show when={props.inFiles}><WorkbenchButton type="button" class="workspace-editor-mode" aria-label="Edit file" title="Edit working file" onClick={() => { const view = activeView; props.onOpenFile(view?.state.doc.toString() ?? "", view?.state.selection.main.head ?? 0, captureReview()); }}><PencilOffIcon />Preview</WorkbenchButton></Show>
+          <FileRepresentationControl diff={!file()} onFile={() => props.onShowFile ? props.onShowFile() : setFile(true)} onDiff={() => setFile(false)} />
+          <WorkbenchButton type="button" aria-label="Find or replace" title="Find in focused version (Ctrl+F)" onClick={() => { if (activeView) openSearchPanel(activeView); }}><SearchIcon /></WorkbenchButton>
+          <Show when={!file()}><WorkbenchButton type="button" aria-label="Unified diff" aria-pressed={layout() === "unified"} disabled={file()} onClick={() => setLayout("unified")}><Rows2Icon /></WorkbenchButton>
+          <WorkbenchButton type="button" aria-label="Side-by-side diff" aria-pressed={layout() === "split"} disabled={file()} onClick={() => setLayout("split")}><Columns2Icon /></WorkbenchButton>
+          <WorkbenchButton type="button" aria-label="Previous change" disabled={file()} onClick={() => move(false)}><ChevronUpIcon /></WorkbenchButton>
+          <WorkbenchButton type="button" aria-label="Next change" disabled={file()} onClick={() => move(true)}><ChevronDownIcon /></WorkbenchButton></Show>
+        </>}><span class="workspace-editor-metadata">{{ changes: "Index → Working copy", staged: "HEAD → Index", head: "HEAD → Working copy", turn: "Turn start → Working copy", session: "Chat start → Working copy" }[props.comparison.scope]}</span>{props.footerControl}<WorkbenchButton type="button" aria-label="Wrap lines" aria-pressed={wrap()} onClick={() => setWrap(!wrap())}><WrapTextIcon /></WorkbenchButton><span class="workspace-editor-metadata">{languageName()} · Read-only</span>
+      </WorkbenchStatus>
     </Show>
   </section>;
 }

@@ -1,3 +1,4 @@
+import { WorkbenchButton } from "./workspace-workbench";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-solid";
 import { For, lazy, Show, Suspense, type JSX } from "solid-js";
 import { FileTypeIcon } from "./file-type-icon";
@@ -19,11 +20,11 @@ export default function WorkspaceReview(props: { title: string; files: Workspace
   };
   return <div class="workspace-patch workspace-review" data-full={props.full}>
     <nav class="workspace-review-files" aria-label={props.title}>
-      <header><strong>{props.title}</strong><small>{index() >= 0 ? `${index() + 1} / ${props.files.length}` : props.files.length}</small><button type="button" aria-label="Previous file" disabled={props.files.length < 2} onClick={() => move(-1)}><ChevronUpIcon /></button><button type="button" aria-label="Next file" disabled={props.files.length < 2} onClick={() => move(1)}><ChevronDownIcon /></button></header>
+      <header><strong>{props.title}</strong><small>{index() >= 0 ? `${index() + 1} / ${props.files.length}` : props.files.length}</small><WorkbenchButton type="button" aria-label="Previous file" disabled={props.files.length < 2} onClick={() => move(-1)}><ChevronUpIcon /></WorkbenchButton><WorkbenchButton type="button" aria-label="Next file" disabled={props.files.length < 2} onClick={() => move(1)}><ChevronDownIcon /></WorkbenchButton></header>
       <div class="workspace-changes"><For each={props.files}>{(file) => {
         const name = () => file.path.split("/").at(-1) ?? file.path;
         const directory = () => file.path.split("/").slice(0, -1).join("/");
-        return <div class="workspace-change-row" data-selected={file.path === props.selectedPath}><button type="button" aria-current={file.path === props.selectedPath ? "true" : undefined} title={`Review ${file.path}`} onClick={() => props.onSelect(file.path)}><FileTypeIcon name={name()} /><span class="workspace-change-name">{name()}</span><span class="workspace-change-directory">{directory()}</span><Show when={file.counts}>{(count) => <small class="workspace-change-counts"><span class="workspace-git-removed">−{count().removed}</span><span class="workspace-git-added">+{count().added}</span></small>}</Show><code data-status={file.status}>{file.status}</code></button></div>;
+        return <div class="workspace-change-row" data-selected={file.path === props.selectedPath}><WorkbenchButton type="button" aria-current={file.path === props.selectedPath ? "true" : undefined} title={`Review ${file.path}`} onClick={() => props.onSelect(file.path)}><FileTypeIcon name={name()} /><span class="workspace-change-name">{name()}</span><span class="workspace-change-directory">{directory()}</span><Show when={file.counts}>{(count) => <small class="workspace-change-counts"><span class="workspace-git-removed">−{count().removed}</span><span class="workspace-git-added">+{count().added}</span></small>}</Show><code data-status={file.status}>{file.status}</code></WorkbenchButton></div>;
       }}</For></div>
     </nav>
     <div class="workspace-review-comparison"><Show when={props.selectedPath} fallback={<div class="workspace-panel-empty">{props.empty}</div>}><Show when={!props.busy} fallback={<div class="workspace-panel-empty">Loading changes…</div>}><Show when={props.comparison}>{(comparison) => <Suspense fallback={<div class="workspace-panel-empty">Loading comparison…</div>}><WorkspaceComparison comparison={comparison()} viewState={props.viewState} footerControl={props.footerControl} onOpenFile={(_source, _position, state) => props.onOpenFile(comparison(), state)} /></Suspense>}</Show></Show></Show></div>

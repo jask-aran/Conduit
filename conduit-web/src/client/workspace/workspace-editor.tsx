@@ -1,3 +1,4 @@
+import { WorkbenchButton, WorkbenchStatus, FileRepresentationControl } from "./workspace-workbench";
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
 import { history, historyKeymap, indentLess, indentMore, indentWithTab, redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
 import { indentOnInput, indentUnit } from "@codemirror/language";
@@ -366,23 +367,21 @@ export default function WorkspaceEditor(props: {
 
   return <div class="workspace-code-surface" data-editable={editable()}>
     <div ref={host} class="workspace-code-editor" data-markdown={isVisualMarkdownFile(props.path)} data-wrap={props.wrap} />
-    <footer class="workspace-editor-status" aria-label="Editor status">
-      <div class="workspace-editor-command-group">
-        <button type="button" class="workspace-editor-mode" disabled={!props.canEdit} aria-label={editable() ? "Close editor" : "Edit file"} aria-pressed={editable()} onClick={() => props.onToggleEditing?.()}>
+    <WorkbenchStatus commands={<>
+        <WorkbenchButton type="button" class="workspace-editor-mode" disabled={!props.canEdit} aria-label={editable() ? "Close editor" : "Edit file"} aria-pressed={editable()} onClick={() => props.onToggleEditing?.()}>
           <Show when={editable()} fallback={<PencilOffIcon />}><PencilIcon /></Show>
           <span>{editable() ? "Editing" : "Preview"}</span>
-        </button>
-        <Show when={props.onShowDiff}><button type="button" aria-pressed="true">File</button><button type="button" aria-pressed="false" onClick={() => props.onShowDiff?.()}>Diff</button></Show>
-        <button type="button" aria-label="Find or replace" title="Find or replace (Ctrl+F)" onClick={() => runCommand(openSearchPanel)}><SearchIcon /></button>
-        <button ref={undoButton} type="button" class="workspace-edit-command" aria-label="Undo" title="Undo (Ctrl+Z)" disabled onClick={() => runEditCommand(undo)}><Undo2Icon /></button>
-        <button ref={redoButton} type="button" class="workspace-edit-command" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled onClick={() => runEditCommand(redo)}><Redo2Icon /></button>
-        <button type="button" class="workspace-edit-command" aria-label="Outdent selection" title="Outdent selection (Shift+Tab)" onClick={() => runEditCommand(indentLess)}><IndentDecreaseIcon /></button>
-        <button type="button" class="workspace-edit-command" aria-label="Indent selection" title="Indent selection (Tab)" onClick={() => runEditCommand(indentMore)}><IndentIncreaseIcon /></button>
-      </div>
-      <div class="workspace-editor-detail-group">
+        </WorkbenchButton>
+        <FileRepresentationControl diff={false} onDiff={props.onShowDiff} />
+        <WorkbenchButton type="button" aria-label="Find or replace" title="Find or replace (Ctrl+F)" onClick={() => runCommand(openSearchPanel)}><SearchIcon /></WorkbenchButton>
+        <WorkbenchButton ref={undoButton} type="button" class="workspace-edit-command" aria-label="Undo" title="Undo (Ctrl+Z)" disabled onClick={() => runEditCommand(undo)}><Undo2Icon /></WorkbenchButton>
+        <WorkbenchButton ref={redoButton} type="button" class="workspace-edit-command" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled onClick={() => runEditCommand(redo)}><Redo2Icon /></WorkbenchButton>
+        <WorkbenchButton type="button" class="workspace-edit-command" aria-label="Outdent selection" title="Outdent selection (Shift+Tab)" onClick={() => runEditCommand(indentLess)}><IndentDecreaseIcon /></WorkbenchButton>
+        <WorkbenchButton type="button" class="workspace-edit-command" aria-label="Indent selection" title="Indent selection (Tab)" onClick={() => runEditCommand(indentMore)}><IndentIncreaseIcon /></WorkbenchButton>
+      </>}>
         <span class="workspace-editor-metadata" title={props.statusTitle ?? props.statusText}>{props.statusText}</span>
-        <button type="button" ref={positionLabel} aria-label="Go to line" title="Go to line (Alt+G)" onClick={() => runCommand(gotoLine)}>Ln 1, Col 1</button>
-        <button type="button" aria-label={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} title={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={props.wrap} onClick={() => { props.onToggleWrap(); view?.focus(); }}><WrapTextIcon /></button>
+        <WorkbenchButton type="button" ref={positionLabel} aria-label="Go to line" title="Go to line (Alt+G)" onClick={() => runCommand(gotoLine)}>Ln 1, Col 1</WorkbenchButton>
+        <WorkbenchButton type="button" aria-label={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} title={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={props.wrap} onClick={() => { props.onToggleWrap(); view?.focus(); }}><WrapTextIcon /></WorkbenchButton>
         <Menu>
           <MenuTrigger class="workspace-editor-picker" aria-label={`Indentation ${indentationLabel(indentation())}`} title="Indentation">
             <span>{indentationLabel(indentation())}</span><ChevronDownIcon />
@@ -415,8 +414,7 @@ export default function WorkspaceEditor(props: {
             </MenuGroup>
           </MenuContent>
         </Menu>
-      </div>
-    </footer>
+    </WorkbenchStatus>
   </div>;
 }
 
