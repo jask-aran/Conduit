@@ -52,6 +52,11 @@ uses `0` for the latest turn and negative offsets for earlier checkpoints. A
 historical checkpoint ends at the next checkpoint, so it isolates that turn.
 The latest checkpoint still ends at the current working copy because no later
 checkpoint exists yet.
+The review timeline hides turns with no file changes but keeps their absolute
+offsets, so navigation can move from `Turn −1` to `Turn −5`. Empty checkpoints
+remain stored because they define exact turn boundaries. If the current turn is
+empty, the surface keeps the latest change-bearing comparison visible and
+returns to `Turn 0` when file changes arrive.
 There is no accordion surface in the current plan.
 
 ## Settled decisions
