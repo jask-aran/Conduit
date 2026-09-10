@@ -6,7 +6,7 @@ function record() {
   return {
     id: "live", chatId: "chat", status: "running", activity: "idle", active: false, stopping: false,
     sessionId: "thread-1", generation: null, clients: new Set(), events: [], pending: new Map(),
-    sequence: 0, eventSequence: 0, messageIds: new Set(),
+    approvals: new Map(), sequence: 0, eventSequence: 0, messageIds: new Set(),
   };
 }
 
@@ -25,8 +25,8 @@ test("Codex notifications map to neutral streaming events", () => {
 test("Codex adapter advertises only implemented capabilities", () => {
   assert.deepEqual(CODEX_CAPABILITIES, {
     steer: false, followUpQueue: false, cancel: true, compaction: false,
-    thinkingLevels: true, modelSwitch: true, toolUse: true, permissions: false,
-    usage: false, replay: true,
+    thinkingLevels: true, modelSwitch: true, toolUse: true, permissions: true,
+    usage: false, replay: false,
   });
 });
 
@@ -228,4 +228,104 @@ test("a command with no message before it gets a carrier of its own", () => {
   assert.equal(finals.length, 1);
   assert.deepEqual(finals[0].blocks.map((block) => [block.kind, block.name]), [["tool_call", "file change"]]);
   assert.equal(finals[0].stopReason, "toolUse");
+});
+
+// A record whose writes are captured, so the reply Codex receives is assertable.
+function approvalHarness() {
+  const adapter = new CodexAppServerAdapter();
+  const live = record();
+  live.active = true;
+  live.generation = { id: "turn-1", closed: false, settled: false };
+  const written = [];
+  adapter.write = (_record, message) => written.push(message);
+  adapter.records.set(live.id, live);
+  return { adapter, live, written };
+}
+
+test("a command approval becomes a permission prompt and its answer reaches Codex", () => {
+  const { adapter, live, written } = approvalHarness();
+  adapter.receive(live, JSON.stringify({ id: 7, method: "item/commandExecution/requestApproval",
+    params: { approvalId: "ap-1", turnId: "turn-1", command: "rm -rf build", reason: "Cleaning the tree" } }));
+
+  const prompt = live.events.find((event) => event.type === "permission_request");
+  assert.ok(prompt, "the request surfaces as a permission prompt");
+  assert.equal(prompt.requestId, "ap-1");
+  assert.equal(prompt.kind, "select");
+  assert.match(prompt.message, /rm -rf build/);
+  assert.match(prompt.message, /Cleaning the tree/);
+  assert.deepEqual(prompt.options, ["Approve", "Approve for session", "Deny"]);
+  assert.equal(live.activity, "waiting_for_user");
+  assert.equal(written.length, 0, "nothing is sent back until the user answers");
+
+  assert.equal(adapter.respondHostUi(live.id, { id: "ap-1", value: "Approve for session" }), "acceptForSession");
+  assert.deepEqual(written, [{ id: 7, result: { decision: "acceptForSession" } }]);
+  assert.ok(live.events.some((event) => event.type === "permission_resolved" && event.requestId === "ap-1"));
+  assert.equal(live.activity, "working", "the turn resumes once the prompt clears");
+});
+
+test("a permission prompt fails closed", () => {
+  for (const [response, expected] of [
+    [{ id: "ap-1", value: "Deny" }, "decline"],
+    [{ id: "ap-1", cancelled: true }, "decline"],
+    [{ id: "ap-1" }, "decline"],
+    [{ id: "ap-1", value: "something else" }, "decline"],
+    [{ id: "ap-1", confirmed: true }, "accept"],
+  ]) {
+    const { adapter, live, written } = approvalHarness();
+    adapter.receive(live, JSON.stringify({ id: 7, method: "item/commandExecution/requestApproval",
+      params: { approvalId: "ap-1", command: "curl evil.example" } }));
+    assert.equal(adapter.respondHostUi(live.id, response), expected, JSON.stringify(response));
+    assert.equal(written[0].result.decision, expected);
+  }
+});
+
+test("the pre-v2 approval spelling uses its own decision vocabulary", () => {
+  const { adapter, live, written } = approvalHarness();
+  adapter.receive(live, JSON.stringify({ id: 3, method: "execCommandApproval",
+    params: { callId: "call-9", command: ["git", "push"] } }));
+  assert.match(live.events.find((event) => event.type === "permission_request").message, /git push/);
+  adapter.respondHostUi(live.id, { id: "call-9", value: "Approve" });
+  assert.deepEqual(written, [{ id: 3, result: { decision: "approved" } }]);
+});
+
+// The defect that motivated this: an unanswered server request stalls the turn.
+test("a server request Conduit does not handle is refused rather than ignored", () => {
+  const { adapter, live, written } = approvalHarness();
+  adapter.receive(live, JSON.stringify({ id: 11, method: "mcpServer/elicitation/request", params: {} }));
+  assert.equal(written.length, 1, "the request is always answered");
+  assert.equal(written[0].id, 11);
+  assert.match(written[0].error.message, /does not handle/);
+  assert.equal(live.events.some((event) => event.type === "permission_request"), false);
+});
+
+test("an approval answered elsewhere clears locally, and answering twice is inert", () => {
+  const { adapter, live, written } = approvalHarness();
+  adapter.receive(live, JSON.stringify({ id: 5, method: "item/fileChange/requestApproval",
+    params: { itemId: "item-2", reason: "Edit src/main.js", grantRoot: "/repo" } }));
+  assert.match(live.events.find((event) => event.type === "permission_request").message, /Grants write access to \/repo/);
+
+  adapter.notification(live, "serverRequest/resolved", { requestId: 5 });
+  assert.ok(live.events.some((event) => event.type === "permission_resolved"));
+  assert.equal(adapter.respondHostUi(live.id, { id: "item-2", value: "Approve" }), null);
+  assert.equal(written.length, 0, "a resolved prompt never writes a decision");
+});
+
+test("a turn that completes with a prompt outstanding does not strand it", () => {
+  const { adapter, live } = approvalHarness();
+  adapter.receive(live, JSON.stringify({ id: 5, method: "item/commandExecution/requestApproval",
+    params: { approvalId: "ap-3", command: "make" } }));
+  adapter.notification(live, "turn/completed", { turn: { id: "turn-1", status: "completed" } });
+  assert.equal(live.approvals.size, 0);
+  assert.ok(live.events.some((event) => event.type === "permission_resolved" && event.requestId === "ap-3"));
+});
+
+test("thread policy overrides only what Conduit was asked for", () => {
+  assert.deepEqual(CodexAppServerAdapter.policy(), {}, "no override leaves the user's config.toml alone");
+  assert.deepEqual(CodexAppServerAdapter.policy("on-request"), { approvalPolicy: "on-request" });
+  assert.deepEqual(CodexAppServerAdapter.policy("", "workspace-write"), { sandbox: { type: "workspace-write" } });
+  assert.deepEqual(CodexAppServerAdapter.policy("nonsense"), {}, "an unknown policy is not forwarded");
+  assert.deepEqual(
+    CodexAppServerAdapter.policy("never", { type: "workspace-write", networkAccess: false, writableRoots: ["/repo"] }),
+    { approvalPolicy: "never", sandbox: { type: "workspace-write", networkAccess: false, writableRoots: ["/repo"] } },
+  );
 });

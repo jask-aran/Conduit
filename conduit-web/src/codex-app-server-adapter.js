@@ -8,9 +8,54 @@ import { unsupported } from "./harnesses/unsupported.js";
 
 export const CODEX_CAPABILITIES = Object.freeze({
   steer: false, followUpQueue: false, cancel: true, compaction: false,
-  thinkingLevels: true, modelSwitch: true, toolUse: true, permissions: false,
-  usage: false, replay: true,
+  thinkingLevels: true, modelSwitch: true, toolUse: true, permissions: true,
+  // `replay` means resuming a generation in progress, which Codex cannot do:
+  // its `replay` returns the current runtime state, not a generation.
+  usage: false, replay: false,
 });
+
+// Codex asks for approval with a JSON-RPC *request* - it carries an id and
+// waits for a reply - so an unanswered one stalls the turn silently. Each entry
+// maps one approval method onto Conduit's neutral permission prompt and back
+// onto the decision vocabulary that method expects.
+const APPROVAL_OPTIONS = Object.freeze(["Approve", "Approve for session", "Deny"]);
+const APPROVAL_POLICIES = Object.freeze(["untrusted", "on-request", "never"]);
+export const SANDBOX_MODES = Object.freeze(["read-only", "workspace-write", "danger-full-access"]);
+const commandText = (params) => Array.isArray(params.command) ? params.command.join(" ") : params.command || "";
+const APPROVALS = {
+  "item/commandExecution/requestApproval": {
+    title: () => "Run a command",
+    message: (params) => [commandText(params), params.reason].filter(Boolean).join("\n\n") || "Codex wants to run a command.",
+    decisions: { approve: "accept", session: "acceptForSession", deny: "decline" },
+  },
+  "item/fileChange/requestApproval": {
+    title: () => "Apply a file change",
+    message: (params) => [params.reason, params.grantRoot && `Grants write access to ${params.grantRoot}`]
+      .filter(Boolean).join("\n\n") || "Codex wants to edit files in this folder.",
+    decisions: { approve: "accept", session: "acceptForSession", deny: "decline" },
+  },
+  // The pre-v2 spellings. An older app-server sends these for the same two
+  // decisions under a different vocabulary.
+  execCommandApproval: {
+    title: () => "Run a command",
+    message: (params) => [commandText(params), params.reason].filter(Boolean).join("\n\n") || "Codex wants to run a command.",
+    decisions: { approve: "approved", session: "approved_for_session", deny: "denied" },
+  },
+  applyPatchApproval: {
+    title: () => "Apply a file change",
+    message: (params) => params.reason || "Codex wants to edit files in this folder.",
+    decisions: { approve: "approved", session: "approved_for_session", deny: "denied" },
+  },
+};
+
+// A permission prompt fails closed: anything but an explicit approval denies.
+const approvalChoice = (response) => {
+  if (!response || response.cancelled) return "deny";
+  if (response.confirmed === true) return "approve";
+  if (response.confirmed === false) return "deny";
+  const index = APPROVAL_OPTIONS.indexOf(String(response.value ?? ""));
+  return ["approve", "session", "deny"][index] || "deny";
+};
 
 const error = (message, code = "backend_unavailable", status = 409) => Object.assign(new Error(message), { code, status });
 
@@ -49,12 +94,13 @@ export class CodexAppServerAdapter extends EventEmitter {
     Object.assign(this, unsupported(CODEX_CAPABILITIES, { label: "Codex" }));
   }
 
-  async create({ chatId, project, model = "", thinkingLevel = "" }) {
+  async create({ chatId, project, model = "", thinkingLevel = "", approvalPolicy = "", sandbox = null }) {
     const record = await this.start({ chatId, cwd: project.workingRoot });
     const result = await this.request(record, "thread/start", {
       cwd: project.workingRoot,
       ...(model ? { model } : {}),
       ...(thinkingLevel ? { effort: thinkingLevel } : {}),
+      ...CodexAppServerAdapter.policy(approvalPolicy, sandbox),
     });
     record.sessionId = result.thread.id;
     record.model = result.model || model;
@@ -62,7 +108,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     return record;
   }
 
-  async restore(opaqueSession, { chatId, project, model = "", thinkingLevel = "" }) {
+  async restore(opaqueSession, { chatId, project, model = "", thinkingLevel = "", approvalPolicy = "", sandbox = null }) {
     const record = await this.start({ chatId, cwd: project.workingRoot });
     const threadId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!threadId) throw error("Codex thread identity is missing");
@@ -70,6 +116,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       threadId, cwd: project.workingRoot,
       ...(model ? { model } : {}),
       ...(thinkingLevel ? { effort: thinkingLevel } : {}),
+      ...CodexAppServerAdapter.policy(approvalPolicy, sandbox),
     });
     record.sessionId = result.thread?.id || threadId;
     record.model = model || result.model || result.thread?.model || "";
@@ -241,7 +288,8 @@ export class CodexAppServerAdapter extends EventEmitter {
     const record = {
       id: crypto.randomUUID(), chatId, cwd, status: "starting", activity: "starting", adapterImplementation: "codex",
       active: false, stopping: false, sessionId: null, model: "", thinkingLevel: "", generation: null,
-      clients: new Set(), events: [], pending: new Map(), sequence: 0, eventSequence: 0, messageIds: new Set(),
+      clients: new Set(), events: [], pending: new Map(), approvals: new Map(),
+      sequence: 0, eventSequence: 0, messageIds: new Set(),
     };
     const child = spawn(this.command, ["app-server", "--stdio"], { cwd, stdio: ["pipe", "pipe", "pipe"] });
     record.child = child;
@@ -289,7 +337,61 @@ export class CodexAppServerAdapter extends EventEmitter {
       else pending.resolve(message.result);
       return;
     }
+    // A message carrying BOTH an id and a method is a request from the server
+    // and needs a reply. Treating it as a notification is what left approval
+    // prompts unanswered and stalled the turn.
+    if (message.id != null && message.method) return this.serverRequest(record, message);
     if (message.method) this.notification(record, message.method, message.params || {});
+  }
+
+  /**
+   * Answer a request the app-server made of us. Every path here replies:
+   * an approval becomes a permission prompt whose answer is written back, and
+   * anything we do not understand is refused immediately rather than ignored,
+   * so the turn fails loudly instead of hanging.
+   */
+  serverRequest(record, message) {
+    const descriptor = APPROVALS[message.method];
+    if (!descriptor) {
+      this.write(record, { id: message.id, error: { code: -32601,
+        message: `Conduit does not handle ${message.method}` } });
+      return;
+    }
+    const params = message.params || {};
+    const requestId = params.approvalId || params.itemId || params.callId || `approval-${message.id}`;
+    const generationId = params.turnId || record.generation?.id || null;
+    record.approvals.set(requestId, { requestId: message.id, decisions: descriptor.decisions, generationId });
+    record.activity = "waiting_for_user";
+    this.publish(record, {
+      type: "permission_request", generationId, requestId, kind: "select",
+      title: descriptor.title(params), message: descriptor.message(params),
+      options: [...APPROVAL_OPTIONS], placeholder: "", prefill: "", timeoutMs: null,
+    });
+    this.publish(record, { type: "status", generationId, sequence: ++record.eventSequence,
+      status: "working", activity: "waiting_for_user", detail: descriptor.title(params) });
+  }
+
+  /** Send the user's answer back to Codex and let the turn continue. */
+  respondHostUi(id, response) {
+    const record = this.get(id);
+    if (!record) throw error("Codex session is not running");
+    const requestId = response?.id;
+    const pending = record.approvals.get(requestId);
+    // Resolved already - answered in the Codex TUI, or a duplicate click.
+    if (!pending) return null;
+    record.approvals.delete(requestId);
+    const decision = pending.decisions[approvalChoice(response)];
+    this.write(record, { id: pending.requestId, result: { decision } });
+    this.settleApproval(record, requestId, pending.generationId);
+    return decision;
+  }
+
+  settleApproval(record, requestId, generationId) {
+    record.approvals.delete(requestId);
+    if (!record.approvals.size) record.activity = record.active ? "working" : "idle";
+    this.publish(record, { type: "permission_resolved", generationId, requestId });
+    this.publish(record, { type: "status", generationId, sequence: ++record.eventSequence,
+      status: record.active ? "working" : "idle", activity: record.activity, detail: null });
   }
 
   /**
@@ -351,12 +453,20 @@ export class CodexAppServerAdapter extends EventEmitter {
         this.publish(record, { type: "tool_activity", generationId: turnId, phase: "end", sequence: ++record.eventSequence,
           toolCallId: params.item.id, name: activity.name, output: truncate(activity.output), isError: activity.isError });
       }
+    } else if (method === "serverRequest/resolved") {
+      // The prompt was answered somewhere else - the Codex TUI, or another
+      // client on the same thread. Clear ours rather than leave it hanging.
+      for (const [requestId, pending] of record.approvals) {
+        if (params.requestId != null && pending.requestId !== params.requestId) continue;
+        this.settleApproval(record, requestId, pending.generationId);
+      }
     } else if (method === "turn/completed") {
       const failed = params.turn?.status === "failed";
       record.active = false;
       record.stopping = false;
       record.activity = failed ? "failed" : "idle";
       if (record.generation) Object.assign(record.generation, { closed: true, settled: true });
+      for (const [requestId, pending] of record.approvals) this.settleApproval(record, requestId, pending.generationId);
       this.publish(record, failed
         ? { type: "error", generationId: turnId, error: { code: "backend_unavailable", message: params.turn?.error?.message || "Codex turn failed" } }
         : { type: "status", generationId: turnId, sequence: ++record.eventSequence, status: "idle", activity: "idle", detail: "settled" });
@@ -369,6 +479,22 @@ export class CodexAppServerAdapter extends EventEmitter {
    * are sent as files rather than only as paths inside the envelope text. It has
    * no generic file variant, so anything else stays a path the model can read.
    */
+  /**
+   * Approval and sandbox policy for a thread. Omitted keys let Codex fall back
+   * to the user's own `~/.codex/config.toml`, so Conduit only overrides what it
+   * was actually asked to.
+   *
+   * `approvalPolicy` is untrusted | on-request | never; `sandbox` is
+   * read-only | workspace-write | danger-full-access, or an object carrying
+   * networkAccess and writableRoots.
+   */
+  static policy(approvalPolicy = "", sandbox = null) {
+    return {
+      ...(APPROVAL_POLICIES.includes(approvalPolicy) ? { approvalPolicy } : {}),
+      ...(sandbox ? { sandbox: typeof sandbox === "string" ? { type: sandbox } : sandbox } : {}),
+    };
+  }
+
   static inputItems(message, attachments) {
     const images = (attachments || []).filter((item) => String(item?.type || "").startsWith("image/") && item.path);
     return [...images.map((item) => ({ type: "localImage", path: item.path })), { type: "text", text: message }];
