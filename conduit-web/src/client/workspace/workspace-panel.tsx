@@ -253,6 +253,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const [artifactBaseline, setArtifactBaseline] = createSignal<ArtifactBaseline>("chat");
   const [artifactTimeline, setArtifactTimeline] = createSignal<TurnCheckpointSummary[]>([]);
   const [artifactOffset, setArtifactOffset] = createSignal(0);
+  const [artifactSkippedLatest, setArtifactSkippedLatest] = createSignal(false);
   const [turnArtifact, setTurnArtifact] = createSignal<TurnArtifactPayload | null>(null);
   const artifactReview = createReviewController(reportError);
   const artifactPath = artifactReview.selectedPath;
@@ -273,7 +274,19 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     });
   };
   const selectArtifactFile = (path: string) => { void loadArtifactComparison(path); };
-  const loadTurnArtifact = async () => {
+  const findChangedTurn = async (projectId: string, chatId: string, timeline: TurnCheckpointSummary[], start: number, direction: -1 | 1) => {
+    let offset = start;
+    let first: TurnArtifactPayload | null = null;
+    while (timeline[offset]) {
+      const checkpoint = timeline[offset]!;
+      const result = await api<TurnArtifactPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&baseline=turn&checkpointId=${encodeURIComponent(checkpoint.id)}`);
+      first ??= result;
+      if (result?.files.length) return { result, offset, changed: true };
+      offset += direction;
+    }
+    return first ? { result: first, offset: start, changed: false } : null;
+  };
+  const loadTurnArtifact = async (direction: -1 | 1 = 1) => {
     const chatId = props.artifactChatId?.();
     if (!chatId) {
       artifactReview.cancel();
@@ -284,15 +297,22 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     const projectId = props.projectId();
     const baseline = artifactBaseline();
     try {
-      const currentOffset = artifactOffset();
+      const displayedOffset = artifactOffset();
+      const currentOffset = artifactSkippedLatest() ? 0 : displayedOffset;
       const currentId = artifactTimeline()[currentOffset]?.id;
       const timeline = await api<TurnCheckpointSummary[]>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&timeline=1`);
       const nextOffset = currentOffset === 0 ? 0 : Math.max(0, timeline.findIndex((checkpoint) => checkpoint.id === currentId));
-      const checkpointId = baseline === "turn" ? timeline[nextOffset]?.id : undefined;
-      const result = await api<TurnArtifactPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&baseline=${baseline}${checkpointId ? `&checkpointId=${encodeURIComponent(checkpointId)}` : ""}`);
-      if (props.projectId() !== projectId || props.artifactChatId?.() !== chatId || artifactBaseline() !== baseline || (baseline === "turn" && artifactOffset() !== currentOffset)) return;
+      const found = baseline === "turn" ? await findChangedTurn(projectId, chatId, timeline, nextOffset, direction) : null;
+      const result = baseline === "turn" ? found?.result ?? null : await api<TurnArtifactPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&baseline=chat`);
+      if (props.projectId() !== projectId || props.artifactChatId?.() !== chatId || artifactBaseline() !== baseline || (baseline === "turn" && artifactOffset() !== displayedOffset)) return;
+      if (baseline === "turn" && !found?.changed && turnArtifact()?.files.length) {
+        if (!artifactSkippedLatest()) setArtifactOffset(Math.max(0, currentOffset - direction));
+        if (direction < 0) setArtifactSkippedLatest(true);
+        return;
+      }
       setArtifactTimeline(timeline);
-      setArtifactOffset(nextOffset);
+      setArtifactOffset(found?.offset ?? nextOffset);
+      setArtifactSkippedLatest(baseline === "turn" && currentOffset === 0 && (found?.offset ?? 0) > 0);
       setTurnArtifact(result);
       const next = artifactReview.reconcile(result?.files ?? []);
       if (next) void loadArtifactComparison(next);
@@ -302,6 +322,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     if (baseline === artifactBaseline() && (baseline !== "turn" || artifactOffset() === 0)) return;
     artifactReview.cancel();
     if (baseline === "turn") setArtifactOffset(0);
+    setArtifactSkippedLatest(false);
     setArtifactBaseline(baseline);
     void loadTurnArtifact();
   };
@@ -311,11 +332,13 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     artifactReview.cancel();
     setArtifactBaseline("turn");
     setArtifactOffset(next);
-    void loadTurnArtifact();
+    setArtifactSkippedLatest(false);
+    void loadTurnArtifact(offset < 0 ? -1 : 1);
   };
-  const artifactBaselineControl = () => <div class="workspace-artifact-baseline" role="radiogroup" aria-label="Agent changes baseline"><button type="button" role="radio" aria-checked={artifactBaseline() === "chat"} onClick={() => selectArtifactBaseline("chat")}>Chat start</button><button type="button" aria-label="Older turn" title="Older turn" disabled={!artifactTimeline().length || artifactOffset() >= artifactTimeline().length - 1} onClick={() => moveArtifactTimeline(1)}><ChevronLeftIcon /></button><button type="button" role="radio" aria-checked={artifactBaseline() === "turn"} onClick={() => selectArtifactBaseline("turn")}>{`Turn ${artifactOffset() === 0 ? "0" : `−${artifactOffset()}`}`}</button><button type="button" aria-label="Newer turn" title="Newer turn" disabled={!artifactTimeline().length || artifactOffset() === 0} onClick={() => moveArtifactTimeline(-1)}><ChevronRightIcon /></button></div>;
+  const artifactBaselineControl = () => <div class="workspace-artifact-baseline" role="radiogroup" aria-label="Agent changes baseline"><Show when={artifactSkippedLatest()}><span>Current turn has no file changes</span></Show><button type="button" role="radio" aria-checked={artifactBaseline() === "chat"} onClick={() => selectArtifactBaseline("chat")}>Chat start</button><button type="button" aria-label="Older turn" title="Older turn" disabled={!artifactTimeline().length || artifactOffset() >= artifactTimeline().length - 1} onClick={() => moveArtifactTimeline(1)}><ChevronLeftIcon /></button><button type="button" role="radio" aria-checked={artifactBaseline() === "turn"} onClick={() => selectArtifactBaseline("turn")}>{`Turn ${artifactOffset() === 0 ? "0" : `−${artifactOffset()}`}`}</button><button type="button" aria-label="Newer turn" title="Newer turn" disabled={!artifactTimeline().length || artifactOffset() === 0} onClick={() => moveArtifactTimeline(-1)}><ChevronRightIcon /></button></div>;
   const [fileAgentTimeline, setFileAgentTimeline] = createSignal<TurnCheckpointSummary[]>([]);
   const [fileAgentOffset, setFileAgentOffset] = createSignal(0);
+  const [fileAgentSkippedLatest, setFileAgentSkippedLatest] = createSignal(false);
   const [fileAgentArtifact, setFileAgentArtifact] = createSignal<TurnArtifactPayload | null>(null);
   const fileAgentReview = createReviewController(reportError);
   let fileAgentTimelineRequest = 0;
@@ -330,7 +353,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       load: (selectedPath, signal) => api<ComparisonPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&path=${encodeURIComponent(selectedPath)}&baseline=turn&checkpointId=${encodeURIComponent(checkpointId)}`, { signal }),
     });
   };
-  const loadFileAgentCheckpoint = async (checkpoint: TurnCheckpointSummary | undefined) => {
+  const loadFileAgentCheckpoint = async (checkpoint: TurnCheckpointSummary | undefined, direction: -1 | 1 = 1, request = ++fileAgentTimelineRequest) => {
     const projectId = props.projectId();
     const chatId = props.artifactChatId?.();
     if (!chatId || !checkpoint) {
@@ -339,10 +362,18 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       return;
     }
     try {
-      const result = await api<TurnArtifactPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&baseline=turn&checkpointId=${encodeURIComponent(checkpoint.id)}`);
-      if (props.projectId() !== projectId || props.artifactChatId?.() !== chatId || fileAgentTimeline()[fileAgentOffset()]?.id !== checkpoint.id) return;
-      setFileAgentArtifact(result);
-      const path = fileAgentReview.reconcile(result?.files ?? []);
+      const timeline = fileAgentTimeline();
+      const start = timeline.findIndex((item) => item.id === checkpoint.id);
+      const found = await findChangedTurn(projectId, chatId, timeline, Math.max(0, start), direction);
+      if (request !== fileAgentTimelineRequest || props.projectId() !== projectId || props.artifactChatId?.() !== chatId) return;
+      if (!found?.changed && fileAgentArtifact()?.files.length) {
+        if (direction < 0) setFileAgentSkippedLatest(true);
+        return;
+      }
+      setFileAgentOffset(found?.offset ?? Math.max(0, start));
+      setFileAgentSkippedLatest(start === 0 && (found?.offset ?? 0) > 0);
+      setFileAgentArtifact(found?.result ?? null);
+      const path = fileAgentReview.reconcile(found?.result.files ?? []);
       if (path) void loadFileAgentComparison(path);
     } catch (cause) { reportError((cause as Error).message); }
   };
@@ -353,27 +384,27 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     if (!chatId) {
       setFileAgentTimeline([]);
       setFileAgentOffset(0);
+      setFileAgentSkippedLatest(false);
       setFileAgentArtifact(null);
       fileAgentReview.select(null);
       return;
     }
-    const currentOffset = fileAgentOffset();
+    const currentOffset = fileAgentSkippedLatest() ? 0 : fileAgentOffset();
     const currentId = fileAgentTimeline()[currentOffset]?.id;
     try {
       const result = await api<TurnCheckpointSummary[]>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&timeline=1`);
       if (request !== fileAgentTimelineRequest || props.projectId() !== projectId || props.artifactChatId?.() !== chatId) return;
       const nextOffset = currentOffset === 0 ? 0 : Math.max(0, result.findIndex((checkpoint) => checkpoint.id === currentId));
       setFileAgentTimeline(result);
-      setFileAgentOffset(nextOffset);
-      await loadFileAgentCheckpoint(result[nextOffset]);
+      await loadFileAgentCheckpoint(result[nextOffset], 1, request);
     } catch (cause) { if (request === fileAgentTimelineRequest) reportError((cause as Error).message); }
   };
   const moveFileAgentTimeline = (offset: number) => {
     const next = Math.max(0, Math.min(fileAgentTimeline().length - 1, fileAgentOffset() + offset));
     if (next === fileAgentOffset()) return;
     fileAgentReview.cancel();
-    setFileAgentOffset(next);
-    void loadFileAgentCheckpoint(fileAgentTimeline()[next]);
+    setFileAgentSkippedLatest(false);
+    void loadFileAgentCheckpoint(fileAgentTimeline()[next], offset < 0 ? -1 : 1);
   };
   const [terminalFocusRequest, setTerminalFocusRequest] = createSignal(0);
   const detailOpenName = () => `${tab()}:detail-open`;
@@ -1894,6 +1925,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
           <Show when={fileNavigatorMode() === "explorer"} fallback={<>
             <WorkspaceReviewNavigator title="Agent changes" files={(fileAgentArtifact()?.files || []).map((file) => ({ path: file.path, status: file.status }))} selectedPath={fileAgentReview.selectedPath()} empty="No agent changes for this turn." onSelect={(path) => void openFileAgentTurn(path)} />
             <div class="workspace-agent-timeline" role="toolbar" aria-label="Agent turn timeline">
+              <Show when={fileAgentSkippedLatest()}><span title="Current turn has no file changes">No changes now</span></Show>
               <button type="button" aria-label="Older turn" title="Older turn" disabled={fileAgentOffset() >= fileAgentTimeline().length - 1} onClick={() => moveFileAgentTimeline(1)}><ChevronLeftIcon /></button>
               <span title={fileAgentTimeline()[fileAgentOffset()]?.createdAt}>{fileAgentTimeline().length ? `Turn ${fileAgentOffset() === 0 ? "0" : `−${fileAgentOffset()}`}` : "No turns"}</span>
               <button type="button" aria-label="Newer turn" title="Newer turn" disabled={fileAgentOffset() === 0} onClick={() => moveFileAgentTimeline(-1)}><ChevronRightIcon /></button>

@@ -372,6 +372,7 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-artifact-modes button { min-height: 22px; border: 0; border-radius: 4px; background: transparent; padding: 3px 7px; color: var(--muted-foreground); font-size: 8.8px; }
 .workspace-artifact-modes button[aria-checked="true"] { background: var(--accent); color: var(--foreground); }
 .workspace-editor-status .workspace-artifact-baseline { display: flex; flex: none; gap: 2px; padding-left: 5px; border-left: 1px solid var(--border); }
+.workspace-editor-status .workspace-artifact-baseline > span { align-self: center; padding-inline: 4px; color: var(--muted-foreground); font-size: 8px; white-space: nowrap; }
 .workspace-editor-status .workspace-artifact-baseline button { width: auto; min-width: 0; padding-inline: 5px; }
 .workspace-editor-status .workspace-artifact-baseline button[aria-checked="true"] { background: var(--accent); color: var(--foreground); }
 .workspace-artifacts .workspace-panel-empty > div { display: grid; max-width: 224px; justify-items: center; gap: 5.6px; }
