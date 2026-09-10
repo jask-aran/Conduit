@@ -2136,3 +2136,143 @@ test("virtualizes a settled math-heavy transcript loaded from history @setpiece"
   });
   expect(virtualizedMathMessages).toBeGreaterThan(5);
 });
+
+const harnessThreadGroups = [{
+  path: "/home/tester/Conduit",
+  display: "~/Conduit",
+  repository: { branch: "main", originUrl: "https://example.test/conduit.git" },
+  updatedAt: Date.now() - 120_000,
+  missing: false,
+  threads: [
+    { id: "thread-recent", title: "Fix the auth broker", preview: "Looking at pi-auth-broker", cwd: "/home/tester/Conduit", branch: "main", originUrl: null, createdAt: null, updatedAt: Date.now() - 120_000, status: "idle", source: "cli", replayFidelity: "full", tracked: false, chatId: null },
+    { id: "thread-tracked", title: "Rename workspace glyphs", preview: "", cwd: "/home/tester/Conduit", branch: "main", originUrl: null, createdAt: null, updatedAt: Date.now() - 3_600_000, status: "idle", source: "cli", replayFidelity: "full", tracked: true, chatId: "550e8400-e29b-41d4-a716-446655440099" },
+  ],
+}, {
+  path: "/home/tester/scratch",
+  display: "~/scratch",
+  repository: null,
+  updatedAt: Date.now() - 10_800_000,
+  missing: false,
+  threads: [
+    { id: "thread-scratch", title: "Bump deps", preview: "npm outdated", cwd: "/home/tester/scratch", branch: null, originUrl: null, createdAt: null, updatedAt: Date.now() - 10_800_000, status: "idle", source: "cli", replayFidelity: "full", tracked: false, chatId: null },
+  ],
+}];
+
+async function openHarnessDashboard(page, testInfo) {
+  await page.route("**/v0/profiles", async (route) => {
+    await route.fulfill({ json: { profiles: [
+      { id: "codex", label: "Codex", management: "native", agent: { implementation: "codex" } },
+    ] } });
+  });
+  await page.route("**/v0/harnesses", async (route) => {
+    await route.fulfill({ json: { harnesses: [
+      { id: "codex", label: "Codex", available: true, sessions: true, drive: true, discovery: "machine", status: "ready", version: "codex-cli 0.test" },
+    ] } });
+  });
+  await page.route("**/v0/live-sessions/*/models", async (route) => {
+    await route.fulfill({ json: { models: [
+      { provider: "openai", id: "codex-test", spec: "codex-test", label: "Codex Test", thinkingLevels: ["low", "medium", "high"], defaultThinkingLevel: "medium" },
+    ], model: "codex-test", thinkingLevel: "medium", modelThinkingLevels: {} } });
+  });
+  await page.route("**/v0/live-sessions/*/process", async (route) => {
+    await route.fulfill({ status: 202, json: {} });
+  });
+  await page.route("**/v0/harnesses/codex/threads**", async (route) => {
+    const scoped = new URL(route.request().url()).searchParams.get("path");
+    const groups = scoped ? harnessThreadGroups.filter((group) => group.path === scoped) : harnessThreadGroups;
+    await route.fulfill({ json: { scope: scoped ? "folder" : "machine", groups, truncated: false } });
+  });
+  await page.route("**/v0/computer**", async (route) => {
+    const requested = new URL(route.request().url()).searchParams.get("path") || "/home/tester";
+    await route.fulfill({ json: {
+      project: { id: "computer:home", slug: "computer", name: requested.split("/").pop(), kind: "workspace", origin: "linked", workingRoot: requested, externalPath: requested, sessions: [] },
+      home: "/home/tester",
+      parent: requested.split("/").slice(0, -1).join("/") || "/",
+      repository: false,
+      listing: { entries: [
+        { name: "Conduit", path: "Conduit", type: "directory" },
+        { name: "scratch", path: "scratch", type: "directory" },
+        { name: "notes.md", path: "notes.md", type: "file" },
+      ] },
+    } });
+  });
+  await page.goto("/computer/harness/codex");
+  // The workspace panel opens over the page on a phone and swallows clicks. It
+  // arrives after the route settles, so wait for it rather than racing it.
+  if (testInfo?.project.name === "mobile-chromium") {
+    const close = page.getByRole("button", { name: "Close workspace panel" });
+    await close.waitFor({ state: "visible", timeout: 10_000 }).catch(() => {});
+    if (await close.isVisible().catch(() => false)) await close.click();
+    await expect(page.locator(".workspace-panel-open")).toHaveCount(0);
+  }
+}
+
+test("harness dashboard lists machine-wide threads grouped by folder", async ({ page }, testInfo) => {
+  await openHarnessDashboard(page, testInfo);
+  const groups = page.locator(".computer-harness-group");
+  await expect(groups).toHaveCount(2);
+  await expect(groups.first()).toContainText("~/Conduit");
+  await expect(groups.first()).toContainText("main");
+  await expect(groups.first().locator(".computer-harness-thread")).toHaveCount(2);
+  await expect(groups.first().locator(".computer-harness-badge")).toHaveText("Tracked");
+  await expect(groups.nth(1)).toContainText("~/scratch");
+});
+
+test("harness dashboard scopes threads to a folder the harness reported", async ({ page }, testInfo) => {
+  await openHarnessDashboard(page, testInfo);
+  // Desktop scopes from the Locations rail, a phone from the scope bar - the
+  // rail is hidden there - and only one of the two is ever on screen.
+  await page.getByRole("button", { name: "~/scratch" }).click();
+  await expect(page.locator(".computer-harness-group")).toHaveCount(1);
+  await expect(page.locator(".computer-harness-group").first()).toContainText("~/scratch");
+});
+
+test("harness dashboard starts a thread from a folder picker without registering a workspace", async ({ page }, testInfo) => {
+  await openHarnessDashboard(page, testInfo);
+  const drive = page.waitForRequest((request) => request.url().includes("/v0/harnesses/codex/drive") && request.method() === "POST");
+  await page.route("**/v0/harnesses/codex/drive", async (route) => {
+    await route.fulfill({ status: 201, json: { id: "live-1", nativeSessionId: "thread-new", streamUrl: "/v0/live-sessions/live-1/stream" } });
+  });
+  await page.getByRole("button", { name: "New thread" }).click();
+  const picker = page.getByRole("dialog", { name: "Start a Codex thread" });
+  await expect(picker).toBeVisible();
+  await picker.locator(".computer-harness-picker-list").getByRole("button", { name: "Conduit", exact: true }).click();
+  await picker.getByRole("button", { name: /Start here/ }).click();
+  const request = await drive;
+  expect(request.postDataJSON()).toMatchObject({ newThread: true });
+  expect(request.postDataJSON().path).toContain("Conduit");
+});
+
+test("driving a thread renders through the shared transcript, not a private one", async ({ page }, testInfo) => {
+  await openHarnessDashboard(page, testInfo);
+  await page.route("**/v0/harnesses/codex/drive", async (route) => {
+    await route.fulfill({ status: 201, json: { id: "live-1", nativeSessionId: "thread-recent", streamUrl: "/v0/live-sessions/live-1/stream" } });
+  });
+  // The harness holds the settled history, and every turn of it has to survive -
+  // not just the one after the last user message.
+  await page.route("**/v0/live-sessions/live-1/transcript", async (route) => {
+    await route.fulfill({ json: { id: "drive-1", status: "active", messages: [
+      { id: "u1", role: "user", content: "First ask" },
+      { id: "a1", role: "assistant", content: "First answer", blocks: [{ type: "text", text: "First answer" }] },
+      { id: "u2", role: "user", content: "Second ask" },
+      { id: "a2", role: "assistant", content: "Second answer", blocks: [{ type: "text", text: "Second answer" }] },
+    ], tools: [], attachments: [], page: { before: null } } });
+  });
+  await page.getByRole("button", { name: /Fix the auth broker/ }).click();
+  const drive = page.locator(".computer-harness-drive");
+  await expect(drive).toBeVisible();
+  await expect(drive).toContainText("Fix the auth broker");
+  await expect(drive.locator(".message-assistant")).toHaveCount(2);
+  await expect(drive.locator(".message-assistant").first()).toContainText("First answer");
+  // Same renderer, same type: an answer here measures what an answer measures on
+  // the chat surface (12px desktop, 15px phone). The dashboard's 9px chrome
+  // styling must not reach into the thread, or an answer reads like a caption.
+  const answerFont = await drive.locator(".message-assistant .chat-markdown p").first()
+    .evaluate((node) => getComputedStyle(node).fontSize);
+  expect(Number.parseFloat(answerFont)).toBeGreaterThanOrEqual(12);
+  // The real transcript, the same one the chat surface renders.
+  await expect(drive.locator('.transcript[data-slot="message-scroller"]')).toHaveCount(1);
+  await expect(drive.locator('[data-slot="message-scroller-viewport"]')).toHaveCount(1);
+  await page.getByRole("button", { name: "Back to threads" }).click();
+  await expect(page.locator(".computer-harness-group").first()).toBeVisible();
+});

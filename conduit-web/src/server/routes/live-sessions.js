@@ -76,6 +76,57 @@ export function registerLiveSessionRoutes(app, {
     } catch (error) { next(error); }
   });
 
+  // Model selection for a live record, not a chat. A driven harness thread has
+  // no registry row, and the adapter already keys the model to the record the
+  // prompt runs on, so this needs neither a chat nor a second app-server.
+  const liveModelView = async (live) => {
+    const adapter = backends.adapterForRecord(live);
+    const models = adapter?.listModels ? await adapter.listModels(live.id) : [];
+    return { models, model: live.model || "", thinkingLevel: live.thinkingLevel || "", modelThinkingLevels: {} };
+  };
+
+  app.get("/v0/live-sessions/:id/models", async (request, response, next) => {
+    try {
+      const live = backends.get(request.params.id);
+      if (!live) return response.status(404).json({ error: "live_session_not_found" });
+      response.json(await liveModelView(live));
+    } catch (error) { next(error); }
+  });
+
+  // A driven thread has no Conduit chat, so its settled history cannot come from
+  // /v0/sessions/:id. It comes from the adapter that is running the thread.
+  app.get("/v0/live-sessions/:id/transcript", async (request, response, next) => {
+    try {
+      const live = backends.get(request.params.id);
+      if (!live) return response.status(404).json({ error: "live_session_not_found" });
+      const adapter = backends.adapterForRecord(live);
+      const transcript = adapter?.liveTranscript ? adapter.liveTranscript(live.id) : { messages: [], tools: [] };
+      response.json({ id: live.chatId || live.id, status: "active", ...transcript, attachments: [], page: { before: null } });
+    } catch (error) { next(error); }
+  });
+
+  app.patch("/v0/live-sessions/:id/models", async (request, response, next) => {
+    try {
+      const live = backends.get(request.params.id);
+      if (!live) return response.status(404).json({ error: "live_session_not_found" });
+      const adapter = backends.adapterForRecord(live);
+      const current = await liveModelView(live);
+      const spec = String(request.body?.model || "").trim();
+      const thinkingLevel = String(request.body?.thinkingLevel || "").trim();
+      if (spec && !current.models.some((item) => item.spec === spec)) {
+        return response.status(400).json({ error: "invalid_model" });
+      }
+      const targetModel = spec || current.model;
+      const target = current.models.find((item) => item.spec === targetModel);
+      if (thinkingLevel && target && target.thinkingLevels.length && !target.thinkingLevels.includes(thinkingLevel)) {
+        return response.status(400).json({ error: "invalid_thinking_level" });
+      }
+      if (spec) await adapter.setModel(live.id, spec);
+      if (thinkingLevel) await adapter.setThinkingLevel(live.id, thinkingLevel);
+      response.json({ ...current, model: targetModel, thinkingLevel: thinkingLevel || current.thinkingLevel });
+    } catch (error) { next(error); }
+  });
+
   app.delete("/v0/live-sessions/:id/process", (request, response) => {
     const stopped = backends.stop(request.params.id);
     response.status(stopped ? 202 : 404).json({ stopped });

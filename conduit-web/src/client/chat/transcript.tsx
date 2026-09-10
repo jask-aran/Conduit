@@ -2,7 +2,7 @@ import { createEffect, createMemo, createRenderEffect, createSignal, For, lazy, 
 import { ArrowDownIcon, CheckIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, TriangleAlertIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { Message, RuntimeActivity, ToolItem } from "../api/contracts";
-import type { ActiveChatStore } from "../state/active-chat";
+import type { TranscriptSource } from "./transcript-source";
 import { AttachmentCards } from "./attachments";
 import { TurnTrace } from "./turn-trace";
 import { createTimelineStore } from "../state/timeline-store";
@@ -131,7 +131,7 @@ function UserMessageText(props: { text: string }) {
   </>;
 }
 
-function Actions(props: { message: Message; precedingUserId?: string; chat: ActiveChatStore; partialContinue: boolean }) {
+function Actions(props: { message: Message; precedingUserId?: string; chat: TranscriptSource; partialContinue: boolean }) {
   const [copied, setCopied] = createSignal(false);
   let copyButton: HTMLButtonElement | undefined;
   const assistant = () => props.message.role !== "user";
@@ -160,7 +160,7 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Acti
   </div>;
 }
 
-export function Transcript(props: { chat: ActiveChatStore; partialContinue: boolean; markdownRenderer: MarkdownRendererId; rendererControlsVisible: boolean; profileLabel?: string }) {
+export function Transcript(props: { chat: TranscriptSource; partialContinue: boolean; markdownRenderer: MarkdownRendererId; rendererControlsVisible: boolean; profileLabel?: string }) {
   let transcriptRoot!: HTMLDivElement;
   let motionShell!: HTMLDivElement;
   let viewport!: HTMLDivElement;

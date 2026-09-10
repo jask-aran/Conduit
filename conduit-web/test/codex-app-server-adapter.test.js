@@ -63,7 +63,169 @@ test("Codex discovery uses the metadata database and exact workspace filter", as
     ] };
   };
   assert.deepEqual(await adapter.listSessions({ cwd: "/workspace" }), [{
-    id: "inside", title: "Inside", preview: "Inside", cwd: "/workspace", createdAt: null,
-    updatedAt: 20, status: "notLoaded", source: "unknown", replayFidelity: "full",
+    id: "inside", title: "Inside", preview: "Inside", cwd: "/workspace", branch: null, originUrl: null,
+    createdAt: null, updatedAt: 20, status: "notLoaded", source: "unknown", replayFidelity: "full",
   }]);
+});
+
+test("machine-wide discovery omits the workspace filter and reports repository identity", async () => {
+  const adapter = new CodexAppServerAdapter();
+  const live = record();
+  live.id = "discovery";
+  adapter.start = async ({ cwd }) => { live.cwd = cwd; return live; };
+  adapter.close = async () => true;
+  adapter.request = async (_record, method, params) => {
+    assert.equal(method, "thread/list");
+    assert.deepEqual(params, { limit: 60, sortKey: "recency_at", sortDirection: "desc", useStateDbOnly: true });
+    return { data: [
+      { id: "here", cwd: "/workspace", preview: "Here", recencyAt: 20, gitInfo: { branch: "main", originUrl: "git@example.test:repo.git" } },
+      { id: "there", cwd: "/other", preview: "There", recencyAt: 10 },
+    ] };
+  };
+  const threads = await adapter.listThreads();
+  assert.deepEqual(threads.map((thread) => [thread.id, thread.cwd, thread.branch]), [
+    ["here", "/workspace", "main"],
+    ["there", "/other", null],
+  ]);
+  assert.equal(threads[0].originUrl, "git@example.test:repo.git");
+});
+
+test("one app-server serves repeated discovery instead of spawning per request", async () => {
+  const adapter = new CodexAppServerAdapter();
+  const live = record();
+  live.id = "discovery";
+  live.status = "running";
+  let starts = 0;
+  adapter.start = async ({ cwd }) => { starts += 1; live.cwd = cwd; adapter.records.set(live.id, live); return live; };
+  adapter.close = async () => true;
+  adapter.request = async () => ({ data: [] });
+  await adapter.listThreads();
+  await adapter.listThreads();
+  await Promise.all([adapter.listThreads(), adapter.listThreads()]);
+  assert.equal(starts, 1);
+  await adapter.retireDiscovery();
+  await adapter.listThreads();
+  assert.equal(starts, 2, "a retired discovery process is replaced on the next lookup");
+});
+
+test("attached images become native localImage input items", () => {
+  const items = CodexAppServerAdapter.inputItems("Look at this", [
+    { type: "image/png", path: "/chats/c1/attachments/a--shot.png" },
+    { type: "application/octet-stream", path: "/chats/c1/attachments/b--notes.bin" },
+    { type: "image/webp", path: "/chats/c1/attachments/c--diagram.webp" },
+  ]);
+  assert.deepEqual(items, [
+    { type: "localImage", path: "/chats/c1/attachments/a--shot.png" },
+    { type: "localImage", path: "/chats/c1/attachments/c--diagram.webp" },
+    { type: "text", text: "Look at this" },
+  ]);
+});
+
+test("a prompt with no attachments is still a single text item", () => {
+  assert.deepEqual(CodexAppServerAdapter.inputItems("Hello", undefined), [{ type: "text", text: "Hello" }]);
+  assert.deepEqual(CodexAppServerAdapter.inputItems("Hello", []), [{ type: "text", text: "Hello" }]);
+});
+
+test("tool noise is trimmed to the recent end without dropping older messages", () => {
+  // A real thread runs five tool items per message, so a single raw cap would
+  // spend the whole budget on recent commands and lose the conversation.
+  const rows = [];
+  for (let turn = 0; turn < 120; turn += 1) {
+    rows.push({ turnId: `t${turn}`, item: { type: "userMessage", id: `u${turn}`, content: [{ type: "text", text: `ask ${turn}` }] } });
+    for (let call = 0; call < 5; call += 1) {
+      rows.push({ turnId: `t${turn}`, item: { type: "commandExecution", id: `e${turn}-${call}`, command: "ls", status: "completed" } });
+    }
+    rows.push({ turnId: `t${turn}`, item: { type: "agentMessage", id: `a${turn}`, text: `answer ${turn}` } });
+  }
+  const kept = CodexAppServerAdapter.recent(rows);
+  const messages = kept.filter((row) => row.item.type === "userMessage" || row.item.type === "agentMessage");
+  const tools = kept.filter((row) => row.item.type === "commandExecution");
+  assert.equal(messages.length, 240, "every message in a 120-turn thread survives");
+  assert.equal(messages[0].item.id, "u0", "including the first one");
+  assert.equal(tools.length, 200);
+  assert.equal(tools.at(-1).item.id, "e119-4", "tools are kept from the recent end");
+  assert.deepEqual(kept.map((row) => rows.indexOf(row)), [...kept.map((row) => rows.indexOf(row))].sort((a, b) => a - b), "and order is preserved");
+});
+
+test("reasoning items never spend the tool budget", () => {
+  const rows = [];
+  for (let index = 0; index < 400; index += 1) rows.push({ turnId: "t1", item: { type: "reasoning", id: `r${index}`, summary: [], content: [] } });
+  rows.push({ turnId: "t1", item: { type: "commandExecution", id: "e1", command: "ls", status: "completed" } });
+  assert.deepEqual(CodexAppServerAdapter.recent(rows).map((row) => row.item.id), ["e1"]);
+});
+
+test("a Codex turn maps onto Conduit's rollup: commentary and commands, then the answer", () => {
+  const { messages, tools } = CodexAppServerAdapter.threadTranscript([
+    { turnId: "t1", item: { type: "userMessage", id: "u1", content: [{ type: "text", text: "Fix the build." }] } },
+    { turnId: "t1", item: { type: "agentMessage", id: "a1", text: "Looking now.", phase: "commentary" } },
+    { turnId: "t1", item: { type: "commandExecution", id: "e1", command: "npm run build", aggregatedOutput: "ok", status: "completed" } },
+    { turnId: "t1", item: { type: "agentMessage", id: "a2", text: "Built.", phase: "final_answer" } },
+    { turnId: "t2", item: { type: "userMessage", id: "u2", content: [{ type: "text", text: "Ship it." }] } },
+    { turnId: "t2", item: { type: "agentMessage", id: "a3", text: "Shipped.", phase: "final_answer" } },
+  ]);
+  // Interim work is marked toolUse, which is what folds it into the rollup;
+  // only the final answer is left to render as the message body.
+  assert.deepEqual(messages.map((message) => [message.role, message.stopReason]), [
+    ["user", undefined], ["assistant", "toolUse"], ["assistant", "stop"],
+    ["user", undefined], ["assistant", "stop"],
+  ]);
+  assert.equal(messages[1].content, "Looking now.");
+  assert.deepEqual(messages[1].blocks.map((block) => block.type), ["text", "toolCall"], "commands hang off the message that ran them");
+  assert.equal(messages[2].content, "Built.");
+  assert.deepEqual(tools, [{ id: "e1", name: "command", args: "npm run build", done: true, result: "ok", isError: false }]);
+});
+
+test("a turn with no final_answer phase still ends in an answer", () => {
+  const { messages } = CodexAppServerAdapter.threadTranscript([
+    { turnId: "t1", item: { type: "userMessage", id: "u1", content: [{ type: "text", text: "Go" }] } },
+    { turnId: "t1", item: { type: "agentMessage", id: "a1", text: "Working." } },
+    { turnId: "t1", item: { type: "commandExecution", id: "e1", command: "ls", status: "completed" } },
+    { turnId: "t1", item: { type: "agentMessage", id: "a2", text: "Done." } },
+  ]);
+  assert.deepEqual(messages.map((message) => message.stopReason), [undefined, "toolUse", "stop"]);
+});
+
+test("a turn that only runs commands carries them without inventing an answer", () => {
+  const { messages } = CodexAppServerAdapter.threadTranscript([
+    { turnId: "t1", item: { type: "userMessage", id: "u1", content: [{ type: "text", text: "Go" }] } },
+    { turnId: "t1", item: { type: "commandExecution", id: "e1", command: "ls", status: "completed" } },
+  ]);
+  assert.deepEqual(messages.map((message) => [message.role, message.stopReason]), [["user", undefined], ["assistant", "toolUse"]]);
+  assert.deepEqual(messages[1].blocks.map((block) => block.type), ["toolCall"]);
+});
+
+test("a thread with no stored history yields an empty transcript", () => {
+  assert.deepEqual(CodexAppServerAdapter.threadTranscript(undefined), { messages: [], tools: [] });
+  assert.deepEqual(new CodexAppServerAdapter().transcript("missing"), []);
+});
+
+test("a live command hangs off the turn's message so the rollup claims it", () => {
+  const adapter = new CodexAppServerAdapter();
+  const live = record();
+  adapter.notification(live, "turn/started", { turn: { id: "turn-1" } });
+  adapter.notification(live, "item/completed", { turnId: "turn-1", item: { type: "agentMessage", id: "m1", text: "Looking now.", phase: "commentary" } });
+  adapter.notification(live, "item/started", { turnId: "turn-1", item: { type: "commandExecution", id: "e1", command: "npm test" } });
+  adapter.notification(live, "item/completed", { turnId: "turn-1", item: { type: "commandExecution", id: "e1", aggregatedOutput: "ok", status: "completed" } });
+  adapter.notification(live, "item/completed", { turnId: "turn-1", item: { type: "agentMessage", id: "m2", text: "Green.", phase: "final_answer" } });
+
+  const finals = live.events.filter((event) => event.type === "assistant_content" && event.phase === "final");
+  // The commentary message is re-sent carrying the command, which is what marks
+  // it interim; the answer that follows carries nothing after it.
+  assert.deepEqual(finals.map((event) => [event.messageId, event.stopReason]), [["m1", "stop"], ["m1", "toolUse"], ["m2", "stop"]]);
+  assert.deepEqual(finals[1].blocks.map((block) => block.kind), ["text", "tool_call"]);
+  assert.equal(finals[1].blocks[1].toolCallId, "e1");
+  assert.deepEqual(finals[2].blocks.map((block) => block.kind), ["text"]);
+  const tools = live.events.filter((event) => event.type === "tool_activity");
+  assert.deepEqual(tools.map((event) => [event.phase, event.name]), [["start", "command"], ["end", "command"]]);
+});
+
+test("a command with no message before it gets a carrier of its own", () => {
+  const adapter = new CodexAppServerAdapter();
+  const live = record();
+  adapter.notification(live, "turn/started", { turn: { id: "turn-1" } });
+  adapter.notification(live, "item/started", { turnId: "turn-1", item: { type: "fileChange", id: "f1", changes: [{ path: "/repo/a.ts", diff: "@@" }] } });
+  const finals = live.events.filter((event) => event.type === "assistant_content" && event.phase === "final");
+  assert.equal(finals.length, 1);
+  assert.deepEqual(finals[0].blocks.map((block) => [block.kind, block.name]), [["tool_call", "file change"]]);
+  assert.equal(finals[0].stopReason, "toolUse");
 });

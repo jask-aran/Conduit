@@ -18,14 +18,14 @@ import {
 } from "@/components/primitives";
 import type { Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
-import type { ModelSettings } from "../state/model-settings";
+import type { ComposerModels } from "./composer-models";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
 type MobileOptionsPanel = "root" | "models" | "profiles";
 
 export function MobileComposerOptions(props: {
   composer: {
-    models: ModelSettings;
+    models: ComposerModels;
     profiles: Template[];
     activeProfile?: Template | null;
     chat: ActiveChatStore;

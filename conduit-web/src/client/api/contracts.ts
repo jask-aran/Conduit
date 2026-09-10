@@ -121,6 +121,32 @@ export interface HarnessSummary {
   drive: boolean;
   status?: "ready" | "authentication_required" | "unavailable";
   version?: string | null;
+  /** How far the harness can see: "machine" lists every thread it knows about. */
+  discovery?: "machine" | "none";
+}
+
+export interface HarnessThread extends BackendSessionSummary {
+  branch?: string | null;
+  originUrl?: string | null;
+  /** Set when a Conduit chat has already adopted this thread. */
+  tracked: boolean;
+  chatId: string | null;
+}
+
+/** Threads grouped by the folder they ran in - the harness's notion of a project. */
+export interface HarnessThreadGroup {
+  path: string;
+  display: string;
+  repository: { branch: string | null; originUrl: string | null } | null;
+  updatedAt: number;
+  missing?: boolean;
+  threads: HarnessThread[];
+}
+
+export interface HarnessThreadDiscovery {
+  scope: "machine" | "folder" | "none";
+  groups: HarnessThreadGroup[];
+  truncated: boolean;
 }
 
 export interface WorkspacePolicy {

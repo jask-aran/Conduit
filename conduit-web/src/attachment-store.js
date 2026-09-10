@@ -99,7 +99,7 @@ async function mimeForFile(file, name) {
     const buffer = Buffer.alloc(12);
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
     const bytes = buffer.subarray(0, bytesRead);
-    if (expected === "image/png" && bytes.length >= 8 && bytes.equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return expected;
+    if (expected === "image/png" && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return expected;
     if (expected === "image/jpeg" && bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return expected;
     if (expected === "image/gif" && ["GIF87a", "GIF89a"].includes(bytes.subarray(0, 6).toString("ascii"))) return expected;
     if (expected === "image/webp" && bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP") return expected;
@@ -118,6 +118,11 @@ export class AttachmentStore {
   directories(project, chatId) {
     const root = chatDirectory(project, chatId);
     return { root, attachments: path.join(root, "attachments"), partial: path.join(root, ".partial") };
+  }
+
+  /** Absolute path of a stored attachment, for adapters that take files natively. */
+  pathFor(project, chatId, item) {
+    return path.join(this.directories(project, chatId).attachments, item.storedName);
   }
 
   async list(project, chatId) {

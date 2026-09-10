@@ -156,10 +156,13 @@
 .computer-harness-dashboard { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: auto; padding: 22px; }
 .computer-harness-dashboard > header { display: flex; align-items: center; gap: 11px; padding: 4px 2px 20px; }
 .computer-harness-hero-mark { width: 28px; height: 28px; }
-.computer-harness-dashboard h1, .computer-harness-dashboard h2, .computer-harness-dashboard p { margin: 0; }
-.computer-harness-dashboard h1 { font-size: 19px; }
-.computer-harness-dashboard h2 { font-size: 12px; }
-.computer-harness-dashboard p, .computer-harness-dashboard small { color: var(--muted-foreground); font-size: 9px; }
+/* Dashboard chrome is small, muted type. A driven thread is not chrome - it is
+   the same transcript the chat surface renders - so the dashboard's typography
+   stops at its edge, or every paragraph of an answer would come out at 9px. */
+.computer-harness-dashboard :is(h1, h2, p):not(.computer-harness-drive *) { margin: 0; }
+.computer-harness-dashboard h1:not(.computer-harness-drive *) { font-size: 19px; }
+.computer-harness-dashboard h2:not(.computer-harness-drive *) { font-size: 12px; }
+.computer-harness-dashboard :is(p, small):not(.computer-harness-drive *) { color: var(--muted-foreground); font-size: 9px; }
 .computer-harness-launch { display: flex; gap: 7px; margin-bottom: 14px; padding: 9px; border: 1px solid var(--border); border-radius: 10px; }
 .computer-harness-launch > div { display: grid; min-width: 0; flex: 1; gap: 2px; }
 .computer-harness-launch input { min-width: 0; border: 0; outline: 0; background: transparent; color: var(--foreground); font-size: 11px; }
@@ -174,20 +177,67 @@
 .computer-harness-ledger > button:hover { background: var(--accent); }
 .computer-harness-ledger > button > span { display: grid; gap: 2px; }
 .computer-harness-ledger > p { padding: 22px; text-align: center; }
-.computer-harness-drive { display: flex; min-height: 480px; flex: 1; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
-.computer-harness-drive > header { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+/* Harness dashboard: machine-wide thread discovery, grouped by folder. */
+.computer-harness-dashboard > header > div { flex: 1; min-width: 0; }
+.computer-harness-start { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); border-radius: 7px; background: transparent; padding: 6px 9px; color: var(--foreground); font-size: 9px; }
+.computer-harness-start:hover { background: var(--accent); }
+.computer-harness-start svg { width: 12px; height: 12px; }
+.computer-harness-threads { display: grid; min-width: 0; flex: 1; align-content: start; gap: 12px; }
+.computer-harness-group { overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
+.computer-harness-group[data-missing="true"] { opacity: 0.55; }
+.computer-harness-group-header { display: flex; min-width: 0; align-items: center; gap: 7px; border-bottom: 1px solid var(--border); padding: 8px 10px; }
+.computer-harness-group-header strong { overflow: hidden; flex: 1; font: 500 10px ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.computer-harness-group-header small { display: inline-flex; align-items: center; gap: 3px; flex: none; color: var(--muted-foreground); font-size: 9px; }
+.computer-harness-group-header svg { width: 10px; height: 10px; }
+.computer-harness-gone { color: var(--warn, var(--destructive)); }
+.computer-harness-thread { display: flex; width: 100%; min-width: 0; align-items: center; gap: 8px; border: 0; border-top: 1px solid color-mix(in oklch, var(--border), transparent 45%); background: transparent; padding: 8px 10px; color: var(--foreground); text-align: left; }
+.computer-harness-thread:first-of-type { border-top: 0; }
+.computer-harness-thread:hover:not(:disabled) { background: var(--accent); }
+.computer-harness-thread:disabled { cursor: default; }
+.computer-harness-thread > span { display: grid; min-width: 0; flex: 1; gap: 2px; }
+.computer-harness-thread strong { overflow: hidden; font-size: 11px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.computer-harness-thread small { overflow: hidden; color: var(--muted-foreground); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.computer-harness-thread-status { width: 5px; height: 5px; flex: none; border-radius: 999px; background: var(--muted-foreground); }
+.computer-harness-thread-status[data-status="running"], .computer-harness-thread-status[data-status="working"] { background: var(--live, #45a56b); }
+.computer-harness-badge { flex: none; border: 1px solid var(--border); border-radius: 999px; padding: 2px 6px; color: var(--muted-foreground); font-size: 8px; font-style: normal; }
+.computer-harness-scopebar { display: none; gap: 6px; overflow-x: auto; margin-bottom: 12px; padding-bottom: 2px; scrollbar-width: none; }
+.computer-harness-scopebar > button { flex: none; max-width: 160px; overflow: hidden; border: 1px solid var(--border); border-radius: 999px; background: transparent; padding: 6px 11px; color: var(--muted-foreground); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.computer-harness-scopebar > button[data-active="true"] { background: var(--accent); color: var(--foreground); }
+.computer-harness-note { padding: 18px; color: var(--muted-foreground); font-size: 9px; text-align: center; }
+.computer-harness-empty { display: grid; gap: 6px; border: 1px solid var(--border); border-radius: 10px; padding: 22px; }
+.computer-harness-empty strong { color: var(--foreground); font-size: 11px; }
+.computer-harness-back { rotate: 180deg; }
+.computer-harness-picker-backdrop { position: fixed; z-index: 60; display: grid; inset: 0; place-items: center; background: color-mix(in oklch, black, transparent 45%); padding: 18px; }
+.computer-harness-picker { display: grid; width: min(420px, 100%); max-height: min(560px, 90vh); grid-template-rows: auto auto minmax(0, 1fr) auto auto; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--background); }
+.computer-harness-picker > header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding: 10px 12px; font-size: 11px; }
+.computer-harness-picker button { border: 0; background: transparent; color: inherit; }
+.computer-harness-picker svg { width: 12px; height: 12px; }
+.computer-harness-picker-path { display: flex; align-items: center; gap: 7px; border-bottom: 1px solid var(--border); padding: 7px 12px; }
+.computer-harness-picker-path span { overflow: hidden; flex: 1; color: var(--muted-foreground); font: 9px ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; direction: rtl; unicode-bidi: plaintext; }
+.computer-harness-picker-path > button:last-child { border: 1px solid var(--border); border-radius: 6px; padding: 3px 7px; font-size: 9px; }
+.computer-harness-picker-list { display: grid; align-content: start; overflow-y: auto; padding: 4px; }
+.computer-harness-picker-list > button { display: flex; align-items: center; gap: 7px; border-radius: 7px; padding: 7px 9px; font-size: 10px; text-align: left; }
+.computer-harness-picker-list > button:hover { background: var(--accent); }
+.computer-harness-picker-list > button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.computer-harness-picker-recent { display: flex; flex-wrap: wrap; gap: 5px; border-top: 1px solid var(--border); padding: 8px 12px; }
+.computer-harness-picker-recent > button { max-width: 100%; overflow: hidden; border: 1px solid var(--border); border-radius: 999px; padding: 4px 9px; color: var(--muted-foreground); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.computer-harness-picker-recent > button:hover { color: var(--foreground); }
+.computer-harness-picker > footer { display: flex; align-items: center; gap: 9px; border-top: 1px solid var(--border); padding: 10px 12px; }
+.computer-harness-picker > footer small { overflow: hidden; flex: 1; color: var(--muted-foreground); font: 9px ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; direction: rtl; unicode-bidi: plaintext; }
+.computer-harness-picker > footer > button { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); border-radius: 7px; padding: 6px 10px; font-size: 10px; }
+.computer-harness-picker > footer > button:hover { background: var(--accent); }
+
+/* Driving fills the page rather than sitting in a card inside a card: the only
+   chrome above the transcript is the thread's own row. */
+.computer-harness-dashboard[data-driving="true"] { overflow: hidden; padding: 0; }
+.computer-harness-drive { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
+.computer-harness-drive > header { display: flex; flex: none; align-items: center; gap: 8px; padding: 10px 14px; }
 .computer-harness-drive > header > div { display: grid; min-width: 0; flex: 1; gap: 2px; }
-.computer-harness-drive > header small { overflow: hidden; font: 8px ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
-.computer-harness-transcript { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 14px; overflow-y: auto; padding: 24px max(18px, calc((100% - 720px) / 2)); }
-.computer-harness-transcript article { font-size: 13px; line-height: 1.55; }
-.computer-harness-transcript article[data-role="assistant"] { width: 100%; }
-.computer-harness-transcript article[data-role="user"] { max-width: 80%; align-self: flex-end; border: 1px solid var(--glass-border); border-radius: 15px; background: var(--glass-bg); padding: 9px 12px; }
-.computer-harness-composer { display: flex; width: min(720px, calc(100% - 28px)); align-items: end; gap: 7px; margin: 8px auto 12px; border: 1px solid var(--glass-border); border-radius: 18px; background: var(--glass-bg); padding: 8px 9px; backdrop-filter: blur(21px); }
-.computer-harness-composer textarea { min-height: 36px; flex: 1; resize: none; border: 0; outline: 0; background: transparent; color: var(--foreground); font: inherit; }
-.computer-harness-composer button { display: grid; width: 28px; height: 28px; place-items: center; border: 0; border-radius: 50%; background: var(--primary); color: var(--primary-foreground); }
-.computer-harness-composer svg { width: 12px; height: 12px; }
-.computer-dashboard button:disabled { opacity: .4; cursor: not-allowed; }
-.computer-dashboard button:focus-visible, .computer-dashboard input:focus-visible { outline: 1px solid var(--ring); outline-offset: -1px; }
+.computer-harness-drive > header strong { overflow: hidden; font-size: 12px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.computer-harness-drive > header small { display: flex; overflow: hidden; align-items: center; gap: 5px; color: var(--muted-foreground); font: 8px ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.computer-harness-drive .transcript-shell, .computer-harness-drive [data-slot="message-scroller-viewport"] { min-height: 0; flex: 1; }
+.computer-dashboard button:disabled:not(.computer-harness-drive *) { opacity: .4; cursor: not-allowed; }
+.computer-dashboard :is(button, input):focus-visible:not(.computer-harness-drive *) { outline: 1px solid var(--ring); outline-offset: -1px; }
 @container computer-explorer-main (max-width: 720px) {
   .computer-search { width: 28px; }
   .computer-search input { padding-inline: 21px 0; }
@@ -197,9 +247,16 @@
   .computer-explorer-toolbar select { display: none; }
 }
 @media (--conduit-mobile-layout) {
+  .computer-harness-dashboard { padding: calc(45px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 10px 10px; }
+  .computer-harness-thread { min-height: 44px; }
+  .computer-harness-picker { width: 100%; max-height: 80vh; }
+}
+
+@media (--conduit-mobile-layout) {
   .computer-dashboard { padding: calc(45px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 6px 6px; }
   .computer-explorer { grid-template-columns: 1fr; }
   .computer-explorer-sidebar { display: none; }
+  .computer-harness-scopebar { display: flex; }
   .computer-sidebar-resize { display: none; }
   .computer-search { width: 28px; }
   .computer-search input { padding-inline: 21px 0; }
