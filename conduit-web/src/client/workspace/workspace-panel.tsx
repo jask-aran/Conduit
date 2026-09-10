@@ -36,6 +36,7 @@ interface TurnArtifactPayload { id: string; turnId: string | null; createdAt: st
 type PanelTab = "files" | "diff" | "artifacts" | "terminal";
 type ArtifactMode = "changes" | "outputs" | "interactive";
 type ArtifactBaseline = "chat" | "turn";
+type SourceControlMode = "changes" | "review" | "graph" | "patch";
 type GitAction = "stage" | "stage-all" | "unstage" | "unstage-all" | "commit" | "fetch" | "pull" | "push";
 type FileSlotId = "primary" | "secondary";
 type OpenFiles = { primary: string | null; secondary: string | null };
@@ -62,6 +63,10 @@ function GitFileLabel(props: { file: GitChangedFile; staged: boolean }) {
 
 function isPanelTab(value: string): value is PanelTab {
   return value === "files" || value === "diff" || value === "artifacts" || value === "terminal";
+}
+
+function isSourceControlMode(value: string | null): value is SourceControlMode {
+  return value === "changes" || value === "review" || value === "graph" || value === "patch";
 }
 
 interface WorkspaceCacheEntry {
@@ -305,11 +310,15 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const [terminalFocusRequest, setTerminalFocusRequest] = createSignal(0);
   const detailOpenName = () => `${tab()}:detail-open`;
   const detailHeightName = () => `${tab()}:detail-height`;
-  const sourceDetailOpenName = "diff:source-detail-open";
   const detailOpenFor = (nextTab: PanelTab) => readSetting(panelScope(), `${nextTab}:detail-open`) ?? (nextTab === "diff" ? "false" : "true");
+  const storedSourceControlMode = (): SourceControlMode => {
+    const stored = readSetting(panelScope(), "diff:mode");
+    if (isSourceControlMode(stored)) return stored;
+    if (readSetting(panelScope(), "diff:source-detail-open") !== "true") return "changes";
+    return detailOpenFor("diff") === "true" ? "patch" : "graph";
+  };
   const [detailOpen, setDetailOpen] = createSignal(detailOpenFor(tab()) === "true");
-  const [diffDetailOpen, setDiffDetailOpen] = createSignal(detailOpenFor("diff") === "true");
-  const [fileDiffMode, setFileDiffMode] = createSignal(false);
+  const [sourceControlMode, setSourceControlMode] = createSignal<SourceControlMode>(storedSourceControlMode());
   const [selectedDiff, setSelectedDiff] = createSignal<{ path: string; staged: boolean } | null>(null);
   const comparisonViewState = createMemo<ComparisonViewState>(() => {
     props.projectId();
@@ -331,16 +340,15 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const [fileDiffBusy, setFileDiffBusy] = createSignal(false);
   const inspectFileDiff = (path: string, staged: boolean) => {
     setSelectedDiff({ path, staged });
-    setFileDiffMode(true);
-    setSourceDetailVisible(true);
+    selectSourceControlMode("review");
   };
-  createEffect(on(() => props.projectId(), () => { setSelectedDiff(null); setFileDiffMode(false); }));
+  createEffect(on(() => props.projectId(), () => { setSelectedDiff(null); }));
   let comparisonIdentity = "";
   createEffect(() => {
     const selected = selectedDiff();
     const projectId = props.projectId();
     diff();
-    if (!fileDiffMode() || !selected) {
+    if (sourceControlMode() !== "review" || !selected) {
       comparisonIdentity = "";
       return;
     }
@@ -369,7 +377,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       .finally(() => { if (!controller.signal.aborted) setFileDiffBusy(false); });
     onCleanup(() => controller.abort());
   });
-  const [sourceDetailOpen, setSourceDetailOpen] = createSignal(readSetting(panelScope(), sourceDetailOpenName) === "true");
   const [detailHeight, setDetailHeight] = createSignal(Math.max(128, Number(readSetting(panelScope(), detailHeightName())) || 288));
   const hasPending = (operation?: string) => [...pending().keys()].some((version) => !operation || requests.get(operation)?.version === version);
   const diffLoading = () => hasPending("diff");
@@ -392,14 +399,13 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     inspectFileDiff(file.path, file.status[0] !== " " && file.status[0] !== "?");
   };
   const beginReview = () => {
-    setFileDiffMode(true);
-    setSourceDetailVisible(true);
+    selectSourceControlMode("review");
     if (reviewIndex() < 0) selectReviewFile(0);
   };
   createEffect(() => {
     const files = reviewFiles();
     const selected = selectedDiff();
-    if (!fileDiffMode() || !selected || files.some((file) => file.path === selected.path)) return;
+    if (sourceControlMode() !== "review" || !selected || files.some((file) => file.path === selected.path)) return;
     if (files.length) selectReviewFile(0);
     else {
       setSelectedDiff(null);
@@ -494,7 +500,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     if (props.sourceControlEnabled()) return;
     if (tab() === "diff") setTab("files");
     if (secondaryTab() === "diff") setSecondaryTab("terminal");
-    setFileDiffMode(false);
+    setSourceControlMode("changes");
     setSelectedDiff(null);
     setDiff(null);
   });
@@ -591,23 +597,12 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     setDetailOpen(next);
     writeSetting(panelScope(), detailOpenName(), String(next));
   };
-  const setSourceDetailVisible = (open: boolean) => {
-    setSourceDetailOpen(open);
-    writeSetting(panelScope(), sourceDetailOpenName, String(open));
-  };
-  const selectSourceDetail = (patch: boolean) => {
-    setFileDiffMode(false);
-    setSourceDetailVisible(true);
+  const selectSourceControlMode = (mode: SourceControlMode) => {
+    setSourceControlMode(mode);
+    writeSetting(panelScope(), "diff:mode", mode);
     setCommitDetail(null);
-    setDiffDetailOpen(patch);
-    writeSetting(panelScope(), "diff:detail-open", String(patch));
-    if (patch && !diff()?.diff) void loadDiff(true, false, true);
-    if (!patch && !diff()?.commits) void loadDiff(false, true, true);
-  };
-  const selectSourceChanges = () => {
-    setFileDiffMode(false);
-    setSourceDetailVisible(false);
-    setCommitDetail(null);
+    if (mode === "patch" && !diff()?.diff) void loadDiff(true, false, true);
+    if (mode === "graph" && !diff()?.commits) void loadDiff(false, true, true);
   };
   let stopDetailResize: (() => void) | undefined;
   const maxDetailHeight = () => Math.max(MIN_DETAIL_HEIGHT, (detailHost?.clientHeight || window.innerHeight) -
@@ -1088,7 +1083,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     await Promise.all(slotsToRefresh.map((handle) => handle.reload()));
     if (props.projectId() !== projectId) return;
     if (treeChanged) toast.info("Workspace files updated");
-    if (props.sourceControlEnabled() && (tabVisible("diff") || tabVisible("files"))) await loadDiff(tabVisible("diff") && sourceDetailOpen() && diffDetailOpen(), tabVisible("diff") && sourceDetailOpen() && !diffDetailOpen(), false, true);
+    if (props.sourceControlEnabled() && (tabVisible("diff") || tabVisible("files"))) await loadDiff(tabVisible("diff") && sourceControlMode() === "patch", tabVisible("diff") && sourceControlMode() === "graph", false, true);
     else {
       // Hidden Git data is stale; refresh it only when Source Control opens.
       setDiff(null);
@@ -1171,10 +1166,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     }
   };
   const inspectCommit = async (commit: GitCommit) => {
-    setFileDiffMode(false);
-    setSourceDetailVisible(true);
-    setDiffDetailOpen(true);
-    writeSetting(panelScope(), "diff:detail-open", "true");
+    selectSourceControlMode("patch");
     setCommitDetail(null);
     setCommitDetailLoading(true);
     const { request, controller } = startRequest("commit", true);
@@ -1200,7 +1192,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         body: JSON.stringify({ action, path, message: action === "commit" ? commitMessage().trim() : undefined }),
       });
       if (action === "commit") setCommitMessage("");
-      await loadDiff(sourceDetailOpen() && diffDetailOpen(), sourceDetailOpen() && !diffDetailOpen());
+      await loadDiff(sourceControlMode() === "patch", sourceControlMode() === "graph");
     } catch (cause) {
       reportError((cause as Error).message);
     } finally {
@@ -1370,8 +1362,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     let pendingWidthCommit: number | null = null;
     batch(() => {
       setDetailOpen(detailOpenFor(nextTab) === "true");
-      setDiffDetailOpen(detailOpenFor("diff") === "true");
-      setSourceDetailOpen(readSetting(panelScope(), sourceDetailOpenName) === "true");
+      setSourceControlMode(storedSourceControlMode());
       setDetailHeight(Math.max(MIN_DETAIL_HEIGHT, Number(readSetting(panelScope(), `${nextTab}:detail-height`)) || 288));
       setCommitDetail(null);
       if (projectChanged) {
@@ -1397,7 +1388,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     if (request && request !== previous && props.open()) focusTabDefault(tab());
   }));
   createEffect(on(
-    () => [props.projectId(), tab(), secondaryTab(), props.open(), props.expanded(), diffDetailOpen(), sourceDetailOpen()] as const,
+    () => [props.projectId(), tab(), secondaryTab(), props.open(), props.expanded(), sourceControlMode()] as const,
     ([projectId, activeTab, companionTab, open, panelExpanded]) => {
       if (!open) return;
       const projectChanged = loadedProjectId !== projectId;
@@ -1421,8 +1412,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       const artifactsVisible = activeTab === "artifacts" || (panelExpanded && companionTab === "artifacts");
       if (filesVisible && !directories()[""] && !filesLoading()) void loadDirectory("", false);
       if (diffVisible || (filesVisible && props.sourceControlEnabled())) {
-        const includePatch = sourceDetailOpen() && diffDetailOpen();
-        const includeHistory = sourceDetailOpen() && !diffDetailOpen();
+        const includePatch = sourceControlMode() === "patch";
+        const includeHistory = sourceControlMode() === "graph";
         const current = diff();
         const needsPatch = diffVisible && includePatch;
         const needsHistory = diffVisible && includeHistory;
@@ -1938,23 +1929,23 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     <Show when={tabVisible("diff")}><section class="workspace-diff" data-position={panePosition("diff")}>
       <header class="workspace-detail-dock-header workspace-source-header">
         <div class="workspace-source-modes" role="tablist" aria-label="Source Control">
-          <button type="button" role="tab" aria-selected={!sourceDetailOpen()} onClick={selectSourceChanges}><CheckIcon />Changes</button>
-          <button type="button" role="tab" aria-selected={fileDiffMode()} onClick={beginReview}><GitCompareArrowsIcon />Review</button>
-          <button type="button" role="tab" aria-selected={sourceDetailOpen() && !fileDiffMode() && !diffDetailOpen()} onClick={() => selectSourceDetail(false)}><GitCommitHorizontalIcon />Graph</button>
-          <button type="button" role="tab" aria-selected={sourceDetailOpen() && !fileDiffMode() && diffDetailOpen()} onClick={() => selectSourceDetail(true)}><FileDiffIcon />Patch</button>
+          <button type="button" role="tab" aria-selected={sourceControlMode() === "changes"} onClick={() => selectSourceControlMode("changes")}><CheckIcon />Changes</button>
+          <button type="button" role="tab" aria-selected={sourceControlMode() === "review"} onClick={beginReview}><GitCompareArrowsIcon />Review</button>
+          <button type="button" role="tab" aria-selected={sourceControlMode() === "graph"} onClick={() => selectSourceControlMode("graph")}><GitCommitHorizontalIcon />Graph</button>
+          <button type="button" role="tab" aria-selected={sourceControlMode() === "patch"} onClick={() => selectSourceControlMode("patch")}><FileDiffIcon />Patch</button>
         </div>
-        <small>{fileDiffMode() ? `${reviewFiles().length} changed` : sourceDetailOpen() && !diffDetailOpen() ? `${diff()?.commits?.length || 0} recent` : `${diff()?.files.length || 0} changed`}</small>
+        <small>{sourceControlMode() === "review" ? `${reviewFiles().length} changed` : sourceControlMode() === "graph" ? `${diff()?.commits?.length || 0} recent` : `${diff()?.files.length || 0} changed`}</small>
         <div class="workspace-source-actions">
           <button type="button" aria-label="Fetch all remotes" title="Fetch all remotes" disabled={Boolean(gitAction())} onClick={() => void runGitAction("fetch")}><Show when={gitAction() === "fetch"} fallback={<RefreshCwIcon />}><Spinner /></Show><span>Fetch</span></button>
           <button type="button" aria-label="Pull current branch" title="Pull current branch (fast-forward only)" disabled={!diff()?.upstream || Boolean(gitAction())} onClick={() => void runGitAction("pull")}><DownloadIcon /><span>Pull</span></button>
           <button type="button" aria-label="Push current branch" title="Push current branch" disabled={!diff()?.upstream || Boolean(gitAction())} onClick={() => void runGitAction("push")}><SendIcon /><span>Push</span></button>
         </div>
       </header>
-      <Show when={!sourceDetailOpen()}>
+      <Show when={sourceControlMode() === "changes"}>
       <div class="workspace-diff-overview">
       <div class="workspace-status-strip">
         <div><GitBranchIcon /><strong>{diff() ? diff()!.repository ? diff()!.branch : "Not a Git repository" : "Loading Git status…"}</strong><Show when={diff()?.upstream}><small>{diff()?.upstream}</small></Show></div>
-        <div><Show when={diff()?.ahead || diff()?.behind}><span class="workspace-sync-state">↑ {diff()?.ahead || 0} ↓ {diff()?.behind || 0}</span></Show><Button variant="ghost" size="icon-sm" aria-label="Copy branch name" disabled={!diff()?.branch} onClick={() => copy(diff()?.branch)}><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Refresh Git status" disabled={diffLoading()} onClick={() => void loadDiff(sourceDetailOpen() && diffDetailOpen(), sourceDetailOpen() && !diffDetailOpen())}><RefreshCwIcon /></Button></div>
+        <div><Show when={diff()?.ahead || diff()?.behind}><span class="workspace-sync-state">↑ {diff()?.ahead || 0} ↓ {diff()?.behind || 0}</span></Show><Button variant="ghost" size="icon-sm" aria-label="Copy branch name" disabled={!diff()?.branch} onClick={() => copy(diff()?.branch)}><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Refresh Git status" disabled={diffLoading()} onClick={() => void loadDiff(sourceControlMode() === "patch", sourceControlMode() === "graph")}><RefreshCwIcon /></Button></div>
       </div>
       <Show when={workspaceStale()}><div class="workspace-freshness-notice" role="status" aria-live="polite"><span>Not updating</span><span aria-hidden="true">·</span><button type="button" onClick={retryWorkspacePoll}>Retry</button></div></Show>
       <Show when={diff()?.repository}>
@@ -1984,8 +1975,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       </Show>
       </div>
       </Show>
-        <Show when={sourceDetailOpen() && fileDiffMode()}><WorkspaceReview title="Working changes" files={reviewViewFiles()} selectedPath={selectedDiff()?.path ?? null} comparison={fileComparison()} viewState={comparisonViewState()} busy={fileDiffBusy()} empty={fileDiffError() || "No changed files to review."} onSelect={(path) => { const file = reviewFiles().find((item) => item.path === path); if (file) inspectFileDiff(path, file.status[0] !== " " && file.status[0] !== "?"); }} onOpenFile={(_comparison, state) => openComparisonFile(state)} /></Show>
-        <Show when={sourceDetailOpen() && !fileDiffMode()}><Show when={diffDetailOpen()} fallback={<Show when={Boolean(diff()?.commits?.length)} fallback={<div class="workspace-panel-empty">No commit history available.</div>}><CommitHistory commits={diff()?.commits || []} refs={diff()?.refs || []} branch={diff()?.branch} onCopy={copy} onInspect={inspectCommit} /></Show>}>
+        <Show when={sourceControlMode() === "review"}><WorkspaceReview title="Working changes" files={reviewViewFiles()} selectedPath={selectedDiff()?.path ?? null} comparison={fileComparison()} viewState={comparisonViewState()} busy={fileDiffBusy()} empty={fileDiffError() || "No changed files to review."} onSelect={(path) => { const file = reviewFiles().find((item) => item.path === path); if (file) inspectFileDiff(path, file.status[0] !== " " && file.status[0] !== "?"); }} onOpenFile={(_comparison, state) => openComparisonFile(state)} /></Show>
+        <Show when={sourceControlMode() === "graph" || sourceControlMode() === "patch"}><Show when={sourceControlMode() === "patch"} fallback={<Show when={Boolean(diff()?.commits?.length)} fallback={<div class="workspace-panel-empty">No commit history available.</div>}><CommitHistory commits={diff()?.commits || []} refs={diff()?.refs || []} branch={diff()?.branch} onCopy={copy} onInspect={inspectCommit} /></Show>}>
           <div class="workspace-patch"><Show when={commitDetailLoading()} fallback={<Show when={commitDetail()} fallback={<Show when={diff()?.diff} fallback={<div class="workspace-panel-empty">{diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</div>}>{(content) => <PatchView content={content()} />}</Show>}>{(detail) => <PatchView content={detail().content} />}</Show>}><div class="workspace-panel-empty">Loading commit…</div></Show></div>
         </Show></Show>
     </section></Show>
