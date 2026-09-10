@@ -37,8 +37,18 @@ export class TurnCheckpointStore {
     return (await this.#checkpoints(chatId)).at(-1) || null;
   }
 
-  async review(chatId, workingRoot, baseline = "chat") {
-    const checkpoint = await this.#checkpoint(chatId, workingRoot, baseline);
+  async timeline(chatId, workingRoot) {
+    const root = path.resolve(workingRoot);
+    return (await this.#checkpoints(chatId))
+      .filter((checkpoint) => checkpoint.version === 1 && checkpoint.workingRoot === root)
+      .toReversed()
+      .map(({ id, turnId, createdAt }) => ({ id, turnId, createdAt }));
+  }
+
+  async review(chatId, workingRoot, baseline = "chat", checkpointId = null) {
+    const checkpoint = checkpointId
+      ? (await this.#checkpoints(chatId)).find((item) => item.id === checkpointId)
+      : await this.#checkpoint(chatId, workingRoot, baseline);
     if (!checkpoint || path.resolve(workingRoot) !== checkpoint.workingRoot) return null;
     const git = (args, maxBuffer = 2 * 1024 * 1024) => runBoundedGit(checkpoint.workingRoot, args, { maxBuffer });
     const currentPaths = checkpoint.repository
