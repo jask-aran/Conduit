@@ -18,6 +18,14 @@ export function projectBackendSessions({ chats, sessions, projectId, implementat
   };
 }
 
+// A harness can be adopted from only if it enumerates threads on this machine
+// and is actually installed. Returns the manifest so callers can stamp identity.
+const discoverableFrom = (backends) => (implementation) => {
+  const manifest = backends.manifestFor?.(implementation);
+  if (!manifest || manifest.discovery === "none") return null;
+  return backends.adapters.has(implementation) ? manifest : null;
+};
+
 export function registerChatRoutes(app, {
   backends,
   catalogFor,
@@ -34,13 +42,14 @@ export function registerChatRoutes(app, {
   runtimeFor,
   templateForChat,
 }) {
+  const discoverable = discoverableFrom(backends);
   app.get("/v0/projects/:projectId/backend-sessions", async (request, response, next) => {
     try {
       const project = await projects.get(request.params.projectId);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       await projects.validate(project);
       const implementation = String(request.query.implementation || "codex");
-      if (implementation !== "codex" || !backends.adapters.has(implementation)) {
+      if (!discoverable(implementation)) {
         return response.status(409).json({ error: "backend_discovery_unavailable" });
       }
       const adapter = backends.forImplementation(implementation);
@@ -58,17 +67,19 @@ export function registerChatRoutes(app, {
       if (!project) return response.status(404).json({ error: "project_not_found" });
       await lifecycle.withProjects([project.id], async () => {
         await projects.validate(project);
-        if (!backends.adapters.has("codex")) return response.status(409).json({ error: "backend_discovery_unavailable" });
-        const adapter = backends.forImplementation("codex");
+        const implementation = String(request.query.implementation || "codex");
+        const manifest = discoverable(implementation);
+        if (!manifest) return response.status(409).json({ error: "backend_discovery_unavailable" });
+        const adapter = backends.forImplementation(implementation);
         const session = (await adapter.listSessions({ cwd: project.workingRoot }))
           .find((item) => item.id === request.params.sessionId);
         if (!session) return response.status(404).json({ error: "backend_session_not_found" });
         const alreadyTracked = registry.list({ includeHidden: true }).find((chat) =>
-          chat.backend?.implementation === "codex" && opaqueSessionId(chat) === session.id);
+          chat.backend?.implementation === implementation && opaqueSessionId(chat) === session.id);
         if (alreadyTracked) return response.status(409).json({ error: "backend_session_already_tracked", chatId: alreadyTracked.id });
         const chat = await registry.create(project, { backend: {
-          profileId: "codex", profileRevision: null, management: "agent", protocol: "native_api",
-          implementation: "codex", installationId: "host-codex", opaqueSession: { threadId: session.id },
+          profileId: implementation, profileRevision: null, management: "agent", protocol: manifest.protocol,
+          implementation, installationId: manifest.installationId, opaqueSession: { threadId: session.id },
         } });
         const timestamp = new Date().toISOString();
         await registry.update(chat.id, { status: "active", title: session.title,
@@ -79,7 +90,7 @@ export function registerChatRoutes(app, {
   });
 
   app.get("/v0/profiles", (_request, response) => response.json({ profiles: agentProfiles(config.piTemplates, {
-    codexAvailable: backends.adapters.has("codex"), chatgptWebAvailable: backends.adapters.has("chatgpt-web"),
+    available: new Set([...backends.adapters.keys()]),
   }) }));
   app.get("/v0/models", async (request, response, next) => {
     try {

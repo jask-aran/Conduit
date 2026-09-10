@@ -1,4 +1,5 @@
 import { normalizeHostUiRequest } from "./activity.js";
+import { detect } from "./harnesses/probe.js";
 
 export const PI_CAPABILITIES = Object.freeze({
   steer: true, followUpQueue: true, cancel: true, compaction: true,
@@ -134,11 +135,68 @@ export class PiRpcAdapter {
 }
 
 export class ChatBackendRegistry {
-  constructor(manager, codex = null, additional = []) {
-    const pi = new PiRpcAdapter(manager);
-    this.adapters = new Map([["conduit_pi", pi], ["native_pi", pi]]);
-    if (codex) this.adapters.set("codex", codex);
-    for (const [implementation, adapter] of additional) this.adapters.set(implementation, adapter);
+  // Backends used to be named positionally here. They are now built from the
+  // harness manifests via `fromManifests`; the bare `manager` form remains for
+  // the Pi-only callers that never had a second backend.
+  constructor(manager = null, adapters = null) {
+    this.adapters = new Map();
+    this.manifests = new Map();
+    this.detection = new Map();
+    if (adapters) {
+      for (const [implementation, adapter] of adapters) this.adapters.set(implementation, adapter);
+      return;
+    }
+    if (manager) {
+      const pi = new PiRpcAdapter(manager);
+      this.adapters.set("conduit_pi", pi);
+      this.adapters.set("native_pi", pi);
+    }
+  }
+
+  /**
+   * Register every harness its probe found. Built-in backends ship with
+   * Conduit and register regardless; the rest must be installed and usable.
+   */
+  static fromManifests(manifests, detection, config) {
+    const registry = new ChatBackendRegistry();
+    registry.detection = detection;
+    registry.manifestList = manifests;
+    registry.config = config;
+    registry.register(manifests, detection, config);
+    return registry;
+  }
+
+  register(manifests, detection, config) {
+    for (const manifest of manifests) {
+      const implementations = manifest.implementations || [manifest.id];
+      if (implementations.some((implementation) => this.adapters.has(implementation))) continue;
+      if (!manifest.builtIn && !detection.get(manifest.id)?.available) continue;
+      const adapter = manifest.build(config);
+      for (const implementation of implementations) {
+        this.adapters.set(implementation, adapter);
+        this.manifests.set(implementation, manifest);
+      }
+    }
+  }
+
+  /**
+   * Re-probe without a restart, so installing a harness makes it visible.
+   * A backend that has become available is registered; one that has gone away
+   * keeps its adapter, because live records may still be attached to it.
+   */
+  async refreshDetection(manifests = this.manifestList, config = this.config) {
+    if (!manifests) return this.detection;
+    this.detection = await detect(manifests, config);
+    this.register(manifests, this.detection, config);
+    return this.detection;
+  }
+
+  /** The manifest behind an implementation key, when it registered. */
+  manifestFor(implementation) { return this.manifests.get(implementation) || null; }
+
+  /** Implementations whose manifest satisfies a predicate, e.g. machine discovery. */
+  where(predicate) {
+    return [...this.manifests].filter(([, manifest]) => predicate(manifest)).map(([implementation]) => implementation);
   }
   forImplementation(implementation) {
     const adapter = this.adapters.get(implementation);

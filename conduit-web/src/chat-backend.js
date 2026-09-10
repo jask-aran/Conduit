@@ -1,3 +1,9 @@
+import { MANIFESTS } from "./harnesses/index.js";
+
+// Harness-backed profiles come from the manifests; Pi profiles come from the
+// template catalogue, which is why the built-in Pi manifest is not one of these.
+const PROFILE_MANIFESTS = MANIFESTS.filter((manifest) => manifest.profile);
+
 // Pi identity metadata only. Runtime dispatch still belongs to PiManager.
 export function piBackendFor(chat) {
   const native = chat.runtime?.kind === "native_pi";
@@ -34,7 +40,8 @@ export function withPiCompatibilityFields(item) {
   };
 }
 
-export function agentProfiles(templates, { codexAvailable = true, chatgptWebAvailable = true } = {}) {
+export function agentProfiles(templates, { available = null } = {}) {
+  const usable = (id) => !available || available.has(id);
   return [
     ...templates.map((template) => ({
       id: template.id,
@@ -48,22 +55,14 @@ export function agentProfiles(templates, { codexAvailable = true, chatgptWebAvai
       management: "agent",
       agent: { protocol: "pi_rpc", implementation: "native_pi", installationId: "host-pi" },
     },
-    {
-      id: "codex",
-      label: "Codex CLI",
-      description: "Use the installed Codex app-server and its native configuration",
+    ...PROFILE_MANIFESTS.map((manifest) => ({
+      id: manifest.id,
+      label: manifest.profileLabel || manifest.label,
+      ...(manifest.description ? { description: manifest.description } : {}),
       management: "agent",
-      disabled: !codexAvailable,
-      agent: { protocol: "native_api", implementation: "codex", installationId: "host-codex" },
-    },
-    {
-      id: "chatgpt-web",
-      label: "ChatGPT Web",
-      description: "Use models from a connected ChatGPT account",
-      management: "agent",
-      disabled: !chatgptWebAvailable,
-      agent: { protocol: "native_api", implementation: "chatgpt-web", installationId: "user-chatgpt-account" },
-    },
+      disabled: !usable(manifest.id),
+      agent: { protocol: manifest.protocol, implementation: manifest.id, installationId: manifest.installationId },
+    })),
   ];
 }
 
@@ -74,7 +73,7 @@ export function profileSelection(body = {}) {
     throw Object.assign(new Error("profileId must be a non-empty string"), { code: "invalid_profile", status: 400 });
   }
   const profileId = body.profileId.trim();
-  if (["codex", "chatgpt-web"].includes(profileId)) {
+  if (PROFILE_MANIFESTS.some((manifest) => manifest.id === profileId)) {
     if (body.runtimeKind != null || body.templateId != null) {
       throw Object.assign(new Error("Profile selection conflicts with legacy fields"), { code: "profile_conflict", status: 400 });
     }
