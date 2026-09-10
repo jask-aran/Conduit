@@ -630,8 +630,9 @@ async function inspectOverview(root, { signal, runGit }) {
     if (isAbort(error)) throw error;
     return { repository: false, files: [], diff: "" };
   }
-  const readCounts = async (staged) => {
-    const { stdout } = await runGit(root, ["diff", ...(staged ? ["--cached"] : []), "--numstat", "-z", "--no-renames", "--no-ext-diff", "--no-textconv"], { signal, maxBuffer: 2 * 1024 * 1024 });
+  const readCounts = async (scope) => {
+    const revisionArgs = scope === "staged" ? ["--cached"] : scope === "head" ? ["HEAD"] : [];
+    const { stdout } = await runGit(root, ["diff", ...revisionArgs, "--numstat", "-z", "--no-renames", "--no-ext-diff", "--no-textconv"], { signal, maxBuffer: 2 * 1024 * 1024 });
     return new Map(stdout.split("\0").filter(Boolean).map((record) => {
       const first = record.indexOf("\t");
       const second = record.indexOf("\t", first + 1);
@@ -640,13 +641,17 @@ async function inspectOverview(root, { signal, runGit }) {
       return [record.slice(second + 1), added === "-" || removed === "-" ? null : { added: Number(added), removed: Number(removed) }];
     }));
   };
-  const [{ stdout: status }, { stdout: branch }, stagedCounts, workingCounts] = await Promise.all([
+  const headCountsRequest = runGit(root, ["rev-parse", "--verify", "HEAD"], { signal })
+    .then(() => readCounts("head"))
+    .catch((error) => { if (isAbort(error)) throw error; return new Map(); });
+  const [{ stdout: status }, { stdout: branch }, stagedCounts, workingCounts, headCounts] = await Promise.all([
     runGit(root, ["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=normal"], { signal, maxBuffer: 2 * 1024 * 1024 }),
     runGit(root, ["branch", "--show-current"], { signal }),
-    readCounts(true),
-    readCounts(false),
+    readCounts("staged"),
+    readCounts("changes"),
+    headCountsRequest,
   ]);
-  const files = parseStatus(status).map((file) => ({ ...file, stagedCounts: stagedCounts.get(file.path) ?? null, workingCounts: workingCounts.get(file.path) ?? null }));
+  const files = parseStatus(status).map((file) => ({ ...file, stagedCounts: stagedCounts.get(file.path) ?? null, workingCounts: workingCounts.get(file.path) ?? null, headCounts: headCounts.get(file.path) ?? null }));
   // Git numstat excludes untracked files. Bound their total read cost, and do
   // not traverse grouped folders just to paint a count in the list.
   let remainingBytes = 4 * 1024 * 1024;
@@ -670,6 +675,7 @@ async function inspectOverview(root, { signal, runGit }) {
         for (const byte of content) if (byte === 10) added++;
         if (content.length && content.at(-1) !== 10) added++;
         file.workingCounts = { added, removed: 0 };
+        file.headCounts = { added, removed: 0 };
       } finally { await handle.close(); }
     } catch (error) { if (isAbort(error)) throw error; }
   }

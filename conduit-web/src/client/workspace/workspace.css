@@ -298,10 +298,27 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-source-actions button:disabled { opacity: .35; }
 .workspace-source-workbench .workspace-history, .workspace-source-workbench .workspace-patch { max-height: none; flex: 1; border: 0; }
 .workspace-source-workbench .workspace-history-list { flex: 1; }
+.workspace-review { flex-direction: row; }
+.workspace-review-files { display: flex; width: clamp(180px, 23%, 280px); min-width: 0; flex: none; flex-direction: column; border-right: 1px solid var(--border); background: color-mix(in oklch, var(--background), var(--accent) 9%); }
+.workspace-review-files > header { display: flex; min-height: 31px; align-items: center; gap: 4px; border-bottom: 1px solid var(--border); padding: 4px 5px 4px 9px; }
+.workspace-review-files > header strong { min-width: 0; flex: 1; overflow: hidden; font-size: 8.8px; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-review-files > header small { flex: none; color: var(--muted-foreground); font: 7.6px ui-monospace, monospace; }
+.workspace-review-files > header button { display: grid; width: 21px; height: 21px; flex: none; place-items: center; border: 0; border-radius: 4px; background: transparent; color: var(--muted-foreground); }
+.workspace-review-files > header button:hover:not(:disabled), .workspace-review-files > header button:focus-visible { background: var(--accent); color: var(--foreground); }
+.workspace-review-files > header button:disabled { opacity: .3; }
+.workspace-review-files > header svg { width: 11px; height: 11px; }
+.workspace-review-files .workspace-changes { flex: 1; }
+.workspace-review-files .workspace-change-row[data-selected="true"] { background: var(--accent); }
+.workspace-review-files .workspace-change-row code { display: grid; width: 12px; flex: none; place-items: center; color: var(--workspace-git-modified); font: 600 8px ui-monospace, monospace; }
+.workspace-review-files .workspace-change-row code[data-status="U"], .workspace-review-files .workspace-change-row code[data-status="A"] { color: var(--workspace-git-added); }
+.workspace-review-files .workspace-change-row code[data-status="D"] { color: var(--destructive); }
+.workspace-review-comparison { display: flex; min-width: 0; min-height: 0; flex: 1; }
 @container workspace-source (max-width: 430px) {
   .workspace-source-workbench > header > small, .workspace-source-actions span { display: none; }
   .workspace-source-actions button { width: 21px; padding: 0; }
   .workspace-commit-refs code { max-width: 72px; }
+  .workspace-review-files { width: 154px; }
+  .workspace-review-files .workspace-change-directory, .workspace-review-files .workspace-change-counts { display: none; }
 }
 .workspace-patch-line { display: block; min-width: max-content; padding-inline: 9.6px; }
 .workspace-patch-line[data-kind="addition"] { background: color-mix(in oklch, var(--live), transparent 91%); color: color-mix(in oklch, var(--live), var(--foreground) 35%); }
