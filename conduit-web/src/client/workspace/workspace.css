@@ -298,7 +298,8 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-source-actions button:disabled { opacity: .35; }
 .workspace-source-workbench .workspace-history, .workspace-source-workbench .workspace-patch { max-height: none; flex: 1; border: 0; }
 .workspace-source-workbench .workspace-history-list { flex: 1; }
-.workspace-review { flex-direction: row; }
+.workspace-patch.workspace-review { flex-direction: row; }
+.workspace-patch.workspace-review[data-full="true"] { max-height: none; flex: 1; }
 .workspace-review-files { display: flex; width: clamp(180px, 23%, 280px); min-width: 0; flex: none; flex-direction: column; border-right: 1px solid var(--border); background: color-mix(in oklch, var(--background), var(--accent) 9%); }
 .workspace-review-files > header { display: flex; min-height: 31px; align-items: center; gap: 4px; border-bottom: 1px solid var(--border); padding: 4px 5px 4px 9px; }
 .workspace-review-files > header strong { min-width: 0; flex: 1; overflow: hidden; font-size: 8.8px; text-overflow: ellipsis; white-space: nowrap; }
