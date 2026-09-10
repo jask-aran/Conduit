@@ -1,4 +1,5 @@
 import { normalizeHostUiRequest } from "./activity.js";
+import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { detect } from "./harnesses/probe.js";
 
 export const PI_CAPABILITIES = Object.freeze({
@@ -9,6 +10,9 @@ export const PI_CAPABILITIES = Object.freeze({
 
 // Keep the complete Pi payload until the v0 client no longer needs it. No event
 // is discarded to fit a thinner backend, including unknown extension events.
+const queueText = (items) => (Array.isArray(items) ? items : [])
+  .map((item) => parseAttachmentEnvelope(typeof item === "string" ? item : item?.message || "").message);
+
 export function normalizePiBackendEvent(event) {
   const base = { generationId: event.generationId || null, pi: event };
   switch (event.type) {
@@ -68,8 +72,10 @@ export function normalizePiBackendEvent(event) {
       // browser has always been told the queue was empty. activity.js reads the
       // arrays correctly, which is why the server record was right and only the
       // neutral event was wrong.
+      // Pi holds the message as Conduit sent it, wrapped in the attachment
+      // envelope. The browser wants what the user typed.
       return { ...base, type: "queue_state", queue: event.queue
-        || { steering: event.steering || [], followUp: event.followUp || [] } };
+        || { steering: queueText(event.steering), followUp: queueText(event.followUp) } };
     case "compaction_start":
     case "compaction_end":
       return { ...base, type: "compaction", active: event.type === "compaction_start" };
