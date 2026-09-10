@@ -701,16 +701,26 @@ test("an unsaved draft in one file slot survives opening another file @desktop",
   const secondary = panel.getByRole("region", { name: "Second file preview" });
 
   await tree.getByRole("treeitem", { name: "app.js" }).click();
+  await expect(primary.getByLabel("Editor status")).toContainText("JavaScript");
   await primary.getByRole("button", { name: "Edit file" }).click();
   await primary.locator(".cm-content").click();
   await page.keyboard.type("// draft");
-  await expect(primary.locator(".workspace-preview-header small")).toHaveText("Unsaved");
+  await expect(primary.locator(".workspace-preview-header small")).toContainText("Unsaved");
+
+  await primary.getByRole("button", { name: "Close editor" }).click();
+  await expect(primary.locator(".cm-content")).toContainText("// draft");
+  await primary.getByRole("button", { name: "Edit file" }).click();
+  await page.keyboard.press("Control+z");
+  await expect(primary.getByRole("button", { name: "Save file" })).toBeDisabled();
+  await page.keyboard.press("Control+Shift+z");
+  await expect(primary.locator(".workspace-preview-header small")).toContainText("Unsaved");
 
   // An unanswered confirm() dismisses by default in Playwright, so the second
   // slot appearing at all proves no discard prompt gated the other slot.
   await tree.getByRole("treeitem", { name: "README.md" }).click({ modifiers: ["Alt"] });
   await expect(secondary.locator(".workspace-preview-file")).toHaveText("README.md");
-  await expect(primary.locator(".workspace-preview-header small")).toHaveText("Unsaved");
+  await expect(secondary.getByLabel("Editor status")).toContainText("Markdown");
+  await expect(primary.locator(".workspace-preview-header small")).toContainText("Unsaved");
 });
 
 test("a save acknowledges only the draft submitted before a later edit @desktop", async ({ page }, testInfo) => {
@@ -758,11 +768,11 @@ test("a save acknowledges only the draft submitted before a later edit @desktop"
   await editor.click();
   await page.keyboard.press("Control+End");
   await page.keyboard.type("v2");
-  await expect(primary.locator(".workspace-preview-header small")).toHaveText("Unsaved");
+  await expect(primary.locator(".workspace-preview-header small")).toContainText("Unsaved");
   releaseSave();
 
   await expect(primary.getByRole("button", { name: "Save file" })).toBeEnabled();
-  await expect(primary.locator(".workspace-preview-header small")).toHaveText("Unsaved");
+  await expect(primary.locator(".workspace-preview-header small")).toContainText("Unsaved");
   expect(savedRevision).toBe("revision-1");
   expect(savedBody).toBe(firstDraft);
   await expect(editor).toContainText("v1v2");
