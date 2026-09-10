@@ -6,14 +6,16 @@ const absent = (id) => !id || /^0+$/.test(id);
 
 // Resolve object IDs before reading content: staged comparisons must never use
 // the working copy, and a missing revision must not hide a Git read failure.
-export async function readWorkspaceComparison(root, filePath, { staged = false, signal } = {}) {
+export async function readWorkspaceComparison(root, filePath, { scope = "changes", signal } = {}) {
   const resolved = await resolveInspectorPath(root, "", { kind: "directory" });
   if (typeof filePath !== "string" || !filePath || filePath.includes("\0") || filePath.includes("\\") || filePath.split("/").some((part) => !part || part === "." || part === "..") || filePath === ".conduit" || filePath.startsWith(".conduit/")) {
     throw new Error("Invalid comparison path");
   }
   const git = (args, maxBuffer = MAX_BYTES) => runBoundedGit(resolved.path, args, { signal, maxBuffer });
+  if (!["changes", "staged", "head"].includes(scope)) throw new Error("Invalid comparison scope");
+  const revisionArgs = scope === "staged" ? ["--cached"] : scope === "head" ? ["HEAD"] : [];
   const [{ stdout: raw }, { stdout: index }] = await Promise.all([
-    git(["diff", ...(staged ? ["--cached"] : []), "--relative", "--raw", "-z", "--no-abbrev", "--find-renames", "--no-ext-diff", "--no-textconv"]),
+    git(["diff", ...revisionArgs, "--relative", "--raw", "-z", "--no-abbrev", "--find-renames", "--no-ext-diff", "--no-textconv"]),
     git(["ls-files", "--stage", "-z", "--", `:(literal)${filePath}`]),
   ]);
   const records = raw.split("\0");
@@ -28,7 +30,7 @@ export async function readWorkspaceComparison(root, filePath, { staged = false, 
   const entries = index.split("\0").filter(Boolean);
   const entry = entries.find((item) => item.slice(item.indexOf("\t") + 1) === filePath);
   const [mode, id, stage] = entry?.split("\t")[0].split(" ") ?? [];
-  const base = { path: filePath, oldPath: change?.oldPath ?? filePath, staged };
+  const base = { path: filePath, oldPath: change?.oldPath ?? filePath, scope };
   const unavailable = (message) => ({ ...base, kind: "unavailable", message });
   if (change?.status === "U" || (stage && stage !== "0")) return unavailable("Resolve this file's merge conflict before comparing it.");
   if ([mode, change?.oldMode, change?.newMode].some((value) => value && value !== "000000" && !/^100/.test(value))) return unavailable("Comparison is available for regular text files only.");
@@ -54,7 +56,7 @@ export async function readWorkspaceComparison(root, filePath, { staged = false, 
   try {
     const [original, modified] = await Promise.all([
       readObject(change ? change.oldId : id),
-      staged ? readObject(change ? change.newId : id) : readWorkingCopy(),
+      scope === "staged" ? readObject(change ? change.newId : id) : readWorkingCopy(),
     ]);
     if ([original, modified].some((text) => text.includes("\0") || text.includes("\ufffd"))) return unavailable("Binary or non-UTF-8 files cannot be shown as a text comparison.");
     return { ...base, kind: "text", original, modified };
