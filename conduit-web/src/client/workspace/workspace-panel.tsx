@@ -284,20 +284,20 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       return;
     }
     const controller = new AbortController();
-    const identity = JSON.stringify([projectId, selected.path, selected.staged]);
+    const identity = JSON.stringify([projectId, selected.path, "head"]);
     if (identity !== comparisonIdentity) {
       comparisonIdentity = identity;
       setFileDiffBusy(true);
       setFileComparison(null);
     }
     setFileDiffError("");
-    void api<ComparisonPayload>(`/v0/projects/${encodeURIComponent(projectId)}/diff?compare=1&path=${encodeURIComponent(selected.path)}&staged=${selected.staged ? "1" : "0"}`, { signal: controller.signal })
+    void api<ComparisonPayload>(`/v0/projects/${encodeURIComponent(projectId)}/diff?compare=1&path=${encodeURIComponent(selected.path)}&scope=head`, { signal: controller.signal })
       .then((result) => {
         if (controller.signal.aborted) return;
         // Polling must not replace the comparison prop (and recreate its
         // EditorView) when Git returns the same two versions.
         setFileComparison((previous) => {
-          if (previous && previous.path === result.path && previous.oldPath === result.oldPath && previous.staged === result.staged) {
+          if (previous && previous.path === result.path && previous.oldPath === result.oldPath && previous.scope === result.scope) {
             if (previous.kind === "text" && result.kind === "text" && previous.original === result.original && previous.modified === result.modified) return previous;
             if (previous.kind === "unavailable" && result.kind === "unavailable" && previous.message === result.message) return previous;
           }
@@ -709,7 +709,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     const projectId = props.projectId();
     if (!path) return;
     try {
-      const comparison = await api<ComparisonPayload>(`/v0/projects/${encodeURIComponent(projectId)}/diff?compare=1&path=${encodeURIComponent(path)}&staged=${staged ? "1" : "0"}`);
+      const comparison = await api<ComparisonPayload>(`/v0/projects/${encodeURIComponent(projectId)}/diff?compare=1&path=${encodeURIComponent(path)}&scope=${staged ? "staged" : "changes"}`);
       if (props.projectId() !== projectId || openPaths()[slot] !== path) return;
       const handle = slotHandles.get(slot);
       if (handle?.hasUnsavedChanges()) {
@@ -1920,7 +1920,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
           <div class="workspace-source-modes" role="tablist" aria-label="Source Control detail">
             <button type="button" role="tab" aria-selected={!fileDiffMode() && !diffDetailOpen()} onClick={() => selectSourceDetail(false)}><GitCommitHorizontalIcon />Graph</button>
             <button type="button" role="tab" aria-selected={!fileDiffMode() && diffDetailOpen()} onClick={() => selectSourceDetail(true)}><FileDiffIcon />Patch</button>
-            <button type="button" role="tab" aria-selected={fileDiffMode()} onClick={() => { setFileDiffMode(true); setSourceDetailVisible(true); }}><GitCompareArrowsIcon />Diff</button>
+            <button type="button" role="tab" aria-selected={fileDiffMode()} onClick={() => { setFileDiffMode(true); setSourceDetailVisible(true); }}><GitCompareArrowsIcon />Review</button>
           </div>
           <small>{diffDetailOpen() ? `${diff()?.files.length || 0} changed` : `${diff()?.commits?.length || 0} recent`}</small>
           <div class="workspace-source-actions">
