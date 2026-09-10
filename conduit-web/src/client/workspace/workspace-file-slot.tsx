@@ -509,7 +509,7 @@ export default function WorkspaceFileSlot(props: {
     >
       <div class="workspace-file-representation" hidden={!props.comparison}>
         <Show when={retainedComparison()}>{(temporary) => <Suspense fallback={<div class="workspace-panel-empty">Loading comparison…</div>}>
-          <WorkspaceComparison comparison={temporary().comparison} viewState={temporary().viewState} inFiles header={textHeader()} onViewStateChange={(viewState) => setRetainedComparison((current) => current ? { ...current, viewState } : current)} onShowFile={props.onShowFile} onOpenFile={(source, position) => props.onEditComparison?.(source, position)} />
+          <WorkspaceComparison comparison={temporary().comparison} viewState={temporary().viewState} wrap={props.wrap} onToggleWrap={props.onToggleWrap} inFiles header={textHeader()} onViewStateChange={(viewState) => setRetainedComparison((current) => current ? { ...current, viewState } : current)} onShowFile={props.onShowFile} onOpenFile={(source, position) => props.onEditComparison?.(source, position)} />
         </Suspense>}</Show>
       </div>
       <div class="workspace-file-representation" hidden={Boolean(props.comparison)}>
