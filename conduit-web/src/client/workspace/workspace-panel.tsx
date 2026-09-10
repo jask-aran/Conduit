@@ -1,5 +1,5 @@
 import { batch, createEffect, createMemo, createSignal, For, lazy, on, onCleanup, Show, Suspense, type Accessor } from "solid-js";
-import { BoxesIcon, Columns2Icon, CheckIcon, ChevronsUpIcon, ChevronDownIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileDiffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, FolderUpIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, Maximize2Icon, Minimize2Icon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, SendIcon, TerminalIcon, Trash2Icon, Undo2Icon, UploadIcon, XIcon } from "lucide-solid";
+import { BoxesIcon, Columns2Icon, CheckIcon, ChevronsUpIcon, ChevronDownIcon, ChevronRightIcon, ChevronUpIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileDiffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, FolderUpIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, Maximize2Icon, Minimize2Icon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, SendIcon, TerminalIcon, Trash2Icon, Undo2Icon, UploadIcon, XIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
 import { Button, ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Spinner } from "@/components/primitives";
 import { api, asList } from "../api/client";
@@ -28,7 +28,7 @@ interface GitActionResult { ok: true; output?: string; }
 interface GitCommit { graph: string; hash: string; shortHash: string; subject: string; author: string; authoredAt: string; }
 interface GitRef { name: string; hash: string; upstream: string | null; kind: "local" | "remote" | "tag"; }
 interface GitLineCounts { added: number; removed: number; }
-interface GitChangedFile { status: string; path: string; stagedCounts?: GitLineCounts | null; workingCounts?: GitLineCounts | null; }
+interface GitChangedFile { status: string; path: string; stagedCounts?: GitLineCounts | null; workingCounts?: GitLineCounts | null; headCounts?: GitLineCounts | null; }
 interface DiffPayload { repository: boolean; branch?: string; upstream?: string | null; ahead?: number; behind?: number; commits?: GitCommit[]; refs?: GitRef[]; files: GitChangedFile[]; diff: string; }
 interface GitCommitDetail { hash: string; content: string; }
 type PanelTab = "files" | "diff" | "artifacts" | "terminal";
@@ -54,6 +54,21 @@ function GitFileLabel(props: { file: GitChangedFile; staged: boolean }) {
       <small class="workspace-change-counts" aria-label={`${count().added} added, ${count().removed} removed`}><span class="workspace-git-removed">−{count().removed}</span><span class="workspace-git-added">+{count().added}</span></small>
     }</Show>
     <code data-status={status()} data-conflict={props.file.status !== "??" && props.file.status.includes("U")} title={props.file.status === "??" ? "Untracked" : statusLabels[status()] ?? status()}>{status()}</code>
+  </>;
+}
+
+function ReviewFileLabel(props: { file: GitChangedFile }) {
+  const name = () => props.file.path.split("/").at(-1) ?? props.file.path;
+  const directory = () => props.file.path.split("/").slice(0, -1).join("/");
+  const status = () => props.file.status === "??" ? "U" : props.file.status[1] !== " " ? props.file.status[1] : props.file.status[0];
+  return <>
+    <FileTypeIcon name={name()} />
+    <span class="workspace-change-name">{name()}</span>
+    <span class="workspace-change-directory">{directory()}</span>
+    <Show when={props.file.headCounts}>{(count) =>
+      <small class="workspace-change-counts" aria-label={`${count().added} added, ${count().removed} removed`}><span class="workspace-git-removed">−{count().removed}</span><span class="workspace-git-added">+{count().added}</span></small>
+    }</Show>
+    <code data-status={status()}>{status()}</code>
   </>;
 }
 
@@ -317,6 +332,30 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const loading = () => [...pending().values()].some((entry) => entry.foreground);
   const stagedFiles = createMemo(() => (diff()?.files || []).filter((file) => file.status[0] !== " " && file.status[0] !== "?"));
   const unstagedFiles = createMemo(() => (diff()?.files || []).filter((file) => file.status[1] !== " " || file.status === "??"));
+  const reviewFiles = createMemo(() => (diff()?.files || []).filter((file) => !file.path.endsWith("/")));
+  const reviewIndex = createMemo(() => reviewFiles().findIndex((file) => file.path === selectedDiff()?.path));
+  const selectReviewFile = (index: number) => {
+    const files = reviewFiles();
+    if (!files.length) return;
+    const file = files[(index + files.length) % files.length];
+    if (!file) return;
+    inspectFileDiff(file.path, file.status[0] !== " " && file.status[0] !== "?");
+  };
+  const beginReview = () => {
+    setFileDiffMode(true);
+    setSourceDetailVisible(true);
+    if (reviewIndex() < 0) selectReviewFile(0);
+  };
+  createEffect(() => {
+    const files = reviewFiles();
+    const selected = selectedDiff();
+    if (!fileDiffMode() || !selected || files.some((file) => file.path === selected.path)) return;
+    if (files.length) selectReviewFile(0);
+    else {
+      setSelectedDiff(null);
+      setFileComparison(null);
+    }
+  });
 
   const ownsRequest = (request: WorkspaceRequest) => ownsWorkspaceRequest({
     projectId: props.projectId(),
@@ -1920,7 +1959,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
           <div class="workspace-source-modes" role="tablist" aria-label="Source Control detail">
             <button type="button" role="tab" aria-selected={!fileDiffMode() && !diffDetailOpen()} onClick={() => selectSourceDetail(false)}><GitCommitHorizontalIcon />Graph</button>
             <button type="button" role="tab" aria-selected={!fileDiffMode() && diffDetailOpen()} onClick={() => selectSourceDetail(true)}><FileDiffIcon />Patch</button>
-            <button type="button" role="tab" aria-selected={fileDiffMode()} onClick={() => { setFileDiffMode(true); setSourceDetailVisible(true); }}><GitCompareArrowsIcon />Review</button>
+            <button type="button" role="tab" aria-selected={fileDiffMode()} onClick={beginReview}><GitCompareArrowsIcon />Review</button>
           </div>
           <small>{diffDetailOpen() ? `${diff()?.files.length || 0} changed` : `${diff()?.commits?.length || 0} recent`}</small>
           <div class="workspace-source-actions">
@@ -1929,14 +1968,20 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             <button type="button" aria-label="Push current branch" title="Push current branch" disabled={!diff()?.upstream || Boolean(gitAction())} onClick={() => void runGitAction("push")}><SendIcon /><span>Push</span></button>
           </div>
         </header>
-        <Show when={sourceDetailOpen() && fileDiffMode()}><div class="workspace-patch">
-          <Show when={selectedDiff()} fallback={<div class="workspace-panel-empty">Select a file in Changes or Staged changes.</div>}>
-            <Show when={!fileDiffBusy()} fallback={<div class="workspace-panel-empty" role="status">Loading diff…</div>}>
-              <Show when={fileComparison()} fallback={<div class="workspace-panel-empty" role="alert">{fileDiffError()}</div>}>{(comparison) =>
-                <Suspense fallback={<div class="workspace-panel-empty">Loading comparison…</div>}><WorkspaceComparison comparison={comparison()} viewState={comparisonViewState()} onOpenFile={(_source, _position, state) => openComparisonFile(state)} /></Suspense>
-              }</Show>
-            </Show>
-          </Show>
+        <Show when={sourceDetailOpen() && fileDiffMode()}><div class="workspace-patch workspace-review">
+          <nav class="workspace-review-files" aria-label="Changed files">
+            <header><strong>Working changes</strong><small>{reviewIndex() >= 0 ? `${reviewIndex() + 1} / ${reviewFiles().length}` : reviewFiles().length}</small><button type="button" aria-label="Previous file" disabled={reviewFiles().length < 2} onClick={() => selectReviewFile(reviewIndex() - 1)}><ChevronUpIcon /></button><button type="button" aria-label="Next file" disabled={reviewFiles().length < 2} onClick={() => selectReviewFile(reviewIndex() + 1)}><ChevronDownIcon /></button></header>
+            <div class="workspace-changes"><For each={reviewFiles()}>{(file) =>
+              <div class="workspace-change-row" data-selected={file.path === selectedDiff()?.path}><button type="button" aria-current={file.path === selectedDiff()?.path ? "true" : undefined} title={`Review ${file.path}`} onClick={() => inspectFileDiff(file.path, file.status[0] !== " " && file.status[0] !== "?")}><ReviewFileLabel file={file} /></button></div>
+            }</For></div>
+          </nav>
+          <div class="workspace-review-comparison"><Show when={selectedDiff()} fallback={<div class="workspace-panel-empty">No changed files to review.</div>}>
+              <Show when={!fileDiffBusy()} fallback={<div class="workspace-panel-empty" role="status">Loading diff…</div>}>
+                <Show when={fileComparison()} fallback={<div class="workspace-panel-empty" role="alert">{fileDiffError()}</div>}>{(comparison) =>
+                  <Suspense fallback={<div class="workspace-panel-empty">Loading comparison…</div>}><WorkspaceComparison comparison={comparison()} viewState={comparisonViewState()} onOpenFile={(_source, _position, state) => openComparisonFile(state)} /></Suspense>
+                }</Show>
+              </Show>
+          </Show></div>
         </div></Show>
         <Show when={sourceDetailOpen() && !fileDiffMode()}><Show when={diffDetailOpen()} fallback={<Show when={Boolean(diff()?.commits?.length)} fallback={<div class="workspace-panel-empty">No commit history available.</div>}><CommitHistory commits={diff()?.commits || []} refs={diff()?.refs || []} branch={diff()?.branch} onCopy={copy} onInspect={inspectCommit} /></Show>}>
           <div class="workspace-patch"><Show when={commitDetailLoading()} fallback={<Show when={commitDetail()} fallback={<Show when={diff()?.diff} fallback={<div class="workspace-panel-empty">{diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</div>}>{(content) => <PatchView content={content()} />}</Show>}>{(detail) => <PatchView content={detail().content} />}</Show>}><div class="workspace-panel-empty">Loading commit…</div></Show></div>
