@@ -1,4 +1,4 @@
-import { WorkbenchButton } from "./workspace-workbench";
+import { WorkbenchButton, WorkbenchStatus } from "./workspace-workbench";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-solid";
 import { For, lazy, Show, Suspense, type JSX } from "solid-js";
 import { FileTypeIcon } from "./file-type-icon";
@@ -28,9 +28,9 @@ export function WorkspaceReviewNavigator(props: { title: string; files: Workspac
     </nav>;
 }
 
-export default function WorkspaceReview(props: { title: string; files: WorkspaceReviewFile[]; selectedPath: string | null; comparison: ComparisonPayload | null; viewState: ComparisonViewState; onViewStateChange?: (state: ComparisonViewState) => void; busy: boolean; full?: boolean; empty: string; footerControl?: JSX.Element; onSelect: (path: string) => void; onOpenFile: (comparison: ComparisonPayload, state: ComparisonViewState) => void }) {
+export default function WorkspaceReview(props: { title: string; files: WorkspaceReviewFile[]; selectedPath: string | null; comparison: ComparisonPayload | null; viewState: ComparisonViewState; onViewStateChange?: (state: ComparisonViewState) => void; busy: boolean; full?: boolean; empty: string; footerControl?: JSX.Element; comparisonLabel?: JSX.Element; onSelect: (path: string) => void; onOpenFile: (comparison: ComparisonPayload, state: ComparisonViewState) => void }) {
   return <div class="workspace-patch workspace-review" data-full={props.full}>
     <WorkspaceReviewNavigator title={props.title} files={props.files} selectedPath={props.selectedPath} empty={props.empty} onSelect={props.onSelect} />
-    <div class="workspace-review-comparison"><Show when={props.selectedPath} fallback={<div class="workspace-panel-empty">{props.empty}</div>}><Show when={props.comparison || !props.busy} fallback={<div class="workspace-panel-empty">Loading changes…</div>}><Show when={props.comparison}>{(comparison) => <Suspense fallback={<div class="workspace-panel-empty">Loading comparison…</div>}><WorkspaceComparison comparison={comparison()} viewState={props.viewState} onViewStateChange={props.onViewStateChange} footerControl={props.footerControl} onOpenFile={(_source, _position, state) => props.onOpenFile(comparison(), state)} /></Suspense>}</Show></Show></Show></div>
+    <div class="workspace-review-comparison"><Show when={props.selectedPath} fallback={<><div class="workspace-panel-empty">{props.empty}</div><Show when={props.footerControl}><WorkbenchStatus commands={<></>}>{props.footerControl}</WorkbenchStatus></Show></>}><Show when={props.comparison || !props.busy} fallback={<div class="workspace-panel-empty">Loading changes…</div>}><Show when={props.comparison}>{(comparison) => <Suspense fallback={<div class="workspace-panel-empty">Loading comparison…</div>}><WorkspaceComparison comparison={comparison()} viewState={props.viewState} onViewStateChange={props.onViewStateChange} footerControl={props.footerControl} comparisonLabel={props.comparisonLabel} onOpenFile={(_source, _position, state) => props.onOpenFile(comparison(), state)} /></Suspense>}</Show></Show></Show></div>
   </div>;
 }
