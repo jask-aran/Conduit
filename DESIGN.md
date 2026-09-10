@@ -162,6 +162,11 @@ The charcoal is cool-neutral at chroma ~0.004–0.006. That gray is the brand. D
 
 No blue anywhere. There is no blue accent token. Do not introduce `--accent-cool` (`oklch(0.72 0.045 246)`) or any steely, slate, or "intelligent blue", for any purpose:
 
+Syntax highlighting inside code is the sole exception. A language theme can
+use blue as a semantic token colour for functions or headings. The exception
+does not apply to editor chrome, selection, focus, status, navigation or other
+application controls.
+
 - selected rows, cards, or nav items
 - a left-edge sliver / inset rail that wraps a highlight
 - a gradient wash on a selected control
