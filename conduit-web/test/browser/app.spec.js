@@ -181,14 +181,23 @@ test.beforeEach(async ({ page }) => {
       generatingCount: 0,
     } });
   });
-  // Every page load asks for these. They return empty so the app lands in the
-  // same state a failed fetch produced, without tripping the unhandled guard;
-  // a test that needs real ones routes them again and wins by being later.
+  // Endpoints every page load reaches for. The guard below fails a test for any
+  // unmocked /v0 call, so a fetch added to the app without a mock added here
+  // fails every test that boots it, whatever that test was checking. These
+  // return the empty, unchanging answers a quiet workspace gives; a test that
+  // needs real ones routes them again and wins by being registered later.
   await page.route("**/v0/profiles", async (route) => {
     await route.fulfill({ json: { profiles: [] } });
   });
   await page.route("**/v0/harnesses", async (route) => {
     await route.fulfill({ json: { harnesses: [] } });
+  });
+  await page.route("**/v0/projects/*/workspace/version*", async (route) => {
+    await route.fulfill({ json: { version: 1, changedPaths: [] } });
+  });
+  await page.route("**/v0/projects/*/backend-sessions*", async (route) => {
+    if (route.request().method() !== "GET") return route.fulfill({ status: 501, json: { error: "unhandled_browser_test_api" } });
+    await route.fulfill({ json: { implementation: "codex", replayFidelity: "full", tracked: [], adoptable: [] } });
   });
   await page.route("**/v0/capabilities", async (route) => {
     await route.fulfill({ json: { partialContinue: true, globalRuntime: "sse" } });
