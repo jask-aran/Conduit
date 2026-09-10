@@ -14,6 +14,8 @@
 .workspace-comparison-content .cm-mergeView { height: 100%; overflow: auto; }
 .workspace-comparison-content .cm-mergeViewEditor { min-width: 0; }
 .workspace-comparison-content .cm-mergeViewEditor + .cm-mergeViewEditor { border-left: 1px solid var(--border); }
+.workspace-comparison-content .cm-changeGutter { width: 0; min-width: 0; overflow: visible; padding: 0; }
+.workspace-comparison-content .cm-changeGutter .cm-gutterElement { width: 3px; min-width: 3px; padding: 0; transform: translateX(-3px); }
 .workspace-comparison-content .cm-merge-a .cm-changedLine,
 .workspace-comparison-content .cm-deletedChunk { background: color-mix(in srgb, var(--destructive) 14%, transparent); }
 .workspace-comparison-content .cm-merge-b .cm-changedLine { background: color-mix(in srgb, var(--workspace-git-added) 14%, transparent); }
