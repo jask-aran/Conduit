@@ -44,6 +44,14 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
     const showFile = file();
     if (data.kind !== "text") return;
     let disposed = false;
+    let ready = false;
+    const publishReview = () => {
+      if (!ready || disposed) return;
+      untrack(() => {
+        savedReview = captureReview();
+        props.onViewStateChange?.(savedReview);
+      });
+    };
     const language = new Compartment();
     const wrapping = new Compartment();
     const extensions: Extension[] = [
@@ -51,6 +59,7 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
       EditorState.readOnly.of(true), EditorView.editable.of(false),
       EditorView.contentAttributes.of({ "aria-label": `${data.path} comparison` }),
       language.of([]), wrapping.of([]),
+      EditorView.updateListener.of((update) => { if (update.selectionSet) publishReview(); }),
       EditorView.domEventHandlers({ focus: (_event, view) => { activeView = view; } }),
     ];
     const options = { highlightChanges: true, gutter: true, collapseUnchanged: { margin: 3, minSize: 8 }, diffConfig: { scanLimit: 500, timeout: 40 } };
@@ -68,8 +77,9 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
     const scroller = merge?.dom ?? view.scrollDOM;
     captureReview = () => ({ layout: layout(), file: file(), wrap: wrap(), top: scroller.scrollTop, left: scroller.scrollLeft, position: view.state.selection.main.head });
     view.dispatch({ selection: { anchor: Math.min(review.position, view.state.doc.length) } });
+    scroller.addEventListener("scroll", publishReview, { passive: true });
     const restoreFrame = requestAnimationFrame(() => {
-      if (!disposed) { scroller.scrollTop = review.top; scroller.scrollLeft = review.left; }
+      if (!disposed) { scroller.scrollTop = review.top; scroller.scrollLeft = review.left; ready = true; }
     });
     createEffect(() => {
       const next = props.comparison;
@@ -118,8 +128,8 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
     onCleanup(() => {
       untrack(() => {
         savedReview = captureReview();
-        props.onViewStateChange?.(savedReview);
       });
+      scroller.removeEventListener("scroll", publishReview);
       cancelAnimationFrame(restoreFrame);
       disposed = true;
       activeView = undefined;

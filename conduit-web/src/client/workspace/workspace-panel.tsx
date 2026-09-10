@@ -16,6 +16,7 @@ import WorkspaceFileSlot, { preloadWorkspaceEditor, type FileSlotHandle, type Fi
 import { readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace-panel-storage";
 import "./workspace.css";
 import type { ComparisonPayload, ComparisonViewState } from "./workspace-comparison";
+import { createReviewController } from "./workspace-review-controller";
 import WorkspaceReview, { type WorkspaceReviewFile } from "./workspace-review";
 
 
@@ -248,53 +249,31 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const [artifactMode, setArtifactMode] = createSignal<ArtifactMode>("changes");
   const [artifactBaseline, setArtifactBaseline] = createSignal<ArtifactBaseline>("chat");
   const [turnArtifact, setTurnArtifact] = createSignal<TurnArtifactPayload | null>(null);
-  const [artifactPath, setArtifactPath] = createSignal<string | null>(null);
-  const [artifactComparison, setArtifactComparison] = createSignal<ComparisonPayload | null>(null);
-  const [artifactBusy, setArtifactBusy] = createSignal(false);
-  const artifactViewState = createMemo<ComparisonViewState>(() => {
-    artifactPath();
-    return { layout: "unified", file: false, wrap: false, top: 0, left: 0, position: 0 };
-  });
-  let artifactComparisonRequest = 0;
-  const loadArtifactComparison = async (path: string, foreground = false) => {
+  const artifactReview = createReviewController(reportError);
+  const artifactPath = artifactReview.selectedPath;
+  const artifactComparison = artifactReview.comparison;
+  const artifactBusy = artifactReview.busy;
+  const artifactViewState = artifactReview.viewState;
+  const loadArtifactComparison = async (path: string) => {
+    artifactReview.select(path);
     const projectId = props.projectId();
     const chatId = props.artifactChatId?.();
     if (!chatId) return;
-    const request = ++artifactComparisonRequest;
     const checkpointId = turnArtifact()?.id;
     const baseline = artifactBaseline();
-    const ownsRequest = () => artifactComparisonRequest === request
-      && props.projectId() === projectId
-      && props.artifactChatId?.() === chatId
-      && artifactPath() === path
-      && artifactBaseline() === baseline
-      && turnArtifact()?.id === checkpointId;
-    if (foreground) setArtifactBusy(true);
-    try {
-      const result = await api<ComparisonPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&path=${encodeURIComponent(path)}&baseline=${baseline}${checkpointId ? `&checkpointId=${encodeURIComponent(checkpointId)}` : ""}`);
-      if (ownsRequest()) setArtifactComparison((previous) => {
-        if (previous && result && previous.path === result.path && previous.oldPath === result.oldPath && previous.scope === result.scope) {
-          if (previous.kind === "text" && result.kind === "text" && previous.original === result.original && previous.modified === result.modified) return previous;
-          if (previous.kind === "unavailable" && result.kind === "unavailable" && previous.message === result.message) return previous;
-        }
-        return result;
-      });
-    } catch (cause) { if (ownsRequest()) reportError((cause as Error).message); }
-    finally { if (ownsRequest()) setArtifactBusy(false); }
+    await artifactReview.refresh({
+      isCurrent: () => props.projectId() === projectId && props.artifactChatId?.() === chatId
+        && artifactBaseline() === baseline && turnArtifact()?.id === checkpointId,
+      load: (selectedPath, signal) => api<ComparisonPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&path=${encodeURIComponent(selectedPath)}&baseline=${baseline}${checkpointId ? `&checkpointId=${encodeURIComponent(checkpointId)}` : ""}`, { signal }),
+    });
   };
-  const selectArtifactFile = (path: string) => {
-    setArtifactPath(path);
-    setArtifactComparison(null);
-    void loadArtifactComparison(path, true);
-  };
+  const selectArtifactFile = (path: string) => { void loadArtifactComparison(path); };
   const loadTurnArtifact = async () => {
     const chatId = props.artifactChatId?.();
     if (!chatId) {
-      artifactComparisonRequest += 1;
-      setArtifactBusy(false);
+      artifactReview.cancel();
+      artifactReview.select(null);
       setTurnArtifact(null);
-      setArtifactPath(null);
-      setArtifactComparison(null);
       return;
     }
     const projectId = props.projectId();
@@ -303,19 +282,13 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       const result = await api<TurnArtifactPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&baseline=${baseline}`);
       if (props.projectId() !== projectId || props.artifactChatId?.() !== chatId || artifactBaseline() !== baseline) return;
       setTurnArtifact(result);
-      const current = artifactPath();
-      const next = current && result?.files.some((file) => file.path === current) ? current : result?.files[0]?.path ?? null;
-      if (next !== current) {
-        setArtifactPath(next);
-        setArtifactComparison(null);
-      }
+      const next = artifactReview.reconcile(result?.files ?? []);
       if (next) void loadArtifactComparison(next);
     } catch (cause) { reportError((cause as Error).message); }
   };
   const selectArtifactBaseline = (baseline: ArtifactBaseline) => {
     if (baseline === artifactBaseline()) return;
-    artifactComparisonRequest += 1;
-    setArtifactBusy(false);
+    artifactReview.cancel();
     setArtifactBaseline(baseline);
     void loadTurnArtifact();
   };
@@ -331,12 +304,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   };
   const [detailOpen, setDetailOpen] = createSignal(detailOpenFor(tab()) === "true");
   const [sourceControlMode, setSourceControlMode] = createSignal<SourceControlMode>(storedSourceControlMode());
-  const [selectedDiff, setSelectedDiff] = createSignal<{ path: string; staged: boolean } | null>(null);
-  const comparisonViewState = createMemo<ComparisonViewState>(() => {
-    props.projectId();
-    selectedDiff();
-    return { layout: "unified", file: false, wrap: false, top: 0, left: 0, position: 0 };
-  });
+  const sourceReview = createReviewController();
+  const comparisonViewState = sourceReview.viewState;
   const [fileNavigation, setFileNavigation] = createSignal<{ projectId: string; slot: FileSlotId; path: string; source: string; position: number } | null>(null);
   const [temporaryComparisons, setTemporaryComparisons] = createSignal<Partial<Record<FileSlotId, TemporaryComparison & { projectId: string }>>>({});
   const comparisonFor = (slot: FileSlotId) => {
@@ -347,47 +316,24 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     const request = fileNavigation();
     return request && request.projectId === props.projectId() && request.slot === slot && request.path === openPaths()[slot] ? request : undefined;
   };
-  const [fileComparison, setFileComparison] = createSignal<ComparisonPayload | null>(null);
-  const [fileDiffError, setFileDiffError] = createSignal("");
-  const [fileDiffBusy, setFileDiffBusy] = createSignal(false);
-  const inspectFileDiff = (path: string, staged: boolean) => {
-    setSelectedDiff({ path, staged });
+  const fileComparison = sourceReview.comparison;
+  const fileDiffError = sourceReview.error;
+  const fileDiffBusy = sourceReview.busy;
+  const inspectFileDiff = (path: string, _staged: boolean) => {
+    sourceReview.select(path);
     selectSourceControlMode("review");
   };
-  createEffect(on(() => props.projectId(), () => { setSelectedDiff(null); }));
-  let comparisonIdentity = "";
+  createEffect(on(() => props.projectId(), () => { sourceReview.select(null); }));
   createEffect(() => {
-    const selected = selectedDiff();
     const projectId = props.projectId();
+    const selected = sourceReview.selectedPath();
     diff();
-    if (sourceControlMode() !== "review" || !selected) {
-      comparisonIdentity = "";
-      return;
-    }
-    const controller = new AbortController();
-    const identity = JSON.stringify([projectId, selected.path, "head"]);
-    if (identity !== comparisonIdentity) {
-      comparisonIdentity = identity;
-      setFileDiffBusy(true);
-      setFileComparison(null);
-    }
-    setFileDiffError("");
-    void api<ComparisonPayload>(`/v0/projects/${encodeURIComponent(projectId)}/diff?compare=1&path=${encodeURIComponent(selected.path)}&scope=head`, { signal: controller.signal })
-      .then((result) => {
-        if (controller.signal.aborted) return;
-        // Polling must not replace the comparison prop (and recreate its
-        // EditorView) when Git returns the same two versions.
-        setFileComparison((previous) => {
-          if (previous && previous.path === result.path && previous.oldPath === result.oldPath && previous.scope === result.scope) {
-            if (previous.kind === "text" && result.kind === "text" && previous.original === result.original && previous.modified === result.modified) return previous;
-            if (previous.kind === "unavailable" && result.kind === "unavailable" && previous.message === result.message) return previous;
-          }
-          return result;
-        });
-      })
-      .catch((cause) => { if (!controller.signal.aborted) setFileDiffError((cause as Error).message); })
-      .finally(() => { if (!controller.signal.aborted) setFileDiffBusy(false); });
-    onCleanup(() => controller.abort());
+    if (sourceControlMode() !== "review" || !selected || !tabVisible("diff") || !props.open()) return;
+    void sourceReview.refresh({
+      isCurrent: () => props.projectId() === projectId && sourceControlMode() === "review",
+      load: (path, signal) => api<ComparisonPayload>(`/v0/projects/${encodeURIComponent(projectId)}/diff?compare=1&path=${encodeURIComponent(path)}&scope=head`, { signal }),
+    });
+    onCleanup(sourceReview.cancel);
   });
   const [detailHeight, setDetailHeight] = createSignal(Math.max(128, Number(readSetting(panelScope(), detailHeightName())) || 288));
   const hasPending = (operation?: string) => [...pending().keys()].some((version) => !operation || requests.get(operation)?.version === version);
@@ -402,7 +348,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     status: file.status === "??" ? "U" : (file.status[1] !== " " ? file.status[1] : file.status[0]) || "M",
     counts: file.headCounts,
   })));
-  const reviewIndex = createMemo(() => reviewFiles().findIndex((file) => file.path === selectedDiff()?.path));
+  const reviewIndex = createMemo(() => reviewFiles().findIndex((file) => file.path === sourceReview.selectedPath()));
   const selectReviewFile = (index: number) => {
     const files = reviewFiles();
     if (!files.length) return;
@@ -416,13 +362,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   };
   createEffect(() => {
     const files = reviewFiles();
-    const selected = selectedDiff();
-    if (sourceControlMode() !== "review" || !selected || files.some((file) => file.path === selected.path)) return;
-    if (files.length) selectReviewFile(0);
-    else {
-      setSelectedDiff(null);
-      setFileComparison(null);
-    }
+    if (sourceControlMode() === "review") sourceReview.reconcile(files);
   });
 
   const ownsRequest = (request: WorkspaceRequest) => ownsWorkspaceRequest({
@@ -513,7 +453,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     if (tab() === "diff") setTab("files");
     if (secondaryTab() === "diff") setSecondaryTab("terminal");
     setSourceControlMode("changes");
-    setSelectedDiff(null);
+    sourceReview.select(null);
     setDiff(null);
   });
   const tabVisible = (candidate: PanelTab) => (candidate !== "diff" || props.sourceControlEnabled()) && (tab() === candidate || (props.expanded() && secondaryTab() === candidate));
@@ -1989,7 +1929,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       </Show>
       </div>
       </Show>
-        <Show when={sourceControlMode() === "review"}><WorkspaceReview title="Working changes" files={reviewViewFiles()} selectedPath={selectedDiff()?.path ?? null} comparison={fileComparison()} viewState={comparisonViewState()} busy={fileDiffBusy()} empty={fileDiffError() || "No changed files to review."} onSelect={(path) => { const file = reviewFiles().find((item) => item.path === path); if (file) inspectFileDiff(path, file.status[0] !== " " && file.status[0] !== "?"); }} onOpenFile={(_comparison, state) => openComparisonFile(state)} /></Show>
+        <Show when={sourceControlMode() === "review"}><WorkspaceReview title="Working changes" files={reviewViewFiles()} selectedPath={sourceReview.selectedPath() ?? null} comparison={fileComparison()} viewState={comparisonViewState()} onViewStateChange={sourceReview.setViewState} busy={fileDiffBusy()} empty={fileDiffError() || "No changed files to review."} onSelect={(path) => { const file = reviewFiles().find((item) => item.path === path); if (file) inspectFileDiff(path, file.status[0] !== " " && file.status[0] !== "?"); }} onOpenFile={(_comparison, state) => openComparisonFile(state)} /></Show>
         <Show when={sourceControlMode() === "graph" || sourceControlMode() === "patch"}><Show when={sourceControlMode() === "patch"} fallback={<Show when={Boolean(diff()?.commits?.length)} fallback={<div class="workspace-panel-empty">No commit history available.</div>}><CommitHistory commits={diff()?.commits || []} refs={diff()?.refs || []} branch={diff()?.branch} onCopy={copy} onInspect={inspectCommit} /></Show>}>
           <div class="workspace-patch"><Show when={commitDetailLoading()} fallback={<Show when={commitDetail()} fallback={<Show when={diff()?.diff} fallback={<div class="workspace-panel-empty">{diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</div>}>{(content) => <PatchView content={content()} />}</Show>}>{(detail) => <PatchView content={detail().content} />}</Show>}><div class="workspace-panel-empty">Loading commit…</div></Show></div>
         </Show></Show>
@@ -1998,7 +1938,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       <div class="workspace-artifact-modes" role="radiogroup" aria-label="Artifact modality"><div><button role="radio" aria-checked={artifactMode() === "changes"} onClick={() => { setArtifactMode("changes"); void loadTurnArtifact(); }}>Agent changes</button><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div></div>
       <Show when={artifactMode() === "changes"} fallback={<div class="workspace-panel-empty"><div><BoxesIcon /><strong>{artifactMode() === "outputs" ? "No artifacts in the loaded transcript" : "Interactive artifacts are not enabled"}</strong><p>{artifactMode() === "outputs" ? "Code blocks and file outputs will appear here as transcript artifact projection lands." : "This boundary is reserved for sandboxed, explicitly trusted generated interfaces."}</p></div></div>}>
         <Show when={turnArtifact()?.files.length} fallback={<div class="workspace-panel-empty"><div><GitCompareArrowsIcon /><strong>No agent changes in this chat</strong><p>This view updates when the agent changes a workspace file.</p></div></div>}>
-          <WorkspaceReview full title="Agent changes" files={(turnArtifact()?.files || []).map((file) => ({ path: file.path, status: file.status }))} selectedPath={artifactPath()} comparison={artifactComparison()} viewState={artifactViewState()} busy={artifactBusy()} empty="No agent changes in this chat." footerControl={<div class="workspace-artifact-baseline" role="radiogroup" aria-label="Agent changes baseline"><button type="button" role="radio" aria-checked={artifactBaseline() === "chat"} onClick={() => selectArtifactBaseline("chat")}>Chat start</button><button type="button" role="radio" aria-checked={artifactBaseline() === "turn"} onClick={() => selectArtifactBaseline("turn")}>Latest turn</button></div>} onSelect={selectArtifactFile} onOpenFile={openComparisonInFiles} />
+          <WorkspaceReview full title="Agent changes" files={(turnArtifact()?.files || []).map((file) => ({ path: file.path, status: file.status }))} selectedPath={artifactPath()} comparison={artifactComparison()} viewState={artifactViewState()} onViewStateChange={artifactReview.setViewState} busy={artifactBusy()} empty="No agent changes in this chat." footerControl={<div class="workspace-artifact-baseline" role="radiogroup" aria-label="Agent changes baseline"><button type="button" role="radio" aria-checked={artifactBaseline() === "chat"} onClick={() => selectArtifactBaseline("chat")}>Chat start</button><button type="button" role="radio" aria-checked={artifactBaseline() === "turn"} onClick={() => selectArtifactBaseline("turn")}>Latest turn</button></div>} onSelect={selectArtifactFile} onOpenFile={openComparisonInFiles} />
         </Show>
       </Show>
     </section></Show>
