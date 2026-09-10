@@ -46,19 +46,25 @@ async function routeFixture({ busy = false } = {}) {
       return resident;
     },
     lifecycle: { isBusy: () => false },
-    manager: {
+    // The route reaches the resident process through `backends` and drives it
+    // through the adapter that owns it; `manager` is left only what it still
+    // answers. A fixture missing `backends` made every request a 500, which the
+    // status assertions then read as an ordinary failure.
+    backends: {
       getByChatId: () => resident,
-      isBusy: () => busy,
-      setModel: async (_id, spec) => {
-        calls.push({ type: "set_model", spec });
-        currentModel = spec;
-      },
-      stopAndWait: async (id) => {
-        calls.push({ type: "stop", id });
-        resident = null;
-      },
-      setThinkingLevel: async (id, level) => calls.push({ type: "set_thinking", id, level }),
+      forChat: () => ({
+        setModel: async (_id, spec) => {
+          calls.push({ type: "set_model", spec });
+          currentModel = spec;
+        },
+        close: async (id) => {
+          calls.push({ type: "stop", id });
+          resident = null;
+        },
+        setThinkingLevel: async (id, level) => calls.push({ type: "set_thinking", id, level }),
+      }),
     },
+    manager: { isBusy: () => busy },
     modelCatalog: {},
     projects: {},
     registry: { update: async () => context.chat },

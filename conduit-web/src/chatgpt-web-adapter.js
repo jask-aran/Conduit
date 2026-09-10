@@ -31,7 +31,7 @@ export class ChatGptWebAdapter extends EventEmitter {
   }
 
   async ensureSidecar() {
-    if (this.origin && this.child?.exitCode == null) return;
+    if (this.origin && this.child && this.child.exitCode == null) return;
     if (this.starting) return this.starting;
     this.starting = new Promise((resolve, reject) => {
       const child = spawn(this.python, [this.script], {
@@ -202,7 +202,10 @@ export class ChatGptWebAdapter extends EventEmitter {
 
   async shutdown() {
     for (const record of [...this.records.values()]) await this.close(record.id);
-    if (this.child?.exitCode == null) this.child.kill("SIGTERM");
+    // `this.child?.exitCode` is undefined when no sidecar ever started, and
+    // `undefined == null` is true - so the optional chain guarded the read and
+    // the comparison threw it away, killing null on every ordinary shutdown.
+    if (this.child && this.child.exitCode == null) this.child.kill("SIGTERM");
   }
 
   async listAvailableModels() {
