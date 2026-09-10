@@ -317,12 +317,15 @@ test("workspace inspection shares active overview work and defers patch commands
   assert.equal(left.repository, true);
   assert.deepEqual(right.files, left.files);
   assert.equal(calls.filter((call) => call.includes("--is-inside-work-tree")).length, 1);
-  assert.equal(calls.filter((call) => call.startsWith("diff ")).length, 0);
+  // The overview reads per-file line counts, so what must stay deferred is the
+  // patch itself - the unbounded diff text - not every `git diff` invocation.
+  const patchCommands = () => calls.filter((call) => call.startsWith("diff ") && !call.includes("--numstat"));
+  assert.deepEqual(patchCommands(), []);
 
   const patch = await readWorkspaceDiff(root, { includePatch: true, includeHistory: false, reuse: true, runGit });
   assert.match(patch.diff, /# Staged/);
   assert.match(patch.diff, /# Working tree/);
-  assert.equal(calls.filter((call) => call.startsWith("diff ")).length, 2);
+  assert.deepEqual(patchCommands(), ["diff --no-ext-diff --no-color", "diff --cached --no-ext-diff --no-color"]);
 });
 
 test("bounded Git commands honour cancellation", async () => {

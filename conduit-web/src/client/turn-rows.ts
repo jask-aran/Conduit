@@ -272,10 +272,16 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, index
         segments.push(buildLiveToolSegment(generation, block));
       }
     }
-    if (assistant.stopReason === "error") segments.push(buildLiveErrorSegment(assistant));
     const terminalError = generation.status === "failed"
       && assistant.stopReason === "error"
       && generation.assistantMessages.at(-1) === assistant;
+    // Only an error the turn moved past belongs in the trace, which is what the
+    // persisted path means by `assistant !== finalAssistant`. The last message
+    // is either the turn's own failure, and renders as the answer row below, or
+    // one Pi is still retrying - and a retry in flight is not a failed request.
+    if (assistant.stopReason === "error" && generation.assistantMessages.at(-1) !== assistant) {
+      segments.push(buildLiveErrorSegment(assistant));
+    }
     if (answer || terminalError) {
       const content = generation.continuation && answers.length === 0
         ? mergeContinuation(generation.continuationBase || "", answer)

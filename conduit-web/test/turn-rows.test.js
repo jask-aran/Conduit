@@ -266,3 +266,24 @@ test("indexes live blocks to one trace or answer row", () => {
   assert.equal(row?.value.content, "Answer updated");
   assert.equal(row?.key, "answer:u1:0");
 });
+
+test("keeps a recovered live error in the trace while it is still generating", () => {
+  const rows = buildTurnRows([{ id: "u1", role: "user", content: "Try this request" }], [], {
+    activeGeneration: {
+      id: "g_recovered",
+      status: "running",
+      lastSeq: 9,
+      toolExecutions: {},
+      assistantMessages: [
+        { id: "m_error", stopReason: "error", errorMessage: "Temporary provider failure", blocks: [] },
+        { id: "m_retry", stopReason: null, blocks: [{ type: "text", identity: "g_recovered:m_retry:0", contentIndex: 0, text: "Recovered answer", status: "complete" }] },
+      ],
+    },
+  });
+  // The turn moved past this one, so it is history the reader should see - the
+  // distinction the terminal and still-retrying cases turn on.
+  assert.deepEqual(rows.map((row) => row.type), ["message", "trace", "message"]);
+  const trace = rows[1];
+  assert.equal(trace?.type === "trace" && trace.value.segments.map((segment) => segment.kind).join(), "error");
+  assert.equal(rows[2]?.type === "message" && rows[2].value.content, "Recovered answer");
+});
