@@ -344,9 +344,11 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-resizing { cursor: col-resize; user-select: none; }
 .workspace-detail-resizing { cursor: row-resize; user-select: none; }
 .workspace-artifacts { display: flex; min-height: 0; flex: 1; flex-direction: column; }
-.workspace-artifact-modes { display: flex; gap: 2px; padding: 3px 6px; border-bottom: 1px solid var(--border); }
+.workspace-artifact-modes { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 6px; border-bottom: 1px solid var(--border); }
+.workspace-artifact-modes > div { display: flex; min-width: 0; gap: 2px; }
 .workspace-artifact-modes button { min-height: 22px; border: 0; border-radius: 4px; background: transparent; padding: 3px 7px; color: var(--muted-foreground); font-size: 8.8px; }
 .workspace-artifact-modes button[aria-checked="true"] { background: var(--accent); color: var(--foreground); }
+.workspace-artifact-baseline { flex: none; padding-left: 6px; border-left: 1px solid var(--border); }
 .workspace-artifacts .workspace-panel-empty > div { display: grid; max-width: 224px; justify-items: center; gap: 5.6px; }
 .workspace-artifacts .workspace-panel-empty svg { width: 19.2px; height: 19.2px; }
 .workspace-artifacts .workspace-panel-empty strong { color: var(--foreground); }
