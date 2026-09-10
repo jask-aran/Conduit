@@ -1,13 +1,11 @@
-import { syntaxHighlighting } from "@codemirror/language";
 import { MergeView, unifiedMergeView, getChunks, goToNextChunk, goToPreviousChunk } from "@codemirror/merge";
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
-import { EditorView, drawSelection, keymap, lineNumbers } from "@codemirror/view";
-import { openSearchPanel, search, searchKeymap } from "@codemirror/search";
+import { EditorView } from "@codemirror/view";
+import { openSearchPanel } from "@codemirror/search";
 import { ChevronDownIcon, ChevronUpIcon, Columns2Icon, PencilIcon, PencilOffIcon, Rows2Icon, SearchIcon, WrapTextIcon, XIcon } from "lucide-solid";
 import { createEffect, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js";
-import { editorTheme, workspaceHighlightStyle } from "./workspace-editor";
+import { workspaceReadOnlySetup } from "./workspace-editor-base";
 import { workspaceLanguageForFilename } from "./workspace-languages";
-import { createWorkspaceSearchPanel } from "./workspace-search-panel";
 import { FileTypeIcon } from "./file-type-icon";
 import "./workspace-comparison.css";
 
@@ -45,11 +43,10 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
     const language = new Compartment();
     const wrapping = new Compartment();
     const extensions: Extension[] = [
-      editorTheme, syntaxHighlighting(workspaceHighlightStyle),
+      workspaceReadOnlySetup,
       EditorState.readOnly.of(true), EditorView.editable.of(false),
       EditorView.contentAttributes.of({ "aria-label": `${data.path} comparison` }),
-      lineNumbers(), drawSelection(), language.of([]), wrapping.of([]),
-      search({ top: false, createPanel: createWorkspaceSearchPanel }), keymap.of(searchKeymap),
+      language.of([]), wrapping.of([]),
       EditorView.domEventHandlers({ focus: (_event, view) => { activeView = view; } }),
     ];
     const options = { highlightChanges: true, gutter: true, collapseUnchanged: { margin: 3, minSize: 8 }, diffConfig: { scanLimit: 500, timeout: 40 } };
