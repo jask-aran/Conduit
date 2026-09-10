@@ -300,9 +300,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const selectArtifactBaseline = (baseline: ArtifactBaseline) => {
     if (baseline === artifactBaseline()) return;
     setArtifactBaseline(baseline);
-    setTurnArtifact(null);
-    setArtifactPath(null);
-    setArtifactComparison(null);
     void loadTurnArtifact();
   };
   const [terminalFocusRequest, setTerminalFocusRequest] = createSignal(0);
@@ -1993,10 +1990,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         </Show></Show>
     </section></Show>
     <Show when={tabVisible("artifacts")}><section class="workspace-artifacts" data-position={panePosition("artifacts")}>
-      <div class="workspace-artifact-modes"><div role="radiogroup" aria-label="Artifact modality"><button role="radio" aria-checked={artifactMode() === "changes"} onClick={() => { setArtifactMode("changes"); void loadTurnArtifact(); }}>Agent changes</button><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div><Show when={artifactMode() === "changes"}><div class="workspace-artifact-baseline" role="radiogroup" aria-label="Agent changes baseline"><button role="radio" aria-checked={artifactBaseline() === "chat"} onClick={() => selectArtifactBaseline("chat")}>Chat start</button><button role="radio" aria-checked={artifactBaseline() === "turn"} onClick={() => selectArtifactBaseline("turn")}>Latest turn</button></div></Show></div>
+      <div class="workspace-artifact-modes" role="radiogroup" aria-label="Artifact modality"><div><button role="radio" aria-checked={artifactMode() === "changes"} onClick={() => { setArtifactMode("changes"); void loadTurnArtifact(); }}>Agent changes</button><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div></div>
       <Show when={artifactMode() === "changes"} fallback={<div class="workspace-panel-empty"><div><BoxesIcon /><strong>{artifactMode() === "outputs" ? "No artifacts in the loaded transcript" : "Interactive artifacts are not enabled"}</strong><p>{artifactMode() === "outputs" ? "Code blocks and file outputs will appear here as transcript artifact projection lands." : "This boundary is reserved for sandboxed, explicitly trusted generated interfaces."}</p></div></div>}>
         <Show when={turnArtifact()?.files.length} fallback={<div class="workspace-panel-empty"><div><GitCompareArrowsIcon /><strong>No agent changes in this chat</strong><p>This view updates when the agent changes a workspace file.</p></div></div>}>
-          <WorkspaceReview full title="Agent changes" files={(turnArtifact()?.files || []).map((file) => ({ path: file.path, status: file.status }))} selectedPath={artifactPath()} comparison={artifactComparison()} viewState={artifactViewState()} busy={artifactBusy()} empty="No agent changes in this chat." onSelect={selectArtifactFile} onOpenFile={openComparisonInFiles} />
+          <WorkspaceReview full title="Agent changes" files={(turnArtifact()?.files || []).map((file) => ({ path: file.path, status: file.status }))} selectedPath={artifactPath()} comparison={artifactComparison()} viewState={artifactViewState()} busy={artifactBusy()} empty="No agent changes in this chat." footerControl={<div class="workspace-artifact-baseline" role="radiogroup" aria-label="Agent changes baseline"><button type="button" role="radio" aria-checked={artifactBaseline() === "chat"} onClick={() => selectArtifactBaseline("chat")}>Chat start</button><button type="button" role="radio" aria-checked={artifactBaseline() === "turn"} onClick={() => selectArtifactBaseline("turn")}>Latest turn</button></div>} onSelect={selectArtifactFile} onOpenFile={openComparisonInFiles} />
         </Show>
       </Show>
     </section></Show>
