@@ -250,21 +250,28 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     artifactPath();
     return { layout: "unified", file: false, wrap: false, top: 0, left: 0, position: 0 };
   });
-  const loadArtifactComparison = async (path: string) => {
+  const loadArtifactComparison = async (path: string, foreground = false) => {
     const projectId = props.projectId();
     const chatId = props.artifactChatId?.();
     if (!chatId) return;
-    setArtifactBusy(true);
+    if (foreground) setArtifactBusy(true);
     try {
-      const result = await api<ComparisonPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&path=${encodeURIComponent(path)}`);
-      if (props.projectId() === projectId && props.artifactChatId?.() === chatId && artifactPath() === path) setArtifactComparison(result);
+      const checkpointId = turnArtifact()?.id;
+      const result = await api<ComparisonPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&path=${encodeURIComponent(path)}${checkpointId ? `&checkpointId=${encodeURIComponent(checkpointId)}` : ""}`);
+      if (props.projectId() === projectId && props.artifactChatId?.() === chatId && artifactPath() === path) setArtifactComparison((previous) => {
+        if (previous && result && previous.path === result.path && previous.oldPath === result.oldPath && previous.scope === result.scope) {
+          if (previous.kind === "text" && result.kind === "text" && previous.original === result.original && previous.modified === result.modified) return previous;
+          if (previous.kind === "unavailable" && result.kind === "unavailable" && previous.message === result.message) return previous;
+        }
+        return result;
+      });
     } catch (cause) { reportError((cause as Error).message); }
     finally { if (props.projectId() === projectId && artifactPath() === path) setArtifactBusy(false); }
   };
   const selectArtifactFile = (path: string) => {
     setArtifactPath(path);
     setArtifactComparison(null);
-    void loadArtifactComparison(path);
+    void loadArtifactComparison(path, true);
   };
   const loadTurnArtifact = async () => {
     const chatId = props.artifactChatId?.();

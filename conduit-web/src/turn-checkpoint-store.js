@@ -34,14 +34,11 @@ export class TurnCheckpointStore {
   }
 
   async latest(chatId) {
-    const directory = path.join(this.root, keyFor(chatId));
-    const names = await fs.readdir(directory).catch((error) => error.code === "ENOENT" ? [] : Promise.reject(error));
-    const name = names.filter((item) => item.endsWith(".json")).sort().at(-1);
-    return name ? JSON.parse(await fs.readFile(path.join(directory, name), "utf8")) : null;
+    return (await this.#checkpoints(chatId)).at(-1) || null;
   }
 
   async review(chatId, workingRoot) {
-    const checkpoint = await this.latest(chatId);
+    const checkpoint = await this.#baseline(chatId, workingRoot);
     if (!checkpoint || path.resolve(workingRoot) !== checkpoint.workingRoot) return null;
     const git = (args, maxBuffer = 2 * 1024 * 1024) => runBoundedGit(checkpoint.workingRoot, args, { maxBuffer });
     const currentPaths = checkpoint.repository
@@ -57,13 +54,17 @@ export class TurnCheckpointStore {
       const comparison = await this.#compare(checkpoint, relativePath, git);
       if (comparison.kind === "text" && comparison.original === comparison.modified) continue;
       if (comparison.kind === "unavailable" && comparison.reason === "unchanged") continue;
-      files.push({ path: relativePath, status: comparison.status, available: comparison.kind === "text" });
+      const stat = await fs.stat(path.join(checkpoint.workingRoot, relativePath)).catch(() => null);
+      files.push({ path: relativePath, status: comparison.status, available: comparison.kind === "text", changedAt: stat?.mtimeMs || Date.parse(checkpoint.createdAt) });
     }
+    files.sort((left, right) => right.changedAt - left.changedAt || left.path.localeCompare(right.path));
     return { id: checkpoint.id, turnId: checkpoint.turnId, createdAt: checkpoint.createdAt, files };
   }
 
-  async compare(chatId, workingRoot, relativePath) {
-    const checkpoint = await this.latest(chatId);
+  async compare(chatId, workingRoot, relativePath, checkpointId) {
+    const checkpoint = checkpointId
+      ? (await this.#checkpoints(chatId)).find((item) => item.id === checkpointId)
+      : await this.#baseline(chatId, workingRoot);
     if (!checkpoint || path.resolve(workingRoot) !== checkpoint.workingRoot) return null;
     if (typeof relativePath !== "string" || !relativePath || relativePath.includes("\0") || relativePath.split("/").some((part) => !part || part === "." || part === "..")) throw new Error("Invalid checkpoint path");
     const git = (args, maxBuffer = 2 * 1024 * 1024) => runBoundedGit(checkpoint.workingRoot, args, { maxBuffer });
@@ -123,16 +124,16 @@ export class TurnCheckpointStore {
     const stored = checkpoint.entries[relativePath];
     if (stored?.kind === "unavailable") {
       const stat = await fs.stat(path.join(checkpoint.workingRoot, relativePath)).catch(() => null);
-      if (stat?.isFile() && stat.size === stored.size && stat.mtimeMs === stored.modifiedAt) return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "turn", status: "M", reason: "unchanged", message: "This file did not change during the turn." };
-      return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "turn", status: "M", reason: "unavailable", message: "The turn baseline is unavailable for this file." };
+      if (stat?.isFile() && stat.size === stored.size && stat.mtimeMs === stored.modifiedAt) return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "session", status: "M", reason: "unchanged", message: "This file did not change during the chat." };
+      return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "session", status: "M", reason: "unavailable", message: "The chat baseline is unavailable for this file." };
     }
-    if (stored?.kind === "unsupported") return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "turn", status: "M", reason: "unsupported", message: "The turn baseline is unavailable for this file." };
+    if (stored?.kind === "unsupported") return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "session", status: "M", reason: "unsupported", message: "The chat baseline is unavailable for this file." };
     let original = Buffer.alloc(0);
     if (stored?.kind === "file") original = Buffer.from(stored.content, "base64");
     else if (!stored && checkpoint.head) {
       try {
         const { stdout: size } = await git(["cat-file", "-s", `${checkpoint.head}:${relativePath}`]);
-        if (Number(size) > MAX_FILE_BYTES) return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "turn", status: "M", reason: "size", message: "This file exceeds the 1 MiB turn comparison limit." };
+        if (Number(size) > MAX_FILE_BYTES) return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "session", status: "M", reason: "size", message: "This file exceeds the 1 MiB chat comparison limit." };
         original = Buffer.from((await git(["cat-file", "blob", `${checkpoint.head}:${relativePath}`], MAX_FILE_BYTES + 1)).stdout);
       } catch { original = Buffer.alloc(0); }
     }
@@ -142,19 +143,35 @@ export class TurnCheckpointStore {
       if (target !== checkpoint.workingRoot && target.startsWith(`${checkpoint.workingRoot}${path.sep}`)) {
         const stat = await fs.stat(target);
         if (!stat.isFile()) throw Object.assign(new Error(), { code: "unsupported" });
-        if (stat.size > MAX_FILE_BYTES) return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "turn", status: "M", reason: "size", message: "This file exceeds the 1 MiB turn comparison limit." };
+        if (stat.size > MAX_FILE_BYTES) return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "session", status: "M", reason: "size", message: "This file exceeds the 1 MiB chat comparison limit." };
         modified = await fs.readFile(target);
       }
     } catch (error) {
-      if (error.code !== "ENOENT") return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "turn", status: "M", reason: "unsupported", message: "Turn comparison is available for regular files only." };
+      if (error.code !== "ENOENT") return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "session", status: "M", reason: "unsupported", message: "Chat comparison is available for regular files only." };
     }
-    if (original.equals(modified)) return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "turn", status: "M", reason: "unchanged", message: "This file did not change during the turn." };
+    if (original.equals(modified)) return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "session", status: "M", reason: "unchanged", message: "This file did not change during the chat." };
     const decode = (value) => new TextDecoder("utf-8", { fatal: true }).decode(value);
     let originalText;
     let modifiedText;
     try { originalText = decode(original); modifiedText = decode(modified); }
-    catch { return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "turn", status: "M", reason: "binary", message: "Binary or non-UTF-8 files cannot be shown as a text comparison." }; }
-    return { kind: "text", path: relativePath, oldPath: relativePath, scope: "turn", status: original.length === 0 ? "A" : modified.length === 0 ? "D" : "M", original: originalText, modified: modifiedText };
+    catch { return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope: "session", status: "M", reason: "binary", message: "Binary or non-UTF-8 files cannot be shown as a text comparison." }; }
+    return { kind: "text", path: relativePath, oldPath: relativePath, scope: "session", status: original.length === 0 ? "A" : modified.length === 0 ? "D" : "M", original: originalText, modified: modifiedText };
+  }
+
+  async #baseline(chatId, workingRoot) {
+    const root = path.resolve(workingRoot);
+    return (await this.#checkpoints(chatId)).find((checkpoint) => checkpoint.version === 1 && typeof checkpoint.repository === "boolean" && checkpoint.workingRoot === root) || null;
+  }
+
+  async #checkpoints(chatId) {
+    const directory = path.join(this.root, keyFor(chatId));
+    const names = await fs.readdir(directory).catch((error) => error.code === "ENOENT" ? [] : Promise.reject(error));
+    const checkpoints = [];
+    for (const name of names.filter((item) => item.endsWith(".json")).sort()) {
+      try { checkpoints.push(JSON.parse(await fs.readFile(path.join(directory, name), "utf8"))); }
+      catch (error) { if (error.code !== "ENOENT") throw error; }
+    }
+    return checkpoints;
   }
 
   async #workspacePaths(root) {
