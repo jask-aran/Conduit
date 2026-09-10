@@ -2,7 +2,7 @@ import { WorkbenchButton, WorkbenchStatus, FileRepresentationControl } from "./w
 import { MergeView, unifiedMergeView, getChunks, goToNextChunk, goToPreviousChunk, getOriginalDoc, originalDocChangeEffect } from "@codemirror/merge";
 import { ChangeSet, Compartment, EditorState, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { openSearchPanel } from "@codemirror/search";
+import { gotoLine, openSearchPanel } from "@codemirror/search";
 import { ChevronDownIcon, ChevronUpIcon, Columns2Icon, PencilIcon, PencilOffIcon, Rows2Icon, SearchIcon, WrapTextIcon, XIcon } from "lucide-solid";
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js";
 import { workspaceReadOnlySetup } from "./workspace-editor-base";
@@ -25,13 +25,15 @@ export interface ComparisonViewState {
   position: number;
 }
 
-export default function WorkspaceComparison(props: { comparison: ComparisonPayload; viewState: ComparisonViewState; inFiles?: boolean; header?: JSX.Element; footerControl?: JSX.Element; onViewStateChange?: (state: ComparisonViewState) => void; onShowFile?: () => void; onClose?: () => void; onOpenFile: (source: string, position: number, state: ComparisonViewState) => void }) {
+export default function WorkspaceComparison(props: { comparison: ComparisonPayload; viewState: ComparisonViewState; inFiles?: boolean; header?: JSX.Element; footerControl?: JSX.Element; onViewStateChange?: (state: ComparisonViewState) => void; wrap?: boolean; onToggleWrap?: () => void; onShowFile?: () => void; onClose?: () => void; onOpenFile: (source: string, position: number, state: ComparisonViewState) => void }) {
   let host!: HTMLDivElement;
   let activeView: EditorView | undefined;
   let captureReview = () => ({ ...props.viewState });
   const [layout, setLayout] = createSignal<"unified" | "split">(props.viewState.layout);
   const [file, setFile] = createSignal(props.viewState.file);
   const [wrap, setWrap] = createSignal(props.viewState.wrap);
+  createEffect(() => { if (props.wrap !== undefined) setWrap(props.wrap); });
+  const [position, setPosition] = createSignal("Ln 1, Col 1");
   const [summary, setSummary] = createSignal({ added: 0, removed: 0, precise: true });
   const [languageName, setLanguageName] = createSignal("Plain text");
 
@@ -59,7 +61,14 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
       EditorState.readOnly.of(true), EditorView.editable.of(false),
       EditorView.contentAttributes.of({ "aria-label": `${data.path} comparison` }),
       language.of([]), wrapping.of([]),
-      EditorView.updateListener.of((update) => { if (update.selectionSet) publishReview(); }),
+      EditorView.updateListener.of((update) => {
+        if (update.selectionSet || update.docChanged) {
+          const head = update.state.selection.main.head;
+          const line = update.state.doc.lineAt(head);
+          setPosition(`Ln ${line.number}, Col ${head - line.from + 1}`);
+          publishReview();
+        }
+      }),
       EditorView.domEventHandlers({ focus: (_event, view) => { activeView = view; } }),
     ];
     const options = { highlightChanges: true, gutter: true, collapseUnchanged: { margin: 3, minSize: 8 }, diffConfig: { scanLimit: 500, timeout: 40 } };
@@ -79,7 +88,7 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
     view.dispatch({ selection: { anchor: Math.min(review.position, view.state.doc.length) } });
     scroller.addEventListener("scroll", publishReview, { passive: true });
     const restoreFrame = requestAnimationFrame(() => {
-      if (!disposed) { scroller.scrollTop = review.top; scroller.scrollLeft = review.left; ready = true; }
+      if (!disposed) { scroller.scrollTop = review.top; scroller.scrollLeft = review.left; ready = true; publishReview(); }
     });
     createEffect(() => {
       const next = props.comparison;
@@ -167,7 +176,7 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
           <WorkbenchButton type="button" aria-label="Side-by-side diff" aria-pressed={layout() === "split"} disabled={file()} onClick={() => setLayout("split")}><Columns2Icon /></WorkbenchButton>
           <WorkbenchButton type="button" aria-label="Previous change" disabled={file()} onClick={() => move(false)}><ChevronUpIcon /></WorkbenchButton>
           <WorkbenchButton type="button" aria-label="Next change" disabled={file()} onClick={() => move(true)}><ChevronDownIcon /></WorkbenchButton></Show>
-        </>}><span class="workspace-editor-metadata">{{ changes: "Index → Working copy", staged: "HEAD → Index", head: "HEAD → Working copy", turn: "Turn start → Working copy", session: "Chat start → Working copy" }[props.comparison.scope]}</span>{props.footerControl}<WorkbenchButton type="button" aria-label="Wrap lines" aria-pressed={wrap()} onClick={() => setWrap(!wrap())}><WrapTextIcon /></WorkbenchButton><span class="workspace-editor-metadata">{languageName()} · Read-only</span>
+        </>}><span class="workspace-editor-metadata">{{ changes: "Index → Working copy", staged: "HEAD → Index", head: "HEAD → Working copy", turn: "Turn start → Working copy", session: "Chat start → Working copy" }[props.comparison.scope]}</span>{props.footerControl}<WorkbenchButton aria-label="Go to line" title="Go to line (Alt+G)" onClick={() => { if (activeView) gotoLine(activeView); }}>{position()}</WorkbenchButton><WorkbenchButton type="button" aria-label="Wrap lines" aria-pressed={wrap()} onClick={() => props.onToggleWrap ? props.onToggleWrap() : setWrap(!wrap())}><WrapTextIcon /></WorkbenchButton><span class="workspace-editor-metadata">{languageName()} · Read-only</span>
       </WorkbenchStatus>
     </Show>
   </section>;
