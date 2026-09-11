@@ -10,12 +10,12 @@ import { createLiveSessionLauncher } from "../src/server/live-session-launcher.j
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
-test("native adapter launch uses and persists the composer model selection", async () => {
+test("native adapter restores its saved model unless a prompt changes it", async () => {
   const chatId = "n".repeat(24);
   const project = { id: "project_native", slug: "native", workingRoot: "/tmp/native" };
   const chat = {
     id: chatId, status: "draft", modelThinkingLevels: {},
-    backend: { protocol: "native_api", implementation: "chatgpt-web", opaqueSession: null },
+    backend: { protocol: "native_api", implementation: "chatgpt-web", opaqueSession: null, model: "saved-model" },
   };
   const calls = [];
   const updates = [];
@@ -28,12 +28,16 @@ test("native adapter launch uses and persists the composer model selection", asy
     registry: { update: async (id, mapping) => updates.push({ id, mapping }) },
   });
 
-  await launcher({ chatId, model: "gpt-5-6", thinkingLevel: "high" });
+  await launcher({ chatId, model: "stale-transcript-model", thinkingLevel: "off" });
 
-  assert.equal(calls[0].model, "gpt-5-6");
-  assert.equal(calls[0].thinkingLevel, "high");
-  assert.equal(updates[0].mapping.backend.model, "gpt-5-6");
-  assert.deepEqual(updates[0].mapping.modelThinkingLevels, { "gpt-5-6": "high" });
+  assert.equal(calls[0].model, "saved-model");
+
+  await launcher({ chatId, model: "gpt-5-6", thinkingLevel: "high", forceModel: true });
+
+  assert.equal(calls[1].model, "gpt-5-6");
+  assert.equal(calls[1].thinkingLevel, "high");
+  assert.equal(updates[1].mapping.backend.model, "gpt-5-6");
+  assert.deepEqual(updates[1].mapping.modelThinkingLevels, { "gpt-5-6": "high" });
 });
 
 test("live session launcher selects and materializes the model profile before Pi starts", async () => {
