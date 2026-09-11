@@ -120,7 +120,18 @@ export function createLiveSessionStream({
     // itself; the client used to sequence these three steps by watching
     // generation state, which raced.
     if (command.type === "interrupt_and_send") {
-      const taken = adapter.clearQueue ? await adapter.clearQueue(record.id) : { steering: [], followUp: [] };
+      // Clearing comes first and must succeed: aborting with the queue still in
+      // place makes the backend deliver it anyway, so a half-run sequence
+      // duplicates the message rather than steering with it.
+      let taken = { steering: [], followUp: [] };
+      if (adapter.clearQueue) {
+        try {
+          taken = await adapter.clearQueue(record.id);
+        } catch (error) {
+          throw Object.assign(new Error(`Cannot interrupt and send: the agent rejected clear_queue (${error.message})`),
+            { code: "clear_queue_unsupported" });
+        }
+      }
       await adapter.cancel(record.id, command.generationId || null);
       const queued = [...(taken.steering || []), ...(taken.followUp || [])]
         .map((item) => parseAttachmentEnvelope(typeof item === "string" ? item : item?.message || "").message);
