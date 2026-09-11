@@ -39,7 +39,9 @@ test("Codex prompt writes the installed app-server turn/start shape", async () =
   await adapter.setModel(live.id, "codex-other");
   await adapter.setThinkingLevel(live.id, "high");
   const pending = adapter.prompt(live.id, "Test prompt");
-  assert.deepEqual(writes[0], { id: 1, method: "turn/start", params: {
+  const { clientUserMessageId, ...params } = writes[0].params;
+  assert.equal(typeof clientUserMessageId, "string");
+  assert.deepEqual({ ...writes[0], params }, { id: 1, method: "turn/start", params: {
     threadId: "thread-1", input: [{ type: "text", text: "Test prompt" }],
     model: "codex-other",
     effort: "high",

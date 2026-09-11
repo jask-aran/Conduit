@@ -501,6 +501,12 @@ export class CodexAppServerAdapter extends EventEmitter {
       record.generation = { id: turnId, closed: false, settled: false };
       record.turn = null;
       this.publish(record, { type: "status", generationId: turnId, sequence: ++record.eventSequence, status: "working", activity: "working", detail: null });
+    } else if (method === "item/started" && params.item?.type === "userMessage") {
+      const messageId = params.item.clientId || params.item.id;
+      if (!messageId || record.messageIds.has(messageId)) return;
+      record.messageIds.add(messageId);
+      this.publish(record, { type: "transcript_message", generationId: turnId,
+        message: { id: messageId, role: "user", content: CodexAppServerAdapter.itemText(params.item) } });
     } else if (method === "item/agentMessage/delta") {
       const messageId = params.itemId || `assistant-${turnId}`;
       if (!record.messageIds.has(messageId)) {
@@ -662,14 +668,14 @@ export class CodexAppServerAdapter extends EventEmitter {
   async prompt(id, message, options) {
     const record = this.get(id);
     if (!record?.sessionId) throw error("Codex thread is not ready");
+    const clientUserMessageId = crypto.randomUUID();
     const result = await this.request(record, "turn/start", {
       threadId: record.sessionId,
+      clientUserMessageId,
       input: CodexAppServerAdapter.inputItems(message, options?.attachments),
       ...(record.model ? { model: record.model } : {}),
       ...(record.thinkingLevel ? { effort: record.thinkingLevel } : {}),
     });
-    this.publish(record, { type: "transcript_message", generationId: result.turn?.id || null,
-      message: { id: crypto.randomUUID(), role: "user", content: parseAttachmentEnvelope(message).message } });
     return result.turn?.id || record.generation?.id || null;
   }
 
