@@ -1,8 +1,9 @@
 import crypto from "node:crypto";
 import { EventEmitter } from "node:events";
+import net from "node:net";
 import os from "node:os";
-import { spawn } from "node:child_process";
-import readline from "node:readline";
+import path from "node:path";
+import WebSocket from "ws";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { unsupported } from "./harnesses/unsupported.js";
@@ -59,11 +60,11 @@ const approvalChoice = (response) => {
 };
 
 const error = (message, code = "backend_unavailable", status = 409) => Object.assign(new Error(message), { code, status });
-const waitForExit = (child, timeoutMs = 2_000) => {
-  if (!child || child.exitCode != null || child.signalCode != null) return Promise.resolve();
+const waitForClose = (socket, timeoutMs = 2_000) => {
+  if (!socket || socket.readyState === WebSocket.CLOSED) return Promise.resolve();
   return new Promise((resolve) => {
     const timer = setTimeout(resolve, timeoutMs);
-    child.once("exit", () => { clearTimeout(timer); resolve(); });
+    socket.once("close", () => { clearTimeout(timer); resolve(); });
   });
 };
 
@@ -86,9 +87,10 @@ const truncate = (output) => {
 };
 
 export class CodexAppServerAdapter extends EventEmitter {
-  constructor({ command = "codex", requestTimeoutMs = 15_000, discoveryIdleMs = 60_000 } = {}) {
+  constructor({ socketPath = path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"),
+    "app-server-control", "app-server-control.sock"), requestTimeoutMs = 15_000, discoveryIdleMs = 60_000 } = {}) {
     super();
-    this.command = command;
+    this.socketPath = socketPath;
     this.requestTimeoutMs = requestTimeoutMs;
     this.discoveryIdleMs = discoveryIdleMs;
     this.discoveryId = null;
@@ -336,27 +338,38 @@ export class CodexAppServerAdapter extends EventEmitter {
       steering: [], followUp: [],
       sequence: 0, eventSequence: 0, messageIds: new Set(),
     };
-    // Keep JSONL on stdio at the Conduit boundary, but proxy it into Codex's
-    // machine-wide daemon. Codex CLI and Conduit can then subscribe to the same
-    // loaded thread instead of competing as independent rollout writers.
-    const child = spawn(this.command, ["app-server", "proxy"], { cwd, stdio: ["pipe", "pipe", "pipe"] });
-    record.child = child;
     this.records.set(record.id, record);
     this.byChatId.set(chatId, record.id);
-    readline.createInterface({ input: child.stdout }).on("line", (line) => this.receive(record, line));
-    child.stderr.on("data", (data) => this.emit("diagnostic", { chatId, message: String(data) }));
-    child.once("error", (cause) => this.fail(record, cause));
-    child.once("exit", (code) => this.exit(record, code));
-    await this.request(record, "initialize", { clientInfo: { name: "conduit", title: "Conduit", version: "0.2.0" } });
-    this.write(record, { method: "initialized" });
-    record.status = "running";
-    record.activity = "idle";
-    return record;
+    try {
+      // The daemon socket carries one JSON-RPC message per WebSocket text
+      // frame. Rust's websocket endpoint rejects extension negotiation, so do
+      // not offer per-message compression.
+      record.socket = new WebSocket("ws://localhost/rpc", {
+        perMessageDeflate: false,
+        createConnection: () => net.connect(this.socketPath),
+      });
+      await new Promise((resolve, reject) => {
+        record.socket.once("open", resolve);
+        record.socket.once("error", reject);
+      });
+      record.socket.on("message", (data) => this.receive(record, String(data)));
+      record.socket.on("error", (cause) => this.fail(record, cause));
+      record.socket.once("close", (code) => this.exit(record, code));
+      await this.request(record, "initialize", { clientInfo: { name: "conduit", title: "Conduit", version: "0.2.0" } });
+      this.write(record, { method: "initialized" });
+      record.status = "running";
+      record.activity = "idle";
+      return record;
+    } catch (cause) {
+      record.status = "stopped";
+      record.socket?.terminate();
+      this.sessions.remove(record.id);
+      throw cause;
+    }
   }
 
   request(record, method, params) {
     const id = ++record.sequence;
-    this.write(record, { id, method, params });
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         record.pending.delete(id);
@@ -364,12 +377,26 @@ export class CodexAppServerAdapter extends EventEmitter {
       }, this.requestTimeoutMs);
       timer.unref?.();
       record.pending.set(id, { resolve, reject, timer });
+      try { this.write(record, { id, method, params }); }
+      catch (cause) {
+        clearTimeout(timer);
+        record.pending.delete(id);
+        reject(cause);
+      }
     });
   }
 
   write(record, message) {
-    if (!record.child?.stdin?.writable) throw error("Codex app-server is unavailable");
-    record.child.stdin.write(`${JSON.stringify(message)}\n`);
+    if (record.socket?.readyState === WebSocket.OPEN) {
+      record.socket.send(JSON.stringify(message));
+      return;
+    }
+    // Kept for isolated protocol tests that provide a JSONL sink.
+    if (record.child?.stdin?.writable) {
+      record.child.stdin.write(`${JSON.stringify(message)}\n`);
+      return;
+    }
+    throw error("Codex app-server is unavailable");
   }
 
   receive(record, line) {
@@ -660,7 +687,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     const record = this.get(id);
     if (!record) return false;
     try {
-      if (record.sessionId && record.child?.stdin?.writable) {
+      if (record.sessionId && record.socket?.readyState === WebSocket.OPEN) {
         await this.request(record, "thread/unsubscribe", { threadId: record.sessionId });
       }
     } catch (cause) {
@@ -668,8 +695,8 @@ export class CodexAppServerAdapter extends EventEmitter {
     } finally {
       record.status = "stopped";
       record.active = false;
-      record.child.kill("SIGTERM");
-      await waitForExit(record.child);
+      if (record.socket && record.socket.readyState !== WebSocket.CLOSED) record.socket.close();
+      await waitForClose(record.socket);
       this.sessions.remove(id);
       this.emit("removed", { id, chatId: record.chatId });
     }
