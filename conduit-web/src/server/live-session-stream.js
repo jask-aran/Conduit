@@ -145,7 +145,7 @@ export function createLiveSessionStream({
     }
     if (command.type === "follow_up" || command.type === "steer") {
       const prepared = await promptForChat(record, command, String(command.message || ""));
-      await adapter.queue(record.id, command.type, prepared.prompt);
+      await adapter.queue(record.id, command.type, prepared.prompt, { attachments: prepared.attachments });
       return null;
     }
     if (command.type === "clear_queue") {

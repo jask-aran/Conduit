@@ -147,11 +147,13 @@ test("tool noise is trimmed to the recent end without dropping older messages", 
   assert.deepEqual(kept.map((row) => rows.indexOf(row)), [...kept.map((row) => rows.indexOf(row))].sort((a, b) => a - b), "and order is preserved");
 });
 
-test("reasoning items never spend the tool budget", () => {
+test("reasoning summaries stay in the message budget and never spend the tool budget", () => {
   const rows = [];
   for (let index = 0; index < 400; index += 1) rows.push({ turnId: "t1", item: { type: "reasoning", id: `r${index}`, summary: [], content: [] } });
   rows.push({ turnId: "t1", item: { type: "commandExecution", id: "e1", command: "ls", status: "completed" } });
-  assert.deepEqual(CodexAppServerAdapter.recent(rows).map((row) => row.item.id), ["e1"]);
+  assert.deepEqual(CodexAppServerAdapter.recent(rows).map((row) => row.item.id), [
+    ...Array.from({ length: 400 }, (_, index) => `r${index}`), "e1",
+  ]);
 });
 
 test("a Codex turn maps onto Conduit's rollup: commentary and commands, then the answer", () => {
