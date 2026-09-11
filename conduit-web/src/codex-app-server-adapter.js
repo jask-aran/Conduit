@@ -505,6 +505,9 @@ export class CodexAppServerAdapter extends EventEmitter {
       const messageId = params.item.clientId || params.item.id;
       if (!messageId || record.messageIds.has(messageId)) return;
       record.messageIds.add(messageId);
+      const steeringCount = record.steering.length;
+      record.steering = record.steering.filter((item) => item.id !== messageId);
+      if (record.steering.length !== steeringCount) this.publishQueue(record);
       this.publish(record, { type: "transcript_message", generationId: turnId,
         message: { id: messageId, role: "user", content: CodexAppServerAdapter.itemText(params.item) } });
     } else if (method === "item/agentMessage/delta") {
@@ -588,7 +591,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     const record = this.get(id);
     if (!record) throw error("Codex session is not running");
     if (!String(message || "").trim()) throw error("Queued message is empty", "invalid_request", 400);
-    const queued = { message, attachments };
+    const queued = { id: crypto.randomUUID(), message, attachments };
     if (type === "follow_up") {
       record.followUp.push(queued);
       this.publishQueue(record);
@@ -601,13 +604,13 @@ export class CodexAppServerAdapter extends EventEmitter {
     try {
       await this.request(record, "turn/steer", {
         threadId: record.sessionId, expectedTurnId: turnId,
+        clientUserMessageId: queued.id,
         input: CodexAppServerAdapter.inputItems(message, attachments),
       });
-    } finally {
-      // Steering is delivered rather than parked, so it leaves the queue as
-      // soon as Codex has it - successfully or not.
+    } catch (cause) {
       record.steering = record.steering.filter((item) => item !== queued);
       this.publishQueue(record);
+      throw cause;
     }
     return { queued: "steer" };
   }
