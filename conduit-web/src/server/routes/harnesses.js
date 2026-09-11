@@ -17,6 +17,7 @@ export function harnessCatalog(backends) {
   return HARNESS_MANIFESTS.map((manifest) => ({
     id: manifest.id,
     label: manifest.label,
+    profileLabel: manifest.profileLabel || manifest.label,
     available: backends.adapters.has(manifest.id),
     sessions: manifest.discovery !== "none",
     drive: manifest.drive,
