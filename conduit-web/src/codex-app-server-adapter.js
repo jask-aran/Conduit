@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 import os from "node:os";
 import { spawn } from "node:child_process";
 import readline from "node:readline";
+import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
@@ -603,7 +604,10 @@ export class CodexAppServerAdapter extends EventEmitter {
 
   static inputItems(message, attachments) {
     const images = (attachments || []).filter((item) => String(item?.type || "").startsWith("image/") && item.path);
-    return [...images.map((item) => ({ type: "localImage", path: item.path })), { type: "text", text: message }];
+    const files = (attachments || []).filter((item) => !String(item?.type || "").startsWith("image/") && item.path);
+    const text = [parseAttachmentEnvelope(message).message,
+      ...files.map((item) => `Attached file: ${item.path}`)].filter(Boolean).join("\n\n");
+    return [...images.map((item) => ({ type: "localImage", path: item.path })), { type: "text", text }];
   }
 
   async prompt(id, message, options) {
@@ -616,7 +620,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       ...(record.thinkingLevel ? { effort: record.thinkingLevel } : {}),
     });
     this.publish(record, { type: "transcript_message", generationId: result.turn?.id || null,
-      message: { id: crypto.randomUUID(), role: "user", content: message } });
+      message: { id: crypto.randomUUID(), role: "user", content: parseAttachmentEnvelope(message).message } });
     return result.turn?.id || record.generation?.id || null;
   }
 
