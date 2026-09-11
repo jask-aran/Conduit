@@ -51,6 +51,17 @@ export interface ChatBackendAdapter<LiveSession = unknown, ModelCatalog = unknow
   close(liveSessionId: string): Promise<unknown>;
   respondHostUi(liveSessionId: string, response: unknown): Promise<unknown> | unknown;
   replay(liveSessionId: string, since?: number): ChatBackendEvent | null;
+
+  /**
+   * Project the transcript the backend has actually recorded.
+   *
+   * The live event stream is a reconstruction; this is the record. Conduit
+   * reads it to heal drift rather than trusting its own accumulated state.
+   * `project` is passed for backends whose store is validated against it and
+   * ignored by backends that own their own.
+   */
+  readTranscript?(liveSessionId: string, options?: { project?: unknown; turns?: number }):
+    Promise<{ messages: unknown[] }>;
   getCapabilities(): ChatCapabilities;
   listModels(liveSessionId?: string): Promise<ModelCatalog> | ModelCatalog;
 }
@@ -178,6 +189,8 @@ export type OptionalCapabilityEvent = EventBase & (
   | { type: "compaction"; active: boolean }
   | { type: "retry"; active: boolean; retry?: unknown }
   | { type: "transcript_message"; message: unknown }
+  /** The backend's own record of recent turns, published to repair live drift. */
+  | { type: "transcript_sync"; messages: unknown[] }
   | { type: "generation_replay"; sequence: number; generation: unknown }
 );
 

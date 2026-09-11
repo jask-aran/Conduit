@@ -16,6 +16,7 @@ import {
   reduceActiveGeneration,
 } from "./active-generation.js";
 import { createPiEventNormalizer } from "./pi-event-normalizer.js";
+import { messagesFromEntries, readSessionPage } from "./session-store.js";
 
 export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = "", models, template }) {
   const args = [
@@ -839,6 +840,24 @@ export class PiManager extends EventEmitter {
       this.publishTransient(record, event);
     }
     return events;
+  }
+
+  /**
+   * Project the transcript Pi has actually written, newest turns first.
+   *
+   * Pi's session file is the transcript; Conduit's live model is a
+   * reconstruction of it from deltas, and the two drift. Reading gives the
+   * caller the version that is true by construction, through the same
+   * projection the initial load uses, so there is one reader rather than two.
+   *
+   * The project comes from the caller because the session file is validated
+   * against it. Backends that own their own store ignore it.
+   */
+  async readTranscript(id, { project, turns = 1 } = {}) {
+    const record = this.processes.get(id);
+    if (!record?.sessionFile || !project) return { messages: [] };
+    const page = await readSessionPage(record.sessionFile, project, { turnLimit: turns });
+    return { messages: messagesFromEntries(page.entries) };
   }
 
   currentGenerationResume(record) {
