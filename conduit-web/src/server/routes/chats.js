@@ -37,6 +37,7 @@ export function registerChatRoutes(app, {
   lifecycle,
   manager,
   modelCatalog,
+  preferences,
   projects,
   registry,
   runtimeFor,
@@ -310,6 +311,12 @@ export function registerChatRoutes(app, {
           : context.chat.modelThinkingLevels || {};
         await registry.update(context.chat.id, {
           backend: { ...context.chat.backend, model }, modelThinkingLevels,
+        });
+        await preferences.save({
+          backendModelDefaults: {
+            ...preferences.get().backendModelDefaults,
+            codex: { model, ...(effort ? { thinkingLevel: effort } : {}) },
+          },
         });
         return response.json({ ...current, model, thinkingLevel: effort, modelThinkingLevels });
       }

@@ -30,11 +30,11 @@ const emptyUiPreferences = {
 test("normalizePreferences falls back when the default template is unknown", () => {
   assert.deepEqual(
     normalizePreferences({ defaultTemplateId: "missing" }, { defaultTemplateId: "chat" }, ["chat", "workspace"]),
-    { defaultTemplateId: "chat", sessionNameModel: "", sessionNameThinkingLevel: "off", terminalShortcuts: [], sidebarPins: [], ...emptyUiPreferences },
+    { defaultTemplateId: "chat", sessionNameModel: "", sessionNameThinkingLevel: "off", backendModelDefaults: {}, terminalShortcuts: [], sidebarPins: [], ...emptyUiPreferences },
   );
   assert.deepEqual(
     normalizePreferences({}, { defaultTemplateId: "gone" }, ["workspace"]),
-    { defaultTemplateId: "workspace", sessionNameModel: "", sessionNameThinkingLevel: "off", terminalShortcuts: [], sidebarPins: [], ...emptyUiPreferences },
+    { defaultTemplateId: "workspace", sessionNameModel: "", sessionNameThinkingLevel: "off", backendModelDefaults: {}, terminalShortcuts: [], sidebarPins: [], ...emptyUiPreferences },
   );
 });
 
