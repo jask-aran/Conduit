@@ -36,6 +36,7 @@ test("projects a live generation directly from ordered Pi blocks", () => {
   assert.equal(trace?.type, "trace");
   if (trace?.type !== "trace") return;
   assert.deepEqual(trace.value.segments.map((segment) => segment.kind), ["thinking", "narration", "tool"]);
+  assert.equal(trace.value.status, "thinking");
   assert.equal(trace.value.segments[1]?.kind === "narration" && trace.value.segments[1].text, "Inspecting files");
   assert.equal(trace.value.segments[2]?.kind === "tool" && trace.value.segments[2].tool.name, "read");
   const answer = rows[2];
@@ -69,6 +70,32 @@ test("does not project persisted partials beside their resumed active generation
   assert.deepEqual(rows.map((row) => row.key), ["message:u1", "trace:u1"]);
   const trace = rows[1];
   assert.equal(trace?.type === "trace" && trace.value.segments[0]?.kind === "thinking" && trace.value.segments[0].text, "Current plan");
+});
+
+test("reports an executing tool and a persisted interrupted trace", () => {
+  const live = buildTurnRows([{ id: "u1", role: "user", content: "Wait" }], [], {
+    activeGeneration: {
+      id: "g1", status: "running", lastSeq: 3,
+      toolExecutions: { call_1: { toolCallId: "call_1", name: "bash", status: "running" } },
+      assistantMessages: [{
+        id: "a1",
+        blocks: [{ type: "toolCall", identity: "g1:a1:0", contentIndex: 0, toolCallId: "call_1", name: "bash", status: "complete" }],
+      }],
+    },
+  });
+  const liveTrace = live.find((row) => row.type === "trace");
+  assert.equal(liveTrace?.type === "trace" && liveTrace.value.status, "executing_tool");
+
+  const persisted = buildTurnRows([
+    { id: "u1", role: "user", content: "Wait" },
+    {
+      id: "a1", role: "assistant", content: "", stopReason: "toolUse",
+      blocks: [{ type: "toolCall", id: "call_1", name: "bash", arguments: {} }],
+    },
+    { id: "a2", role: "assistant", content: "", stopReason: "aborted", stopped: true },
+  ], [{ id: "call_1", name: "bash", done: true, result: "Command aborted" }]);
+  const persistedTrace = persisted.find((row) => row.type === "trace");
+  assert.equal(persistedTrace?.type === "trace" && persistedTrace.value.status, "interrupted");
 });
 
 test("projects partial continuation through Active Generation without a flattened stream", () => {

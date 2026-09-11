@@ -58,6 +58,7 @@ export type TraceSegment =
 
 export interface TurnTraceData {
   active: boolean;
+  status: "thinking" | "executing_tool" | "interrupted" | "complete" | "failed";
   segments: TraceSegment[];
 }
 
@@ -312,7 +313,16 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, index
     }
   }
   const rows: TurnRow[] = [];
-  if (segments.length) rows.push({ key: `trace:${owner ? messageKey(owner) : `live:${generation.id}`}`, type: "trace", value: { active: active(generation), segments } });
+  if (segments.length) {
+    const running = active(generation);
+    const latestTool = [...segments].reverse().find((segment) => segment.kind === "tool");
+    const executingTool = running && latestTool?.kind === "tool" && latestTool.tool.done === false;
+    const status = generation.status === "stopped" ? "interrupted"
+      : generation.status === "failed" ? "failed"
+      : generation.status === "complete" ? "complete"
+      : executingTool ? "executing_tool" : "thinking";
+    rows.push({ key: `trace:${owner ? messageKey(owner) : `live:${generation.id}`}`, type: "trace", value: { active: running, status, segments } });
+  }
   rows.push(...answers);
   return rows;
 }
@@ -392,7 +402,15 @@ export function buildTurnRows(
       for (const tool of turn.leftoverTools) {
         if (!claimed.has(tool.id)) { claimed.add(tool.id); segments.push({ kind: "tool", id: `tool:${tool.id}`, tool }); }
       }
-      if (segments.length > 0) rows.push({ key: `trace:${turn.userMessage ? messageKey(turn.userMessage) : messageKey(turn.assistants[0]!)}`, type: "trace", value: { active: false, segments } });
+      if (segments.length > 0) {
+        const interrupted = turn.assistants.some((assistant) => assistant.stopped || assistant.stopReason === "aborted");
+        const failed = finalAssistant?.stopReason === "error" && !interrupted;
+        rows.push({
+          key: `trace:${turn.userMessage ? messageKey(turn.userMessage) : messageKey(turn.assistants[0]!)}`,
+          type: "trace",
+          value: { active: false, status: interrupted ? "interrupted" : failed ? "failed" : "complete", segments },
+        });
+      }
       const answer = answerAssistants.at(-1) || null;
       const answerText = answerAssistants.map((assistant) => String(assistant.content || "").trim()).filter(Boolean).join("\n\n");
       if (answer && (answerText || (answer === finalAssistant && answer.stopReason === "error"))) {

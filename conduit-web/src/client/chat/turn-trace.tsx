@@ -102,6 +102,14 @@ function previewOf(trace: TurnTraceData): { text: string; counters: string } {
   return { text: clipped, counters };
 }
 
+const statusLabel = (status: TurnTraceData["status"]) => ({
+  thinking: "Thinking",
+  executing_tool: "Executing tool",
+  interrupted: "Interrupted",
+  complete: "Complete",
+  failed: "Failed",
+})[status];
+
 export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | null; renderer?: MarkdownRendererId; pacing?: IncremarkPacingMode; profileLabel?: string; onRendered?: () => void }) {
   const [open, setOpen] = createSignal(false);
   return <div class="turn-trace" data-active={props.trace.active ? "true" : "false"}>
@@ -110,6 +118,7 @@ export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | nul
       <div class="turn-trace-preview">
         <Suspense fallback={<span>{previewOf(props.trace).text}</span>}><ChatMarkdown inline renderer={props.renderer} pacing={props.pacing}>{previewOf(props.trace).text}</ChatMarkdown></Suspense>
         <Show when={previewOf(props.trace).counters}><span class="turn-trace-counter"> · {previewOf(props.trace).counters}</span></Show>
+        <span class="turn-trace-status"> · {statusLabel(props.trace.status)}</span>
       </div>
       <ChevronDownIcon class="turn-trace-chevron" data-open={open() ? "true" : "false"} />
     </button>

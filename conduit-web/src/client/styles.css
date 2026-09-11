@@ -298,7 +298,7 @@ svg { stroke-width: 1.5; }
 .turn-trace-preview .chat-markdown { display: contents; font-size: inherit; line-height: inherit; }
 .turn-trace-preview .chat-markdown > * { display: inline; margin: 0; }
 .turn-trace-preview .chat-markdown > *:not(:last-child)::after { content: " "; }
-.turn-trace-counter { flex: none; }
+.turn-trace-counter, .turn-trace-status { flex: none; }
 .turn-trace[data-active="true"] .turn-trace-preview { animation: trace-shimmer 1.6s ease-in-out infinite; }
 @keyframes trace-shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
 .turn-trace-chevron { transition: transform 0.15s ease; }
@@ -1091,7 +1091,7 @@ svg { stroke-width: 1.5; }
 .turn-trace-preview .chat-markdown { display: contents; font-size: inherit; line-height: inherit; }
 .turn-trace-preview .chat-markdown > * { display: inline; margin: 0; }
 .turn-trace-preview .chat-markdown > *:not(:last-child)::after { content: " "; }
-.turn-trace-counter { flex: none; }
+.turn-trace-counter, .turn-trace-status { flex: none; }
 .turn-trace[data-active="true"] .turn-trace-preview { animation: trace-shimmer 1.6s ease-in-out infinite; }
 @keyframes trace-shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
 .turn-trace-chevron { transition: transform 0.15s ease; }
