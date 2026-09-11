@@ -59,11 +59,13 @@ export function createLiveSessionStream({
    */
   async function syncTranscript(record, turns = 1) {
     const adapter = adapterFor(record);
-    if (!adapter.readTranscript || record.ephemeral) return;
+    if (record.ephemeral) return;
     try {
       const context = await findChatContext(record.chatId);
       if (!context) return;
-      const projection = await adapter.readTranscript(record.id, { project: context.project, turns });
+      const projection = await adapter.readTranscript({
+        liveSessionId: record.id, chatId: record.chatId, project: context.project, turns,
+      });
       if (projection.messages?.length) adapter.publish(record, { type: "transcript_sync", ...projection });
     } catch (error) {
       // A sync is a repair, never the only path to correctness.
@@ -208,8 +210,9 @@ export function createLiveSessionStream({
       return null;
     }
     if (command.type === "refresh_context") return adapter.refreshContext(record.id);
-    adapter.sendNative(record.id, command);
-    return null;
+    throw Object.assign(new Error(`Unknown live-session command: ${String(command.type || "")}`), {
+      code: "invalid_request", status: 400,
+    });
   }
 
   const handleUpgrade = (id, request, socket, head) => wss.handleUpgrade(request, socket, head, (ws) => {

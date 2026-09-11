@@ -12,10 +12,9 @@ const refuse = (message) => () => {
  *
  * @param capabilities the adapter's ChatCapabilities
  * @param label human name used in the refusal message
- * @param protocol AgentProtocol; only `pi_rpc` backends accept raw Pi commands
  * @param overrides methods the adapter implements after all, or extra refusals
  */
-export function unsupported(capabilities, { label, protocol = "native_api", overrides = {} } = {}) {
+export function unsupported(capabilities, { label, overrides = {} } = {}) {
   const stubs = {};
   if (!capabilities.permissions) {
     stubs.respondHostUi = refuse(`${label} does not expose host UI requests`);
@@ -31,6 +30,5 @@ export function unsupported(capabilities, { label, protocol = "native_api", over
   if (!capabilities.usage) stubs.refreshContext = () => Promise.resolve(null);
   // History forks have no capability flag; no backend but Pi implements one.
   stubs.fork = refuse(`${label} history forks are unavailable`);
-  if (protocol !== "pi_rpc") stubs.sendNative = refuse(`Unsupported ${label} command`);
   return { ...stubs, ...overrides };
 }

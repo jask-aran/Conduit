@@ -90,3 +90,36 @@ test("one socket delivers backend commands in browser order", async () => {
   assert.match(delivered[0], /<user_message>\nfirst\n<\/user_message>/);
   assert.match(delivered[1], /<user_message>\nsecond\n<\/user_message>/);
 });
+
+test("an unknown browser command cannot reach a backend escape hatch", async () => {
+  const sent = [];
+  const record = { id: "live-1", chatId: "chat-1", status: "running", hostUiRequests: [] };
+  const adapter = {
+    attach: () => null,
+    view: () => record,
+    toClientEvent: (event) => event,
+    refreshContext: async () => {},
+  };
+  const ws = new EventEmitter();
+  ws.readyState = 1;
+  ws.send = (message) => sent.push(JSON.parse(message));
+  const stream = createLiveSessionStream({
+    manager: {},
+    wss: { handleUpgrade: (_request, _socket, _head, accept) => accept(ws) },
+    attachments: {},
+    registry: { metadata: () => ({ backend: { implementation: "conduit_pi" } }) },
+    config: {},
+    findChatContext: async () => null,
+    backends: { get: () => record, forChat: () => adapter },
+  });
+
+  stream.handleUpgrade(record.id, {}, {}, null);
+  ws.emit("message", JSON.stringify({ type: "backend_native_command", payload: { destructive: true } }));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(sent.at(-1), {
+    type: "client_error",
+    code: "invalid_request",
+    message: "Unknown live-session command: backend_native_command",
+  });
+});

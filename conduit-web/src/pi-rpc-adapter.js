@@ -1,6 +1,7 @@
 import { wasAborted } from "./abort-signature.js";
 import { normalizeHostUiRequest } from "./activity.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
+import { assertChatBackendAdapter } from "./chat-backend-contract.js";
 import { detect } from "./harnesses/probe.js";
 
 export const PI_CAPABILITIES = Object.freeze({
@@ -139,6 +140,9 @@ export class PiRpcAdapter {
   toClientEvent(event) { const { pi: _pi, ...neutral } = normalizePiBackendEvent(event); return neutral; }
   listModels(id) { return this.manager.getAvailableModels(id); }
   getModelState(id) { return this.manager.getModelState(id); }
+  get(id) { return this.manager.get(id); }
+  getByChatId(chatId) { return this.manager.getByChatId(chatId); }
+  list() { return this.manager.list(); }
   waitForSession(id) { return this.manager.waitForSession(id); }
   attach(id, socket) {
     const replay = this.manager.attach(id, socket);
@@ -146,12 +150,11 @@ export class PiRpcAdapter {
   }
   queue(id, type, message) { return this.manager.queueAccepted(id, type, message); }
   clearQueue(id) { return this.manager.clearQueue(id); }
-  readTranscript(id, options) { return this.manager.readTranscript(id, options); }
+  readTranscript({ liveSessionId, ...options }) { return this.manager.readTranscript(liveSessionId, options); }
   fork(id, entryId) { return this.manager.fork(id, entryId); }
   setModel(id, model) { return this.manager.setModel(id, model); }
   setThinkingLevel(id, level) { return this.manager.setThinkingLevel(id, level); }
   refreshContext(id) { return this.manager.refreshContextUsage(id); }
-  sendNative(id, command) { return this.manager.send(id, command); }
   publish(record, event) { return this.manager.publish(record, event); }
   view(record) {
     return { ...this.manager.view(record), capabilities: PI_CAPABILITIES };
@@ -167,11 +170,11 @@ export class ChatBackendRegistry {
     this.manifests = new Map();
     this.detection = new Map();
     if (adapters) {
-      for (const [implementation, adapter] of adapters) this.adapters.set(implementation, adapter);
+      for (const [implementation, adapter] of adapters) this.adapters.set(implementation, assertChatBackendAdapter(adapter, implementation));
       return;
     }
     if (manager) {
-      const pi = new PiRpcAdapter(manager);
+      const pi = assertChatBackendAdapter(new PiRpcAdapter(manager), "conduit-pi");
       this.adapters.set("conduit_pi", pi);
       this.adapters.set("native_pi", pi);
     }
@@ -195,7 +198,7 @@ export class ChatBackendRegistry {
       const implementations = manifest.implementations || [manifest.id];
       if (implementations.some((implementation) => this.adapters.has(implementation))) continue;
       if (!manifest.builtIn && !detection.get(manifest.id)?.available) continue;
-      const adapter = manifest.build(config);
+      const adapter = assertChatBackendAdapter(manifest.build(config), manifest.id, manifest.capabilities);
       for (const implementation of implementations) {
         this.adapters.set(implementation, adapter);
         this.manifests.set(implementation, manifest);
@@ -239,20 +242,20 @@ export class ChatBackendRegistry {
   adapterForRecord(record) { return this.adapters.get(record?.adapterImplementation || "conduit_pi"); }
   get(id) {
     for (const adapter of new Set(this.adapters.values())) {
-      const record = adapter.get ? adapter.get(id) : adapter.manager.get(id);
+      const record = adapter.get(id);
       if (record) return record;
     }
     return null;
   }
   getByChatId(chatId) {
     for (const adapter of new Set(this.adapters.values())) {
-      const record = adapter.getByChatId ? adapter.getByChatId(chatId) : adapter.manager.getByChatId(chatId);
+      const record = adapter.getByChatId(chatId);
       if (record) return record;
     }
     return null;
   }
   list() {
-    return [...new Set(this.adapters.values())].flatMap((adapter) => adapter.list ? adapter.list() : adapter.manager.list());
+    return [...new Set(this.adapters.values())].flatMap((adapter) => adapter.list());
   }
   view(record) { return this.adapterForRecord(record).view(record); }
   stop(id) {

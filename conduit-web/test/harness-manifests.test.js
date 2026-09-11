@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { MANIFESTS, manifestForImplementation, implementationsOf } from "../src/harnesses/index.js";
 import { ChatBackendRegistry } from "../src/pi-rpc-adapter.js";
+import { assertChatBackendAdapter } from "../src/chat-backend-contract.js";
 import { harnessCatalog } from "../src/server/routes/harnesses.js";
 import { agentProfiles, profileSelection } from "../src/chat-backend.js";
 import { SessionRecords } from "../src/harnesses/session-records.js";
@@ -52,6 +53,21 @@ test("registration, catalog and profile selection all agree with the manifests",
     assert.ok(profiles.some((profile) => profile.id === manifest.id), `${manifest.id} is not offered as a profile`);
     assert.deepEqual(profileSelection({ profileId: manifest.id }), { profileId: manifest.id });
   }
+});
+
+test("registration rejects incomplete adapters and dishonest capabilities", () => {
+  const valid = ChatBackendRegistry.fromManifests(MANIFESTS, allAvailable(), config).forImplementation("conduit_pi");
+  const incomplete = Object.create(valid);
+  incomplete.readTranscript = null;
+  assert.throws(() => assertChatBackendAdapter(incomplete, "broken"),
+    /Chat backend broken is missing adapter methods: readTranscript/);
+
+  const dishonest = Object.create(valid);
+  dishonest.getCapabilities = () => ({ ...valid.getCapabilities(), steer: "yes" });
+  assert.throws(() => assertChatBackendAdapter(dishonest, "broken"),
+    /Chat backend broken has invalid capabilities: steer/);
+  assert.throws(() => assertChatBackendAdapter(valid, "broken", { ...valid.getCapabilities(), steer: false }),
+    /Chat backend broken capabilities disagree with its manifest: steer/);
 });
 
 test("an unavailable harness registers nothing but a built-in one always does", () => {
@@ -138,7 +154,7 @@ test("refusals are derived from the capability flags, not hand-written", () => {
     { permissions: false, steer: false, followUpQueue: false, modelSwitch: false, thinkingLevels: false, usage: false },
     { label: "Thin" },
   );
-  for (const method of ["respondHostUi", "queue", "clearQueue", "setModel", "setThinkingLevel", "fork", "sendNative"]) {
+  for (const method of ["respondHostUi", "queue", "clearQueue", "setModel", "setThinkingLevel", "fork"]) {
     assert.throws(() => limited[method](), { code: "unsupported_interaction", status: 400 }, method);
   }
   assert.throws(() => limited.queue(), /Thin does not support steering or follow-up queues/);

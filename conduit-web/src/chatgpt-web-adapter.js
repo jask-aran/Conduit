@@ -257,6 +257,10 @@ export class ChatGptWebAdapter extends EventEmitter {
     }
     return messages;
   }
+  async readTranscript({ liveSessionId, chatId }) {
+    const record = liveSessionId ? this.get(liveSessionId) : null;
+    return { messages: this.transcript(chatId || record?.chatId), tools: [] };
+  }
   get(id) { return this.sessions.get(id); }
   getByChatId(chatId) { return this.sessions.getByChatId(chatId); }
   list() { return this.sessions.list(); }
