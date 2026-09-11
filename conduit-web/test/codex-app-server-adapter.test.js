@@ -343,7 +343,11 @@ test("steering stays visible until Codex reports that it consumed the message", 
   const sent = [];
   adapter.request = (_record, method, params) => { sent.push({ method, params }); return Promise.resolve({}); };
 
-  const result = await adapter.queue(live.id, "steer", "use the other file");
+  const result = await adapter.queue(live.id, "steer", `<conduit_attachments version="2" chat_id="chat-1234">
+</conduit_attachments>
+<user_message>
+use the other file
+</user_message>`);
   assert.deepEqual(result, { queued: "steer" });
   assert.equal(sent[0].method, "turn/steer");
   assert.equal(sent[0].params.expectedTurnId, "turn-1");
