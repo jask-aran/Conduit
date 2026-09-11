@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { serializeAttachmentEnvelope } from "../src/attachment-envelope.js";
 import { CONTINUE_PROMPT } from "../src/continuation.js";
-import { discoverSessions, duplicateSession, findSession, messagesFromEntries, moveSession, moveSessions, pageSessionEntries, readSessionPage, removeSession, removeSessionFamily, renameSession, sessionDirectoryFor, sessionFamilyFiles, sessionIdFor, settingsFromEntries, toolsFromEntries, transcriptFromEntries, validateSessionHeader } from "../src/session-store.js";
+import { discoverSessions, duplicateSession, findSession, messagesFromEntries, moveSession, moveSessions, pageSessionEntries, projectSessionEntries, readSessionPage, removeSession, removeSessionFamily, renameSession, sessionDirectoryFor, sessionFamilyFiles, sessionIdFor, settingsFromEntries, toolsFromEntries, transcriptFromEntries, validateSessionHeader } from "../src/session-store.js";
 
 test("session IDs prefer Pi's native ID and otherwise remain stable", () => {
   assert.equal(sessionIdFor("/tmp/a.jsonl", "native-123"), "native-123");
@@ -38,6 +38,26 @@ test("restores completed tool calls from persisted messages", () => {
     result: "Successfully wrote note.md",
     timestamp: null,
   }]);
+});
+
+test("projects browser messages and tools from the same transcript entries", () => {
+  const entries = [{
+    type: "message", id: "user-1", message: { role: "user", content: "inspect" },
+  }, {
+    type: "message", id: "assistant-1", message: {
+      role: "assistant",
+      content: [{ type: "toolCall", id: "call-1", name: "read", arguments: {} }],
+    },
+  }, {
+    type: "message", id: "result-1", message: {
+      role: "toolResult", toolCallId: "call-1", toolName: "read", content: "done",
+    },
+  }];
+
+  const projection = projectSessionEntries(entries);
+  assert.deepEqual(projection.messages.map((message) => message.role), ["user", "assistant"]);
+  assert.deepEqual(projection.tools.map((tool) => tool.id), ["call-1"]);
+  assert.equal(projection.tools[0].result, "done");
 });
 
 test("restores the latest model and thinking level from a session", () => {

@@ -16,7 +16,7 @@ import {
   reduceActiveGeneration,
 } from "./active-generation.js";
 import { createPiEventNormalizer } from "./pi-event-normalizer.js";
-import { messagesFromEntries, readSessionPage } from "./session-store.js";
+import { projectSessionEntries, readSessionPage } from "./session-store.js";
 
 export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = "", models, template }) {
   const args = [
@@ -857,7 +857,7 @@ export class PiManager extends EventEmitter {
     const record = this.processes.get(id);
     if (!record?.sessionFile || !project) return { messages: [] };
     const page = await readSessionPage(record.sessionFile, project, { turnLimit: turns });
-    return { messages: messagesFromEntries(page.entries) };
+    return projectSessionEntries(page.entries);
   }
 
   currentGenerationResume(record) {

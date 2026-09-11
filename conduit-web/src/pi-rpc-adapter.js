@@ -151,7 +151,7 @@ export class PiRpcAdapter {
   setModel(id, model) { return this.manager.setModel(id, model); }
   setThinkingLevel(id, level) { return this.manager.setThinkingLevel(id, level); }
   refreshContext(id) { return this.manager.refreshContextUsage(id); }
-  sendPi(id, command) { return this.manager.send(id, command); }
+  sendNative(id, command) { return this.manager.send(id, command); }
   publish(record, event) { return this.manager.publish(record, event); }
   view(record) {
     return { ...this.manager.view(record), capabilities: PI_CAPABILITIES };

@@ -22,7 +22,7 @@ import type {
   ToolItem,
   TranscriptDetail,
 } from "../api/contracts";
-import { assignToolSeq, commitAssistantMessage, mergeTranscript, promotePendingUser } from "../timeline-order";
+import { assignToolSeq, commitAssistantMessage, mergeTranscriptProjection, promotePendingUser } from "../timeline-order";
 import { reconcileMessages } from "../reconcile-messages";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { canCoalesceTextDelta, enqueueOverflowLiveEvent, mergeTextDeltaEvents } from "./text-delta-batcher";
@@ -658,7 +658,14 @@ export function createActiveChat(options: ActiveChatOptions) {
         }
         break;
       case "transcript_sync":
-        setMessages((current) => mergeTranscript(current, event.messages as Message[]));
+        batch(() => {
+          const projection = mergeTranscriptProjection(
+            messages(), tools(), event.messages as Message[],
+            assignToolSeq(event.tools as ToolItem[]),
+          );
+          setMessages(projection.messages);
+          setTools(projection.tools);
+        });
         break;
       case "message_end":
         if (event.message.role === "user") {

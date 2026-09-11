@@ -138,7 +138,7 @@ test("refusals are derived from the capability flags, not hand-written", () => {
     { permissions: false, steer: false, followUpQueue: false, modelSwitch: false, thinkingLevels: false, usage: false },
     { label: "Thin" },
   );
-  for (const method of ["respondHostUi", "queue", "setModel", "setThinkingLevel", "fork", "sendPi"]) {
+  for (const method of ["respondHostUi", "queue", "clearQueue", "setModel", "setThinkingLevel", "fork", "sendNative"]) {
     assert.throws(() => limited[method](), { code: "unsupported_interaction", status: 400 }, method);
   }
   assert.throws(() => limited.queue(), /Thin does not support steering or follow-up queues/);

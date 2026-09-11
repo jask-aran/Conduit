@@ -653,6 +653,18 @@ export function toolsFromEntries(entries) {
   return [...tools.values()];
 }
 
+/** One browser-facing projection of a backend-owned Pi transcript page. */
+export function projectSessionEntries(entries, { toolResultLimit = 4000 } = {}) {
+  return {
+    messages: messagesFromEntries(entries).filter((message) => ["user", "assistant"].includes(message.role)),
+    tools: toolsFromEntries(entries).map((tool) => ({
+      ...tool,
+      result: tool.result?.length > toolResultLimit ? null : tool.result,
+      resultDeferred: tool.result?.length > toolResultLimit,
+    })),
+  };
+}
+
 export function settingsFromEntries(entries) {
   let model = null;
   let thinkingLevel = "";
