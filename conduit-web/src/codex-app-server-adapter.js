@@ -336,7 +336,10 @@ export class CodexAppServerAdapter extends EventEmitter {
       steering: [], followUp: [],
       sequence: 0, eventSequence: 0, messageIds: new Set(),
     };
-    const child = spawn(this.command, ["app-server", "--stdio"], { cwd, stdio: ["pipe", "pipe", "pipe"] });
+    // Keep JSONL on stdio at the Conduit boundary, but proxy it into Codex's
+    // machine-wide daemon. Codex CLI and Conduit can then subscribe to the same
+    // loaded thread instead of competing as independent rollout writers.
+    const child = spawn(this.command, ["app-server", "proxy"], { cwd, stdio: ["pipe", "pipe", "pipe"] });
     record.child = child;
     this.records.set(record.id, record);
     this.byChatId.set(chatId, record.id);
