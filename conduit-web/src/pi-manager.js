@@ -965,6 +965,18 @@ export class PiManager extends EventEmitter {
     await this.request(id, { type, message });
   }
 
+  /**
+   * Take the queued messages back off Pi, returning their text.
+   *
+   * Pi continues queued messages through an abort by design, so a client that
+   * wants Esc behaviour - stop, and hand the text back to the composer - has to
+   * clear the queue first. Documented in Pi's rpc.md.
+   */
+  async clearQueue(id) {
+    const response = await this.request(id, { type: "clear_queue" });
+    return { steering: response?.steering || [], followUp: response?.followUp || [] };
+  }
+
   async abortGeneration(id, generationId = null) {
     const record = this.processes.get(id);
     const generation = record?.generation;
@@ -976,7 +988,11 @@ export class PiManager extends EventEmitter {
     this.publishState(record);
     let processTerminated = false;
     try {
-      await this.request(id, { type: "abort" }, { timeout: 250 });
+      // Pi resolves abort once the session is genuinely idle, which can trail
+      // a tool's teardown. Acks measure in single-digit milliseconds; the
+      // budget is generous so a slow teardown cannot cost the session, and
+      // SIGKILL stays the fallback for a process that has actually wedged.
+      await this.request(id, { type: "abort" }, { timeout: 2000 });
     } catch {
       processTerminated = true;
       record.status = "stopped";

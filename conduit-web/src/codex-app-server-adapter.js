@@ -528,6 +528,17 @@ export class CodexAppServerAdapter extends EventEmitter {
     }
   }
 
+  /** Take back whatever has not been handed to Codex yet. */
+  async clearQueue(id) {
+    const record = this.get(id);
+    if (!record) throw error("Codex session is not running");
+    const taken = { steering: [...record.steering], followUp: [...record.followUp] };
+    record.steering = [];
+    record.followUp = [];
+    this.publishQueue(record);
+    return taken;
+  }
+
   publishQueue(record) {
     this.publish(record, { type: "queue_state", generationId: record.generation?.id || null,
       queue: { steering: [...record.steering], followUp: [...record.followUp] } });

@@ -871,19 +871,49 @@ export function createActiveChat(options: ActiveChatOptions) {
     }));
   });
 
-  /** Take the queued messages out of the transcript, returning their text. */
+  /**
+   * Take the queued messages back off the backend, returning their text.
+   *
+   * Pi carries queued messages through an abort on purpose, so stopping without
+   * clearing first would still deliver them. Its own Esc does clear-then-abort,
+   * and so does this.
+   */
   const takeQueued = () => {
     const text = pendingMessages().map((message) => message.content).filter(Boolean).join("\n");
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "clear_queue" }));
     setQueue({ steering: [], followUp: [] });
     return text;
   };
 
   /**
-   * Stop the turn. Nothing else: Pi takes the next message off its own queue
-   * as soon as the turn ends, inserts it as a user message and answers it, so
-   * sending it again here would deliver it twice.
+   * Interrupt the turn and send what is queued, as one server-side command.
+   *
+   * The sequence is clear_queue, abort, prompt, and it has to run in that
+   * order: leaving the queue in place means the abort delivers it anyway, and
+   * aborting during a tool call makes Pi fail that queued turn instantly and
+   * empty. Sequencing it here - by waiting for the stop to land before
+   * prompting - raced against the backend's terminal event, so the server owns
+   * the whole sequence now and the client sends one message.
    */
-  const interruptAndSend = () => stop();
+  const interruptAndSend = () => {
+    const text = draft().trim();
+    if (!pendingMessages().length && !text) return void stop();
+    const attachmentIds = attachments.pendingIds();
+    setQueue({ steering: [], followUp: [] });
+    setDraft("");
+    setGeneration("submitting");
+    try {
+      socket!.send(JSON.stringify({ type: "interrupt_and_send", message: text, attachmentIds,
+        model: models.model(), thinkingLevel: models.effort() }));
+      attachments.markAnnounced(attachmentIds);
+      setStatus("active");
+      setGeneration("active");
+    } catch (error) {
+      setDraft(text);
+      setGeneration("idle");
+      onError(error);
+    }
+  };
 
   /** Put the queued text back in the composer so it can be reworded. */
   const editQueued = () => {
