@@ -258,10 +258,10 @@ export class ChatBackendRegistry {
     return [...new Set(this.adapters.values())].flatMap((adapter) => adapter.list());
   }
   view(record) { return this.adapterForRecord(record).view(record); }
-  stop(id) {
+  async stop(id) {
     const record = this.get(id);
     if (!record) return false;
-    void this.adapterForRecord(record).close(id);
+    await this.adapterForRecord(record).close(id);
     return true;
   }
 }

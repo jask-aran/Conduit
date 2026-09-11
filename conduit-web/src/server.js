@@ -534,6 +534,7 @@ function checkpointNativeAdapter(adapter, record) {
 // emitter and simply has no `on`, so this covers the backends that need it.
 for (const adapter of adapterInstances()) {
   adapter.on?.("settled", ({ record }) => checkpointNativeAdapter(adapter, record));
+  adapter.on?.("removed", ({ id, chatId }) => runtimeHub.publishProcessRemoved(id, chatId));
 }
 registerRuntimeRoutes(app, {
   attachments,

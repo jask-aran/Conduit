@@ -27,6 +27,7 @@ export interface PaletteContext {
   templateId: string | null;
   chatStatus: string;
   streaming: boolean;
+  liveProcess: boolean;
   connectivity: string;
   effort: string;
   thinkingLevels: string[];
@@ -57,6 +58,7 @@ export interface PaletteActions {
   move: () => void;
   renameFolder: () => void;
   stop: () => void;
+  stopProcess: () => void;
   regenerate: () => void;
   continue: () => void;
   copy: () => void;
@@ -202,6 +204,7 @@ const paletteCommandRuntime: Record<string, PaletteCommandRuntime> = {
   [COMMAND_IDS.moveChat]: { isAvailable: hasChat, run: (actions) => actions.move() },
   [COMMAND_IDS.renameFolder]: { isAvailable: isNamedFolder, run: (actions) => actions.renameFolder() },
   [COMMAND_IDS.stopResponse]: { isAvailable: (context) => context.streaming, run: (actions) => actions.stop() },
+  [COMMAND_IDS.stopProcess]: { isAvailable: (context) => context.liveProcess, run: (actions) => actions.stopProcess() },
   [COMMAND_IDS.regenerateResponse]: { isAvailable: (context) => Boolean(context.canRegenerate), run: (actions) => actions.regenerate() },
   [COMMAND_IDS.continueResponse]: { isAvailable: (context) => context.canContinue, run: (actions) => actions.continue() },
   [COMMAND_IDS.copyResponse]: { isAvailable: (context) => Boolean(context.canCopy), run: (actions) => actions.copy() },

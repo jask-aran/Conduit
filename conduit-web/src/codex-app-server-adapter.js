@@ -637,11 +637,18 @@ export class CodexAppServerAdapter extends EventEmitter {
   async close(id) {
     const record = this.get(id);
     if (!record) return false;
-    record.status = "stopped";
-    record.child.kill("SIGTERM");
-    if (record.ephemeral) {
-      this.records.delete(record.id);
-      this.byChatId.delete(record.chatId);
+    try {
+      if (record.sessionId && record.child?.stdin?.writable) {
+        await this.request(record, "thread/unsubscribe", { threadId: record.sessionId });
+      }
+    } catch (cause) {
+      this.emit("diagnostic", { chatId: record.chatId, message: `Codex thread unsubscribe failed: ${cause.message}` });
+    } finally {
+      record.status = "stopped";
+      record.active = false;
+      record.child.kill("SIGTERM");
+      this.sessions.remove(id);
+      this.emit("removed", { id, chatId: record.chatId });
     }
     return true;
   }
@@ -770,6 +777,13 @@ export class CodexAppServerAdapter extends EventEmitter {
   list() { return this.sessions.list(); }
   stop(id) { void this.close(id); return Boolean(this.get(id)); }
   fail(record, cause) { for (const pending of record.pending.values()) { clearTimeout(pending.timer); pending.reject(error(cause.message)); } record.pending.clear(); }
-  exit(record, code) { if (record.status !== "stopped" && code) this.publish(record, { type: "error", generationId: record.generation?.id || null,
-    error: { code: "backend_unavailable", message: `Codex app-server exited with ${code}` } }); record.status = "stopped"; record.active = false; }
+  exit(record, code) {
+    if (record.status === "stopped") return;
+    if (code) this.publish(record, { type: "error", generationId: record.generation?.id || null,
+      error: { code: "backend_unavailable", message: `Codex app-server exited with ${code}` } });
+    record.status = "stopped";
+    record.active = false;
+    this.sessions.remove(record.id);
+    this.emit("removed", { id: record.id, chatId: record.chatId });
+  }
 }

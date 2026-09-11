@@ -132,9 +132,11 @@ export function registerLiveSessionRoutes(app, {
     } catch (error) { next(error); }
   });
 
-  app.delete("/v0/live-sessions/:id/process", (request, response) => {
-    const stopped = backends.stop(request.params.id);
-    response.status(stopped ? 202 : 404).json({ stopped });
+  app.delete("/v0/live-sessions/:id/process", async (request, response, next) => {
+    try {
+      const stopped = await backends.stop(request.params.id);
+      response.status(stopped ? 202 : 404).json({ stopped });
+    } catch (error) { next(error); }
   });
 
   return launchLiveSession;
