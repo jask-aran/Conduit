@@ -56,7 +56,7 @@ export interface ChatBackendAdapter<LiveSession = unknown, ModelCatalog = unknow
   view(liveSession: unknown): unknown;
   toClientEvent(event: unknown): unknown;
   publish(liveSession: unknown, event: unknown): unknown;
-  queue(liveSessionId: string, mode: "steer" | "follow_up", message: string): Promise<unknown>;
+  queue(liveSessionId: string, mode: "steer" | "follow_up", message: string, options?: unknown): Promise<unknown>;
   clearQueue(liveSessionId: string): Promise<{ steering: unknown[]; followUp: unknown[] }>;
   fork(liveSessionId: string, entryId: string): Promise<unknown>;
   setModel(liveSessionId: string, model: string): Promise<unknown>;

@@ -68,8 +68,10 @@ const REPLAY_PAGE_LIMIT = 20;
 const REPLAY_MESSAGE_LIMIT = 500;
 const REPLAY_TOOL_LIMIT = 200;
 const REPLAY_OUTPUT_LIMIT = 1500;
-const isMessage = (item) => item?.type === "userMessage" || item?.type === "agentMessage";
+const isMessage = (item) => ["userMessage", "agentMessage", "reasoning"].includes(item?.type);
 const textResult = (output) => typeof output === "string" ? output : JSON.stringify(output ?? "");
+const itemPartsText = (parts) => (Array.isArray(parts) ? parts : [])
+  .map((part) => typeof part === "string" ? part : part?.text || "").join("");
 const truncate = (output) => {
   if (typeof output !== "string" || output.length <= REPLAY_OUTPUT_LIMIT) return output;
   return `${output.slice(0, REPLAY_OUTPUT_LIMIT)}\n… ${output.length - REPLAY_OUTPUT_LIMIT} more characters`;
@@ -161,6 +163,14 @@ export class CodexAppServerAdapter extends EventEmitter {
       return { name: `${item.server || "mcp"}/${item.tool || "tool"}`, input: item.arguments ?? null,
         output: item.result ?? item.error ?? "", isError: item.status === "failed" };
     }
+    if (item.type === "dynamicToolCall") {
+      return { name: item.tool || "tool", input: item.arguments ?? null,
+        output: item.contentItems ?? "", isError: item.success === false || item.status === "failed" };
+    }
+    if (item.type === "collabToolCall") {
+      return { name: `collaboration/${item.tool || "tool"}`, input: item.prompt || "",
+        output: item.agentStatus || "", isError: item.status === "failed" };
+    }
     if (item.type === "webSearch") {
       return { name: "web search", input: item.query || "", output: item.results ?? "", isError: false };
     }
@@ -205,13 +215,17 @@ export class CodexAppServerAdapter extends EventEmitter {
     const messages = [];
     const tools = [];
     let turnId;
+    let turnStatus;
     let turnStart = 0;
     let interim = null;
     const closeTurn = () => {
       // Older threads carry no `phase`, so nothing would read as the answer.
       // The turn's last message without commands is the closest thing to one.
       const turn = messages.slice(turnStart);
-      if (!turn.some((message) => message.role === "assistant" && message.stopReason === "stop")) {
+      if (turnStatus === "interrupted") {
+        const interrupted = turn.findLast((message) => message.role === "assistant");
+        if (interrupted) interrupted.stopReason = "aborted";
+      } else if (!turn.some((message) => message.role === "assistant" && message.stopReason === "stop")) {
         const answer = turn.findLast((message) => message.role === "assistant"
           && !message.blocks.some((block) => block.type === "toolCall"));
         if (answer) answer.stopReason = "stop";
@@ -221,7 +235,11 @@ export class CodexAppServerAdapter extends EventEmitter {
     };
     for (const row of rows || []) {
       const item = row.item || {};
-      if (row.turnId !== turnId) { closeTurn(); turnId = row.turnId; }
+      if (row.turnId !== turnId) {
+        closeTurn();
+        turnId = row.turnId;
+        turnStatus = row.turnStatus;
+      }
       if (item.type === "userMessage") {
         closeTurn();
         messages.push({ id: item.id, role: "user", content: CodexAppServerAdapter.itemText(item) });
@@ -234,6 +252,14 @@ export class CodexAppServerAdapter extends EventEmitter {
         messages.push({ id: item.id || `assistant-${turnId}`, role: "assistant", content: text,
           blocks: [{ type: "text", text }], stopReason: answer ? "stop" : "toolUse" });
         interim = answer ? null : messages.at(-1);
+        continue;
+      }
+      if (item.type === "reasoning") {
+        const text = itemPartsText(item.summary);
+        if (!text) continue;
+        messages.push({ id: item.id || `reasoning-${turnId}`, role: "assistant", content: text,
+          blocks: [{ type: "thinking", text }], stopReason: "toolUse" });
+        interim = messages.at(-1);
         continue;
       }
       const activity = CodexAppServerAdapter.toolActivity(item);
@@ -258,7 +284,8 @@ export class CodexAppServerAdapter extends EventEmitter {
     const transport = live || await this.discovery(project?.workingRoot);
     const result = await this.request(transport, "thread/read", { threadId, includeTurns: true });
     const turns = result?.thread?.turns || [];
-    const rows = turns.flatMap((turn) => (turn.items || []).map((item) => ({ turnId: turn.id, item })));
+    const rows = turns.flatMap((turn) => (turn.items || [])
+      .map((item) => ({ turnId: turn.id, turnStatus: turn.status, item })));
     if (rows.length || result?.thread?.historyMode !== "paginated") {
       return CodexAppServerAdapter.threadTranscript(CodexAppServerAdapter.recent(rows));
     }
@@ -433,6 +460,16 @@ export class CodexAppServerAdapter extends EventEmitter {
       }
       this.publish(record, { type: "assistant_content", generationId: turnId, phase: "delta", sequence: ++record.eventSequence,
         messageId, contentIndex: 0, blockKind: "text", delta: params.delta || "" });
+    } else if (method === "item/reasoning/summaryTextDelta") {
+      const messageId = params.itemId || `reasoning-${turnId}`;
+      if (!record.messageIds.has(messageId)) {
+        record.messageIds.add(messageId);
+        this.publish(record, { type: "assistant_content", generationId: turnId, phase: "start",
+          sequence: ++record.eventSequence, messageId });
+      }
+      this.publish(record, { type: "assistant_content", generationId: turnId, phase: "delta",
+        sequence: ++record.eventSequence, messageId, contentIndex: params.summaryIndex || 0,
+        blockKind: "thinking", delta: params.delta || "" });
     } else if (method === "item/completed" && params.item?.type === "agentMessage") {
       const messageId = params.item.id || `assistant-${turnId}`;
       if (!record.messageIds.has(params.item.id)) this.publish(record, { type: "assistant_content", generationId: turnId,
@@ -440,6 +477,16 @@ export class CodexAppServerAdapter extends EventEmitter {
       record.turn = { id: turnId, messageId, blocks: [{ kind: "text", contentIndex: 0, text: params.item.text || "" }] };
       this.publish(record, { type: "assistant_content", generationId: turnId, phase: "final", sequence: ++record.eventSequence,
         messageId, stopReason: "stop", errorMessage: null, blocks: record.turn.blocks });
+    } else if (method === "item/completed" && params.item?.type === "reasoning") {
+      const messageId = params.item.id || `reasoning-${turnId}`;
+      const text = itemPartsText(params.item.summary);
+      if (!record.messageIds.has(messageId)) this.publish(record, { type: "assistant_content", generationId: turnId,
+        phase: "start", sequence: ++record.eventSequence, messageId });
+      record.turn = { id: turnId, messageId, blocks: text
+        ? [{ kind: "thinking", contentIndex: 0, text, redacted: false }]
+        : [] };
+      this.publish(record, { type: "assistant_content", generationId: turnId, phase: "final",
+        sequence: ++record.eventSequence, messageId, stopReason: "toolUse", errorMessage: null, blocks: record.turn.blocks });
     } else if (method === "item/started" || method === "item/completed") {
       const activity = CodexAppServerAdapter.toolActivity(params.item || {});
       if (!activity) return;
@@ -474,11 +521,6 @@ export class CodexAppServerAdapter extends EventEmitter {
   }
 
   /**
-   * Codex takes images natively as `localImage` input items, so attached images
-   * are sent as files rather than only as paths inside the envelope text. It has
-   * no generic file variant, so anything else stays a path the model can read.
-   */
-  /**
    * Take a message sent while a turn is running.
    *
    * Steering hands it to Codex immediately - `turn/steer` delivers as soon as
@@ -486,28 +528,29 @@ export class CodexAppServerAdapter extends EventEmitter {
    * follow-up waits for the turn to finish, which Codex has no endpoint for, so
    * Conduit holds it and starts the next turn itself.
    */
-  async queue(id, type, message) {
+  async queue(id, type, message, { attachments = [] } = {}) {
     const record = this.get(id);
     if (!record) throw error("Codex session is not running");
     if (!String(message || "").trim()) throw error("Queued message is empty", "invalid_request", 400);
+    const queued = { message, attachments };
     if (type === "follow_up") {
-      record.followUp.push(message);
+      record.followUp.push(queued);
       this.publishQueue(record);
       return { queued: "follow_up" };
     }
     const turnId = record.generation?.id;
     if (!turnId) throw error("Codex is not running a turn to steer", "invalid_request", 409);
-    record.steering.push(message);
+    record.steering.push(queued);
     this.publishQueue(record);
     try {
       await this.request(record, "turn/steer", {
         threadId: record.sessionId, expectedTurnId: turnId,
-        input: CodexAppServerAdapter.inputItems(message, []),
+        input: CodexAppServerAdapter.inputItems(message, attachments),
       });
     } finally {
       // Steering is delivered rather than parked, so it leaves the queue as
       // soon as Codex has it - successfully or not.
-      record.steering = record.steering.filter((item) => item !== message);
+      record.steering = record.steering.filter((item) => item !== queued);
       this.publishQueue(record);
     }
     return { queued: "steer" };
@@ -515,10 +558,10 @@ export class CodexAppServerAdapter extends EventEmitter {
 
   /** Start the next turn from the messages that waited for this one to finish. */
   async flushFollowUp(record) {
-    const message = record.followUp.shift();
-    if (message === undefined) return;
+    const queued = record.followUp.shift();
+    if (queued === undefined) return;
     this.publishQueue(record);
-    try { await this.prompt(record.id, message, {}); }
+    try { await this.prompt(record.id, queued.message, { attachments: queued.attachments }); }
     catch (cause) {
       this.publish(record, { type: "error", generationId: record.generation?.id || null,
         error: { code: "backend_unavailable", message: cause?.message || "Queued message could not be sent" } });
@@ -537,8 +580,9 @@ export class CodexAppServerAdapter extends EventEmitter {
   }
 
   publishQueue(record) {
+    const text = (item) => typeof item === "string" ? item : item.message;
     this.publish(record, { type: "queue_state", generationId: record.generation?.id || null,
-      queue: { steering: [...record.steering], followUp: [...record.followUp] } });
+      queue: { steering: record.steering.map(text), followUp: record.followUp.map(text) } });
   }
 
   /**
@@ -576,12 +620,13 @@ export class CodexAppServerAdapter extends EventEmitter {
     return result.turn?.id || record.generation?.id || null;
   }
 
-  async cancel(id) {
+  async cancel(id, generationId = null) {
     const record = this.get(id);
-    if (!record?.generation?.id) return false;
+    const turnId = generationId || record?.generation?.id;
+    if (!record?.sessionId || !turnId) return false;
     record.stopping = true;
     record.activity = "stopping";
-    await this.request(record, "turn/interrupt", { threadId: record.sessionId, turnId: record.generation.id });
+    await this.request(record, "turn/interrupt", { threadId: record.sessionId, turnId });
     return true;
   }
 
