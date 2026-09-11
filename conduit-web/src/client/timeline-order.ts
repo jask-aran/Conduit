@@ -142,3 +142,32 @@ export function promotePendingUser(messages: Message[], eventMessage: ProtocolMe
     timestamp: eventMessage.timestamp || new Date().toISOString(),
   }];
 }
+
+/**
+ * Commit a completed assistant message into the transcript.
+ *
+ * The turn that owns the live generation renders that structure instead of its
+ * settled assistants, so committing here does not duplicate the streaming view
+ * - it gives the turn something to fall back to once it stops being live. A
+ * turn that ended early used to have nothing, and went blank until a reload.
+ */
+export function commitAssistantMessage(messages: Message[], eventMessage: ProtocolMessage): Message[] {
+  const id = eventMessage.id;
+  const blocks = Array.isArray(eventMessage.content) ? eventMessage.content as Message["blocks"] : undefined;
+  const next: Message = {
+    id: id || `assistant_${Date.now()}`,
+    role: "assistant",
+    content: messageText(eventMessage),
+    blocks,
+    stopReason: eventMessage.stopReason,
+    errorMessage: eventMessage.errorMessage ?? null,
+    timestamp: eventMessage.timestamp || new Date().toISOString(),
+  };
+  const index = id ? messages.findIndex((message) => message.id === id) : -1;
+  if (index >= 0) {
+    const copy = [...messages];
+    copy[index] = { ...messages[index]!, ...next };
+    return copy;
+  }
+  return [...messages, next];
+}

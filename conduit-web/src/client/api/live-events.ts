@@ -154,13 +154,22 @@ function sessionSnapshot(value: unknown): SessionSnapshot {
   };
 }
 
+// Pi timestamps messages with epoch milliseconds, while the session file
+// timestamps its entries with an ISO string. Stringifying the number gave the
+// transcript "Invalid Date" live and the right time after a reload.
+function messageTimestamp(value: unknown): string | undefined {
+  if (value == null || value === "") return undefined;
+  const parsed = typeof value === "number" ? new Date(value) : new Date(String(value));
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+}
+
 function protocolMessage(value: unknown): ProtocolMessage {
   const source = record(value);
   return {
     id: optionalText(source.id) || undefined,
     role: optionalText(source.role) || undefined,
     content: source.content,
-    timestamp: optionalText(source.timestamp) || undefined,
+    timestamp: messageTimestamp(source.timestamp),
     stopReason: optionalText(source.stopReason) || undefined,
     errorMessage: optionalText(source.errorMessage),
   };

@@ -58,6 +58,13 @@ test("an interrupted turn still reports its assistant message", async () => {
   assert.ok(final, "the interrupted assistant message must reach the transcript");
   assert.equal(final.stopReason, "aborted");
   assert.equal(final.blocks[0].text, "On the morning the bells rang backward");
+
+  // The same message is published as a transcript entry, which is what commits
+  // the turn's text. Without it the text lives only in the live structure and
+  // disappears when the next turn replaces it.
+  const entry = published.find((event) => event.type === "message_end" && event.message?.role === "assistant");
+  assert.ok(entry, "the interrupted assistant message must be published as a transcript entry");
+  assert.equal(entry.message.stopReason, "aborted");
 });
 
 test("a closed generation still ignores a later unrelated turn", async () => {
