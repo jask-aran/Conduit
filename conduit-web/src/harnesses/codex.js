@@ -10,6 +10,9 @@ export const manifest = {
   installationId: "host-codex",
   capabilities: CODEX_CAPABILITIES,
   discovery: "machine",
+  // The daemon owns turns. Conduit can disconnect during restart and resume
+  // its subscription without interrupting the work.
+  restartDrain: false,
   drive: true,
   profile: true,
   probe: (config) => commandProbe(config.codexCommand)(),

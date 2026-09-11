@@ -1,4 +1,7 @@
 import { validSidebarPins, validTerminalShortcuts, validUiPreferencePatch } from "../../preferences-store.js";
+import { manifestForImplementation } from "../../harnesses/index.js";
+
+const drainsOnRestart = (process) => manifestForImplementation(process.backend?.implementation)?.restartDrain !== false;
 
 export function registerRuntimeRoutes(app, {
   attachments,
@@ -17,9 +20,9 @@ export function registerRuntimeRoutes(app, {
   promptStore,
 }) {
   app.get("/healthz", (request, response) => {
-    const activeGenerations = runtimeHub.snapshot().processes.filter((process) => process.active
-      || process.stopping || process.compacting || process.retrying
-      || process.generation && !process.generation.settled).length;
+    const activeGenerations = runtimeHub.snapshot().processes.filter((process) => drainsOnRestart(process)
+      && (process.active || process.stopping || process.compacting || process.retrying
+        || process.generation && !process.generation.settled)).length;
     response.status(isShuttingDown() ? 503 : 200).json({
       ok: !isShuttingDown(),
       status: isShuttingDown() ? "stopping" : "ready",
