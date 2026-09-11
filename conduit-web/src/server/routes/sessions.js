@@ -36,7 +36,11 @@ export function registerSessionRoutes(app, {
         // Backends without a Pi session file keep their own history; any adapter
         // that can hand one over serves the transcript here.
         const adapter = backends.forChat(context.chat);
-        const projection = await adapter.readTranscript({ chatId: context.chat.id, project: context.project });
+        const projection = await adapter.readTranscript({
+          chatId: context.chat.id,
+          opaqueSession: context.chat.backend?.opaqueSession,
+          project: context.project,
+        });
         return response.json({ ...chatView(context.chat), ...projection, attachments: [], page: { before: null } });
       }
       let session;

@@ -74,6 +74,7 @@ export function registerLiveSessionRoutes(app, {
       const projection = await adapter.readTranscript({
         liveSessionId: live.id,
         chatId: live.chatId,
+        opaqueSession: context?.chat?.backend?.opaqueSession,
         project: context?.project,
       });
       response.json({ live: backends.view(live), events: live.events, ...projection });
