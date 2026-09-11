@@ -590,8 +590,9 @@ export class CodexAppServerAdapter extends EventEmitter {
   async queue(id, type, message, { attachments = [] } = {}) {
     const record = this.get(id);
     if (!record) throw error("Codex session is not running");
-    if (!String(message || "").trim()) throw error("Queued message is empty", "invalid_request", 400);
-    const queued = { id: crypto.randomUUID(), message, attachments };
+    const userMessage = parseAttachmentEnvelope(message).message;
+    if (!userMessage.trim()) throw error("Queued message is empty", "invalid_request", 400);
+    const queued = { id: crypto.randomUUID(), message: userMessage, attachments };
     if (type === "follow_up") {
       record.followUp.push(queued);
       this.publishQueue(record);
@@ -605,7 +606,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       await this.request(record, "turn/steer", {
         threadId: record.sessionId, expectedTurnId: turnId,
         clientUserMessageId: queued.id,
-        input: CodexAppServerAdapter.inputItems(message, attachments),
+        input: CodexAppServerAdapter.inputItems(userMessage, attachments),
       });
     } catch (cause) {
       record.steering = record.steering.filter((item) => item !== queued);
