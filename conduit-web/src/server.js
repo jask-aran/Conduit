@@ -242,10 +242,12 @@ async function chatModelView(context) {
     const resident = backends.getByChatId(context.chat.id);
     if (!resident) {
       const models = await adapter.listAvailableModels(context.project.workingRoot);
-      const model = context.chat.backend.model || models[0]?.spec || "";
+      const remembered = preferences.get().backendModelDefaults.codex;
+      const rememberedModel = models.some((item) => item.spec === remembered?.model) ? remembered.model : "";
+      const model = context.chat.backend.model || rememberedModel || models[0]?.spec || "";
       const selected = models.find((item) => item.spec === model);
       const defaultThinkingLevel = selected?.defaultThinkingLevel || selected?.thinkingLevels[0] || "";
-      const savedThinkingLevel = context.chat.modelThinkingLevels?.[model] || "";
+      const savedThinkingLevel = context.chat.modelThinkingLevels?.[model] || remembered?.thinkingLevel || "";
       const thinkingLevel = selected?.thinkingLevels.includes(savedThinkingLevel) ? savedThinkingLevel : defaultThinkingLevel;
       return {
         installationId: "host-codex", runtimeKind: "codex", models, model,
@@ -614,6 +616,7 @@ registerChatRoutes(app, {
   lifecycle,
   manager,
   modelCatalog,
+  preferences,
   projects,
   registry,
   runtimeFor,

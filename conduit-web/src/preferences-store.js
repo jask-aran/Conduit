@@ -5,6 +5,7 @@ const DEFAULTS = {
   defaultTemplateId: "assistant",
   sessionNameModel: "",
   sessionNameThinkingLevel: "off",
+  backendModelDefaults: {},
   terminalShortcuts: [],
   sidebarPins: [],
   sidebarChatLimit: null,
@@ -87,6 +88,16 @@ const validVoicePreferences = (value) => value && typeof value === "object" && !
   && oneOf(value.activation, ["push_to_talk", "toggle"])
   && typeof value.autoSend === "boolean"
   && oneOf(value.captureProfile, ["raw", "processed"]);
+const normalizeBackendModelDefaults = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).flatMap(([implementation, selection]) => {
+    const model = typeof selection?.model === "string" ? selection.model.trim() : "";
+    const thinkingLevel = typeof selection?.thinkingLevel === "string" ? selection.thinkingLevel.trim() : "";
+    return implementation.length <= 80 && model && model.length <= 200
+      ? [[implementation, { model, ...(thinkingLevel && thinkingLevel.length <= 40 ? { thinkingLevel } : {}) }]]
+      : [];
+  }).slice(0, 20));
+};
 
 export function validUiPreferencePatch(input = {}) {
   return Object.entries(input).every(([key, value]) => {
@@ -172,6 +183,7 @@ export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTempl
     defaultTemplateId,
     sessionNameModel,
     sessionNameThinkingLevel,
+    backendModelDefaults: normalizeBackendModelDefaults(input.backendModelDefaults ?? fallback.backendModelDefaults),
     terminalShortcuts,
     sidebarPins,
     sidebarChatLimit: nullable("sidebarChatLimit", (value) => Number.isFinite(Number(value))
