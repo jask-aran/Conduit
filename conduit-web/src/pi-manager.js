@@ -204,6 +204,8 @@ function deliveryEventBytes(event) {
   return Buffer.byteLength(JSON.stringify(event));
 }
 
+const ABORT_TERMINAL_EVENTS = new Set(["message_end", "turn_end"]);
+
 export class PiManager extends EventEmitter {
   constructor({
     command = "pi",
@@ -817,7 +819,14 @@ export class PiManager extends EventEmitter {
 
   ingestGenerationEvent(record, source, { allowClosed = false } = {}) {
     if (!record.generationNormalizer || !record.activeGeneration) return [];
-    if (record.generation?.closed && !allowClosed) return [];
+    // A generation being aborted is closed to new work but still owns its own
+    // ending. Pi reports the interrupted assistant message after the abort is
+    // requested, and discarding it left the turn's text uncommitted - present
+    // while streaming, gone the moment the next turn replaced it, back again
+    // on reload. Only the terminal events pass: late deltas and a message that
+    // starts after the abort are still content the user stopped.
+    const finishing = record.generation?.aborting && ABORT_TERMINAL_EVENTS.has(source.type);
+    if (record.generation?.closed && !allowClosed && !finishing) return [];
     const events = record.generationNormalizer.normalize(source);
     for (const event of events) {
       record.activeGeneration = reduceActiveGeneration(record.activeGeneration, event);
@@ -983,6 +992,11 @@ export class PiManager extends EventEmitter {
     const generation = record?.generation;
     if (!record || !generation || (generationId && generation.id !== generationId)) return null;
     generation.closed = true;
+    // Stays set for the life of this generation. Pi reports the interrupted
+    // assistant message between the abort request and its response, so a flag
+    // cleared when the abort resolves loses the race by a millisecond. The
+    // next turn replaces record.generation, which retires the flag with it.
+    generation.aborting = true;
     record.stopping = true;
     record.activity = "stopping";
     this.ingestGenerationEvent(record, { type: "generation_stopping" }, { allowClosed: true });
