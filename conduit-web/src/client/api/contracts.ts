@@ -116,6 +116,7 @@ export interface BackendSessionDiscovery {
 export interface HarnessSummary {
   id: "codex" | "chatgpt-web";
   label: string;
+  profileLabel: string;
   available: boolean;
   sessions: boolean;
   drive: boolean;

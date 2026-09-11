@@ -717,6 +717,13 @@ export function Sidebar(props: {
       };
     }
     if (target?.type === "terminal") return { title: "Destroy this shell?", description: `This permanently stops ${target.terminal.title || "Shell"} and removes its terminal session.` };
+    if (target?.type === "chat") {
+      const implementation = target.chat.backend?.implementation;
+      const harness = harnesses().find((item) => item.id === implementation);
+      if (harness) return { title: "Delete this chat from Conduit?",
+        description: `This deletes Conduit's link and attached files. The thread stays in ${harness.profileLabel}.` };
+      return { title: "Delete this chat?", description: "This permanently deletes the Pi session transcript and this chat's attached files." };
+    }
     if (target?.type !== "project") return { title: "Delete this chat?", description: "This permanently deletes the Pi session transcript and this chat's attached files." };
     if (target.project.origin === "linked") return { title: "Unlink this workspace?", description: `This unregisters ${target.project.name} and deletes its Conduit chats. The linked directory on disk is kept.` };
     if (target.project.origin === "created") return { title: "Unlink this workspace?", description: `This unregisters ${target.project.name} and deletes its Conduit chats. The created directory on disk is kept.` };
