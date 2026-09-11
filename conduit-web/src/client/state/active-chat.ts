@@ -22,7 +22,7 @@ import type {
   ToolItem,
   TranscriptDetail,
 } from "../api/contracts";
-import { assignToolSeq, promotePendingUser } from "../timeline-order";
+import { assignToolSeq, commitAssistantMessage, promotePendingUser } from "../timeline-order";
 import { reconcileMessages } from "../reconcile-messages";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { canCoalesceTextDelta, enqueueOverflowLiveEvent, mergeTextDeltaEvents } from "./text-delta-batcher";
@@ -661,6 +661,8 @@ export function createActiveChat(options: ActiveChatOptions) {
         if (event.message.role === "user") {
           void catalogue.refresh();
           setMessages((current) => promotePendingUser(current, event.message));
+        } else if (event.message.role === "assistant") {
+          setMessages((current) => commitAssistantMessage(current, event.message));
         }
         break;
       case "runtime_error":
