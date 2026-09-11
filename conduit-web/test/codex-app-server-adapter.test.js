@@ -334,7 +334,7 @@ test("thread policy overrides only what Conduit was asked for", () => {
   );
 });
 
-test("steering reaches Codex immediately and leaves the queue once delivered", async () => {
+test("steering stays visible until Codex reports that it consumed the message", async () => {
   const adapter = new CodexAppServerAdapter();
   const live = record();
   live.active = true;
@@ -348,10 +348,14 @@ test("steering reaches Codex immediately and leaves the queue once delivered", a
   assert.equal(sent[0].method, "turn/steer");
   assert.equal(sent[0].params.expectedTurnId, "turn-1");
   assert.equal(sent[0].params.threadId, "thread-1");
+  assert.equal(typeof sent[0].params.clientUserMessageId, "string");
   assert.deepEqual(sent[0].params.input, [{ type: "text", text: "use the other file" }]);
 
+  const clientId = sent[0].params.clientUserMessageId;
+  adapter.notification(live, "item/started", { turnId: "turn-1",
+    item: { type: "userMessage", id: "user-2", clientId, content: [{ type: "text", text: "use the other file" }] } });
   const queues = live.events.filter((event) => event.type === "queue_state").map((event) => event.queue.steering);
-  assert.deepEqual(queues, [["use the other file"], []], "it appears while in flight, then clears");
+  assert.deepEqual(queues, [["use the other file"], []]);
 });
 
 test("steering a settled turn is refused rather than silently dropped", async () => {
