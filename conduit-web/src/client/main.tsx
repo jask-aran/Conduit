@@ -1299,6 +1299,14 @@ function App() {
     } catch (error) { showError(error); }
   };
   const runSidebar = (type: string, target: Omit<SidebarCommand, "type" | "nonce"> = {}) => setSidebarCommand({ type, nonce: Date.now(), ...target });
+  const stopChatProcess = async (chatId = catalogue.selectedId()) => {
+    const process = runtime.getProcess(chatId);
+    if (!process?.id) return;
+    try {
+      await api(`/v0/live-sessions/${encodeURIComponent(process.id)}/process`, { method: "DELETE" });
+      toast.success("Process stopped");
+    } catch (error) { showError(error); }
+  };
   const pinRef = (type: "chat" | "project" | "terminal", id: string) => `${type}:${id}`;
   const isSidebarPinned = (type: "chat" | "project" | "terminal", id: string) => sidebarPins().includes(pinRef(type, id));
   const toggleSidebarPin = async (type: "chat" | "project" | "terminal", id: string) => {
@@ -1360,6 +1368,7 @@ function App() {
     templateId: chat.templateId(),
     chatStatus: chat.status(),
     streaming: chat.streaming(),
+    liveProcess: Boolean(runtime.getProcess(catalogue.selectedId())),
     connectivity: runtime.connectivity(),
     effort: models.effort(),
     thinkingLevels: thinkingLevels(),
@@ -1390,6 +1399,7 @@ function App() {
     move: () => runSidebar("move-chat"),
     renameFolder: () => runSidebar("rename-folder"),
     stop: () => chat.stop(),
+    stopProcess: () => void stopChatProcess(),
     regenerate: () => { const id = lastUserEntryId(); if (id) void chat.regenerate(id); },
     continue: () => void chat.continueResponse(),
     copy: () => { const content = lastAssistant()?.content; if (content) void navigator.clipboard.writeText(content); },
@@ -1780,6 +1790,7 @@ function App() {
       onOpenProjectMaximized={openProjectWithMaximizedWorkspace}
       onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
+      onStopProcess={(target) => stopChatProcess(target.id)}
       onOpenTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
       onOpenPty={(terminal) => {
         if (terminal.projectId.startsWith("computer:")) {

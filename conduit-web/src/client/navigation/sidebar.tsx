@@ -24,6 +24,7 @@ import {
   RefreshCwIcon,
   SearchIcon,
   Settings2Icon,
+  SquareIcon,
   TerminalIcon,
   Trash2Icon,
   LoaderCircleIcon,
@@ -176,6 +177,7 @@ export function Sidebar(props: {
   onDeleteChat: (chat: ChatSummary, project: Project) => Promise<void>;
   onDeleteChats: (targets: ChatTarget[]) => Promise<string[]>;
   onDeleteProject: (project: Project) => Promise<void>;
+  onStopProcess: (chat: ChatSummary) => Promise<void>;
   onOpenTerminal: (chat: ChatSummary, project: Project) => void;
   onOpenPty: (terminal: Pty) => void;
   onOpenDashboard: () => void;
@@ -790,6 +792,7 @@ export function Sidebar(props: {
           </ContextMenuSub>
           <ContextMenuItem onSelect={() => void props.onCopyTranscript(menuProps.chat)}><ClipboardCopyIcon />{commandLabel(COMMAND_IDS.copyTranscript)}</ContextMenuItem>
           <ContextMenuItem onSelect={() => props.onOpenTerminal(menuProps.chat, menuProps.project)}><TerminalIcon />Open terminal</ContextMenuItem>
+          <Show when={processFor(menuProps.chat)?.id}><ContextMenuItem onSelect={() => void props.onStopProcess(menuProps.chat)}><SquareIcon />Stop process</ContextMenuItem></Show>
           <Show when={isConduitManagedProject(menuProps.project)}><ContextMenuItem onSelect={() => void togglePin("chat", menuProps.chat.id)}>
             <Show when={isPinned("chat", menuProps.chat.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show>
           </ContextMenuItem></Show>

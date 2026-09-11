@@ -209,8 +209,8 @@ export class ChatGptWebAdapter extends EventEmitter {
     record.abortController?.abort();
     record.status = "stopped";
     record.active = false;
-    this.records.delete(id);
-    this.byChatId.delete(record.chatId);
+    this.sessions.remove(id);
+    this.emit("removed", { id, chatId: record.chatId });
     return true;
   }
 

@@ -370,6 +370,7 @@ export interface HostUiRequest {
 }
 
 export interface RuntimeProcess {
+  id?: string;
   chatId: string;
   projectId?: string;
   status?: string;
