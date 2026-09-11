@@ -37,6 +37,27 @@ export function createLiveSessionStream({
     return { context, prompt, message, attachments: files };
   }
 
+  /**
+   * Publish what the backend has actually recorded for the latest turn.
+   *
+   * A turn that ends early leaves Conduit's live model holding a version of the
+   * turn it assembled from deltas. Reading the backend's own transcript and
+   * publishing that is how the client stops having to be right on its own.
+   */
+  async function syncTranscript(record, turns = 1) {
+    const adapter = adapterFor(record);
+    if (!adapter.readTranscript || record.ephemeral) return;
+    try {
+      const context = await findChatContext(record.chatId);
+      if (!context) return;
+      const { messages } = await adapter.readTranscript(record.id, { project: context.project, turns });
+      if (messages?.length) adapter.publish(record, { type: "transcript_sync", messages });
+    } catch (error) {
+      // A sync is a repair, never the only path to correctness.
+      console.warn("Could not sync transcript", error.message);
+    }
+  }
+
   async function sendPrompt(record, prepared, options) {
     const needsName = !prepared.context.chat.title && !namingChats.has(prepared.context.chat.id);
     const adapter = adapterFor(record);
@@ -133,6 +154,7 @@ export function createLiveSessionStream({
         }
       }
       await adapter.cancel(record.id, command.generationId || null);
+      await syncTranscript(record);
       const queued = [...(taken.steering || []), ...(taken.followUp || [])]
         .map((item) => parseAttachmentEnvelope(typeof item === "string" ? item : item?.message || "").message);
       const text = [...queued, String(command.message || "")].map((item) => item.trim()).filter(Boolean).join("\n");
@@ -142,7 +164,9 @@ export function createLiveSessionStream({
       return sendPrompt(record, prepared);
     }
     if (command.type === "stop_generation" || command.type === "abort") {
-      return adapter.cancel(record.id, command.generationId || null);
+      const stopped = await adapter.cancel(record.id, command.generationId || null);
+      await syncTranscript(record);
+      return stopped;
     }
     if (command.type === "fork_and_prompt") {
       await adapter.fork(record.id, command.entryId);

@@ -146,6 +146,7 @@ export class PiRpcAdapter {
   }
   queue(id, type, message) { return this.manager.queueAccepted(id, type, message); }
   clearQueue(id) { return this.manager.clearQueue(id); }
+  readTranscript(id, options) { return this.manager.readTranscript(id, options); }
   fork(id, entryId) { return this.manager.fork(id, entryId); }
   setModel(id, model) { return this.manager.setModel(id, model); }
   setThinkingLevel(id, level) { return this.manager.setThinkingLevel(id, level); }

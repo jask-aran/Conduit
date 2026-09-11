@@ -22,7 +22,7 @@ import type {
   ToolItem,
   TranscriptDetail,
 } from "../api/contracts";
-import { assignToolSeq, commitAssistantMessage, promotePendingUser } from "../timeline-order";
+import { assignToolSeq, commitAssistantMessage, mergeTranscript, promotePendingUser } from "../timeline-order";
 import { reconcileMessages } from "../reconcile-messages";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { canCoalesceTextDelta, enqueueOverflowLiveEvent, mergeTextDeltaEvents } from "./text-delta-batcher";
@@ -656,6 +656,9 @@ export function createActiveChat(options: ActiveChatOptions) {
             });
           } else if (!current) void loadDetail(event.chatId, true).catch((error) => onError(error));
         }
+        break;
+      case "transcript_sync":
+        setMessages((current) => mergeTranscript(current, event.messages as Message[]));
         break;
       case "message_end":
         if (event.message.role === "user") {

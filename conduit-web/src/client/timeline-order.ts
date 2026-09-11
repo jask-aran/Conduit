@@ -171,3 +171,20 @@ export function commitAssistantMessage(messages: Message[], eventMessage: Protoc
   }
   return [...messages, next];
 }
+
+/**
+ * Merge the backend's own record of recent turns into the transcript.
+ *
+ * The incoming messages are authoritative for the entries they cover: they came
+ * from the backend's transcript through the same projection the initial load
+ * uses. Anything older is left alone, so a one-turn sync costs one turn.
+ */
+export function mergeTranscript(messages: Message[], incoming: Message[]): Message[] {
+  if (!incoming.length) return messages;
+  const incomingIds = new Set(incoming.map((message) => message.id).filter(Boolean));
+  const firstIndex = messages.findIndex((message) => incomingIds.has(message.id));
+  const kept = firstIndex >= 0 ? messages.slice(0, firstIndex) : messages;
+  // A pending message is the composer's, not the transcript's, so it survives.
+  const pending = (firstIndex >= 0 ? messages.slice(firstIndex) : []).filter((message) => message.pending);
+  return [...kept, ...incoming, ...pending];
+}
