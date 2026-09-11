@@ -1,7 +1,7 @@
 import path from "node:path";
 import { chatView, isChatId } from "../../chat-store.js";
 import {
-  messagesFromEntries,
+  projectSessionEntries,
   removeSessionFamily,
   sessionFamilyFiles,
   toolsFromEntries,
@@ -50,13 +50,13 @@ export function registerSessionRoutes(app, {
         });
         throw error;
       }
-      const messages = messagesFromEntries(session.entries).filter((message) => ["user", "assistant"].includes(message.role));
+      const projection = projectSessionEntries(session.entries);
       response.json({
         ...chatView(context.chat),
         model: session.model,
         thinkingLevel: session.thinkingLevel,
-        messages,
-        tools: toolsFromEntries(session.entries).map((tool) => ({ ...tool, result: tool.result?.length > 4000 ? null : tool.result, resultDeferred: tool.result?.length > 4000 })),
+        messages: projection.messages,
+        tools: projection.tools,
         page: session.page,
       });
     } catch (error) { next(error); }

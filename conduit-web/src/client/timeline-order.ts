@@ -194,6 +194,33 @@ export function mergeTranscript(messages: Message[], incoming: Message[]): Messa
   return [...messages.slice(0, anchor), ...incoming, ...pending];
 }
 
+function toolIds(messages: Message[]): Set<string> {
+  const ids = new Set<string>();
+  for (const message of messages) {
+    for (const block of message.blocks || []) {
+      if (block?.type === "toolCall" && block.id) ids.add(block.id);
+    }
+  }
+  return ids;
+}
+
+/** Replace one committed transcript range, including the tools owned by it. */
+export function mergeTranscriptProjection(
+  messages: Message[],
+  tools: ToolItem[],
+  incomingMessages: Message[],
+  incomingTools: ToolItem[],
+): { messages: Message[]; tools: ToolItem[] } {
+  if (!incomingMessages.length) return { messages, tools };
+  const anchor = syncAnchor(messages, incomingMessages);
+  if (anchor == null) return { messages, tools };
+  const retainedIds = toolIds(messages.slice(0, anchor));
+  return {
+    messages: mergeTranscript(messages, incomingMessages),
+    tools: [...tools.filter((tool) => retainedIds.has(tool.id)), ...incomingTools],
+  };
+}
+
 function syncAnchor(messages: Message[], incoming: Message[]): number | null {
   const incomingIds = new Set(incoming.map((message) => message.id).filter(Boolean));
   const byId = messages.findIndex((message) => message.id && incomingIds.has(message.id));

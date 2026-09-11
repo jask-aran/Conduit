@@ -4,6 +4,19 @@ import { chatView } from "../chat-store.js";
 import { parseAttachmentEnvelope, serializeAttachmentEnvelope } from "../attachment-envelope.js";
 import { ChatBackendRegistry } from "../pi-rpc-adapter.js";
 
+export function interruptedPromptInput(taken, message, attachmentIds = []) {
+  const queued = [...(taken?.steering || []), ...(taken?.followUp || [])]
+    .map((item) => parseAttachmentEnvelope(typeof item === "string" ? item : item?.message || ""));
+  return {
+    message: [...queued.map((item) => item.message), String(message || "")]
+      .map((item) => item.trim()).filter(Boolean).join("\n"),
+    attachmentIds: [...new Set([
+      ...queued.flatMap((item) => item.attachments.map((attachment) => attachment.id)),
+      ...(Array.isArray(attachmentIds) ? attachmentIds : []),
+    ])],
+  };
+}
+
 export function createLiveSessionStream({
   manager,
   wss,
@@ -50,8 +63,8 @@ export function createLiveSessionStream({
     try {
       const context = await findChatContext(record.chatId);
       if (!context) return;
-      const { messages } = await adapter.readTranscript(record.id, { project: context.project, turns });
-      if (messages?.length) adapter.publish(record, { type: "transcript_sync", messages });
+      const projection = await adapter.readTranscript(record.id, { project: context.project, turns });
+      if (projection.messages?.length) adapter.publish(record, { type: "transcript_sync", ...projection });
     } catch (error) {
       // A sync is a repair, never the only path to correctness.
       console.warn("Could not sync transcript", error.message);
@@ -155,12 +168,13 @@ export function createLiveSessionStream({
       }
       await adapter.cancel(record.id, command.generationId || null);
       await syncTranscript(record);
-      const queued = [...(taken.steering || []), ...(taken.followUp || [])]
-        .map((item) => parseAttachmentEnvelope(typeof item === "string" ? item : item?.message || "").message);
-      const text = [...queued, String(command.message || "")].map((item) => item.trim()).filter(Boolean).join("\n");
-      if (!text) return null;
+      const interrupted = interruptedPromptInput(taken, command.message, command.attachmentIds);
+      if (!interrupted.message) return null;
       await applyComposerModel(record, command);
-      const prepared = await promptForChat(record, command, text);
+      const prepared = await promptForChat(record, {
+        ...command,
+        attachmentIds: interrupted.attachmentIds,
+      }, interrupted.message);
       return sendPrompt(record, prepared);
     }
     if (command.type === "stop_generation" || command.type === "abort") {
@@ -194,7 +208,7 @@ export function createLiveSessionStream({
       return null;
     }
     if (command.type === "refresh_context") return adapter.refreshContext(record.id);
-    adapter.sendPi(record.id, command);
+    adapter.sendNative(record.id, command);
     return null;
   }
 
@@ -214,10 +228,18 @@ export function createLiveSessionStream({
       cacheStats: record.cacheStats || null,
     })));
     if (record.lastCheckpoint) ws.send(JSON.stringify(adapter.toClientEvent(record.lastCheckpoint)));
+    // One browser connection is one ordered command stream. Native harness
+    // operations can be asynchronous, but a later clear, steer, or prompt must
+    // not overtake an earlier one while attachment paths or an abort resolve.
+    let commands = Promise.resolve();
     ws.on("message", (data) => {
-      Promise.resolve()
+      commands = commands
         .then(() => handleClientCommand(record, JSON.parse(String(data))))
-        .catch((error) => ws.send(JSON.stringify(adapter.toClientEvent({ type: "client_error", code: error.code, message: error.message }))));
+        .catch((error) => {
+          if (ws.readyState === 1) ws.send(JSON.stringify(adapter.toClientEvent({
+            type: "client_error", code: error.code, message: error.message,
+          })));
+        });
     });
   });
 

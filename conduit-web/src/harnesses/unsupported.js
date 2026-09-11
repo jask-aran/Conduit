@@ -22,6 +22,7 @@ export function unsupported(capabilities, { label, protocol = "native_api", over
   }
   if (!capabilities.steer && !capabilities.followUpQueue) {
     stubs.queue = refuse(`${label} does not support steering or follow-up queues`);
+    stubs.clearQueue = refuse(`${label} does not support steering or follow-up queues`);
   }
   if (!capabilities.modelSwitch) stubs.setModel = refuse(`${label} cannot switch models`);
   if (!capabilities.thinkingLevels) stubs.setThinkingLevel = refuse(`${label} has no thinking levels`);
@@ -30,6 +31,6 @@ export function unsupported(capabilities, { label, protocol = "native_api", over
   if (!capabilities.usage) stubs.refreshContext = () => Promise.resolve(null);
   // History forks have no capability flag; no backend but Pi implements one.
   stubs.fork = refuse(`${label} history forks are unavailable`);
-  if (protocol !== "pi_rpc") stubs.sendPi = refuse(`Unsupported ${label} command`);
+  if (protocol !== "pi_rpc") stubs.sendNative = refuse(`Unsupported ${label} command`);
   return { ...stubs, ...overrides };
 }

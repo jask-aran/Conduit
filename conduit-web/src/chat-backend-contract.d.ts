@@ -51,6 +51,19 @@ export interface ChatBackendAdapter<LiveSession = unknown, ModelCatalog = unknow
   close(liveSessionId: string): Promise<unknown>;
   respondHostUi(liveSessionId: string, response: unknown): Promise<unknown> | unknown;
   replay(liveSessionId: string, since?: number): ChatBackendEvent | null;
+  waitForSession(liveSessionId: string): Promise<unknown>;
+  attach(liveSessionId: string, socket: unknown): ChatBackendEvent | null;
+  view(liveSession: unknown): unknown;
+  toClientEvent(event: unknown): unknown;
+  publish(liveSession: unknown, event: unknown): unknown;
+  queue(liveSessionId: string, mode: "steer" | "follow_up", message: string): Promise<unknown>;
+  clearQueue(liveSessionId: string): Promise<{ steering: unknown[]; followUp: unknown[] }>;
+  fork(liveSessionId: string, entryId: string): Promise<unknown>;
+  setModel(liveSessionId: string, model: string): Promise<unknown>;
+  setThinkingLevel(liveSessionId: string, level: string): Promise<unknown>;
+  refreshContext(liveSessionId: string): Promise<unknown>;
+  /** Pass a backend-native command through an explicitly supported adapter. */
+  sendNative(liveSessionId: string, command: unknown): Promise<unknown> | unknown;
 
   /**
    * Project the transcript the backend has actually recorded.
@@ -61,7 +74,7 @@ export interface ChatBackendAdapter<LiveSession = unknown, ModelCatalog = unknow
    * ignored by backends that own their own.
    */
   readTranscript?(liveSessionId: string, options?: { project?: unknown; turns?: number }):
-    Promise<{ messages: unknown[] }>;
+    Promise<{ messages: unknown[]; tools: unknown[] }>;
   getCapabilities(): ChatCapabilities;
   listModels(liveSessionId?: string): Promise<ModelCatalog> | ModelCatalog;
 }
@@ -190,7 +203,7 @@ export type OptionalCapabilityEvent = EventBase & (
   | { type: "retry"; active: boolean; retry?: unknown }
   | { type: "transcript_message"; message: unknown }
   /** The backend's own record of recent turns, published to repair live drift. */
-  | { type: "transcript_sync"; messages: unknown[] }
+  | { type: "transcript_sync"; messages: unknown[]; tools: unknown[] }
   | { type: "generation_replay"; sequence: number; generation: unknown }
 );
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mergeTranscript } from "../src/client/timeline-order.ts";
+import { mergeTranscript, mergeTranscriptProjection } from "../src/client/timeline-order.ts";
 
 const message = (id, role, content, extra = {}) => ({ id, role, content, ...extra });
 
@@ -118,4 +118,25 @@ test("a queued message survives an id-less sync", () => {
 test("a sync carrying no user message is not placed at all", () => {
   const live = [message("u1", "user", "hello"), message("a1", "assistant", "hi")];
   assert.equal(mergeTranscript(live, [message("e9", "assistant", "orphan")]), live);
+});
+
+test("a synced turn replaces its tools and retains tools from older turns", () => {
+  const live = [
+    message("u0", "user", "earlier"),
+    message("a0", "assistant", "done", { blocks: [{ type: "toolCall", id: "old-tool" }] }),
+    message("u1", "user", "latest"),
+    message("a1", "assistant", "partial", { blocks: [{ type: "toolCall", id: "stale-tool" }] }),
+  ];
+  const projection = mergeTranscriptProjection(live, [
+    { id: "old-tool", name: "read", done: true },
+    { id: "stale-tool", name: "write", done: false },
+  ], [
+    message("e1", "user", "latest"),
+    message("e2", "assistant", "complete", { blocks: [{ type: "toolCall", id: "real-tool" }] }),
+  ], [
+    { id: "real-tool", name: "write", done: true },
+  ]);
+
+  assert.deepEqual(projection.messages.map((item) => item.id), ["u0", "a0", "e1", "e2"]);
+  assert.deepEqual(projection.tools.map((item) => item.id), ["old-tool", "real-tool"]);
 });
