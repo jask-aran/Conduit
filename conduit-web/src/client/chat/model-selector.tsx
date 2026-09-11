@@ -10,6 +10,7 @@ import {
   MenuRadioItem,
   MenuSeparator,
   MenuTrigger,
+  Spinner,
 } from "@/components/primitives";
 import type { ModelOption } from "../api/contracts";
 
@@ -20,6 +21,7 @@ export function ModelSelector(props: {
   model: string;
   thinkingLevel: string;
   notice?: string;
+  loading?: boolean;
   disabled?: boolean;
   onModelChange: (spec: string) => void;
   onThinkingLevelChange: (level: string) => void;
@@ -30,10 +32,12 @@ export function ModelSelector(props: {
   const levels = createMemo(() => selected()?.thinkingLevels || ["off"]);
 
   return <Menu>
-    <MenuTrigger class="model-trigger" aria-label={`${selected()?.label || props.model || "Model"} ${props.thinkingLevel || "off"}`} disabled={props.disabled}>
-      <span>{selected()?.label || props.model || "Model"}</span>
-      <span class="text-muted-foreground">{props.thinkingLevel || "off"}</span>
-      <ChevronDownIcon />
+    <MenuTrigger class="model-trigger" aria-label={props.loading ? "Connecting to model" : `${selected()?.label || props.model || "Model"} ${props.thinkingLevel || "off"}`} disabled={props.disabled || props.loading}>
+      <Show when={!props.loading} fallback={<><Spinner /><span>Connecting…</span></>}>
+        <span>{selected()?.label || props.model || "Model"}</span>
+        <span class="text-muted-foreground">{props.thinkingLevel || "off"}</span>
+        <ChevronDownIcon />
+      </Show>
     </MenuTrigger>
     <MenuContent class="w-72">
       <MenuGroup>

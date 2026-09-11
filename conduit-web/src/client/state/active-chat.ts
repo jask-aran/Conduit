@@ -943,6 +943,9 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   const activity = createMemo(() => {
+    if (connectingId() === selectedId()) return runtimeIdentity()?.kind === "codex"
+      ? { kind: "starting", label: "Connecting to Codex CLI…" }
+      : { kind: "starting", label: "Starting agent…" };
     const process = options.runtime.getProcess(selectedId());
     const derived = deriveFineActivity({
       generation: generation(),
