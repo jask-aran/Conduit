@@ -108,6 +108,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     record.sessionId = result.thread.id;
     record.model = result.model || model;
     record.thinkingLevel = result.thread?.reasoningEffort || thinkingLevel;
+    this.emit("changed", { record, reason: "created" });
     return record;
   }
 
@@ -124,6 +125,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     record.sessionId = result.thread?.id || threadId;
     record.model = model || result.model || result.thread?.model || "";
     record.thinkingLevel = thinkingLevel || result.thread?.reasoningEffort || "";
+    this.emit("changed", { record, reason: "restored" });
     return record;
   }
 
@@ -771,7 +773,13 @@ export class CodexAppServerAdapter extends EventEmitter {
   attach(id, socket) { return this.sessions.attach(id, socket); }
   view(record) { return this.sessions.view(record); }
   runtimeState(record) { return this.sessions.runtimeState(record); }
-  publish(record, event) { return this.sessions.publish(record, event); }
+  publish(record, event) {
+    const result = this.sessions.publish(record, event);
+    if (event?.type === "status" || event?.type === "error") {
+      this.emit("changed", { record, reason: event.type });
+    }
+    return result;
+  }
   get(id) { return this.sessions.get(id); }
   getByChatId(chatId) { return this.sessions.getByChatId(chatId); }
   list() { return this.sessions.list(); }
