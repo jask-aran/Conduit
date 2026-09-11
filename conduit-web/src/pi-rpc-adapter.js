@@ -1,3 +1,4 @@
+import { wasAborted } from "./abort-signature.js";
 import { normalizeHostUiRequest } from "./activity.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { detect } from "./harnesses/probe.js";
@@ -22,12 +23,18 @@ export function normalizePiBackendEvent(event) {
         blockKind: event.blockType === "toolCall" ? "tool_call" : event.blockType, delta: event.delta };
     case "assistant_message_started":
       return { ...base, type: "assistant_content", phase: "start", sequence: event.seq, messageId: event.messageId };
-    case "assistant_message_completed":
+    case "assistant_message_completed": {
+      // An abort is not a failure. Normalising here keeps the streaming view
+      // and the reloaded transcript telling the same story.
+      const aborted = wasAborted(event);
       return { ...base, type: "assistant_content", phase: "final", sequence: event.seq,
-        messageId: event.messageId, stopReason: event.stopReason, errorMessage: event.errorMessage,
+        messageId: event.messageId,
+        stopReason: aborted ? "aborted" : event.stopReason,
+        errorMessage: aborted ? null : event.errorMessage,
         blocks: event.blocks.map(({ type, ...block }) => type === "toolCall"
           ? { kind: "tool_call", contentIndex: block.contentIndex, toolCallId: block.toolCallId, name: block.name, input: block.arguments }
           : { kind: type, ...block }) };
+    }
     case "generation_started":
     case "generation_running":
       return { ...base, type: "status", sequence: event.seq, status: "working", activity: "working", detail: event.type };
@@ -85,8 +92,12 @@ export function normalizePiBackendEvent(event) {
     case "auto_retry_end":
     case "generation_retry_ended":
       return { ...base, type: "retry", active: false };
-    case "message_end":
-      return { ...base, type: "transcript_message", message: event.message };
+    case "message_end": {
+      const message = event.message;
+      return { ...base, type: "transcript_message", message: wasAborted(message)
+        ? { ...message, stopReason: "aborted", errorMessage: null }
+        : message };
+    }
     case "context_usage":
       return { ...base, type: "usage", contextUsage: event.contextUsage,
         sessionStats: event.sessionStats, cacheStats: event.cacheStats };
@@ -134,6 +145,7 @@ export class PiRpcAdapter {
     return replay ? normalizePiBackendEvent(replay) : null;
   }
   queue(id, type, message) { return this.manager.queueAccepted(id, type, message); }
+  clearQueue(id) { return this.manager.clearQueue(id); }
   fork(id, entryId) { return this.manager.fork(id, entryId); }
   setModel(id, model) { return this.manager.setModel(id, model); }
   setThinkingLevel(id, level) { return this.manager.setThinkingLevel(id, level); }

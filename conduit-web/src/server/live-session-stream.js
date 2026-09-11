@@ -1,7 +1,7 @@
 import { CONTINUE_PROMPT } from "../continuation.js";
 import { messagesFromEntries } from "../session-store.js";
 import { chatView } from "../chat-store.js";
-import { serializeAttachmentEnvelope } from "../attachment-envelope.js";
+import { parseAttachmentEnvelope, serializeAttachmentEnvelope } from "../attachment-envelope.js";
 import { ChatBackendRegistry } from "../pi-rpc-adapter.js";
 
 export function createLiveSessionStream({
@@ -111,6 +111,24 @@ export function createLiveSessionStream({
       const prepared = await promptForChat(record, command, String(command.message || ""));
       await adapter.queue(record.id, command.type, prepared.prompt);
       return null;
+    }
+    if (command.type === "clear_queue") {
+      return adapter.clearQueue ? adapter.clearQueue(record.id) : null;
+    }
+    // Pi's documented interrupt recipe, run in order on this side of the
+    // socket. Clearing first is what stops the abort from continuing the queue
+    // itself; the client used to sequence these three steps by watching
+    // generation state, which raced.
+    if (command.type === "interrupt_and_send") {
+      const taken = adapter.clearQueue ? await adapter.clearQueue(record.id) : { steering: [], followUp: [] };
+      await adapter.cancel(record.id, command.generationId || null);
+      const queued = [...(taken.steering || []), ...(taken.followUp || [])]
+        .map((item) => parseAttachmentEnvelope(typeof item === "string" ? item : item?.message || "").message);
+      const text = [...queued, String(command.message || "")].map((item) => item.trim()).filter(Boolean).join("\n");
+      if (!text) return null;
+      await applyComposerModel(record, command);
+      const prepared = await promptForChat(record, command, text);
+      return sendPrompt(record, prepared);
     }
     if (command.type === "stop_generation" || command.type === "abort") {
       return adapter.cancel(record.id, command.generationId || null);

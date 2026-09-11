@@ -2,21 +2,11 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { wasAborted } from "./abort-signature.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { CONTINUE_PROMPT, mergeContinuation } from "./continuation.js";
 import { isPathInside } from "./workspace-paths.js";
 
-
-// Stopping a turn cancels the in-flight provider request, and the provider
-// reports that cancellation as a failure - "This operation was aborted". A stop
-// the user asked for is not a failure, so it is read back as one: an abort
-// carries no error, and renders as "Stopped" rather than a red failure card.
-const ABORT_SIGNATURE = /\b(aborted|cancell?ed)\b/i;
-
-function wasAborted(message) {
-  if (message?.stopReason === "aborted") return true;
-  return message?.stopReason === "error" && ABORT_SIGNATURE.test(message?.errorMessage || "");
-}
 
 export function sessionDirectoryFor(cwd, agentDir) {
   const resolvedCwd = path.resolve(cwd);
