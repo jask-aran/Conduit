@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import { loadConfig } from "../src/config.js";
+
+const manifest = JSON.parse(fs.readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8"));
+const pinnedPiVersion = manifest.dependencies["@earendil-works/pi-coding-agent"];
 
 const configEnv = (overrides = {}) => ({
   CONDUIT_NATIVE_PI_COMMAND: "/definitely/missing/pi",
@@ -39,7 +44,10 @@ test("default runtime paths are owned by the repository root", () => {
   assert.equal(config.searchConfigFile.endsWith(path.join("data", "pi", "web-search.json")), true);
   assert.equal(config.modelProfilesFile.endsWith(path.join("templates", "model-profiles.json")), true);
   assert.deepEqual(config.modelProfiles.profiles.map((profile) => profile.id), ["openai-search", "brave-search"]);
-  assert.equal(config.installations.get("conduit-pinned").version, "0.84.1");
+  // The pinned installation is whatever the dependency resolves to. Asserting a
+  // literal here only records the version at the time of writing, and fails on
+  // every legitimate bump.
+  assert.equal(config.installations.get("conduit-pinned").version, pinnedPiVersion);
   assert.equal(path.isAbsolute(config.installations.get("conduit-pinned").command), true);
   assert.equal(config.enablePartialContinue, true);
   assert.equal(config.maxAttachmentBytes, 100 * 1024 * 1024);

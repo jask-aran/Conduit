@@ -974,7 +974,8 @@ export class PiManager extends EventEmitter {
    */
   async clearQueue(id) {
     const response = await this.request(id, { type: "clear_queue" });
-    return { steering: response?.steering || [], followUp: response?.followUp || [] };
+    const data = response?.data || {};
+    return { steering: data.steering || [], followUp: data.followUp || [] };
   }
 
   async abortGeneration(id, generationId = null) {
@@ -988,11 +989,12 @@ export class PiManager extends EventEmitter {
     this.publishState(record);
     let processTerminated = false;
     try {
-      // Pi resolves abort once the session is genuinely idle, which can trail
-      // a tool's teardown. Acks measure in single-digit milliseconds; the
-      // budget is generous so a slow teardown cannot cost the session, and
-      // SIGKILL stays the fallback for a process that has actually wedged.
-      await this.request(id, { type: "abort" }, { timeout: 2000 });
+      // Pi resolves abort only once the session is genuinely idle. That is
+      // usually milliseconds, but a queue left in place makes Pi deliver it and
+      // run another model call inside the abort, which can take as long as any
+      // turn. The budget covers that; SIGKILL stays for a process that has
+      // actually wedged, not for one that is doing what it was asked.
+      await this.request(id, { type: "abort" }, { timeout: 15_000 });
     } catch {
       processTerminated = true;
       record.status = "stopped";
