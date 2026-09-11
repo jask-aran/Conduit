@@ -121,7 +121,6 @@ export class CodexAppServerAdapter extends EventEmitter {
     record.sessionId = result.thread?.id || threadId;
     record.model = model || result.model || result.thread?.model || "";
     record.thinkingLevel = thinkingLevel || result.thread?.reasoningEffort || "";
-    record.history = await this.history(record, record.sessionId);
     return record;
   }
 
@@ -191,12 +190,6 @@ export class CodexAppServerAdapter extends EventEmitter {
     return rows.filter((_row, index) => keep.has(index));
   }
 
-  /** The thread's stored history, trimmed to what the transcript will show. */
-  async history(record, threadId) {
-    try { return CodexAppServerAdapter.recent(await this.items(record, threadId)); }
-    catch { return []; }
-  }
-
   /**
    * The stored history as a settled transcript, in Pi's shape.
    *
@@ -257,21 +250,19 @@ export class CodexAppServerAdapter extends EventEmitter {
     return { messages, tools };
   }
 
-  /** The transcript for a chat this adapter is running, for `/v0/sessions/:id`. */
-  transcript(chatId) {
-    const record = this.getByChatId(chatId);
-    return record ? CodexAppServerAdapter.threadTranscript(record.history).messages : [];
-  }
-
-  /** The same history for an ephemeral thread, which has no chat to look up. */
-  liveTranscript(id) {
-    return CodexAppServerAdapter.threadTranscript(this.records.get(id)?.history);
-  }
-
-  async readTranscript({ liveSessionId, chatId }) {
-    if (liveSessionId) return this.liveTranscript(liveSessionId);
-    const record = this.getByChatId(chatId);
-    return CodexAppServerAdapter.threadTranscript(record?.history);
+  async readTranscript({ liveSessionId, chatId, opaqueSession, project }) {
+    const live = (liveSessionId ? this.get(liveSessionId) : null) || this.getByChatId(chatId);
+    const threadId = live?.sessionId
+      || (typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId);
+    if (!threadId) return { messages: [], tools: [] };
+    const transport = live || await this.discovery(project?.workingRoot);
+    const result = await this.request(transport, "thread/read", { threadId, includeTurns: true });
+    const turns = result?.thread?.turns || [];
+    const rows = turns.flatMap((turn) => (turn.items || []).map((item) => ({ turnId: turn.id, item })));
+    if (rows.length || result?.thread?.historyMode !== "paginated") {
+      return CodexAppServerAdapter.threadTranscript(CodexAppServerAdapter.recent(rows));
+    }
+    return CodexAppServerAdapter.threadTranscript(CodexAppServerAdapter.recent(await this.items(transport, threadId)));
   }
 
   /**
@@ -688,7 +679,7 @@ export class CodexAppServerAdapter extends EventEmitter {
    * lookup. Spawning per request costs seconds, which a dashboard that reloads
    * on focus cannot pay. The process retires once it has been idle.
    */
-  async discovery() {
+  async discovery(cwd = os.homedir()) {
     if (this.discoveryStart) return this.discoveryStart;
     const existing = this.discoveryId ? this.get(this.discoveryId) : null;
     if (existing && existing.status === "running") {
@@ -696,7 +687,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       return existing;
     }
     this.discoveryStart = (async () => {
-      const record = await this.start({ chatId: `discovery-${crypto.randomUUID()}`, cwd: os.homedir() });
+      const record = await this.start({ chatId: `discovery-${crypto.randomUUID()}`, cwd });
       record.ephemeral = true;
       this.discoveryId = record.id;
       this.holdDiscovery();

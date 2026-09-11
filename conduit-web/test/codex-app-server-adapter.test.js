@@ -194,9 +194,9 @@ test("a turn that only runs commands carries them without inventing an answer", 
   assert.deepEqual(messages[1].blocks.map((block) => block.type), ["toolCall"]);
 });
 
-test("a thread with no stored history yields an empty transcript", () => {
+test("a thread with no stored history yields an empty transcript", async () => {
   assert.deepEqual(CodexAppServerAdapter.threadTranscript(undefined), { messages: [], tools: [] });
-  assert.deepEqual(new CodexAppServerAdapter().transcript("missing"), []);
+  assert.deepEqual(await new CodexAppServerAdapter().readTranscript({ chatId: "missing" }), { messages: [], tools: [] });
 });
 
 test("a live command hangs off the turn's message so the rollup claims it", () => {

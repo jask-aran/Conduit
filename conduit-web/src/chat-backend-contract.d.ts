@@ -74,7 +74,13 @@ export interface ChatBackendAdapter<LiveSession = unknown, ModelCatalog = unknow
    * `project` is passed for backends whose store is validated against it and
    * ignored by backends that own their own.
    */
-  readTranscript(options: { liveSessionId?: string; chatId?: string; project?: unknown; turns?: number }):
+  readTranscript(options: {
+    liveSessionId?: string;
+    chatId?: string;
+    opaqueSession?: unknown;
+    project?: unknown;
+    turns?: number;
+  }):
     Promise<{ messages: unknown[]; tools: unknown[] }>;
   getCapabilities(): ChatCapabilities;
   listModels(liveSessionId?: string): Promise<ModelCatalog> | ModelCatalog;
