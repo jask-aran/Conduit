@@ -5,7 +5,7 @@ export const manifest = {
   id: "codex",
   label: "Codex",
   profileLabel: "Codex CLI",
-  description: "Use the installed Codex app-server and its native configuration",
+  description: "Use the installed Codex app-server daemon and its native configuration",
   protocol: "native_api",
   installationId: "host-codex",
   capabilities: CODEX_CAPABILITIES,
