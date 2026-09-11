@@ -1,4 +1,4 @@
-/** Backend-neutral contract for future chat adapters. This file has no runtime effect. */
+/** Backend-neutral contract for chat adapters. */
 
 export type SessionSurface = "chat" | "terminal";
 export type AgentProtocol = "pi_rpc" | "acp" | "native_api" | "pty";
@@ -62,8 +62,9 @@ export interface ChatBackendAdapter<LiveSession = unknown, ModelCatalog = unknow
   setModel(liveSessionId: string, model: string): Promise<unknown>;
   setThinkingLevel(liveSessionId: string, level: string): Promise<unknown>;
   refreshContext(liveSessionId: string): Promise<unknown>;
-  /** Pass a backend-native command through an explicitly supported adapter. */
-  sendNative(liveSessionId: string, command: unknown): Promise<unknown> | unknown;
+  get(liveSessionId: string): LiveSession | null;
+  getByChatId(chatId: string): LiveSession | null;
+  list(): unknown[];
 
   /**
    * Project the transcript the backend has actually recorded.
@@ -73,11 +74,20 @@ export interface ChatBackendAdapter<LiveSession = unknown, ModelCatalog = unknow
    * `project` is passed for backends whose store is validated against it and
    * ignored by backends that own their own.
    */
-  readTranscript?(liveSessionId: string, options?: { project?: unknown; turns?: number }):
+  readTranscript(options: { liveSessionId?: string; chatId?: string; project?: unknown; turns?: number }):
     Promise<{ messages: unknown[]; tools: unknown[] }>;
   getCapabilities(): ChatCapabilities;
   listModels(liveSessionId?: string): Promise<ModelCatalog> | ModelCatalog;
+  getModelState(liveSessionId: string): Promise<{ model: string; thinkingLevel: string }>;
 }
+
+export const CHAT_CAPABILITY_KEYS: readonly (keyof ChatCapabilities)[];
+export const REQUIRED_CHAT_BACKEND_METHODS: readonly (keyof ChatBackendAdapter)[];
+export function assertChatBackendAdapter<T extends ChatBackendAdapter>(
+  adapter: T,
+  label?: string,
+  expectedCapabilities?: ChatCapabilities | null,
+): T;
 
 export type ChatLifecycleState =
   | "creating"

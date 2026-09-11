@@ -1,4 +1,3 @@
-import { messagesFromEntries } from "../../session-store.js";
 import { createLiveSessionLauncher } from "../live-session-launcher.js";
 
 export function registerLiveSessionRoutes(app, {
@@ -6,7 +5,6 @@ export function registerLiveSessionRoutes(app, {
   catalogFor,
   config,
   findChatContext,
-  findRegisteredSession,
   lifecycle,
   manager,
   modelProfileRuntime,
@@ -71,8 +69,14 @@ export function registerLiveSessionRoutes(app, {
     try {
       const live = backends.get(request.params.id);
       if (!live) return response.status(404).json({ error: "live_session_not_found" });
-      const persisted = live.chatId ? await findRegisteredSession(live.chatId) : null;
-      response.json({ live: backends.view(live), events: live.events, messages: persisted ? messagesFromEntries(persisted.entries) : [] });
+      const context = live.chatId ? await findChatContext(live.chatId) : null;
+      const adapter = backends.adapterForRecord(live);
+      const projection = await adapter.readTranscript({
+        liveSessionId: live.id,
+        chatId: live.chatId,
+        project: context?.project,
+      });
+      response.json({ live: backends.view(live), events: live.events, ...projection });
     } catch (error) { next(error); }
   });
 
@@ -100,7 +104,7 @@ export function registerLiveSessionRoutes(app, {
       const live = backends.get(request.params.id);
       if (!live) return response.status(404).json({ error: "live_session_not_found" });
       const adapter = backends.adapterForRecord(live);
-      const transcript = adapter?.liveTranscript ? adapter.liveTranscript(live.id) : { messages: [], tools: [] };
+      const transcript = await adapter.readTranscript({ liveSessionId: live.id, chatId: live.chatId });
       response.json({ id: live.chatId || live.id, status: "active", ...transcript, attachments: [], page: { before: null } });
     } catch (error) { next(error); }
   });

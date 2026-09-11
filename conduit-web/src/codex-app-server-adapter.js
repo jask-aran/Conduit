@@ -268,6 +268,12 @@ export class CodexAppServerAdapter extends EventEmitter {
     return CodexAppServerAdapter.threadTranscript(this.records.get(id)?.history);
   }
 
+  async readTranscript({ liveSessionId, chatId }) {
+    if (liveSessionId) return this.liveTranscript(liveSessionId);
+    const record = this.getByChatId(chatId);
+    return CodexAppServerAdapter.threadTranscript(record?.history);
+  }
+
   /**
    * Codex user messages carry an array of content parts, agent messages a flat
    * string. Flattening here keeps both out of the transcript as "[object

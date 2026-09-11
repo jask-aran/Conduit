@@ -592,7 +592,6 @@ const launchLiveSession = registerLiveSessionRoutes(app, {
   catalogFor,
   config,
   findChatContext,
-  findRegisteredSession,
   lifecycle,
   manager,
   modelProfileRuntime,
