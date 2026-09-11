@@ -1,6 +1,10 @@
 import type { Message } from "./api/contracts";
 
-const OPTIMISTIC_PREFIXES = ["user_", "live_", "end_"];
+// Ids the client minted because the backend had none to give. Pi puts ids on
+// session entries, not on the messages it streams, so a committed assistant
+// message carries one of these until the projection replaces it - and it must
+// not be offered as a fork or regenerate target in the meantime.
+const OPTIMISTIC_PREFIXES = ["user_", "live_", "end_", "assistant_"];
 export const isOptimisticId = (id: string) => OPTIMISTIC_PREFIXES.some((prefix) => id.startsWith(prefix));
 const keyOf = (message: Message) => message.key ?? message.id;
 

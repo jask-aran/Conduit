@@ -175,16 +175,40 @@ export function commitAssistantMessage(messages: Message[], eventMessage: Protoc
 /**
  * Merge the backend's own record of recent turns into the transcript.
  *
- * The incoming messages are authoritative for the entries they cover: they came
+ * The incoming messages are authoritative for the turns they cover: they came
  * from the backend's transcript through the same projection the initial load
  * uses. Anything older is left alone, so a one-turn sync costs one turn.
+ *
+ * Ids cannot be relied on to find where the synced range begins. Pi puts ids on
+ * session entries, not on the messages it streams, so the client's copy of a
+ * turn has locally minted ids that match nothing. The sync always covers a
+ * whole number of turns, so the fallback anchor is the same number of user
+ * messages counted back from the end.
  */
 export function mergeTranscript(messages: Message[], incoming: Message[]): Message[] {
   if (!incoming.length) return messages;
-  const incomingIds = new Set(incoming.map((message) => message.id).filter(Boolean));
-  const firstIndex = messages.findIndex((message) => incomingIds.has(message.id));
-  const kept = firstIndex >= 0 ? messages.slice(0, firstIndex) : messages;
+  const anchor = syncAnchor(messages, incoming);
+  if (anchor == null) return messages;
   // A pending message is the composer's, not the transcript's, so it survives.
-  const pending = (firstIndex >= 0 ? messages.slice(firstIndex) : []).filter((message) => message.pending);
-  return [...kept, ...incoming, ...pending];
+  const pending = messages.slice(anchor).filter((message) => message.pending);
+  return [...messages.slice(0, anchor), ...incoming, ...pending];
+}
+
+function syncAnchor(messages: Message[], incoming: Message[]): number | null {
+  const incomingIds = new Set(incoming.map((message) => message.id).filter(Boolean));
+  const byId = messages.findIndex((message) => message.id && incomingIds.has(message.id));
+  if (byId >= 0) return byId;
+
+  const turns = incoming.filter((message) => message.role === "user").length;
+  if (!turns) return null;
+  let seen = 0;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]!;
+    if (message.role !== "user" || message.pending) continue;
+    seen += 1;
+    if (seen === turns) return index;
+  }
+  // The transcript holds fewer turns than the sync covers, so all of it is
+  // inside the synced range.
+  return 0;
 }
