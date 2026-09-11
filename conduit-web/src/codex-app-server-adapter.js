@@ -59,6 +59,13 @@ const approvalChoice = (response) => {
 };
 
 const error = (message, code = "backend_unavailable", status = 409) => Object.assign(new Error(message), { code, status });
+const waitForExit = (child, timeoutMs = 2_000) => {
+  if (!child || child.exitCode != null || child.signalCode != null) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, timeoutMs);
+    child.once("exit", () => { clearTimeout(timer); resolve(); });
+  });
+};
 
 // A long-running Codex thread holds hundreds of items, and the commands, edits
 // and searches outnumber the conversation roughly five to one. Capping raw items
@@ -99,34 +106,44 @@ export class CodexAppServerAdapter extends EventEmitter {
 
   async create({ chatId, project, model = "", thinkingLevel = "", approvalPolicy = "", sandbox = null }) {
     const record = await this.start({ chatId, cwd: project.workingRoot });
-    const result = await this.request(record, "thread/start", {
-      cwd: project.workingRoot,
-      ...(model ? { model } : {}),
-      ...(thinkingLevel ? { effort: thinkingLevel } : {}),
-      ...CodexAppServerAdapter.policy(approvalPolicy, sandbox),
-    });
-    record.sessionId = result.thread.id;
-    record.model = result.model || model;
-    record.thinkingLevel = result.thread?.reasoningEffort || thinkingLevel;
-    this.emit("changed", { record, reason: "created" });
-    return record;
+    try {
+      const result = await this.request(record, "thread/start", {
+        cwd: project.workingRoot,
+        ...(model ? { model } : {}),
+        ...(thinkingLevel ? { effort: thinkingLevel } : {}),
+        ...CodexAppServerAdapter.policy(approvalPolicy, sandbox),
+      });
+      record.sessionId = result.thread.id;
+      record.model = result.model || model;
+      record.thinkingLevel = result.thread?.reasoningEffort || thinkingLevel;
+      this.emit("changed", { record, reason: "created" });
+      return record;
+    } catch (cause) {
+      await this.close(record.id);
+      throw cause;
+    }
   }
 
   async restore(opaqueSession, { chatId, project, model = "", thinkingLevel = "", approvalPolicy = "", sandbox = null }) {
     const record = await this.start({ chatId, cwd: project.workingRoot });
     const threadId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!threadId) throw error("Codex thread identity is missing");
-    const result = await this.request(record, "thread/resume", {
-      threadId, cwd: project.workingRoot,
-      ...(model ? { model } : {}),
-      ...(thinkingLevel ? { effort: thinkingLevel } : {}),
-      ...CodexAppServerAdapter.policy(approvalPolicy, sandbox),
-    });
-    record.sessionId = result.thread?.id || threadId;
-    record.model = model || result.model || result.thread?.model || "";
-    record.thinkingLevel = thinkingLevel || result.thread?.reasoningEffort || "";
-    this.emit("changed", { record, reason: "restored" });
-    return record;
+    try {
+      const result = await this.request(record, "thread/resume", {
+        threadId, cwd: project.workingRoot,
+        ...(model ? { model } : {}),
+        ...(thinkingLevel ? { effort: thinkingLevel } : {}),
+        ...CodexAppServerAdapter.policy(approvalPolicy, sandbox),
+      });
+      record.sessionId = result.thread?.id || threadId;
+      record.model = model || result.model || result.thread?.model || "";
+      record.thinkingLevel = thinkingLevel || result.thread?.reasoningEffort || "";
+      this.emit("changed", { record, reason: "restored" });
+      return record;
+    } catch (cause) {
+      await this.close(record.id);
+      throw cause;
+    }
   }
 
   /**
@@ -649,6 +666,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       record.status = "stopped";
       record.active = false;
       record.child.kill("SIGTERM");
+      await waitForExit(record.child);
       this.sessions.remove(id);
       this.emit("removed", { id, chatId: record.chatId });
     }
