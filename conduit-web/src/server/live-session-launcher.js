@@ -43,8 +43,8 @@ export function createLiveSessionLauncher({
     if (resident) return { live: resident, modelRecovery: null };
 
     if (context.chat.backend?.protocol === "native_api") {
-      const selectedModel = text(model) || text(context.chat.backend.model);
-      const selectedThinkingLevel = text(thinkingLevel)
+      const selectedModel = (forceModel ? text(model) : "") || text(context.chat.backend.model);
+      const selectedThinkingLevel = (forceModel ? text(thinkingLevel) : "")
         || text(context.chat.modelThinkingLevels?.[selectedModel]);
       const options = {
         chatId: context.chat.id,

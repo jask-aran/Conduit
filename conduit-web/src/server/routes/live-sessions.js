@@ -54,6 +54,7 @@ export function registerLiveSessionRoutes(app, {
         requestedProject: request.body?.projectId || "",
         model: request.body?.model || "",
         thinkingLevel: request.body?.thinkingLevel || "",
+        forceModel: request.body?.intent === "prompt",
       });
       response.status(201).json({
         ...backends.view(live),
