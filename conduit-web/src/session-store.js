@@ -609,14 +609,18 @@ export function pageSessionEntries(entries, { before, turnLimit = 10, characterL
   return { entries: entries.slice(start, end), start, end, hasMore: start > starts[0] };
 }
 
-export function transcriptFromEntries(entries) {
-  return messagesFromEntries(entries)
+export function transcriptFromMessages(messages) {
+  return messages
     .filter((message) => message.content.trim())
     .map((message) => {
       const role = message.role === "user" ? "User" : message.role === "assistant" ? "Assistant" : "Tool result";
       return `## ${role}\n\n${message.content.trim()}`;
     })
     .join("\n\n");
+}
+
+export function transcriptFromEntries(entries) {
+  return transcriptFromMessages(messagesFromEntries(entries));
 }
 
 export function toolsFromEntries(entries) {

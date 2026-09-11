@@ -6,6 +6,7 @@ import {
   sessionFamilyFiles,
   toolsFromEntries,
   transcriptFromEntries,
+  transcriptFromMessages,
 } from "../../session-store.js";
 import {
   findDeletableSession,
@@ -28,6 +29,17 @@ export function registerSessionRoutes(app, {
   readSessionPage,
   registry,
 }) {
+  async function transcriptFor(context) {
+    const session = await findRegisteredSession(context.chat.id);
+    if (session) return transcriptFromEntries(session.entries).trim();
+    const projection = await backends.forChat(context.chat).readTranscript({
+      chatId: context.chat.id,
+      opaqueSession: context.chat.backend?.opaqueSession,
+      project: context.project,
+    });
+    return transcriptFromMessages(projection.messages || []).trim();
+  }
+
   app.get("/v0/sessions/:id", async (request, response, next) => {
     try {
       const context = await findChatContext(request.params.id);
@@ -68,8 +80,7 @@ export function registerSessionRoutes(app, {
     try {
       const context = await findChatContext(request.params.id);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
-      const session = await findRegisteredSession(request.params.id);
-      response.type("text/markdown").send(session ? transcriptFromEntries(session.entries) : "");
+      response.type("text/markdown").send(await transcriptFor(context));
     } catch (error) { next(error); }
   });
 
@@ -107,12 +118,7 @@ export function registerSessionRoutes(app, {
     try {
       const context = await findChatContext(request.params.id);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
-      const session = await findRegisteredSession(context.chat.id);
-      if (!session) return response.status(409).json({
-        error: "session_context_required",
-        message: "This chat has no persisted context to name.",
-      });
-      const transcript = transcriptFromEntries(session.entries).trim();
+      const transcript = await transcriptFor(context);
       if (!transcript) return response.status(409).json({
         error: "session_context_required",
         message: "This chat has no persisted context to name.",
