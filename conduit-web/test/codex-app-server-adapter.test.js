@@ -117,7 +117,7 @@ test("attached images become native localImage input items", () => {
   assert.deepEqual(items, [
     { type: "localImage", path: "/chats/c1/attachments/a--shot.png" },
     { type: "localImage", path: "/chats/c1/attachments/c--diagram.webp" },
-    { type: "text", text: "Look at this" },
+    { type: "text", text: "Look at this\n\nAttached file: /chats/c1/attachments/b--notes.bin" },
   ]);
 });
 
