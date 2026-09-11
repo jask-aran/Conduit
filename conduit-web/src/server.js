@@ -751,13 +751,14 @@ const liveSessionStream = createLiveSessionStream({
       apply: async (name) => {
         const currentTitle = registry.metadata(context.chat.id)?.title;
         if (currentTitle && currentTitle !== "New chat") return "not_applied_title_already_set";
-        await registry.update(context.chat.id, { title: name });
+        const updated = await registry.update(context.chat.id, { title: name });
         backends.adapterForRecord(record).publish(record, {
           type: "session_checkpoint",
-          chat: chatView(registry.metadata(context.chat.id)),
+          chat: chatView(updated),
           generationId: record.generation?.id || null,
           generationSeq: record.generation?.seq || null,
         });
+        runtimeHub.publish({ type: "chat_changed", chat: chatView(updated), at: new Date().toISOString() });
         return "applied";
       },
     });
