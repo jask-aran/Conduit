@@ -91,8 +91,6 @@ export default function WorkspaceEditor(props: {
   onSave: (value: string) => void;
   onToggleEditing?: () => void;
   onToggleWrap: () => void;
-  reveal?: { source: string; position: number };
-  onRevealed?: () => void;
   header?: JSX.Element;
   ref?: (handle: WorkspaceEditorHandle) => void;
 }) {
@@ -335,35 +333,6 @@ export default function WorkspaceEditor(props: {
       languageLoadToken += 1;
       view?.destroy();
       view = undefined;
-    });
-  });
-
-  createEffect(() => {
-    const request = props.reveal;
-    const path = props.path;
-    if (!request) return;
-    let cancelled = false;
-    onCleanup(() => { cancelled = true; });
-    // A staged or original-side location must be mapped into the live buffer,
-    // which may also contain unsaved edits. Load diffing only for this action.
-    void import("@codemirror/merge").then(({ diff }) => {
-      if (cancelled || !view || activePath !== path) return;
-      const source = request.source.replace(/\r\n?/g, "\n");
-      const target = view.state.doc.toString();
-      const position = Math.max(0, Math.min(request.position, source.length));
-      let mapped = position;
-      for (const change of diff(source, target, { scanLimit: 500, timeout: 40 })) {
-        if (position < change.fromA) break;
-        if (position <= change.toA) {
-          mapped = change.fromB + Math.min(position - change.fromA, change.toB - change.fromB);
-          break;
-        }
-        mapped = position + change.toB - change.toA;
-      }
-      const anchor = Math.max(0, Math.min(mapped, view.state.doc.length));
-      view.dispatch({ selection: { anchor }, effects: EditorView.scrollIntoView(anchor, { y: "center" }) });
-      view.focus();
-      props.onRevealed?.();
     });
   });
 

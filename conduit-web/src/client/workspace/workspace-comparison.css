@@ -10,7 +10,6 @@
 .workspace-comparison-counts > :first-child { color: var(--destructive); }
 .workspace-comparison-counts > :last-child { color: var(--workspace-git-added); }
 .workspace-comparison-content { flex: 1; min-height: 0; overflow: hidden; }
-.workspace-comparison[data-in-files="true"] { background: color-mix(in oklch, var(--background), black 3%); }
 .workspace-comparison-content .cm-mergeView { height: 100%; overflow: auto; }
 .workspace-comparison-content .cm-mergeViewEditor { min-width: 0; }
 .workspace-comparison-content .cm-mergeViewEditor + .cm-mergeViewEditor { border-left: 1px solid var(--border); }

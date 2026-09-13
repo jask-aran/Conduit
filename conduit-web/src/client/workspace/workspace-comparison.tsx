@@ -25,14 +25,13 @@ export interface ComparisonViewState {
   position: number;
 }
 
-export default function WorkspaceComparison(props: { comparison: ComparisonPayload; sourceKey: string; viewState: ComparisonViewState; inFiles?: boolean; header?: JSX.Element; headerAction?: JSX.Element; statusPrefix?: JSX.Element; comparisonSource?: JSX.Element; comparisonLabel?: JSX.Element; onViewStateChange?: (state: ComparisonViewState) => void; wrap?: boolean; onToggleWrap?: () => void }) {
+export default function WorkspaceComparison(props: { comparison: ComparisonPayload; sourceKey: string; viewState: ComparisonViewState; headerAction?: JSX.Element; comparisonSource?: JSX.Element; comparisonLabel?: JSX.Element; onViewStateChange?: (state: ComparisonViewState) => void }) {
   let host!: HTMLDivElement;
   let activeView: EditorView | undefined;
   let captureReview = () => ({ ...props.viewState });
   const [layout, setLayout] = createSignal<"unified" | "split">(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "diff-layout") === "split" ? "split" : props.viewState.layout);
   createEffect(() => writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "diff-layout", layout()));
   const [wrap, setWrap] = createSignal(props.viewState.wrap);
-  createEffect(() => { if (props.wrap !== undefined) setWrap(props.wrap); });
   const [position, setPosition] = createSignal("Ln 1, Col 1");
   const [summary, setSummary] = createSignal({ added: 0, removed: 0, precise: true });
   const [languageName, setLanguageName] = createSignal("Plain text");
@@ -154,9 +153,9 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
     activeView.focus();
   };
   const rangeLabel = () => props.comparisonLabel ?? { changes: "Index → Working copy", staged: "HEAD → Index", head: "HEAD → Working copy", turn: "Turn start → Working copy", session: "Chat start → Working copy" }[props.comparison.scope];
-  return <section class="workspace-comparison" data-in-files={props.inFiles}>
+  return <section class="workspace-comparison">
     <header class="workspace-preview-header">
-      <Show when={props.header} fallback={<span class="workspace-comparison-path">{props.comparison.path}</span>}>{props.header}</Show>
+      <span class="workspace-comparison-path">{props.comparison.path}</span>
       {props.headerAction}
       <Show when={props.comparison.kind === "text"}>
         <Menu>
@@ -178,7 +177,6 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
     <Show when={props.comparison.kind === "text"} fallback={<div class="workspace-panel-empty">{props.comparison.kind === "unavailable" ? props.comparison.message : ""}</div>}>
       <div ref={host} class="workspace-comparison-content workspace-code-editor" data-layout={layout()} />
       <WorkbenchStatus commands={<>
-        {props.statusPrefix}
         {props.comparisonSource}
         <WorkbenchButton aria-label="Find in comparison" title="Find in comparison (Ctrl+F)" onClick={() => { if (activeView) openSearchPanel(activeView); }}><SearchIcon /></WorkbenchButton>
         <WorkbenchButton aria-label="Previous change" title="Previous change" onClick={() => move(false)}><ChevronUpIcon /></WorkbenchButton>
@@ -186,7 +184,7 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
       </>}>
         <span class="workspace-editor-metadata" title="Comparison endpoints">{rangeLabel()}</span>
         <WorkbenchButton aria-label="Go to line" title="Go to line (Alt+G)" onClick={() => { if (activeView) gotoLine(activeView); }}>{position()}</WorkbenchButton>
-        <WorkbenchButton aria-label={wrap() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={wrap()} title={wrap() ? "Disable line wrapping" : "Enable line wrapping"} onClick={() => props.onToggleWrap ? props.onToggleWrap() : setWrap(!wrap())}><WrapTextIcon /></WorkbenchButton>
+        <WorkbenchButton aria-label={wrap() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={wrap()} title={wrap() ? "Disable line wrapping" : "Enable line wrapping"} onClick={() => setWrap(!wrap())}><WrapTextIcon /></WorkbenchButton>
         <span class="workspace-editor-metadata">{languageName()} · Read-only</span>
       </WorkbenchStatus>
     </Show>
