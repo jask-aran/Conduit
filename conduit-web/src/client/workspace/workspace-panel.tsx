@@ -1,4 +1,4 @@
-import { batch, createEffect, createMemo, createSignal, For, lazy, on, onCleanup, Show, Suspense, type Accessor } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, Show, type Accessor } from "solid-js";
 import { BoxesIcon, Columns2Icon, CheckIcon, ChevronsUpIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileDiffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, FolderUpIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, HistoryIcon, Maximize2Icon, MessageSquareIcon, Minimize2Icon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, SendIcon, TerminalIcon, Trash2Icon, Undo2Icon, UploadIcon, XIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
 import { Button, ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Menu, MenuContent, MenuItem, MenuRadioGroup, MenuRadioItem, MenuTrigger, Spinner } from "@/components/primitives";
@@ -19,6 +19,7 @@ import type { ComparisonPayload, ComparisonViewState } from "./workspace-compari
 import { createWorkspaceReview, diffScopes, isDiffScope, type DiffScope } from "./workspace-review-source";
 import { WorkspaceReviewNavigator } from "./workspace-review";
 import { WorkbenchButton } from "./workspace-workbench";
+import { WorkspaceDiffView } from "./workspace-diff-view";
 
 
 interface TreeEntry { name: string; path: string; type: "directory" | "file" | "other"; }
@@ -46,8 +47,6 @@ type FilesMode = "file" | "diff";
 type UploadTarget = { kind: "directory"; path: string } | { kind: "replacement"; path: string };
 
 const PANEL_TABS = ["files", "diff", "artifacts", "terminal"] satisfies PanelTab[];
-const WorkspaceComparison = lazy(() => import("./workspace-comparison"));
-
 function historyEntryLabel(node: HistoryNode): string {
   if (node.label) return node.label;
   return node.entry.display || node.entry.type.replaceAll("_", " ");
@@ -735,7 +734,23 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     sourceReview.setScope(scope, checkpoint);
     void sourceReview.refresh();
   };
-  const inspectFileDiff = (path: string, staged: boolean) => void openReview(staged ? "staged" : "changes", path);
+  const openSourceControlReview = async (scope: DiffScope, path: string) => {
+    const slot = slotForPath(path);
+    const handle = slot ? slotHandles.get(slot) : undefined;
+    if (handle?.hasUnsavedChanges()) {
+      if (!window.confirm("Discard unsaved changes and review this file?")) return;
+      handle.discardChanges();
+    }
+    const side = panePosition("files") ?? focusedPane();
+    setSourceControlMode("review");
+    writeSetting(panelScope(), "diff:mode", "review");
+    setCommitDetail(null);
+    sourceReview.setScope(scope);
+    setPaneTab(side, "diff");
+    if (!diff()) await loadDiff(false, false);
+    await sourceReview.refresh(path);
+  };
+  const inspectFileDiff = (path: string, staged: boolean) => void openSourceControlReview(staged ? "staged" : "changes", path);
   const refreshReview = async () => {
     await review.refresh();
     const comparison = review.comparison();
@@ -773,13 +788,21 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   };
   const showFileDiff = (slot: FileSlotId, staged: boolean) => {
     const path = openPaths()[slot];
-    if (path) { setFocusedSlot(slot); void openReview(staged ? "staged" : "changes", path); }
+    if (path) { setFocusedSlot(slot); void openSourceControlReview(staged ? "staged" : "changes", path); }
   };
   const openFile = (path: string) => {
     if (filesMode() === "diff") showFileMode();
     if (openInSlot(focusedSlot(), path)) setNavigatorOpen(false);
   };
   const openFileToSide = (path: string) => openInSlot("secondary", path);
+  const openWorkingFile = (path: string) => {
+    const diffSide = panePosition("diff") ?? focusedPane();
+    showFileMode();
+    if (!openInSlot(focusedSlot(), path)) return;
+    if (!tabVisible("files")) setPaneTab(diffSide, "files");
+    const filesSide = panePosition("files") ?? diffSide;
+    queueMicrotask(() => focusTabDefault("files", filesSide));
+  };
   let pendingEdit: string | null = null;
   const editFile = (path: string) => {
     const slot = slotForPath(path);
@@ -1991,10 +2014,22 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       </Show>
       </div>
       </Show>
-      <Show when={sourceControlMode() === "review"}><div class="workspace-artifact-review">
-        <WorkspaceReviewNavigator title="Changed files" files={sourceReview.files()} selectedPath={sourceReview.selectedPath()} empty={sourceReview.error() || (sourceReview.loading() ? "Loading changes…" : "No uncommitted changes.")} onSelect={(path) => void sourceReview.select(path)} />
-        <div class="workspace-review-comparison"><Show when={sourceReview.comparison()} fallback={<div class="workspace-panel-empty">{sourceReview.loading() ? "Loading changes…" : "Select a changed file."}</div>}>{(comparison) => <Suspense fallback={<div class="workspace-panel-empty">Loading comparison…</div>}><WorkspaceComparison comparison={comparison()} sourceKey={sourceReview.sourceKey()} viewState={sourceReview.viewState()} comparisonSource={comparisonSourceControls(sourceReview, openEmbeddedSourceReview)} comparisonLabel={sourceReview.rangeLabel()} onViewStateChange={sourceReview.setViewState} /></Suspense>}</Show></div>
-      </div></Show>
+      <Show when={sourceControlMode() === "review"}><WorkspaceDiffView
+        title="Changed files"
+        files={sourceReview.files()}
+        selectedPath={sourceReview.selectedPath()}
+        comparison={sourceReview.comparison()}
+        sourceKey={sourceReview.sourceKey()}
+        viewState={sourceReview.viewState()}
+        loading={sourceReview.loading()}
+        error={sourceReview.error()}
+        empty="No uncommitted changes."
+        comparisonSource={comparisonSourceControls(sourceReview, openEmbeddedSourceReview)}
+        comparisonLabel={sourceReview.rangeLabel()}
+        onSelect={(path) => void sourceReview.select(path)}
+        onOpenWorkingFile={openWorkingFile}
+        onViewStateChange={sourceReview.setViewState}
+      /></Show>
         <Show when={sourceControlMode() === "graph" || sourceControlMode() === "patch"}><Show when={sourceControlMode() === "patch"} fallback={<Show when={Boolean(diff()?.commits?.length)} fallback={<div class="workspace-panel-empty">No commit history available.</div>}><CommitHistory commits={diff()?.commits || []} refs={diff()?.refs || []} branch={diff()?.branch} onCopy={copy} onInspect={inspectCommit} /></Show>}>
           <div class="workspace-patch"><Show when={commitDetailLoading()} fallback={<Show when={commitDetail()} fallback={<Show when={diff()?.diff} fallback={<div class="workspace-panel-empty">{diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</div>}>{(content) => <PatchView content={content()} />}</Show>}>{(detail) => <PatchView content={detail().content} />}</Show>}><div class="workspace-panel-empty">Loading commit…</div></Show></div>
         </Show></Show>
@@ -2002,10 +2037,22 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     <Show when={tabVisible("artifacts")}><section class="workspace-artifacts" data-position={panePosition("artifacts")}>
       <div class="workspace-artifact-modes" role="radiogroup" aria-label="Chat view"><div><Show when={props.historyAvailable?.()}><button role="radio" aria-checked={artifactMode() === "history"} onClick={() => { setArtifactMode("history"); void loadHistory(); }}>History</button></Show><button role="radio" aria-checked={artifactMode() === "changes"} onClick={showAgentChanges}>Agent changes</button><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div></div>
       <Show when={artifactMode() === "history"}><Show when={!historyLoading()} fallback={<div class="workspace-panel-empty">Loading history…</div>}><Show when={historyTree()?.tree.length} fallback={<div class="workspace-panel-empty"><div><HistoryIcon /><strong>No chat history</strong><p>Send a message to start this tree.</p></div></div>}><div class="workspace-chat-history" role="tree" aria-label="Chat history"><HistoryNodes nodes={historyTree()!.tree} activePath={historyActivePath()} leafId={historyTree()!.leafId} /></div></Show></Show></Show>
-      <Show when={artifactMode() === "changes"}><div class="workspace-artifact-review">
-        <WorkspaceReviewNavigator title="Changed files" files={chatReview.files()} selectedPath={chatReview.selectedPath()} empty={chatReview.error() || (chatReview.loading() ? "Loading changes…" : "No changes in this scope.")} onSelect={selectEmbeddedReviewFile} />
-        <div class="workspace-review-comparison"><Show when={chatReview.comparison()} fallback={<div class="workspace-panel-empty">{chatReview.loading() ? "Loading changes…" : "Select a changed file."}</div>}>{(comparison) => <Suspense fallback={<div class="workspace-panel-empty">Loading comparison…</div>}><WorkspaceComparison comparison={comparison()} sourceKey={chatReview.sourceKey()} viewState={chatReview.viewState()} comparisonSource={comparisonSourceControls(chatReview, openEmbeddedReview)} comparisonLabel={chatReview.rangeLabel()} onViewStateChange={chatReview.setViewState} /></Suspense>}</Show></div>
-      </div></Show>
+      <Show when={artifactMode() === "changes"}><WorkspaceDiffView
+        title="Changed files"
+        files={chatReview.files()}
+        selectedPath={chatReview.selectedPath()}
+        comparison={chatReview.comparison()}
+        sourceKey={chatReview.sourceKey()}
+        viewState={chatReview.viewState()}
+        loading={chatReview.loading()}
+        error={chatReview.error()}
+        empty="No changes in this scope."
+        comparisonSource={comparisonSourceControls(chatReview, openEmbeddedReview)}
+        comparisonLabel={chatReview.rangeLabel()}
+        onSelect={selectEmbeddedReviewFile}
+        onOpenWorkingFile={openWorkingFile}
+        onViewStateChange={chatReview.setViewState}
+      /></Show>
       <Show when={artifactMode() === "outputs" || artifactMode() === "interactive"}><div class="workspace-panel-empty"><div><BoxesIcon /><strong>{artifactMode() === "outputs" ? "No artifacts in the loaded transcript" : "Interactive artifacts are not enabled"}</strong><p>{artifactMode() === "outputs" ? "Code blocks and file outputs will appear here as transcript artifact projection lands." : "This boundary is reserved for sandboxed, explicitly trusted generated interfaces."}</p></div></div></Show>
     </section></Show>
     <Show when={tabVisible("terminal")}><section class="workspace-terminal-slot" data-position={panePosition("terminal")}><TerminalPane projectId={props.settingsScope?.() === "computer" ? "computer" : props.projectId()} projectName={props.settingsScope?.() === "computer" ? "Computer" : props.projectName()} workingRoot={props.settingsScope?.() === "computer" ? props.workingRoot() : undefined} terminalId={props.requestedTab?.()?.terminalId} focusRequest={terminalFocusRequest()} /></section></Show>

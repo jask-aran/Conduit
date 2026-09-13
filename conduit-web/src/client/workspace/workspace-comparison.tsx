@@ -25,7 +25,7 @@ export interface ComparisonViewState {
   position: number;
 }
 
-export default function WorkspaceComparison(props: { comparison: ComparisonPayload; sourceKey: string; viewState: ComparisonViewState; inFiles?: boolean; header?: JSX.Element; statusPrefix?: JSX.Element; comparisonSource?: JSX.Element; comparisonLabel?: JSX.Element; onViewStateChange?: (state: ComparisonViewState) => void; wrap?: boolean; onToggleWrap?: () => void }) {
+export default function WorkspaceComparison(props: { comparison: ComparisonPayload; sourceKey: string; viewState: ComparisonViewState; inFiles?: boolean; header?: JSX.Element; headerAction?: JSX.Element; statusPrefix?: JSX.Element; comparisonSource?: JSX.Element; comparisonLabel?: JSX.Element; onViewStateChange?: (state: ComparisonViewState) => void; wrap?: boolean; onToggleWrap?: () => void }) {
   let host!: HTMLDivElement;
   let activeView: EditorView | undefined;
   let captureReview = () => ({ ...props.viewState });
@@ -157,6 +157,7 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
   return <section class="workspace-comparison" data-in-files={props.inFiles}>
     <header class="workspace-preview-header">
       <Show when={props.header} fallback={<span class="workspace-comparison-path">{props.comparison.path}</span>}>{props.header}</Show>
+      {props.headerAction}
       <Show when={props.comparison.kind === "text"}>
         <Menu>
           <MenuTrigger class="workspace-document-menu" aria-label="Comparison view options">View<ChevronDownIcon /></MenuTrigger>
