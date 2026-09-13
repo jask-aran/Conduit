@@ -4,6 +4,7 @@ import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, Con
 import { api } from "../api/client";
 import type { ChatSummary, ComputerLocation, HarnessSummary, Project } from "../api/contracts";
 import type { ComposerModels } from "../chat/composer-models";
+import type { DriveChatStore } from "../state/drive-chat";
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { FileTypeIcon } from "../workspace/file-type-icon";
@@ -65,6 +66,8 @@ export function ComputerDashboard(props: {
   onOpenHarnessHere?: (id: string, cwd: string) => void;
   onOpenHarnessChat?: (chat: ChatSummary, project: Project, prompt?: string) => void;
   harnessComposer?: (cwd: string, models: ComposerModels, loading: boolean) => JSX.Element;
+  onHarnessDriveChange?: (open: boolean) => void;
+  renderHarnessDrive?: (input: { current: { cwd: string; title: string; nativeSessionId: string }; harness: HarnessSummary; store: DriveChatStore; onBack: () => void; onTrack: () => void }) => JSX.Element;
   dialog?: boolean;
   onSelectFolder?: () => void;
   onCreateFolder?: () => void;
@@ -187,7 +190,7 @@ export function ComputerDashboard(props: {
       </aside></Show>
       <Show when={!props.selectedHarness}><div class="computer-sidebar-resize" role="separator" aria-label="Resize locations sidebar" aria-orientation="vertical" aria-valuemin="120" aria-valuemax="280" aria-valuenow={sidebarWidth()} onPointerDown={startSidebarResize} /></Show>
 
-      <Show when={!props.selectedHarness} fallback={<HarnessDashboard harness={harnesses().find((item) => item.id === props.selectedHarness)} projects={workspaces()} cwd={props.location?.project.workingRoot || ""} runtime={props.runtime} scope={harnessScope()} onScope={setHarnessScope} onOpenChat={props.onOpenHarnessChat} composer={props.harnessComposer} />}>
+      <Show when={!props.selectedHarness} fallback={<HarnessDashboard harness={harnesses().find((item) => item.id === props.selectedHarness)} projects={workspaces()} cwd={props.location?.project.workingRoot || ""} runtime={props.runtime} scope={harnessScope()} onScope={setHarnessScope} onOpenChat={props.onOpenHarnessChat} composer={props.harnessComposer} onDriveChange={props.onHarnessDriveChange} renderDrive={props.renderHarnessDrive} />}>
       <div class="computer-explorer-main">
         <div class="computer-explorer-toolbar">
           <button type="button" aria-label="Home folder" title="Home folder" disabled={props.loading} onClick={() => props.onBrowse()}><HomeIcon /></button>

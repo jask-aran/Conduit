@@ -574,6 +574,7 @@ registerVoiceRoutes(app, { voiceSettings, voiceRuntime, voiceModel });
 registerPtyRoutes(app, { projects, terminals });
 
 registerProjectRoutes(app, {
+  backends,
   buildProjectDashboard,
   config,
   listWorkspaceDirectory,

@@ -784,7 +784,7 @@ export function Sidebar(props: {
         void props.onOpenChat(menuProps.chat, menuProps.project);
       }}
     >
-      <RuntimeIndicator process={processFor(menuProps.chat)} stale={props.runtime.stale()} unread={menuProps.chat.unread} hideIdle fallback={<ThreadHarnessMark id={menuProps.chat.harnessId} />} />
+      <RuntimeIndicator process={processFor(menuProps.chat)} stale={props.runtime.stale()} unread={menuProps.chat.unread} fallback={<ThreadHarnessMark id={menuProps.chat.harnessId} />} />
       <SidebarChatTitle title={title} animate={animateTitle} />
     </ContextMenuTrigger>
     <ContextMenuContent class="w-60 sidebar-context-menu">

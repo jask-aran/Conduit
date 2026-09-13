@@ -15,7 +15,7 @@ type Mark = { src: string; tint?: boolean };
 const BLOSSOM: Mark = { src: "/brand/openai-blossom-mark.svg", tint: true };
 
 const MARKS: Record<string, Mark> = {
-  conduit: { src: "/brand/pi-mark.svg", tint: true },
+  conduit: { src: "/favicon.svg" },
   codex: { src: "/brand/codex-mark.svg" },
   "chatgpt-web": BLOSSOM,
   "claude-code": { src: "/brand/claude-code-mark.svg", tint: true },

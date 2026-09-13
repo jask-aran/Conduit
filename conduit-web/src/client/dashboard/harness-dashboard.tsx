@@ -5,13 +5,12 @@ import type { ChatSummary, ComputerLocation, HarnessSummary, HarnessThread, Harn
 import { Composer } from "../chat/composer";
 import type { ComposerModels } from "../chat/composer-models";
 import { saveChatSort, useChatSort } from "../preferences/chat-sort";
-import { selectedMarkdownRenderer } from "../chat/markdown-settings";
-import { Transcript } from "../chat/transcript";
-import { HarnessMark } from "../harness-brand";
+import { HarnessMark, ThreadHarnessMark } from "../harness-brand";
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
+import { RuntimeIndicator } from "../navigation/runtime-indicator";
 import { createDriveChat } from "../state/drive-chat";
+import type { DriveChatStore } from "../state/drive-chat";
 import type { RuntimeStore } from "../state/runtime";
-import { loadVoiceDictationSettings } from "../chat/voice-dictation.js";
 import { DashboardControlGroup, DashboardEmpty, DashboardGrid, DashboardIdentity, DashboardLaunch, DashboardQuickActions, DashboardRow, DashboardRowTitle, DashboardScrollRegion, DashboardSearchButton, DashboardSection, DashboardShell } from "./primitives/dashboard";
 import "./harness-dashboard.css";
 
@@ -24,6 +23,8 @@ export function HarnessDashboard(props: {
   onScope: (path: string | null) => void;
   onOpenChat?: (chat: ChatSummary, project: Project, prompt?: string) => void;
   composer?: (cwd: string, models: ComposerModels, loading: boolean) => JSX.Element;
+  onDriveChange?: (open: boolean) => void;
+  renderDrive?: (input: { current: { cwd: string; title: string; nativeSessionId: string }; harness: HarnessSummary; store: DriveChatStore; onBack: () => void; onTrack: () => void }) => JSX.Element;
 }) {
   const relativeTime = (value: number | string | null) => {
     const raw = typeof value === "number" && value < 1_000_000_000_000 ? value * 1_000 : value;
@@ -54,7 +55,6 @@ export function HarnessDashboard(props: {
   const [picker, setPicker] = createSignal<ComputerLocation | null>(null);
   const [pickerBusy, setPickerBusy] = createSignal(false);
   const [drive, setDrive] = createSignal<{ cwd: string; title: string; nativeSessionId: string } | null>(null);
-  const voiceSettings = loadVoiceDictationSettings();
   const chatSort = useChatSort();
   let liveId = "";
   const driveChat = props.runtime ? createDriveChat({ runtime: props.runtime, onError: (cause) => setError(cause instanceof Error ? cause.message : String(cause)) }) : null;
@@ -117,14 +117,15 @@ export function HarnessDashboard(props: {
     finally { setLoading(false); }
   };
   createEffect(() => { props.harness?.id; scope(); void load(); });
-  onCleanup(() => { const current = liveId; if (current) void api(`/v0/live-sessions/${current}/process`, { method: "DELETE" }); });
+  onCleanup(() => { props.onDriveChange?.(false); const current = liveId; if (current) void api(`/v0/live-sessions/${current}/process`, { method: "DELETE" }); });
 
   const attach = async (live: { id: string; nativeSessionId: string; streamUrl: string }, cwd: string, title: string) => {
     if (!driveChat) return setError("Live sessions are unavailable on this surface");
     liveId = live.id;
     setDrive({ cwd, title, nativeSessionId: live.nativeSessionId });
+    props.onDriveChange?.(true);
     try { await driveChat.attach(live, title); }
-    catch (cause) { setDrive(null); setError(cause instanceof Error ? cause.message : "Thread could not be opened"); }
+    catch (cause) { setDrive(null); props.onDriveChange?.(false); setError(cause instanceof Error ? cause.message : "Thread could not be opened"); }
   };
 
   const openThread = async (group: HarnessThreadGroup, thread: HarnessThread) => {
@@ -147,6 +148,7 @@ export function HarnessDashboard(props: {
     liveId = "";
     driveChat?.detach();
     setDrive(null);
+    props.onDriveChange?.(false);
     if (current) await api(`/v0/live-sessions/${current}/process`, { method: "DELETE" });
     void load();
   };
@@ -164,11 +166,10 @@ export function HarnessDashboard(props: {
       liveId = "";
       driveChat?.detach();
       setDrive(null);
+      props.onDriveChange?.(false);
       props.onOpenChat?.(chat, project);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Thread could not be tracked"); }
   };
-
-  const driveAttachments = { items: () => [] as never[], addFiles: () => {}, remove: () => {} } as never;
 
   const browsePicker = async (path?: string) => {
     setPickerBusy(true);
@@ -212,7 +213,7 @@ export function HarnessDashboard(props: {
     </div>}>
       <Show when={!loading()} fallback={<DashboardEmpty>Finding threads…</DashboardEmpty>}>
         <DashboardScrollRegion>
-          <For each={sessionRows()}>{({ group, thread }) => <DashboardRow element="button" class="harness-session-row" disabled={group.missing} onClick={() => void openThread(group, thread)} content={<><DashboardRowTitle title={thread.title} context={[scope() ? null : group.display, group.repository?.branch, group.missing ? "Folder is gone" : null].filter(Boolean).join(" · ")} /><Show when={thread.preview && thread.preview !== thread.title}><small>{thread.preview}</small></Show></>} meta={<><Show when={thread.tracked}><em class="harness-tracked-badge">Tracked</em></Show><small>{relativeTime(thread.updatedAt)}</small></>} />}</For>
+          <For each={sessionRows()}>{({ group, thread }) => <DashboardRow element="button" class="harness-session-row" disabled={group.missing} onClick={() => void openThread(group, thread)} leading={<RuntimeIndicator process={thread.chatId ? props.runtime?.getProcess(thread.chatId) : null} stale={props.runtime?.stale()} fallback={<ThreadHarnessMark id={props.harness?.id} />} />} content={<><DashboardRowTitle title={thread.title} context={[scope() ? null : group.display, group.repository?.branch, group.missing ? "Folder is gone" : null].filter(Boolean).join(" · ")} /><Show when={thread.preview && thread.preview !== thread.title}><small>{thread.preview}</small></Show></>} meta={<><Show when={thread.tracked}><em class="harness-tracked-badge">Tracked</em></Show><small>{relativeTime(thread.updatedAt)}</small></>} />}</For>
           <Show when={!sessionRows().length}><DashboardEmpty>{sessionQuery() ? "No sessions match this search." : `No threads ${scope() ? "in this folder" : "yet"}.`}</DashboardEmpty></Show>
           <Show when={truncated()}><p class="harness-note">Older threads are not shown.</p></Show>
         </DashboardScrollRegion>
@@ -227,10 +228,9 @@ export function HarnessDashboard(props: {
       <DashboardGrid primary={<Sessions />} rail={<><Show when={!harness().drive}><WorkingFolder /></Show><RecentFolders /></>} />
       <Show when={error()}><p class="harness-error" role="alert">{error()}</p></Show>
     </DashboardShell>}>
-      {(current) => <section class="harness-drive">
-        <header><button type="button" aria-label="Back to threads" onClick={() => void closeDrive()}><ArrowRightIcon class="harness-back" /></button><div><strong>{current().title}</strong><small title={current().cwd}><HarnessMark id={harness().id} />{current().cwd} · not tracked</small></div><button type="button" onClick={() => void track()}>Track this thread</button></header>
-        <Show when={driveChat} fallback={<DashboardEmpty>Live sessions are unavailable on this surface.</DashboardEmpty>}>{(store) => <div class="work-area"><section class="work-area-conversation" aria-label="Conversation"><Transcript chat={store().chat} partialContinue={false} markdownRenderer={selectedMarkdownRenderer()} rendererControlsVisible={false} profileLabel={harness().label} /><div class="composer-stack"><Composer chat={store().chat} attachments={driveAttachments} attachmentsSupported={false} models={store().models} profiles={[]} activeProfile={null} serverOnline={props.runtime?.connectivity() === "online"} voiceSettings={voiceSettings} onChooseProfile={() => {}} onOpenSettings={() => {}} onOpenAttachments={() => {}} /></div></section></div>}</Show>
-      </section>}
+      {(current) => driveChat && props.renderDrive
+        ? props.renderDrive({ current: current(), harness: harness(), store: driveChat, onBack: () => void closeDrive(), onTrack: () => void track() })
+        : <DashboardEmpty>Live sessions are unavailable on this surface.</DashboardEmpty>}
     </Show>
 
     <Show when={picker()}>{(location) => <div class="harness-picker-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setPicker(null); }}><div class="harness-picker" role="dialog" aria-label="Select working folder" aria-busy={pickerBusy()}>

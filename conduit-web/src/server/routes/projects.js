@@ -77,6 +77,7 @@ function normalizeWorkspaceAppearance(requested) {
 }
 
 export function registerProjectRoutes(app, {
+  backends,
   buildProjectDashboard,
   config,
   listWorkspaceDirectory,
@@ -183,6 +184,7 @@ export function registerProjectRoutes(app, {
         terminals: terminals.list(),
         readPage: readSessionPage,
         inspectWorkspace: (root, options) => readWorkspaceDiff(root, { ...options, includePatch: false }),
+        listBackendSessions: (implementation, cwd) => backends.forImplementation(implementation).listSessions({ cwd }),
         signal: controller.signal,
       }));
     } catch (error) {
