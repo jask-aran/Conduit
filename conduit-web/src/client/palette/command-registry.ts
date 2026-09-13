@@ -53,7 +53,7 @@ export interface PaletteActions {
   focusComposer: () => void;
   focusWorkspacePanel: () => void;
   toggleChatWorkspaceFocus: () => void;
-  openWorkspaceView: (view: "files" | "diff" | "artifacts" | "terminal") => void;
+  openWorkspaceView: (view: "files" | "diff" | "chat" | "terminal") => void;
   copyTranscript: () => void;
   rename: () => void;
   autoName: () => void;
@@ -262,7 +262,7 @@ function settingsSectionCommands(context: PaletteContext): PaletteCommand[] {
 const WORKSPACE_VIEWS = [
   { id: COMMAND_IDS.workspaceFiles, view: "files", label: "Files", description: "Browse the project files", icon: "workspace-panel", keywords: ["tree", "folder", "project"] },
   { id: COMMAND_IDS.workspaceSourceControl, view: "diff", label: "Source Control", description: "Inspect working-tree changes", icon: "workspace-panel", keywords: ["git", "diff", "changes"] },
-  { id: COMMAND_IDS.workspaceArtifacts, view: "artifacts", label: "Artifacts", description: "Browse outputs and interactive artifacts", icon: "workspace-panel", keywords: ["outputs", "preview"] },
+  { id: COMMAND_IDS.workspaceChat, view: "chat", label: "Chat", description: "Browse history, agent changes, and outputs", icon: "workspace-panel", keywords: ["history", "changes", "outputs", "preview"] },
   { id: COMMAND_IDS.workspaceTerminal, view: "terminal", label: "Terminal", description: "Open a server-owned shell for this session", icon: "terminal", keywords: ["shell", "console", "pty"] },
 ] as const;
 

@@ -32,8 +32,8 @@ interface GitLineCounts { added: number; removed: number; }
 interface GitChangedFile { status: string; path: string; stagedCounts?: GitLineCounts | null; workingCounts?: GitLineCounts | null; headCounts?: GitLineCounts | null; }
 interface DiffPayload { repository: boolean; branch?: string; upstream?: string | null; ahead?: number; behind?: number; commits?: GitCommit[]; refs?: GitRef[]; files: GitChangedFile[]; diff: string; }
 interface GitCommitDetail { hash: string; content: string; }
-type PanelTab = "files" | "diff" | "artifacts" | "terminal";
-type ArtifactMode = "history" | "changes" | "outputs" | "interactive";
+type PanelTab = "files" | "diff" | "chat" | "terminal";
+type ChatMode = "history" | "changes" | "outputs" | "interactive";
 interface HistoryEntry { id: string; parentId: string | null; timestamp: string; type: string; display: string; kind: "user" | "assistant" | "tool" | "summary" | "system"; hidden: boolean; }
 interface HistoryNode { entry: HistoryEntry; children: HistoryNode[]; label?: string; }
 interface HistoryTree { tree: HistoryNode[]; leafId: string | null; }
@@ -43,7 +43,7 @@ type FileSlotId = "primary" | "secondary";
 type OpenFiles = { primary: string | null; secondary: string | null };
 type UploadTarget = { kind: "directory"; path: string } | { kind: "replacement"; path: string };
 
-const PANEL_TABS = ["files", "diff", "artifacts", "terminal"] satisfies PanelTab[];
+const PANEL_TABS = ["files", "diff", "chat", "terminal"] satisfies PanelTab[];
 function historyEntryLabel(node: HistoryNode): string {
   if (node.label) return node.label;
   return node.entry.display || node.entry.type.replaceAll("_", " ");
@@ -99,8 +99,9 @@ function GitFileLabel(props: { file: GitChangedFile; staged: boolean }) {
   </>;
 }
 
-function isPanelTab(value: string): value is PanelTab {
-  return value === "files" || value === "diff" || value === "artifacts" || value === "terminal";
+function panelTab(value: string): PanelTab | null {
+  if (value === "artifacts") return "chat";
+  return value === "files" || value === "diff" || value === "chat" || value === "terminal" ? value : null;
 }
 
 function isSourceControlMode(value: string | null): value is SourceControlMode {
@@ -232,11 +233,11 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const fileScope = () => props.settingsScope ? props.projectId() : panelScope();
   const storedTab = () => {
     const value = readSetting(panelScope(), "tab") || "";
-    return isPanelTab(value) ? value : "files";
+    return panelTab(value) ?? "files";
   };
   const storedSecondary = () => {
     const stored = readSetting(panelScope(), "secondary-tab") || "";
-    return isPanelTab(stored) ? stored : null;
+    return panelTab(stored);
   };
   const [tab, setTab] = createSignal<PanelTab>(storedTab());
   const [secondaryTab, setSecondaryTab] = createSignal<PanelTab | null>(storedSecondary());
@@ -280,7 +281,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const [splitRatio, setSplitRatio] = createSignal(Math.max(0, Math.min(100, Number(readSetting(projectScope(), "split-ratio")) || 50)));
   const [splitWidth, setSplitWidth] = createSignal(0);
   const [fileSplitRatio, setFileSplitRatio] = createSignal(Math.max(25, Math.min(75, Number(readSetting(projectScope(), "file-split-ratio")) || 50)));
-  const [artifactMode, setArtifactMode] = createSignal<ArtifactMode>("history");
+  const [chatMode, setChatMode] = createSignal<ChatMode>("history");
   const [historyTree, setHistoryTree] = createSignal<HistoryTree | null>(null);
   const [historyLoading, setHistoryLoading] = createSignal(false);
   const loadHistory = async () => {
@@ -318,7 +319,9 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     return result;
   });
   const [terminalFocusRequest, setTerminalFocusRequest] = createSignal(0);
-  const detailOpenFor = (nextTab: PanelTab) => readSetting(panelScope(), `${nextTab}:detail-open`) ?? (nextTab === "diff" ? "false" : "true");
+  const detailOpenFor = (nextTab: PanelTab) => readSetting(panelScope(), `${nextTab}:detail-open`)
+    ?? (nextTab === "chat" ? readSetting(panelScope(), "artifacts:detail-open") : null)
+    ?? (nextTab === "diff" ? "false" : "true");
   const storedSourceControlMode = (): SourceControlMode => {
     const stored = readSetting(panelScope(), "diff:mode");
     if (isSourceControlMode(stored)) return stored;
@@ -423,7 +426,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   });
   const tabVisible = (candidate: PanelTab) => (candidate !== "diff" || props.sourceControlEnabled()) && (tab() === candidate || (props.expanded() && secondaryTab() === candidate));
   const panePosition = (candidate: PanelTab) => tab() === candidate ? "left" : secondaryTab() === candidate ? "right" : undefined;
-  const tabLabel = (candidate: PanelTab) => candidate === "files" ? "Files" : candidate === "diff" ? "Source Control" : candidate === "artifacts" ? "Chat" : "Terminal";
+  const tabLabel = (candidate: PanelTab) => candidate === "files" ? "Files" : candidate === "diff" ? "Source Control" : candidate === "chat" ? "Chat" : "Terminal";
   const setPaneTab = (side: "left" | "right", next: PanelTab) => {
     if (next === "diff" && !props.sourceControlEnabled()) next = "files";
     if (!splitActive()) {
@@ -459,7 +462,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   };
   const tabIcon = (candidate: PanelTab) => candidate === "files" ? <FolderIcon />
     : candidate === "diff" ? <GitCompareArrowsIcon />
-    : candidate === "artifacts" ? <MessageSquareIcon />
+    : candidate === "chat" ? <MessageSquareIcon />
     : <TerminalIcon />;
   // One strip per pane: the tabs you click always belong to the pane below them,
   // so a split needs no notion of an "active" pane.
@@ -483,9 +486,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     </div>
   );
   const changePaneTab = (side: "left" | "right", value: string) => {
-    if (!isPanelTab(value)) return;
-    setPaneTab(side, value);
-    focusTabDefault(value, side);
+    const next = panelTab(value);
+    if (!next) return;
+    setPaneTab(side, next);
+    focusTabDefault(next, side);
   };
   const workspaceShortcutAvailable = () => !document.querySelector(
     '.command-dialog[data-state="open"], .settings-dialog[data-state="open"], .conduit-modal[data-state="open"], .external-link-dialog[data-state="open"]',
@@ -504,7 +508,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const releaseShortcutHandlers = [
     props.shortcuts.registerHandler(COMMAND_IDS.workspaceFiles, "workspace-panel", () => selectShortcutTab("files"), { when: workspaceShortcutAvailable }),
     props.shortcuts.registerHandler(COMMAND_IDS.workspaceSourceControl, "workspace-panel", () => selectShortcutTab("diff"), { when: workspaceShortcutAvailable }),
-    props.shortcuts.registerHandler(COMMAND_IDS.workspaceArtifacts, "workspace-panel", () => selectShortcutTab("artifacts"), { when: workspaceShortcutAvailable }),
+    props.shortcuts.registerHandler(COMMAND_IDS.workspaceChat, "workspace-panel", () => selectShortcutTab("chat"), { when: workspaceShortcutAvailable }),
     props.shortcuts.registerHandler(COMMAND_IDS.workspaceTerminal, "workspace-panel", () => selectShortcutTab("terminal"), { when: workspaceShortcutAvailable }),
     props.shortcuts.registerHandler(COMMAND_IDS.workspaceSplit, "workspace-panel", toggleSplit, { when: workspaceShortcutAvailable }),
   ];
@@ -585,17 +589,18 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     setFocusedSlot(slot);
     return true;
   };
-  const filesStatusControls = () => <div class="workspace-files-status-controls">
-    <WorkbenchButton class="workspace-files-list-toggle" aria-label="Toggle file list" aria-pressed={filesWide() ? !treeCollapsed() : navigatorOpen()} onClick={() => filesWide() ? toggleTreeCollapsed() : setNavigatorOpen(!navigatorOpen())}><PanelLeftOpenIcon /></WorkbenchButton>
-  </div>;
+  const hideFileNavigator = () => filesWide() ? toggleTreeCollapsed() : setNavigatorOpen(false);
+  const showFileNavigator = () => filesWide() ? toggleTreeCollapsed() : setNavigatorOpen(true);
   type ReviewOpener = (scope: DiffScope, path?: string, checkpoint?: string | null) => void;
   type WorkspaceReviewController = ReturnType<typeof createWorkspaceReview>;
-  const comparisonSourceControls = (source: WorkspaceReviewController, open: ReviewOpener) => <div class="workspace-comparison-source-controls">
+  const sourceControlScopes = diffScopes.filter((scope) => scope.value === "head" || scope.value === "changes" || scope.value === "staged");
+  const chatScopes = diffScopes.filter((scope) => scope.value === "chat" || scope.value === "turn");
+  const comparisonSourceControls = (source: WorkspaceReviewController, open: ReviewOpener, scopes: typeof diffScopes) => <div class="workspace-comparison-source-controls">
     <Menu>
       <MenuTrigger class="workspace-scope-picker" aria-label="Comparison source">{diffScopes.find((scope) => scope.value === source.scope())?.label}<ChevronDownIcon /></MenuTrigger>
       <MenuContent>
-        <MenuRadioGroup value={source.scope()} onChange={(value) => { if (isDiffScope(value)) open(value); }}>
-          <For each={diffScopes}>{(scope) => <MenuRadioItem value={scope.value} disabled={(scope.value === "chat" || scope.value === "turn") ? !props.artifactChatId?.() : !props.sourceControlEnabled()}>{scope.label}</MenuRadioItem>}</For>
+        <MenuRadioGroup value={source.scope()} onChange={(value) => { if (isDiffScope(value) && scopes.some((scope) => scope.value === value)) open(value); }}>
+          <For each={scopes}>{(scope) => <MenuRadioItem value={scope.value} disabled={(scope.value === "chat" || scope.value === "turn") && !props.artifactChatId?.()}>{scope.label}</MenuRadioItem>}</For>
         </MenuRadioGroup>
       </MenuContent>
     </Menu>
@@ -618,17 +623,27 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     if (checkpoint) open(source.scope(), undefined, index === 0 ? null : checkpoint.id);
   };
   const openEmbeddedReview: ReviewOpener = (scope, _path, checkpoint = null) => {
+    if (scope !== "chat" && scope !== "turn") return;
     chatReview.setScope(scope, checkpoint);
     void chatReview.refresh();
   };
   const showAgentChanges = () => {
-    setArtifactMode("changes");
+    setChatMode("changes");
     openEmbeddedReview("chat");
   };
+  createEffect(on(
+    () => [props.projectId(), props.artifactChatId?.(), chatMode(), tabVisible("chat")] as const,
+    ([_projectId, _chatId, mode, visible]) => {
+      if (!visible || mode !== "changes") return;
+      if (chatReview.scope() !== "chat" && chatReview.scope() !== "turn") chatReview.setScope("chat");
+      void chatReview.refresh();
+    },
+  ));
   const selectEmbeddedReviewFile = (path: string) => {
     void chatReview.select(path);
   };
   const openEmbeddedSourceReview: ReviewOpener = (scope, _path, checkpoint = null) => {
+    if (scope !== "head" && scope !== "changes" && scope !== "staged") return;
     sourceReview.setScope(scope, checkpoint);
     void sourceReview.refresh();
   };
@@ -1143,7 +1158,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   });
   createEffect(() => {
     const projectId = props.projectId();
-    const active = !props.initialDirectory && Boolean(projectId) && props.open() && (tabVisible("files") || tabVisible("diff") || tabVisible("artifacts")) && documentVisible() && networkOnline();
+    const active = !props.initialDirectory && Boolean(projectId) && props.open() && (tabVisible("files") || tabVisible("diff") || tabVisible("chat")) && documentVisible() && networkOnline();
     pollRetry();
     if (!active) {
       workspaceVersion = null;
@@ -1302,7 +1317,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       }
       const filesVisible = activeTab === "files" || (panelExpanded && companionTab === "files");
       const diffVisible = activeTab === "diff" || (panelExpanded && companionTab === "diff");
-      const artifactsVisible = activeTab === "artifacts" || (panelExpanded && companionTab === "artifacts");
+      const chatVisible = activeTab === "chat" || (panelExpanded && companionTab === "chat");
       if (filesVisible && !directories()[""] && !filesLoading()) void loadDirectory("", false);
       if (diffVisible || (filesVisible && props.sourceControlEnabled())) {
         const includePatch = sourceControlMode() === "patch";
@@ -1312,7 +1327,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         const needsHistory = diffVisible && includeHistory;
         if (!current || (needsPatch && !current.diff) || (needsHistory && !current.commits)) void loadDiff(needsPatch, needsHistory, Boolean(current));
       }
-      if (artifactsVisible && artifactMode() === "history") void loadHistory();
+      if (chatVisible && chatMode() === "history") void loadHistory();
     }));
 
   createEffect(on(() => props.initialDirectory?.(), (listing) => {
@@ -1696,6 +1711,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
                 onKeyDown={onFileFilterKeyDown}
               />
             </label>
+            <button type="button" aria-label="Hide file navigator" title="Hide file navigator" onClick={hideFileNavigator}><PanelLeftCloseIcon /></button>
           </div>
           <Show when={workspaceStale()}><div class="workspace-freshness-notice" role="status" aria-live="polite"><span>Not updating</span><span aria-hidden="true">·</span><button type="button" onClick={retryWorkspacePoll}>Retry</button></div></Show>
           <nav ref={(element) => {
@@ -1715,10 +1731,12 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             </button>
             <button type="button" aria-label="Upload files" title="Upload files to workspace root" disabled={uploading()} onClick={() => chooseUpload()}><Show when={uploading()} fallback={<UploadIcon />}><Spinner /></Show></button>
             <button type="button" aria-label="Refresh files" title="Refresh files" disabled={filesLoading()} onClick={() => void refreshFiles()}><RefreshCwIcon /></button>
-            <Show when={filesWide()}><button type="button" aria-label="Hide file tree" title="Hide file tree" onClick={toggleTreeCollapsed}><PanelLeftCloseIcon /></button></Show>
             <input ref={fileUploadInput} class="workspace-file-input" type="file" multiple={uploadTarget().kind === "directory"} onChange={(event) => void uploadFiles(event.currentTarget.files)} />
           </div>
         </div>
+        <Show when={filesWide() ? treeCollapsed() : !navigatorOpen()}>
+          <div class="workspace-tree-collapsed-rail"><button type="button" aria-label="Show file navigator" title="Show file navigator" onClick={showFileNavigator}><PanelLeftOpenIcon /></button></div>
+        </Show>
         <Show when={filesWide()}>
           <div
             ref={treeResizeHandle}
@@ -1745,7 +1763,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             closable={Boolean(openPaths().primary)}
             busy={uploading()}
             wrap={wrapLines()}
-            statusPrefix={focusedSlot() === "primary" || !openPaths().secondary ? filesStatusControls() : undefined}
             onToggleWrap={toggleWrapLines}
             onFocus={() => setFocusedSlot("primary")}
             onClose={() => closeSlot("primary")}
@@ -1777,7 +1794,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
               closable
               busy={uploading()}
               wrap={wrapLines()}
-              statusPrefix={focusedSlot() === "secondary" ? filesStatusControls() : undefined}
               onToggleWrap={toggleWrapLines}
               onFocus={() => setFocusedSlot("secondary")}
               onClose={() => closeSlot("secondary")}
@@ -1854,7 +1870,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         loading={sourceReview.loading()}
         error={sourceReview.error()}
         empty="No uncommitted changes."
-        comparisonSource={comparisonSourceControls(sourceReview, openEmbeddedSourceReview)}
+        comparisonSource={comparisonSourceControls(sourceReview, openEmbeddedSourceReview, sourceControlScopes)}
         comparisonLabel={sourceReview.rangeLabel()}
         onSelect={(path) => void sourceReview.select(path)}
         onOpenWorkingFile={openWorkingFile}
@@ -1864,10 +1880,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
           <div class="workspace-patch"><Show when={commitDetailLoading()} fallback={<Show when={commitDetail()} fallback={<Show when={diff()?.diff} fallback={<div class="workspace-panel-empty">{diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</div>}>{(content) => <PatchView content={content()} />}</Show>}>{(detail) => <PatchView content={detail().content} />}</Show>}><div class="workspace-panel-empty">Loading commit…</div></Show></div>
         </Show></Show>
     </section></Show>
-    <Show when={tabVisible("artifacts")}><section class="workspace-artifacts" data-position={panePosition("artifacts")}>
-      <div class="workspace-artifact-modes" role="radiogroup" aria-label="Chat view"><div><Show when={props.historyAvailable?.()}><button role="radio" aria-checked={artifactMode() === "history"} onClick={() => { setArtifactMode("history"); void loadHistory(); }}>History</button></Show><button role="radio" aria-checked={artifactMode() === "changes"} onClick={showAgentChanges}>Agent changes</button><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div></div>
-      <Show when={artifactMode() === "history"}><Show when={!historyLoading()} fallback={<div class="workspace-panel-empty">Loading history…</div>}><Show when={historyTree()?.tree.length} fallback={<div class="workspace-panel-empty"><div><HistoryIcon /><strong>No chat history</strong><p>Send a message to start this tree.</p></div></div>}><div class="workspace-chat-history" role="tree" aria-label="Chat history"><HistoryNodes nodes={historyTree()!.tree} activePath={historyActivePath()} leafId={historyTree()!.leafId} /></div></Show></Show></Show>
-      <Show when={artifactMode() === "changes"}><WorkspaceDiffView
+    <Show when={tabVisible("chat")}><section class="workspace-chat-view" data-position={panePosition("chat")}>
+      <div class="workspace-chat-modes" role="radiogroup" aria-label="Chat view"><div><Show when={props.historyAvailable?.()}><button role="radio" aria-checked={chatMode() === "history"} onClick={() => { setChatMode("history"); void loadHistory(); }}>History</button></Show><button role="radio" aria-checked={chatMode() === "changes"} onClick={showAgentChanges}>Agent changes</button><button role="radio" aria-checked={chatMode() === "outputs"} onClick={() => setChatMode("outputs")}>Outputs</button><button role="radio" aria-checked={chatMode() === "interactive"} onClick={() => setChatMode("interactive")}>Interactive UI</button></div></div>
+      <Show when={chatMode() === "history"}><Show when={!historyLoading()} fallback={<div class="workspace-panel-empty">Loading history…</div>}><Show when={historyTree()?.tree.length} fallback={<div class="workspace-panel-empty"><div><HistoryIcon /><strong>No chat history</strong><p>Send a message to start this tree.</p></div></div>}><div class="workspace-chat-history" role="tree" aria-label="Chat history"><HistoryNodes nodes={historyTree()!.tree} activePath={historyActivePath()} leafId={historyTree()!.leafId} /></div></Show></Show></Show>
+      <Show when={chatMode() === "changes"}><WorkspaceDiffView
         title="Changed files"
         files={chatReview.files()}
         selectedPath={chatReview.selectedPath()}
@@ -1877,13 +1893,13 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         loading={chatReview.loading()}
         error={chatReview.error()}
         empty="No changes in this scope."
-        comparisonSource={comparisonSourceControls(chatReview, openEmbeddedReview)}
+        comparisonSource={comparisonSourceControls(chatReview, openEmbeddedReview, chatScopes)}
         comparisonLabel={chatReview.rangeLabel()}
         onSelect={selectEmbeddedReviewFile}
         onOpenWorkingFile={openWorkingFile}
         onViewStateChange={chatReview.setViewState}
       /></Show>
-      <Show when={artifactMode() === "outputs" || artifactMode() === "interactive"}><div class="workspace-panel-empty"><div><BoxesIcon /><strong>{artifactMode() === "outputs" ? "No artifacts in the loaded transcript" : "Interactive artifacts are not enabled"}</strong><p>{artifactMode() === "outputs" ? "Code blocks and file outputs will appear here as transcript artifact projection lands." : "This boundary is reserved for sandboxed, explicitly trusted generated interfaces."}</p></div></div></Show>
+      <Show when={chatMode() === "outputs" || chatMode() === "interactive"}><div class="workspace-panel-empty"><div><BoxesIcon /><strong>{chatMode() === "outputs" ? "No artifacts in the loaded transcript" : "Interactive artifacts are not enabled"}</strong><p>{chatMode() === "outputs" ? "Code blocks and file outputs will appear here as transcript artifact projection lands." : "This boundary is reserved for sandboxed, explicitly trusted generated interfaces."}</p></div></div></Show>
     </section></Show>
     <Show when={tabVisible("terminal")}><section class="workspace-terminal-slot" data-position={panePosition("terminal")}><TerminalPane projectId={props.settingsScope?.() === "computer" ? "computer" : props.projectId()} projectName={props.settingsScope?.() === "computer" ? "Computer" : props.projectName()} workingRoot={props.settingsScope?.() === "computer" ? props.workingRoot() : undefined} terminalId={props.requestedTab?.()?.terminalId} focusRequest={terminalFocusRequest()} /></section></Show>
     </main>

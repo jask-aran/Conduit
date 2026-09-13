@@ -151,7 +151,6 @@ export default function WorkspaceFileSlot(props: {
   closable: boolean;
   busy: boolean;
   wrap: boolean;
-  statusPrefix?: JSX.Element;
   headerPrefix?: JSX.Element;
   height?: string;
   empty?: string;
@@ -472,6 +471,18 @@ export default function WorkspaceFileSlot(props: {
     {fileActions()}
     <Show when={props.closable}><WorkbenchButton type="button" class="workspace-preview-action workspace-preview-close" aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><XIcon /></WorkbenchButton></Show>
   </>;
+  const previewStatus = (file: FileMetadata & { kind: FileKind; mime: string }) => <WorkbenchStatus commands={
+    <span class="workspace-editor-metadata">Working copy · Preview</span>
+  }>
+    <Show when={file.kind === "image" && imageDimensions()}>{(dimensions) =>
+      <span class="workspace-editor-metadata">{dimensions().width} × {dimensions().height}</span>
+    }</Show>
+    <span class="workspace-editor-metadata">{formatFileSize(file.size)}</span>
+    <span class="workspace-editor-metadata">{file.mime}</span>
+    <Show when={fileTimeMetadata(file)}>{(metadata) =>
+      <span class="workspace-editor-metadata" title={metadata()}>{metadata()}</span>
+    }</Show>
+  </WorkbenchStatus>;
 
   return <ContextMenu>
     <ContextMenuTrigger
@@ -489,7 +500,6 @@ export default function WorkspaceFileSlot(props: {
           <Show when={props.headerPrefix}>{props.headerPrefix}</Show>
           <div class="workspace-preview-file" title={file().path}><FileTypeIcon name={file().path} /><span>{file().path}</span></div>
           {gitControls()}
-          <small>{[file().kind === "image" && imageDimensions() && `${imageDimensions()!.width} × ${imageDimensions()!.height}`, formatFileSize(file().size), file().mime, fileTimeMetadata(file())].filter(Boolean).join(" · ")}</small>
           <WorkbenchButton type="button" class="workspace-preview-action" aria-label="Download file" title="Download file" onClick={() => void download()}><DownloadIcon /></WorkbenchButton>
           <WorkbenchButton type="button" class="workspace-preview-copy" aria-label="Copy file path" title="Copy file path" onClick={() => copy(file().path)}><CopyIcon /></WorkbenchButton>
           <Show when={props.closable}>
@@ -542,6 +552,7 @@ export default function WorkspaceFileSlot(props: {
           </div>
         </Show>
         </Show>
+        {previewStatus(file())}
       </>}</Show>
       <Show when={!asset()}>
         <Show when={preview()} fallback={<>
@@ -559,7 +570,6 @@ export default function WorkspaceFileSlot(props: {
                   ref={(handle) => { editor = handle; }}
                   path={path()}
                   value={file().content}
-                  statusPrefix={props.statusPrefix}
                   wrap={props.wrap}
                   editable={editing()}
                   canEdit={editable()}
@@ -573,16 +583,15 @@ export default function WorkspaceFileSlot(props: {
               </Suspense>
             }</Show>
           </div>}>
+            <header class="workspace-preview-header">{textHeader()}</header>
             <div class="workspace-file-kind-card">
               <strong>This text file is larger than the 25 MiB preview limit.</strong>
               <span>Download the complete file, or load the first 25 MiB as read-only text.</span>
               <WorkbenchButton type="button" class="workspace-file-kind-action" onClick={loadLargeText}>Load first 25 MiB</WorkbenchButton>
             </div>
+            {previewStatus({ ...file(), kind: "text" })}
           </Show>
         </>}</Show>
-      </Show>
-      <Show when={props.statusPrefix && (!preview() || Boolean(asset()) || preview()?.truncated)}>
-        <WorkbenchStatus commands={props.statusPrefix}><></></WorkbenchStatus>
       </Show>
     </ContextMenuTrigger>
     <Show when={preview() || asset()}>{(file) =>

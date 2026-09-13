@@ -76,7 +76,7 @@ const FOCUS_MOVING_COMMAND_IDS = new Set<string>([
   COMMAND_IDS.toggleChatWorkspaceFocus,
   COMMAND_IDS.workspaceFiles,
   COMMAND_IDS.workspaceSourceControl,
-  COMMAND_IDS.workspaceArtifacts,
+  COMMAND_IDS.workspaceChat,
   COMMAND_IDS.workspaceTerminal,
 ]);
 
