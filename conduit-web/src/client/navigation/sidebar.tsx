@@ -67,12 +67,13 @@ import { dispatchPanelGeometryMotion } from "../panel-motion";
 import { compareChatsBySort, sortChats, useChatSort } from "../preferences/chat-sort";
 import { publishUiPreference, UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
-import { HarnessMark, harnessStatusLabel } from "../harness-brand";
+import { HarnessMark, ThreadHarnessMark, harnessStatusLabel } from "../harness-brand";
 import "./sidebar.css";
 
 const ComputerExplorer = lazy(() => import("../dashboard/computer-dashboard").then((module) => ({ default: module.ComputerExplorer })));
 
 type WorkspaceMode = "linked" | "created" | "cloned";
+type SidebarArea = "conduit" | "computer";
 type ProjectInput = { mode: string; name?: string; path?: string; directoryName?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string };
 type WorkspacePreview = { key: string; path: string; ownership: string };
 export type ChatTarget = { chat: ChatSummary; project: Project };
@@ -208,6 +209,7 @@ export function Sidebar(props: {
   const [harnesses, setHarnesses] = createSignal<HarnessSummary[]>([]);
   const [activityClock, setActivityClock] = createSignal(Date.now());
   const [newKind, setNewKind] = createSignal<"folder" | "workspace" | null>(null);
+  const [area, setArea] = createSignal<SidebarArea>(props.computer || props.terminal ? "computer" : "conduit");
   let sidebarRoot: HTMLElement | undefined;
   let sidebarSurface: HTMLDivElement | undefined;
   let sidebarMotionId = 0;
@@ -765,7 +767,7 @@ export function Sidebar(props: {
       class="sidebar-row sidebar-chat"
       data-chat-id={menuProps.chat.id}
       aria-current={props.selectedId === menuProps.chat.id ? "page" : undefined}
-      aria-label={`${chatTitle(menuProps.chat)}${menuProps.chat.unread ? ", unread" : ""}${selected() ? ", selected" : ""}`}
+      aria-label={`${chatTitle(menuProps.chat)}, ${menuProps.chat.harnessId || "conduit"} harness${menuProps.chat.unread ? ", unread" : ""}${selected() ? ", selected" : ""}`}
       data-selected={selected() ? "true" : undefined}
       onPointerEnter={() => props.onPrefetchChat(menuProps.chat)}
       onFocus={() => props.onPrefetchChat(menuProps.chat)}
@@ -782,7 +784,7 @@ export function Sidebar(props: {
         void props.onOpenChat(menuProps.chat, menuProps.project);
       }}
     >
-      <RuntimeIndicator process={processFor(menuProps.chat)} stale={props.runtime.stale()} unread={menuProps.chat.unread} />
+      <RuntimeIndicator process={processFor(menuProps.chat)} stale={props.runtime.stale()} unread={menuProps.chat.unread} hideIdle fallback={<ThreadHarnessMark id={menuProps.chat.harnessId} />} />
       <SidebarChatTitle title={title} animate={animateTitle} />
     </ContextMenuTrigger>
     <ContextMenuContent class="w-60 sidebar-context-menu">
@@ -996,31 +998,31 @@ export function Sidebar(props: {
       <div ref={sidebarSurface} data-slot="sidebar-container" class="sidebar-container">
         <div data-sidebar="header">
           <Button variant="ghost" size="icon-sm" data-sidebar="trigger" aria-label="Toggle Sidebar" aria-expanded={isMobileLayout() ? props.mobileOpen : !collapsed()} onClick={onSidebarTrigger}><PanelLeftIcon /></Button>
-          <button data-sidebar="brand" aria-label="Conduit" onClick={() => { closeMobile(); props.onOpenDashboard(); }}><span>Conduit</span></button>
+          <button data-sidebar="brand" aria-label="Conduit" onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); }}><span>Conduit</span></button>
         </div>
         <div data-sidebar="content" class="sidebar-content">
           <div data-sidebar="rail-actions" class="sidebar-rail-actions" aria-label="Quick navigation">
-            <RailAction label="Computer" current={props.computer} onClick={() => { closeMobile(); props.onOpenComputer(); }}><MonitorIcon /></RailAction>
-            <RailAction label="Terminal View" current={props.terminal} onClick={() => { closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /></RailAction>
+            <RailAction label="Computer" current={props.computer} onClick={() => { setArea("computer"); closeMobile(); props.onOpenComputer(); }}><MonitorIcon /></RailAction>
+            <RailAction label="Terminal View" current={props.terminal} onClick={() => { setArea("computer"); closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /></RailAction>
             <Show when={railWorkspaces().length}>
               <div data-sidebar="rail-section" data-sidebar-section="workspaces" class="sidebar-rail-section">
                 <For each={railWorkspaces()}>{(project) => <RailAction
                   label={project.name}
                   current={railProjectIsActive(project)}
                   live={railProjectIsLive(project)}
-                  onClick={() => { closeMobile(); void props.onOpenProject(project); }}
+                  onClick={() => { setArea("computer"); closeMobile(); void props.onOpenProject(project); }}
                 ><WorkspaceGlyph appearance={project.workspaceAppearance} /></RailAction>}</For>
               </div>
             </Show>
             <div data-sidebar="rail-divider" aria-hidden="true" />
-            <RailAction label="Conduit Dashboard" current={props.dashboard} onClick={() => { closeMobile(); props.onOpenDashboard(); }}><LayoutDashboardIcon /></RailAction>
+            <RailAction label="Conduit Dashboard" current={props.dashboard} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); }}><LayoutDashboardIcon /></RailAction>
             <Show when={railFolders().length}>
               <div data-sidebar="rail-section" data-sidebar-section="projects" class="sidebar-rail-section">
                 <For each={railFolders()}>{(project) => <RailAction
                   label={`Project: ${project.name}`}
                   current={railProjectIsActive(project)}
                   live={railProjectIsLive(project)}
-                  onClick={() => { closeMobile(); void props.onOpenProject(project); }}
+                  onClick={() => { setArea("conduit"); closeMobile(); void props.onOpenProject(project); }}
                 ><FolderIcon /></RailAction>}</For>
               </div>
             </Show>
@@ -1030,42 +1032,48 @@ export function Sidebar(props: {
                 label={`Chat: ${chatTitle(item.chat)}`}
                 current={props.selectedId === item.chat.id}
                 live={Boolean(processFor(item.chat))}
-                onClick={() => { closeMobile(); void props.onOpenChat(item.chat, item.project); }}
+                onClick={() => { setArea("conduit"); closeMobile(); void props.onOpenChat(item.chat, item.project); }}
               ><MessageSquareIcon /></RailAction>}</For>
             </div>
           </div>
-          <div class="sidebar-area-label">Computer</div>
-          <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.computer ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenComputer(); }}><MonitorIcon /><span>Files</span></button>
-          <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.terminal ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /><span>Terminal View</span><span class="sidebar-action-slot"><ExternalLinkIcon class="sidebar-route-indicator" /></span></button>
-          <Show when={harnesses().length}>
-            <div class="sidebar-harness-tiles">
-              <For each={harnesses()}>{(harness) =>
-                <button type="button" class="sidebar-harness-tile" aria-current={props.selectedHarness === harness.id ? "page" : undefined} aria-label={`${harness.label} · ${harnessStatusLabel(harness.status)}`} title={`${harness.label} · ${harnessStatusLabel(harness.status)}`} onClick={() => { closeMobile(); props.onOpenHarness(harness.id); }}>
-                  <HarnessMark id={harness.id} class="sidebar-harness-mark" />
-                  <i class="sidebar-harness-status" data-status={harness.status || "ready"} aria-hidden="true" />
-                </button>
-              }</For>
-            </div>
-          </Show>
-          <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" addLabel="New workspace" onAdd={() => openNewDialog("workspace")} />
-          <section class="sidebar-group">
-            <div class="sidebar-group-header"><div data-sidebar="group-label">Terminals</div></div>
-            <For each={terminals()}>{(terminal) => <TerminalRow terminal={terminal} />}</For>
-            <Show when={!terminals().length}><div class="sidebar-empty">No live terminals</div></Show>
-          </section>
-          <div class="sidebar-area-label sidebar-area-divider">Conduit App</div>
-          <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.dashboard ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenDashboard(); }}>
-            <LayoutDashboardIcon />
-            <span>Conduit Dashboard</span>
-          </button>
-          <Show when={pinnedItems().length}>
+          <div class="sidebar-area-toggle" role="group" aria-label="Sidebar section">
+            <button type="button" aria-pressed={area() === "conduit"} onClick={() => setArea("conduit")}>Conduit</button>
+            <button type="button" aria-pressed={area() === "computer"} onClick={() => setArea("computer")}>Computer</button>
+          </div>
+          <Show when={area() === "computer"}>
+            <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.computer ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenComputer(); }}><MonitorIcon /><span>Files</span></button>
+            <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.terminal ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /><span>Terminal View</span><span class="sidebar-action-slot"><ExternalLinkIcon class="sidebar-route-indicator" /></span></button>
+            <Show when={harnesses().length}>
+              <div class="sidebar-harness-tiles">
+                <For each={harnesses()}>{(harness) =>
+                  <button type="button" class="sidebar-harness-tile" aria-current={props.selectedHarness === harness.id ? "page" : undefined} aria-label={`${harness.label} · ${harnessStatusLabel(harness.status)}`} title={`${harness.label} · ${harnessStatusLabel(harness.status)}`} onClick={() => { closeMobile(); props.onOpenHarness(harness.id); }}>
+                    <HarnessMark id={harness.id} class="sidebar-harness-mark" />
+                    <i class="sidebar-harness-status" data-status={harness.status || "ready"} aria-hidden="true" />
+                  </button>
+                }</For>
+              </div>
+            </Show>
+            <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" addLabel="New workspace" onAdd={() => openNewDialog("workspace")} />
             <section class="sidebar-group">
-              <div class="sidebar-group-header"><div data-sidebar="group-label">Pinned</div></div>
-              <For each={pinnedItems()}>{(item) => <PinnedRow item={item} />}</For>
+              <div class="sidebar-group-header"><div data-sidebar="group-label">Terminals</div></div>
+              <For each={terminals()}>{(terminal) => <TerminalRow terminal={terminal} />}</For>
+              <Show when={!terminals().length}><div class="sidebar-empty">No live terminals</div></Show>
             </section>
           </Show>
-          <Group label="Projects" projects={folders()} emptyLabel="No projects" addLabel="New folder" onAdd={() => openNewDialog("folder")} />
-          <Group label="Chats" projects={[]} chatRoot={chats()} addLabel="New chat" onAdd={() => startNewChat()} />
+          <Show when={area() === "conduit"}>
+            <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.dashboard ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenDashboard(); }}>
+              <LayoutDashboardIcon />
+              <span>Conduit Dashboard</span>
+            </button>
+            <Show when={pinnedItems().length}>
+              <section class="sidebar-group">
+                <div class="sidebar-group-header"><div data-sidebar="group-label">Pinned</div></div>
+                <For each={pinnedItems()}>{(item) => <PinnedRow item={item} />}</For>
+              </section>
+            </Show>
+            <Group label="Projects" projects={folders()} emptyLabel="No projects" addLabel="New folder" onAdd={() => openNewDialog("folder")} />
+            <Group label="Chats" projects={[]} chatRoot={chats()} addLabel="New chat" onAdd={() => startNewChat()} />
+          </Show>
         </div>
         <div data-sidebar="footer"><Menu><MenuTrigger class="sidebar-user" aria-label={`Conduit · ${connectionLabel()}`} title={connectionLabel()}><CableIcon /><span><strong>Conduit</strong><small>{connectionLabel()}</small></span><span class={`server-status-indicator runtime-indicator runtime-indicator-${connectionTone()}`} aria-hidden="true"><Show when={props.connectivity === "connecting" || props.connectivity === "reconnecting"} fallback={<span class="runtime-indicator-dot" />}><Spinner class="size-3" /></Show></span></MenuTrigger><MenuContent>
           <MenuItem onSelect={() => { closeMobile(); props.onOpenSettings("models"); }}>Manage settings</MenuItem>

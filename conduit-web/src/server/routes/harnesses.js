@@ -42,7 +42,20 @@ const opaqueSessionId = (chat) => typeof chat.backend?.opaqueSession === "string
   ? chat.backend.opaqueSession
   : chat.backend?.opaqueSession?.threadId || null;
 
-export function registerHarnessRoutes(app, { backends, projects, registry }) {
+export function registerHarnessRoutes(app, { backends, preferences, projects, registry }) {
+  const modelCatalogs = new Map();
+  const modelCatalogRequests = new Map();
+  const refreshModels = (implementation, cwd, adapter) => {
+    const key = `${implementation}\0${cwd}`;
+    const existing = modelCatalogRequests.get(key);
+    if (existing) return existing;
+    const request = adapter.listAvailableModels(cwd)
+      .then((models) => { modelCatalogs.set(key, models); return models; })
+      .finally(() => modelCatalogRequests.delete(key));
+    modelCatalogRequests.set(key, request);
+    return request;
+  };
+
   // `?refresh=1` re-probes, so installing a harness does not need a restart.
   app.get("/v0/harnesses", async (request, response) => {
     if (request.query.refresh) await backends.refreshDetection?.();
@@ -101,6 +114,41 @@ export function registerHarnessRoutes(app, { backends, projects, registry }) {
       const groups = groupThreadsByFolder(threads, { tracked });
       await Promise.all(groups.map(async (group) => { group.missing = !(await isDirectory(group.path)); }));
       response.json({ scope: requested ? "folder" : "machine", groups, truncated: threads.length >= limit });
+    } catch (error) { next(error); }
+  });
+
+  app.get("/v0/harnesses/:implementation/models", async (request, response, next) => {
+    try {
+      const implementation = request.params.implementation;
+      if (!SUPPORTED.has(implementation) || !backends.adapters.has(implementation)) {
+        return response.status(404).json({ error: "harness_not_found" });
+      }
+      const adapter = backends.forImplementation(implementation);
+      if (!adapter.listAvailableModels) return response.status(409).json({ error: "harness_models_unavailable" });
+      const requested = typeof request.query.path === "string" && request.query.path ? request.query.path : null;
+      const cwd = requested ? (await resolveFolder(requested)).workingRoot : (await computerContext()).workingRoot;
+      const key = `${implementation}\0${cwd}`;
+      let models = modelCatalogs.get(key);
+      if (models) void refreshModels(implementation, cwd, adapter).catch(() => {});
+      else models = await refreshModels(implementation, cwd, adapter);
+      const remembered = preferences.get().backendModelDefaults?.[implementation];
+      const model = models.some((item) => item.spec === remembered?.model) ? remembered.model : models[0]?.spec || "";
+      const selected = models.find((item) => item.spec === model);
+      const thinkingLevel = selected?.thinkingLevels.includes(remembered?.thinkingLevel)
+        ? remembered.thinkingLevel
+        : selected?.defaultThinkingLevel || selected?.thinkingLevels[0] || "";
+      response.json({
+        installationId: implementation === "codex" ? "host-codex" : implementation,
+        runtimeKind: implementation,
+        models,
+        model,
+        thinkingLevel,
+        defaultModel: models[0]?.spec || "",
+        defaultThinkingLevel: selected?.defaultThinkingLevel || selected?.thinkingLevels[0] || "",
+        requiresAuthentication: false,
+        warnings: [],
+        source: "catalog",
+      });
     } catch (error) { next(error); }
   });
 

@@ -3,8 +3,6 @@ import { isChatId } from "../chat-store.js";
 import { readSessionMetadata, validateSessionHeader } from "../session-store.js";
 import { resolvePiLaunch } from "../pi-launch.js";
 import { resolveThinkingLevel } from "../pi-model-catalog.js";
-import { publicModelProfile, resolveModelProfile } from "../model-profiles.js";
-import { usesWebSearchOverlay } from "../model-profile-runtime.js";
 import { ChatBackendRegistry } from "../pi-rpc-adapter.js";
 
 function launchError(code, message, status = 400) {
@@ -21,7 +19,6 @@ export function createLiveSessionLauncher({
   findChatContext,
   lifecycle,
   manager,
-  modelProfileRuntime,
   nativePreflight,
   registry,
   runtimeFor,
@@ -51,6 +48,10 @@ export function createLiveSessionLauncher({
         project: context.project,
         model: selectedModel,
         thinkingLevel: selectedThinkingLevel,
+        permissionMode: text(context.chat.backend.permissionMode),
+        permissionProfile: text(context.chat.backend.permissionProfile),
+        approvalPolicy: text(context.chat.backend.approvalPolicy),
+        approvalsReviewer: text(context.chat.backend.approvalsReviewer),
       };
       const live = context.chat.backend.opaqueSession
         ? await adapter.restore(context.chat.backend.opaqueSession, options)
@@ -133,15 +134,6 @@ export function createLiveSessionLauncher({
       && Boolean(processModel)
       && Boolean(effectiveThinkingLevel)
       && effectiveThinkingLevel !== seedThinkingLevel;
-    let modelProfile = null;
-    let runtimeAgentDir = installation.agentDir;
-    if (runtime.kind === "conduit_profile" && usesWebSearchOverlay(template)) {
-      const profileModel = processModel || "unknown/unresolved";
-      modelProfile = resolveModelProfile(config.modelProfiles, profileModel);
-      const materialized = await modelProfileRuntime.materialize({ template, profile: modelProfile });
-      runtimeAgentDir = materialized.agentDir;
-    }
-
     const launchSpec = resolvePiLaunch({
       chat: context.chat,
       project: context.project,
@@ -152,8 +144,6 @@ export function createLiveSessionLauncher({
       thinkingLevel: processThinkingLevel,
       bridgeSystemPrompt: config.bridgeSystemPrompt,
       bridgeSkill: config.bridgeSkill,
-      runtimeAgentDir,
-      modelProfile: publicModelProfile(modelProfile),
       systemPrompt: runtime.kind === "conduit_profile" && config.promptStore ? await config.promptStore.pathFor(template.id) : null,
     });
     console.info("Launching Pi", {
@@ -164,7 +154,7 @@ export function createLiveSessionLauncher({
       binaryVersion: installation.version,
       profileId: runtime.profileId,
       profileVersion: runtime.profileVersion,
-      modelProfileId: modelProfile?.id || null,
+      modelProfileId: null,
       cwd: launchSpec.cwd,
       sessionFile: launchSpec.sessionFile,
       trustPosture: launchSpec.trustPosture,

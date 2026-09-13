@@ -52,6 +52,7 @@ import { createActiveChat, type ActiveChatStore } from "./state/active-chat";
 import { createAttachments, DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
 import { createCatalogueStore } from "./state/catalogue";
 import { createModelSettings } from "./state/model-settings";
+import { createPermissionSettings } from "./state/permission-settings";
 import { createRuntimeStore } from "./state/runtime";
 import { VoiceWaveform } from "./chat/voice-waveform";
 import { browserShortcutEnvironmentProvider } from "./shortcuts/shortcut-environment";
@@ -247,6 +248,7 @@ function ChatHeader(props: {
       cacheStats: props.chat.cacheStats(),
     })
     : "";
+  const sessionId = () => typeof props.live?.sessionId === "string" ? props.live.sessionId : "";
   const contextPercent = () => {
     const value = props.chat ? contextUsagePercent(props.chat.contextUsage()) : null;
     return value == null ? 0 : Math.max(0, Math.min(100, value));
@@ -329,6 +331,7 @@ function ChatHeader(props: {
                 <MenuLabel>Context metrics</MenuLabel>
                 <div class="chat-context-menu-values">{contextDetail() || "No context metrics selected."}</div>
               </MenuGroup>
+              <Show when={sessionId()}><MenuSeparator /><MenuGroup aria-label="Session"><MenuLabel>Session ID</MenuLabel><div class="chat-context-menu-values"><code>{sessionId()}</code></div></MenuGroup></Show>
             </MenuContent>
           </Menu>
         </Show>
@@ -345,6 +348,7 @@ function ChatHeader(props: {
                 <MenuLabel class="chat-header-menu-section-label">Context metrics</MenuLabel>
                 <div class="chat-header-menu-context-values">{contextDetail() || "No context metrics available yet."}</div>
               </MenuGroup>
+              <Show when={sessionId()}><MenuGroup class="chat-header-menu-context" aria-label="Session"><MenuLabel class="chat-header-menu-section-label">Session ID</MenuLabel><div class="chat-header-menu-context-values"><code>{sessionId()}</code></div></MenuGroup></Show>
             </Show>
             <MenuSeparator />
             <Show when={!props.dashboard && !nativeApp}>
@@ -514,6 +518,7 @@ function App() {
       duration: 6_000,
     });
   });
+  const permissions = createPermissionSettings(showError);
   const attachments = createAttachments(showError, maxAttachmentBytes);
 
   const saveWorkspaceDefault = async (workspaceId: string, templateId: string | null) => {
@@ -554,6 +559,7 @@ function App() {
     catalogue,
     runtime,
     models,
+    permissions,
     attachments,
     onError: showError,
     onModelRecovered: ({ from, to }) => toast.warning(`This chat's previous model ${from} is no longer scoped. It resumed with ${to}.`, {
@@ -915,14 +921,20 @@ function App() {
     await browseComputer(cwd);
     openComputerHarness(id, "push", cwd);
   };
-  const launchHarnessChat = async (harness: HarnessSummary, cwd: string, prompt?: string) => {
+  const launchHarnessChat = async (harnessId: string, cwd: string, prompt?: string, selection?: { model: string; thinkingLevel: string }) => {
     let project = catalogue.projects().find((item) => !isConduitManagedProject(item) && item.workingRoot === cwd);
     if (!project) {
       const created = await api<Project>("/v0/projects", { method: "POST", body: JSON.stringify({ mode: "linked", path: cwd }) });
       const projects = await catalogue.refresh();
       project = projects.find((item) => item.id === created.id) || created;
     }
-    const target = await api<ChatSummary>("/v0/chats", { method: "POST", body: JSON.stringify({ projectId: project.id, profileId: harness.id }) });
+    const target = await api<ChatSummary>("/v0/chats", { method: "POST", body: JSON.stringify({ projectId: project.id, profileId: harnessId }) });
+    if (selection?.model) {
+      await api(`/v0/chats/${encodeURIComponent(target.id)}/models`, {
+        method: "PATCH",
+        body: JSON.stringify(selection),
+      });
+    }
     await openChat(target, project);
     if (prompt) { chat.setDraft(prompt); await chat.send(); }
   };
@@ -1060,6 +1072,7 @@ function App() {
     chat.setTemplateId(payload.profileId || payload.templateId || id);
     chat.setRuntimeIdentity(payload.runtime || null);
     await models.reloadChat(selectedId);
+    await permissions.select(selectedId);
   };
 
   const refresh = async () => {
@@ -1374,6 +1387,7 @@ function App() {
     thinkingLevels: thinkingLevels(),
     canRegenerate: Boolean(lastUserEntryId()) && !chat.streaming() && !chat.stopping(),
     canContinue: partialContinue() && Boolean(lastAssistant()?.stopped) && !chat.streaming(),
+    canCompact: Boolean(chat.capabilities()?.compaction) && !chat.streaming() && !chat.compacting() && chat.messages().length > 0,
     canCopy: Boolean(lastAssistant()?.content),
     chatSort: chatSort(),
   }));
@@ -1402,6 +1416,7 @@ function App() {
     stopProcess: () => void stopChatProcess(),
     regenerate: () => { const id = lastUserEntryId(); if (id) void chat.regenerate(id); },
     continue: () => void chat.continueResponse(),
+    compact: () => void chat.compact(),
     copy: () => { const content = lastAssistant()?.content; if (content) void navigator.clipboard.writeText(content); },
     retryConnection: () => runtime.retry(),
     reload: () => location.reload(),
@@ -1829,6 +1844,7 @@ function App() {
               chat={chat}
               attachments={attachments}
               models={models}
+              permissions={activeProfile()?.id === "codex" ? permissions : undefined}
               profiles={profiles()}
               activeProfile={activeProfile()}
               serverOnline={runtime.connectivity() === "online"}
@@ -1894,7 +1910,7 @@ function App() {
         </Show>
         <Show when={routeKind() === "computer"}>
           <ChatHeader title="Computer" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard />
-          <ComputerDashboard projects={catalogue.projects()} runtime={runtime} location={computerLocation()} loading={computerLoading()} error={computerError()} selectedHarness={computerHarness()} onOpenHarness={(id) => openComputerHarness(id)} onOpenHarnessHere={(id, cwd) => void openComputerHarnessHere(id, cwd)} onLaunchHarnessChat={launchHarnessChat} onOpenHarnessChat={(target, project, prompt) => { void openChat(target, project).then(() => { if (prompt) { chat.setDraft(prompt); void chat.send(); } }); }} onBrowse={(path) => void browseComputer(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => void designateComputerWorkspace()} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProject(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={(path) => { setComputerFile({ path }); openWorkspaceView("files"); }} />
+          <ComputerDashboard projects={catalogue.projects()} runtime={runtime} location={computerLocation()} loading={computerLoading()} error={computerError()} selectedHarness={computerHarness()} onOpenHarness={(id) => openComputerHarness(id)} onOpenHarnessHere={(id, cwd) => void openComputerHarnessHere(id, cwd)} harnessComposer={computerHarness() ? (cwd, harnessModels, modelsLoading) => <Composer chat={chat} attachments={attachments} attachmentsSupported={false} models={harnessModels} modelsLoading={modelsLoading} permissions={computerHarness() === "codex" ? permissions : undefined} profiles={profiles().filter((profile) => profile.id === computerHarness())} activeProfile={profiles().find((profile) => profile.id === computerHarness()) || null} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => {}} onSendDraft={(prompt) => launchHarnessChat(computerHarness()!, cwd, prompt, { model: harnessModels.model(), thinkingLevel: harnessModels.effort() })} /> : undefined} onOpenHarnessChat={(target, project, prompt) => { void openChat(target, project).then(() => { if (prompt) { chat.setDraft(prompt); void chat.send(); } }); }} onBrowse={(path) => void browseComputer(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => void designateComputerWorkspace()} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProject(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={(path) => { setComputerFile({ path }); openWorkspaceView("files"); }} />
         </Show>
         <Show when={routeKind() !== "dashboard" && routeKind() !== "computer"}>
         <Show when={routeKind() === "chat" && meteorField()}>
@@ -1910,7 +1926,7 @@ function App() {
             <section class="work-area-conversation" aria-label="Conversation">
               <Transcript chat={chat} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} />
               <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-                <Composer chat={chat} attachments={attachments} models={models} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
+                <Composer chat={chat} attachments={attachments} models={models} permissions={activeProfile()?.id === "codex" ? permissions : undefined} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
             </section>
           </div>
         </>}>
@@ -1920,6 +1936,7 @@ function App() {
               chat={chat}
               attachments={attachments}
               models={models}
+              permissions={activeProfile()?.id === "codex" ? permissions : undefined}
               profiles={profiles()}
               activeProfile={activeProfile()}
               serverOnline={runtime.connectivity() === "online"}
@@ -1958,7 +1975,10 @@ function App() {
       </Show>
     </main>
     <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} requestedTab={workspaceViewRequest} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
-    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} projectName={() => selectedProject()!.name} sourceControlEnabled={() => selectedProject()!.kind === "workspace"} workingRoot={() => selectedProject()!.workingRoot} chatId={() => workspacePanelScope()!} artifactChatId={() => routeKind() === "chat" ? chat.loadedId() : null} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} requestedTab={workspaceViewRequest} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
+    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} projectName={() => selectedProject()!.name} sourceControlEnabled={() => selectedProject()!.kind === "workspace"} workingRoot={() => selectedProject()!.workingRoot} chatId={() => workspacePanelScope()!} artifactChatId={() => routeKind() === "chat" ? chat.loadedId() : null} historyAvailable={() => {
+      const active = selectedProject()!.sessions.find((item) => item.id === chat.loadedId());
+      return active?.backend?.implementation === "conduit_pi" || active?.backend?.implementation === "native_pi" || active?.runtime?.kind === "native_pi";
+    }} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} requestedTab={workspaceViewRequest} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </div>
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>

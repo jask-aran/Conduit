@@ -4,6 +4,12 @@ import { MANIFESTS } from "./harnesses/index.js";
 // template catalogue, which is why the built-in Pi manifest is not one of these.
 const PROFILE_MANIFESTS = MANIFESTS.filter((manifest) => manifest.profile);
 
+export function harnessIdForImplementation(implementation) {
+  if (implementation === "conduit_pi") return "conduit";
+  if (implementation === "native_pi") return "pi";
+  return implementation || "conduit";
+}
+
 // Pi identity metadata only. Runtime dispatch still belongs to PiManager.
 export function piBackendFor(chat) {
   const native = chat.runtime?.kind === "native_pi";

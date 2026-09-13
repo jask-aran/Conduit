@@ -17,6 +17,7 @@ import type { ChatSummary, Project, Template } from "../api/contracts";
 import {
   COMMAND_IDS, getCommandDefinition,
 } from "../commands/command-registry.ts";
+import { chatSortStamp, compareChatsBySort } from "../preferences/chat-sort";
 
 export interface PaletteContext {
   nativeApp: boolean;
@@ -33,6 +34,7 @@ export interface PaletteContext {
   thinkingLevels: string[];
   canRegenerate: boolean;
   canContinue: boolean;
+  canCompact: boolean;
   canCopy: boolean;
   chatSort?: "latest" | "created";
 }
@@ -61,6 +63,7 @@ export interface PaletteActions {
   stopProcess: () => void;
   regenerate: () => void;
   continue: () => void;
+  compact: () => void;
   copy: () => void;
   retryConnection: () => void;
   reload: () => void;
@@ -207,6 +210,7 @@ const paletteCommandRuntime: Record<string, PaletteCommandRuntime> = {
   [COMMAND_IDS.stopProcess]: { isAvailable: (context) => context.liveProcess, run: (actions) => actions.stopProcess() },
   [COMMAND_IDS.regenerateResponse]: { isAvailable: (context) => Boolean(context.canRegenerate), run: (actions) => actions.regenerate() },
   [COMMAND_IDS.continueResponse]: { isAvailable: (context) => context.canContinue, run: (actions) => actions.continue() },
+  [COMMAND_IDS.compactContext]: { isAvailable: (context) => context.canCompact, run: (actions) => actions.compact() },
   [COMMAND_IDS.copyResponse]: { isAvailable: (context) => Boolean(context.canCopy), run: (actions) => actions.copy() },
   [COMMAND_IDS.retryConnection]: {
     isAvailable: (context) => Boolean(context.connectivity) && context.connectivity !== "online",
@@ -279,9 +283,7 @@ function workspaceViewCommands(): PaletteCommand[] {
 
 function chatCommands(context: PaletteContext): PaletteCommand[] {
   const sort = context.chatSort === "created" ? "created" : "latest";
-  const stamp = (session: ChatSummary) => sort === "created"
-    ? session.createdAt || ""
-    : session.lastMessageAt || session.createdAt || "";
+  const stamp = (session: ChatSummary) => chatSortStamp(session, sort);
   const projects = Array.isArray(context.projects) ? context.projects : [];
   const rows: { project: Project; session: ChatSummary }[] = [];
   for (const project of projects) {
@@ -289,8 +291,7 @@ function chatCommands(context: PaletteContext): PaletteCommand[] {
       rows.push({ project, session });
     }
   }
-  rows.sort((left, right) => stamp(right.session).localeCompare(stamp(left.session))
-    || String(right.session.id || "").localeCompare(String(left.session.id || "")));
+  rows.sort((left, right) => compareChatsBySort(left.session, right.session, sort));
   return rows.map(({ project, session }) => ({
     id: `open-chat:${session.id}`,
     group: "navigation",

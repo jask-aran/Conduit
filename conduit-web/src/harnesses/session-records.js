@@ -31,6 +31,15 @@ export class SessionRecords {
   get(id) { return this.records.get(id) || null; }
   getByChatId(chatId) { const id = this.byChatId.get(chatId); return id ? this.get(id) : null; }
 
+  reassign(id, chatId) {
+    const record = this.get(id);
+    if (!record) return null;
+    if (this.byChatId.get(record.chatId) === id) this.byChatId.delete(record.chatId);
+    record.chatId = chatId;
+    this.byChatId.set(chatId, id);
+    return record;
+  }
+
   remove(id) {
     const record = this.get(id);
     if (!record) return null;

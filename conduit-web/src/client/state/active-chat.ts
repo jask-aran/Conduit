@@ -12,6 +12,7 @@ import type {
   ContextUsage,
   GenerationState,
   HostUiRequest,
+  HarnessCommand,
   LiveRecord,
   Message,
   Project,
@@ -30,6 +31,7 @@ import type { AttachmentsStore, UploadAttachment } from "./attachments";
 import type { CatalogueStore } from "./catalogue";
 import type { ActiveGenerationView, LiveGenerationChange } from "../turn-rows";
 import type { ModelSettings } from "./model-settings";
+import type { PermissionSettings } from "./permission-settings";
 import type { RuntimeStore } from "./runtime";
 import { createClientActiveGenerationStore } from "./active-generation-store.js";
 
@@ -64,6 +66,7 @@ interface ActiveChatOptions {
   catalogue: CatalogueStore;
   runtime: RuntimeStore;
   models: ModelSettings;
+  permissions?: PermissionSettings;
   attachments: AttachmentsStore;
   onError: ErrorHandler;
   onModelRecovered: (details: { from: string; to: string }) => void;
@@ -72,7 +75,7 @@ interface ActiveChatOptions {
 }
 
 export function createActiveChat(options: ActiveChatOptions) {
-  const { catalogue, models, attachments, onError } = options;
+  const { catalogue, models, permissions, attachments, onError } = options;
   const [status, setStatus] = createSignal<ChatStatus>("draft");
   const [title, setTitle] = createSignal("");
   const [templateId, setTemplateId] = createSignal<string | null>(null);
@@ -93,6 +96,9 @@ export function createActiveChat(options: ActiveChatOptions) {
   const [hostUiRequests, setHostUiRequests] = createSignal<HostUiRequest[]>([]);
   const [queue, setQueue] = createSignal<QueueState>({ steering: [], followUp: [] });
   const [capabilities, setCapabilities] = createSignal<ChatCapabilities | null>(null);
+  const [harnessCommands, setHarnessCommands] = createSignal<HarnessCommand[]>([]);
+  let commandsLoadedFor: string | null = null;
+  let commandsLoading: Promise<void> | null = null;
   const [thinking, setThinking] = createSignal(false);
   const [responding, setResponding] = createSignal(false);
   const [activeToolName, setActiveToolName] = createSignal<string | null>(null);
@@ -288,6 +294,9 @@ export function createActiveChat(options: ActiveChatOptions) {
     setHostUiRequests([]);
     setQueue({ steering: [], followUp: [] });
     setCapabilities(null);
+    setHarnessCommands([]);
+    commandsLoadedFor = null;
+    commandsLoading = null;
     resetLiveFlags();
     clearPendingLiveEvents();
     generationStore.clear();
@@ -745,6 +754,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     setTemplateId(chat.templateId || options.defaultTemplateId() || "assistant");
     setRuntimeIdentity(chat.runtime || null);
     models.select(project.id, chat.id, detail, { reloadChat: (detail?.status || chat.status) !== "active" });
+    void permissions?.select(chat.id);
     void attachments.select(chat.id);
     if (detail) applyDetail(detail);
     else { setMessages([]); setTools([]); setPageBefore(null); setLoadedId(chat.id); }
@@ -830,6 +840,27 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (streaming() || stopping()) return;
     try { await ensureLive(); setGeneration("active"); socket!.send(JSON.stringify({ type: "continue" })); }
     catch (error) { setGeneration("idle"); onError(error); }
+  };
+
+  const compact = async () => {
+    if (streaming() || compacting() || !capabilities()?.compaction) return;
+    try { await ensureLive(); socket!.send(JSON.stringify({ type: "compact" })); }
+    catch (error) { onError(error); }
+  };
+
+  const loadHarnessCommands = async () => {
+    const chatId = selectedId();
+    if (!chatId || commandsLoadedFor === chatId) return;
+    if (commandsLoading) return commandsLoading;
+    commandsLoading = (async () => {
+      const record = await ensureLive();
+      if (!record || selectedId() !== chatId) return;
+      const result = await api<{ commands: HarnessCommand[] }>(`/v0/live-sessions/${encodeURIComponent(record.id)}/commands`);
+      if (selectedId() !== chatId) return;
+      setHarnessCommands(Array.isArray(result.commands) ? result.commands : []);
+      commandsLoadedFor = chatId;
+    })().catch(onError).finally(() => { commandsLoading = null; });
+    return commandsLoading;
   };
 
   const loadOlder = async () => {
@@ -978,10 +1009,10 @@ export function createActiveChat(options: ActiveChatOptions) {
   return {
     status, setStatus, title, setTitle, templateId, setTemplateId, runtimeIdentity, setRuntimeIdentity,
     live, messages, setMessages, tools, loadedId, pageBefore, loadingOlder, draft, setDraft,
-    generation, editingEntryId, contextUsage, sessionStats, cacheStats, compacting, hostUiRequests, queue, pendingMessages, capabilities, activeGeneration, activeGenerationChange,
+    generation, editingEntryId, contextUsage, sessionStats, cacheStats, compacting, hostUiRequests, queue, pendingMessages, capabilities, harnessCommands, activeGeneration, activeGenerationChange,
     connectingId, streaming, stopping, activity,
     initialize, select, prefetch, loadDetail, openLive, attachLive, ensureLive, reset, send, stop, regenerate,
-    continueResponse, loadOlder, edit, respondHostUi, clearQueue, interruptAndSend, editQueued, discardQueued,
+    continueResponse, compact, loadHarnessCommands, loadOlder, edit, respondHostUi, clearQueue, interruptAndSend, editQueued, discardQueued,
   };
 }
 

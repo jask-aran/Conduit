@@ -130,6 +130,13 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
   };
   const pasteFromClipboard = async () => {
     clearMobileModifiers();
+    // Reading the clipboard needs a secure context, which a plain-HTTP LAN
+    // address is not. Say so rather than blaming a permission the browser
+    // never offered to grant.
+    if (!navigator.clipboard?.readText) {
+      setError("Pasting needs a secure connection. Use the keyboard's own paste, or reach Conduit over HTTPS or localhost.");
+      return;
+    }
     try {
       const text = await navigator.clipboard.readText();
       if (text) inputTerminal(text, false);

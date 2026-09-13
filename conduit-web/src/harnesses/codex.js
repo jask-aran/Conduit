@@ -10,6 +10,8 @@ export const manifest = {
   installationId: "host-codex",
   capabilities: CODEX_CAPABILITIES,
   discovery: "machine",
+  // Codex names threads and publishes `thread/name/updated`.
+  nameGeneration: "backend",
   // The daemon owns turns. Conduit can disconnect during restart and resume
   // its subscription without interrupting the work.
   restartDrain: false,

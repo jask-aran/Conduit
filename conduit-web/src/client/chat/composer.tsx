@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show } from "solid-js";
-import { ArrowUpIcon, ChevronDownIcon, MicIcon, PaperclipIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
+import { ArrowUpIcon, ChevronDownIcon, MicIcon, PaperclipIcon, ShieldCheckIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
 import {
   Button,
   Menu,
@@ -18,10 +18,12 @@ import type { ActiveChatStore } from "../state/active-chat";
 import { filesFromDataTransfer } from "../state/attachments";
 import type { AttachmentsStore } from "../state/attachments";
 import type { ComposerModels } from "./composer-models";
+import type { PermissionSettings } from "../state/permission-settings";
 import type { VoiceDictationSettings } from "./voice-dictation-types";
 import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../navigation/mobile-layout";
 import { QueuedMessages } from "./queued-messages";
 import { AttachmentCards } from "./attachments";
+import { composerSlashCommands } from "./composer-slash-commands";
 import { COMPOSER_SURFACE_CHANGE_EVENT, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
 import { createVoiceDictationClient, type VoiceDictationState } from "./voice-dictation-client";
 import type { AudioSignalLevel } from "./voice-audio";
@@ -32,6 +34,7 @@ import { ModelSelector } from "./model-selector";
 import "./performance-composer.css";
 
 export const SPINNING_ACTIVITY = new Set(["starting", "thinking", "responding", "using_tool", "retrying", "compacting", "stopping", "waiting_for_model"]);
+
 const MobileComposerOptions = lazy(() => import("./mobile-composer-options"));
 
 export interface ComposerStatus {
@@ -48,6 +51,8 @@ export function Composer(props: {
   chat: ActiveChatStore;
   attachments: AttachmentsStore;
   models: ComposerModels;
+  modelsLoading?: boolean;
+  permissions?: PermissionSettings;
   /** Surfaces without a Conduit chat behind them cannot carry attachments. */
   attachmentsSupported?: boolean;
   profiles: Template[];
@@ -86,6 +91,11 @@ export function Composer(props: {
   const canSend = createMemo(() => hasText() && props.serverOnline && props.chat.generation() !== "stopping"
     && (!busy() || supports("steer") || supports("followUpQueue")) && !dictating());
   const activity = createMemo(() => props.chat.activity());
+  const slashCommandOptions = () => ({
+    attachments: props.attachmentsSupported !== false,
+    compaction: Boolean(props.chat.capabilities()?.compaction) && !busy() && !props.chat.compacting(),
+    harnessCommands: props.chat.harnessCommands(),
+  });
   const dictationLabel = createMemo(() => {
     if (dictationState() === "completed" && !dictatedRange()) return "";
     if (dictationState() === "failed" && !dictationError()) return "";
@@ -145,7 +155,10 @@ export function Composer(props: {
       }
     }
     props.chat.setDraft(value);
-    setSlashOpen(/^\/[^\s]*$/.test(value) && "/attach".startsWith(value));
+    if (value.startsWith("/")) void props.chat.loadHarnessCommands().then(() => {
+      if (props.chat.draft() === value) setSlashOpen(composerSlashCommands(value, slashCommandOptions()).length > 0);
+    });
+    setSlashOpen(composerSlashCommands(value, slashCommandOptions()).length > 0);
     queueMicrotask(resize);
   };
 
@@ -274,6 +287,27 @@ export function Composer(props: {
     queueMicrotask(() => input.focus());
   };
 
+  const slashCommands = createMemo(() => composerSlashCommands(props.chat.draft(), slashCommandOptions()));
+  const slashCommand = createMemo(() => slashCommands()[0]);
+  const completeSlashCommand = (item: ReturnType<typeof slashCommands>[number]) => {
+    props.chat.setDraft(item.command);
+    queueMicrotask(() => {
+      resize();
+      input.setSelectionRange(item.command.length, item.command.length);
+    });
+  };
+  const runSlashCommand = (item: ReturnType<typeof slashCommands>[number]) => {
+    setSlashOpen(false);
+    if (item.source === "harness") {
+      props.chat.setDraft(`${item.command} `);
+      queueMicrotask(() => input.focus());
+      return;
+    }
+    props.chat.setDraft("");
+    if (item.id === "attach") attach();
+    else if (item.id === "compact") void props.chat.compact();
+  };
+
   const paste = (event: ClipboardEvent) => {
     const files = filesFromDataTransfer(event.clipboardData);
     if (!files.length) return;
@@ -283,7 +317,18 @@ export function Composer(props: {
 
   const keydown = (event: KeyboardEvent) => {
     if (event.key === "Escape" && slashOpen()) { event.preventDefault(); setSlashOpen(false); return; }
-    if (event.key === "Enter" && slashOpen()) { event.preventDefault(); props.chat.setDraft(""); attach(); return; }
+    if (event.key === "Tab" && slashOpen()) {
+      event.preventDefault();
+      const selected = slashCommand();
+      if (selected) completeSlashCommand(selected);
+      return;
+    }
+    if (event.key === "Enter" && slashOpen()) {
+      event.preventDefault();
+      const selected = slashCommand();
+      if (selected) runSlashCommand(selected);
+      return;
+    }
     if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
       event.preventDefault();
       if (canSend()) sendMessage();
@@ -375,18 +420,17 @@ export function Composer(props: {
         <div class="composer-content">
           <MobileComposerOptions composer={props} />
           <div class="composer-input-shell">
-            <textarea ref={input} rows={1} aria-label="Message Pi" aria-expanded={slashOpen()} aria-controls={slashOpen() ? "slash-suggestions" : undefined} data-has-text={hasText() ? "true" : "false"} data-dictated-range={dictationSelectionOwned() && dictatedRange() ? "true" : undefined} placeholder={props.serverOnline ? "Send a message..." : "Server unavailable"} value={props.chat.draft()} disabled={!props.serverOnline} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} />
+            <textarea ref={input} rows={1} aria-label="Message Pi" data-has-text={hasText() ? "true" : "false"} data-dictated-range={dictationSelectionOwned() && dictatedRange() ? "true" : undefined} placeholder={props.serverOnline ? "Send a message..." : "Server unavailable"} value={props.chat.draft()} disabled={!props.serverOnline} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} />
+            <Show when={slashOpen() && slashCommand()}>{(item) => <div class="slash-completion" aria-hidden="true"><span>{props.chat.draft()}</span>{item().command.slice(props.chat.draft().length)} <small>{item().description}</small></div>}</Show>
           </div>
-          <Show when={slashOpen()}>
-            <div id="slash-suggestions" role="listbox" aria-label="Suggestions" class="slash-suggestions"><button type="button" role="option" aria-selected="true" onMouseDown={(event) => event.preventDefault()} onClick={attach}><strong>/attach</strong><span>Choose files to attach</span></button></div>
-          </Show>
           <div class="composer-actions" data-mobile-actions-stacked={mobileActionsStacked()}>
             <div class="composer-actions-left">
               <Show when={props.attachmentsSupported !== false}><Button class="composer-desktop-attachment" variant="ghost" size="icon-sm" aria-label={`Attach files${props.attachments.items().length ? ` (${props.attachments.items().length})` : ""}`} disabled={!props.serverOnline} onClick={attach}><PaperclipIcon /></Button></Show>
               <div class="composer-desktop-setting">
-                <ModelSelector models={props.models.models()} model={props.models.model()} thinkingLevel={props.models.effort()} notice={props.models.notice()} loading={Boolean(props.chat.connectingId())} disabled={!props.serverOnline || !supports("modelSwitch")} onModelChange={(value) => void props.models.chooseModel(value)} onThinkingLevelChange={(value) => void props.models.chooseEffort(value)} onManageModels={() => props.onOpenSettings("models")} />
+                <ModelSelector models={props.models.models()} model={props.models.model()} thinkingLevel={props.models.effort()} notice={props.models.notice()} loading={props.modelsLoading || Boolean(props.chat.connectingId())} disabled={!props.serverOnline || !supports("modelSwitch")} onModelChange={(value) => void props.models.chooseModel(value)} onThinkingLevelChange={(value) => void props.models.chooseEffort(value)} onManageModels={() => props.onOpenSettings("models")} />
               </div>
               <Show when={props.profiles.length}><div class="composer-desktop-setting"><Menu><MenuTrigger class="model-trigger" aria-label={`Profile ${props.activeProfile?.label || "General"}`} disabled={!props.serverOnline || props.chat.status() !== "draft"}><span>{props.activeProfile?.label || "Profile"}</span><ChevronDownIcon /></MenuTrigger><MenuContent class="w-72"><MenuGroup><MenuLabel>Profile</MenuLabel><Show when={props.chat.status() !== "draft"}><div class="px-2 pb-2 text-xs text-muted-foreground">Locked for this chat after the first message.</div></Show><MenuRadioGroup value={props.activeProfile?.id || ""} onChange={props.onChooseProfile}><For each={props.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={props.chat.status() !== "draft" || item.disabled}>{item.label}</MenuRadioItem>}</For></MenuRadioGroup></MenuGroup><MenuSeparator /><MenuItem onSelect={() => props.onOpenSettings("profiles")}>Manage profiles…</MenuItem></MenuContent></Menu></div></Show>
+              <Show when={props.permissions?.profiles().length}><div class="composer-desktop-setting"><Menu><MenuTrigger class="model-trigger" aria-label={`Permissions ${props.permissions?.selected() || "Default"}`} disabled={!props.serverOnline}><ShieldCheckIcon /><span>{props.permissions?.profiles().find((profile) => profile.id === props.permissions?.selected())?.label || "Permissions"}</span><ChevronDownIcon /></MenuTrigger><MenuContent class="w-72"><MenuGroup><MenuLabel>Permissions</MenuLabel><MenuRadioGroup value={props.permissions?.selected() || ""} onChange={(value) => void props.permissions?.choose(value)}><For each={props.permissions?.profiles() || []}>{(profile) => <MenuRadioItem value={profile.id} disabled={!profile.allowed}><span>{profile.label}</span><Show when={profile.description}><span class="ml-auto max-w-40 truncate text-xs text-muted-foreground">{profile.description}</span></Show></MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></MenuContent></Menu></div></Show>
             </div>
             <Show when={recording() && !phoneLayout()}><VoiceWaveform class="composer-status-waveform composer-actions-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={3} ariaLabel={dictationLabel() || "Microphone input level"} /></Show>
             <div ref={mobileActions} class="composer-actions-right">

@@ -15,6 +15,7 @@ type Mark = { src: string; tint?: boolean };
 const BLOSSOM: Mark = { src: "/brand/openai-blossom-mark.svg", tint: true };
 
 const MARKS: Record<string, Mark> = {
+  conduit: { src: "/brand/pi-mark.svg", tint: true },
   codex: { src: "/brand/codex-mark.svg" },
   "chatgpt-web": BLOSSOM,
   "claude-code": { src: "/brand/claude-code-mark.svg", tint: true },
@@ -33,4 +34,21 @@ export function HarnessMark(props: { id: string; class?: string }) {
   return <Show when={mark().tint} fallback={<img class={`harness-mark ${props.class || ""}`} src={mark().src} alt="" />}>
     <i class={`harness-mark harness-mark-tinted ${props.class || ""}`} style={{ "mask-image": `url("${mark().src}")`, "-webkit-mask-image": `url("${mark().src}")` }} aria-hidden="true" />
   </Show>;
+}
+
+const HARNESS_LABELS: Record<string, string> = {
+  conduit: "Conduit",
+  pi: "Pi",
+  codex: "Codex",
+  "chatgpt-web": "ChatGPT Web",
+  "claude-code": "Claude Code",
+  opencode: "OpenCode",
+};
+
+export function ThreadHarnessMark(props: { id?: string }) {
+  const id = () => props.id || "conduit";
+  const label = () => HARNESS_LABELS[id()] || id();
+  return <span class="thread-harness-mark" role="img" aria-label={`${label()} harness`} title={label()}>
+    <HarnessMark id={id()} />
+  </span>;
 }

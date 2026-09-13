@@ -229,6 +229,7 @@ export class ChatGptWebAdapter extends EventEmitter {
       defaultThinkingLevel: item.defaultThinkingLevel || item.thinkingLevels[0] || "" }));
   }
   listModels() { return this.listAvailableModels(); }
+  listCommands() { return Promise.resolve([]); }
   async setModel(id, model) { const record = this.get(id); if (record) record.model = model; return model; }
   async setThinkingLevel(id, thinkingLevel) { const record = this.get(id); if (record) record.thinkingLevel = thinkingLevel; return thinkingLevel; }
   getModelState(id) { const record = this.get(id); return Promise.resolve({ model: record?.model || "", thinkingLevel: record?.thinkingLevel || "" }); }

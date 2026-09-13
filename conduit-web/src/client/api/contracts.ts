@@ -4,6 +4,22 @@ export interface ChatCapabilities {
   thinkingLevels: boolean; modelSwitch: boolean; toolUse: boolean; permissions: boolean;
   usage: boolean; replay: boolean;
 }
+
+export interface HarnessCommand {
+  name: string;
+  description?: string;
+  source?: string;
+}
+export interface PermissionMode {
+  id: string;
+  label: string;
+  description: string;
+  allowed: boolean;
+}
+export interface PermissionModeState {
+  modes: PermissionMode[];
+  selected: string;
+}
 export type ChatStatus = "draft" | "active";
 
 export interface RuntimeIdentity {
@@ -17,6 +33,8 @@ export interface ChatSummary {
   projectId: string;
   status: ChatStatus;
   title: string;
+  /** Stable user-facing harness identity. Session routing still uses backend.implementation. */
+  harnessId?: string;
   templateId?: string;
   runtime?: RuntimeIdentity;
   profileId?: string | null;
@@ -393,6 +411,7 @@ export interface RuntimeProcess {
 export interface LiveRecord {
   id: string;
   chatId?: string;
+  sessionId?: string | null;
   streamUrl?: string;
   runtime?: RuntimeIdentity;
   contextUsage?: ContextUsage;

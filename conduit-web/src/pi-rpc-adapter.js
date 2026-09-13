@@ -15,6 +15,65 @@ export const PI_CAPABILITIES = Object.freeze({
 const queueText = (items) => (Array.isArray(items) ? items : [])
   .map((item) => parseAttachmentEnvelope(typeof item === "string" ? item : item?.message || "").message);
 
+const historyText = (content) => {
+  const text = typeof content === "string" ? content : Array.isArray(content)
+    ? content.map((part) => typeof part?.text === "string" ? part.text : "").join(" ") : "";
+  return parseAttachmentEnvelope(text).message.replace(/\s+/g, " ").trim().slice(0, 240);
+};
+
+const formatHistoryTool = (name, args = {}) => {
+  const path = String(args.path || args.file_path || "").replace(/^\/home\/[^/]+/, "~");
+  if (["read", "write", "edit"].includes(name)) return `[${name}: ${path}]`;
+  if (name === "bash") {
+    const command = String(args.command || "").replace(/\s+/g, " ").trim();
+    return `[bash: ${command.slice(0, 50)}${command.length > 50 ? "..." : ""}]`;
+  }
+  return `[${name}]`;
+};
+
+const historyTreeView = (tree) => {
+  const tools = new Map();
+  const pending = [...tree];
+  while (pending.length) {
+    const node = pending.pop();
+    pending.push(...(node.children || []));
+    if (node.entry?.type !== "message" || node.entry.message?.role !== "assistant") continue;
+    for (const part of Array.isArray(node.entry.message.content) ? node.entry.message.content : []) {
+      if (part?.type === "toolCall" && part.id) tools.set(part.id, { name: part.name, arguments: part.arguments });
+    }
+  }
+  const project = (node) => {
+    const message = node.entry.message;
+    const text = historyText(message?.content ?? node.entry.content ?? node.entry.summary);
+    const tool = message?.toolCallId ? tools.get(message.toolCallId) : null;
+    const display = message?.role === "user" ? `user: ${text}`
+      : message?.role === "assistant" ? `assistant: ${text || message.errorMessage || "(no content)"}`
+      : message?.role === "toolResult" ? formatHistoryTool(tool?.name || message.toolName || "tool", tool?.arguments)
+      : message?.role === "bashExecution" ? `[bash: ${String(message.command || "").replace(/\s+/g, " ").trim()}]`
+      : node.entry.type === "compaction" ? "[compaction]"
+      : node.entry.type === "branch_summary" ? `[branch summary]: ${text}` : text;
+    const settings = ["label", "custom", "model_change", "thinking_level_change", "session_info"].includes(node.entry.type);
+    const toolOnlyAssistant = message?.role === "assistant" && !text && !message.errorMessage;
+    const kind = message?.role === "user" ? "user"
+      : message?.role === "assistant" ? "assistant"
+      : ["toolResult", "bashExecution"].includes(message?.role) ? "tool"
+      : node.entry.type === "branch_summary" ? "summary" : "system";
+    return { entry: {
+    id: node.entry.id,
+    parentId: node.entry.parentId ?? null,
+    timestamp: node.entry.timestamp,
+    type: node.entry.type,
+    display,
+    kind,
+    hidden: settings || toolOnlyAssistant,
+  },
+  ...(node.label ? { label: node.label } : {}),
+  children: (node.children || []).map(project),
+    };
+  };
+  return tree.map(project);
+};
+
 export function normalizePiBackendEvent(event) {
   const base = { generationId: event.generationId || null, pi: event };
   switch (event.type) {
@@ -139,6 +198,7 @@ export class PiRpcAdapter {
   getCapabilities() { return PI_CAPABILITIES; }
   toClientEvent(event) { const { pi: _pi, ...neutral } = normalizePiBackendEvent(event); return neutral; }
   listModels(id) { return this.manager.getAvailableModels(id); }
+  listCommands(id) { return this.manager.getCommands(id); }
   getModelState(id) { return this.manager.getModelState(id); }
   get(id) { return this.manager.get(id); }
   getByChatId(chatId) { return this.manager.getByChatId(chatId); }
@@ -148,13 +208,18 @@ export class PiRpcAdapter {
     const replay = this.manager.attach(id, socket);
     return replay ? normalizePiBackendEvent(replay) : null;
   }
-  queue(id, type, message) { return this.manager.queueAccepted(id, type, message); }
+  queue(id, type, message, options) { return this.manager.queueAccepted(id, type, message, options); }
   clearQueue(id) { return this.manager.clearQueue(id); }
   readTranscript({ liveSessionId, ...options }) { return this.manager.readTranscript(liveSessionId, options); }
   fork(id, entryId) { return this.manager.fork(id, entryId); }
+  async getHistoryTree(id) {
+    const result = await this.manager.getHistoryTree(id);
+    return { leafId: result?.leafId || null, tree: historyTreeView(result?.tree || []) };
+  }
   setModel(id, model) { return this.manager.setModel(id, model); }
   setThinkingLevel(id, level) { return this.manager.setThinkingLevel(id, level); }
   refreshContext(id) { return this.manager.refreshContextUsage(id); }
+  compact(id) { return this.manager.compact(id); }
   publish(record, event) { return this.manager.publish(record, event); }
   view(record) {
     return { ...this.manager.view(record), capabilities: PI_CAPABILITIES };

@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { readSessionMetadata, readSessionParentSession, validateSessionFile } from "./session-store.js";
 import { ensureChatTree } from "./owned-paths.js";
-import { piBackendFor, withPiCompatibilityFields } from "./chat-backend.js";
+import { harnessIdForImplementation, piBackendFor, withPiCompatibilityFields } from "./chat-backend.js";
 
 const CHAT_ID = /^[a-zA-Z0-9_-]{8,128}$/;
 const COMPLETED_ATTACHMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}--.+$/i;
@@ -35,7 +35,13 @@ export function chatView(chat) {
   if (!chat) return null;
   const { piSessionId, piSessionFile, backend, ...view } = chat;
   const { opaqueSession, ...identity } = backend || piBackendFor(chat);
-  return { ...view, backend: identity, profileId: identity.profileId, profileRevision: identity.profileRevision };
+  return {
+    ...view,
+    harnessId: harnessIdForImplementation(identity.implementation),
+    backend: identity,
+    profileId: identity.profileId,
+    profileRevision: identity.profileRevision,
+  };
 }
 
 function sessionFileFor(item) {

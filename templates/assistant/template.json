@@ -15,7 +15,6 @@
   "extensions": [
     "../../conduit-web/node_modules/pi-web-access"
   ],
-  "runtimeOverlays": ["web-search"],
   "skills": [
     "../coding/skills/web-research"
   ],

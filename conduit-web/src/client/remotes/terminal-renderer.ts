@@ -149,13 +149,19 @@ function installClipboardShortcuts(terminal: ClipboardTerminal) {
     const copy = key === "c" && (isApple ? event.metaKey && !event.ctrlKey : event.ctrlKey && event.shiftKey);
     const paste = key === "v" && (isApple ? event.metaKey && !event.ctrlKey : event.ctrlKey);
 
+    // The async Clipboard API only exists in a secure context, so it is absent
+    // whenever Conduit is reached over plain HTTP on a LAN address. Falling
+    // through leaves the browser's own copy/paste on xterm's textarea intact,
+    // which still works there; swallowing the key would break it outright.
     if (copy && terminal.hasSelection?.()) {
+      if (!navigator.clipboard?.writeText) return true;
       event.preventDefault();
       const selection = terminal.getSelection?.() || "";
       if (selection) void navigator.clipboard.writeText(selection).catch(() => {});
       return false;
     }
     if (paste && terminal.paste) {
+      if (!navigator.clipboard?.readText) return true;
       event.preventDefault();
       void navigator.clipboard.readText()
         .then((text) => { if (text) terminal.paste?.(text); })

@@ -3,7 +3,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { listPiTemplates, loadPiTemplate, normalizeTemplateId } from "../../scripts/pi-runtime.mjs";
-import { loadModelProfiles } from "./model-profiles.js";
 import { expandHome, parseAllowlist } from "./workspace-paths.js";
 import { PiInstallationRegistry } from "./pi-installations.js";
 
@@ -54,7 +53,6 @@ export function loadConfig(env = process.env) {
     env.CONDUIT_WORKSPACE_DEFAULT_ROOT || env.CONDUIT_WORKSPACE_SUGGESTION_ROOT || os.homedir(),
   );
   const piAgentDir = absolute(env.CONDUIT_PI_AGENT_DIR || path.join(dataRoot, "pi"));
-  const modelProfilesFile = absolute(env.CONDUIT_MODEL_PROFILES_FILE || path.join(templatesRoot, "model-profiles.json"));
   const installations = new PiInstallationRegistry({
     conduitAgentDir: piAgentDir,
     conduitCommand: env.CONDUIT_PI_COMMAND || "",
@@ -76,8 +74,6 @@ export function loadConfig(env = process.env) {
     sessionNamePrompt: path.join(templatesRoot, "chat-naming", "SYSTEM.md"),
     preferencesFile: absolute(env.CONDUIT_PREFERENCES_FILE || path.join(dataRoot, "preferences.json")),
     piAgentDir,
-    modelProfilesFile,
-    modelProfiles: loadModelProfiles(modelProfilesFile),
     searchConfigFile: absolute(env.CONDUIT_SEARCH_CONFIG_FILE || path.join(piAgentDir, "web-search.json")),
     voiceConfigFile: absolute(env.CONDUIT_VOICE_CONFIG_FILE || path.join(dataRoot, "voice.json")),
     voiceModelRoot: absolute(env.CONDUIT_VOICE_MODEL_ROOT || path.join(dataRoot, "voice", "models")),

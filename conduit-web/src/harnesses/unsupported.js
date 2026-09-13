@@ -28,6 +28,7 @@ export function unsupported(capabilities, { label, overrides = {} } = {}) {
   // Usage reporting is optional rather than refusable: the caller polls this and
   // a throw would surface as a failed chat rather than an absent number.
   if (!capabilities.usage) stubs.refreshContext = () => Promise.resolve(null);
+  if (!capabilities.compaction) stubs.compact = refuse(`${label} does not support compaction`);
   // History forks have no capability flag; no backend but Pi implements one.
   stubs.fork = refuse(`${label} history forks are unavailable`);
   return { ...stubs, ...overrides };

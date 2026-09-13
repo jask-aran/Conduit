@@ -87,7 +87,10 @@ export function resolvePiLaunch({
       ...sessionArgs(chat.piSessionFile, model, thinkingLevel),
     ],
     cwd,
-    env: projectEnvironment(project, cwd, buildPiEnvironment(runtimeAgentDir || installation.agentDir, filteredEnvironment(installation.environment || process.env))),
+    env: projectEnvironment(project, cwd, {
+      ...buildPiEnvironment(runtimeAgentDir || installation.agentDir, filteredEnvironment(installation.environment || process.env)),
+      PI_CODING_AGENT_SESSION_DIR: project.sessionsDir,
+    }),
     sessionFile: chat.piSessionFile ? path.resolve(chat.piSessionFile) : null,
     runtime,
     binaryVersion: installation.version,

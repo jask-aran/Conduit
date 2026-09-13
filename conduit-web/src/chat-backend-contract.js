@@ -6,8 +6,8 @@ export const CHAT_CAPABILITY_KEYS = Object.freeze([
 export const REQUIRED_CHAT_BACKEND_METHODS = Object.freeze([
   "create", "restore", "prompt", "cancel", "close", "respondHostUi", "replay",
   "waitForSession", "attach", "view", "toClientEvent", "publish", "queue",
-  "clearQueue", "fork", "setModel", "setThinkingLevel", "refreshContext",
-  "readTranscript", "getCapabilities", "listModels", "getModelState", "get",
+  "clearQueue", "fork", "setModel", "setThinkingLevel", "refreshContext", "compact",
+  "readTranscript", "getCapabilities", "listModels", "listCommands", "getModelState", "get",
   "getByChatId", "list",
 ]);
 

@@ -581,6 +581,164 @@ const PNG_FIXTURE = Buffer.from(
   "base64",
 );
 
+async function installUnifiedReviewFixture(page) {
+  await page.route("**/v0/chats/*/permission-profiles", (route) => route.fulfill({ json: { modes: [], selected: "" } }));
+  await page.route("**/v0/projects", (route) => route.fulfill({ json: { projects: projects.map((project) => ({ ...project, kind: "workspace", workingRoot: "/fixture" })) } }));
+  await page.route("**/v0/chats/*/history", (route) => route.fulfill({ json: { tree: [], leafId: null } }));
+  await page.route("**/v0/projects/*/diff*", (route) => {
+    const query = new URL(route.request().url()).searchParams;
+    if (query.has("compare")) {
+      const scope = query.get("scope");
+      return route.fulfill({ json: { path: query.get("path"), oldPath: query.get("path"), scope, kind: "text", original: scope === "changes" ? "staged version\n" : "committed version\n", modified: scope === "staged" ? "staged version\n" : "working version\n" } });
+    }
+    return route.fulfill({ json: { repository: true, branch: "main", files: [{ path: "app.js", status: "MM" }, { path: "README.md", status: " M" }], diff: "" } });
+  });
+  const turns = [{ id: "new-turn", turnId: "new", createdAt: "2026-09-11T02:00:00Z" }, { id: "old-turn", turnId: "old", createdAt: "2026-09-11T01:00:00Z" }];
+  await page.route("**/v0/projects/*/turn-artifact*", (route) => {
+    const query = new URL(route.request().url()).searchParams;
+    if (query.has("timeline")) return route.fulfill({ json: turns });
+    const checkpoint = turns.find((turn) => turn.id === query.get("checkpointId")) ?? turns[0];
+    if (!query.has("path")) return route.fulfill({ json: { ...checkpoint, files: [{ path: "app.js", status: "M", available: true }] } });
+    return route.fulfill({ json: { kind: "text", path: "app.js", oldPath: "app.js", scope: query.get("baseline") === "chat" ? "session" : "turn", original: "turn original\n", modified: checkpoint.id === "old-turn" ? "historical version\n" : "working version\n" } });
+  });
+  await page.route("**/v0/projects/*/file?*", (route) => {
+    const path = new URL(route.request().url()).searchParams.get("path");
+    return route.fulfill({ json: { path, size: 16, revision: "fixture-revision", modifiedAt: 1, content: "working version\n", kind: "text", mime: "text/plain" } });
+  });
+}
+
+test("unified review preserves Git scope, turn scope, and unsaved edits @desktop", async ({ page }, testInfo) => {
+  await installUnifiedReviewFixture(page);
+  await page.goto("/chat/session_existing");
+  await runPaletteCommand(page, "Toggle maximized workspace panel");
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  await panel.getByRole("tab", { name: "Source Control", exact: true }).click();
+  await panel.getByRole("tab", { name: "Review", exact: true }).click();
+  await expect(panel.getByRole("tab", { name: "Source Control", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(panel.getByRole("button", { name: "Comparison source", exact: true })).toHaveText("Uncommitted");
+  await expect(panel.locator(".workspace-diff .workspace-comparison")).toContainText("HEAD → Working copy");
+  await panel.getByRole("tab", { name: "Changes", exact: true }).click();
+  await panel.locator(".workspace-change-section").filter({ hasText: "Staged changes" }).getByRole("button", { name: /app.js/ }).first().click();
+  await expect(panel.getByRole("tab", { name: "Diff mode", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(panel.getByRole("button", { name: "Comparison source", exact: true })).toHaveText("Staged");
+  const comparison = panel.locator(".workspace-comparison:visible");
+  await expect(comparison).toContainText("HEAD → Index");
+  await expect(comparison.locator(".cm-content")).toContainText("staged version");
+  await expect(comparison.locator(".cm-content")).not.toContainText("working version");
+  await expect(comparison.getByRole("button", { name: "Find in comparison", exact: true })).toBeVisible();
+  await expect(comparison.getByRole("button", { name: "Previous change", exact: true })).toBeVisible();
+  await panel.getByRole("button", { name: "Comparison source", exact: true }).click();
+  await page.getByRole("menuitemradio", { name: "Unstaged", exact: true }).click();
+  await expect(comparison).toContainText("Index → Working copy");
+  await expect(comparison.locator(".cm-content")).toContainText("working version");
+  await comparison.getByRole("button", { name: "Comparison view options" }).click();
+  await page.getByRole("menuitemradio", { name: "Side-by-side diff" }).click();
+  await expect(comparison.locator(".workspace-comparison-content")).toHaveAttribute("data-layout", "split");
+  await panel.getByRole("tab", { name: "Chat", exact: true }).click();
+  await panel.getByRole("radio", { name: "Agent changes", exact: true }).click();
+  await expect(panel.getByRole("tab", { name: "Chat", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(panel.getByRole("button", { name: "Comparison source", exact: true })).toHaveText("This chat");
+  const chatComparison = panel.locator(".workspace-artifact-review .workspace-comparison");
+  await expect(chatComparison).toContainText("Chat start → Latest turn");
+  await expect(panel.getByRole("button", { name: "Select turn", exact: true })).toHaveText("Latest turn");
+  await panel.getByRole("button", { name: "Older turn", exact: true }).click();
+  await expect(panel.getByRole("button", { name: "Comparison source", exact: true })).toHaveText("This chat");
+  await expect(chatComparison).toContainText("Chat start → Turn 1");
+  await expect(chatComparison.locator(".cm-content").last()).toContainText("historical version");
+  await panel.getByRole("button", { name: "Comparison source", exact: true }).click();
+  await page.getByRole("menuitemradio", { name: "Selected turn", exact: true }).click();
+  await panel.getByRole("button", { name: "Older turn", exact: true }).click();
+  await expect(chatComparison).toContainText("Turn start → Next turn start");
+  await expect(chatComparison.locator(".cm-content").last()).toContainText("historical version");
+  await panel.getByRole("tab", { name: "Files", exact: true }).click();
+  await comparison.getByRole("button", { name: "Edit working file", exact: true }).click();
+  const editor = panel.getByRole("textbox", { name: "Edit app.js", exact: true });
+  await expect(editor).toContainText("working version");
+  await expect(panel.getByRole("button", { name: "Preview file", exact: true })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Find or replace", exact: true })).toBeVisible();
+  await editor.fill("unsaved draft");
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await panel.getByRole("tab", { name: "Diff mode", exact: true }).click();
+  await expect(editor).toContainText("unsaved draft");
+  await expect(panel.getByRole("tab", { name: "File mode", exact: true })).toHaveAttribute("aria-selected", "true");
+  await page.screenshot({ path: testInfo.outputPath("unified-review-desktop.png") });
+});
+
+test("unified review keeps scope visible above a narrow file drawer", async ({ page }, testInfo) => {
+  await installUnifiedReviewFixture(page);
+  await page.goto("/chat/session_existing");
+  await runPaletteCommand(page, "Toggle workspace panel");
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  await panel.getByRole("tab", { name: "Diff mode", exact: true }).click();
+  await expect(panel.locator(".workspace-comparison:visible")).toContainText("HEAD → Working copy");
+  await expect(panel.locator(".workspace-tree-pane")).toBeHidden();
+  await panel.getByRole("button", { name: "Toggle file list", exact: true }).click();
+  await expect(panel.locator(".workspace-tree-pane")).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Comparison source", exact: true })).toHaveText("Uncommitted");
+  await panel.getByRole("button", { name: /README.md/ }).click();
+  await expect(panel.locator(".workspace-tree-pane")).toBeHidden();
+  await expect(panel.locator(".workspace-comparison:visible")).toContainText("README.md");
+  const fits = await panel.locator(".workspace-panel-header").evaluate((element) => element.scrollWidth <= element.clientWidth);
+  expect(fits).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("unified-review-narrow.png") });
+});
+
+test("switching from all files reuses the in-flight Git overview @desktop", async ({ page }) => {
+  await installUnifiedReviewFixture(page);
+  let overviewRequests = 0;
+  let markOverviewStarted;
+  const overviewStarted = new Promise((resolve) => { markOverviewStarted = resolve; });
+  await page.route("**/v0/projects/*/diff*", async (route) => {
+    const query = new URL(route.request().url()).searchParams;
+    if (query.has("compare")) return route.fallback();
+    overviewRequests += 1;
+    markOverviewStarted();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await route.fulfill({ json: { repository: true, branch: "main", files: [{ path: "app.js", status: "MM" }], diff: "" } });
+  });
+  await page.goto("/chat/session_existing");
+  await runPaletteCommand(page, "Toggle maximized workspace panel");
+  await overviewStarted;
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  await panel.getByRole("tab", { name: "Diff mode", exact: true }).click();
+  await expect(panel.locator(".workspace-comparison:visible")).toContainText("HEAD → Working copy");
+  expect(overviewRequests).toBe(1);
+});
+
+test("unified review rejects late scope responses and clears empty scopes @desktop", async ({ page }) => {
+  await installUnifiedReviewFixture(page);
+  let releaseStaged;
+  const stagedGate = new Promise((resolve) => { releaseStaged = resolve; });
+  let stagedArrived;
+  const stagedRequest = new Promise((resolve) => { stagedArrived = resolve; });
+  await page.route("**/v0/projects/*/diff?*", async (route) => {
+    const query = new URL(route.request().url()).searchParams;
+    if (query.get("scope") !== "staged") return route.fallback();
+    stagedArrived();
+    await stagedGate;
+    await route.fulfill({ json: { kind: "text", path: "app.js", oldPath: "app.js", scope: "staged", original: "old", modified: "late staged response" } });
+  });
+  await page.goto("/chat/session_existing");
+  await runPaletteCommand(page, "Toggle maximized workspace panel");
+  const panel = page.getByRole("complementary", { name: "Workspace panel" });
+  await panel.getByRole("tab", { name: "Diff mode", exact: true }).click();
+  const scope = panel.getByRole("button", { name: "Comparison source", exact: true });
+  await scope.click();
+  await page.getByRole("menuitemradio", { name: "Staged", exact: true }).click();
+  await stagedRequest;
+  await scope.click();
+  await page.getByRole("menuitemradio", { name: "Unstaged", exact: true }).click();
+  await expect(panel.locator(".workspace-comparison:visible")).toContainText("working version");
+  releaseStaged();
+  await expect(scope).toHaveText("Unstaged");
+  await expect(panel.locator(".workspace-comparison:visible")).not.toContainText("late staged response");
+  await page.route("**/v0/projects/*/turn-artifact*", (route) => route.fulfill({ json: new URL(route.request().url()).searchParams.has("timeline") ? [] : null }));
+  await scope.click();
+  await page.getByRole("menuitemradio", { name: "This chat", exact: true }).click();
+  await expect(panel.locator(".workspace-comparison:visible")).toHaveCount(0);
+  await expect(panel.locator(".workspace-preview")).toContainText("No changes in this scope.");
+});
+
 test("workspace previews an image instead of refusing it as binary @desktop", async ({ page }, testInfo) => {
   await page.route("**/v0/projects/*/tree?*", async (route) => {
     await route.fulfill({ json: { path: "", entries: [
