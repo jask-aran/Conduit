@@ -140,7 +140,7 @@ export function AppDashboard(props: {
         <Show when={chats().length} fallback={<DashboardEmpty>No recent chats.</DashboardEmpty>}>
           <DashboardScrollRegion class="project-chat-list">
             <For each={chats()}>{({ chat, project }) =>
-              <ContextMenu><ContextMenuTrigger as={DashboardRow} element="button" onPointerEnter={() => props.onPrefetchChat(chat)} onFocus={() => props.onPrefetchChat(chat)} onClick={() => props.onOpenChat(chat, project)} leading={<RuntimeIndicator process={props.runtime.getProcess(chat.id)} stale={props.runtime.stale()} unread={chat.unread} hideIdle fallback={<ThreadHarnessMark id={chat.harnessId} />} />} content={<>
+              <ContextMenu><ContextMenuTrigger as={DashboardRow} element="button" onPointerEnter={() => props.onPrefetchChat(chat)} onFocus={() => props.onPrefetchChat(chat)} onClick={() => props.onOpenChat(chat, project)} leading={<RuntimeIndicator process={props.runtime.getProcess(chat.id)} stale={props.runtime.stale()} unread={chat.unread} fallback={<ThreadHarnessMark id={chat.harnessId} />} />} content={<>
                   <DashboardRowTitle title={chat.title || "Untitled chat"} context={`${project.name}${compactDate(chat.createdAt) ? ` · ${compactDate(chat.createdAt)}` : ""}`} />
                 </>} meta={<time dateTime={chat.lastMessageAt || chat.createdAt}>{relativeActivity(Date.parse(chat.lastMessageAt || chat.createdAt || "") || 0)}</time>} trailing={<ArrowRightIcon />} /><ContextMenuContent class="w-60 sidebar-context-menu"><ContextMenuGroup>
                 <ContextMenuItem onSelect={() => props.onContextAction("rename-chat", { chat, project })}><PencilIcon />{commandLabel(COMMAND_IDS.renameChat)}</ContextMenuItem>

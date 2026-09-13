@@ -31,12 +31,11 @@ const TONES: Record<string, string> = {
 const SPINNING = new Set(["starting", "stopping", "working", "compacting"]);
 
 /** Compact accessible process/activity indicator for sidebar rows, matching main. */
-export function RuntimeIndicator(props: { process?: RuntimeProcess | null; stale?: boolean; unread?: boolean; hideIdle?: boolean; class?: string; fallback?: JSX.Element }) {
+export function RuntimeIndicator(props: { process?: RuntimeProcess | null; stale?: boolean; unread?: boolean; class?: string; fallback?: JSX.Element }) {
   const visible = () => {
     const process = props.process;
     if (!process || process.status === "stopped" || process.status === "none") return false;
     const activity = activityOf(process);
-    if (props.hideIdle && activity === "idle") return false;
     if (activity === "idle" && process.status !== "running" && !process.active) return false;
     return true;
   };

@@ -20,8 +20,12 @@ function isInspectionAbort(error) {
   return error?.code === "workspace_inspection_aborted" || error?.name === "AbortError";
 }
 
-async function recentChatView(chat, project, process, readPage) {
-  let lastMessagePreview = "";
+const opaqueThreadId = (chat) => typeof chat.backend?.opaqueSession === "string"
+  ? chat.backend.opaqueSession
+  : chat.backend?.opaqueSession?.threadId || null;
+
+async function recentChatView(chat, project, process, readPage, backendSessions) {
+  let lastMessagePreview = backendSessions.get(opaqueThreadId(chat))?.preview || "";
   let lastMessageAt = chat.updatedAt || chat.createdAt || null;
   if (chat.piSessionFile) {
     try {
@@ -58,6 +62,7 @@ export async function buildProjectDashboard({
   terminals = [],
   readPage,
   inspectWorkspace,
+  listBackendSessions,
   signal,
 }) {
   const chats = registry.listProject(project.id);
@@ -69,8 +74,15 @@ export async function buildProjectDashboard({
     .sort((left, right) => String(right.updatedAt || right.createdAt || "")
       .localeCompare(String(left.updatedAt || left.createdAt || "")))
     .slice(0, RECENT_CHAT_LIMIT);
+  const backendSessions = new Map();
+  const implementations = [...new Set(recent.map((chat) => chat.backend?.implementation)
+    .filter((implementation) => implementation && !["conduit_pi", "native_pi"].includes(implementation)))];
+  await Promise.all(implementations.map(async (implementation) => {
+    const sessions = await listBackendSessions?.(implementation, project.workingRoot).catch(() => []) || [];
+    for (const session of sessions) backendSessions.set(session.id, session);
+  }));
   const recentChats = await Promise.all(recent
-    .map((chat) => recentChatView(chat, project, processByChat.get(chat.id), readPage)));
+    .map((chat) => recentChatView(chat, project, processByChat.get(chat.id), readPage, backendSessions)));
 
   let git = null;
   if (isWorkspace(project)) {

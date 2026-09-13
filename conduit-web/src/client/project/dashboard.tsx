@@ -399,7 +399,7 @@ export function ProjectDashboard(props: {
             <Show when={visibleChats().length} fallback={<DashboardEmpty>No chats yet. Start one above.</DashboardEmpty>}>
               <DashboardScrollRegion class="project-chat-list">
                 <For each={visibleChats()}>{(item) =>
-                  <ContextMenu><ContextMenuTrigger as={DashboardRow} element="button" onPointerEnter={() => props.onPrefetchChat(item)} onFocus={() => props.onPrefetchChat(item)} onClick={() => void props.onOpenChat(item, props.project)} leading={<RuntimeIndicator process={props.runtime.getProcess(item.id)} stale={props.runtime.stale()} unread={item.unread} hideIdle fallback={<ThreadHarnessMark id={item.harnessId} />} />} content={<>
+                  <ContextMenu><ContextMenuTrigger as={DashboardRow} element="button" onPointerEnter={() => props.onPrefetchChat(item)} onFocus={() => props.onPrefetchChat(item)} onClick={() => void props.onOpenChat(item, props.project)} leading={<RuntimeIndicator process={props.runtime.getProcess(item.id)} stale={props.runtime.stale()} unread={item.unread} fallback={<ThreadHarnessMark id={item.harnessId} />} />} content={<>
                       <DashboardRowTitle title={item.title || "Untitled chat"} context={`${props.project.name}${compactDate(item.createdAt) ? ` · ${compactDate(item.createdAt)}` : ""}`} />
                       <Show when={item.lastMessagePreview}><small>{item.lastMessagePreview}</small></Show>
                     </>} meta={<time dateTime={item.lastMessageAt || item.createdAt}>{relativeActivity(item.lastMessageAt || item.createdAt, now())}</time>} trailing={<ArrowRightIcon />} /><ContextMenuContent class="w-60 sidebar-context-menu"><ContextMenuGroup>
