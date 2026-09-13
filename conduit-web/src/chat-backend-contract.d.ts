@@ -62,6 +62,7 @@ export interface ChatBackendAdapter<LiveSession = unknown, ModelCatalog = unknow
   setModel(liveSessionId: string, model: string): Promise<unknown>;
   setThinkingLevel(liveSessionId: string, level: string): Promise<unknown>;
   refreshContext(liveSessionId: string): Promise<unknown>;
+  compact(liveSessionId: string): Promise<unknown>;
   get(liveSessionId: string): LiveSession | null;
   getByChatId(chatId: string): LiveSession | null;
   list(): unknown[];
@@ -84,6 +85,7 @@ export interface ChatBackendAdapter<LiveSession = unknown, ModelCatalog = unknow
     Promise<{ messages: unknown[]; tools: unknown[] }>;
   getCapabilities(): ChatCapabilities;
   listModels(liveSessionId?: string): Promise<ModelCatalog> | ModelCatalog;
+  listCommands(liveSessionId: string): Promise<Array<{ name: string; description?: string; source?: string }>>;
   getModelState(liveSessionId: string): Promise<{ model: string; thinkingLevel: string }>;
 }
 

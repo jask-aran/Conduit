@@ -24,10 +24,35 @@ test("Codex notifications map to neutral streaming events", () => {
 
 test("Codex adapter advertises only implemented capabilities", () => {
   assert.deepEqual(CODEX_CAPABILITIES, {
-    steer: true, followUpQueue: true, cancel: true, compaction: false,
+    steer: true, followUpQueue: true, cancel: true, compaction: true,
     thinkingLevels: true, modelSwitch: true, toolUse: true, permissions: true,
     usage: false, replay: false,
   });
+});
+
+test("Codex compaction uses the native thread operation", async () => {
+  const adapter = new CodexAppServerAdapter();
+  const live = record();
+  adapter.records.set(live.id, live);
+  adapter.request = async (target, method, params) => {
+    assert.equal(target, live);
+    assert.equal(method, "thread/compact/start");
+    assert.deepEqual(params, { threadId: "thread-1" });
+    return {};
+  };
+  assert.deepEqual(await adapter.compact(live.id), {});
+});
+
+test("Codex context-compaction items drive neutral compaction state", () => {
+  const adapter = new CodexAppServerAdapter();
+  const live = record();
+  adapter.notification(live, "turn/started", { turn: { id: "compact-turn" } });
+  adapter.notification(live, "item/started", { turnId: "compact-turn", item: { id: "compact-1", type: "contextCompaction" } });
+  assert.equal(live.compacting, true);
+  assert.equal(live.activity, "compacting");
+  adapter.notification(live, "item/completed", { turnId: "compact-turn", item: { id: "compact-1", type: "contextCompaction" } });
+  assert.equal(live.compacting, false);
+  assert.deepEqual(live.events.filter((event) => event.type === "compaction").map((event) => event.active), [true, false]);
 });
 
 test("Codex prompt writes the installed app-server turn/start shape", async () => {

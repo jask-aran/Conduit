@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import { spawn } from "node:child_process";
 import crypto from "node:crypto";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { projectEnvironment } from "./project-environment.js";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
@@ -499,6 +500,7 @@ export class PiManager extends EventEmitter {
       generation: null,
       stopping: false,
       pendingRequests: new Map(),
+      pendingQueuedPrompts: [],
       statsTimer: null,
     };
     this.processes.set(id, record);
@@ -791,6 +793,10 @@ export class PiManager extends EventEmitter {
     }
   }
 
+  compact(id) {
+    return this.request(id, { type: "compact" }, { timeout: 120_000 });
+  }
+
   beginActiveGeneration(record, generationId, continuationBase) {
     const previous = {
       activeGeneration: record.activeGeneration,
@@ -813,6 +819,7 @@ export class PiManager extends EventEmitter {
 
   /** Open a generation for a turn Pi started itself, from its own queue. */
   beginQueuedGeneration(record) {
+    record.pendingQueuedPrompts.shift();
     const generationId = `g${++record.generationSequence}`;
     const structured = this.beginActiveGeneration(record, generationId, "");
     record.generation = { id: generationId, closed: false, settled: false, continuationBase: "" };
@@ -916,6 +923,11 @@ export class PiManager extends EventEmitter {
     return Array.isArray(response.data?.models) ? response.data.models : [];
   }
 
+  async getCommands(id) {
+    const response = await this.request(id, { type: "get_commands" });
+    return Array.isArray(response.data?.commands) ? response.data.commands : [];
+  }
+
   async getModelState(id) {
     const response = await this.request(id, { type: "get_state" });
     const record = this.processes.get(id);
@@ -939,7 +951,20 @@ export class PiManager extends EventEmitter {
     return { model: record?.model || null, thinkingLevel: record?.thinkingLevel || "" };
   }
 
-  prompt(id, message, { continuationBase = "", streamingBehavior = null } = {}) {
+  async attachmentPrompt(message, attachments = []) {
+    const images = [];
+    const files = [];
+    for (const attachment of attachments) {
+      if (String(attachment.type || "").startsWith("image/") && attachment.type !== "image/svg+xml") {
+        images.push({ type: "image", data: await fs.readFile(attachment.path, "base64"), mimeType: attachment.type });
+      } else {
+        files.push(`Attached file: ${attachment.path}`);
+      }
+    }
+    return { message: [message, ...files].filter(Boolean).join("\n\n"), images };
+  }
+
+  async prompt(id, message, { continuationBase = "", streamingBehavior = null, attachments = [] } = {}) {
     const record = this.processes.get(id);
     if (!record) throw new Error("Unknown live session");
     if (record.stopping) throw Object.assign(new Error("Pi is still stopping the previous response"), { code: "generation_stopping" });
@@ -953,7 +978,9 @@ export class PiManager extends EventEmitter {
     record.generation = { id: generationId, closed: false, settled: false, continuationBase };
     record.activity = "working";
     try {
-      const payload = { type: "prompt", message };
+      const prepared = await this.attachmentPrompt(message, attachments);
+      const payload = { type: "prompt", message: prepared.message };
+      if (prepared.images.length) payload.images = prepared.images;
       if (streamingBehavior === "steer" || streamingBehavior === "followUp") {
         payload.streamingBehavior = streamingBehavior;
       }
@@ -968,7 +995,7 @@ export class PiManager extends EventEmitter {
     return generationId;
   }
 
-  async promptAccepted(id, message, { continuationBase = "", streamingBehavior = null } = {}) {
+  async promptAccepted(id, message, { continuationBase = "", streamingBehavior = null, attachments = [] } = {}) {
     const record = this.processes.get(id);
     if (!record) throw new Error("Unknown live session");
     if (record.stopping) throw Object.assign(new Error("Pi is still stopping the previous response"), { code: "generation_stopping" });
@@ -978,7 +1005,11 @@ export class PiManager extends EventEmitter {
     const structured = this.beginActiveGeneration(record, generationId, continuationBase);
     record.generation = { id: generationId, closed: false, settled: false, continuationBase };
     record.activity = "working";
-    const payload = { type: "prompt", message };
+    const before = await this.request(id, { type: "get_entries" });
+    const afterMessageId = before.data?.leafId || null;
+    const prepared = await this.attachmentPrompt(message, attachments);
+    const payload = { type: "prompt", message: prepared.message };
+    if (prepared.images.length) payload.images = prepared.images;
     if (streamingBehavior === "steer" || streamingBehavior === "followUp") payload.streamingBehavior = streamingBehavior;
     try {
       await this.request(id, payload);
@@ -991,12 +1022,37 @@ export class PiManager extends EventEmitter {
     }
     this.publishTransient(record, structured.started);
     this.publishState(record);
-    return generationId;
+    if (streamingBehavior === "steer" || streamingBehavior === "followUp") {
+      const ordinal = record.attachmentQueueAnchor === afterMessageId ? record.attachmentQueueOrdinal : 0;
+      record.attachmentQueueAnchor = afterMessageId;
+      record.attachmentQueueOrdinal = ordinal + 1;
+      const attachmentIdentity = { afterMessageId, ordinal };
+      record.pendingQueuedPrompts.push({ type: streamingBehavior, message, attachmentIds: attachments.map((item) => item.id), attachmentIdentity });
+      return { generationId, attachmentIdentity };
+    }
+    const accepted = await this.request(id, afterMessageId
+      ? { type: "get_entries", since: afterMessageId }
+      : { type: "get_entries" });
+    const user = (accepted.data?.entries || []).findLast((entry) => entry.type === "message" && entry.message?.role === "user");
+    return { generationId, attachmentIdentity: user?.id ? { messageId: user.id } : { afterMessageId } };
   }
 
-  async queueAccepted(id, type, message) {
+  async queueAccepted(id, type, message, { attachments = [] } = {}) {
     if (!new Set(["steer", "follow_up"]).has(type)) throw new Error("Invalid queued prompt type");
-    await this.request(id, { type, message });
+    const record = this.processes.get(id);
+    if (!record) throw new Error("Unknown live session");
+    const before = await this.request(id, { type: "get_entries" });
+    const prepared = await this.attachmentPrompt(message, attachments);
+    const payload = { type, message: prepared.message };
+    if (prepared.images.length) payload.images = prepared.images;
+    await this.request(id, payload);
+    const afterMessageId = before.data?.leafId || null;
+    const ordinal = record.attachmentQueueAnchor === afterMessageId ? record.attachmentQueueOrdinal : 0;
+    record.attachmentQueueAnchor = afterMessageId;
+    record.attachmentQueueOrdinal = ordinal + 1;
+    const attachmentIdentity = { afterMessageId, ordinal };
+    record.pendingQueuedPrompts.push({ type, message, attachmentIds: attachments.map((item) => item.id), attachmentIdentity });
+    return { attachmentIdentity };
   }
 
   /**
@@ -1007,9 +1063,20 @@ export class PiManager extends EventEmitter {
    * clear the queue first. Documented in Pi's rpc.md.
    */
   async clearQueue(id) {
+    const record = this.processes.get(id);
+    if (!record) throw new Error("Unknown live session");
     const response = await this.request(id, { type: "clear_queue" });
     const data = response?.data || {};
-    return { steering: data.steering || [], followUp: data.followUp || [] };
+    const pending = record.pendingQueuedPrompts.splice(0);
+    const queued = (type, fallback) => {
+      const local = pending.filter((item) => item.type === type || (type === "follow_up" && item.type === "followUp"));
+      return local.length ? local : fallback;
+    };
+    return {
+      steering: queued("steer", data.steering || []),
+      followUp: queued("follow_up", data.followUp || []),
+      discardedAttachmentIdentities: pending.map((item) => item.attachmentIdentity),
+    };
   }
 
   async abortGeneration(id, generationId = null) {
@@ -1077,6 +1144,76 @@ export class PiManager extends EventEmitter {
     const record = this.processes.get(id);
     if (!record?.sessionFile) throw new Error("Pi did not report the forked session file");
     return { text: response.data?.text || "", sessionFile: record.sessionFile, sessionId: record.sessionId || null };
+  }
+
+  async getHistoryTree(id) {
+    const record = this.processes.get(id);
+    if (!record) throw new Error("Unknown live session");
+    const response = await this.request(id, { type: "get_tree" });
+    if (!record.sessionFile) return response.data;
+
+    const currentPath = path.resolve(record.sessionFile);
+    const sessionDir = path.dirname(currentPath);
+    const sessions = [];
+    const directories = [sessionDir, path.resolve(record.sessionDir)];
+    const loadedDirectories = new Set();
+    while (directories.length) {
+      const directory = directories.pop();
+      if (loadedDirectories.has(directory)) continue;
+      loadedDirectories.add(directory);
+      const found = await SessionManager.list(record.cwd, directory);
+      sessions.push(...found);
+      for (const session of found) {
+        if (session.parentSessionPath) directories.push(path.dirname(path.resolve(session.parentSessionPath)));
+      }
+    }
+    const byPath = new Map(sessions.map((session) => [path.resolve(session.path), session]));
+    let rootPath = currentPath;
+    const visited = new Set();
+    while (!visited.has(rootPath)) {
+      visited.add(rootPath);
+      const parent = byPath.get(rootPath)?.parentSessionPath;
+      if (!parent) break;
+      const parentPath = path.resolve(parent);
+      if (!byPath.has(parentPath)) break;
+      rootPath = parentPath;
+    }
+
+    const family = new Set([rootPath]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const session of sessions) {
+        const sessionPath = path.resolve(session.path);
+        const parentPath = session.parentSessionPath ? path.resolve(session.parentSessionPath) : null;
+        if (parentPath && family.has(parentPath) && !family.has(sessionPath)) {
+          family.add(sessionPath);
+          changed = true;
+        }
+      }
+    }
+
+    const nodes = new Map();
+    const collect = (tree) => {
+      for (const node of tree || []) {
+        const existing = nodes.get(node.entry.id);
+        nodes.set(node.entry.id, existing ? { ...existing, ...node, children: [] } : { ...node, children: [] });
+        collect(node.children);
+      }
+    };
+    for (const sessionPath of family) {
+      if (sessionPath === currentPath) continue;
+      collect(SessionManager.open(sessionPath, path.dirname(sessionPath), record.cwd).getTree());
+    }
+    collect(response.data?.tree);
+
+    const roots = [];
+    for (const node of nodes.values()) {
+      const parent = node.entry.parentId ? nodes.get(node.entry.parentId) : null;
+      if (parent) parent.children.push(node);
+      else roots.push(node);
+    }
+    return { ...response.data, tree: roots };
   }
 
   attach(id, socket) {

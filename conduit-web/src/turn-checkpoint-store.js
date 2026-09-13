@@ -190,9 +190,13 @@ export class TurnCheckpointStore {
     const checkpoints = (await this.#checkpoints(chatId)).filter((checkpoint) => checkpoint.version === 1 && typeof checkpoint.repository === "boolean" && checkpoint.workingRoot === root);
     const index = checkpointId ? checkpoints.findIndex((checkpoint) => checkpoint.id === checkpointId) : baseline === "turn" ? checkpoints.length - 1 : 0;
     if (index < 0) return { checkpoint: null, targetCheckpoint: null };
+    if (baseline === "chat") return {
+      checkpoint: checkpoints[0],
+      targetCheckpoint: checkpointId ? checkpoints[index + 1] || null : null,
+    };
     return {
       checkpoint: checkpoints[index],
-      targetCheckpoint: baseline === "turn" && checkpointId ? checkpoints[index + 1] || null : null,
+      targetCheckpoint: checkpointId ? checkpoints[index + 1] || null : null,
     };
   }
 

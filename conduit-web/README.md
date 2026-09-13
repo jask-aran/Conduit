@@ -108,11 +108,26 @@ system bindings, but it cannot detect a key that the browser or operating
 system consumes before the page receives it. Overrides are local to the
 current browser profile and are not server-synced.
 
-The composer slash Popover contains only `/attach`. A project-aware breadcrumb
-identifies where each chat belongs.
+The composer slash Popover combines Conduit's `/attach` and capability-gated
+`/compact` actions with runnable commands exposed by the active harness. Pi
+supplies extension commands, prompt templates, and skills through
+`get_commands`. A project-aware breadcrumb identifies where each chat belongs.
 
 The chat header, Cmd/Ctrl+., and Workspace views… open a per-chat Workspace
-panel. The lazy directory API hides `.conduit`, rejects symlinks and traversal,
+panel. Files owns file browsing, comparison, and editing. Its All files mode
+shows the working tree and offers preview and edit states. Its Diff mode keeps
+This chat, Selected turn, Uncommitted, Unstaged, and Staged as comparison
+sources in the changed-file navigator. Chat's Agent changes button and Source
+Control's Review and file rows open that Diff mode. Staged compares HEAD to the
+index; Unstaged compares the index to the working copy. Historical turns compare
+their start to the next captured turn start; the latest turn compares to the
+working copy. Historical content stays read-only; Edit working file opens the
+current file without restoring a snapshot. The file navigator resizes on wide
+panes and opens as a drawer on narrow panes. The editor footer holds preview,
+edit, find, history, wrap, position, indentation, and language controls. The
+comparison footer holds file/diff, comparison source, find, change navigation,
+endpoint, position, wrap, and read-only status controls.
+The lazy directory API hides `.conduit`, rejects symlinks and traversal,
 and caps text previews at 1 MiB. Source Control can stage, unstage, commit,
 fetch, pull, push, and inspect one historical commit on demand. Terminal is available for
 every chat, starts at the validated Workspace root for Workspace chats and the
@@ -573,6 +588,10 @@ cumulative derived cache statistics. Null tokens/percent mean unknown, not
 zero. Session statistics include message and tool counts, input/output/cache
 token totals, and cumulative cost.
 
+The command palette exposes **Compact context** when the selected backend
+supports native compaction and the chat is idle. Pi uses its `compact` RPC
+command. Codex uses `thread/compact/start`.
+
 `cacheStats` is derived from successive assistant request usage records. For
 each eligible pair, Conduit sets prompt tokens to input plus cache-read plus
 cache-write tokens, eligible tokens to the lower prompt total, and cache hits
@@ -604,9 +623,9 @@ and cost values.
 Code Mode, and the special Runtime profile use `conduit_pi` on
 `conduit-pinned`. Host Pi uses `native_pi` on `host-pi`, with agent-owned
 configuration. Both use `pi_rpc`. When the installed `codex` command is
-available, Codex CLI uses `native_api` on `host-codex` and runs through
-`codex app-server --stdio` with the user's existing Codex authentication and
-configuration. Runtime still requires its dedicated create
+available, Codex CLI uses `native_api` on `host-codex` and connects to the
+Codex app-server daemon through its control-socket RPC transport with the
+user's existing Codex authentication and configuration. Runtime still requires its dedicated create
 route; Host Pi still requires a Workspace and an available host installation.
 
 `POST /v0/chats` and draft `PATCH /v0/chats/:id` accept `profileId`.

@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { execFile } from "node:child_process";
 import { EventEmitter } from "node:events";
 import net from "node:net";
 import os from "node:os";
@@ -9,7 +10,7 @@ import { SessionRecords } from "./harnesses/session-records.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 export const CODEX_CAPABILITIES = Object.freeze({
-  steer: true, followUpQueue: true, cancel: true, compaction: false,
+  steer: true, followUpQueue: true, cancel: true, compaction: true,
   thinkingLevels: true, modelSwitch: true, toolUse: true, permissions: true,
   // `replay` means resuming a generation in progress, which Codex cannot do:
   // its `replay` returns the current runtime state, not a generation.
@@ -22,7 +23,14 @@ export const CODEX_CAPABILITIES = Object.freeze({
 // onto the decision vocabulary that method expects.
 const APPROVAL_OPTIONS = Object.freeze(["Approve", "Approve for session", "Deny"]);
 const APPROVAL_POLICIES = Object.freeze(["untrusted", "on-request", "never"]);
+const APPROVAL_REVIEWERS = Object.freeze(["user", "auto_review"]);
 export const SANDBOX_MODES = Object.freeze(["read-only", "workspace-write", "danger-full-access"]);
+const BUILTIN_PERMISSION_MODES = Object.freeze([
+  { id: "default", label: "Default permissions", description: "Runs commands in a sandbox", profile: ":workspace", approvalPolicy: "on-request", approvalsReviewer: "user" },
+  { id: "auto-review", label: "Auto-review", description: "Reviews elevated requests automatically", profile: ":workspace", approvalPolicy: "on-request", approvalsReviewer: "auto_review" },
+  { id: "read-only", label: "Read only", description: "Requires approval to edit files or run commands", profile: ":read-only", approvalPolicy: "on-request", approvalsReviewer: "user" },
+  { id: "full-access", label: "Full access", description: "Full computer access (elevated risk)", profile: ":danger-full-access", approvalPolicy: "never", approvalsReviewer: "user" },
+]);
 const commandText = (params) => Array.isArray(params.command) ? params.command.join(" ") : params.command || "";
 const APPROVALS = {
   "item/commandExecution/requestApproval": {
@@ -87,37 +95,61 @@ const truncate = (output) => {
 };
 
 export class CodexAppServerAdapter extends EventEmitter {
-  constructor({ socketPath = path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"),
+  constructor({ command = "codex", socketPath = path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"),
     "app-server-control", "app-server-control.sock"), requestTimeoutMs = 15_000, discoveryIdleMs = 60_000 } = {}) {
     super();
+    this.command = command;
     this.socketPath = socketPath;
     this.requestTimeoutMs = requestTimeoutMs;
     this.discoveryIdleMs = discoveryIdleMs;
     this.discoveryId = null;
     this.discoveryStart = null;
+    this.daemonStart = null;
     this.discoveryTimer = null;
     this.sessions = new SessionRecords({
       capabilities: CODEX_CAPABILITIES,
       backend: { protocol: "native_api", implementation: "codex", installationId: "host-codex" },
+      extras: (record) => ({ sessionId: record.sessionId || null }),
     });
     // `start` indexes records directly; these are the store's own maps.
     this.records = this.sessions.records;
     this.byChatId = this.sessions.byChatId;
-    Object.assign(this, unsupported(CODEX_CAPABILITIES, { label: "Codex" }));
+    const unsupportedMethods = unsupported(CODEX_CAPABILITIES, { label: "Codex" });
+    delete unsupportedMethods.fork;
+    Object.assign(this, unsupportedMethods);
   }
 
-  async create({ chatId, project, model = "", thinkingLevel = "", approvalPolicy = "", sandbox = null }) {
+  startDaemon() {
+    if (!this.daemonStart) {
+      this.daemonStart = new Promise((resolve, reject) => {
+        execFile(this.command, ["app-server", "daemon", "start"], (cause, _stdout, stderr) => {
+          if (cause) reject(error(stderr.trim() || cause.message));
+          else resolve();
+        });
+      }).finally(() => { this.daemonStart = null; });
+    }
+    return this.daemonStart;
+  }
+
+  async create({ chatId, project, model = "", thinkingLevel = "", permissionMode = "", permissionProfile = "", approvalPolicy = "", approvalsReviewer = "", sandbox = null }) {
     const record = await this.start({ chatId, cwd: project.workingRoot });
     try {
       const result = await this.request(record, "thread/start", {
         cwd: project.workingRoot,
         ...(model ? { model } : {}),
         ...(thinkingLevel ? { effort: thinkingLevel } : {}),
-        ...CodexAppServerAdapter.policy(approvalPolicy, sandbox),
+        ...(permissionProfile ? { permissions: permissionProfile } : {}),
+        ...CodexAppServerAdapter.policy(approvalPolicy, approvalsReviewer, sandbox),
       });
       record.sessionId = result.thread.id;
       record.model = result.model || model;
       record.thinkingLevel = result.thread?.reasoningEffort || thinkingLevel;
+      // An omitted profile is meaningful: Codex must continue to resolve the
+      // effective config instead of Conduit freezing its current result.
+      record.permissionProfile = permissionProfile;
+      record.permissionMode = permissionMode;
+      record.approvalPolicy = approvalPolicy;
+      record.approvalsReviewer = approvalsReviewer;
       this.emit("changed", { record, reason: "created" });
       return record;
     } catch (cause) {
@@ -126,7 +158,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     }
   }
 
-  async restore(opaqueSession, { chatId, project, model = "", thinkingLevel = "", approvalPolicy = "", sandbox = null }) {
+  async restore(opaqueSession, { chatId, project, model = "", thinkingLevel = "", permissionMode = "", permissionProfile = "", approvalPolicy = "", approvalsReviewer = "", sandbox = null }) {
     const record = await this.start({ chatId, cwd: project.workingRoot });
     const threadId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!threadId) throw error("Codex thread identity is missing");
@@ -135,11 +167,16 @@ export class CodexAppServerAdapter extends EventEmitter {
         threadId, cwd: project.workingRoot,
         ...(model ? { model } : {}),
         ...(thinkingLevel ? { effort: thinkingLevel } : {}),
-        ...CodexAppServerAdapter.policy(approvalPolicy, sandbox),
+        ...(permissionProfile ? { permissions: permissionProfile } : {}),
+        ...CodexAppServerAdapter.policy(approvalPolicy, approvalsReviewer, sandbox),
       });
       record.sessionId = result.thread?.id || threadId;
       record.model = model || result.model || result.thread?.model || "";
       record.thinkingLevel = thinkingLevel || result.thread?.reasoningEffort || "";
+      record.permissionProfile = permissionProfile;
+      record.permissionMode = permissionMode;
+      record.approvalPolicy = approvalPolicy;
+      record.approvalsReviewer = approvalsReviewer;
       this.emit("changed", { record, reason: "restored" });
       return record;
     } catch (cause) {
@@ -264,7 +301,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       }
       if (item.type === "userMessage") {
         closeTurn();
-        messages.push({ id: item.id, role: "user", content: CodexAppServerAdapter.itemText(item) });
+        messages.push({ id: item.clientId || item.id, role: "user", content: CodexAppServerAdapter.itemText(item) });
         turnStart = messages.length;
         continue;
       }
@@ -308,10 +345,10 @@ export class CodexAppServerAdapter extends EventEmitter {
     const turns = result?.thread?.turns || [];
     const rows = turns.flatMap((turn) => (turn.items || [])
       .map((item) => ({ turnId: turn.id, turnStatus: turn.status, item })));
-    if (rows.length || result?.thread?.historyMode !== "paginated") {
-      return CodexAppServerAdapter.threadTranscript(CodexAppServerAdapter.recent(rows));
-    }
-    return CodexAppServerAdapter.threadTranscript(CodexAppServerAdapter.recent(await this.items(transport, threadId)));
+    const transcriptRows = rows.length || result?.thread?.historyMode !== "paginated"
+      ? rows
+      : await this.items(transport, threadId);
+    return CodexAppServerAdapter.threadTranscript(CodexAppServerAdapter.recent(transcriptRows));
   }
 
   /**
@@ -336,6 +373,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       active: false, stopping: false, sessionId: null, model: "", thinkingLevel: "", generation: null,
       clients: new Set(), events: [], pending: new Map(), approvals: new Map(),
       steering: [], followUp: [],
+      permissionMode: "", permissionProfile: "", approvalPolicy: "", approvalsReviewer: "",
       sequence: 0, eventSequence: 0, messageIds: new Set(),
     };
     this.records.set(record.id, record);
@@ -344,18 +382,30 @@ export class CodexAppServerAdapter extends EventEmitter {
       // The daemon socket carries one JSON-RPC message per WebSocket text
       // frame. Rust's websocket endpoint rejects extension negotiation, so do
       // not offer per-message compression.
-      record.socket = new WebSocket("ws://localhost/rpc", {
-        perMessageDeflate: false,
-        createConnection: () => net.connect(this.socketPath),
-      });
-      await new Promise((resolve, reject) => {
-        record.socket.once("open", resolve);
-        record.socket.once("error", reject);
-      });
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        record.socket = new WebSocket("ws://localhost/rpc", {
+          perMessageDeflate: false,
+          createConnection: () => net.connect(this.socketPath),
+        });
+        try {
+          await new Promise((resolve, reject) => {
+            record.socket.once("open", resolve);
+            record.socket.once("error", reject);
+          });
+          break;
+        } catch (cause) {
+          record.socket.terminate();
+          if (attempt || !["ECONNREFUSED", "ENOENT"].includes(cause.code)) throw cause;
+          await this.startDaemon();
+        }
+      }
       record.socket.on("message", (data) => this.receive(record, String(data)));
       record.socket.on("error", (cause) => this.fail(record, cause));
       record.socket.once("close", (code) => this.exit(record, code));
-      await this.request(record, "initialize", { clientInfo: { name: "conduit", title: "Conduit", version: "0.2.0" } });
+      await this.request(record, "initialize", {
+        clientInfo: { name: "conduit", title: "Conduit", version: "0.2.0" },
+        capabilities: { experimentalApi: true },
+      });
       this.write(record, { method: "initialized" });
       record.status = "running";
       record.activity = "idle";
@@ -495,12 +545,26 @@ export class CodexAppServerAdapter extends EventEmitter {
 
   notification(record, method, params) {
     const turnId = params.turn?.id || params.turnId || record.generation?.id || null;
-    if (method === "turn/started") {
+    if (method === "thread/name/updated") {
+      const name = typeof params.threadName === "string" ? params.threadName.trim() : "";
+      if (name && (!params.threadId || params.threadId === record.sessionId)) {
+        record.title = name;
+        this.emit("changed", { record, reason: "named", name });
+      }
+    } else if (method === "turn/started") {
       record.active = true;
       record.activity = "working";
       record.generation = { id: turnId, closed: false, settled: false };
       record.turn = null;
       this.publish(record, { type: "status", generationId: turnId, sequence: ++record.eventSequence, status: "working", activity: "working", detail: null });
+    } else if (method === "item/started" && params.item?.type === "contextCompaction") {
+      record.compacting = true;
+      record.activity = "compacting";
+      this.publish(record, { type: "compaction", generationId: turnId, active: true });
+    } else if ((method === "item/completed" && params.item?.type === "contextCompaction") || method === "thread/compacted") {
+      record.compacting = false;
+      record.activity = record.active ? "working" : "idle";
+      this.publish(record, { type: "compaction", generationId: turnId, active: false });
     } else if (method === "item/started" && params.item?.type === "userMessage") {
       const messageId = params.item.clientId || params.item.id;
       if (!messageId || record.messageIds.has(messageId)) return;
@@ -568,6 +632,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       const failed = params.turn?.status === "failed";
       record.active = false;
       record.stopping = false;
+      record.compacting = false;
       record.activity = failed ? "failed" : "idle";
       if (record.generation) Object.assign(record.generation, { closed: true, settled: true });
       for (const [requestId, pending] of record.approvals) this.settleApproval(record, requestId, pending.generationId);
@@ -596,7 +661,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     if (type === "follow_up") {
       record.followUp.push(queued);
       this.publishQueue(record);
-      return { queued: "follow_up" };
+      return { queued: "follow_up", attachmentIdentity: { messageId: queued.id } };
     }
     const turnId = record.generation?.id;
     if (!turnId) throw error("Codex is not running a turn to steer", "invalid_request", 409);
@@ -613,7 +678,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       this.publishQueue(record);
       throw cause;
     }
-    return { queued: "steer" };
+    return { queued: "steer", attachmentIdentity: { messageId: queued.id } };
   }
 
   /** Start the next turn from the messages that waited for this one to finish. */
@@ -621,7 +686,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     const queued = record.followUp.shift();
     if (queued === undefined) return;
     this.publishQueue(record);
-    try { await this.prompt(record.id, queued.message, { attachments: queued.attachments }); }
+    try { await this.prompt(record.id, queued.message, { attachments: queued.attachments, clientUserMessageId: queued.id }); }
     catch (cause) {
       this.publish(record, { type: "error", generationId: record.generation?.id || null,
         error: { code: "backend_unavailable", message: cause?.message || "Queued message could not be sent" } });
@@ -636,7 +701,8 @@ export class CodexAppServerAdapter extends EventEmitter {
     record.steering = [];
     record.followUp = [];
     this.publishQueue(record);
-    return taken;
+    return { ...taken, discardedAttachmentIdentities: [...taken.steering, ...taken.followUp]
+      .map((item) => ({ messageId: item.id })).filter((identity) => identity.messageId) };
   }
 
   publishQueue(record) {
@@ -654,9 +720,10 @@ export class CodexAppServerAdapter extends EventEmitter {
    * read-only | workspace-write | danger-full-access, or an object carrying
    * networkAccess and writableRoots.
    */
-  static policy(approvalPolicy = "", sandbox = null) {
+  static policy(approvalPolicy = "", approvalsReviewer = "", sandbox = null) {
     return {
       ...(APPROVAL_POLICIES.includes(approvalPolicy) ? { approvalPolicy } : {}),
+      ...(APPROVAL_REVIEWERS.includes(approvalsReviewer) ? { approvalsReviewer } : {}),
       ...(sandbox ? { sandbox: typeof sandbox === "string" ? { type: sandbox } : sandbox } : {}),
     };
   }
@@ -672,15 +739,20 @@ export class CodexAppServerAdapter extends EventEmitter {
   async prompt(id, message, options) {
     const record = this.get(id);
     if (!record?.sessionId) throw error("Codex thread is not ready");
-    const clientUserMessageId = crypto.randomUUID();
+    const clientUserMessageId = options?.clientUserMessageId || crypto.randomUUID();
     const result = await this.request(record, "turn/start", {
       threadId: record.sessionId,
       clientUserMessageId,
       input: CodexAppServerAdapter.inputItems(message, options?.attachments),
       ...(record.model ? { model: record.model } : {}),
       ...(record.thinkingLevel ? { effort: record.thinkingLevel } : {}),
+      ...(record.permissionProfile ? { permissions: record.permissionProfile } : {}),
+      ...CodexAppServerAdapter.policy(record.approvalPolicy, record.approvalsReviewer),
     });
-    return result.turn?.id || record.generation?.id || null;
+    return {
+      generationId: result.turn?.id || record.generation?.id || null,
+      attachmentIdentity: { messageId: clientUserMessageId },
+    };
   }
 
   async cancel(id, generationId = null) {
@@ -728,6 +800,103 @@ export class CodexAppServerAdapter extends EventEmitter {
     record.thinkingLevel = thinkingLevel;
     return thinkingLevel;
   }
+  async compact(id) {
+    const record = this.get(id);
+    if (!record?.sessionId) throw error("Codex thread is not ready");
+    return this.request(record, "thread/compact/start", { threadId: record.sessionId });
+  }
+  async setPermissionMode(id, mode) {
+    const record = this.get(id);
+    if (!record) throw error("Codex app-server is unavailable");
+    record.permissionMode = mode.id;
+    record.permissionProfile = mode.profile;
+    record.approvalPolicy = mode.approvalPolicy;
+    record.approvalsReviewer = mode.approvalsReviewer;
+    return mode.id;
+  }
+  async listPermissionModes(id, cwd) {
+    const record = id ? this.get(id) : [...this.records.values()][0];
+    if (!record) return [];
+    const params = { ...(cwd ? { cwd } : {}) };
+    const [catalogue, configResult, requirementsResult] = await Promise.all([
+      this.request(record, "permissionProfile/list", params),
+      this.request(record, "config/read", { ...params, includeLayers: false }),
+      this.request(record, "configRequirements/read", {}),
+    ]);
+    const profiles = catalogue.data || [];
+    const requirements = requirementsResult?.requirements || {};
+    const allowedProfiles = requirements.allowedPermissionProfiles;
+    const profileAllowed = (profile) => profile?.allowed !== false
+      && (!allowedProfiles || allowedProfiles[profile.id] !== false);
+    const allowedPolicies = requirements.allowedApprovalPolicies;
+    const policyAllowed = (policy) => !Array.isArray(allowedPolicies) || allowedPolicies.some((value) => value === policy);
+    const byId = new Map(profiles.map((profile) => [profile.id, profile]));
+    const modes = BUILTIN_PERMISSION_MODES
+      .filter((mode) => profileAllowed(byId.get(mode.profile)) && policyAllowed(mode.approvalPolicy))
+      .map((mode) => ({ ...mode, allowed: true }));
+    const config = configResult?.config || {};
+    const configuredDefault = config.default_permissions || requirements.defaultPermissions || "";
+    if (configuredDefault && profileAllowed(byId.get(configuredDefault))) {
+      modes.push({ id: "custom", label: "Custom (config.toml)", description: "Uses the permissions defined in config.toml",
+        profile: "", approvalPolicy: "", approvalsReviewer: "", allowed: true });
+    }
+    for (const profile of profiles) {
+      if (profile.id.startsWith(":") || !profileAllowed(profile)) continue;
+      modes.push({ id: `profile:${profile.id}`, label: profile.label || profile.id, description: profile.description || "",
+        profile: profile.id, approvalPolicy: "", approvalsReviewer: "", allowed: true });
+    }
+    return modes;
+  }
+  async listAvailablePermissionModes(cwd) {
+    const chatId = `permissions-${crypto.randomUUID()}`;
+    let record = null;
+    try {
+      record = await this.start({ chatId, cwd });
+      return await this.listPermissionModes(record.id, cwd);
+    } finally {
+      record ||= this.getByChatId(chatId);
+      if (record) await this.close(record.id);
+    }
+  }
+  async fork(id, entryId) {
+    const record = this.get(id);
+    if (!record?.sessionId) throw error("Codex thread is not ready");
+    const sourceThreadId = record.sessionId;
+    const read = await this.request(record, "thread/read", { threadId: sourceThreadId, includeTurns: true });
+    const turns = read?.thread?.turns || [];
+    const rows = turns.length || read?.thread?.historyMode !== "paginated"
+      ? turns.flatMap((turn) => (turn.items || []).map((item) => ({ turnId: turn.id, item })))
+      : await this.items(record, sourceThreadId);
+    const target = rows.find((row) => row.item?.type === "userMessage"
+      && [row.item.id, row.item.clientId].includes(entryId));
+    if (!target?.turnId) throw error("Codex cannot find the selected message in its thread", "fork_target_missing", 409);
+    const turnIds = [...new Set(rows.map((row) => row.turnId).filter(Boolean))];
+    const targetIndex = turnIds.indexOf(target.turnId);
+    const lastTurnId = targetIndex > 0 ? turnIds[targetIndex - 1] : null;
+    const result = await this.request(record, "thread/fork", {
+      threadId: sourceThreadId,
+      ...(lastTurnId ? { lastTurnId } : {}),
+      cwd: record.cwd,
+      ...(record.model ? { model: record.model } : {}),
+      ...(record.thinkingLevel ? { effort: record.thinkingLevel } : {}),
+      ...(record.permissionProfile ? { permissions: record.permissionProfile } : {}),
+      ...CodexAppServerAdapter.policy(record.approvalPolicy, record.approvalsReviewer),
+    });
+    record.sessionId = result.thread.id;
+    if (!lastTurnId) {
+      const reverted = await this.request(record, "thread/revert", {
+        threadId: record.sessionId,
+        beforeTurnId: target.turnId,
+      });
+      record.sessionId = reverted.thread?.id || record.sessionId;
+    }
+    record.model = result.model || record.model;
+    record.thinkingLevel = result.reasoningEffort || record.thinkingLevel;
+    record.permissionProfile = result.activePermissionProfile?.id || result.activePermissionProfile || record.permissionProfile;
+    await this.request(record, "thread/unsubscribe", { threadId: sourceThreadId });
+    this.emit("changed", { record, reason: "forked" });
+    return { text: CodexAppServerAdapter.itemText(target.item), sessionId: record.sessionId };
+  }
   waitForSession() { return Promise.resolve(); }
   replay(id) { return this.runtimeState(this.get(id)); }
   getCapabilities() { return CODEX_CAPABILITIES; }
@@ -745,6 +914,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       };
     });
   }
+  listCommands() { return Promise.resolve([]); }
   async listAvailableModels(cwd) {
     const chatId = `catalog-${crypto.randomUUID()}`;
     let record = null;
@@ -840,6 +1010,7 @@ export class CodexAppServerAdapter extends EventEmitter {
   }
   get(id) { return this.sessions.get(id); }
   getByChatId(chatId) { return this.sessions.getByChatId(chatId); }
+  track(id, chatId) { return this.sessions.reassign(id, chatId); }
   list() { return this.sessions.list(); }
   stop(id) { void this.close(id); return Boolean(this.get(id)); }
   fail(record, cause) { for (const pending of record.pending.values()) { clearTimeout(pending.timer); pending.reject(error(cause.message)); } record.pending.clear(); }

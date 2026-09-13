@@ -17,20 +17,30 @@ export function selectedChatSort(): ChatSort {
   return parseChatSort(localStorage.getItem(CHAT_SORT_STORAGE_KEY));
 }
 
-export function chatSortStamp(chat: { createdAt?: string; lastMessageAt?: string | null }, sort: ChatSort) {
-  return sort === "created" ? chat.createdAt || "" : chat.lastMessageAt || chat.createdAt || "";
+type SortableChat = { id?: string; createdAt?: unknown; lastMessageAt?: unknown };
+
+function normalizeChatTimestamp(value: unknown) {
+  if (typeof value === "string") return value;
+  if (typeof value !== "number" || !Number.isFinite(value)) return "";
+  const date = new Date(value < 1_000_000_000_000 ? value * 1_000 : value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+export function chatSortStamp(chat: SortableChat, sort: ChatSort) {
+  const selected = sort === "created" ? chat.createdAt : chat.lastMessageAt || chat.createdAt;
+  return normalizeChatTimestamp(selected);
 }
 
 export function compareChatsBySort(
-  left: { id?: string; createdAt?: string; lastMessageAt?: string | null },
-  right: { id?: string; createdAt?: string; lastMessageAt?: string | null },
+  left: SortableChat,
+  right: SortableChat,
   sort: ChatSort,
 ) {
   return chatSortStamp(right, sort).localeCompare(chatSortStamp(left, sort))
     || String(right.id || "").localeCompare(String(left.id || ""));
 }
 
-export function sortChats<T extends { id?: string; createdAt?: string; lastMessageAt?: string | null }>(chats: T[], sort: ChatSort) {
+export function sortChats<T extends SortableChat>(chats: T[], sort: ChatSort) {
   return [...chats].sort((left, right) => compareChatsBySort(left, right, sort));
 }
 

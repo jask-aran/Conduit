@@ -57,8 +57,6 @@ import { registerVoiceRoutes } from "./server/routes/voice.js";
 import { SearchSettingsStore } from "./search-settings.js";
 import { VoiceSettingsStore } from "./voice-settings.js";
 import { VOICE_EXECUTION_CATALOG } from "./server/voice-execution-catalog.js";
-import { ModelProfileRuntime, usesWebSearchOverlay } from "./model-profile-runtime.js";
-import { publicModelProfile, resolveModelProfile } from "./model-profiles.js";
 import { PromptStore } from "./prompt-store.js";
 import { ChatBackendRegistry, serializePiV0 } from "./pi-rpc-adapter.js";
 import { MANIFESTS } from "./harnesses/index.js";
@@ -106,10 +104,6 @@ await voiceSettings.initialize();
 const voiceModel = new VoiceModelManager({ root: config.voiceModelRoot, catalog: VOICE_EXECUTION_CATALOG });
 const voiceRecordingStore = new VoiceRecordingStore({ root: config.voiceRecordingsRoot });
 const voiceRuntime = new VoiceRuntime({ settings: voiceSettings, modelManager: voiceModel, catalog: VOICE_EXECUTION_CATALOG });
-const modelProfileRuntime = new ModelProfileRuntime({
-  agentDir: config.piAgentDir,
-  searchConfigFile: config.searchConfigFile,
-});
 const promptStore = new PromptStore({
   root: config.promptOverridesRoot,
   prompts: [
@@ -310,9 +304,6 @@ async function chatModelView(context) {
   }
   const selectedModel = models.find((item) => item.spec === model);
   if (selectedModel) thinkingLevel = resolveThinkingLevel(thinkingLevel, selectedModel.thinkingLevels, catalogView.defaultThinkingLevel);
-  const modelProfile = runtime.kind === "conduit_profile" && usesWebSearchOverlay(template)
-    ? publicModelProfile(resolveModelProfile(config.modelProfiles, model || "unknown/unresolved"))
-    : null;
   return {
     installationId: runtime.installationId,
     runtimeKind: runtime.kind,
@@ -324,7 +315,7 @@ async function chatModelView(context) {
     defaultThinkingLevel: catalogView.defaultThinkingLevel,
     requiresAuthentication: catalogView.requiresAuthentication,
     warnings: catalogView.warnings,
-    modelProfile,
+    modelProfile: null,
     source,
   };
 }
@@ -532,11 +523,22 @@ function checkpointNativeAdapter(adapter, record) {
     })
     .catch((cause) => console.error("Could not checkpoint native chat", cause));
 }
+async function applyBackendName(adapter, record, name) {
+  if (!await registry.fallbackTitle(record.chatId, name)) return;
+  const chat = registry.metadata(record.chatId);
+  adapter.publish(record, { type: "session_checkpoint", generationId: record.generation?.id || null,
+    sequence: record.eventSequence, chatId: chat.id, title: chat.title });
+  runtimeHub.publish({ type: "chat_changed", chat: chatView(chat), at: new Date().toISOString() });
+}
 // Every native adapter checkpoints the same way. PiRpcAdapter is not an event
 // emitter and simply has no `on`, so this covers the backends that need it.
 for (const adapter of adapterInstances()) {
   adapter.on?.("settled", ({ record }) => checkpointNativeAdapter(adapter, record));
-  adapter.on?.("changed", ({ record, reason }) => runtimeHub.publishProcess(adapter.view(record), reason || "update"));
+  adapter.on?.("changed", ({ record, reason, name }) => {
+    runtimeHub.publishProcess(adapter.view(record), reason || "update");
+    if (reason === "named" && name) void applyBackendName(adapter, record, name)
+      .catch((cause) => console.error("Could not apply backend chat name", cause));
+  });
   adapter.on?.("removed", ({ id, chatId }) => runtimeHub.publishProcessRemoved(id, chatId));
 }
 registerRuntimeRoutes(app, {
@@ -592,13 +594,13 @@ registerProjectRoutes(app, {
   turnCheckpoints,
 });
 const launchLiveSession = registerLiveSessionRoutes(app, {
+  attachments,
   backends,
   catalogFor,
   config,
   findChatContext,
   lifecycle,
   manager,
-  modelProfileRuntime,
   nativePreflight,
   registry,
   runtimeFor,
@@ -622,8 +624,9 @@ registerChatRoutes(app, {
   runtimeFor,
   templateForChat,
 });
-registerHarnessRoutes(app, { backends, projects, registry });
+registerHarnessRoutes(app, { backends, preferences, projects, registry });
 registerSessionRoutes(app, {
+  attachments,
   backends,
   config,
   findChatContext,

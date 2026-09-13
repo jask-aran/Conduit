@@ -37,6 +37,7 @@ test("legacy Pi rows gain durable identity without changing JSONL or exposing pa
   assert.equal((await restored.find([project], "chat-test")).file, file);
   assert.equal(await fs.readFile(file, "utf8"), transcript);
   assert.equal(JSON.stringify(chatView(restored.metadata("chat-test"))).includes(file), false);
+  assert.equal(chatView(restored.metadata("chat-test")).harnessId, "conduit");
   const neutralRow = structuredClone(restored.metadata("chat-test"));
   delete neutralRow.templateId;
   delete neutralRow.templateVersion;
@@ -58,6 +59,7 @@ test("legacy Pi rows gain durable identity without changing JSONL or exposing pa
   assert.equal(native.backend.management, "agent");
   assert.equal(native.backend.implementation, "native_pi");
   assert.equal(native.backend.installationId, "host-pi");
+  assert.equal(chatView(native).harnessId, "pi");
   const draft = await store.create(project, { templateId: "coding", templateVersion: "1" });
   await store.update(draft.id, { piSessionFile: file, templateVersion: "2" });
   await store.update(draft.id, { templateVersion: "2" });
@@ -87,6 +89,7 @@ test("agent-managed Codex identity persists without Pi compatibility fields", as
     implementation: "codex", installationId: "host-codex", opaqueSession: "thread-1" };
   const store = new ChatStore(registry);
   const chat = await store.create(project, { backend });
+  assert.equal(chatView(chat).harnessId, "codex");
   await store.update(chat.id, { status: "active", lastUserMessageAt: new Date().toISOString() });
   const restored = new ChatStore(registry);
   await restored.initialize([project]);

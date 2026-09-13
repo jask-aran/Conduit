@@ -6,7 +6,7 @@ export interface ReviewSource {
   load: (path: string, signal: AbortSignal) => Promise<ComparisonPayload | null>;
 }
 
-const initialView = (): ComparisonViewState => ({ layout: "unified", file: false, wrap: false, top: 0, left: 0, position: 0 });
+const initialView = (): ComparisonViewState => ({ layout: "unified", wrap: false, top: 0, left: 0, position: 0 });
 
 function sameComparison(previous: ComparisonPayload | null, next: ComparisonPayload | null) {
   if (!previous || !next) return previous === next;

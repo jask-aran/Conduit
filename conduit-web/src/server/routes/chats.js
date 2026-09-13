@@ -1,8 +1,6 @@
 import { resolveTemplate } from "../../config.js";
 import { chatView, isChatId } from "../../chat-store.js";
 import { stopSessionProcesses } from "../../session-operations.js";
-import { resolveModelProfile } from "../../model-profiles.js";
-import { usesWebSearchOverlay } from "../../model-profile-runtime.js";
 import { agentProfiles, profileSelection } from "../../chat-backend.js";
 
 const opaqueSessionId = (chat) => typeof chat.backend?.opaqueSession === "string"
@@ -72,6 +70,11 @@ export function registerChatRoutes(app, {
         const manifest = discoverable(implementation);
         if (!manifest) return response.status(409).json({ error: "backend_discovery_unavailable" });
         const adapter = backends.forImplementation(implementation);
+        const liveId = typeof request.body?.liveSessionId === "string" ? request.body.liveSessionId : "";
+        const live = liveId ? adapter.get(liveId) : null;
+        if (liveId && (!live || live.sessionId !== request.params.sessionId)) {
+          return response.status(409).json({ error: "live_session_mismatch" });
+        }
         const session = (await adapter.listSessions({ cwd: project.workingRoot }))
           .find((item) => item.id === request.params.sessionId);
         if (!session) return response.status(404).json({ error: "backend_session_not_found" });
@@ -85,6 +88,10 @@ export function registerChatRoutes(app, {
         const timestamp = new Date().toISOString();
         await registry.update(chat.id, { status: "active", title: session.title,
           lastMessageAt: session.updatedAt || timestamp, updatedAt: timestamp });
+        if (live) {
+          adapter.track(live.id, chat.id);
+          live.ephemeral = false;
+        }
         response.status(201).json(chatView(registry.metadata(chat.id)));
       });
     } catch (error) { next(error); }
@@ -182,6 +189,64 @@ export function registerChatRoutes(app, {
       const context = await findChatContext(request.params.chatId);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
       response.json(chatView(context.chat));
+    } catch (error) { next(error); }
+  });
+
+  app.get("/v0/chats/:chatId/history", async (request, response, next) => {
+    try {
+      const context = await findChatContext(request.params.chatId);
+      if (!context) return response.status(404).json({ error: "chat_not_found" });
+      const manifest = backends.manifestFor?.(context.chat.backend?.implementation
+        || (context.chat.runtime?.kind === "native_pi" ? "native_pi" : "conduit_pi"));
+      if (manifest?.history !== "tree") return response.status(409).json({ error: "chat_history_unavailable" });
+      const resident = backends.getByChatId(context.chat.id);
+      if (!resident) return response.status(409).json({ error: "live_session_required" });
+      response.json(await backends.forChat(context.chat).getHistoryTree(resident.id));
+    } catch (error) { next(error); }
+  });
+
+  app.get("/v0/chats/:chatId/permission-profiles", async (request, response, next) => {
+    try {
+      const context = await findChatContext(request.params.chatId);
+      if (!context) return response.status(404).json({ error: "chat_not_found" });
+      if (context.chat.backend?.implementation !== "codex") return response.json({ modes: [], selected: "" });
+      const adapter = backends.forChat(context.chat);
+      const resident = backends.getByChatId(context.chat.id);
+      const modes = resident
+        ? await adapter.listPermissionModes(resident.id, context.project.workingRoot)
+        : await adapter.listAvailablePermissionModes(context.project.workingRoot);
+      const selected = resident?.permissionMode || context.chat.backend.permissionMode
+        || (context.chat.backend.permissionProfile ? modes.find((mode) => mode.profile === context.chat.backend.permissionProfile)?.id : "")
+        || (modes.some((mode) => mode.id === "custom") ? "custom" : modes[0]?.id) || "";
+      response.json({ modes, selected });
+    } catch (error) { next(error); }
+  });
+
+  app.patch("/v0/chats/:chatId/permission-profiles", async (request, response, next) => {
+    try {
+      const context = await findChatContext(request.params.chatId);
+      if (!context) return response.status(404).json({ error: "chat_not_found" });
+      if (context.chat.backend?.implementation !== "codex") return response.status(409).json({ error: "permission_profiles_unavailable" });
+      const adapter = backends.forChat(context.chat);
+      const resident = backends.getByChatId(context.chat.id);
+      const modes = resident
+        ? await adapter.listPermissionModes(resident.id, context.project.workingRoot)
+        : await adapter.listAvailablePermissionModes(context.project.workingRoot);
+      const selected = String(request.body?.permissionMode || "").trim();
+      const mode = modes.find((candidate) => candidate.id === selected && candidate.allowed);
+      if (!mode) {
+        return response.status(400).json({ error: "invalid_permission_mode" });
+      }
+      if (resident) await adapter.setPermissionMode(resident.id, mode);
+      const backend = { ...context.chat.backend, permissionMode: selected };
+      if (mode.profile) backend.permissionProfile = mode.profile;
+      else delete backend.permissionProfile;
+      if (mode.approvalPolicy) backend.approvalPolicy = mode.approvalPolicy;
+      else delete backend.approvalPolicy;
+      if (mode.approvalsReviewer) backend.approvalsReviewer = mode.approvalsReviewer;
+      else delete backend.approvalsReviewer;
+      await registry.update(context.chat.id, { backend });
+      response.json({ modes, selected });
     } catch (error) { next(error); }
   });
 
@@ -330,31 +395,7 @@ export function registerChatRoutes(app, {
       if (resident) {
         const adapter = backends.forChat(context.chat);
         if (spec && spec !== current.model) {
-          const template = templateForChat(context.chat, context.project);
-          const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });
-          const profileForModel = (model) => runtime.kind === "conduit_profile" && usesWebSearchOverlay(template)
-            ? resolveModelProfile(config.modelProfiles, model || "unknown/unresolved")
-            : null;
-          const currentProfile = resident.modelProfile || profileForModel(current.model);
-          const targetProfile = profileForModel(spec);
-          if (currentProfile?.id !== targetProfile?.id) {
-            if (manager.isBusy(resident)) {
-              return response.status(409).json({
-                error: "model_profile_transition_busy",
-                message: "Finish the current response before changing to a model with different runtime settings.",
-              });
-            }
-            await adapter.setModel(resident.id, spec);
-            await adapter.close(resident.id);
-            await launchLiveSession({
-              chatId: context.chat.id,
-              model: spec,
-              thinkingLevel,
-              forceModel: true,
-            });
-          } else {
-            await adapter.setModel(resident.id, spec);
-          }
+          await adapter.setModel(resident.id, spec);
         }
         const activeResident = backends.getByChatId(context.chat.id);
         if (thinkingLevel && activeResident) await adapter.setThinkingLevel(activeResident.id, thinkingLevel);

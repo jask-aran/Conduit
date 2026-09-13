@@ -5,12 +5,14 @@ import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, Con
 import { api, projectPath } from "../api/client";
 import type { ChatSummary, Project } from "../api/contracts";
 import { RuntimeIndicator } from "../navigation/runtime-indicator";
+import { ThreadHarnessMark } from "../harness-brand";
 import type { Pty } from "../remotes/terminal-pane";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import type { RuntimeStore } from "../state/runtime";
 import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
+import { DashboardControlGroup, DashboardEmpty, DashboardGrid, DashboardIdentity, DashboardLaunch, DashboardQuickActions, DashboardRow, DashboardRowTitle, DashboardScrollRegion, DashboardSearchButton, DashboardSection, DashboardShell } from "./primitives/dashboard";
 import "./app-dashboard.css";
 
 function latestActivity(project: Project) {
@@ -106,57 +108,41 @@ export function AppDashboard(props: {
   };
   const terminalCwd = (terminal: Pty) => terminal.cwd || terminalScope(terminal)?.workingRoot || "Working directory unavailable";
 
-  return <section class="app-dashboard" aria-labelledby="app-dashboard-title">
-    <div class="app-dashboard-intro">
-      <h1 id="app-dashboard-title">Start where the work is.</h1>
-    </div>
+  return <DashboardShell class="app-dashboard" labelledBy="app-dashboard-title">
+    <DashboardIdentity title="Start where the work is." titleId="app-dashboard-title" variant="intro" />
 
-    <div class="app-dashboard-launch-row">
-      <div class="app-dashboard-composer-slot">{props.composer}</div>
-      <aside class="app-dashboard-quick-actions" aria-label="Quick actions">
-        <span>Quick actions</span>
+    <DashboardLaunch primary={props.composer} aside={<DashboardQuickActions label="Workspace actions" columns={1}>
         <button type="button" onClick={() => props.onSearchChats("unscoped")}>
           <SearchIcon />
           <strong>Search chats</strong>
           <ArrowRightIcon />
         </button>
-      </aside>
-    </div>
+      </DashboardQuickActions>} />
 
-    <div class="app-dashboard-grid">
-      <section class="app-dashboard-section app-dashboard-chats" aria-labelledby="recent-chats-title">
-        <div class="app-dashboard-section-heading">
-          <div><h2 id="recent-chats-title">Recent chats</h2><p>Continue a conversation</p></div>
+    <DashboardGrid primary={<DashboardSection scrollable class="app-dashboard-chats" id="recent-chats-title" title="Recent chats" description="Continue a conversation" actions={
           <div class="app-dashboard-chat-actions">
-            <div class="app-dashboard-scope-toggle" role="group" aria-label="Recent chat scope">
+            <DashboardControlGroup label="Recent chat scope">
               <button type="button" aria-pressed={chatScope() === "unscoped"} onClick={() => setChatScope("unscoped")}>Unscoped</button>
               <button type="button" aria-pressed={chatScope() === "all"} onClick={() => setChatScope("all")}>All</button>
-            </div>
-            <div class="app-dashboard-scope-toggle" role="group" aria-label="Recent chat sort">
+            </DashboardControlGroup>
+            <DashboardControlGroup label="Recent chat sort">
               <button type="button" aria-pressed={chatSort() === "latest"} onClick={() => saveChatSort("latest")}>Latest</button>
               <button type="button" aria-pressed={chatSort() === "created"} onClick={() => saveChatSort("created")}>Created</button>
-            </div>
-            <div class="app-dashboard-scope-toggle" role="group" aria-label="Recent chat visibility">
+            </DashboardControlGroup>
+            <DashboardControlGroup label="Recent chat visibility">
               <button type="button" aria-pressed={chatVisibility() === "unread"} onClick={() => setChatVisibility("unread")}>Unread</button>
               <button type="button" aria-pressed={chatVisibility() === "all"} onClick={() => setChatVisibility("all")}>All</button>
-            </div>
-            <button type="button" class="app-dashboard-chat-search" aria-label="Search Chats" title="Search Chats" onClick={() => props.onSearchChats(chatScope())}>
+            </DashboardControlGroup>
+            <DashboardSearchButton aria-label="Search Chats" title="Search Chats" onClick={() => props.onSearchChats(chatScope())}>
               <SearchIcon />
-            </button>
-          </div>
-        </div>
-        <Show when={chats().length} fallback={<div class="app-dashboard-empty">No recent chats.</div>}>
-          <div class="project-chat-list">
+            </DashboardSearchButton>
+          </div>}>
+        <Show when={chats().length} fallback={<DashboardEmpty>No recent chats.</DashboardEmpty>}>
+          <DashboardScrollRegion class="project-chat-list">
             <For each={chats()}>{({ chat, project }) =>
-              <ContextMenu><ContextMenuTrigger as="button" class="project-chat-row" onPointerEnter={() => props.onPrefetchChat(chat)} onFocus={() => props.onPrefetchChat(chat)} onClick={() => props.onOpenChat(chat, project)}>
-                <span class="project-chat-runtime"><RuntimeIndicator process={props.runtime.getProcess(chat.id)} stale={props.runtime.stale()} unread={chat.unread} /></span>
-                <span class="project-chat-copy">
-                  <strong>{chat.title || "Untitled chat"}</strong>
-                  <small>{project.name}{compactDate(chat.createdAt) ? ` · ${compactDate(chat.createdAt)}` : ""}</small>
-                </span>
-                <time dateTime={chat.lastMessageAt || chat.createdAt}>{relativeActivity(Date.parse(chat.lastMessageAt || chat.createdAt || "") || 0)}</time>
-                <ArrowRightIcon />
-              </ContextMenuTrigger><ContextMenuContent class="w-60 sidebar-context-menu"><ContextMenuGroup>
+              <ContextMenu><ContextMenuTrigger as={DashboardRow} element="button" onPointerEnter={() => props.onPrefetchChat(chat)} onFocus={() => props.onPrefetchChat(chat)} onClick={() => props.onOpenChat(chat, project)} leading={<RuntimeIndicator process={props.runtime.getProcess(chat.id)} stale={props.runtime.stale()} unread={chat.unread} hideIdle fallback={<ThreadHarnessMark id={chat.harnessId} />} />} content={<>
+                  <DashboardRowTitle title={chat.title || "Untitled chat"} context={`${project.name}${compactDate(chat.createdAt) ? ` · ${compactDate(chat.createdAt)}` : ""}`} />
+                </>} meta={<time dateTime={chat.lastMessageAt || chat.createdAt}>{relativeActivity(Date.parse(chat.lastMessageAt || chat.createdAt || "") || 0)}</time>} trailing={<ArrowRightIcon />} /><ContextMenuContent class="w-60 sidebar-context-menu"><ContextMenuGroup>
                 <ContextMenuItem onSelect={() => props.onContextAction("rename-chat", { chat, project })}><PencilIcon />{commandLabel(COMMAND_IDS.renameChat)}</ContextMenuItem>
                 <ContextMenuItem onSelect={() => props.onContextAction("move-chat", { chat, project })}><FolderInputIcon />Move to folder…</ContextMenuItem>
                 <ContextMenuItem onSelect={() => props.onContextAction("copy-chat", { chat })}><ClipboardCopyIcon />{commandLabel(COMMAND_IDS.copyTranscript)}</ContextMenuItem>
@@ -164,22 +150,15 @@ export function AppDashboard(props: {
                 <Show when={isConduitManagedProject(project)}><ContextMenuItem onSelect={() => props.onContextAction("pin-chat", { chat })}><Show when={props.isPinned("chat", chat.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show></ContextMenuItem></Show>
               </ContextMenuGroup><ContextMenuSeparator /><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-chat", { chat, project })}><Trash2Icon />{commandLabel(COMMAND_IDS.deleteChat)}</ContextMenuItem></ContextMenuContent></ContextMenu>}
             </For>
-          </div>
+          </DashboardScrollRegion>
         </Show>
-      </section>
+      </DashboardSection>} rail={<>
 
-      <section class="app-dashboard-section app-dashboard-workspaces" aria-labelledby="recent-workspaces-title">
-        <div class="app-dashboard-section-heading">
-          <div><h2 id="recent-workspaces-title">Recent Workspaces</h2><p>Open a dashboard</p></div>
-        </div>
-        <Show when={workspaces().length} fallback={<div class="app-dashboard-empty">No Workspaces yet.</div>}>
+      <DashboardSection class="app-dashboard-workspaces" id="recent-workspaces-title" title="Recent Workspaces" description="Open a dashboard">
+        <Show when={workspaces().length} fallback={<DashboardEmpty>No Workspaces yet.</DashboardEmpty>}>
           <div class="app-dashboard-list">
             <For each={workspaces()}>{(project) =>
-              <ContextMenu><ContextMenuTrigger as="a" href={projectPath(project)} onPointerEnter={() => props.onPrefetchProject(project)} onFocus={() => props.onPrefetchProject(project)} onClick={(event: MouseEvent) => { event.preventDefault(); props.onOpenProject(project); }}>
-                <span class="app-dashboard-workspace-glyph"><WorkspaceGlyph appearance={project.workspaceAppearance} /></span>
-                <span><strong>{project.name}</strong><small>{relativeActivity(latestActivity(project))}</small></span>
-                <ArrowRightIcon />
-              </ContextMenuTrigger><ContextMenuContent class="w-60 sidebar-context-menu"><ContextMenuGroup>
+              <ContextMenu><ContextMenuTrigger as={DashboardRow} element="a" href={projectPath(project)} onPointerEnter={() => props.onPrefetchProject(project)} onFocus={() => props.onPrefetchProject(project)} onClick={(event: MouseEvent) => { event.preventDefault(); props.onOpenProject(project); }} leading={<WorkspaceGlyph appearance={project.workspaceAppearance} />} content={<><strong>{project.name}</strong><small>{relativeActivity(latestActivity(project))}</small></>} trailing={<ArrowRightIcon />} /><ContextMenuContent class="w-60 sidebar-context-menu"><ContextMenuGroup>
                 <ContextMenuItem onSelect={() => props.onNewChat(project)}><MessageSquarePlusIcon />{commandLabel(COMMAND_IDS.newChat)}</ContextMenuItem>
                 <ContextMenuItem onSelect={() => props.onContextAction("rename-folder", { project })}><PencilIcon />Rename workspace</ContextMenuItem>
                 <ContextMenuItem onSelect={() => props.onOpenWorkspaceIdentity(project)}><PaletteIcon />Identity</ContextMenuItem>
@@ -196,19 +175,14 @@ export function AppDashboard(props: {
             </For>
           </div>
         </Show>
-      </section>
+      </DashboardSection>
 
-      <section class="app-dashboard-section app-dashboard-terminals" aria-labelledby="live-terminals-title">
-        <div class="app-dashboard-section-heading">
-          <div><h2 id="live-terminals-title">Live terminals</h2><p>{terminals().length || "No"} running</p></div>
-        </div>
-        <Show when={!loading()} fallback={<div class="app-dashboard-empty"><Spinner /><span>Loading terminals…</span></div>}>
-          <Show when={terminals().length} fallback={<div class="app-dashboard-empty">No live terminals.</div>}>
+      <DashboardSection class="app-dashboard-terminals" id="live-terminals-title" title="Live terminals" description={`${terminals().length || "No"} running`}>
+        <Show when={!loading()} fallback={<DashboardEmpty><Spinner /><span>Loading terminals…</span></DashboardEmpty>}>
+          <Show when={terminals().length} fallback={<DashboardEmpty>No live terminals.</DashboardEmpty>}>
             <div class="app-dashboard-list app-dashboard-terminal-list">
               <For each={terminals()}>{(terminal) =>
-                <ContextMenu><ContextMenuTrigger as="button" onPointerEnter={props.onPrefetchTerminal} onFocus={props.onPrefetchTerminal} onClick={() => props.onOpenTerminal(terminal)}>
-                  <TerminalIcon />
-                  <span class="app-dashboard-terminal-copy">
+                <ContextMenu><ContextMenuTrigger as={DashboardRow} element="button" onPointerEnter={props.onPrefetchTerminal} onFocus={props.onPrefetchTerminal} onClick={() => props.onOpenTerminal(terminal)} leading={<TerminalIcon />} content={<span class="app-dashboard-terminal-copy">
                     <span class="app-dashboard-terminal-title">
                       <strong>{terminal.title || "Shell"}</strong>
                       <em>{terminalScope(terminal)?.name || "Unscoped"}</em>
@@ -216,9 +190,7 @@ export function AppDashboard(props: {
                     <small title={`${terminal.currentCommand || "shell"} · ${terminalActivity(terminal)} · ${terminalCwd(terminal)}`}>
                       {terminal.currentCommand || "shell"} · {terminalActivity(terminal)} · <code>{terminalCwd(terminal)}</code>
                     </small>
-                  </span>
-                  <ArrowRightIcon />
-                </ContextMenuTrigger><ContextMenuContent class="w-52 sidebar-context-menu"><ContextMenuGroup>
+                  </span>} trailing={<ArrowRightIcon />} /><ContextMenuContent class="w-52 sidebar-context-menu"><ContextMenuGroup>
                   <ContextMenuItem onSelect={() => props.onOpenTerminalMaximized(terminal)}><TerminalIcon />Open maximized</ContextMenuItem>
                   <ContextMenuItem onSelect={() => props.onContextAction("rename-terminal", { terminal })}><PencilIcon />Rename</ContextMenuItem>
                 </ContextMenuGroup><ContextMenuSeparator /><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-terminal", { terminal })}><Trash2Icon />Destroy shell</ContextMenuItem></ContextMenuContent></ContextMenu>}
@@ -226,7 +198,7 @@ export function AppDashboard(props: {
             </div>
           </Show>
         </Show>
-      </section>
-    </div>
-  </section>;
+      </DashboardSection>
+    </>} />
+  </DashboardShell>;
 }

@@ -117,7 +117,54 @@ export class AttachmentStore {
 
   directories(project, chatId) {
     const root = chatDirectory(project, chatId);
-    return { root, attachments: path.join(root, "attachments"), partial: path.join(root, ".partial") };
+    return { root, attachments: path.join(root, "attachments"), partial: path.join(root, ".partial"), messages: path.join(root, "attachment-messages.jsonl") };
+  }
+
+  async recordMessage(project, chatId, identity, items) {
+    if (!items?.length) return;
+    const { root, messages } = this.directories(project, chatId);
+    await fsp.mkdir(root, { recursive: true });
+    const attachments = items.map(({ id, name, size, type }) => ({ id, name, size, type }));
+    await fsp.appendFile(messages, `${JSON.stringify({ identity, attachments, createdAt: new Date().toISOString() })}\n`, "utf8");
+  }
+
+  async discardMessages(project, chatId, identities) {
+    if (!identities?.length) return;
+    const { root, messages } = this.directories(project, chatId);
+    await fsp.mkdir(root, { recursive: true });
+    await fsp.appendFile(messages, identities.map((identity) => JSON.stringify({ discardedIdentity: identity })).join("\n") + "\n", "utf8");
+  }
+
+  async decorateMessages(project, chatId, transcript) {
+    const { messages } = this.directories(project, chatId);
+    const rows = (await fsp.readFile(messages, "utf8").catch((error) => error.code === "ENOENT" ? "" : Promise.reject(error)))
+      .split("\n").filter(Boolean).flatMap((line) => { try { return [JSON.parse(line)]; } catch { return []; } });
+    const identityKey = (identity) => identity ? JSON.stringify(identity) : "";
+    const discarded = new Set(rows.flatMap((row) => row.discardedIdentity ? [identityKey(row.discardedIdentity)] : []));
+    const activeRows = rows.filter((row) => !row.identity || !discarded.has(identityKey(row.identity)));
+    const used = new Set();
+    const byId = new Map(activeRows.flatMap((row) => row.identity?.messageId ? [[row.identity.messageId, row]] : []));
+    const positions = new Map((transcript || []).map((item, index) => [item.id, index]));
+    for (const row of activeRows) {
+      const anchor = row.identity?.afterMessageId;
+      if (!row.identity || !("afterMessageId" in row.identity)) continue;
+      if (anchor && !positions.has(anchor)) continue;
+      const ordinal = Number.isSafeInteger(row.identity.ordinal) ? row.identity.ordinal : 0;
+      const start = anchor && positions.has(anchor) ? positions.get(anchor) + 1 : 0;
+      const candidate = (transcript || []).slice(start).filter((item) => item.role === "user")[ordinal];
+      if (candidate?.id) byId.set(candidate.id, row);
+    }
+    return (transcript || []).map((item) => {
+      if (item.role !== "user" || item.attachments?.length) return item;
+      const native = byId.get(item.id);
+      if (native) return { ...item, attachments: native.attachments || [] };
+      // Read compatibility for attachment records written before harness IDs
+      // became authoritative. New records never store message text.
+      const index = activeRows.findIndex((row, candidate) => !used.has(candidate) && row.message === item.content);
+      if (index < 0) return item;
+      used.add(index);
+      return { ...item, attachments: activeRows[index].attachments || [] };
+    });
   }
 
   /** Absolute path of a stored attachment, for adapters that take files natively. */

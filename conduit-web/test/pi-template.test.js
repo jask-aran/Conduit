@@ -15,6 +15,25 @@ import {
   templatePublicView,
 } from "../../scripts/pi-runtime.mjs";
 
+test("manual Pi compaction uses the native compact RPC command", async () => {
+  const manager = Object.create(PiManager.prototype);
+  manager.request = async (id, command, options) => ({ id, command, options });
+  assert.deepEqual(await manager.compact("live-1"), {
+    id: "live-1", command: { type: "compact" }, options: { timeout: 120_000 },
+  });
+});
+
+test("Pi exposes its runnable slash-command catalogue", async () => {
+  const manager = Object.create(PiManager.prototype);
+  manager.request = async (_id, command) => {
+    assert.deepEqual(command, { type: "get_commands" });
+    return { data: { commands: [{ name: "skill:web-search", description: "Search the web", source: "skill" }] } };
+  };
+  assert.deepEqual(await manager.getCommands("live-1"), [
+    { name: "skill:web-search", description: "Search the web", source: "skill" },
+  ]);
+});
+
 test("repository templates are discoverable launch presets", () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../templates");
   const templates = listPiTemplates(root);

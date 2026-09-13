@@ -1,7 +1,7 @@
-import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, Show, type Accessor } from "solid-js";
-import { BoxesIcon, Columns2Icon, CheckIcon, ChevronsUpIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileDiffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, FolderUpIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, Maximize2Icon, Minimize2Icon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, SendIcon, TerminalIcon, Trash2Icon, Undo2Icon, UploadIcon, XIcon } from "lucide-solid";
+import { batch, createEffect, createMemo, createSignal, For, lazy, on, onCleanup, Show, Suspense, type Accessor } from "solid-js";
+import { BoxesIcon, Columns2Icon, CheckIcon, ChevronsUpIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileDiffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, FolderUpIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, HistoryIcon, Maximize2Icon, MessageSquareIcon, Minimize2Icon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, SendIcon, TerminalIcon, Trash2Icon, Undo2Icon, UploadIcon, XIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
-import { Button, ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Spinner } from "@/components/primitives";
+import { Button, ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Menu, MenuContent, MenuItem, MenuRadioGroup, MenuRadioItem, MenuTrigger, Spinner } from "@/components/primitives";
 import { api, asList } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
@@ -16,8 +16,9 @@ import WorkspaceFileSlot, { preloadWorkspaceEditor, type FileSlotHandle, type Fi
 import { readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace-panel-storage";
 import "./workspace.css";
 import type { ComparisonPayload, ComparisonViewState } from "./workspace-comparison";
-import { createReviewController } from "./workspace-review-controller";
-import WorkspaceReview, { WorkspaceReviewNavigator, type WorkspaceReviewFile } from "./workspace-review";
+import { createWorkspaceReview, diffScopes, isDiffScope, type DiffScope } from "./workspace-review-source";
+import { WorkspaceReviewNavigator } from "./workspace-review";
+import { WorkbenchButton } from "./workspace-workbench";
 
 
 interface TreeEntry { name: string; path: string; type: "directory" | "file" | "other"; }
@@ -32,20 +33,58 @@ interface GitLineCounts { added: number; removed: number; }
 interface GitChangedFile { status: string; path: string; stagedCounts?: GitLineCounts | null; workingCounts?: GitLineCounts | null; headCounts?: GitLineCounts | null; }
 interface DiffPayload { repository: boolean; branch?: string; upstream?: string | null; ahead?: number; behind?: number; commits?: GitCommit[]; refs?: GitRef[]; files: GitChangedFile[]; diff: string; }
 interface GitCommitDetail { hash: string; content: string; }
-interface TurnArtifactFile { path: string; status: string; available: boolean; }
-interface TurnArtifactPayload { id: string; turnId: string | null; createdAt: string; files: TurnArtifactFile[]; }
-interface TurnCheckpointSummary { id: string; turnId: string | null; createdAt: string; }
 type PanelTab = "files" | "diff" | "artifacts" | "terminal";
-type ArtifactMode = "changes" | "outputs" | "interactive";
-type ArtifactBaseline = "chat" | "turn";
-type FileNavigatorMode = "explorer" | "agent-changes";
+type ArtifactMode = "history" | "changes" | "outputs" | "interactive";
+interface HistoryEntry { id: string; parentId: string | null; timestamp: string; type: string; display: string; kind: "user" | "assistant" | "tool" | "summary" | "system"; hidden: boolean; }
+interface HistoryNode { entry: HistoryEntry; children: HistoryNode[]; label?: string; }
+interface HistoryTree { tree: HistoryNode[]; leafId: string | null; }
 type SourceControlMode = "changes" | "review" | "graph" | "patch";
 type GitAction = "stage" | "stage-all" | "unstage" | "unstage-all" | "commit" | "fetch" | "pull" | "push";
 type FileSlotId = "primary" | "secondary";
 type OpenFiles = { primary: string | null; secondary: string | null };
+type FilesMode = "file" | "diff";
 type UploadTarget = { kind: "directory"; path: string } | { kind: "replacement"; path: string };
 
 const PANEL_TABS = ["files", "diff", "artifacts", "terminal"] satisfies PanelTab[];
+const WorkspaceComparison = lazy(() => import("./workspace-comparison"));
+
+function historyEntryLabel(node: HistoryNode): string {
+  if (node.label) return node.label;
+  return node.entry.display || node.entry.type.replaceAll("_", " ");
+}
+
+function historyLength(node: HistoryNode): number {
+  return 1 + Math.max(0, ...node.children.map(historyLength));
+}
+
+function primaryHistoryIndex(nodes: HistoryNode[], activePath: Set<string>): number {
+  const activeIndex = nodes.findIndex((node) => activePath.has(node.entry.id));
+  return Math.max(0, activeIndex >= 0
+    ? activeIndex
+    : nodes.reduce((best, node, index) => historyLength(node) > historyLength(nodes[best]) ? index : best, 0));
+}
+
+function HistoryNodeRow(props: { node: HistoryNode; activePath: Set<string>; leafId: string | null; connected: boolean }) {
+  const node = () => props.node;
+  return <div class="workspace-history-row" data-kind={node().entry.kind} data-active={props.activePath.has(node().entry.id)} data-leaf={props.leafId === node().entry.id} title={historyEntryLabel(node())}>
+      <Show when={props.connected}><span class="workspace-history-branch-tick" aria-hidden="true" /></Show>
+      <span><Show when={node().entry.kind === "user" || node().entry.kind === "assistant"} fallback={historyEntryLabel(node())}><strong>{node().entry.kind}:</strong>{` ${historyEntryLabel(node()).replace(/^\w+:\s*/, "")}`}</Show></span>
+    </div>;
+}
+
+function HistoryNodes(props: { nodes: HistoryNode[]; activePath: Set<string>; leafId: string | null; connected?: boolean }) {
+  const primary = () => primaryHistoryIndex(props.nodes, props.activePath);
+  const content = (node: HistoryNode, connected: boolean) => <>
+    <Show when={!node.entry.hidden}><HistoryNodeRow node={node} activePath={props.activePath} leafId={props.leafId} connected={connected} /></Show>
+    <HistoryNodes nodes={node.children} activePath={props.activePath} leafId={props.leafId} connected={connected} />
+  </>;
+  return <For each={props.nodes}>{(node, index) => <Show when={index() !== primary()} fallback={content(node, Boolean(props.connected))}>
+    <div class="workspace-history-branch">
+      <span class="workspace-history-branch-rail" aria-hidden="true" />
+      <div class="workspace-history-branch-content">{content(node, true)}</div>
+    </div>
+  </Show>}</For>;
+}
 
 function GitFileLabel(props: { file: GitChangedFile; staged: boolean }) {
   const name = () => props.file.path.replace(/\/$/, "").split("/").at(-1) ?? props.file.path;
@@ -81,7 +120,6 @@ interface WorkspaceCacheEntry {
 
 const MAX_CACHED_WORKSPACES = 6;
 const workspaceCache = new Map<string, WorkspaceCacheEntry>();
-const MIN_DETAIL_HEIGHT = 32;
 const MIN_WORKSPACE_PANE_WIDTH = 240;
 const WORKSPACE_SPLIT_GUTTER_WIDTH = 9;
 const WIDE_FILES_MIN_WIDTH = 720;
@@ -174,7 +212,7 @@ function cacheWorkspace(projectId: string, patch: Partial<WorkspaceCacheEntry>) 
   while (workspaceCache.size > MAX_CACHED_WORKSPACES) workspaceCache.delete(workspaceCache.keys().next().value!);
 }
 
-export default function WorkspacePanel(props: { projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onToggleExpanded: () => void; onClose: () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing> }) {
+export default function WorkspacePanel(props: { projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onToggleExpanded: () => void; onClose: () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing> }) {
   let projectGeneration = 0;
   let requestVersion = 0;
   let projectController = new AbortController();
@@ -182,7 +220,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const requestControllers = new Map<number, AbortController>();
   let panelRoot: HTMLElement | undefined;
   let resizeHandle: HTMLDivElement | undefined;
-  let detailHost: HTMLElement | undefined;
   let filesHost: HTMLElement | undefined;
   let treeElement: HTMLElement | undefined;
   let treeResizeHandle: HTMLDivElement | undefined;
@@ -222,6 +259,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const [uploadTarget, setUploadTarget] = createSignal<UploadTarget>({ kind: "directory", path: "" });
   const [primaryFile, setPrimaryFile] = createSignal<FileSummary | null>(null);
   const [openPaths, setOpenPaths] = createSignal<OpenFiles>({ primary: readSetting(fileScope(), "file"), secondary: readSetting(fileScope(), "file-secondary") });
+  const [fileOpenPaths, setFileOpenPaths] = createSignal<OpenFiles>(openPaths());
+  const [filesMode, setFilesMode] = createSignal<FilesMode>("file");
   const [focusedSlot, setFocusedSlot] = createSignal<FileSlotId>("primary");
   const slotHandles = new Map<FileSlotId, FileSlotHandle>();
   const [wrapLines, setWrapLines] = createSignal(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines") === "true");
@@ -245,170 +284,51 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const [shellGap, setShellGap] = createSignal(props.open() && !isMobileLayout() ? 8 : 0);
   const [treeWidth, setTreeWidth] = createSignal(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(readSetting(projectScope(), "tree-width")) || DEFAULT_TREE_WIDTH)));
   const [treeCollapsed, setTreeCollapsed] = createSignal(readSetting(projectScope(), "tree-collapsed") === "true");
-  const [fileNavigatorMode, setFileNavigatorMode] = createSignal<FileNavigatorMode>("explorer");
+  const review = createWorkspaceReview({ projectId: props.projectId, chatId: () => props.artifactChatId?.() ?? null, gitFiles: () => diff()?.files ?? [] });
+  const chatReview = createWorkspaceReview({ projectId: props.projectId, chatId: () => props.artifactChatId?.() ?? null, gitFiles: () => diff()?.files ?? [] });
+  const sourceReview = createWorkspaceReview({ projectId: props.projectId, chatId: () => props.artifactChatId?.() ?? null, gitFiles: () => diff()?.files ?? [] });
+  const [navigatorOpen, setNavigatorOpen] = createSignal(false);
   const [splitRatio, setSplitRatio] = createSignal(Math.max(0, Math.min(100, Number(readSetting(projectScope(), "split-ratio")) || 50)));
   const [splitWidth, setSplitWidth] = createSignal(0);
   const [fileSplitRatio, setFileSplitRatio] = createSignal(Math.max(25, Math.min(75, Number(readSetting(projectScope(), "file-split-ratio")) || 50)));
-  const [artifactMode, setArtifactMode] = createSignal<ArtifactMode>("changes");
-  const [artifactBaseline, setArtifactBaseline] = createSignal<ArtifactBaseline>("chat");
-  const [artifactTimeline, setArtifactTimeline] = createSignal<TurnCheckpointSummary[]>([]);
-  const [artifactOffset, setArtifactOffset] = createSignal(0);
-  const [artifactSkippedLatest, setArtifactSkippedLatest] = createSignal(false);
-  const [turnArtifact, setTurnArtifact] = createSignal<TurnArtifactPayload | null>(null);
-  const artifactReview = createReviewController(reportError);
-  const artifactPath = artifactReview.selectedPath;
-  const artifactComparison = artifactReview.comparison;
-  const artifactBusy = artifactReview.busy;
-  const artifactViewState = artifactReview.viewState;
-  const loadArtifactComparison = async (path: string) => {
-    artifactReview.select(path);
-    const projectId = props.projectId();
+  const [artifactMode, setArtifactMode] = createSignal<ArtifactMode>("history");
+  const [historyTree, setHistoryTree] = createSignal<HistoryTree | null>(null);
+  const [historyLoading, setHistoryLoading] = createSignal(false);
+  const loadHistory = async () => {
     const chatId = props.artifactChatId?.();
-    if (!chatId) return;
-    const checkpointId = turnArtifact()?.id;
-    const baseline = artifactBaseline();
-    await artifactReview.refresh({
-      isCurrent: () => props.projectId() === projectId && props.artifactChatId?.() === chatId
-        && artifactBaseline() === baseline && turnArtifact()?.id === checkpointId,
-      load: (selectedPath, signal) => api<ComparisonPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&path=${encodeURIComponent(selectedPath)}&baseline=${baseline}${checkpointId ? `&checkpointId=${encodeURIComponent(checkpointId)}` : ""}`, { signal }),
-    });
-  };
-  const selectArtifactFile = (path: string) => { void loadArtifactComparison(path); };
-  const findChangedTurn = async (projectId: string, chatId: string, timeline: TurnCheckpointSummary[], start: number, direction: -1 | 1) => {
-    let offset = start;
-    let first: TurnArtifactPayload | null = null;
-    while (timeline[offset]) {
-      const checkpoint = timeline[offset]!;
-      const result = await api<TurnArtifactPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&baseline=turn&checkpointId=${encodeURIComponent(checkpoint.id)}`);
-      first ??= result;
-      if (result?.files.length) return { result, offset, changed: true };
-      offset += direction;
-    }
-    return first ? { result: first, offset: start, changed: false } : null;
-  };
-  const loadTurnArtifact = async (direction: -1 | 1 = 1) => {
-    const chatId = props.artifactChatId?.();
-    if (!chatId) {
-      artifactReview.cancel();
-      artifactReview.select(null);
-      setTurnArtifact(null);
+    if (!chatId || !props.historyAvailable?.()) {
+      setHistoryTree(null);
       return;
     }
-    const projectId = props.projectId();
-    const baseline = artifactBaseline();
+    setHistoryLoading(true);
     try {
-      const displayedOffset = artifactOffset();
-      const currentOffset = artifactSkippedLatest() ? 0 : displayedOffset;
-      const currentId = artifactTimeline()[currentOffset]?.id;
-      const timeline = await api<TurnCheckpointSummary[]>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&timeline=1`);
-      const nextOffset = currentOffset === 0 ? 0 : Math.max(0, timeline.findIndex((checkpoint) => checkpoint.id === currentId));
-      const found = baseline === "turn" ? await findChangedTurn(projectId, chatId, timeline, nextOffset, direction) : null;
-      const result = baseline === "turn" ? found?.result ?? null : await api<TurnArtifactPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&baseline=chat`);
-      if (props.projectId() !== projectId || props.artifactChatId?.() !== chatId || artifactBaseline() !== baseline || (baseline === "turn" && artifactOffset() !== displayedOffset)) return;
-      if (baseline === "turn" && !found?.changed && turnArtifact()?.files.length) {
-        if (!artifactSkippedLatest()) setArtifactOffset(Math.max(0, currentOffset - direction));
-        if (direction < 0) setArtifactSkippedLatest(true);
-        return;
-      }
-      setArtifactTimeline(timeline);
-      setArtifactOffset(found?.offset ?? nextOffset);
-      setArtifactSkippedLatest(baseline === "turn" && currentOffset === 0 && (found?.offset ?? 0) > 0);
-      setTurnArtifact(result);
-      const next = artifactReview.reconcile(result?.files ?? []);
-      if (next) void loadArtifactComparison(next);
-    } catch (cause) { reportError((cause as Error).message); }
-  };
-  const selectArtifactBaseline = (baseline: ArtifactBaseline) => {
-    if (baseline === artifactBaseline() && (baseline !== "turn" || artifactOffset() === 0)) return;
-    artifactReview.cancel();
-    if (baseline === "turn") setArtifactOffset(0);
-    setArtifactSkippedLatest(false);
-    setArtifactBaseline(baseline);
-    void loadTurnArtifact();
-  };
-  const moveArtifactTimeline = (offset: number) => {
-    const next = Math.max(0, Math.min(artifactTimeline().length - 1, artifactOffset() + offset));
-    if (artifactBaseline() === "turn" && next === artifactOffset()) return;
-    artifactReview.cancel();
-    setArtifactBaseline("turn");
-    setArtifactOffset(next);
-    setArtifactSkippedLatest(false);
-    void loadTurnArtifact(offset < 0 ? -1 : 1);
-  };
-  const artifactBaselineControl = () => <div class="workspace-artifact-baseline" role="radiogroup" aria-label="Agent changes baseline"><Show when={artifactSkippedLatest()}><span>Current turn has no file changes</span></Show><button type="button" role="radio" aria-checked={artifactBaseline() === "chat"} onClick={() => selectArtifactBaseline("chat")}>Chat start</button><button type="button" aria-label="Older turn" title="Older turn" disabled={!artifactTimeline().length || artifactOffset() >= artifactTimeline().length - 1} onClick={() => moveArtifactTimeline(1)}><ChevronLeftIcon /></button><button type="button" role="radio" aria-checked={artifactBaseline() === "turn"} onClick={() => selectArtifactBaseline("turn")}>{`Turn ${artifactOffset() === 0 ? "0" : `−${artifactOffset()}`}`}</button><button type="button" aria-label="Newer turn" title="Newer turn" disabled={!artifactTimeline().length || artifactOffset() === 0} onClick={() => moveArtifactTimeline(-1)}><ChevronRightIcon /></button></div>;
-  const [fileAgentTimeline, setFileAgentTimeline] = createSignal<TurnCheckpointSummary[]>([]);
-  const [fileAgentOffset, setFileAgentOffset] = createSignal(0);
-  const [fileAgentSkippedLatest, setFileAgentSkippedLatest] = createSignal(false);
-  const [fileAgentArtifact, setFileAgentArtifact] = createSignal<TurnArtifactPayload | null>(null);
-  const fileAgentReview = createReviewController(reportError);
-  let fileAgentTimelineRequest = 0;
-  const loadFileAgentComparison = async (path: string) => {
-    fileAgentReview.select(path);
-    const projectId = props.projectId();
-    const chatId = props.artifactChatId?.();
-    const checkpointId = fileAgentArtifact()?.id;
-    if (!chatId || !checkpointId) return;
-    await fileAgentReview.refresh({
-      isCurrent: () => props.projectId() === projectId && props.artifactChatId?.() === chatId && fileAgentArtifact()?.id === checkpointId,
-      load: (selectedPath, signal) => api<ComparisonPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&path=${encodeURIComponent(selectedPath)}&baseline=turn&checkpointId=${encodeURIComponent(checkpointId)}`, { signal }),
-    });
-  };
-  const loadFileAgentCheckpoint = async (checkpoint: TurnCheckpointSummary | undefined, direction: -1 | 1 = 1, request = ++fileAgentTimelineRequest) => {
-    const projectId = props.projectId();
-    const chatId = props.artifactChatId?.();
-    if (!chatId || !checkpoint) {
-      setFileAgentArtifact(null);
-      fileAgentReview.select(null);
-      return;
+      const result = await api<HistoryTree>(`/v0/chats/${encodeURIComponent(chatId)}/history`, { cache: "no-store" });
+      if (props.artifactChatId?.() === chatId) setHistoryTree(result);
+    } catch (cause) {
+      reportError((cause as Error).message);
+    } finally {
+      if (props.artifactChatId?.() === chatId) setHistoryLoading(false);
     }
-    try {
-      const timeline = fileAgentTimeline();
-      const start = timeline.findIndex((item) => item.id === checkpoint.id);
-      const found = await findChangedTurn(projectId, chatId, timeline, Math.max(0, start), direction);
-      if (request !== fileAgentTimelineRequest || props.projectId() !== projectId || props.artifactChatId?.() !== chatId) return;
-      if (!found?.changed && fileAgentArtifact()?.files.length) {
-        if (direction < 0) setFileAgentSkippedLatest(true);
-        return;
-      }
-      setFileAgentOffset(found?.offset ?? Math.max(0, start));
-      setFileAgentSkippedLatest(start === 0 && (found?.offset ?? 0) > 0);
-      setFileAgentArtifact(found?.result ?? null);
-      const path = fileAgentReview.reconcile(found?.result.files ?? []);
-      if (path) void loadFileAgentComparison(path);
-    } catch (cause) { reportError((cause as Error).message); }
   };
-  const loadFileAgentTimeline = async () => {
-    const projectId = props.projectId();
-    const chatId = props.artifactChatId?.();
-    const request = ++fileAgentTimelineRequest;
-    if (!chatId) {
-      setFileAgentTimeline([]);
-      setFileAgentOffset(0);
-      setFileAgentSkippedLatest(false);
-      setFileAgentArtifact(null);
-      fileAgentReview.select(null);
-      return;
+  const historyActivePath = createMemo(() => {
+    const result = new Set<string>();
+    const tree = historyTree();
+    if (!tree?.leafId) return result;
+    const parents = new Map<string, string | null>();
+    const pending = [...tree.tree];
+    while (pending.length) {
+      const node = pending.pop()!;
+      parents.set(node.entry.id, node.entry.parentId);
+      pending.push(...node.children);
     }
-    const currentOffset = fileAgentSkippedLatest() ? 0 : fileAgentOffset();
-    const currentId = fileAgentTimeline()[currentOffset]?.id;
-    try {
-      const result = await api<TurnCheckpointSummary[]>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?chatId=${encodeURIComponent(chatId)}&timeline=1`);
-      if (request !== fileAgentTimelineRequest || props.projectId() !== projectId || props.artifactChatId?.() !== chatId) return;
-      const nextOffset = currentOffset === 0 ? 0 : Math.max(0, result.findIndex((checkpoint) => checkpoint.id === currentId));
-      setFileAgentTimeline(result);
-      await loadFileAgentCheckpoint(result[nextOffset], 1, request);
-    } catch (cause) { if (request === fileAgentTimelineRequest) reportError((cause as Error).message); }
-  };
-  const moveFileAgentTimeline = (offset: number) => {
-    const next = Math.max(0, Math.min(fileAgentTimeline().length - 1, fileAgentOffset() + offset));
-    if (next === fileAgentOffset()) return;
-    fileAgentReview.cancel();
-    setFileAgentSkippedLatest(false);
-    void loadFileAgentCheckpoint(fileAgentTimeline()[next], offset < 0 ? -1 : 1);
-  };
+    let current: string | null = tree.leafId;
+    while (current) {
+      result.add(current);
+      current = parents.get(current) || null;
+    }
+    return result;
+  });
   const [terminalFocusRequest, setTerminalFocusRequest] = createSignal(0);
-  const detailOpenName = () => `${tab()}:detail-open`;
-  const detailHeightName = () => `${tab()}:detail-height`;
   const detailOpenFor = (nextTab: PanelTab) => readSetting(panelScope(), `${nextTab}:detail-open`) ?? (nextTab === "diff" ? "false" : "true");
   const storedSourceControlMode = (): SourceControlMode => {
     const stored = readSetting(panelScope(), "diff:mode");
@@ -416,69 +336,27 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     if (readSetting(panelScope(), "diff:source-detail-open") !== "true") return "changes";
     return detailOpenFor("diff") === "true" ? "patch" : "graph";
   };
-  const [detailOpen, setDetailOpen] = createSignal(detailOpenFor(tab()) === "true");
   const [sourceControlMode, setSourceControlMode] = createSignal<SourceControlMode>(storedSourceControlMode());
-  const sourceReview = createReviewController();
-  const comparisonViewState = sourceReview.viewState;
   const [fileNavigation, setFileNavigation] = createSignal<{ projectId: string; slot: FileSlotId; path: string; source: string; position: number } | null>(null);
   const [temporaryComparisons, setTemporaryComparisons] = createSignal<Partial<Record<FileSlotId, TemporaryComparison & { projectId: string }>>>({});
   const comparisonFor = (slot: FileSlotId) => {
     const entry = temporaryComparisons()[slot];
     return entry?.projectId === props.projectId() && entry.comparison.path === openPaths()[slot] ? entry : undefined;
   };
+  const saveComparisonView = (slot: FileSlotId, state: ComparisonViewState) => {
+    const entry = comparisonFor(slot);
+    if (entry?.sourceKey === review.sourceKey() && entry.comparison.path === review.selectedPath()) review.setViewState(state);
+  };
   const navigationFor = (slot: FileSlotId) => {
     const request = fileNavigation();
     return request && request.projectId === props.projectId() && request.slot === slot && request.path === openPaths()[slot] ? request : undefined;
   };
-  const fileComparison = sourceReview.comparison;
-  const fileDiffError = sourceReview.error;
-  const fileDiffBusy = sourceReview.busy;
-  const inspectFileDiff = (path: string, _staged: boolean) => {
-    sourceReview.select(path);
-    selectSourceControlMode("review");
-  };
-  createEffect(on(() => props.projectId(), () => { sourceReview.select(null); }));
-  createEffect(() => {
-    const projectId = props.projectId();
-    const selected = sourceReview.selectedPath();
-    diff();
-    if (sourceControlMode() !== "review" || !selected || !tabVisible("diff") || !props.open()) return;
-    void sourceReview.refresh({
-      isCurrent: () => props.projectId() === projectId && sourceControlMode() === "review",
-      load: (path, signal) => api<ComparisonPayload>(`/v0/projects/${encodeURIComponent(projectId)}/diff?compare=1&path=${encodeURIComponent(path)}&scope=head`, { signal }),
-    });
-    onCleanup(sourceReview.cancel);
-  });
-  const [detailHeight, setDetailHeight] = createSignal(Math.max(128, Number(readSetting(panelScope(), detailHeightName())) || 288));
   const hasPending = (operation?: string) => [...pending().keys()].some((version) => !operation || requests.get(operation)?.version === version);
   const diffLoading = () => hasPending("diff");
   const filesLoading = () => [...requests.keys()].some((operation) => operation.startsWith("directory:") && hasPending(operation));
   const loading = () => [...pending().values()].some((entry) => entry.foreground);
   const stagedFiles = createMemo(() => (diff()?.files || []).filter((file) => file.status[0] !== " " && file.status[0] !== "?"));
   const unstagedFiles = createMemo(() => (diff()?.files || []).filter((file) => file.status[1] !== " " || file.status === "??"));
-  const reviewFiles = createMemo(() => (diff()?.files || []).filter((file) => !file.path.endsWith("/")));
-  const reviewViewFiles = createMemo<WorkspaceReviewFile[]>(() => reviewFiles().map((file) => ({
-    path: file.path,
-    status: file.status === "??" ? "U" : (file.status[1] !== " " ? file.status[1] : file.status[0]) || "M",
-    counts: file.headCounts,
-  })));
-  const reviewIndex = createMemo(() => reviewFiles().findIndex((file) => file.path === sourceReview.selectedPath()));
-  const selectReviewFile = (index: number) => {
-    const files = reviewFiles();
-    if (!files.length) return;
-    const file = files[(index + files.length) % files.length];
-    if (!file) return;
-    inspectFileDiff(file.path, file.status[0] !== " " && file.status[0] !== "?");
-  };
-  const beginReview = () => {
-    selectSourceControlMode("review");
-    if (reviewIndex() < 0) selectReviewFile(0);
-  };
-  createEffect(() => {
-    const files = reviewFiles();
-    if (sourceControlMode() === "review") sourceReview.reconcile(files);
-  });
-
   const ownsRequest = (request: WorkspaceRequest) => ownsWorkspaceRequest({
     projectId: props.projectId(),
     generation: projectGeneration,
@@ -506,6 +384,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   };
   const resetRequestScope = () => {
     projectController.abort();
+    diffLoadPromise = undefined;
     projectController = new AbortController();
     projectGeneration += 1;
     requests.clear();
@@ -531,8 +410,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   };
 
   const selectTab = (next: PanelTab) => {
-    setDetailOpen(detailOpenFor(next) === "true");
-    setDetailHeight(Math.max(MIN_DETAIL_HEIGHT, Number(readSetting(panelScope(), `${next}:detail-height`)) || 288));
     setTab(next);
     writeSetting(panelScope(), "tab", next);
   };
@@ -567,12 +444,15 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     if (tab() === "diff") setTab("files");
     if (secondaryTab() === "diff") setSecondaryTab("terminal");
     setSourceControlMode("changes");
-    sourceReview.select(null);
+    if (review.scope() === "head" || review.scope() === "changes" || review.scope() === "staged") {
+      review.setScope("chat");
+      setFilesMode("file");
+    }
     setDiff(null);
   });
   const tabVisible = (candidate: PanelTab) => (candidate !== "diff" || props.sourceControlEnabled()) && (tab() === candidate || (props.expanded() && secondaryTab() === candidate));
   const panePosition = (candidate: PanelTab) => tab() === candidate ? "left" : secondaryTab() === candidate ? "right" : undefined;
-  const tabLabel = (candidate: PanelTab) => candidate === "files" ? "Files" : candidate === "diff" ? "Source Control" : candidate === "artifacts" ? "Artifacts" : "Terminal";
+  const tabLabel = (candidate: PanelTab) => candidate === "files" ? "Files" : candidate === "diff" ? "Source Control" : candidate === "artifacts" ? "Chat" : "Terminal";
   const setPaneTab = (side: "left" | "right", next: PanelTab) => {
     if (next === "diff" && !props.sourceControlEnabled()) next = "files";
     if (!splitActive()) {
@@ -608,7 +488,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   };
   const tabIcon = (candidate: PanelTab) => candidate === "files" ? <FolderIcon />
     : candidate === "diff" ? <GitCompareArrowsIcon />
-    : candidate === "artifacts" ? <BoxesIcon />
+    : candidate === "artifacts" ? <MessageSquareIcon />
     : <TerminalIcon />;
   // One strip per pane: the tabs you click always belong to the pane below them,
   // so a split needs no notion of an "active" pane.
@@ -658,65 +538,16 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     props.shortcuts.registerHandler(COMMAND_IDS.workspaceSplit, "workspace-panel", toggleSplit, { when: workspaceShortcutAvailable }),
   ];
   onCleanup(() => releaseShortcutHandlers.forEach((release) => release()));
-  const toggleDetail = () => {
-    const next = !detailOpen();
-    setDetailOpen(next);
-    writeSetting(panelScope(), detailOpenName(), String(next));
-  };
   const selectSourceControlMode = (mode: SourceControlMode) => {
     setSourceControlMode(mode);
     writeSetting(panelScope(), "diff:mode", mode);
     setCommitDetail(null);
+    if (mode === "review") {
+      sourceReview.setScope("head");
+      void sourceReview.refresh();
+    }
     if (mode === "patch" && !diff()?.diff) void loadDiff(true, false, true);
     if (mode === "graph" && !diff()?.commits) void loadDiff(false, true, true);
-  };
-  let stopDetailResize: (() => void) | undefined;
-  const maxDetailHeight = () => Math.max(MIN_DETAIL_HEIGHT, (detailHost?.clientHeight || window.innerHeight) -
-    (detailHost?.querySelector<HTMLElement>(".workspace-detail-dock-header, .workspace-preview-header")?.offsetHeight || 32) -
-    MIN_DETAIL_HEIGHT);
-  const clampDetailHeight = (value: number) => Math.max(MIN_DETAIL_HEIGHT, Math.min(maxDetailHeight(), value));
-  const startDetailResize = (event: PointerEvent) => {
-    stopDetailResize?.();
-    event.preventDefault();
-    const startY = event.clientY;
-    const startHeight = detailHeight();
-    let pendingHeight = startHeight;
-    let frame = 0;
-    const apply = () => {
-      frame = 0;
-      setDetailHeight(clampDetailHeight(pendingHeight));
-    };
-    const move = (moveEvent: PointerEvent) => {
-      pendingHeight = startHeight + startY - moveEvent.clientY;
-      if (!frame) frame = requestAnimationFrame(apply);
-    };
-    const stop = () => {
-      if (frame) cancelAnimationFrame(frame);
-      const next = clampDetailHeight(pendingHeight);
-      setDetailHeight(next);
-      writeSetting(panelScope(), detailHeightName(), String(next));
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-      window.removeEventListener("pointercancel", stop);
-      document.body.classList.remove("workspace-detail-resizing");
-      stopDetailResize = undefined;
-    };
-    stopDetailResize = stop;
-    document.body.classList.add("workspace-detail-resizing");
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop, { once: true });
-    window.addEventListener("pointercancel", stop, { once: true });
-  };
-  const resizeDetailByKey = (event: KeyboardEvent) => {
-    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
-    event.preventDefault();
-    const next = event.key === "Home"
-      ? MIN_DETAIL_HEIGHT
-      : event.key === "End"
-        ? maxDetailHeight()
-        : clampDetailHeight(detailHeight() + (event.key === "ArrowUp" ? 16 : -16));
-    setDetailHeight(next);
-    writeSetting(panelScope(), detailHeightName(), String(next));
   };
   const loadDirectory = async (directory = "", background = false, more = false) => {
     if (background && requests.has(`directory:${directory}`)) return false;
@@ -763,9 +594,13 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const isFileOpen = (path: string) => openPaths().primary === path || openPaths().secondary === path;
   const slotForPath = (path: string): FileSlotId | null =>
     openPaths().primary === path ? "primary" : openPaths().secondary === path ? "secondary" : null;
-  const setSlotPath = (slot: FileSlotId, path: string | null) => {
+  const setDisplayedSlotPath = (slot: FileSlotId, path: string | null) => {
     setTemporaryComparisons((current) => ({ ...current, [slot]: undefined }));
     setOpenPaths((current) => ({ ...current, [slot]: path }));
+  };
+  const setSlotPath = (slot: FileSlotId, path: string | null) => {
+    setDisplayedSlotPath(slot, path);
+    setFileOpenPaths((current) => ({ ...current, [slot]: path }));
     writeSetting(fileScope(), slot === "primary" ? "file" : "file-secondary", path);
   };
   // Only the slot being retargeted can lose a draft, so editing on one side is
@@ -785,62 +620,136 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     setFocusedSlot(slot);
     return true;
   };
-  const openComparisonInFiles = (comparison: ComparisonPayload, viewState: ComparisonViewState, origin?: TemporaryComparison["origin"]) => {
-    const slot = slotForPath(comparison.path) ?? focusedSlot();
+  let reviewNavigation = 0;
+  const presentComparison = (slot: FileSlotId) => {
+    const comparison = review.comparison();
+    if (!comparison) {
+      if (review.error()) reportError(review.error());
+      else if (!slotHandles.get(slot)?.hasUnsavedChanges()) setDisplayedSlotPath(slot, null);
+      return;
+    }
     const handle = slotHandles.get(slot);
     if (handle?.hasUnsavedChanges()) {
       if (!window.confirm("Discard unsaved changes and open this comparison?")) return;
       handle.discardChanges();
     }
-    if (!openInSlot(slot, comparison.path)) return;
-    setFileNavigation(null);
-    setTemporaryComparisons((current) => ({ ...current, [slot]: { projectId: props.projectId(), comparison, viewState: { ...viewState, file: false }, origin } }));
-    selectTab("files");
-    setDetailOpen(true);
+    batch(() => {
+      setDisplayedSlotPath(slot, comparison.path);
+      setFocusedSlot(slot);
+      setFileNavigation(null);
+      setTemporaryComparisons((current) => ({ ...current, [slot]: {
+        projectId: props.projectId(), comparison, viewState: review.viewState(), label: review.rangeLabel(), sourceKey: review.sourceKey(),
+      } }));
+    });
+    setNavigatorOpen(false);
   };
-  const openArtifactFileInFiles = async (path: string) => {
-    await loadArtifactComparison(path);
-    const comparison = artifactComparison();
-    if (comparison?.path === path) openComparisonInFiles(comparison, artifactViewState(), "artifact");
+  const openReview = async (scope: DiffScope, path?: string, checkpoint: string | null = null) => {
+    const slot = (path ? slotForPath(path) : null) ?? focusedSlot();
+    const handle = slotHandles.get(slot);
+    if (handle?.hasUnsavedChanges()) {
+      if (!window.confirm("Discard unsaved changes and change the file view?")) return;
+      handle.discardChanges();
+    }
+    const request = ++reviewNavigation;
+    const projectId = props.projectId();
+    const chatId = props.artifactChatId?.();
+    const selected = path ?? openPaths()[slot] ?? undefined;
+    review.setScope(scope, checkpoint);
+    setFilesMode("diff");
+    if (!tabVisible("files")) setPaneTab(focusedPane(), "files");
+    setTreeCollapsed(false);
+    if (props.sourceControlEnabled() && (scope === "head" || scope === "changes" || scope === "staged") && !diff()) await loadDiff(false, false);
+    if (request !== reviewNavigation || props.projectId() !== projectId || props.artifactChatId?.() !== chatId) return;
+    await review.refresh(selected);
+    if (request !== reviewNavigation || props.projectId() !== projectId || props.artifactChatId?.() !== chatId) return;
+    presentComparison(slot);
   };
-  const openFileAgentTurn = async (path: string) => {
-    await loadFileAgentComparison(path);
-    const comparison = fileAgentReview.comparison();
-    if (comparison?.path === path) openComparisonInFiles(comparison, fileAgentReview.viewState(), "timeline");
+  const showFileMode = () => {
+    reviewNavigation += 1;
+    review.cancel();
+    batch(() => {
+      setFilesMode("file");
+      setTemporaryComparisons({});
+      setOpenPaths(fileOpenPaths());
+    });
   };
-  createEffect(() => {
-    const comparison = artifactComparison();
+  const filesStatusControls = () => <div class="workspace-files-status-controls">
+    <WorkbenchButton class="workspace-files-list-toggle" aria-label="Toggle file list" aria-pressed={filesWide() ? !treeCollapsed() : navigatorOpen()} onClick={() => filesWide() ? toggleTreeCollapsed() : setNavigatorOpen(!navigatorOpen())}><PanelLeftOpenIcon /></WorkbenchButton>
+    <div class="workspace-files-mode" role="tablist" aria-label="Files view">
+      <button type="button" role="tab" aria-label="File mode" aria-selected={filesMode() === "file"} onClick={showFileMode}>All files</button>
+      <button type="button" role="tab" aria-label="Diff mode" aria-selected={filesMode() === "diff"} onClick={() => void openReview(review.scope())}>Diff</button>
+    </div>
+  </div>;
+  type ReviewOpener = (scope: DiffScope, path?: string, checkpoint?: string | null) => void;
+  type WorkspaceReviewController = ReturnType<typeof createWorkspaceReview>;
+  const comparisonSourceControls = (source: WorkspaceReviewController = review, open: ReviewOpener = (scope, path, checkpoint) => void openReview(scope, path, checkpoint)) => <div class="workspace-comparison-source-controls">
+    <Menu>
+      <MenuTrigger class="workspace-scope-picker" aria-label="Comparison source">{diffScopes.find((scope) => scope.value === source.scope())?.label}<ChevronDownIcon /></MenuTrigger>
+      <MenuContent>
+        <MenuRadioGroup value={source.scope()} onChange={(value) => { if (isDiffScope(value)) open(value); }}>
+          <For each={diffScopes}>{(scope) => <MenuRadioItem value={scope.value} disabled={(scope.value === "chat" || scope.value === "turn") ? !props.artifactChatId?.() : !props.sourceControlEnabled()}>{scope.label}</MenuRadioItem>}</For>
+        </MenuRadioGroup>
+      </MenuContent>
+    </Menu>
+    <Show when={source.scope() === "chat" || source.scope() === "turn"}>
+      <div class="workspace-turn-navigation" aria-label="Turn navigation">
+        <WorkbenchButton aria-label="Older turn" title="Older turn" disabled={source.loading() || source.turnIndex() >= source.timeline().length - 1} onClick={() => moveReviewTurn(source, 1, open)}><ChevronLeftIcon /></WorkbenchButton>
+        <Menu>
+          <MenuTrigger class="workspace-scope-picker" aria-label="Select turn">{source.turnIndex() === 0 ? "Latest turn" : `${source.scope() === "chat" ? "Through turn" : "Turn"} ${source.timeline().length - source.turnIndex()}`}<ChevronDownIcon /></MenuTrigger>
+          <MenuContent><For each={source.timeline()}>{(turn, index) => <MenuItem onSelect={() => open(source.scope(), undefined, index() === 0 ? null : turn.id)}>{index() === 0 ? "Latest turn" : `${source.scope() === "chat" ? "Through turn" : "Turn"} ${source.timeline().length - index()}`} · {new Date(turn.createdAt).toLocaleTimeString()}</MenuItem>}</For></MenuContent>
+        </Menu>
+        <WorkbenchButton aria-label="Newer turn" title="Newer turn" disabled={source.loading() || source.turnIndex() <= 0} onClick={() => moveReviewTurn(source, -1, open)}><ChevronRightIcon /></WorkbenchButton>
+      </div>
+    </Show>
+    <Show when={source.loading()}><Spinner /></Show>
+    <Show when={source.error()}><WorkbenchButton class="workspace-review-retry" title={source.error()} onClick={() => open(source.scope(), undefined, source.checkpointId())}>Retry</WorkbenchButton></Show>
+  </div>;
+  const selectReviewFile = async (path: string) => {
+    const slot = focusedSlot();
+    const handle = slotHandles.get(slot);
+    if (handle?.hasUnsavedChanges()) {
+      if (!window.confirm("Discard unsaved changes and open this comparison?")) return;
+      handle.discardChanges();
+    }
+    const request = ++reviewNavigation;
+    await review.select(path);
+    if (request === reviewNavigation) presentComparison(slot);
+  };
+  const moveReviewTurn = (source: WorkspaceReviewController, offset: number, open: ReviewOpener = (scope, path, checkpoint) => void openReview(scope, path, checkpoint)) => {
+    const index = source.turnIndex() + offset;
+    const checkpoint = source.timeline()[index];
+    if (checkpoint) open(source.scope(), undefined, index === 0 ? null : checkpoint.id);
+  };
+  const openEmbeddedReview: ReviewOpener = (scope, _path, checkpoint = null) => {
+    chatReview.setScope(scope, checkpoint);
+    void chatReview.refresh();
+  };
+  const showAgentChanges = () => {
+    setArtifactMode("changes");
+    openEmbeddedReview("chat");
+  };
+  const selectEmbeddedReviewFile = (path: string) => {
+    void chatReview.select(path);
+  };
+  const openEmbeddedSourceReview: ReviewOpener = (scope, _path, checkpoint = null) => {
+    sourceReview.setScope(scope, checkpoint);
+    void sourceReview.refresh();
+  };
+  const inspectFileDiff = (path: string, staged: boolean) => void openReview(staged ? "staged" : "changes", path);
+  const refreshReview = async () => {
+    await review.refresh();
+    const comparison = review.comparison();
     if (!comparison) return;
     setTemporaryComparisons((current) => {
-      let changed = false;
       const next = { ...current };
       for (const slot of ["primary", "secondary"] as const) {
         const entry = current[slot];
-        if (entry?.projectId !== props.projectId() || entry.origin !== "artifact" || entry.comparison.path !== comparison.path) continue;
-        next[slot] = { ...entry, comparison };
-        changed = true;
+        if (entry?.projectId === props.projectId() && entry.comparison.path === comparison.path && entry.sourceKey === review.sourceKey()) {
+          next[slot] = { ...entry, comparison };
+        }
       }
-      return changed ? next : current;
+      return next;
     });
-  });
-  createEffect(() => {
-    const comparison = fileAgentReview.comparison();
-    if (!comparison) return;
-    setTemporaryComparisons((current) => {
-      let changed = false;
-      const next = { ...current };
-      for (const slot of ["primary", "secondary"] as const) {
-        const entry = current[slot];
-        if (entry?.projectId !== props.projectId() || entry.origin !== "timeline" || entry.comparison.path !== comparison.path) continue;
-        next[slot] = { ...entry, comparison };
-        changed = true;
-      }
-      return changed ? next : current;
-    });
-  });
-  const openComparisonFile = (viewState: ComparisonViewState) => {
-    const comparison = fileComparison();
-    if (comparison) openComparisonInFiles(comparison, viewState);
   };
   const editComparisonFile = async (slot: FileSlotId, source: string, position: number) => {
     const temporary = comparisonFor(slot);
@@ -853,29 +762,23 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       await api(`/v0/projects/${encodeURIComponent(projectId)}/file?path=${encodeURIComponent(path)}&metadata=1`);
       if (props.projectId() !== projectId || comparisonFor(slot) !== temporary) return;
       setFileNavigation({ projectId, slot, path, source, position });
+      setFilesMode("file");
+      setFileOpenPaths((current) => ({ ...current, [slot]: path }));
+      writeSetting(fileScope(), slot === "primary" ? "file" : "file-secondary", path);
       setTemporaryComparisons((current) => ({ ...current, [slot]: undefined }));
       setFocusedSlot(slot);
     } catch (cause) {
       reportError(errorCode(cause) === "path_not_found" ? "This file no longer exists in the working copy." : (cause as Error).message);
     }
   };
-  const showFileDiff = async (slot: FileSlotId, staged: boolean) => {
+  const showFileDiff = (slot: FileSlotId, staged: boolean) => {
     const path = openPaths()[slot];
-    const projectId = props.projectId();
-    if (!path) return;
-    try {
-      const comparison = await api<ComparisonPayload>(`/v0/projects/${encodeURIComponent(projectId)}/diff?compare=1&path=${encodeURIComponent(path)}&scope=${staged ? "staged" : "changes"}`);
-      if (props.projectId() !== projectId || openPaths()[slot] !== path) return;
-      const handle = slotHandles.get(slot);
-      if (handle?.hasUnsavedChanges()) {
-        if (!window.confirm("Discard unsaved changes and show the saved file's diff?")) return;
-        handle.discardChanges();
-      }
-      setFileNavigation(null);
-      setTemporaryComparisons((current) => ({ ...current, [slot]: { projectId, comparison, viewState: { layout: "unified", file: false, wrap: wrapLines(), top: 0, left: 0, position: 0 } } }));
-    } catch (cause) { reportError((cause as Error).message); }
+    if (path) { setFocusedSlot(slot); void openReview(staged ? "staged" : "changes", path); }
   };
-  const openFile = (path: string) => openInSlot(focusedSlot(), path);
+  const openFile = (path: string) => {
+    if (filesMode() === "diff") showFileMode();
+    if (openInSlot(focusedSlot(), path)) setNavigatorOpen(false);
+  };
   const openFileToSide = (path: string) => openInSlot("secondary", path);
   let pendingEdit: string | null = null;
   const editFile = (path: string) => {
@@ -1195,8 +1098,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       setDiff(null);
       cacheWorkspace(projectId, { diff: null });
     }
-    if (tabVisible("artifacts") && artifactMode() === "changes") await loadTurnArtifact();
-    if (tabVisible("files") && fileNavigatorMode() === "agent-changes") await loadFileAgentTimeline();
+    if (tabVisible("files") && filesMode() === "diff") await refreshReview();
   };
   const pollWorkspace = async () => {
     if (pollingWorkspace || uploading()) return true;
@@ -1240,10 +1142,13 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     setWorkspaceStale(false);
     setPollRetry((attempt) => attempt + 1);
   };
-  const loadDiff = async (includePatch = false, includeHistory = false, reuse = false, background = false) => {
-    if (!props.sourceControlEnabled()) return;
-    const { request, controller } = startRequest("diff", !background);
-    try {
+  let diffLoadPromise: Promise<void> | undefined;
+  const loadDiff = (includePatch = false, includeHistory = false, reuse = false, background = false): Promise<void> => {
+    if (!props.sourceControlEnabled()) return Promise.resolve();
+    if (diffLoadPromise && !includePatch && !includeHistory) return diffLoadPromise;
+    const load = async () => {
+      const { request, controller } = startRequest("diff", !background);
+      try {
       const endpoint = `/v0/projects/${encodeURIComponent(request.projectId)}/diff`;
       // Show the first status before waiting for history or a full patch.
       if (!diff() && (includePatch || includeHistory)) {
@@ -1264,13 +1169,15 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         setDiff(next);
         cacheWorkspace(request.projectId, { diff: next });
       }
-    }
-    catch (cause) {
-      if (ownsRequest(request) && !wasAborted(cause)) reportError((cause as Error).message);
-    }
-    finally {
-      finishRequest(request);
-    }
+      } catch (cause) {
+        if (ownsRequest(request) && !wasAborted(cause)) reportError((cause as Error).message);
+      } finally {
+        finishRequest(request);
+      }
+    };
+    const promise = load().finally(() => { if (diffLoadPromise === promise) diffLoadPromise = undefined; });
+    diffLoadPromise = promise;
+    return promise;
   };
   const inspectCommit = async (commit: GitCommit) => {
     selectSourceControlMode("patch");
@@ -1443,7 +1350,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   onCleanup(() => {
     resetRequestScope();
     stopResize?.();
-      stopDetailResize?.();
     filesResizeObserver?.disconnect();
     splitResizeObserver?.disconnect();
     document.removeEventListener("visibilitychange", updateDocumentVisibility);
@@ -1461,6 +1367,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   let geometryProjectId = "";
   createEffect(on(() => [props.chatId(), props.projectId()] as const, () => {
     const nextTab = storedTab();
+    reviewNavigation += 1;
+    review.setScope("head");
+    setFilesMode("file");
+    setTemporaryComparisons({});
     const projectChanged = geometryProjectId !== projectScope();
     if (projectChanged) {
       geometryProjectId = projectScope();
@@ -1468,9 +1378,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     }
     let pendingWidthCommit: number | null = null;
     batch(() => {
-      setDetailOpen(detailOpenFor(nextTab) === "true");
       setSourceControlMode(storedSourceControlMode());
-      setDetailHeight(Math.max(MIN_DETAIL_HEIGHT, Number(readSetting(panelScope(), `${nextTab}:detail-height`)) || 288));
       setCommitDetail(null);
       if (projectChanged) {
         pendingWidthCommit = Number(readSetting(projectScope(), "width")) || 336;
@@ -1483,7 +1391,9 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       setTab(nextTab);
       setSecondaryTab(storedSecondary());
       setKeptVisible(storedPaths(props.projectId(), "kept-visible"));
-      setOpenPaths(storedOpenFiles());
+      const storedFiles = storedOpenFiles();
+      setOpenPaths(storedFiles);
+      setFileOpenPaths(storedFiles);
       setFocusedSlot("primary");
     });
     if (pendingWidthCommit != null) commitWidth(pendingWidthCommit);
@@ -1495,7 +1405,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     if (request && request !== previous && props.open()) focusTabDefault(tab());
   }));
   createEffect(on(
-    () => [props.projectId(), tab(), secondaryTab(), props.open(), props.expanded(), sourceControlMode(), fileNavigatorMode()] as const,
+    () => [props.projectId(), tab(), secondaryTab(), props.open(), props.expanded(), sourceControlMode()] as const,
     ([projectId, activeTab, companionTab, open, panelExpanded]) => {
       if (!open) return;
       const projectChanged = loadedProjectId !== projectId;
@@ -1526,8 +1436,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         const needsHistory = diffVisible && includeHistory;
         if (!current || (needsPatch && !current.diff) || (needsHistory && !current.commits)) void loadDiff(needsPatch, needsHistory, Boolean(current));
       }
-      if (artifactsVisible && artifactMode() === "changes") void loadTurnArtifact();
-      if (filesVisible && fileNavigatorMode() === "agent-changes") void loadFileAgentTimeline();
+      if (artifactsVisible && artifactMode() === "history") void loadHistory();
     }));
 
   createEffect(on(() => props.initialDirectory?.(), (listing) => {
@@ -1867,7 +1776,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     <Show when={tabVisible("files")}>
       <div
         ref={(element) => {
-          detailHost = element;
           filesResizeObserver?.disconnect();
           const updateWideState = (width: number) =>
             setFilesWide(!isMobileLayout() && width >= (props.expanded() ? 520 : WIDE_FILES_MIN_WIDTH));
@@ -1889,23 +1797,16 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         data-position={panePosition("files")}
         data-wide={filesWide()}
         data-files={openPaths().secondary ? "2" : "1"}
-        data-tree-collapsed={treeCollapsed() && fileNavigatorMode() === "explorer"}
+        data-tree-collapsed={treeCollapsed()}
+        data-navigator-open={navigatorOpen()}
         style={{
           "--workspace-tree-width": `${treeWidth()}px`,
           "--workspace-file-a": `${fileSplitRatio()}fr`,
           "--workspace-file-b": `${100 - fileSplitRatio()}fr`,
         }}
       >
-        <Show when={filesWide() && treeCollapsed()}>
-          <div class="workspace-tree-collapsed-rail"><button type="button" aria-label="Show file tree" title="Show file tree" onClick={toggleTreeCollapsed}><PanelLeftOpenIcon /></button></div>
-        </Show>
         <div class="workspace-tree-pane">
           <div class="workspace-tree-tools workspace-tree-search">
-            <div class="workspace-tree-modes" role="radiogroup" aria-label="File navigator">
-              <button type="button" role="radio" aria-label="Explore files" aria-checked={fileNavigatorMode() === "explorer"} title="Explore files" onClick={() => setFileNavigatorMode("explorer")}><FolderIcon /></button>
-              <button type="button" role="radio" aria-label="Review agent changes" aria-checked={fileNavigatorMode() === "agent-changes"} title="Review agent changes" onClick={() => setFileNavigatorMode("agent-changes")}><GitCompareArrowsIcon /></button>
-            </div>
-            <Show when={fileNavigatorMode() === "explorer"}>
             <label class="workspace-tree-filter">
               <SearchIcon />
               <input
@@ -1919,18 +1820,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
                 onKeyDown={onFileFilterKeyDown}
               />
             </label>
-            </Show>
           </div>
           <Show when={workspaceStale()}><div class="workspace-freshness-notice" role="status" aria-live="polite"><span>Not updating</span><span aria-hidden="true">·</span><button type="button" onClick={retryWorkspacePoll}>Retry</button></div></Show>
-          <Show when={fileNavigatorMode() === "explorer"} fallback={<>
-            <WorkspaceReviewNavigator title="Agent changes" files={(fileAgentArtifact()?.files || []).map((file) => ({ path: file.path, status: file.status }))} selectedPath={fileAgentReview.selectedPath()} empty="No agent changes for this turn." onSelect={(path) => void openFileAgentTurn(path)} />
-            <div class="workspace-agent-timeline" role="toolbar" aria-label="Agent turn timeline">
-              <Show when={fileAgentSkippedLatest()}><span title="Current turn has no file changes">No changes now</span></Show>
-              <button type="button" aria-label="Older turn" title="Older turn" disabled={fileAgentOffset() >= fileAgentTimeline().length - 1} onClick={() => moveFileAgentTimeline(1)}><ChevronLeftIcon /></button>
-              <span title={fileAgentTimeline()[fileAgentOffset()]?.createdAt}>{fileAgentTimeline().length ? `Turn ${fileAgentOffset() === 0 ? "0" : `−${fileAgentOffset()}`}` : "No turns"}</span>
-              <button type="button" aria-label="Newer turn" title="Newer turn" disabled={fileAgentOffset() === 0} onClick={() => moveFileAgentTimeline(-1)}><ChevronRightIcon /></button>
-            </div>
-          </>
+          <Show when={filesMode() === "file"} fallback={
+            <WorkspaceReviewNavigator title="Changed files" files={review.files().filter((file) => file.path.toLowerCase().includes(fileFilter().toLowerCase()))} selectedPath={review.selectedPath()} empty={review.error() || (review.loading() ? "Loading changes…" : "No changes in this scope.")} onSelect={(path) => void selectReviewFile(path)} />
           }>
           <nav ref={(element) => {
             treeElement = element;
@@ -1941,7 +1834,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             <Show when={directories()[""] && !directories()[""]?.oversize && visibleEntries("").length === 0}><div class="workspace-tree-empty">{fileFilter() ? "No loaded files match this filter." : "No files to show."}</div></Show>
           </nav>
           </Show>
-          <Show when={fileNavigatorMode() === "explorer"}>
+          <Show when={filesMode() === "file"}>
           <div class="workspace-tree-tools workspace-tree-actions" role="toolbar" aria-label="File tree actions">
             <button type="button" aria-label="New file" title="Create a file in the workspace root" disabled={uploading()} onClick={() => void createFile()}><FilePlusIcon /></button>
             <button type="button" aria-label="New folder" title="Create a folder in the workspace root" disabled={uploading()} onClick={() => void createDirectory()}><FolderPlusIcon /></button>
@@ -1974,25 +1867,17 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             }}
           />
         </Show>
-        <Show when={!filesWide() && !detailOpen()}>
-          <div class="workspace-detail-dock-header">
-            <button type="button" class="workspace-detail-disclosure" aria-expanded={false} onClick={toggleDetail}><ChevronDownIcon data-open={false} /><span>File preview</span></button>
-          </div>
-        </Show>
-        <Show when={filesWide() || detailOpen()}><>
           <WorkspaceFileSlot
             projectId={props.projectId()}
             path={openPaths().primary}
+            empty={filesMode() === "diff" ? review.error() || (review.loading() ? "Loading changes…" : "No changes in this scope.") : undefined}
             slot="primary"
             focused={focusedSlot() === "primary" && Boolean(openPaths().secondary)}
             closable={Boolean(openPaths().primary)}
             busy={uploading()}
             wrap={wrapLines()}
-            headerPrefix={!filesWide() ? <div class="workspace-detail-dock-prefix">
-              <div class="workspace-detail-resize-handle" role="separator" aria-label="Resize file preview" aria-orientation="horizontal" aria-valuemin={MIN_DETAIL_HEIGHT} aria-valuemax={maxDetailHeight()} aria-valuenow={detailHeight()} tabIndex={0} onPointerDown={startDetailResize} onKeyDown={resizeDetailByKey} />
-              <button type="button" class="workspace-detail-disclosure" aria-expanded={detailOpen()} onClick={toggleDetail}><ChevronDownIcon data-open={detailOpen()} /><span>File preview</span></button>
-            </div> : undefined}
-            height={filesWide() ? undefined : `${detailHeight() / (openPaths().secondary ? 2 : 1)}px`}
+            statusPrefix={focusedSlot() === "primary" || !openPaths().secondary ? filesStatusControls() : undefined}
+            comparisonSource={filesMode() === "diff" && (focusedSlot() === "primary" || !openPaths().secondary) ? comparisonSourceControls() : undefined}
             onToggleWrap={toggleWrapLines}
             onFocus={() => setFocusedSlot("primary")}
             onClose={() => closeSlot("primary")}
@@ -2003,11 +1888,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             onLoaded={(file) => noteSlotLoaded("primary", file)}
             navigation={navigationFor("primary")}
             comparison={comparisonFor("primary")}
-            comparisonFooterControl={comparisonFor("primary")?.origin === "artifact" ? artifactBaselineControl() : undefined}
-            comparisonLabel={comparisonFor("primary")?.origin === "timeline" && fileAgentOffset() > 0 ? "Turn start → Turn end" : undefined}
+            comparisonLabel={comparisonFor("primary")?.label}
+            onComparisonViewStateChange={(state) => saveComparisonView("primary", state)}
             gitFile={props.sourceControlEnabled() ? diff()?.files.find((file) => file.path === openPaths().primary) : undefined}
             onShowDiff={(staged) => void showFileDiff("primary", staged)}
-            onShowFile={() => { setFileNavigation(null); setTemporaryComparisons((current) => ({ ...current, primary: undefined })); }}
             onRestoreComparison={(comparison) => setTemporaryComparisons((current) => ({ ...current, primary: { ...comparison, projectId: props.projectId() } }))}
             onEditComparison={(source, position) => void editComparisonFile("primary", source, position)}
             onNavigated={() => setFileNavigation(null)}
@@ -2032,7 +1916,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
               closable
               busy={uploading()}
               wrap={wrapLines()}
-              height={filesWide() ? undefined : `${detailHeight() / 2}px`}
+              statusPrefix={focusedSlot() === "secondary" ? filesStatusControls() : undefined}
+              comparisonSource={filesMode() === "diff" && focusedSlot() === "secondary" ? comparisonSourceControls() : undefined}
               onToggleWrap={toggleWrapLines}
               onFocus={() => setFocusedSlot("secondary")}
               onClose={() => closeSlot("secondary")}
@@ -2043,11 +1928,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
               onLoaded={(file) => noteSlotLoaded("secondary", file)}
               navigation={navigationFor("secondary")}
               comparison={comparisonFor("secondary")}
-              comparisonFooterControl={comparisonFor("secondary")?.origin === "artifact" ? artifactBaselineControl() : undefined}
-              comparisonLabel={comparisonFor("secondary")?.origin === "timeline" && fileAgentOffset() > 0 ? "Turn start → Turn end" : undefined}
+              comparisonLabel={comparisonFor("secondary")?.label}
+              onComparisonViewStateChange={(state) => saveComparisonView("secondary", state)}
               gitFile={props.sourceControlEnabled() ? diff()?.files.find((file) => file.path === openPaths().secondary) : undefined}
               onShowDiff={(staged) => void showFileDiff("secondary", staged)}
-              onShowFile={() => { setFileNavigation(null); setTemporaryComparisons((current) => ({ ...current, secondary: undefined })); }}
               onRestoreComparison={(comparison) => setTemporaryComparisons((current) => ({ ...current, secondary: { ...comparison, projectId: props.projectId() } }))}
               onEditComparison={(source, position) => void editComparisonFile("secondary", source, position)}
               onNavigated={() => setFileNavigation(null)}
@@ -2056,18 +1940,17 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
               onDispose={() => slotHandles.delete("secondary")}
             />
           </Show>
-        </></Show>
       </div>
     </Show>
     <Show when={tabVisible("diff")}><section class="workspace-diff" data-position={panePosition("diff")}>
       <header class="workspace-detail-dock-header workspace-source-header">
         <div class="workspace-source-modes" role="tablist" aria-label="Source Control">
           <button type="button" role="tab" aria-selected={sourceControlMode() === "changes"} onClick={() => selectSourceControlMode("changes")}><CheckIcon />Changes</button>
-          <button type="button" role="tab" aria-selected={sourceControlMode() === "review"} onClick={beginReview}><GitCompareArrowsIcon />Review</button>
+          <button type="button" role="tab" aria-selected={sourceControlMode() === "review"} onClick={() => selectSourceControlMode("review")}><GitCompareArrowsIcon />Review</button>
           <button type="button" role="tab" aria-selected={sourceControlMode() === "graph"} onClick={() => selectSourceControlMode("graph")}><GitCommitHorizontalIcon />Graph</button>
           <button type="button" role="tab" aria-selected={sourceControlMode() === "patch"} onClick={() => selectSourceControlMode("patch")}><FileDiffIcon />Patch</button>
         </div>
-        <small>{sourceControlMode() === "review" ? `${reviewFiles().length} changed` : sourceControlMode() === "graph" ? `${diff()?.commits?.length || 0} recent` : `${diff()?.files.length || 0} changed`}</small>
+        <small>{sourceControlMode() === "graph" ? `${diff()?.commits?.length || 0} recent` : `${diff()?.files.length || 0} changed`}</small>
         <div class="workspace-source-actions">
           <button type="button" aria-label="Fetch all remotes" title="Fetch all remotes" disabled={Boolean(gitAction())} onClick={() => void runGitAction("fetch")}><Show when={gitAction() === "fetch"} fallback={<RefreshCwIcon />}><Spinner /></Show><span>Fetch</span></button>
           <button type="button" aria-label="Pull current branch" title="Pull current branch (fast-forward only)" disabled={!diff()?.upstream || Boolean(gitAction())} onClick={() => void runGitAction("pull")}><DownloadIcon /><span>Pull</span></button>
@@ -2108,16 +1991,22 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       </Show>
       </div>
       </Show>
-        <Show when={sourceControlMode() === "review"}><WorkspaceReview title="Working changes" files={reviewViewFiles()} selectedPath={sourceReview.selectedPath() ?? null} comparison={fileComparison()} viewState={comparisonViewState()} onViewStateChange={sourceReview.setViewState} busy={fileDiffBusy()} empty={fileDiffError() || "No changed files to review."} onSelect={(path) => { const file = reviewFiles().find((item) => item.path === path); if (file) inspectFileDiff(path, file.status[0] !== " " && file.status[0] !== "?"); }} onOpenFile={(_comparison, state) => openComparisonFile(state)} /></Show>
+      <Show when={sourceControlMode() === "review"}><div class="workspace-artifact-review">
+        <WorkspaceReviewNavigator title="Changed files" files={sourceReview.files()} selectedPath={sourceReview.selectedPath()} empty={sourceReview.error() || (sourceReview.loading() ? "Loading changes…" : "No uncommitted changes.")} onSelect={(path) => void sourceReview.select(path)} />
+        <div class="workspace-review-comparison"><Show when={sourceReview.comparison()} fallback={<div class="workspace-panel-empty">{sourceReview.loading() ? "Loading changes…" : "Select a changed file."}</div>}>{(comparison) => <Suspense fallback={<div class="workspace-panel-empty">Loading comparison…</div>}><WorkspaceComparison comparison={comparison()} sourceKey={sourceReview.sourceKey()} viewState={sourceReview.viewState()} comparisonSource={comparisonSourceControls(sourceReview, openEmbeddedSourceReview)} comparisonLabel={sourceReview.rangeLabel()} onViewStateChange={sourceReview.setViewState} /></Suspense>}</Show></div>
+      </div></Show>
         <Show when={sourceControlMode() === "graph" || sourceControlMode() === "patch"}><Show when={sourceControlMode() === "patch"} fallback={<Show when={Boolean(diff()?.commits?.length)} fallback={<div class="workspace-panel-empty">No commit history available.</div>}><CommitHistory commits={diff()?.commits || []} refs={diff()?.refs || []} branch={diff()?.branch} onCopy={copy} onInspect={inspectCommit} /></Show>}>
           <div class="workspace-patch"><Show when={commitDetailLoading()} fallback={<Show when={commitDetail()} fallback={<Show when={diff()?.diff} fallback={<div class="workspace-panel-empty">{diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</div>}>{(content) => <PatchView content={content()} />}</Show>}>{(detail) => <PatchView content={detail().content} />}</Show>}><div class="workspace-panel-empty">Loading commit…</div></Show></div>
         </Show></Show>
     </section></Show>
     <Show when={tabVisible("artifacts")}><section class="workspace-artifacts" data-position={panePosition("artifacts")}>
-      <div class="workspace-artifact-modes" role="radiogroup" aria-label="Artifact modality"><div><button role="radio" aria-checked={artifactMode() === "changes"} onClick={() => { setArtifactMode("changes"); void loadTurnArtifact(); }}>Agent changes</button><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div></div>
-      <Show when={artifactMode() === "changes"} fallback={<div class="workspace-panel-empty"><div><BoxesIcon /><strong>{artifactMode() === "outputs" ? "No artifacts in the loaded transcript" : "Interactive artifacts are not enabled"}</strong><p>{artifactMode() === "outputs" ? "Code blocks and file outputs will appear here as transcript artifact projection lands." : "This boundary is reserved for sandboxed, explicitly trusted generated interfaces."}</p></div></div>}>
-        <WorkspaceReview full title="Agent changes" files={(turnArtifact()?.files || []).map((file) => ({ path: file.path, status: file.status }))} selectedPath={artifactPath()} comparison={artifactComparison()} viewState={artifactViewState()} onViewStateChange={artifactReview.setViewState} busy={artifactBusy()} empty={artifactBaseline() === "turn" ? "No agent changes in this turn." : "No agent changes in this chat."} footerControl={artifactBaselineControl()} comparisonLabel={artifactBaseline() === "turn" && artifactOffset() > 0 ? "Turn start → Turn end" : undefined} onSelect={selectArtifactFile} onOpenFile={openComparisonInFiles} />
-      </Show>
+      <div class="workspace-artifact-modes" role="radiogroup" aria-label="Chat view"><div><Show when={props.historyAvailable?.()}><button role="radio" aria-checked={artifactMode() === "history"} onClick={() => { setArtifactMode("history"); void loadHistory(); }}>History</button></Show><button role="radio" aria-checked={artifactMode() === "changes"} onClick={showAgentChanges}>Agent changes</button><button role="radio" aria-checked={artifactMode() === "outputs"} onClick={() => setArtifactMode("outputs")}>Outputs</button><button role="radio" aria-checked={artifactMode() === "interactive"} onClick={() => setArtifactMode("interactive")}>Interactive UI</button></div></div>
+      <Show when={artifactMode() === "history"}><Show when={!historyLoading()} fallback={<div class="workspace-panel-empty">Loading history…</div>}><Show when={historyTree()?.tree.length} fallback={<div class="workspace-panel-empty"><div><HistoryIcon /><strong>No chat history</strong><p>Send a message to start this tree.</p></div></div>}><div class="workspace-chat-history" role="tree" aria-label="Chat history"><HistoryNodes nodes={historyTree()!.tree} activePath={historyActivePath()} leafId={historyTree()!.leafId} /></div></Show></Show></Show>
+      <Show when={artifactMode() === "changes"}><div class="workspace-artifact-review">
+        <WorkspaceReviewNavigator title="Changed files" files={chatReview.files()} selectedPath={chatReview.selectedPath()} empty={chatReview.error() || (chatReview.loading() ? "Loading changes…" : "No changes in this scope.")} onSelect={selectEmbeddedReviewFile} />
+        <div class="workspace-review-comparison"><Show when={chatReview.comparison()} fallback={<div class="workspace-panel-empty">{chatReview.loading() ? "Loading changes…" : "Select a changed file."}</div>}>{(comparison) => <Suspense fallback={<div class="workspace-panel-empty">Loading comparison…</div>}><WorkspaceComparison comparison={comparison()} sourceKey={chatReview.sourceKey()} viewState={chatReview.viewState()} comparisonSource={comparisonSourceControls(chatReview, openEmbeddedReview)} comparisonLabel={chatReview.rangeLabel()} onViewStateChange={chatReview.setViewState} /></Suspense>}</Show></div>
+      </div></Show>
+      <Show when={artifactMode() === "outputs" || artifactMode() === "interactive"}><div class="workspace-panel-empty"><div><BoxesIcon /><strong>{artifactMode() === "outputs" ? "No artifacts in the loaded transcript" : "Interactive artifacts are not enabled"}</strong><p>{artifactMode() === "outputs" ? "Code blocks and file outputs will appear here as transcript artifact projection lands." : "This boundary is reserved for sandboxed, explicitly trusted generated interfaces."}</p></div></div></Show>
     </section></Show>
     <Show when={tabVisible("terminal")}><section class="workspace-terminal-slot" data-position={panePosition("terminal")}><TerminalPane projectId={props.settingsScope?.() === "computer" ? "computer" : props.projectId()} projectName={props.settingsScope?.() === "computer" ? "Computer" : props.projectName()} workingRoot={props.settingsScope?.() === "computer" ? props.workingRoot() : undefined} terminalId={props.requestedTab?.()?.terminalId} focusRequest={terminalFocusRequest()} /></section></Show>
     </main>

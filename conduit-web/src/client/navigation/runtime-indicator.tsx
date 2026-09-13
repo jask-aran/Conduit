@@ -1,4 +1,4 @@
-import { Show } from "solid-js";
+import { Show, type JSX } from "solid-js";
 import { activityLabel } from "../../activity.js";
 import { Spinner, Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives";
 import { cn } from "@/lib/utils";
@@ -31,18 +31,19 @@ const TONES: Record<string, string> = {
 const SPINNING = new Set(["starting", "stopping", "working", "compacting"]);
 
 /** Compact accessible process/activity indicator for sidebar rows, matching main. */
-export function RuntimeIndicator(props: { process?: RuntimeProcess | null; stale?: boolean; unread?: boolean; class?: string }) {
+export function RuntimeIndicator(props: { process?: RuntimeProcess | null; stale?: boolean; unread?: boolean; hideIdle?: boolean; class?: string; fallback?: JSX.Element }) {
   const visible = () => {
     const process = props.process;
     if (!process || process.status === "stopped" || process.status === "none") return false;
     const activity = activityOf(process);
+    if (props.hideIdle && activity === "idle") return false;
     if (activity === "idle" && process.status !== "running" && !process.active) return false;
     return true;
   };
   const activity = () => activityOf(props.process) || "idle";
   const label = () => activityLabel(activity(), activityDetail(props.process));
   const tone = () => TONES[activity()] || "muted";
-  return <Show when={props.unread} fallback={<Show when={visible()}><Tooltip>
+  return <Show when={props.unread} fallback={<Show when={visible()} fallback={props.fallback}><Tooltip>
       <TooltipTrigger as="span"
         class={cn("runtime-indicator", `runtime-indicator-${tone()}`, props.stale && "runtime-indicator-stale", props.class)}
         role="status"

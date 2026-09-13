@@ -20,6 +20,7 @@ function context(projects, chatId = null) {
     thinkingLevels: [],
     canRegenerate: false,
     canContinue: false,
+    canCompact: false,
     canCopy: false,
   };
 }
@@ -90,6 +91,15 @@ test("native palette hides service-worker actions", () => {
   const ids = resolvePaletteCommands(nativeContext).map((command) => command.id);
   assert.ok(!ids.includes(COMMAND_IDS.updateApp));
   assert.ok(!ids.includes(COMMAND_IDS.resetAppCache));
+});
+
+test("root palette exposes compaction only when the backend can compact", () => {
+  assert.ok(!resolvePaletteCommands(context([], "chat-1")).some((command) => command.id === COMMAND_IDS.compactContext));
+  const compact = resolvePaletteCommands({ ...context([], "chat-1"), canCompact: true })
+    .find((command) => command.id === COMMAND_IDS.compactContext);
+  let calls = 0;
+  compact?.run({ compact: () => { calls += 1; } });
+  assert.equal(calls, 1);
 });
 
 test("chat date sections use local calendar boundaries", () => {

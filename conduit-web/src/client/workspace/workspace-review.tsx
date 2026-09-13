@@ -1,10 +1,7 @@
-import { WorkbenchButton, WorkbenchStatus } from "./workspace-workbench";
+import { WorkbenchButton } from "./workspace-workbench";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-solid";
-import { For, lazy, Show, Suspense, type JSX } from "solid-js";
+import { For, Show } from "solid-js";
 import { FileTypeIcon } from "./file-type-icon";
-import type { ComparisonPayload, ComparisonViewState } from "./workspace-comparison";
-
-const WorkspaceComparison = lazy(() => import("./workspace-comparison"));
 
 export interface WorkspaceReviewFile {
   path: string;
@@ -26,11 +23,4 @@ export function WorkspaceReviewNavigator(props: { title: string; files: Workspac
         return <div class="workspace-change-row" data-selected={file.path === props.selectedPath}><WorkbenchButton type="button" aria-current={file.path === props.selectedPath ? "true" : undefined} title={`Review ${file.path}`} onClick={() => props.onSelect(file.path)}><FileTypeIcon name={name()} /><span class="workspace-change-name">{name()}</span><span class="workspace-change-directory">{directory()}</span><Show when={file.counts}>{(count) => <small class="workspace-change-counts"><span class="workspace-git-removed">−{count().removed}</span><span class="workspace-git-added">+{count().added}</span></small>}</Show><code data-status={file.status}>{file.status}</code></WorkbenchButton></div>;
       }}</For></div></Show>
     </nav>;
-}
-
-export default function WorkspaceReview(props: { title: string; files: WorkspaceReviewFile[]; selectedPath: string | null; comparison: ComparisonPayload | null; viewState: ComparisonViewState; onViewStateChange?: (state: ComparisonViewState) => void; busy: boolean; full?: boolean; empty: string; footerControl?: JSX.Element; comparisonLabel?: JSX.Element; onSelect: (path: string) => void; onOpenFile: (comparison: ComparisonPayload, state: ComparisonViewState) => void }) {
-  return <div class="workspace-patch workspace-review" data-full={props.full}>
-    <WorkspaceReviewNavigator title={props.title} files={props.files} selectedPath={props.selectedPath} empty={props.empty} onSelect={props.onSelect} />
-    <div class="workspace-review-comparison"><Show when={props.selectedPath} fallback={<><div class="workspace-panel-empty">{props.empty}</div><Show when={props.footerControl}><WorkbenchStatus commands={<></>}>{props.footerControl}</WorkbenchStatus></Show></>}><Show when={props.comparison || !props.busy} fallback={<div class="workspace-panel-empty">Loading changes…</div>}><Show when={props.comparison}>{(comparison) => <Suspense fallback={<div class="workspace-panel-empty">Loading comparison…</div>}><WorkspaceComparison comparison={comparison()} viewState={props.viewState} onViewStateChange={props.onViewStateChange} footerControl={props.footerControl} comparisonLabel={props.comparisonLabel} onOpenFile={(_source, _position, state) => props.onOpenFile(comparison(), state)} /></Suspense>}</Show></Show></Show></div>
-  </div>;
 }

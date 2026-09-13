@@ -1,8 +1,8 @@
-import { WorkbenchButton } from "./workspace-workbench";
+import { WorkbenchButton, WorkbenchStatus } from "./workspace-workbench";
 import { batch, createEffect, createSignal, lazy, on, onCleanup, Show, Suspense, type JSX } from "solid-js";
-import { CopyIcon, DownloadIcon, GitCompareArrowsIcon, PencilIcon, SaveIcon, Trash2Icon, UploadIcon, XIcon } from "lucide-solid";
+import { CopyIcon, DownloadIcon, EllipsisIcon, PencilIcon, SaveIcon, Trash2Icon, UploadIcon, XIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
-import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Spinner } from "@/components/primitives";
+import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Menu, MenuContent, MenuItem, MenuTrigger, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
@@ -12,7 +12,7 @@ import type { WorkspaceEditorHandle } from "./workspace-editor";
 import type { ComparisonPayload, ComparisonViewState } from "./workspace-comparison";
 
 const WorkspaceComparison = lazy(() => import("./workspace-comparison"));
-export interface TemporaryComparison { comparison: ComparisonPayload; viewState: ComparisonViewState; origin?: "artifact" | "timeline"; }
+export interface TemporaryComparison { comparison: ComparisonPayload; viewState: ComparisonViewState; label: string; sourceKey: string; }
 
 let workspaceEditorPromise: Promise<typeof import("./workspace-editor")> | undefined;
 export const preloadWorkspaceEditor = () => {
@@ -155,8 +155,11 @@ export default function WorkspaceFileSlot(props: {
   closable: boolean;
   busy: boolean;
   wrap: boolean;
+  statusPrefix?: JSX.Element;
+  comparisonSource?: JSX.Element;
   headerPrefix?: JSX.Element;
   height?: string;
+  empty?: string;
   onToggleWrap: () => void;
   onFocus: () => void;
   onClose: () => void;
@@ -171,12 +174,11 @@ export default function WorkspaceFileSlot(props: {
   onNavigated?: () => void;
   onSaved?: () => void;
   comparison?: TemporaryComparison;
-  comparisonFooterControl?: JSX.Element;
   comparisonLabel?: JSX.Element;
+  onComparisonViewStateChange?: (state: ComparisonViewState) => void;
   onEditComparison?: (source: string, position: number) => void;
   gitFile?: { status: string; stagedCounts?: { added: number; removed: number } | null; workingCounts?: { added: number; removed: number } | null };
   onShowDiff?: (staged: boolean) => void;
-  onShowFile?: () => void;
   onRestoreComparison?: (comparison: TemporaryComparison) => void;
   onDispose?: () => void;
   ref?: (handle: FileSlotHandle) => void;
@@ -482,21 +484,38 @@ export default function WorkspaceFileSlot(props: {
   const editable = () => Boolean(preview() && !preview()!.readOnly && !preview()!.truncated);
   const hasChanges = () => Boolean(props.gitFile && (props.gitFile.status === "??" || props.gitFile.status[1] !== " "));
   const hasStaged = () => Boolean(props.gitFile && props.gitFile.status[0] !== " " && props.gitFile.status[0] !== "?");
-  const gitControls = () => <Show when={props.gitFile}>{(file) => <>
+  const editDisplayedFile = () => {
+    const comparison = props.comparison?.comparison;
+    if (comparison?.kind === "text") props.onEditComparison?.(comparison.modified, retainedComparison()?.viewState.position ?? 0);
+    else void edit();
+  };
+  const fileActions = () => <Menu>
+    <MenuTrigger class="workspace-document-menu workspace-file-actions" aria-label="File actions" title="File actions"><EllipsisIcon /></MenuTrigger>
+    <MenuContent>
+      <MenuItem onSelect={() => { const compared = props.comparison?.comparison; copy(compared?.kind === "text" ? compared.modified : currentText()); }}><CopyIcon />Copy contents</MenuItem>
+      <MenuItem onSelect={() => copy(props.path ?? "")}><CopyIcon />Copy path</MenuItem>
+      <MenuItem onSelect={() => void download()}><DownloadIcon />Download working file</MenuItem>
+      <Show when={hasChanges()}><MenuItem onSelect={() => props.onShowDiff?.(false)}>Review unstaged changes</MenuItem></Show>
+      <Show when={hasStaged()}><MenuItem onSelect={() => props.onShowDiff?.(true)}>Review staged changes</MenuItem></Show>
+    </MenuContent>
+  </Menu>;
+  const gitControls = () => <Show when={props.gitFile}>{(file) =>
     <code class="workspace-file-git-status" data-status={file().status === "??" ? "U" : file().status.trim()} title="Git status">{file().status === "??" ? "U" : file().status.trim()}</code>
-    <Show when={hasChanges()}><WorkbenchButton type="button" class="workspace-file-diff-button" title="Show working-copy changes" aria-label="Show Changes diff" onClick={() => props.onShowDiff?.(false)}><GitCompareArrowsIcon /><span>Changes</span><Show when={file().workingCounts}>{(count) => <><span class="workspace-git-removed">−{count().removed}</span><span class="workspace-git-added">+{count().added}</span></>}</Show></WorkbenchButton></Show>
-    <Show when={hasStaged()}><WorkbenchButton type="button" class="workspace-file-diff-button" title="Show staged changes" aria-label="Show Staged diff" onClick={() => props.onShowDiff?.(true)}><GitCompareArrowsIcon /><span>Staged</span><Show when={file().stagedCounts}>{(count) => <><span class="workspace-git-removed">−{count().removed}</span><span class="workspace-git-added">+{count().added}</span></>}</Show></WorkbenchButton></Show>
-  </>}</Show>;
-  const textHeader = () => <header class="workspace-preview-header">
+  }</Show>;
+  const textHeader = () => <>
     <Show when={props.headerPrefix}>{props.headerPrefix}</Show>
     <div class="workspace-preview-file" title={props.path ?? ""}><FileTypeIcon name={props.path ?? ""} /><span>{props.path}</span></div>
     {gitControls()}
     <span class="workspace-preview-dirty" data-dirty={hasUnsavedChanges()} aria-hidden="true" />
-    <WorkbenchButton type="button" class="workspace-preview-action" aria-label="Save file" title="Save file (Ctrl+S)" disabled={Boolean(props.comparison) || !hasUnsavedChanges() || saving()} onClick={() => void save()}><Show when={saving()} fallback={<SaveIcon />}><Spinner /></Show></WorkbenchButton>
-    <WorkbenchButton type="button" class="workspace-preview-copy" aria-label="Copy file contents" title="Copy file contents" onClick={() => { const compared = props.comparison?.comparison; void copy(compared?.kind === "text" ? compared.modified : currentText()); }}><CopyIcon /></WorkbenchButton>
-    <WorkbenchButton type="button" class="workspace-preview-action" aria-label="Download file" title="Download working file" onClick={() => void download()}><DownloadIcon /></WorkbenchButton>
+    <Show when={props.comparison}>
+      <WorkbenchButton type="button" aria-label="Edit working file" disabled={props.comparison?.comparison.kind !== "text"} onClick={editDisplayedFile}><PencilIcon /><span>Edit working file</span></WorkbenchButton>
+    </Show>
+    <Show when={hasUnsavedChanges()}>
+      <WorkbenchButton type="button" aria-label="Save file" title="Save file (Ctrl+S)" disabled={saving()} onClick={() => void save()}><Show when={saving()} fallback={<SaveIcon />}><Spinner /></Show>Save</WorkbenchButton>
+    </Show>
+    {fileActions()}
     <Show when={props.closable}><WorkbenchButton type="button" class="workspace-preview-action workspace-preview-close" aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><XIcon /></WorkbenchButton></Show>
-  </header>;
+  </>;
 
   return <ContextMenu>
     <ContextMenuTrigger
@@ -511,7 +530,7 @@ export default function WorkspaceFileSlot(props: {
     >
       <div class="workspace-file-representation" hidden={!props.comparison}>
         <Show when={retainedComparison()}>{(temporary) => <Suspense fallback={<div class="workspace-panel-empty">Loading comparison…</div>}>
-          <WorkspaceComparison comparison={temporary().comparison} viewState={temporary().viewState} wrap={props.wrap} onToggleWrap={props.onToggleWrap} inFiles header={textHeader()} footerControl={props.comparisonFooterControl} comparisonLabel={props.comparisonLabel} onViewStateChange={(viewState) => setRetainedComparison((current) => current ? { ...current, viewState } : current)} onShowFile={props.onShowFile} onOpenFile={(source, position) => props.onEditComparison?.(source, position)} />
+          <WorkspaceComparison comparison={temporary().comparison} sourceKey={temporary().sourceKey} viewState={temporary().viewState} wrap={props.wrap} onToggleWrap={props.onToggleWrap} statusPrefix={props.statusPrefix} comparisonSource={props.comparisonSource} inFiles header={textHeader()} comparisonLabel={props.comparisonLabel} onViewStateChange={(viewState) => { setRetainedComparison((current) => current ? { ...current, viewState } : current); if (props.comparison) props.onComparisonViewStateChange?.(viewState); }} />
         </Suspense>}</Show>
       </div>
       <div class="workspace-file-representation" hidden={Boolean(props.comparison)}>
@@ -577,9 +596,8 @@ export default function WorkspaceFileSlot(props: {
       <Show when={!asset()}>
         <Show when={preview()} fallback={<>
           <Show when={props.headerPrefix}><header class="workspace-preview-header">{props.headerPrefix}</header></Show>
-          <div class="workspace-panel-empty">Select a file to preview it.</div>
+          <div class="workspace-panel-empty">{props.empty ?? "Select a file to preview it."}</div>
         </>}>{(file) => <>
-          {textHeader()}
           <Show when={file().readOnly && !file().truncated}>
             <div class="workspace-file-readonly-notice">Opened as text. Editing is disabled.</div>
           </Show>
@@ -587,20 +605,17 @@ export default function WorkspaceFileSlot(props: {
             <Show when={file().path}>{(path) =>
               <Suspense fallback={<div class="workspace-panel-empty">Loading preview…</div>}>
                 <WorkspaceEditor
+                  header={textHeader()}
                   ref={(handle) => { editor = handle; }}
                   path={path()}
                   value={file().content}
+                  statusPrefix={props.statusPrefix}
                   wrap={props.wrap}
                   reveal={file().path === props.path ? props.navigation : undefined}
                   onRevealed={props.onNavigated}
-                  onShowDiff={props.gitFile || retainedComparison() ? () => {
-                    const retained = retainedComparison();
-                    if (retained && props.onRestoreComparison) props.onRestoreComparison(retained);
-                    else props.onShowDiff?.(!hasChanges());
-                  } : undefined}
                   editable={editing()}
                   canEdit={editable()}
-                  statusText={[hasUnsavedChanges() ? "Unsaved" : formatFileSize(file().size), formatFileTime(file().modifiedAt)].filter(Boolean).join(" · ")}
+                  statusText={["Working copy", hasUnsavedChanges() ? "Unsaved" : editing() ? "Editing" : "Preview", formatFileSize(file().size)].join(" · ")}
                   statusTitle={[hasUnsavedChanges() ? "Unsaved" : formatFileSize(file().size), fileTimeMetadata(file())].filter(Boolean).join(" · ")}
                   onDirtyChange={setEditorDirty}
                   onSave={(value) => void save(value)}
@@ -619,6 +634,9 @@ export default function WorkspaceFileSlot(props: {
         </>}</Show>
       </Show>
       </div>
+      <Show when={props.statusPrefix && !props.comparison && (!preview() || Boolean(asset()) || preview()?.truncated)}>
+        <WorkbenchStatus commands={<>{props.statusPrefix}{props.comparisonSource}</>}><></></WorkbenchStatus>
+      </Show>
     </ContextMenuTrigger>
     <Show when={preview() || asset()}>{(file) =>
       <ContextMenuContent shortcutScope="workspace-panel" class="w-48 workspace-file-menu">

@@ -1,7 +1,7 @@
 import { CONTINUE_PROMPT } from "../continuation.js";
 import { messagesFromEntries } from "../session-store.js";
 import { chatView } from "../chat-store.js";
-import { parseAttachmentEnvelope, serializeAttachmentEnvelope } from "../attachment-envelope.js";
+import { parseAttachmentEnvelope } from "../attachment-envelope.js";
 import { ChatBackendRegistry } from "../pi-rpc-adapter.js";
 
 export function interruptedPromptInput(taken, message, attachmentIds = []) {
@@ -12,6 +12,8 @@ export function interruptedPromptInput(taken, message, attachmentIds = []) {
       .map((item) => item.trim()).filter(Boolean).join("\n"),
     attachmentIds: [...new Set([
       ...queued.flatMap((item) => item.attachments.map((attachment) => attachment.id)),
+      ...[...(taken?.steering || []), ...(taken?.followUp || [])]
+        .flatMap((item) => item?.attachmentIds || item?.attachments?.map((attachment) => attachment.id) || []),
       ...(Array.isArray(attachmentIds) ? attachmentIds : []),
     ])],
   };
@@ -41,9 +43,9 @@ export function createLiveSessionStream({
     const context = await findChatContext(record.chatId);
     if (!context) throw new Error("Chat no longer exists");
     const selectedAttachments = await attachments.resolveMany(context.project, context.chat.id, command.attachmentIds);
-    const prompt = serializeAttachmentEnvelope({ chatId: context.chat.id, attachments: selectedAttachments, message });
-    // The envelope stays the prompt text - it is what the transcript renders
-    // chips from - but adapters that accept files natively get real paths too.
+    const prompt = message;
+    // The harness owns transcript text. Conduit sends native attachment inputs
+    // and keeps only metadata that the harness cannot retain.
     const files = selectedAttachments.map((item) => ({
       ...item, path: attachments.pathFor(context.project, context.chat.id, item),
     }));
@@ -66,7 +68,10 @@ export function createLiveSessionStream({
       const projection = await adapter.readTranscript({
         liveSessionId: record.id, chatId: record.chatId, project: context.project, turns,
       });
-      if (projection.messages?.length) adapter.publish(record, { type: "transcript_sync", ...projection });
+      if (projection.messages?.length) {
+        projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages);
+        adapter.publish(record, { type: "transcript_sync", ...projection });
+      }
     } catch (error) {
       // A sync is a repair, never the only path to correctness.
       console.warn("Could not sync transcript", error.message);
@@ -74,7 +79,8 @@ export function createLiveSessionStream({
   }
 
   async function sendPrompt(record, prepared, options) {
-    const needsName = !prepared.context.chat.title && !namingChats.has(prepared.context.chat.id);
+    const backendNames = backends.manifestFor?.(record.adapterImplementation)?.nameGeneration === "backend";
+    const needsName = !backendNames && !prepared.context.chat.title && !namingChats.has(prepared.context.chat.id);
     const adapter = adapterFor(record);
     let checkpoint = null;
     try {
@@ -87,7 +93,10 @@ export function createLiveSessionStream({
     } catch (error) {
       console.warn("Could not capture turn checkpoint", error.message);
     }
-    const generationId = await adapter.prompt(record.id, prepared.prompt, { ...options, attachments: prepared.attachments });
+    const accepted = await adapter.prompt(record.id, prepared.prompt, { ...options, attachments: prepared.attachments });
+    const generationId = typeof accepted === "string" ? accepted : accepted?.generationId;
+    await attachments.recordMessage(prepared.context.project, prepared.context.chat.id,
+      accepted?.attachmentIdentity || null, prepared.attachments);
     if (checkpoint && generationId) {
       try { await turnCheckpoints.assignTurn(checkpoint, generationId); }
       catch (error) { console.warn("Could not assign turn checkpoint", error.message); }
@@ -125,12 +134,21 @@ export function createLiveSessionStream({
   async function syncForkedChat(record) {
     const context = await findChatContext(record.chatId);
     if (!context) throw new Error("Chat no longer exists");
-    await registry.update(context.chat.id, {
-      piSessionId: record.sessionId || context.chat.piSessionId,
-      piSessionFile: record.sessionFile,
-    });
-    manager.publish(record, { type: "history_forked", chat: chatView(registry.metadata(context.chat.id)) });
+    const native = context.chat.backend?.protocol === "native_api";
+    await registry.update(context.chat.id, native
+      ? { backend: { ...context.chat.backend, opaqueSession: record.sessionId } }
+      : { piSessionId: record.sessionId || context.chat.piSessionId, piSessionFile: record.sessionFile });
+    adapterFor(record).publish(record, { type: "history_forked", chat: chatView(registry.metadata(context.chat.id)) });
     return registry.metadata(context.chat.id);
+  }
+
+  async function clearQueuedMessages(record, adapter) {
+    const taken = await adapter.clearQueue(record.id);
+    if (!record.ephemeral && taken?.discardedAttachmentIdentities?.length) {
+      const context = await findChatContext(record.chatId);
+      if (context) await attachments.discardMessages(context.project, context.chat.id, taken.discardedAttachmentIdentities);
+    }
+    return taken;
   }
 
   async function handleClientCommand(record, command) {
@@ -145,11 +163,13 @@ export function createLiveSessionStream({
     }
     if (command.type === "follow_up" || command.type === "steer") {
       const prepared = await promptForChat(record, command, String(command.message || ""));
-      await adapter.queue(record.id, command.type, prepared.prompt, { attachments: prepared.attachments });
+      const accepted = await adapter.queue(record.id, command.type, prepared.prompt, { attachments: prepared.attachments });
+      await attachments.recordMessage(prepared.context.project, prepared.context.chat.id,
+        accepted?.attachmentIdentity || null, prepared.attachments);
       return null;
     }
     if (command.type === "clear_queue") {
-      return adapter.clearQueue ? adapter.clearQueue(record.id) : null;
+      return adapter.clearQueue ? clearQueuedMessages(record, adapter) : null;
     }
     // Pi's documented interrupt recipe, run in order on this side of the
     // socket. Clearing first is what stops the abort from continuing the queue
@@ -162,7 +182,7 @@ export function createLiveSessionStream({
       let taken = { steering: [], followUp: [] };
       if (adapter.clearQueue) {
         try {
-          taken = await adapter.clearQueue(record.id);
+          taken = await clearQueuedMessages(record, adapter);
         } catch (error) {
           throw Object.assign(new Error(`Cannot interrupt and send: the agent rejected clear_queue (${error.message})`),
             { code: "clear_queue_unsupported" });
@@ -210,6 +230,7 @@ export function createLiveSessionStream({
       return null;
     }
     if (command.type === "refresh_context") return adapter.refreshContext(record.id);
+    if (command.type === "compact") return adapter.compact(record.id);
     throw Object.assign(new Error(`Unknown live-session command: ${String(command.type || "")}`), {
       code: "invalid_request", status: 400,
     });

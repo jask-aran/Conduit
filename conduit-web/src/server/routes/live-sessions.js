@@ -1,13 +1,13 @@
 import { createLiveSessionLauncher } from "../live-session-launcher.js";
 
 export function registerLiveSessionRoutes(app, {
+  attachments,
   backends,
   catalogFor,
   config,
   findChatContext,
   lifecycle,
   manager,
-  modelProfileRuntime,
   nativePreflight,
   registry,
   runtimeFor,
@@ -21,7 +21,6 @@ export function registerLiveSessionRoutes(app, {
     findChatContext,
     lifecycle,
     manager,
-    modelProfileRuntime,
     nativePreflight,
     registry,
     runtimeFor,
@@ -78,6 +77,7 @@ export function registerLiveSessionRoutes(app, {
         opaqueSession: context?.chat?.backend?.opaqueSession,
         project: context?.project,
       });
+      if (context) projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages);
       response.json({ live: backends.view(live), events: live.events, ...projection });
     } catch (error) { next(error); }
   });
@@ -99,6 +99,15 @@ export function registerLiveSessionRoutes(app, {
     } catch (error) { next(error); }
   });
 
+  app.get("/v0/live-sessions/:id/commands", async (request, response, next) => {
+    try {
+      const live = backends.get(request.params.id);
+      if (!live) return response.status(404).json({ error: "live_session_not_found" });
+      const commands = await backends.adapterForRecord(live).listCommands(live.id);
+      response.json({ commands });
+    } catch (error) { next(error); }
+  });
+
   // A driven thread has no Conduit chat, so its settled history cannot come from
   // /v0/sessions/:id. It comes from the adapter that is running the thread.
   app.get("/v0/live-sessions/:id/transcript", async (request, response, next) => {
@@ -107,6 +116,10 @@ export function registerLiveSessionRoutes(app, {
       if (!live) return response.status(404).json({ error: "live_session_not_found" });
       const adapter = backends.adapterForRecord(live);
       const transcript = await adapter.readTranscript({ liveSessionId: live.id, chatId: live.chatId });
+      if (live.chatId) {
+        const context = await findChatContext(live.chatId);
+        if (context) transcript.messages = await attachments.decorateMessages(context.project, context.chat.id, transcript.messages);
+      }
       response.json({ id: live.chatId || live.id, status: "active", ...transcript, attachments: [], page: { before: null } });
     } catch (error) { next(error); }
   });

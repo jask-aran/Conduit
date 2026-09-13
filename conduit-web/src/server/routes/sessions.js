@@ -18,6 +18,7 @@ import {
 } from "../../session-operations.js";
 
 export function registerSessionRoutes(app, {
+  attachments,
   backends,
   config,
   findChatContext,
@@ -53,6 +54,7 @@ export function registerSessionRoutes(app, {
           opaqueSession: context.chat.backend?.opaqueSession,
           project: context.project,
         });
+        projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages);
         return response.json({ ...chatView(context.chat), ...projection, attachments: [], page: { before: null } });
       }
       let session;
@@ -65,6 +67,7 @@ export function registerSessionRoutes(app, {
         throw error;
       }
       const projection = projectSessionEntries(session.entries);
+      projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages);
       response.json({
         ...chatView(context.chat),
         model: session.model,

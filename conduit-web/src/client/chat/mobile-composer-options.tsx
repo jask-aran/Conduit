@@ -5,7 +5,7 @@ import { For, Show, createSignal, createUniqueId, onCleanup } from "solid-js";
 // @ts-expect-error Kobalte does not publish declarations for this internal chunk.
 import { useMenuContext } from "../../../node_modules/@kobalte/core/dist/chunk/L544S5A4.jsx";
 import type { FocusOutsideEvent } from "@kobalte/core";
-import { PaperclipIcon, PlusIcon, SlidersHorizontalIcon, UserRoundIcon } from "lucide-solid";
+import { PaperclipIcon, PlusIcon, ShieldCheckIcon, SlidersHorizontalIcon, UserRoundIcon } from "lucide-solid";
 import {
   Menu,
   MenuContent,
@@ -19,13 +19,15 @@ import {
 import type { Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import type { ComposerModels } from "./composer-models";
+import type { PermissionSettings } from "../state/permission-settings";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
-type MobileOptionsPanel = "root" | "models" | "profiles";
+type MobileOptionsPanel = "root" | "models" | "profiles" | "permissions";
 
 export function MobileComposerOptions(props: {
   composer: {
     models: ComposerModels;
+    permissions?: PermissionSettings;
     profiles: Template[];
     activeProfile?: Template | null;
     chat: ActiveChatStore;
@@ -39,6 +41,7 @@ export function MobileComposerOptions(props: {
   const selectedModel = () => composer.models.models().find((item) => item.spec === composer.models.model());
   const selectedModelLabel = () => selectedModel()?.label || composer.models.model() || "Not selected";
   const selectedProfileLabel = () => composer.activeProfile?.label || composer.activeProfile?.id || "General";
+  const selectedPermissionLabel = () => composer.permissions?.profiles().find((profile) => profile.id === composer.permissions?.selected())?.label || "Default";
   const levels = () => selectedModel()?.thinkingLevels || ["off"];
   const profileLocked = () => composer.chat.status() !== "draft";
   const [panel, setPanel] = createSignal<MobileOptionsPanel>("root");
@@ -146,6 +149,12 @@ export function MobileComposerOptions(props: {
                 <UserRoundIcon /><span>Profile</span><span class="composer-options-preview ml-auto max-w-28 truncate text-right text-xs italic text-muted-foreground">{selectedProfileLabel()}</span>
             </MenuItem>
           </Show>
+          <Show when={composer.permissions?.profiles().length}>
+            <MenuSeparator />
+            <MenuItem closeOnSelect={false} onSelect={() => setPanel("permissions")} class="composer-options-subtrigger">
+                <ShieldCheckIcon /><span>Permissions</span><span class="composer-options-preview ml-auto max-w-28 truncate text-right text-xs italic text-muted-foreground">{selectedPermissionLabel()}</span>
+            </MenuItem>
+          </Show>
           <MenuSeparator />
           <MenuItem disabled={!composer.serverOnline} onSelect={composer.onOpenAttachments}>
             <PaperclipIcon /><span>Attach files</span>
@@ -176,6 +185,16 @@ export function MobileComposerOptions(props: {
             </MenuGroup>
             <MenuSeparator />
             <MenuItem onSelect={() => composer.onOpenSettings("profiles")}>Manage profiles…</MenuItem>
+          </div>
+        </Show>
+        <Show when={panel() === "permissions"}>
+          <div class="composer-options-submenu composer-permissions-menu">
+            <MenuGroup>
+              <MenuLabel class="composer-options-label">Permissions</MenuLabel>
+              <MenuRadioGroup value={composer.permissions?.selected() || ""} onChange={(value) => void composer.permissions?.choose(value)}>
+                <For each={composer.permissions?.profiles() || []}>{(profile) => <MenuRadioItem value={profile.id} disabled={!profile.allowed} closeOnSelect={false}><span>{profile.label}</span></MenuRadioItem>}</For>
+              </MenuRadioGroup>
+            </MenuGroup>
           </div>
         </Show>
       </MenuContent>
