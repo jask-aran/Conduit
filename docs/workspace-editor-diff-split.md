@@ -100,8 +100,8 @@ agent changes remain in this view because both depend on chat identity.
    and Agent changes surfaces through it without changing behavior.
 2. **Built:** Route file overflow review commands to Source Control review. Add
    the reverse action from a comparison to the working file.
-3. Remove `FilesMode`, temporary comparisons, and comparison rendering from
-   `WorkspaceFileSlot`.
+3. **Built:** Remove `FilesMode`, temporary comparisons, and comparison
+   rendering from `WorkspaceFileSlot`.
 4. Rename Artifacts to Chat in code and visible labels. Keep History, Agent
    changes, Outputs, and Interactive UI inside it.
 5. Remove dead diff props and crossover CSS from the file components.
