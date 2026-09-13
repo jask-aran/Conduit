@@ -24,6 +24,8 @@ const LEGACY_SETTING_NAMES = [
   "terminal:detail-open",
   "artifacts:detail-height",
   "artifacts:detail-open",
+  "chat:detail-height",
+  "chat:detail-open",
   "files:detail-height",
   "files:detail-open",
   "diff:detail-height",

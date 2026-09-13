@@ -86,7 +86,6 @@ export default function WorkspaceEditor(props: {
   canEdit?: boolean;
   statusText?: string;
   statusTitle?: string;
-  statusPrefix?: JSX.Element;
   onDirtyChange: (dirty: boolean) => void;
   onSave: (value: string) => void;
   onToggleEditing?: () => void;
@@ -340,7 +339,6 @@ export default function WorkspaceEditor(props: {
     <header class="workspace-preview-header">{props.header}</header>
     <div ref={host} class="workspace-code-editor" data-markdown={isVisualMarkdownFile(props.path)} data-wrap={props.wrap} />
     <WorkbenchStatus commands={<>
-      {props.statusPrefix}
       <Show when={props.onToggleEditing}>
         <WorkbenchButton class="workspace-editor-mode" aria-label={editable() ? "Preview file" : "Edit file"} title={editable() ? "Switch to preview" : "Edit working file"} disabled={!editable() && !props.canEdit} onClick={props.onToggleEditing}>
           <Show when={editable()} fallback={<PencilIcon />}><EyeIcon /></Show><span>{editable() ? "Preview" : "Edit"}</span>

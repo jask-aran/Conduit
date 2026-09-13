@@ -104,7 +104,7 @@ applyTranscriptAppearance({
 if (import.meta.env.PROD && !nativeApp) registerSW({ immediate: true, onRegisteredSW: (_url, registration) => rememberPwaRegistration(registration) });
 
 type SettingsSection = "ui" | "shortcuts" | "models" | "prompts" | "runtime" | "workspaces" | "voice" | "search";
-type WorkspaceView = "files" | "diff" | "artifacts" | "terminal";
+type WorkspaceView = "files" | "diff" | "chat" | "terminal";
 const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field";
 const selectedMeteorField = () => localStorage.getItem(METEOR_FIELD_STORAGE_KEY) !== "false";
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
