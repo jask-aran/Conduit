@@ -307,6 +307,11 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
         case "generation_stopped":
           setPath(["status"], "stopped");
           setPath(["retry"], null);
+          for (const [toolCallId, execution] of Object.entries(state.toolExecutions)) {
+            if (execution.status !== "running") continue;
+            setPath(["toolExecutions", toolCallId, "status"], "cancelled");
+            setPath(["toolExecutions", toolCallId, "isError"], false);
+          }
           break;
         case "generation_failed":
           setPath(["status"], "failed");

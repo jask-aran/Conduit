@@ -442,7 +442,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     const turnOpen = Boolean(session.generation && !session.generation.closed && !session.generation.settled);
     if (session.stopping) setGeneration("stopping");
     else if (turnOpen || session.active) setGeneration("active");
-    else setGeneration((current) => ["stopping", "interrupted"].includes(current) ? current : "idle");
+    else setGeneration((current) => current === "interrupted" ? current : "idle");
   };
 
   const scheduleReconnect = (record: LiveRecord, chatId: string, selection: number) => {
@@ -668,12 +668,21 @@ export function createActiveChat(options: ActiveChatOptions) {
         break;
       case "transcript_sync":
         batch(() => {
+          const incomingMessages = asList<Message>(event.messages);
           const projection = mergeTranscriptProjection(
-            messages(), tools(), event.messages as Message[],
+            messages(), tools(), incomingMessages,
             assignToolSeq(event.tools as ToolItem[]),
           );
           setMessages(projection.messages);
           setTools(projection.tools);
+          const current = activeGeneration();
+          const persistedInterrupt = incomingMessages.some((message) => message.role === "assistant"
+            && (message.stopped || message.stopReason === "aborted"));
+          if (current?.status === "stopped" && persistedInterrupt) {
+            generationStore.clear();
+            setActiveGenerationChange(null);
+            setActiveGeneration(null);
+          }
         });
         break;
       case "message_end":

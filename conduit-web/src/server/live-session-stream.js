@@ -257,13 +257,22 @@ export function createLiveSessionStream({
     // not overtake an earlier one while attachment paths or an abort resolve.
     let commands = Promise.resolve();
     ws.on("message", (data) => {
+      const command = JSON.parse(String(data));
+      const run = () => handleClientCommand(record, command);
+      const report = (error) => {
+        if (ws.readyState === 1) ws.send(JSON.stringify(adapter.toClientEvent({
+          type: "client_error", code: error.code, message: error.message,
+        })));
+      };
+      // A prompt RPC remains pending for the full model turn. Stop must bypass
+      // that queue or Pi cannot receive the abort until the turn ends itself.
+      if (command.type === "stop_generation" || command.type === "abort") {
+        void run().catch(report);
+        return;
+      }
       commands = commands
-        .then(() => handleClientCommand(record, JSON.parse(String(data))))
-        .catch((error) => {
-          if (ws.readyState === 1) ws.send(JSON.stringify(adapter.toClientEvent({
-            type: "client_error", code: error.code, message: error.message,
-          })));
-        });
+        .then(run)
+        .catch(report);
     });
   });
 

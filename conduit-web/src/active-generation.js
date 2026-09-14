@@ -210,6 +210,12 @@ export function reduceActiveGeneration(current, event) {
     case "generation_stopped":
       next.status = "stopped";
       next.retry = null;
+      for (const execution of Object.values(next.toolExecutions)) {
+        if (execution.status === "running") {
+          execution.status = "cancelled";
+          execution.isError = false;
+        }
+      }
       break;
     case "generation_failed":
       next.status = "failed";
