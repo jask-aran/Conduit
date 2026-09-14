@@ -6,6 +6,7 @@ import express from "express";
 import compression from "compression";
 import { WebSocketServer } from "ws";
 import { loadConfig, resolveTemplate } from "./config.js";
+import { TerminalPasteStore } from "./terminal-paste-store.js";
 import { PiModelCatalog, resolveThinkingLevel } from "./pi-model-catalog.js";
 import { ProjectStore } from "./project-store.js";
 import { readSessionMetadata, readSessionPage } from "./session-store.js";
@@ -46,6 +47,7 @@ import { registerAttachmentRoutes } from "./server/routes/attachments.js";
 import { registerAuthRoutes } from "./server/routes/auth.js";
 import { registerPiAuthRoutes } from "./server/routes/pi-auth.js";
 import { registerPtyRoutes } from "./server/routes/ptys.js";
+import { registerTerminalPasteRoutes } from "./server/routes/terminal-paste.js";
 import { registerRuntimeRoutes } from "./server/routes/runtime.js";
 import { registerChatRoutes } from "./server/routes/chats.js";
 import { registerHarnessRoutes } from "./server/routes/harnesses.js";
@@ -95,6 +97,7 @@ const registry = new ChatStore(config.sessionRegistryFile, {
 await registry.initialize(await projects.list());
 await registry.migrateTemplateIds(normalizeTemplateId);
 const attachments = new AttachmentStore(registry, { maxBytes: config.maxAttachmentBytes });
+const terminalPastes = new TerminalPasteStore({ root: config.terminalPasteRoot });
 const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, defaultsFromEnv(process.env));
 await runtimeSettings.load();
 const searchSettings = new SearchSettingsStore({ filePath: config.searchConfigFile, environment: process.env });
@@ -572,6 +575,7 @@ registerSearchRoutes(app, {
 registerVoiceRoutes(app, { voiceSettings, voiceRuntime, voiceModel });
 
 registerPtyRoutes(app, { projects, terminals });
+registerTerminalPasteRoutes(app, { terminalPastes });
 
 registerProjectRoutes(app, {
   backends,

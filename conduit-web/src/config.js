@@ -67,6 +67,7 @@ export function loadConfig(env = process.env) {
     repositoryRoot,
     dataRoot,
     filesRoot,
+    terminalPasteRoot: absolute(env.CONDUIT_TERMINAL_PASTE_ROOT || path.join(dataRoot, "terminal-paste")),
     catalogFile: absolute(env.CONDUIT_CATALOG_FILE || path.join(dataRoot, "conduit.json")),
     sessionRegistryFile: absolute(env.CONDUIT_SESSION_REGISTRY_FILE || path.join(dataRoot, "sessions.json")),
     sessionNameLogFile: absolute(env.CONDUIT_SESSION_NAME_LOG_FILE || path.join(dataRoot, "session-name-requests.jsonl")),
