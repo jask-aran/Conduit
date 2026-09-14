@@ -4,6 +4,8 @@ import type { ComparisonPayload, ComparisonViewState } from "./workspace-compari
 import { WorkspaceReviewNavigator, type WorkspaceReviewFile } from "./workspace-review";
 import { WorkbenchButton } from "./workspace-workbench";
 import { readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace-panel-storage";
+import { addReviewComment } from "../chat/review-comments";
+import type { AnnotationSelection } from "./workspace-annotate";
 
 const WorkspaceComparison = lazy(() => import("./workspace-comparison"));
 const MIN_NAVIGATOR_WIDTH = 128;
@@ -21,6 +23,7 @@ export interface WorkspaceDiffViewProps {
   empty: string;
   comparisonSource?: JSX.Element;
   comparisonLabel?: JSX.Element;
+  annotationChatId?: string | null;
   onSelect: (path: string) => void;
   onOpenWorkingFile: (path: string) => void;
   onViewStateChange: (state: ComparisonViewState) => void;
@@ -38,6 +41,22 @@ export function WorkspaceDiffView(props: WorkspaceDiffViewProps) {
   const setCollapsed = (collapsed: boolean) => {
     setNavigatorCollapsed(collapsed);
     writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "diff-navigator-collapsed", String(collapsed));
+  };
+  const addAnnotation = (selection: AnnotationSelection, note: string) => {
+    const chatId = props.annotationChatId;
+    const comparison = props.comparison;
+    if (!chatId || !comparison) return false;
+    return addReviewComment({
+      id: `rc_${crypto.randomUUID()}`,
+      chatId,
+      path: comparison.path,
+      side: selection.side,
+      scope: comparison.scope,
+      from: selection.from,
+      to: selection.to,
+      excerpt: selection.excerpt,
+      note,
+    });
   };
   let stopResize: (() => void) | undefined;
   const startResize = (event: PointerEvent) => {
@@ -82,6 +101,7 @@ export function WorkspaceDiffView(props: WorkspaceDiffViewProps) {
             headerAction={<WorkbenchButton type="button" aria-label="Open working file" title="Open working file" onClick={() => props.onOpenWorkingFile(comparison().path)}><PencilIcon /><span>Open working file</span></WorkbenchButton>}
             comparisonSource={props.comparisonSource}
             comparisonLabel={props.comparisonLabel}
+            onAnnotate={props.annotationChatId ? addAnnotation : undefined}
             onViewStateChange={props.onViewStateChange}
           />
         </Suspense>}

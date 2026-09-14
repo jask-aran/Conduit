@@ -9,6 +9,7 @@ import { httpUrl } from "../api/transport";
 import { FileTypeIcon } from "./file-type-icon";
 import { Capacitor } from "@capacitor/core";
 import type { WorkspaceEditorHandle } from "./workspace-editor";
+import { addReviewComment } from "../chat/review-comments";
 
 let workspaceEditorPromise: Promise<typeof import("./workspace-editor")> | undefined;
 export const preloadWorkspaceEditor = () => {
@@ -155,6 +156,7 @@ export default function WorkspaceFileSlot(props: {
   height?: string;
   empty?: string;
   onToggleWrap: () => void;
+  annotationChatId?: string | null;
   onFocus: () => void;
   onClose: () => void;
   onError: (message: string) => void;
@@ -579,6 +581,21 @@ export default function WorkspaceFileSlot(props: {
                   onSave={(value) => void save(value)}
                   onToggleEditing={() => editing() ? setEditing(false) : void edit()}
                   onToggleWrap={props.onToggleWrap}
+                  onAnnotate={props.annotationChatId ? (selection, note) => {
+                    const chatId = props.annotationChatId;
+                    if (!chatId) return false;
+                    return addReviewComment({
+                      id: `rc_${crypto.randomUUID()}`,
+                      chatId,
+                      path: file().path,
+                      side: selection.side,
+                      scope: "file",
+                      from: selection.from,
+                      to: selection.to,
+                      excerpt: selection.excerpt,
+                      note,
+                    });
+                  } : undefined}
                 />
               </Suspense>
             }</Show>
