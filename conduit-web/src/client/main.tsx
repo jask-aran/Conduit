@@ -16,7 +16,7 @@ import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, 
 import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/client";
 import { buildHttpUrl, clearServerOrigin, configuredServerOrigin, loginUrl, logoutUrl, normalizeServerOrigin, saveServerOrigin, transcriptUrl } from "./api/transport";
 import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
-import type { ChatSummary, DashboardChat, HarnessSummary, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
+import type { ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
 import { AppDashboard } from "./dashboard/app-dashboard";

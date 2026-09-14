@@ -6,8 +6,6 @@ import { spawn } from "node:child_process";
 // dashboard stops special-casing one implementation.
 export const READY = (version = null, detail = null) => ({ available: true, status: "ready", version, detail });
 export const UNAVAILABLE = (detail = null) => ({ available: false, status: "unavailable", version: null, detail });
-export const NEEDS_AUTH = (version = null, detail = null) =>
-  ({ available: true, status: "authentication_required", version, detail });
 
 /** Run a command to completion, capturing stdout. Never rejects. */
 function run(command, args, timeoutMs) {

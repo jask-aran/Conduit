@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
-import { ArrowUpIcon, ChevronDownIcon, CopyIcon, EyeIcon, EyeOffIcon, FolderIcon, GitBranchIcon, Grid2X2Icon, HomeIcon, ListIcon, PaletteIcon, PencilIcon, PlusIcon, RefreshCwIcon, SearchIcon, SquareIcon, TerminalIcon, UnlinkIcon } from "lucide-solid";
+import { ArrowUpIcon, ChevronDownIcon, CopyIcon, EyeIcon, EyeOffIcon, FolderIcon, GitBranchIcon, Grid2X2Icon, HomeIcon, ListIcon, PaletteIcon, PencilIcon, PlusIcon, RefreshCwIcon, SearchIcon, TerminalIcon, UnlinkIcon } from "lucide-solid";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, Menu, MenuContent, MenuGroup, MenuItem, MenuTrigger } from "@/components/primitives";
 import { api } from "../api/client";
 import type { ChatSummary, ComputerLocation, HarnessSummary, Project } from "../api/contracts";

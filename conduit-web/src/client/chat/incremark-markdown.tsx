@@ -6,7 +6,7 @@ import { getHarnessRecorder, recordHarnessMetric } from "@/client/harness-metric
 import type { ChatMarkdownProps } from "./markdown";
 import { ExternalLinkDialog } from "./external-link-dialog";
 import { copyWithFeedback, createExternalLinkController } from "./markdown-actions";
-import { codeBlockCollapseLabel, codeBlockState, countCodeLines, normalizeCodeLanguage, publishCodeBlockToggle } from "./code-block";
+import { codeBlockCollapseLabel, codeBlockState, normalizeCodeLanguage, publishCodeBlockToggle } from "./code-block";
 import { useCodeBlockCollapse } from "./transcript-appearance";
 import { highlighterReady, StreamingCodeHighlighter } from "./code-highlight";
 import { createSyntheticMathPreviewNode, repairSyntheticMathSource } from "./incremark-synthetic-math";
@@ -770,14 +770,9 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   // has no settled state worth protecting, and giving it one would fight the
   // summary's own sizing.
   const freezes = () => !props.inline;
-  // Both memos deliberately preserve value equality across settlement. When
-  // frozenSource changes from null to the already-rendered final string, and
-  // settled changes while streaming is already false, everything downstream
-  // sees no value change and so takes no terminal render pulse. The memo also
-  // drops its live props.children dependency once frozen, so later upstream
-  // churn -- a checkpoint reload re-delivering the same text -- can no longer
-  // reach a message that is already on screen.
-  const source = createMemo(() => frozenSource() ?? String(props.children || ""));
+  // The memo deliberately preserves value equality across settlement: settled
+  // changing while streaming is already false leaves everything downstream
+  // seeing no value change, so nothing takes a terminal render pulse.
   const streaming = createMemo(() => settled() ? false : Boolean(props.streaming));
   // Nothing is left in flight that could still change the layout.
   const quiet = () => !props.streaming

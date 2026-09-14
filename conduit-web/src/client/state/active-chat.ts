@@ -1,4 +1,4 @@
-import { batch, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
+import { batch, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 import { deriveFineActivity } from "../../activity.js";
 import { api, asList } from "../api/client";
 import { webSocketUrl } from "../api/transport";
@@ -27,7 +27,7 @@ import { assignToolSeq, commitAssistantMessage, mergeTranscriptProjection, promo
 import { reconcileMessages } from "../reconcile-messages";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { canCoalesceTextDelta, enqueueOverflowLiveEvent, mergeTextDeltaEvents } from "./text-delta-batcher";
-import type { AttachmentsStore, UploadAttachment } from "./attachments";
+import type { AttachmentsStore } from "./attachments";
 import type { DraftsStore } from "./drafts";
 import type { CatalogueStore } from "./catalogue";
 import { settleGenerationTools, type ActiveGenerationView, type LiveGenerationChange } from "../turn-rows";

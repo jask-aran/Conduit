@@ -65,7 +65,6 @@ const profileDescription = (profile: VoiceExecutionProfile) => profile.execution
 
 export default function VoiceLocalCatalogue(props: VoiceLocalCatalogueProps) {
   const disabled = () => props.busy || Boolean(props.installingModelId);
-  const familyArtifacts = () => props.selectedModel ? artifactsForModel(props.catalogue, props.selectedModel.id) : [];
   const familyBackendPaths = () => props.selectedModel ? backendPathsForModel(props.catalogue, props.selectedModel.id) : [];
   const runtimeChoices = () => {
     const seen = new Set<string>();

@@ -5,7 +5,7 @@ import katex from "katex";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { ExternalLinkDialog } from "./external-link-dialog";
 import { createExternalLinkController, handleMarkdownClick } from "./markdown-actions";
-import { escapeHtml, renderMarkdownLink, sanitizeMarkdownFragment } from "./markdown-security";
+import { renderMarkdownLink, sanitizeMarkdownFragment } from "./markdown-security";
 import { codeBlockMarkup, codeBlockState } from "./code-block";
 import { selectedCodeBlockCollapse, selectedCodeBlockCollapseLines } from "./transcript-appearance";
 import { splitStreamingMarkdown, type StreamingPending } from "./streaming-markdown";

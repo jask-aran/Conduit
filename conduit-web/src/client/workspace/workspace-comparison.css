@@ -1,5 +1,4 @@
 .workspace-comparison { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
-.workspace-comparison-path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-comparison-counts { display: flex; flex: none; gap: 6px; padding-inline: 5px; font: inherit; white-space: nowrap; }
 .workspace-comparison-counts > :first-child { color: var(--destructive); }
 .workspace-comparison-counts > :last-child { color: var(--workspace-git-added); }

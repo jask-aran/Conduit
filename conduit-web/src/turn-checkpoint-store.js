@@ -53,10 +53,6 @@ export class TurnCheckpointStore {
     return { ...checkpoint, turnId, messageId: content.messageId ?? null };
   }
 
-  async latest(chatId) {
-    return (await this.#checkpoints(chatId)).at(-1) || null;
-  }
-
   async checkpointForMessage(chatId, workingRoot, sessionFile, messageId) {
     const root = path.resolve(workingRoot);
     const stored = (await this.#checkpoints(chatId))
@@ -78,9 +74,7 @@ export class TurnCheckpointStore {
       const summary = await this.#summary(checkpoint, target?.checkpoint || null);
       timeline.push({
         id: checkpoint.id,
-        turnId: checkpoint.turnId,
         createdAt: checkpoint.createdAt,
-        anchorEntryId: checkpoint.anchorEntryId ?? null,
         messageId: mappings.get(checkpoint.id).messageId,
         sequence,
         targetSequence: target?.sequence ?? null,
@@ -134,7 +128,7 @@ export class TurnCheckpointStore {
       files.push({ path: relativePath, status: comparison.status, available: comparison.kind === "text", changedAt: stat?.mtimeMs || Date.parse(checkpoint.createdAt) });
     }
     files.sort((left, right) => right.changedAt - left.changedAt || left.path.localeCompare(right.path));
-    return { id: checkpoint.id, turnId: checkpoint.turnId, createdAt: checkpoint.createdAt, files };
+    return { id: checkpoint.id, createdAt: checkpoint.createdAt, files };
   }
 
   async compare(chatId, workingRoot, relativePath, checkpointId, baseline = "chat", sessionFile = null) {

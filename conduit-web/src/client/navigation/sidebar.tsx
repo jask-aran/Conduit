@@ -621,23 +621,6 @@ export function Sidebar(props: {
     appliedDefaultWorkspacePath = defaultPath;
   });
 
-  const workspacePathDescription = () => {
-    const policy = props.workspacePolicy;
-    if (!policy) return "Allowed workspace locations are loading.";
-    const roots = policy.allowlist.join(", ");
-    if (!roots) return "No workspace location is configured for this Conduit instance.";
-    if (mode() === "linked") return `Choose an existing folder under: ${roots}.`;
-    if (policy.defaultInputPath) return `New folders and clones start in ${policy.defaultInputPath}. Allowed locations: ${roots}.`;
-    return `Choose a parent folder under: ${roots}.`;
-  };
-
-  const workspacePathPlaceholder = () => {
-    const policy = props.workspacePolicy;
-    const root = policy?.defaultInputPath || policy?.allowlist[0];
-    if (root) return mode() === "linked" ? `${root.replace(/\/$/, "")}/existing-folder` : root;
-    return mode() === "linked" ? "an allowed folder" : "an allowed parent directory";
-  };
-
   const previewKey = () => `${mode()}\0${path().trim()}\0${directoryName().trim()}`;
   createEffect(() => {
     const currentMode = mode();

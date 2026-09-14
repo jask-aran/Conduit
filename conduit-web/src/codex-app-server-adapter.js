@@ -24,7 +24,6 @@ export const CODEX_CAPABILITIES = Object.freeze({
 const APPROVAL_OPTIONS = Object.freeze(["Approve", "Approve for session", "Deny"]);
 const APPROVAL_POLICIES = Object.freeze(["untrusted", "on-request", "never"]);
 const APPROVAL_REVIEWERS = Object.freeze(["user", "auto_review"]);
-export const SANDBOX_MODES = Object.freeze(["read-only", "workspace-write", "danger-full-access"]);
 const BUILTIN_PERMISSION_MODES = Object.freeze([
   { id: "default", label: "Default permissions", description: "Runs commands in a sandbox", profile: ":workspace", approvalPolicy: "on-request", approvalsReviewer: "user" },
   { id: "auto-review", label: "Auto-review", description: "Reviews elevated requests automatically", profile: ":workspace", approvalPolicy: "on-request", approvalsReviewer: "auto_review" },

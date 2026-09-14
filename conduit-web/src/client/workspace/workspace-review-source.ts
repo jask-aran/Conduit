@@ -21,7 +21,7 @@ export function isDiffScope(value: string): value is DiffScope {
 const MAX_TURN_PROBES = 25;
 
 export interface TurnChangeSummary { added: number; removed: number; }
-interface Checkpoint { id: string; turnId: string | null; createdAt: string; sequence: number; anchorEntryId: string | null; messageId: string | null; summary: TurnChangeSummary | null; }
+interface Checkpoint { id: string; createdAt: string; sequence: number; messageId: string | null; summary: TurnChangeSummary | null; }
 interface TurnFiles extends Checkpoint { files: { path: string; status: string; available: boolean }[]; }
 interface GitFile { path: string; status: string; stagedCounts?: { added: number; removed: number } | null; workingCounts?: { added: number; removed: number } | null; headCounts?: { added: number; removed: number } | null; }
 

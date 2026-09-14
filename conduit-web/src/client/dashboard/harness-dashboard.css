@@ -16,12 +16,10 @@
 .computer-dashboard:has(.harness-drive-shared) { padding: 0; }
 .harness-drive-shared { display: flex; width: 100%; height: 100%; min-height: 0; flex-direction: column; }
 .harness-drive > header { display: flex; flex: none; align-items: center; gap: 8px; padding: 10px 14px; }
-.harness-drive-context { display: flex; min-width: 0; align-items: center; gap: 5px; overflow: hidden; color: var(--muted-foreground); font: 8px ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .harness-drive > header img { width: 14px; height: 14px; }
 .harness-drive > header button { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); border-radius: 7px; background: transparent; padding: 6px 9px; color: var(--foreground); font-size: 9px; }
 .harness-drive > header svg { width: 12px; height: 12px; }
-.harness-back { rotate: 180deg; }
-.harness-drive .transcript-shell, .harness-drive [data-slot="message-scroller-viewport"] { min-height: 0; flex: 1; }
+.harness-drive [data-slot="message-scroller-viewport"] { min-height: 0; flex: 1; }
 .harness-picker-backdrop { position: fixed; z-index: 60; display: grid; inset: 0; place-items: center; background: color-mix(in oklch, black, transparent 45%); padding: 18px; }
 .harness-picker { display: grid; width: min(420px, 100%); max-height: min(560px, 90vh); grid-template-rows: auto auto minmax(0, 1fr) auto auto; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--background); }
 .harness-picker > header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding: 10px 12px; font-size: 11px; }

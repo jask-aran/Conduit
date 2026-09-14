@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createRenderEffect, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense } from "solid-js";
 import { ArrowDownIcon, CheckIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, TriangleAlertIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
-import type { Message, RuntimeActivity, ToolItem } from "../api/contracts";
+import type { Message } from "../api/contracts";
 import type { TranscriptSource } from "./transcript-source";
 import type { TurnArtifactSummary } from "../api/live-events";
 import { AttachmentCards } from "./attachments";
@@ -25,7 +25,6 @@ import {
   selectedCodeBlockCollapseLines,
   isCodeBlockCollapseMode,
   isCodeBlockCollapseLines,
-  isUserMessageCollapseMode,
   useUserMessageCollapse,
   userMessageCollapseLines,
 } from "./transcript-appearance";

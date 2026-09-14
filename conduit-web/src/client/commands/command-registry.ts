@@ -1,9 +1,8 @@
 import {
-  formatShortcutBinding, shortcutBinding, shortcutStroke,
+  shortcutBinding, shortcutStroke,
 } from "../shortcuts/shortcut-normalize.ts";
-import { detectShortcutEnvironment } from "../shortcuts/shortcut-environment.ts";
 import type {
-  ShortcutBinding, ShortcutCommandDefinition, ShortcutEnvironment, ShortcutModifier,
+  ShortcutBinding, ShortcutCommandDefinition, ShortcutModifier,
 } from "../shortcuts/shortcut-types.ts";
 
 const stroke = (code: string, key: string, modifiers: ShortcutModifier[] = []) =>
