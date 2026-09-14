@@ -522,7 +522,11 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   };
   const focusWorkspaceSurface = (event: PointerEvent) => {
     const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest("button,a,input,textarea,select,[contenteditable='true'],[role='button'],[role='link'],[role='option'],[role='treeitem'],[role='menu'],[role^='menuitem']")) return;
+    // The terminal is its own pointer surface: preventDefault here suppresses
+    // the compatibility mouse events, so xterm never sees the mousedown and
+    // loses click-to-position, drag selection, and mouse reporting to the TUI.
+    // It focuses itself on click, so it needs nothing from this handler.
+    if (target?.closest("button,a,input,textarea,select,[contenteditable='true'],[role='button'],[role='link'],[role='option'],[role='treeitem'],[role='menu'],[role^='menuitem'],[data-shortcut-exclusive='terminal']")) return;
     event.preventDefault();
     queueMicrotask(() => focusTabDefault(tab()));
   };
