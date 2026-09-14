@@ -433,8 +433,8 @@ export function registerProjectRoutes(app, {
       const baseline = request.query.baseline === "turn" ? "turn" : "chat";
       const checkpointId = typeof request.query.checkpointId === "string" ? request.query.checkpointId : null;
       const artifact = request.query.path
-        ? await turnCheckpoints.compare(chatId, project.workingRoot, request.query.path, checkpointId, baseline)
-        : await turnCheckpoints.review(chatId, project.workingRoot, baseline, checkpointId);
+        ? await turnCheckpoints.compare(chatId, project.workingRoot, request.query.path, checkpointId, baseline, chat.piSessionFile)
+        : await turnCheckpoints.review(chatId, project.workingRoot, baseline, checkpointId, chat.piSessionFile);
       response.json(artifact);
     } catch (error) { next(error); }
   });

@@ -3,7 +3,7 @@ import { deriveFineActivity } from "../../activity.js";
 import { api, asList } from "../api/client";
 import { webSocketUrl } from "../api/transport";
 import { isStructuredGenerationEvent, normalizeLiveEvent } from "../api/live-events";
-import type { LiveEvent, RuntimeStateEvent, StructuredGenerationEvent } from "../api/live-events";
+import type { LiveEvent, RuntimeStateEvent, StructuredGenerationEvent, TurnArtifactSummary } from "../api/live-events";
 import type {
   ChatStatus,
   ChatSummary,
@@ -126,6 +126,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   const [activeGenerationRoot, setActiveGenerationRoot] = createSignal<ActiveGenerationView | null>(null);
   const [activeGenerationRevision, setActiveGenerationRevision] = createSignal(0);
   const [activeGenerationChange, setActiveGenerationChange] = createSignal<LiveGenerationChange | null>(null);
+  const [turnArtifacts, setTurnArtifacts] = createSignal<{ chatId: string; items: TurnArtifactSummary[] } | null>(null);
   const activeGeneration = () => {
     activeGenerationRevision();
     return activeGenerationRoot();
@@ -680,6 +681,7 @@ export function createActiveChat(options: ActiveChatOptions) {
           if (event.chatId === selectedId()) setTitle(event.title);
         }
         if (event.chatId === selectedId()) {
+          if (event.artifacts) setTurnArtifacts({ chatId: event.chatId, items: event.artifacts });
           const current = activeGeneration();
           const terminal = current && ["stopped", "complete", "failed"].includes(current.status);
           if (terminal && current.id === event.generationId
@@ -1115,7 +1117,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   return {
     status, setStatus, title, setTitle, templateId, setTemplateId, runtimeIdentity, setRuntimeIdentity, backendImplementation,
     live, messages, setMessages, tools, loadedId, pageBefore, loadingOlder, draft, setDraft,
-    generation, editingEntryId, contextUsage, sessionStats, cacheStats, compacting, hostUiRequests, queue, pendingMessages, capabilities, harnessCommands, activeGeneration, activeGenerationChange,
+    generation, editingEntryId, contextUsage, sessionStats, cacheStats, compacting, hostUiRequests, queue, pendingMessages, capabilities, harnessCommands, activeGeneration, activeGenerationChange, turnArtifacts,
     connectingId, navigatingId, streaming, stopping, activity,
     initialize, select, prefetch, loadDetail, openLive, attachLive, ensureLive, reset, send, stop, regenerate,
     continueResponse, compact, loadHarnessCommands, loadOlder, edit, respondHostUi, clearQueue, interruptAndSend, editQueued, discardQueued,

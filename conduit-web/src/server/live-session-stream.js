@@ -80,6 +80,7 @@ export function createLiveSessionStream({
   }
 
   async function sendPrompt(record, prepared, options) {
+    const { sourceCheckpointId = null, ...promptOptions } = options || {};
     const backendNames = backends.manifestFor?.(record.adapterImplementation)?.nameGeneration === "backend";
     const needsName = !backendNames && !prepared.context.chat.title && !namingChats.has(prepared.context.chat.id);
     const adapter = adapterFor(record);
@@ -91,16 +92,18 @@ export function createLiveSessionStream({
         projectKind: prepared.context.project.kind,
         workingRoot: prepared.context.project.workingRoot,
         sessionFile: record.sessionFile || prepared.context.chat.piSessionFile || null,
+        sourceCheckpointId,
       });
     } catch (error) {
       console.warn("Could not capture turn checkpoint", error.message);
     }
-    const accepted = await adapter.prompt(record.id, prepared.prompt, { ...options, attachments: prepared.attachments });
+    const accepted = await adapter.prompt(record.id, prepared.prompt, { ...promptOptions, attachments: prepared.attachments });
     const generationId = typeof accepted === "string" ? accepted : accepted?.generationId;
     await attachments.recordMessage(prepared.context.project, prepared.context.chat.id,
       accepted?.attachmentIdentity || null, prepared.attachments);
     if (checkpoint && generationId) {
-      try { await turnCheckpoints.assignTurn(checkpoint, generationId); }
+      const messageId = typeof accepted === "object" ? accepted?.attachmentIdentity?.messageId : null;
+      try { await turnCheckpoints.assignTurn(checkpoint, generationId, messageId); }
       catch (error) { console.warn("Could not assign turn checkpoint", error.message); }
     }
     await registry.markUserMessage(prepared.context.chat.id);
@@ -165,6 +168,19 @@ export function createLiveSessionStream({
     }
     if (command.type === "follow_up" || command.type === "steer") {
       const prepared = await promptForChat(record, command, String(command.message || ""));
+      if (command.type === "steer") {
+        try {
+          await turnCheckpoints?.capture({
+            chatId: prepared.context.chat.id,
+            projectId: prepared.context.project.id,
+            projectKind: prepared.context.project.kind,
+            workingRoot: prepared.context.project.workingRoot,
+            sessionFile: record.sessionFile || prepared.context.chat.piSessionFile || null,
+          });
+        } catch (error) {
+          console.warn("Could not capture steering checkpoint", error.message);
+        }
+      }
       const accepted = await adapter.queue(record.id, command.type, prepared.prompt, { attachments: prepared.attachments });
       await attachments.recordMessage(prepared.context.project, prepared.context.chat.id,
         accepted?.attachmentIdentity || null, prepared.attachments);
@@ -215,17 +231,26 @@ export function createLiveSessionStream({
       return stopped;
     }
     if (command.type === "fork_and_prompt") {
+      const context = await findChatContext(record.chatId);
+      const sourceCheckpointId = context ? await turnCheckpoints?.checkpointForMessage(
+        context.chat.id, context.project.workingRoot, record.sessionFile || context.chat.piSessionFile, command.entryId,
+      ) : null;
       await adapter.fork(record.id, command.entryId);
       await syncForkedChat(record);
       await applyComposerModel(record, command);
       const prepared = await promptForChat(record, command, String(command.message || ""));
-      return sendPrompt(record, prepared);
+      return sendPrompt(record, prepared, { sourceCheckpointId });
     }
     if (command.type === "regenerate") {
+      const context = await findChatContext(record.chatId);
+      const sourceCheckpointId = context ? await turnCheckpoints?.checkpointForMessage(
+        context.chat.id, context.project.workingRoot, record.sessionFile || context.chat.piSessionFile, command.entryId,
+      ) : null;
       const forked = await adapter.fork(record.id, command.entryId);
       await syncForkedChat(record);
       await applyComposerModel(record, command);
-      return adapter.prompt(record.id, forked.text);
+      const prepared = await promptForChat(record, command, forked.text);
+      return sendPrompt(record, prepared, { sourceCheckpointId });
     }
     if (command.type === "continue") {
       if (!config.enablePartialContinue) throw Object.assign(new Error("Partial continuation is disabled"), { code: "partial_continue_disabled" });

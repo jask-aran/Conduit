@@ -3,6 +3,14 @@ import type { ProtocolMessage, ToolLifecycleEvent } from "../timeline-order";
 
 type UnknownRecord = Record<string, unknown>;
 
+export interface TurnArtifactSummary {
+  id: string;
+  messageId: string | null;
+  sequence: number;
+  targetSequence: number | null;
+  summary: { added: number; removed: number; preferredPath: string } | null;
+}
+
 export interface GenerationHandle {
   id: string | null;
   closed: boolean;
@@ -67,7 +75,7 @@ export type LiveEvent = EventBase & (
   | { type: "queue_update"; queue: QueueState }
   | { type: "extension_ui_request"; request: HostUiRequest | null }
   | { type: "extension_ui_resolved"; requestId: string }
-  | { type: "session_checkpoint"; chatId: string; title: string | null; generationSeq: number | null }
+  | { type: "session_checkpoint"; chatId: string; title: string | null; generationSeq: number | null; artifacts: TurnArtifactSummary[] | null }
   | { type: "message_end"; message: ProtocolMessage }
   | { type: "transcript_sync"; messages: unknown[]; tools: unknown[] }
   | StructuredGenerationEvent
@@ -257,6 +265,15 @@ export function normalizeLiveEvent(value: unknown): LiveEvent {
         generationSeq: number(source.generationSeq ?? source.sequence) ?? null,
         chatId: text(chat.id || source.chatId),
         title: optionalText(chat.title || source.title),
+        artifacts: Array.isArray(source.artifacts) ? source.artifacts.flatMap((value) => {
+          const item = record(value);
+          const summary = record(item.summary);
+          if (typeof item.id !== "string" || typeof item.sequence !== "number") return [];
+          return [{ id: item.id, messageId: optionalText(item.messageId), sequence: item.sequence,
+            targetSequence: typeof item.targetSequence === "number" ? item.targetSequence : null,
+            summary: typeof summary.added === "number" && typeof summary.removed === "number" && typeof summary.preferredPath === "string"
+              ? { added: summary.added, removed: summary.removed, preferredPath: summary.preferredPath } : null }];
+        }) : null,
       };
     }
     case "message_end": return { type: "message_end", generationId, message: protocolMessage(source.message) };

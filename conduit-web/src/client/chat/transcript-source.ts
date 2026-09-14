@@ -1,4 +1,5 @@
 import type { Accessor } from "solid-js";
+import type { TurnArtifactSummary } from "../api/live-events";
 import type { Message, ToolItem } from "../api/contracts";
 import type { ActiveGenerationView, LiveGenerationChange } from "../turn-rows";
 
@@ -15,6 +16,7 @@ export interface TranscriptSource {
   tools: Accessor<ToolItem[]>;
   activeGeneration: Accessor<ActiveGenerationView | null>;
   activeGenerationChange: Accessor<LiveGenerationChange | null>;
+  turnArtifacts: Accessor<{ chatId: string; items: TurnArtifactSummary[] } | null>;
   activity: Accessor<{ kind: string; label: string | null } | null>;
   streaming: Accessor<boolean>;
   loadedId: Accessor<string | null>;
