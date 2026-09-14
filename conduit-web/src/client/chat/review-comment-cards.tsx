@@ -23,6 +23,11 @@ export function ReviewCommentCards(props: {
         if (removable && props.onUpdate) props.onUpdate(removable, note());
         setEditing(false);
       };
+      // The box starts small so the excerpt has the room, and grows with the note.
+      const grow = (element: HTMLTextAreaElement) => {
+        element.style.height = "auto";
+        element.style.height = `${element.scrollHeight}px`;
+      };
       const lines = item.from === item.to ? `:${item.from}` : `:${item.from}-${item.to}`;
       // A comparison comment can span added and removed text, so it says so.
       const diff = item.scope !== "file";
@@ -48,7 +53,7 @@ export function ReviewCommentCards(props: {
                 <WorkspaceExcerptView path={item.path} text={item.excerpt} firstLine={item.from} startColumn={item.startColumn} endColumn={item.endColumn} note={item.note} side={diff ? item.side : undefined} counterpart={item.counterpart} />
               </Suspense>
             </div>
-            <Textarea autofocus aria-label={`Comment for ${item.path}`} maxlength={2000} rows={10} value={note()} onInput={(event) => setNote(event.currentTarget.value)} onKeyDown={(event) => {
+            <Textarea ref={(element: HTMLTextAreaElement) => queueMicrotask(() => grow(element))} autofocus aria-label={`Comment for ${item.path}`} maxlength={2000} rows={2} value={note()} onInput={(event) => { setNote(event.currentTarget.value); grow(event.currentTarget); }} onKeyDown={(event) => {
               if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); commit(); }
             }} />
             <div class="review-comment-editor-actions">

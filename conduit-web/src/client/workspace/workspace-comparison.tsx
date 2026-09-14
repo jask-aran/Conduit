@@ -9,7 +9,7 @@ import { readSetting, writeSetting, WORKSPACE_PANEL_GLOBAL_SCOPE } from "./works
 import { workspaceReadOnlySetup } from "./workspace-editor-base";
 import { workspaceLanguageForFilename } from "./workspace-languages";
 import { FileTypeIcon } from "./file-type-icon";
-import { annotationExtension, annotationSpan, commentHighlightsExtension, commentRange, WorkspaceAnnotationPopup, type AnnotationReading, type AnnotationSelection, type AnnotationSpan, type CommentHighlight } from "./workspace-annotate";
+import { annotationExtension, annotationSpan, paintAnnotationRange, commentHighlightsExtension, commentRange, WorkspaceAnnotationPopup, type AnnotationReading, type AnnotationSelection, type AnnotationSpan, type CommentHighlight } from "./workspace-annotate";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import "./workspace-comparison.css";
 
@@ -143,10 +143,14 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
      * the editor's own selection cannot describe a drag that touches them.
      */
     const readDeletedSelection = (target: EditorView): AnnotationReading | null | undefined => {
+      const clear = <T,>(result: T): T => {
+        paintAnnotationRange(target, null);
+        return result;
+      };
       const selection = target.dom.ownerDocument.getSelection();
       if (!selection || selection.rangeCount === 0) return undefined;
       const range = selection.getRangeAt(0);
-      if (!target.contentDOM.contains(range.commonAncestorContainer)) return undefined;
+      if (!target.contentDOM.contains(range.commonAncestorContainer)) return clear(undefined);
       const chunks = chunksNow();
       const widgets = Array.from(target.contentDOM.querySelectorAll(".cm-deletedChunk"));
       const locate = (node: Node, offset: number) => {
@@ -164,10 +168,10 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
       };
       const start = locate(range.startContainer, range.startOffset);
       const end = locate(range.endContainer, range.endOffset);
-      if (!start.chunk && !end.chunk) return undefined;
-      if (start.pos === undefined && !start.chunk) return undefined;
-      if (end.pos === undefined && !end.chunk) return undefined;
-      if (range.collapsed) return null;
+      if (!start.chunk && !end.chunk) return clear(undefined);
+      if (start.pos === undefined && !start.chunk) return clear(undefined);
+      if (end.pos === undefined && !end.chunk) return clear(undefined);
+      if (range.collapsed) return clear(null);
       const original = docFor("original");
       const originalFrom = start.chunk ? start.chunk.fromA + (start.offset ?? 0) : end.chunk!.fromA;
       const originalTo = end.chunk ? end.chunk.fromA + (end.offset ?? 0) : start.chunk!.endA;
@@ -176,7 +180,8 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
       const removed = original ? annotationSpan(original, "original", originalFrom, originalTo) : null;
       const added = annotationSpan(target.state.doc, "modified", modifiedFrom, modifiedTo);
       const span = added ?? removed;
-      if (!span) return null;
+      if (!span) return clear(null);
+      paintAnnotationRange(target, added ? { from: modifiedFrom, to: modifiedTo } : null);
       const counterpart = added
         ? removed ?? counterpartFor("modified", modifiedFrom, modifiedTo)
         : counterpartFor("original", originalFrom, originalTo);

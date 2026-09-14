@@ -188,16 +188,17 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-excerpt .cm-editor { background: transparent; }
 .workspace-excerpt .cm-scroller { font: 11px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; }
 .workspace-excerpt .cm-content { padding: 6px 0; }
-.workspace-excerpt .cm-gutters { border-right: 1px solid var(--border); background: transparent; }
-.workspace-excerpt[data-side="original"] .cm-gutters { border-right-color: color-mix(in oklch, var(--destructive), transparent 50%); }
-.workspace-excerpt[data-side="modified"] .cm-gutters { border-right-color: color-mix(in oklch, var(--workspace-git-added), transparent 50%); }
-.workspace-excerpt[data-comparison="true"] .cm-deletedChunk { background: color-mix(in srgb, var(--destructive) 14%, transparent); }
-.workspace-excerpt[data-comparison="true"] .cm-changedLine { background: color-mix(in srgb, var(--workspace-git-added) 14%, transparent); }
-.workspace-excerpt[data-comparison="true"] .cm-changedText,
-.workspace-excerpt[data-comparison="true"] .cm-deletedText { background: color-mix(in srgb, currentColor 16%, transparent); }
-.workspace-excerpt[data-comparison="true"] .cm-deletedLine { padding-inline: 10px; text-decoration: none; }
-.workspace-excerpt[data-comparison="true"] .cm-deletedLine del { text-decoration: none; }
+.workspace-excerpt .cm-gutters { background: transparent; }
+.workspace-excerpt[data-comparison="true"] .cm-editor .cm-deletedChunk { background: color-mix(in srgb, var(--destructive) 22%, transparent); }
+.workspace-excerpt[data-comparison="true"] .cm-editor .cm-changedLine { background: color-mix(in srgb, var(--workspace-git-added) 22%, transparent); }
+.workspace-excerpt[data-comparison="true"] .cm-editor .cm-changedText,
+.workspace-excerpt[data-comparison="true"] .cm-editor .cm-deletedText { background: color-mix(in srgb, currentColor 16%, transparent); }
+.workspace-excerpt[data-comparison="true"] .cm-editor .cm-deletedLine { padding-inline: 10px; text-decoration: none; }
+.workspace-excerpt[data-comparison="true"] .cm-editor .cm-deletedLine del { text-decoration: none; }
+.workspace-excerpt .cm-review-comment { box-shadow: none; background: color-mix(in oklch, var(--warn), transparent 78%); }
+.workspace-excerpt .cm-review-context { color: var(--muted-foreground); opacity: .55; }
 /* A comment leaves its lines faintly marked, and hovering them previews the note. */
+.cm-annotation-range { background: color-mix(in oklch, var(--foreground), transparent 78%); }
 .cm-review-comment { border-radius: 2px; background: color-mix(in oklch, var(--warn), transparent 90%); box-shadow: inset 2px 0 0 color-mix(in oklch, var(--warn), transparent 55%); }
 .cm-tooltip.cm-tooltip-hover:has(.workspace-review-comment-tooltip) { border: 1px solid var(--border); border-radius: 6px; background: var(--popover); box-shadow: var(--shadow-md); }
 .workspace-review-comment-tooltip { max-width: 280px; padding: 5px 7px; color: var(--popover-foreground); font: 11px/1.45 var(--font-sans); white-space: pre-wrap; overflow-wrap: anywhere; }
