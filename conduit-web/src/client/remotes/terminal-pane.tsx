@@ -1,5 +1,5 @@
 import { createEffect, createSignal, For, Index, on, onCleanup, onMount, Show } from "solid-js";
-import { ArrowDownIcon, ArrowLeftIcon, ArrowUpIcon, CheckIcon, ChevronDownIcon, FocusIcon, KeyboardIcon, Maximize2Icon, Minimize2Icon, PencilIcon, PlusIcon, Settings2Icon, TerminalIcon, Trash2Icon, UnplugIcon } from "lucide-solid";
+import { ArrowDownIcon, ArrowLeftIcon, CableIcon, ArrowUpIcon, CheckIcon, ChevronDownIcon, FocusIcon, KeyboardIcon, Maximize2Icon, Minimize2Icon, PencilIcon, PlusIcon, Settings2Icon, TerminalIcon, Trash2Icon, UnplugIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
 import {
   Button,
@@ -21,6 +21,7 @@ import {
   TooltipTrigger,
 } from "@/components/primitives";
 import { api } from "../api/client";
+import type { Connectivity } from "../state/runtime";
 import { terminalSocketUrl } from "../api/transport";
 import { clipboardPasteText, createTerminalRenderer, type TerminalPasteFiles, type TerminalRenderer } from "./terminal-renderer";
 import { terminalRecoveryView, type TerminalConnectionState } from "./terminal-recovery";
@@ -43,7 +44,15 @@ export type Pty = {
 };
 const PTY_IN_USE_CLOSE_CODE = 4009;
 const PTY_TAKEN_OVER_CLOSE_CODE = 4010;
+const SERVER_RESTART_CLOSE_CODE = 1012;
 const MOBILE_KEYS_STORAGE_KEY = "conduit:terminal-mobile-keys";
+// A Conduit restart closes every terminal socket at once and stays down longer
+// than a handful of sub-second retries can cover. Back off like the runtime
+// stream instead of giving up: quick first attempts for an ordinary blip, then
+// a slow poll that keeps waiting for the server to come back.
+const RECONNECT_CEILING_MS = 8_000;
+const RECONNECT_IDLE_MS = 10_000;
+const RECONNECT_VISIBLE_ATTEMPTS = 5;
 
 function notifyPtyChange() {
   window.dispatchEvent(new Event("conduit:ptys-changed"));
@@ -64,7 +73,7 @@ function sessionMetadata(record: Pty) {
 type StandaloneTerminalControls = { onOpenConduit: () => void };
 type KeyboardLockNavigator = Navigator & { keyboard?: { lock?: (codes?: string[]) => Promise<void>; unlock?: () => void } };
 
-export function TerminalPane(props: { projectId: string; projectName?: string; workingRoot?: string; terminalId?: string; active?: boolean; autoStart?: boolean; focusRequest?: number; standaloneControls?: StandaloneTerminalControls }) {
+export function TerminalPane(props: { projectId: string; projectName?: string; workingRoot?: string; terminalId?: string; active?: boolean; autoStart?: boolean; focusRequest?: number; connectivity?: () => Connectivity; standaloneControls?: StandaloneTerminalControls }) {
   const [pty, setPty] = createSignal<Pty | null>(null);
   const [sessions, setSessions] = createSignal<Pty[]>([]);
   const [error, setError] = createSignal("");
@@ -92,6 +101,9 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
   let syncGeometry: (() => void) | undefined;
   let reconnectTimer: number | undefined;
   let reconnectAttempts = 0;
+  // Set when the server answers that this terminal no longer exists, which is
+  // the one close the reconnect loop must not keep chasing.
+  let terminalGone = false;
   let connectionGeneration = 0;
   let mounted = false;
   let wasInactive = false;
@@ -300,22 +312,26 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
       record.status !== "running"
       || closeCode === PTY_IN_USE_CLOSE_CODE
       || closeCode === PTY_TAKEN_OVER_CLOSE_CODE
-      || closeCode === 1012
       || closeCode === 1013
-      || reconnectAttempts >= 3
+      || terminalGone
       || activeProjectId !== record.projectId
       || props.active === false
     ) return false;
-    const delay = 250 * (2 ** reconnectAttempts);
+    const attempt = reconnectAttempts;
     reconnectAttempts += 1;
+    // "Offline" here means "still trying, just slowly" — the same contract the
+    // runtime stream keeps. Only a terminal the server can no longer offer
+    // stops the loop, and that arrives as pty_not_found.
+    const waiting = attempt >= RECONNECT_VISIBLE_ATTEMPTS;
+    const delay = waiting ? RECONNECT_IDLE_MS : Math.min(250 * (2 ** attempt), RECONNECT_CEILING_MS);
     clearReconnect();
-    setConnectionState("reconnecting");
+    setConnectionState(waiting ? "offline" : "reconnecting");
     reconnectTimer = window.setTimeout(() => {
       reconnectTimer = undefined;
-      void connect(record, {
-        freshRenderer: true,
-        retrying: true,
-      });
+      // The renderer is deliberately kept across attempts: tmux repaints the
+      // pane on attach, so rebuilding it only costs a visible flash on every
+      // retry and throws away the screen the user was reading.
+      void connect(record, { retrying: true });
     }, delay);
     return true;
   };
@@ -327,6 +343,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     const generation = ++connectionGeneration;
     closeConnection();
     setError("");
+    terminalGone = false;
     if (!retrying) reconnectAttempts = 0;
     setConnectionState("connecting");
     const activeTerminal = await ensureRenderer({ fresh: freshRenderer });
@@ -402,7 +419,19 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
             return;
           }
           if (message.type === "client_error") {
-            if (message.code === "pty_in_use") {
+            if (message.code === "pty_not_found" || message.code === "pty_not_running") {
+              // Conduit came back without this terminal. Retrying cannot
+              // resurrect it, so settle on the state that offers a new one.
+              terminalGone = true;
+              intentionallyClosed = true;
+              clearReconnect();
+              setWritable(false);
+              setTerminalFocused(false);
+              setPty((current) => current ? { ...current, status: "exited" } : current);
+              setConnectionState("stopped");
+              void refreshSessions(activeProjectId).catch(() => {});
+              notifyPtyChange();
+            } else if (message.code === "pty_in_use") {
               setWritable(false);
               setTerminalFocused(false);
               setConnectionState("conflict");
@@ -477,7 +506,9 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
       if (connectionState() === "conflict") return;
       const reason = event.code === 1013
           ? "Terminal connection was closed because this browser could not keep up with output."
-          : "Terminal connection was interrupted.";
+          : event.code === SERVER_RESTART_CLOSE_CODE
+            ? "Conduit is restarting. Waiting for the terminal to come back."
+            : "Terminal connection was interrupted.";
       setError(reason);
       if (!scheduleReconnect({ ...record, status: "running" }, event.code)) setConnectionState("offline");
     };
@@ -657,14 +688,14 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     const record = pty();
     if (!record || record.status !== "running") return;
     reconnectAttempts = 0;
-    await connect(record, { freshRenderer: true });
+    await connect(record);
   };
 
   const takeControl = async () => {
     const record = pty();
     if (!record || record.status !== "running") return;
     reconnectAttempts = 0;
-    await connect(record, { freshRenderer: true, takeover: true });
+    await connect(record, { takeover: true });
   };
 
   const discardSelectedTerminal = (message: string) => {
@@ -784,6 +815,43 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
   };
 
   const recovery = () => terminalRecoveryView(connectionState(), error());
+
+  // Mirrors the sidebar footer indicator so both terminal surfaces say the same
+  // thing about the server the pane depends on.
+  const serverState = () => props.connectivity?.();
+  const serverLabel = () => {
+    const state = serverState();
+    if (state === "online") return "Server connected";
+    if (state === "offline") return "Server unavailable";
+    if (state === "reconnecting") return "Reconnecting";
+    return "Connecting";
+  };
+  const serverTone = () => {
+    const state = serverState();
+    if (state === "online") return "success";
+    if (state === "offline") return "danger";
+    if (state === "reconnecting") return "warn";
+    return "muted";
+  };
+  const serverBusy = () => serverState() === "connecting" || serverState() === "reconnecting";
+
+  // The runtime stream notices Conduit returning long before a backed-off
+  // terminal retry would. Collapse the wait: reattach at once, and when the
+  // terminal did not survive, refresh the list so the recovery button offers a
+  // new one that can actually be spawned.
+  createEffect(on(serverState, (state, previous) => {
+    if (state !== "online" || previous === undefined || previous === "online") return;
+    if (!mounted || props.active === false || activeProjectId !== props.projectId) return;
+    const record = pty();
+    const recoverable = connectionState() === "offline" || connectionState() === "reconnecting";
+    if (record?.status === "running" && recoverable) {
+      clearReconnect();
+      reconnectAttempts = 0;
+      void connect(record).catch((cause) => setError((cause as Error).message));
+      return;
+    }
+    void refreshSessions(activeProjectId).catch(() => {});
+  }));
 
   onMount(() => {
     mounted = true;
@@ -966,6 +1034,15 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
         </Button>
       </div>
       <div class="terminal-pane-actions">
+        <Show when={serverState()}>
+          <span class="terminal-server-status" data-tone={serverTone()} title={serverLabel()} aria-label={`Conduit · ${serverLabel()}`}>
+            <CableIcon />
+            <span class={`server-status-indicator runtime-indicator runtime-indicator-${serverTone()}`} aria-hidden="true">
+              <Show when={serverBusy()} fallback={<span class="runtime-indicator-dot" />}><Spinner class="size-3" /></Show>
+            </span>
+            <small>{serverLabel()}</small>
+          </span>
+        </Show>
         <Menu onOpenChange={(open) => { if (open) void refreshSessions().catch((cause) => setError((cause as Error).message)); }}>
           <MenuTrigger class="terminal-sessions-trigger" aria-label="Active terminal sessions" title="Active terminal sessions">
             <TerminalIcon /><span>{sessions().length}</span><ChevronDownIcon />
