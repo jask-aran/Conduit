@@ -1071,16 +1071,31 @@ export function createActiveChat(options: ActiveChatOptions) {
   const interruptAndSend = () => {
     const prepared = prepareOutboundMessage();
     if (!pendingMessages().length && !prepared.hasContent) return void stop();
+    // The server prompts with the queue it takes back plus this message, joined
+    // the way interruptedPromptInput joins them, so the bubble says what the
+    // model was actually asked.
+    const interrupting = [...pendingMessages().map((message) => message.content), prepared.message]
+      .map((text) => text.trim()).filter(Boolean).join("\n");
+    // Pi accepts a steered message without saying which entry it becomes, so
+    // unlike a prompt there is no id to reconcile against and nothing arrives
+    // until the session file is read back. Without a bubble of its own the
+    // message the interrupt sent is absent from the transcript until then --
+    // for the whole of the response it asked for.
+    const local: Message = { id: `user_${Date.now()}`, role: "user", content: interrupting,
+      timestamp: new Date().toISOString(), attachments: prepared.sentAttachments };
+    const previous = messages();
     setQueue({ steering: [], followUp: [] });
     setDraft("");
     setGeneration("submitting");
     try {
       socket!.send(JSON.stringify({ type: "interrupt_and_send", message: prepared.message, attachmentIds: prepared.attachmentIds,
         model: models.model(), thinkingLevel: models.effort() }));
+      setMessages((current) => [...current, local]);
       acceptOutboundMessage(prepared);
       setStatus("active");
       setGeneration("active");
     } catch (error) {
+      setMessages(previous);
       setDraft(prepared.text);
       setGeneration("idle");
       onError(error);

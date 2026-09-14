@@ -212,16 +212,21 @@ export function createLiveSessionStream({
         await syncTranscript(record);
         return null;
       }
+      // Before the replacement, not only after it: the interrupted turn is
+      // already written by the time cancel resolves, and syncing it now settles
+      // it while the client still has nothing else arriving. Leaving it until
+      // after the replacement prompt meant the client carried an unreconciled
+      // interrupted turn for the whole of the next response.
+      await syncTranscript(record);
       await applyComposerModel(record, command);
       const prepared = await promptForChat(record, {
         ...command,
         attachmentIds: interrupted.attachmentIds,
       }, interrupted.message);
       const generationId = await sendPrompt(record, prepared);
-      // Pi can write the aborted tool result just after cancel resolves. Once
-      // the replacement prompt is accepted, a two-turn sync includes both the
-      // interrupted turn and its replacement, so the live timeline does not
-      // depend on a later reload.
+      // Pi can write the aborted tool result just after cancel resolves, and
+      // the steered message has no id until Pi writes it, so a two-turn sync
+      // once the replacement is accepted is what names both turns.
       await syncTranscript(record, 2);
       return generationId;
     }
