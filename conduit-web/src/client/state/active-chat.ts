@@ -30,7 +30,7 @@ import { canCoalesceTextDelta, enqueueOverflowLiveEvent, mergeTextDeltaEvents } 
 import type { AttachmentsStore } from "./attachments";
 import type { DraftsStore } from "./drafts";
 import type { CatalogueStore } from "./catalogue";
-import { settleGenerationTools, type ActiveGenerationView, type LiveGenerationChange } from "../turn-rows";
+import { freezeGeneration, settleGenerationTools, type ActiveGenerationView, type LiveGenerationChange } from "../turn-rows";
 import type { ModelSettings } from "./model-settings";
 import type { PermissionSettings } from "./permission-settings";
 import type { RuntimeStore } from "./runtime";
@@ -358,7 +358,21 @@ export function createActiveChat(options: ActiveChatOptions) {
     const recorder = getHarnessRecorder();
     const reduceStartedAt = recorder ? performance.now() : 0;
     let result: ReturnType<typeof generationStore.apply> | undefined;
+    // The next turn's start installs a fresh live generation over this one, and
+    // an interrupted turn lives nowhere else until its persisted copy arrives.
+    // Freeze it into the transcript first, so steering does not blank the
+    // answer it is steering away from.
+    const supersedes = event.type === "generation_started"
+      && previous?.status === "stopped"
+      && previous.id !== event.generationId;
     batch(() => {
+      if (supersedes && previous) {
+        const frozen = freezeGeneration(previous);
+        if (frozen.length) {
+          setTools((existing) => settleGenerationTools(existing, previous));
+          setMessages((existing) => [...existing, ...frozen]);
+        }
+      }
       result = generationStore.apply(event);
       if (result.changed && result.state) {
         setActiveGeneration(result.state as ActiveGenerationView);
