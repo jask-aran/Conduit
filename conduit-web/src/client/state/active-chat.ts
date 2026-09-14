@@ -385,6 +385,9 @@ export function createActiveChat(options: ActiveChatOptions) {
     // once rather than waiting for a sync that may be a whole response away.
     // The live view is cleared with it: whatever it held is now in the
     // transcript, and leaving both would render the turn twice.
+    // Freeze, but do not return: the status handling below is what clears
+    // stopPending, and skipping it made every later event -- the next turn's
+    // generation_started among them -- be dropped.
     if (next.status === "stopped" && previous?.status !== "stopped") {
       const frozen = freezeGeneration(next);
       batch(() => {
@@ -396,7 +399,6 @@ export function createActiveChat(options: ActiveChatOptions) {
         setActiveGenerationChange(null);
         setActiveGeneration(null);
       });
-      return;
     }
     if (recorder) {
       const eventRecord = event as Record<string, unknown>;
