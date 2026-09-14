@@ -55,8 +55,9 @@ The controller must:
    when the reader returns to a chat.
 6. Cache persisted projection by user-owned turn. The authoritative projector
    assigns referenced and timestamp-fallback tools before it decides which
-   turn rows can be reused. Settlement rebuilds the changed final turn. History
-   prepend reuses a turn only when its message indexes remain valid.
+   turn rows can be reused. Settlement rebuilds the changed final turn. Rows do
+   not carry obsolete numeric message indexes, so history prepend builds only
+   the new turns and preserves every unchanged cached turn.
 7. Keep the existing settled-row visibility virtualization. Keep the live turn
    mounted outside any future DOM eviction changes.
 

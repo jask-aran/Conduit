@@ -67,7 +67,7 @@ export type TurnRow =
   // The projection already knows which user message opened the turn; making
   // each row rediscover it meant a backwards scan of the whole message list
   // per assistant row, which is quadratic in a long chat.
-  | { key: string; type: "message"; value: Message; index: number; live?: boolean; streamVersion?: number; displayKey?: string; precedingUserId?: string }
+  | { key: string; type: "message"; value: Message; live?: boolean; streamVersion?: number; displayKey?: string; precedingUserId?: string }
   | { key: string; type: "trace"; value: TurnTraceData };
 
 interface PersistedTurn {
@@ -82,7 +82,6 @@ export interface PersistedTurnProjection {
   userMessage: Message | null;
   assistants: Message[];
   leftoverTools: ToolItem[];
-  firstMessageIndex: number;
   rows: TurnRow[];
 }
 
@@ -180,7 +179,7 @@ export function buildLiveAnswerRow(
   generation: ActiveGenerationView,
   assistantId: string,
   index: LiveProjectionIndex,
-  messageIndex: number,
+  _messageIndex: number,
   precedingUserId?: string,
 ): Extract<TurnRow, { type: "message" }> | null {
   const assistant = generation.assistantMessages.find((message) => message.id === assistantId);
@@ -201,7 +200,6 @@ export function buildLiveAnswerRow(
     key: index.answerRowKeys.get(assistantId) || `message:live:${generation.id}:${assistantId}`,
     displayKey: index.answerRowKeys.get(assistantId),
     type: "message",
-    index: messageIndex,
     live: active(generation),
     streamVersion: generation.lastSeq,
     precedingUserId,
@@ -289,7 +287,7 @@ export function settleGenerationTools(current: ToolItem[], generation: ActiveGen
   return next;
 }
 
-function liveRows(generation: ActiveGenerationView, owner: Message | null, index: number): TurnRow[] {
+function liveRows(generation: ActiveGenerationView, owner: Message | null): TurnRow[] {
   const classifications = textBlockClassifications(generation) as Record<string, "interim" | "answer">;
   const segments: TraceSegment[] = [];
   const answers: TurnRow[] = [];
@@ -326,7 +324,6 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, index
         key: answerDisplayKey(owner, answerIndex, `live:${generation.id}`),
         displayKey: answerDisplayKey(owner, answerIndex, `live:${generation.id}`),
         type: "message",
-        index,
         live: active(generation),
         streamVersion: generation.lastSeq,
         precedingUserId: owner?.id,
@@ -369,9 +366,9 @@ export function projectLiveTurn(
   generation: ActiveGenerationView,
 ): TurnRow[] {
   const owner = liveOwner(messages, generation);
-  if (!owner) return [...persistedRows, ...liveRows(generation, null, messages.length)];
+  if (!owner) return [...persistedRows, ...liveRows(generation, null)];
   const ownerRow = persistedRows.findIndex((row) => row.key === `message:${messageKey(owner)}`);
-  if (ownerRow < 0) return [...persistedRows, ...liveRows(generation, owner, messages.indexOf(owner))];
+  if (ownerRow < 0) return [...persistedRows, ...liveRows(generation, owner)];
   let nextTurn = ownerRow + 1;
   while (nextTurn < persistedRows.length) {
     const row = persistedRows[nextTurn]!;
@@ -380,7 +377,7 @@ export function projectLiveTurn(
   }
   return [
     ...persistedRows.slice(0, ownerRow + 1),
-    ...liveRows(generation, owner, messages.indexOf(owner)),
+    ...liveRows(generation, owner),
     ...persistedRows.slice(nextTurn),
   ];
 }
@@ -389,10 +386,8 @@ function sameSources(
   left: PersistedTurnProjection,
   right: PersistedTurn,
   sourceTools: ToolItem[],
-  firstMessageIndex: number,
 ): boolean {
   return left.userMessage === right.userMessage
-    && left.firstMessageIndex === firstMessageIndex
     && left.assistants.length === right.assistants.length
     && left.assistants.every((message, index) => message === right.assistants[index])
     && left.leftoverTools.length === right.leftoverTools.length
@@ -404,7 +399,7 @@ function sameSources(
 function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById: Map<string, ToolItem>): TurnRow[] {
   const rows: TurnRow[] = [];
   if (turn.userMessage) {
-    rows.push({ key: `message:${messageKey(turn.userMessage)}`, type: "message", value: turn.userMessage, index: messages.indexOf(turn.userMessage) });
+    rows.push({ key: `message:${messageKey(turn.userMessage)}`, type: "message", value: turn.userMessage });
   }
   if (!turn.assistants.length) return rows;
   const segments: TraceSegment[] = [];
@@ -449,7 +444,6 @@ function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById
       displayKey,
       type: "message",
       value: answerAssistants.length === 1 ? answer : { ...answer, content: answerText },
-      index: messages.indexOf(answer),
       precedingUserId: turn.userMessage?.id,
     });
   }
@@ -488,23 +482,20 @@ export function projectPersistedTurns(
 
   const previousByKey = new Map(previous.map((turn) => [turn.key, turn]));
   const toolById = new Map(tools.map((tool) => [tool.id, tool]));
-  const projected = turns.map((turn, turnIndex) => {
+  const projected = turns.map((turn) => {
     const key = turn.userMessage ? `user:${messageKey(turn.userMessage)}` : "preamble";
-    const firstMessage = turn.userMessage || turn.assistants[0] || null;
-    const firstMessageIndex = firstMessage ? messages.indexOf(firstMessage) : turnIndex;
     const sourceTools = [
       ...turn.assistants.flatMap((assistant) => toolCallIdsOf(assistant).map((id) => toolById.get(id)).filter((tool): tool is ToolItem => Boolean(tool))),
       ...turn.leftoverTools,
     ];
     const cached = previousByKey.get(key);
-    if (cached && sameSources(cached, turn, sourceTools, firstMessageIndex)) return cached;
+    if (cached && sameSources(cached, turn, sourceTools)) return cached;
     return {
       key,
       userMessage: turn.userMessage,
       assistants: turn.assistants,
       leftoverTools: turn.leftoverTools,
       sourceTools,
-      firstMessageIndex,
       rows: persistedRowsForTurn(turn, messages, toolById),
     };
   });
