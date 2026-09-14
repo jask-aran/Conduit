@@ -82,6 +82,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   const [title, setTitle] = createSignal("");
   const [templateId, setTemplateId] = createSignal<string | null>(null);
   const [runtimeIdentity, setRuntimeIdentity] = createSignal<RuntimeIdentity | null>(null);
+  const [backendImplementation, setBackendImplementation] = createSignal<string | null>(null);
   const [live, setLive] = createSignal<LiveRecord | null>(null);
   const [messages, setMessages] = createSignal<Message[]>([]);
   const [tools, setTools] = createSignal<ToolItem[]>([]);
@@ -134,6 +135,8 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
   const generationStore = createClientActiveGenerationStore();
   const [connectingId, setConnectingId] = createSignal<string | null>(null);
+  const [navigatingId, setNavigatingId] = createSignal<string | null>(null);
+  let navigationRequest: Promise<void> | null = null;
   let socket: WebSocket | null = null;
   let currentGeneration: string | null = null;
   let stopPending = false;
@@ -150,14 +153,35 @@ export function createActiveChat(options: ActiveChatOptions) {
     expiresAt: number;
     request: Promise<TranscriptDetail>;
   }>();
+  const transcriptCache = new Map<string, {
+    revision: string;
+    detail: TranscriptDetail;
+  }>();
 
   const chatIsLive = (chat: ChatSummary) => chat.liveActive || Boolean(options.runtime.getProcess(chat.id)?.active);
+  const transcriptRevision = (chat: ChatSummary) => chat.updatedAt || chat.createdAt || "";
+  const rememberTranscript = (chat: ChatSummary, detail: TranscriptDetail) => {
+    transcriptCache.delete(chat.id);
+    transcriptCache.set(chat.id, { revision: transcriptRevision(chat), detail });
+    while (transcriptCache.size > 10) transcriptCache.delete(transcriptCache.keys().next().value!);
+    return detail;
+  };
+  const cachedTranscript = (chat: ChatSummary) => {
+    if (chatIsLive(chat)) return null;
+    const cached = transcriptCache.get(chat.id);
+    if (!cached || cached.revision !== transcriptRevision(chat)) return null;
+    transcriptCache.delete(chat.id);
+    transcriptCache.set(chat.id, cached);
+    return cached.detail;
+  };
+  const fetchTranscript = (chat: ChatSummary) => api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(chat.id)}`)
+    .then((detail) => rememberTranscript(chat, detail));
   const loadTranscript = (chat: ChatSummary) => {
-    const revision = chat.updatedAt || chat.createdAt || "";
+    const revision = transcriptRevision(chat);
     const cached = transcriptPrefetches.get(chat.id);
     if (!chatIsLive(chat) && cached && cached.revision === revision && cached.expiresAt > Date.now()) return cached.request;
     transcriptPrefetches.delete(chat.id);
-    const request = api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(chat.id)}`);
+    const request = fetchTranscript(chat);
     transcriptPrefetches.set(chat.id, { revision, expiresAt: Date.now() + 30_000, request });
     request.catch(() => {
       if (transcriptPrefetches.get(chat.id)?.request === request) transcriptPrefetches.delete(chat.id);
@@ -299,6 +323,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     cancelReconnect();
     setConnectingId(null);
     setLoadedId(null);
+    setBackendImplementation(null);
     socket?.close();
     socket = null;
     setLive(null);
@@ -438,6 +463,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       setTitle(detail.title ?? "");
       if (detail.profileId || detail.templateId) setTemplateId(detail.profileId || detail.templateId || null);
       if (detail.runtime) setRuntimeIdentity(detail.runtime);
+      setBackendImplementation(detail.backend?.implementation || null);
     });
   };
 
@@ -748,15 +774,14 @@ export function createActiveChat(options: ActiveChatOptions) {
     applyLiveEvent(event);
   }
 
-  const select = async (
+  const performSelect = async (
     chat: ChatSummary,
     project: Project,
     navigationOptions: { history?: "push" | "replace" | "none"; onCommit?: () => void } = {},
   ) => {
-    // Load first, commit once: failed or superseded navigation leaves the
-    // current chat, URL, socket, and selection intact.
     const navigation = ++navigationToken;
-    const detail = await loadTranscript(chat);
+    const cached = cachedTranscript(chat);
+    const detail = cached || await loadTranscript(chat);
     if (chatIsLive(chat)) transcriptPrefetches.delete(chat.id);
     if (navigation !== navigationToken) return;
     reset();
@@ -773,6 +798,28 @@ export function createActiveChat(options: ActiveChatOptions) {
     hydrateDraft(chat.id);
     applyDetail(detail);
     if (detail.status === "active") await openLive(chat.id, project.id, {}, selection);
+    else if (cached) {
+      void fetchTranscript(chat).then((fresh) => {
+        if (selection !== selectionToken || selectedId() !== chat.id) return;
+        applyDetail(fresh, true);
+      }).catch(onError);
+    }
+  };
+  const select = (
+    chat: ChatSummary,
+    project: Project,
+    navigationOptions: { history?: "push" | "replace" | "none"; onCommit?: () => void } = {},
+  ) => {
+    if (navigatingId() === chat.id && navigationRequest) return navigationRequest;
+    setNavigatingId(chat.id);
+    let request: Promise<void>;
+    request = performSelect(chat, project, navigationOptions).finally(() => {
+      if (navigationRequest !== request) return;
+      navigationRequest = null;
+      setNavigatingId(null);
+    });
+    navigationRequest = request;
+    return request;
   };
 
   const initialize = (chat: ChatSummary, project: Project, detail?: TranscriptDetail) => {
@@ -785,6 +832,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     setTitle(chat.title);
     setTemplateId(chat.templateId || options.defaultTemplateId() || "assistant");
     setRuntimeIdentity(chat.runtime || null);
+    setBackendImplementation(chat.backend?.implementation || null);
     models.select(project.id, chat.id, detail, { reloadChat: (detail?.status || chat.status) !== "active" });
     void permissions?.select(chat.id);
     void attachments.select(chat.id);
@@ -1033,6 +1081,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   onCleanup(() => {
     cancelReconnect();
     transcriptPrefetches.clear();
+    transcriptCache.clear();
     socket?.close();
     document.removeEventListener("visibilitychange", resumeLive);
     window.removeEventListener("pageshow", restoreLive);
@@ -1040,10 +1089,10 @@ export function createActiveChat(options: ActiveChatOptions) {
   });
 
   return {
-    status, setStatus, title, setTitle, templateId, setTemplateId, runtimeIdentity, setRuntimeIdentity,
+    status, setStatus, title, setTitle, templateId, setTemplateId, runtimeIdentity, setRuntimeIdentity, backendImplementation,
     live, messages, setMessages, tools, loadedId, pageBefore, loadingOlder, draft, setDraft,
     generation, editingEntryId, contextUsage, sessionStats, cacheStats, compacting, hostUiRequests, queue, pendingMessages, capabilities, harnessCommands, activeGeneration, activeGenerationChange,
-    connectingId, streaming, stopping, activity,
+    connectingId, navigatingId, streaming, stopping, activity,
     initialize, select, prefetch, loadDetail, openLive, attachLive, ensureLive, reset, send, stop, regenerate,
     continueResponse, compact, loadHarnessCommands, loadOlder, edit, respondHostUi, clearQueue, interruptAndSend, editQueued, discardQueued,
   };
