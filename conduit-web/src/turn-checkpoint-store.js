@@ -199,7 +199,7 @@ export class TurnCheckpointStore {
     // about to write becomes its child, which is what ties a checkpoint to the
     // exchange that produced it.
     const anchorEntryId = await this.#anchor(sessionFile);
-    await this.#write(file, { version: 1, id, chatId, projectId, workingRoot: root, repository, turnId: null, createdAt, sequence, anchorEntryId, sessionFile: sessionFile ? path.resolve(sessionFile) : null, head, digest, entries });
+    await this.#write(file, { version: 1, id, chatId, projectId, workingRoot: root, repository, turnId: null, createdAt, sequence, anchorEntryId, sessionFile: sessionFile ? path.resolve(sessionFile) : null, sourceCheckpointId: source?.id ?? null, head, digest, entries });
     const names = (await fs.readdir(directory)).filter((name) => name.endsWith(".json")).sort();
     await Promise.all(names.slice(0, -MAX_CHECKPOINTS_PER_CHAT).map((name) => fs.unlink(path.join(directory, name))));
     return { id, file, turnId: null };
@@ -358,13 +358,21 @@ export class TurnCheckpointStore {
   }
 
   async #activeCheckpoints(sessionFile, checkpoints) {
-    const mappings = await this.#userMessageIds(sessionFile, checkpoints);
-    const latestByMessage = new Map();
+    const branch = [];
     for (const checkpoint of checkpoints) {
+      if (typeof checkpoint.sourceCheckpointId === "string") {
+        const sourceIndex = branch.findIndex((candidate) => candidate.id === checkpoint.sourceCheckpointId);
+        if (sourceIndex >= 0) branch.splice(sourceIndex + 1);
+      }
+      branch.push(checkpoint);
+    }
+    const mappings = await this.#userMessageIds(sessionFile, branch);
+    const latestByMessage = new Map();
+    for (const checkpoint of branch) {
       const mapping = mappings.get(checkpoint.id);
       if (mapping) latestByMessage.set(mapping.messageId, checkpoint.id);
     }
-    const active = checkpoints.filter((checkpoint) => {
+    const active = branch.filter((checkpoint) => {
       const mapping = mappings.get(checkpoint.id);
       return mapping && latestByMessage.get(mapping.messageId) === checkpoint.id;
     });

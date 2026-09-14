@@ -221,7 +221,7 @@ export type OptionalCapabilityEvent = EventBase & (
   | { type: "retry"; active: boolean; retry?: unknown }
   | { type: "transcript_message"; message: unknown }
   /** The backend's own record of recent turns, published to repair live drift. */
-  | { type: "transcript_sync"; messages: unknown[]; tools: unknown[] }
+  | { type: "transcript_sync"; messages: unknown[]; tools: unknown[]; replaceAll?: boolean }
   | { type: "generation_replay"; sequence: number; generation: unknown }
 );
 

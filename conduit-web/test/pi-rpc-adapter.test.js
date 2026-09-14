@@ -33,6 +33,11 @@ test("Pi adapter maps required neutral events and retains Pi richness", () => {
     generationId: "g1", pi: sync, type: "transcript_sync",
     messages: [{ id: "user-1", role: "user" }], tools: [],
   });
+  const reset = { ...sync, generationId: null, replaceAll: true };
+  assert.deepEqual(normalizePiBackendEvent(reset), {
+    generationId: null, pi: reset, type: "transcript_sync", replaceAll: true,
+    messages: [{ id: "user-1", role: "user" }], tools: [],
+  });
   const unknown = { type: "pi_extension_event", value: 4 };
   assert.deepEqual(normalizePiBackendEvent(unknown), { generationId: null, pi: unknown, type: "pi_event" });
   assert.ok(Object.values(PI_CAPABILITIES).every(Boolean));

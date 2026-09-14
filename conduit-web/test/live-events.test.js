@@ -2,6 +2,22 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { isStructuredGenerationEvent, normalizeLiveEvent } from "../src/client/api/live-events.ts";
 
+test("preserves an authoritative fork transcript marker", () => {
+  assert.deepEqual(normalizeLiveEvent({
+    type: "transcript_sync",
+    generationId: null,
+    replaceAll: true,
+    messages: [{ id: "user-kept", role: "user" }],
+    tools: [],
+  }), {
+    type: "transcript_sync",
+    generationId: null,
+    replaceAll: true,
+    messages: [{ id: "user-kept", role: "user" }],
+    tools: [],
+  });
+});
+
 test("normalizes host UI events into the client discriminated union", () => {
   assert.deepEqual(normalizeLiveEvent({
     type: "extension_ui_request",

@@ -860,10 +860,10 @@ export class PiManager extends EventEmitter {
    * The project comes from the caller because the session file is validated
    * against it. Backends that own their own store ignore it.
    */
-  async readTranscript(id, { project, turns = 1 } = {}) {
+  async readTranscript(id, { project, turns = 1, characterLimit = 50_000 } = {}) {
     const record = this.processes.get(id);
     if (!record?.sessionFile || !project) return { messages: [] };
-    const page = await readSessionPage(record.sessionFile, project, { turnLimit: turns });
+    const page = await readSessionPage(record.sessionFile, project, { turnLimit: turns, characterLimit });
     return projectSessionEntries(page.entries);
   }
 

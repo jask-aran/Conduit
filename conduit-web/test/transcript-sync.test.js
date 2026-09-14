@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mergeTranscript, mergeTranscriptProjection } from "../src/client/timeline-order.ts";
+import { mergeTranscript, mergeTranscriptProjection, replaceTranscriptProjection, tagOptimisticGenerationOwner, truncateForRegenerate } from "../src/client/timeline-order.ts";
 
 const message = (id, role, content, extra = {}) => ({ id, role, content, ...extra });
 
@@ -69,6 +69,46 @@ test("the client's copy of a turn is replaced through the generation it belongs 
     message("7dab869c", "assistant", "half a story", { stopReason: "aborted" }),
   ], "g1");
   assert.deepEqual(merged.map((item) => item.id), ["d8f7a8eb", "7dab869c"]);
+});
+
+test("a resumed generation tags its optimistic user before a stopped turn is synced", () => {
+  const resumed = tagOptimisticGenerationOwner([
+    message("user_1700", "user", "write a story"),
+    message("end_g1:m1", "assistant", "half a story", { generationId: "g1", stopped: true }),
+  ], "g1");
+  const merged = mergeTranscript(resumed, [
+    message("d8f7a8eb", "user", "write a story"),
+    message("7dab869c", "assistant", "half a story", { stopReason: "aborted" }),
+  ], "g1");
+
+  assert.deepEqual(merged.map((item) => item.id), ["d8f7a8eb", "7dab869c"]);
+});
+
+test("regenerate removes the user message that the fork replaces", () => {
+  const truncated = truncateForRegenerate([
+    message("user-1", "user", "keep"),
+    message("assistant-1", "assistant", "keep this too"),
+    message("user-2", "user", "replace me"),
+    message("assistant-2", "assistant", "old answer"),
+  ], "user-2");
+
+  assert.deepEqual(truncated.map((item) => item.id), ["user-1", "assistant-1"]);
+});
+
+test("an authoritative fork transcript removes every abandoned message", () => {
+  const current = [
+    message("user-kept", "user", "keep", { key: "stable-user" }),
+    message("assistant-kept", "assistant", "keep", { key: "stable-assistant" }),
+    message("user-abandoned", "user", "old prompt"),
+    message("assistant-abandoned", "assistant", "old answer"),
+  ];
+  const projection = replaceTranscriptProjection(current, [
+    message("user-kept", "user", "keep"),
+    message("assistant-kept", "assistant", "keep"),
+  ], []);
+
+  assert.deepEqual(projection.messages.map((item) => item.id), ["user-kept", "assistant-kept"]);
+  assert.deepEqual(projection.messages.map((item) => item.key), ["stable-user", "stable-assistant"]);
 });
 
 test("earlier turns survive a sync of the turn that follows them", () => {

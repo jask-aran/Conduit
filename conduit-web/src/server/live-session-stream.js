@@ -143,11 +143,21 @@ export function createLiveSessionStream({
   async function syncForkedChat(record) {
     const context = await findChatContext(record.chatId);
     if (!context) throw new Error("Chat no longer exists");
+    const adapter = adapterFor(record);
     const native = context.chat.backend?.protocol === "native_api";
     await registry.update(context.chat.id, native
       ? { backend: { ...context.chat.backend, opaqueSession: record.sessionId } }
       : { piSessionId: record.sessionId || context.chat.piSessionId, piSessionFile: record.sessionFile });
-    adapterFor(record).publish(record, { type: "history_forked", chat: chatView(registry.metadata(context.chat.id)) });
+    adapter.publish(record, { type: "history_forked", chat: chatView(registry.metadata(context.chat.id)) });
+    const projection = await adapter.readTranscript({
+      liveSessionId: record.id,
+      chatId: record.chatId,
+      project: context.project,
+      turns: Number.MAX_SAFE_INTEGER,
+      characterLimit: Number.MAX_SAFE_INTEGER,
+    });
+    projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages || []);
+    adapter.publish(record, { type: "transcript_sync", generationId: null, replaceAll: true, ...projection });
     return registry.metadata(context.chat.id);
   }
 

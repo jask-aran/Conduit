@@ -200,6 +200,7 @@ export function registerChatRoutes(app, {
         || (context.chat.runtime?.kind === "native_pi" ? "native_pi" : "conduit_pi"));
       if (manifest?.history !== "tree") return response.status(409).json({ error: "chat_history_unavailable" });
       const resident = backends.getByChatId(context.chat.id);
+      if (!resident && context.chat.status === "draft") return response.json({ leafId: null, tree: [] });
       if (!resident) return response.status(409).json({ error: "live_session_required" });
       response.json(await backends.forChat(context.chat).getHistoryTree(resident.id));
     } catch (error) { next(error); }
