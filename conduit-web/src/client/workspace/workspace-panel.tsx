@@ -292,21 +292,34 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const [chatMode, setChatMode] = createSignal<ChatMode>("history");
   const [historyTree, setHistoryTree] = createSignal<HistoryTree | null>(null);
   const [historyLoading, setHistoryLoading] = createSignal(false);
+  let historyChatId: string | null = null;
+  let historyLoad: { chatId: string; promise: Promise<void> } | null = null;
   const loadHistory = async () => {
     const chatId = props.artifactChatId?.();
     if (!chatId || !props.historyAvailable?.()) {
+      historyChatId = null;
       setHistoryTree(null);
       return;
     }
-    setHistoryLoading(true);
-    try {
-      const result = await api<HistoryTree>(`/v0/chats/${encodeURIComponent(chatId)}/history`, { cache: "no-store" });
-      if (props.artifactChatId?.() === chatId) setHistoryTree(result);
-    } catch (cause) {
-      reportError((cause as Error).message);
-    } finally {
-      if (props.artifactChatId?.() === chatId) setHistoryLoading(false);
-    }
+    if (historyLoad?.chatId === chatId) return historyLoad.promise;
+    const initialLoad = historyChatId !== chatId || !historyTree();
+    if (initialLoad) setHistoryLoading(true);
+    const promise = (async () => {
+      try {
+        const result = await api<HistoryTree>(`/v0/chats/${encodeURIComponent(chatId)}/history`, { cache: "no-store" });
+        if (props.artifactChatId?.() === chatId) {
+          historyChatId = chatId;
+          setHistoryTree(result);
+        }
+      } catch (cause) {
+        reportError((cause as Error).message);
+      } finally {
+        if (props.artifactChatId?.() === chatId) setHistoryLoading(false);
+        if (historyLoad?.promise === promise) historyLoad = null;
+      }
+    })();
+    historyLoad = { chatId, promise };
+    return promise;
   };
   const historyActivePath = createMemo(() => {
     const result = new Set<string>();
