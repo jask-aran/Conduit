@@ -77,7 +77,7 @@ export type LiveEvent = EventBase & (
   | { type: "extension_ui_resolved"; requestId: string }
   | { type: "session_checkpoint"; chatId: string; title: string | null; generationSeq: number | null; artifacts: TurnArtifactSummary[] | null }
   | { type: "message_end"; message: ProtocolMessage }
-  | { type: "transcript_sync"; messages: unknown[]; tools: unknown[] }
+  | { type: "transcript_sync"; messages: unknown[]; tools: unknown[]; replaceAll: boolean }
   | StructuredGenerationEvent
   | { type: "runtime_error" | "client_error"; code: string; message: string }
   | { type: "unknown"; sourceType: string }
@@ -239,7 +239,7 @@ export function normalizeLiveEvent(value: unknown): LiveEvent {
       ? { type: "auto_retry_start", generationId, retry: retry(source.retry) || {} }
       : { type: "auto_retry_end", generationId };
     case "transcript_message": return { type: "message_end", generationId, message: protocolMessage(source.message) };
-    case "transcript_sync": return { type: "transcript_sync", generationId, messages: list(source.messages), tools: list(source.tools) };
+    case "transcript_sync": return { type: "transcript_sync", generationId, messages: list(source.messages), tools: list(source.tools), replaceAll: Boolean(source.replaceAll) };
     case "runtime_state": {
       if (!Object.keys(record(source.session)).length && source.lifecycle) {
         const active = source.lifecycle === "working" || source.status === "working";

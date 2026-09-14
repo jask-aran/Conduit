@@ -23,7 +23,7 @@ import type {
   ToolItem,
   TranscriptDetail,
 } from "../api/contracts";
-import { assignToolSeq, commitAssistantMessage, mergeTranscriptProjection, promotePendingUser } from "../timeline-order";
+import { assignToolSeq, commitAssistantMessage, mergeTranscriptProjection, promotePendingUser, replaceTranscriptProjection, tagOptimisticGenerationOwner, truncateForRegenerate } from "../timeline-order";
 import { reconcileMessages } from "../reconcile-messages";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { canCoalesceTextDelta, enqueueOverflowLiveEvent, mergeTextDeltaEvents } from "./text-delta-batcher";
@@ -36,7 +36,6 @@ import type { PermissionSettings } from "./permission-settings";
 import type { RuntimeStore } from "./runtime";
 import { createClientActiveGenerationStore } from "./active-generation-store.js";
 import { clearReviewComments, parseReviewComments, projectReviewComments, restoreReviewComments, reviewComments } from "../chat/review-comments";
-import { isOptimisticId } from "../reconcile-messages";
 
 type UnknownRecord = Record<string, unknown>;
 type ErrorHandler = (error: unknown) => void;
@@ -363,14 +362,8 @@ export function createActiveChat(options: ActiveChatOptions) {
       // The message that started this turn is the last one the client minted,
       // and until Pi writes it there is nothing else to call it. Tagging it
       // with the generation is what lets that turn's sync find it again.
-      if (event.type === "generation_started") {
-        setMessages((existing) => {
-          const index = existing.findLastIndex((message) => message.role === "user"
-            && !message.pending && isOptimisticId(message.id) && message.generationId == null);
-          if (index < 0) return existing;
-          const tagged = { ...existing[index]!, generationId: event.generationId };
-          return [...existing.slice(0, index), tagged, ...existing.slice(index + 1)];
-        });
+      if (event.type === "generation_started" || event.type === "generation_resume") {
+        setMessages((existing) => tagOptimisticGenerationOwner(existing, event.generationId));
       }
       result = generationStore.apply(event);
       if (result.changed && result.state) {
@@ -753,11 +746,11 @@ export function createActiveChat(options: ActiveChatOptions) {
         break;
       case "transcript_sync":
         batch(() => {
-          const projection = mergeTranscriptProjection(
-            messages(), tools(), asList<Message>(event.messages),
-            assignToolSeq(event.tools as ToolItem[]),
-            event.generationId || null,
-          );
+          const incomingMessages = asList<Message>(event.messages);
+          const incomingTools = assignToolSeq(event.tools as ToolItem[]);
+          const projection = event.replaceAll
+            ? replaceTranscriptProjection(messages(), incomingMessages, incomingTools)
+            : mergeTranscriptProjection(messages(), tools(), incomingMessages, incomingTools, event.generationId || null);
           setMessages(projection.messages);
           setTools(projection.tools);
         });
@@ -959,7 +952,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (!entryId || streaming() || stopping()) return;
     try {
       await ensureLive();
-      setMessages((current) => { const index = current.findIndex((item) => item.id === entryId); return index >= 0 ? current.slice(0, index + 1) : current; });
+      setMessages((current) => truncateForRegenerate(current, entryId));
       setGeneration("active");
       socket!.send(JSON.stringify({ type: "regenerate", entryId, model: models.model(), thinkingLevel: models.effort() }));
     } catch (error) { setGeneration("idle"); onError(error); }

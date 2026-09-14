@@ -91,6 +91,62 @@ test("one socket delivers backend commands in browser order", async () => {
   assert.match(delivered[1], /<user_message>\nsecond\n<\/user_message>/);
 });
 
+test("a successful fork replaces the browser transcript before the new prompt", async () => {
+  const operations = [];
+  const record = {
+    id: "live-1", chatId: "chat-1", projectId: "project-1", status: "running",
+    sessionFile: "/tmp/fork.jsonl", hostUiRequests: [],
+  };
+  const adapter = {
+    attach: () => null,
+    view: () => record,
+    toClientEvent: (event) => event,
+    refreshContext: async () => {},
+    fork: async () => { operations.push("fork"); },
+    publish: (_record, event) => { operations.push(event); },
+    readTranscript: async () => ({
+      messages: [{ id: "user-kept", role: "user", content: "keep" }],
+      tools: [],
+    }),
+    prompt: async () => { operations.push("prompt"); return "generation-1"; },
+  };
+  const chat = { id: "chat-1", title: "Chat", backend: { implementation: "conduit_pi" } };
+  const project = { id: "project-1", kind: "workspace", workingRoot: "/tmp" };
+  const ws = new EventEmitter();
+  ws.readyState = 1;
+  ws.send = () => {};
+  const stream = createLiveSessionStream({
+    manager: {},
+    wss: { handleUpgrade: (_request, _socket, _head, accept) => accept(ws) },
+    attachments: {
+      resolveMany: async () => [],
+      decorateMessages: async (_project, _chatId, messages) => messages,
+      recordMessage: async () => {},
+    },
+    registry: {
+      metadata: () => chat,
+      update: async () => chat,
+    },
+    config: {},
+    findChatContext: async () => ({ chat, project }),
+    backends: { get: () => record, forChat: () => adapter },
+  });
+
+  stream.handleUpgrade(record.id, {}, {}, null);
+  ws.emit("message", JSON.stringify({ type: "fork_and_prompt", entryId: "user-old", message: "replacement" }));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(operations[0], "fork");
+  assert.deepEqual(operations[2], {
+    type: "transcript_sync",
+    generationId: null,
+    replaceAll: true,
+    messages: [{ id: "user-kept", role: "user", content: "keep" }],
+    tools: [],
+  });
+  assert.equal(operations[3], "prompt");
+});
+
 test("an unknown browser command cannot reach a backend escape hatch", async () => {
   const sent = [];
   const record = { id: "live-1", chatId: "chat-1", status: "running", hostUiRequests: [] };

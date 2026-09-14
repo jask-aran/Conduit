@@ -1,5 +1,6 @@
 import { parseAttachmentEnvelope } from "../attachment-envelope.js";
 import type { Message, ToolItem } from "./api/contracts";
+import { isOptimisticId, reconcileMessages } from "./reconcile-messages.ts";
 
 export interface ProtocolMessage {
   id?: string;
@@ -143,6 +144,21 @@ export function promotePendingUser(messages: Message[], eventMessage: ProtocolMe
   }];
 }
 
+export function tagOptimisticGenerationOwner(messages: Message[], generationId: string | null): Message[] {
+  if (!generationId) return messages;
+  const index = messages.findLastIndex((message) => message.role === "user"
+    && !message.pending && isOptimisticId(message.id) && message.generationId == null);
+  if (index < 0) return messages;
+  return messages.map((message, messageIndex) => messageIndex === index
+    ? { ...message, generationId }
+    : message);
+}
+
+export function truncateForRegenerate(messages: Message[], entryId: string): Message[] {
+  const index = messages.findIndex((message) => message.id === entryId);
+  return index >= 0 ? messages.slice(0, index) : messages;
+}
+
 /**
  * Commit a completed assistant message into the transcript.
  *
@@ -230,6 +246,14 @@ export function mergeTranscriptProjection(
   };
 }
 
+export function replaceTranscriptProjection(
+  messages: Message[],
+  incomingMessages: Message[],
+  incomingTools: ToolItem[],
+): { messages: Message[]; tools: ToolItem[] } {
+  return { messages: reconcileMessages(messages, incomingMessages), tools: incomingTools };
+}
+
 /**
  * Which of the client's messages this sync is the persisted copy of.
  *
@@ -259,5 +283,3 @@ function replacedRange(messages: Message[], incoming: Message[], generationId?: 
   });
   return { at, ids };
 }
-
-

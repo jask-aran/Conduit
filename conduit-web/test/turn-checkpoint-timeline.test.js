@@ -23,10 +23,10 @@ async function workspace() {
 }
 
 /** One checkpoint file, named the way the store names them so order is stable. */
-async function writeCheckpoint(directory, { id, createdAt, anchorEntryId = null, sessionFile = null, workingRoot, entries = {} }) {
+async function writeCheckpoint(directory, { id, createdAt, anchorEntryId = null, messageId = null, sessionFile = null, sourceCheckpointId = null, workingRoot, entries = {} }) {
   await fs.writeFile(path.join(directory, keyFor(CHAT), `${createdAt.replace(/[:.]/g, "-")}-${id}.json`), JSON.stringify({
     version: 1, id, chatId: CHAT, projectId: "project", workingRoot, repository: false,
-    turnId: null, createdAt, sequence: 0, anchorEntryId, sessionFile, head: null, entries,
+    turnId: null, messageId, createdAt, sequence: 0, anchorEntryId, sessionFile, sourceCheckpointId, head: null, entries,
   }));
 }
 
@@ -91,4 +91,35 @@ test("a checkpoint from the abandoned branch does not claim the turn that replac
 
   const timeline = await new TurnCheckpointStore(store).timeline(CHAT, files, forkedFile);
   assert.deepEqual(timeline, []);
+});
+
+test("a fork does not report its workspace restore as an edit by a retained turn", async () => {
+  const { store, files, sessions } = await workspace();
+  const parentFile = path.join(sessions, "parent.jsonl");
+  const forkedFile = path.join(sessions, "forked.jsonl");
+  await fs.writeFile(parentFile, [
+    JSON.stringify({ type: "session", id: "parent", cwd: files }),
+    message("user-1", null, "user", "do nothing", "2026-01-01T00:00:00.000Z"),
+    message("assistant-1", "user-1", "assistant", "Done", "2026-01-01T00:00:10.000Z"),
+    message("user-2", "assistant-1", "user", "write note.txt", "2026-01-01T00:01:00.000Z"),
+    message("assistant-2", "user-2", "assistant", "Done", "2026-01-01T00:01:10.000Z"),
+    message("user-3", "assistant-2", "user", "modify it", "2026-01-01T00:02:00.000Z"),
+  ].join("\n") + "\n");
+  await fs.writeFile(forkedFile, [
+    JSON.stringify({ type: "session", id: "forked", cwd: files, parentSession: parentFile }),
+    message("user-1", null, "user", "do nothing", "2026-01-01T00:00:00.000Z"),
+    message("assistant-1", "user-1", "assistant", "Done", "2026-01-01T00:00:10.000Z"),
+    message("user-4", "assistant-1", "user", "write a new note", "2026-01-01T00:03:00.000Z"),
+  ].join("\n") + "\n");
+
+  const note = { "note.txt": { kind: "file", mode: 0o644, content: Buffer.from("one\ntwo\nthree\n").toString("base64") } };
+  await writeCheckpoint(store, { id: "before-retained", createdAt: "2026-01-01T00:00:00.000Z", workingRoot: files });
+  await writeCheckpoint(store, { id: "fork-source", createdAt: "2026-01-01T00:00:59.000Z", anchorEntryId: "assistant-1", messageId: "user-2", sessionFile: parentFile, workingRoot: files });
+  await writeCheckpoint(store, { id: "abandoned", createdAt: "2026-01-01T00:01:59.000Z", anchorEntryId: "assistant-2", messageId: "user-3", sessionFile: parentFile, workingRoot: files, entries: note });
+  await writeCheckpoint(store, { id: "after-fork", createdAt: "2026-01-01T00:02:59.000Z", anchorEntryId: "assistant-1", messageId: "user-4", sessionFile: forkedFile, sourceCheckpointId: "fork-source", workingRoot: files });
+  await fs.writeFile(path.join(files, "note.txt"), "new\nnote\nhere\n");
+
+  const timeline = await new TurnCheckpointStore(store).timeline(CHAT, files, forkedFile);
+  assert.deepEqual(timeline.map((item) => item.messageId), ["user-4"]);
+  assert.deepEqual(timeline[0].summary, { added: 3, removed: 0, preferredPath: "note.txt" });
 });

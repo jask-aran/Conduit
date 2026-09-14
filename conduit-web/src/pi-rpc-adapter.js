@@ -137,7 +137,7 @@ export function normalizePiBackendEvent(event) {
     // and anything keyed by a persisted id (turn artifacts, fork, regenerate)
     // only worked after a reload.
     case "transcript_sync":
-      return { ...base, type: "transcript_sync", messages: event.messages || [], tools: event.tools || [] };
+      return { ...base, type: "transcript_sync", messages: event.messages || [], tools: event.tools || [], ...(event.replaceAll ? { replaceAll: true } : {}) };
     case "session_checkpoint":
       return { ...base, type: "session_checkpoint", sequence: event.generationSeq ?? null,
         artifacts: event.artifacts ?? null,
