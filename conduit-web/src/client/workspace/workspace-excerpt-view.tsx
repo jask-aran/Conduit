@@ -1,7 +1,8 @@
 import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { unifiedMergeView } from "@codemirror/merge";
 import { createEffect, onCleanup } from "solid-js";
-import type { ReviewCommentSide } from "../chat/review-comments";
+import type { ReviewCommentCounterpart, ReviewCommentSide } from "../chat/review-comments";
 import { commentHighlightsExtension } from "./workspace-annotate";
 import { workspaceExcerptSetup } from "./workspace-editor-base";
 import { workspaceLanguageForFilename } from "./workspace-languages";
@@ -10,7 +11,8 @@ import "./workspace.css";
 /**
  * A window onto the lines a review comment was written against, rendered by the
  * same CodeMirror setup as the file viewer so an excerpt reads exactly as it did
- * where it was captured, gutter numbers and all.
+ * where it was captured, gutter numbers and all. A comment taken on a comparison
+ * carries the other side with it, and is rendered as the diff it came from.
  */
 export default function WorkspaceExcerptView(props: {
   path: string;
@@ -20,29 +22,41 @@ export default function WorkspaceExcerptView(props: {
   endColumn: number;
   note?: string;
   side?: ReviewCommentSide;
+  counterpart?: ReviewCommentCounterpart;
 }) {
   let host!: HTMLDivElement;
   createEffect(() => {
-    const lines = props.text.split("\n").length;
+    const onModified = props.side !== "original";
+    const modified = onModified ? props.text : props.counterpart?.excerpt ?? "";
+    const original = onModified ? props.counterpart?.excerpt : props.text;
+    const firstLine = onModified ? props.firstLine : props.counterpart?.from ?? 1;
+    const lines = modified.split("\n").length;
     const language = new Compartment();
     const view = new EditorView({
       parent: host,
       state: EditorState.create({
-        doc: props.text,
+        doc: modified,
         extensions: [
-          workspaceExcerptSetup(props.firstLine),
+          workspaceExcerptSetup(firstLine),
           language.of([]),
           EditorView.lineWrapping,
           EditorView.contentAttributes.of({
-            "aria-label": `${props.path} lines ${props.firstLine} to ${props.firstLine + lines - 1}`,
+            "aria-label": `${props.path} lines ${props.firstLine} to ${props.firstLine + props.text.split("\n").length - 1}`,
           }),
-          commentHighlightsExtension([{
+          ...(onModified ? [commentHighlightsExtension([{
             from: 1,
             to: lines,
             startColumn: props.startColumn,
             endColumn: props.endColumn,
             note: props.note ?? "",
-          }]),
+          }])] : []),
+          ...(original === undefined ? [] : [unifiedMergeView({
+            original,
+            mergeControls: false,
+            gutter: false,
+            highlightChanges: true,
+            syntaxHighlightDeletions: true,
+          })]),
         ],
       }),
     });
@@ -58,5 +72,5 @@ export default function WorkspaceExcerptView(props: {
       view.destroy();
     });
   });
-  return <div ref={host} class="workspace-excerpt" data-side={props.side} />;
+  return <div ref={host} class="workspace-excerpt" data-side={props.side} data-comparison={props.counterpart ? "true" : undefined} />;
 }

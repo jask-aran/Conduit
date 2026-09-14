@@ -4,6 +4,16 @@ import type { ComparisonPayload } from "../workspace/workspace-comparison";
 export type ReviewCommentSide = "original" | "modified";
 export type ReviewCommentScope = ComparisonPayload["scope"] | "file";
 
+/** The same passage on the other side of a comparison. */
+export interface ReviewCommentCounterpart {
+  side: ReviewCommentSide;
+  from: number;
+  to: number;
+  startColumn: number;
+  endColumn: number;
+  excerpt: string;
+}
+
 export interface ReviewComment {
   id: string;
   chatId: string;
@@ -18,6 +28,8 @@ export interface ReviewComment {
   endColumn: number;
   /** Every line the selection touched, whole, so the span has context around it. */
   excerpt: string;
+  /** For a comment on a diff, the lines the selection replaced or was replaced by. */
+  counterpart?: ReviewCommentCounterpart;
   note: string;
 }
 
@@ -51,6 +63,7 @@ export function addReviewComment(comment: ReviewComment): boolean {
   setComments((current) => [...current, {
     ...comment,
     excerpt: truncateUtf8(comment.excerpt, MAX_EXCERPT_BYTES),
+    ...(comment.counterpart ? { counterpart: { ...comment.counterpart, excerpt: truncateUtf8(comment.counterpart.excerpt, MAX_EXCERPT_BYTES) } } : {}),
     note: comment.note.slice(0, MAX_NOTE_LENGTH),
   }]);
   return true;
@@ -84,6 +97,11 @@ export function projectReviewComments(text: string, values: readonly ReviewComme
     "<excerpt>",
     escapeText(comment.excerpt),
     "</excerpt>",
+    ...(comment.counterpart ? [
+      `<counterpart side="${comment.counterpart.side}" lines="${comment.counterpart.from}-${comment.counterpart.to}" columns="${comment.counterpart.startColumn}-${comment.counterpart.endColumn}">`,
+      escapeText(comment.counterpart.excerpt),
+      "</counterpart>",
+    ] : []),
     "<note>",
     escapeText(comment.note),
     "</note>",
@@ -126,14 +144,14 @@ export function parseReviewComments(value: string): { text: string; comments: Pr
   const text = value.slice(0, start).trimEnd();
   const suffix = value.slice(start);
   // Columns arrived after the first messages were sent, so they stay optional.
-  const pattern = /<review_comment path="([^"]*)" lines="(\d+)-(\d+)"(?: columns="(\d+)-(\d+)")? side="(original|modified)" scope="([^"]*)">\n<excerpt>\n([\s\S]*?)\n<\/excerpt>\n<note>\n([\s\S]*?)\n<\/note>\n<\/review_comment>/gy;
+  const pattern = /<review_comment path="([^"]*)" lines="(\d+)-(\d+)"(?: columns="(\d+)-(\d+)")? side="(original|modified)" scope="([^"]*)">\n<excerpt>\n([\s\S]*?)\n<\/excerpt>\n(?:<counterpart side="(original|modified)" lines="(\d+)-(\d+)" columns="(\d+)-(\d+)">\n([\s\S]*?)\n<\/counterpart>\n)?<note>\n([\s\S]*?)\n<\/note>\n<\/review_comment>/gy;
   const comments: ProjectedReviewComment[] = [];
   let offset = 0;
   while (offset < suffix.length) {
     pattern.lastIndex = offset;
     const match = pattern.exec(suffix);
     if (!match) return { text: value, comments: [] };
-    const [, encodedPath = "", from = "0", to = "0", startColumn, endColumn, side = "modified", scope = "", excerpt = "", note = ""] = match;
+    const [, encodedPath = "", from = "0", to = "0", startColumn, endColumn, side = "modified", scope = "", excerpt = "", otherSide, otherFrom, otherTo, otherStart, otherEnd, otherExcerpt, note = ""] = match;
     if (!isReviewScope(scope)) return { text: value, comments: [] };
     const excerptText = decodeText(excerpt);
     comments.push({
@@ -145,6 +163,16 @@ export function parseReviewComments(value: string): { text: string; comments: Pr
       side: side === "original" ? "original" : "modified",
       scope,
       excerpt: excerptText,
+      ...(otherSide ? {
+        counterpart: {
+          side: otherSide === "original" ? "original" as const : "modified" as const,
+          from: Number(otherFrom),
+          to: Number(otherTo),
+          startColumn: Number(otherStart),
+          endColumn: Number(otherEnd),
+          excerpt: decodeText(otherExcerpt ?? ""),
+        },
+      } : {}),
       note: decodeText(note),
     });
     offset = pattern.lastIndex;

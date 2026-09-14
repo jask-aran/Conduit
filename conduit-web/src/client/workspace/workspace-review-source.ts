@@ -20,7 +20,8 @@ export function isDiffScope(value: string): value is DiffScope {
 
 const MAX_TURN_PROBES = 25;
 
-interface Checkpoint { id: string; turnId: string | null; createdAt: string; sequence: number; anchorEntryId: string | null; }
+export interface TurnChangeSummary { added: number; removed: number; }
+interface Checkpoint { id: string; turnId: string | null; createdAt: string; sequence: number; anchorEntryId: string | null; messageId: string | null; summary: TurnChangeSummary | null; }
 interface TurnFiles extends Checkpoint { files: { path: string; status: string; available: boolean }[]; }
 interface GitFile { path: string; status: string; stagedCounts?: { added: number; removed: number } | null; workingCounts?: { added: number; removed: number } | null; headCounts?: { added: number; removed: number } | null; }
 
@@ -84,7 +85,7 @@ export function createWorkspaceReview(props: { projectId: Accessor<string>; chat
   };
   const rangeLabel = createMemo(() => {
     switch (scope()) {
-      case "chat": return checkpointId() ? `Chat start → Turn ${turnNumber(turnIndex())}` : "Chat start → Latest turn";
+      case "chat": return timeline().length ? `Chat start → Turn ${turnNumber(turnIndex())}` : "Chat start → Latest turn";
       case "turn": return turnIndex() > 0 ? `Turn ${turnNumber(turnIndex())} → Turn ${turnNumber(turnIndex() - 1)}` : `Turn ${turnNumber(0)} → Working copy`;
       case "head": return "HEAD → Working copy";
       case "changes": return "Index → Working copy";

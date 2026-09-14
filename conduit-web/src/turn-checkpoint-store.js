@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { presentableDiff } from "@codemirror/merge";
 import { runBoundedGit } from "./workspace-inspector.js";
 
 const MAX_FILE_BYTES = 1024 * 1024;
@@ -55,15 +56,27 @@ export class TurnCheckpointStore {
     return (await this.#checkpoints(chatId)).at(-1) || null;
   }
 
-  async timeline(chatId, workingRoot) {
+  async timeline(chatId, workingRoot, sessionFile = null) {
     const root = path.resolve(workingRoot);
     const checkpoints = await this.#prune((await this.#checkpoints(chatId))
       .filter((checkpoint) => checkpoint.version === 1 && checkpoint.workingRoot === root));
+    const userMessageIds = await this.#userMessageIds(sessionFile, checkpoints);
     // Checkpoints written before sequences existed fall back to counting.
     let counter = 0;
-    return checkpoints
-      .map(({ id, turnId, createdAt, sequence, anchorEntryId }) => ({ id, turnId, createdAt, anchorEntryId: anchorEntryId ?? null, sequence: (counter = sequence ?? counter + 1) }))
-      .toReversed();
+    const timeline = [];
+    for (const [index, checkpoint] of checkpoints.entries()) {
+      const summary = await this.#summary(checkpoint, checkpoints[index + 1] || null);
+      timeline.push({
+        id: checkpoint.id,
+        turnId: checkpoint.turnId,
+        createdAt: checkpoint.createdAt,
+        anchorEntryId: checkpoint.anchorEntryId ?? null,
+        messageId: userMessageIds.get(checkpoint.id) ?? null,
+        sequence: (counter = checkpoint.sequence ?? counter + 1),
+        summary,
+      });
+    }
+    return timeline.toReversed();
   }
 
   /**
@@ -237,6 +250,75 @@ export class TurnCheckpointStore {
     try { originalText = decode(original); modifiedText = decode(modified); }
     catch { return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope, status: "M", reason: "binary", message: "Binary or non-UTF-8 files cannot be shown as a text comparison." }; }
     return { kind: "text", path: relativePath, oldPath: relativePath, scope, status: original.length === 0 ? "A" : modified.length === 0 ? "D" : "M", original: originalText, modified: modifiedText };
+  }
+
+  async #summary(checkpoint, targetCheckpoint) {
+    const git = (args, maxBuffer = 2 * 1024 * 1024) => runBoundedGit(checkpoint.workingRoot, args, { maxBuffer });
+    const targetPaths = targetCheckpoint
+      ? Object.keys(targetCheckpoint.entries)
+      : checkpoint.repository
+        ? (await git(["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"])).stdout.split("\0").filter(Boolean).map((record) => record.slice(3))
+        : await this.#workspacePaths(checkpoint.workingRoot);
+    const paths = new Set([...Object.keys(checkpoint.entries), ...targetPaths]);
+    let added = 0;
+    let removed = 0;
+    for (const relativePath of paths) {
+      const comparison = await this.#compare(checkpoint, relativePath, git, "turn", targetCheckpoint);
+      if (comparison.kind !== "text") {
+        if (comparison.reason !== "unchanged") return null;
+        continue;
+      }
+      const lineNumber = (text, offset) => text.slice(0, offset).split("\n").length;
+      for (const change of presentableDiff(comparison.original, comparison.modified)) {
+        added += change.toB <= change.fromB ? 0 : lineNumber(comparison.modified, change.toB - 1) - lineNumber(comparison.modified, change.fromB) + 1;
+        removed += change.toA <= change.fromA ? 0 : lineNumber(comparison.original, change.toA - 1) - lineNumber(comparison.original, change.fromA) + 1;
+      }
+    }
+    return added || removed ? { added, removed } : null;
+  }
+
+  async #userMessageIds(sessionFile, checkpoints) {
+    const result = new Map();
+    if (typeof sessionFile !== "string" || !sessionFile) return result;
+    const entries = new Map();
+    let currentFile = path.resolve(sessionFile);
+    let leafId = null;
+    for (let hop = 0; currentFile && hop < MAX_ANCHOR_HOPS; hop += 1) {
+      let parentFile = null;
+      const lines = await fs.readFile(currentFile, "utf8").then((value) => value.split("\n"), () => []);
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        let entry;
+        try { entry = JSON.parse(line); } catch { continue; }
+        if (entry?.type === "session") {
+          parentFile = typeof entry.parentSession === "string" && entry.parentSession ? path.resolve(entry.parentSession) : null;
+          continue;
+        }
+        if (typeof entry?.id === "string" && entry.id) {
+          entries.set(entry.id, entry);
+          if (hop === 0) leafId = entry.id;
+        }
+      }
+      currentFile = parentFile;
+    }
+    const lineage = [];
+    const visited = new Set();
+    for (let id = leafId; id && !visited.has(id);) {
+      visited.add(id);
+      const entry = entries.get(id);
+      if (!entry) break;
+      lineage.push(entry);
+      id = typeof entry.parentId === "string" ? entry.parentId : null;
+    }
+    lineage.reverse();
+    const positions = new Map(lineage.map((entry, index) => [entry.id, index]));
+    for (const checkpoint of checkpoints) {
+      const start = checkpoint.anchorEntryId == null ? -1 : positions.get(checkpoint.anchorEntryId);
+      if (start === undefined) continue;
+      const user = lineage.slice(start + 1).find((entry) => entry.type === "message" && entry.message?.role === "user");
+      if (user) result.set(checkpoint.id, user.id);
+    }
+    return result;
   }
 
   async #comparisonRange(chatId, workingRoot, baseline, checkpointId) {

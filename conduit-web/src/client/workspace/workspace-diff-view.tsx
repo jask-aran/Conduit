@@ -58,6 +58,7 @@ export function WorkspaceDiffView(props: WorkspaceDiffViewProps) {
       startColumn: selection.startColumn,
       endColumn: selection.endColumn,
       excerpt: selection.excerpt,
+      counterpart: selection.counterpart,
       note,
     });
   };

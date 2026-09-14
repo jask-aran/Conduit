@@ -238,6 +238,10 @@ svg { stroke-width: 1.5; }
 .welcome { display: grid; min-height: 56vh; place-content: center; color: var(--muted-foreground); text-align: center; }
 .welcome h1 { margin: 0; color: var(--foreground); font-size: clamp(17.6px, 3vw, 20.8px); font-weight: 600; letter-spacing: -0.04em; }
 .marker { color: var(--muted-foreground); font-size: 9.6px; }
+.turn-change-summary { display: flex; width: max-content; gap: 4.8px; border: 0; border-radius: 4px; background: transparent; padding: 1.6px 3.2px; font: 8.8px ui-monospace, SFMono-Regular, Consolas, monospace; cursor: pointer; }
+.turn-change-summary:hover { background: var(--accent); }
+.turn-change-summary [data-change="added"] { color: var(--live); }
+.turn-change-summary [data-change="removed"] { color: var(--destructive); }
 .composer-status-state > svg { width: 10.4px; height: 10.4px; flex: none; }
 .message-scroller-button[data-slot="button"] {
   position: absolute;
@@ -1051,6 +1055,10 @@ svg { stroke-width: 1.5; }
 .welcome { display: grid; min-height: 56vh; place-content: center; color: var(--muted-foreground); text-align: center; }
 .welcome h1 { margin: 0; color: var(--foreground); font-size: clamp(22px, 3vw, 26px); font-weight: 600; letter-spacing: -0.04em; }
 .marker { color: var(--muted-foreground); font-size: 12px; }
+.turn-change-summary { display: flex; width: max-content; gap: 6px; border: 0; border-radius: 5px; background: transparent; padding: 2px 4px; font: 11px ui-monospace, SFMono-Regular, Consolas, monospace; cursor: pointer; }
+.turn-change-summary:hover { background: var(--accent); }
+.turn-change-summary [data-change="added"] { color: var(--live); }
+.turn-change-summary [data-change="removed"] { color: var(--destructive); }
 .composer-status-state > svg { width: 13px; height: 13px; flex: none; }
 .message-scroller-button[data-slot="button"] {
   position: absolute;

@@ -429,7 +429,7 @@ export function registerProjectRoutes(app, {
       const chatId = typeof request.query.chatId === "string" ? request.query.chatId : "";
       const chat = registry.metadata(chatId);
       if (!chat || chat.projectId !== project.id) return response.json(null);
-      if (request.query.timeline === "1") return response.json(await turnCheckpoints.timeline(chatId, project.workingRoot));
+      if (request.query.timeline === "1") return response.json(await turnCheckpoints.timeline(chatId, project.workingRoot, chat.piSessionFile));
       const baseline = request.query.baseline === "turn" ? "turn" : "chat";
       const checkpointId = typeof request.query.checkpointId === "string" ? request.query.checkpointId : null;
       const artifact = request.query.path

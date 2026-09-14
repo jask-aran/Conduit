@@ -161,3 +161,34 @@ test("parts split an excerpt around the characters the comment covers", () => {
   const degenerate = { excerpt: "abc", startColumn: 3, endColumn: 1 };
   assert.deepEqual(reviewCommentParts(degenerate), { before: "", selected: "abc", after: "" }, "an impossible span falls back to the whole excerpt");
 });
+
+test("a comparison comment projects and parses its counterpart side", () => {
+  const projected = projectReviewComments("look at this", [comment({
+    scope: "turn",
+    side: "modified",
+    from: 12,
+    to: 12,
+    startColumn: 3,
+    endColumn: 9,
+    excerpt: "  const next = 2;",
+    counterpart: { side: "original", from: 12, to: 13, startColumn: 1, endColumn: 18, excerpt: "  const next = 1;\n  // gone" },
+  })]);
+
+  assert.match(projected, /<counterpart side="original" lines="12-13" columns="1-18">\n  const next = 1;\n  \/\/ gone\n<\/counterpart>/);
+  const parsed = parseReviewComments(projected);
+  assert.equal(parsed.text, "look at this");
+  assert.deepEqual(parsed.comments[0].counterpart, {
+    side: "original",
+    from: 12,
+    to: 13,
+    startColumn: 1,
+    endColumn: 18,
+    excerpt: "  const next = 1;\n  // gone",
+  });
+});
+
+test("a comment without a counterpart parses back without one", () => {
+  const parsed = parseReviewComments(projectReviewComments("", [comment()]));
+  assert.equal(parsed.comments.length, 1);
+  assert.equal(parsed.comments[0].counterpart, undefined);
+});

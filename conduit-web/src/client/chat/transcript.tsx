@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createRenderEffect, createSignal, For, lazy, onCleanup, onMount, Show, Suspense } from "solid-js";
+import { createEffect, createMemo, createRenderEffect, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense } from "solid-js";
 import { ArrowDownIcon, CheckIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, TriangleAlertIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { Message, RuntimeActivity, ToolItem } from "../api/contracts";
@@ -45,6 +45,8 @@ import {
   type TailFollowState,
 } from "./transcript-tail-follow";
 import { captureTranscriptAnchor, restoreTranscriptAnchor } from "./transcript-anchor";
+import { api } from "../api/client";
+import { requestTurnArtifactNavigation } from "./turn-artifact-navigation";
 
 const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
 const fullDateTime = (value?: string) => {
@@ -164,7 +166,14 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Tran
   </div>;
 }
 
-export function Transcript(props: { chat: TranscriptSource; partialContinue: boolean; markdownRenderer: MarkdownRendererId; rendererControlsVisible: boolean; profileLabel?: string }) {
+interface TurnArtifactSummary {
+  id: string;
+  messageId: string | null;
+  sequence: number;
+  summary: { added: number; removed: number } | null;
+}
+
+export function Transcript(props: { chat: TranscriptSource; partialContinue: boolean; markdownRenderer: MarkdownRendererId; rendererControlsVisible: boolean; profileLabel?: string; projectId?: string }) {
   let transcriptRoot!: HTMLDivElement;
   let motionShell!: HTMLDivElement;
   let viewport!: HTMLDivElement;
@@ -190,6 +199,18 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
     expandedItems.set(chatId, items);
     while (expandedItems.size > 10) expandedItems.delete(expandedItems.keys().next().value!);
   };
+  const [artifactSummaries, setArtifactSummaries] = createSignal(new Map<string, TurnArtifactSummary>());
+  createEffect(on(
+    () => [props.projectId ?? null, props.chat.loadedId(), props.chat.streaming()] as const,
+    ([projectId, chatId, streaming]) => {
+      if (!projectId || !chatId || streaming) return;
+      const controller = new AbortController();
+      void api<TurnArtifactSummary[]>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?${new URLSearchParams({ chatId, timeline: "1" })}`, { signal: controller.signal })
+        .then((items) => setArtifactSummaries(new Map(items.filter((item) => item.messageId && item.summary).map((item) => [item.messageId!, item]))))
+        .catch((error) => { if (error?.name !== "AbortError") setArtifactSummaries(new Map()); });
+      onCleanup(() => controller.abort());
+    },
+  ));
   let historyLoad: Promise<void> | null = null;
   let layoutEpoch = 0;
   let previousMarkdownRenderer = props.markdownRenderer;
@@ -883,6 +904,10 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
             return props.chat.streaming() && !user() && Boolean(last && (message().key || message().id) === (last.key || last.id));
           });
           const precedingUserId = () => user() ? undefined : item.precedingUserId;
+          const artifact = createMemo(() => {
+            const userId = precedingUserId();
+            return userId ? artifactSummaries().get(userId) : undefined;
+          });
           let row!: HTMLDivElement;
           return <div ref={row} data-slot="message-scroller-item" data-message-id={message().id}>
             <article data-slot="message" data-align={user() ? "end" : "start"} class={user() ? "message-user" : "message-assistant"}>
@@ -913,6 +938,7 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
                 <Show when={user() && message().attachments?.length}><AttachmentCards items={message().attachments!} chatId={props.chat.loadedId()} label="Message attachments" /></Show>
                 <Show when={user() && review().comments.length}><ReviewCommentCards items={review().comments} chatId={props.chat.loadedId() ?? ""} label="Code references" /></Show>
                 <Show when={message().stopped}><div class="marker">{message().status === "stopping" ? "Stopping…" : "Stopped"}</div></Show>
+                <Show when={!user() && artifact()}>{(entry) => <button type="button" class="turn-change-summary" aria-label={`Open agent changes through turn ${entry().sequence}: ${entry().summary!.added} additions and ${entry().summary!.removed} removals`} onClick={() => requestTurnArtifactNavigation({ chatId: props.chat.loadedId()!, checkpointId: entry().id })}><span data-change="added">+{entry().summary!.added}</span><span data-change="removed">−{entry().summary!.removed}</span></button>}</Show>
                 <Actions message={message()} precedingUserId={precedingUserId()} chat={props.chat} partialContinue={props.partialContinue} />
               </div>
             </article>
