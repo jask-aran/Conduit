@@ -21,7 +21,7 @@ export function isVisualMarkdownFile(path: string) {
 }
 
 const sourceEditorSetup = [
-  workspaceReadOnlySetup,
+  workspaceReadOnlySetup(),
   dropCursor(),
   indentOnInput(),
   closeBrackets(),

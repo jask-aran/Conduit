@@ -212,9 +212,9 @@ const indentationGuides = ViewPlugin.fromClass(class {
  * navigation affordances a preview has no room for. `firstLine` offsets the
  * gutter so the numbers are the ones in the real file.
  */
-export const workspaceExcerptSetup = (firstLine = 1) => [
+export const workspaceExcerptSetup = (numbers: Parameters<typeof lineNumbers>[0] = {}) => [
   editorTheme,
-  lineNumbers(firstLine > 1 ? { formatNumber: (number) => String(number + firstLine - 1) } : {}),
+  lineNumbers(numbers),
   highlightSpecialChars(),
   syntaxHighlighting(workspaceHighlightStyle, { fallback: true }),
   indentationGuides,
@@ -222,9 +222,9 @@ export const workspaceExcerptSetup = (firstLine = 1) => [
   EditorView.editable.of(false),
 ];
 
-export const workspaceReadOnlySetup = [
+export const workspaceReadOnlySetup = (numbers: Parameters<typeof lineNumbers>[0] = {}) => [
   editorTheme,
-  lineNumbers(),
+  lineNumbers(numbers),
   highlightSpecialChars(),
   drawSelection(),
   EditorState.allowMultipleSelections.of(true),

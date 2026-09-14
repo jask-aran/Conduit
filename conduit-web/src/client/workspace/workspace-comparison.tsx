@@ -1,18 +1,22 @@
 import { WorkbenchButton, WorkbenchStatus } from "./workspace-workbench";
-import { MergeView, getChunks, getOriginalDoc, originalDocChangeEffect } from "@codemirror/merge";
-import { workspaceMergeView, workspaceUnifiedMerge } from "./workspace-diff-setup";
-import { ChangeSet, Compartment, EditorState, type Extension, type Text } from "@codemirror/state";
+import { MergeView, getChunks } from "@codemirror/merge";
+import { inlineLineNumbers, inlineRowsOf, setInlineRows, workspaceInlineDiff, workspaceMergeView } from "./workspace-diff-setup";
+import { buildInlineDiff, inlineDocLine, inlineRowNumber, unchangedRuns, type InlineDiff } from "./workspace-inline-diff";
+import { Compartment, EditorState, type Extension, type Text } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { gotoLine, openSearchPanel } from "@codemirror/search";
+import { codeFolding, foldEffect } from "@codemirror/language";
 import { Columns2Icon, SearchIcon, WrapTextIcon } from "lucide-solid";
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js";
 import { readSetting, writeSetting, WORKSPACE_PANEL_GLOBAL_SCOPE } from "./workspace-panel-storage";
 import { workspaceReadOnlySetup } from "./workspace-editor-base";
 import { workspaceLanguageForFilename } from "./workspace-languages";
 import { FileTypeIcon } from "./file-type-icon";
-import { annotationExtension, annotationSpan, paintAnnotationRange, commentHighlightsExtension, commentRange, WorkspaceAnnotationPopup, type AnnotationReading, type AnnotationSelection, type AnnotationSpan, type CommentHighlight } from "./workspace-annotate";
+import { annotationExtension, annotationSpan, commentHighlightsExtension, commentRange, WorkspaceAnnotationPopup, type AnnotationReading, type AnnotationSelection, type AnnotationSpan, type CommentHighlight } from "./workspace-annotate";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import "./workspace-comparison.css";
+
+const DIFF_CONFIG = { scanLimit: 500, timeout: 40 };
 
 export type ComparisonPayload = {
   path: string;
@@ -26,33 +30,6 @@ export interface ComparisonViewState {
   top: number;
   left: number;
   position: number;
-}
-
-/** Walks an element point down to the text node the browser actually selected. */
-function descend(node: Node, offset: number): [Node, number] {
-  let target = node, at = offset;
-  while (target.nodeType === Node.ELEMENT_NODE && target.childNodes.length) {
-    const past = at >= target.childNodes.length;
-    const child = target.childNodes[Math.min(at, target.childNodes.length - 1)]!;
-    target = child;
-    at = past ? (child.nodeType === Node.TEXT_NODE ? child.textContent!.length : child.childNodes.length) : 0;
-  }
-  return [target, at];
-}
-
-/** Offset of a point inside a deleted chunk, within that chunk's original text. */
-function deletedOffset(widget: Element, node: Node, offset: number): number {
-  let total = 0;
-  for (const line of widget.querySelectorAll(".cm-deletedLine")) {
-    if (line.contains(node)) {
-      const range = line.ownerDocument.createRange();
-      range.selectNodeContents(line);
-      range.setEnd(node, offset);
-      return total + range.toString().length;
-    }
-    if (node.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_PRECEDING) total += (line.textContent?.length ?? 0) + 1;
-  }
-  return Math.max(0, total - 1);
 }
 
 export default function WorkspaceComparison(props: { comparison: ComparisonPayload; sourceKey: string; viewState: ComparisonViewState; headerAction?: JSX.Element; comparisonSource?: JSX.Element; commentHighlights?: readonly CommentHighlight[]; reveal?: ReviewNavigationRequest | null; onViewStateChange?: (state: ComparisonViewState) => void; onAnnotate?: (selection: AnnotationSelection, note: string) => boolean }) {
@@ -100,7 +77,7 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
     const language = new Compartment();
     const wrapping = new Compartment();
     const extensions: Extension[] = [
-      workspaceReadOnlySetup,
+      workspaceReadOnlySetup(split ? {} : inlineLineNumbers),
       EditorState.readOnly.of(true),
       EditorView.contentAttributes.of({ "aria-label": `${data.path} comparison` }),
       language.of([]), wrapping.of([]),
@@ -108,7 +85,10 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
         if (update.selectionSet || update.docChanged) {
           const head = update.state.selection.main.head;
           const line = update.state.doc.lineAt(head);
-          setPosition(`Ln ${line.number}, Col ${head - line.from + 1}`);
+          // Inline, a row counts in the document it came from, not in this view.
+          const rows = inlineRowsOf(update.state);
+          const number = rows ? inlineRowNumber(rows[line.number - 1]) : String(line.number);
+          setPosition(`Ln ${number}, Col ${head - line.from + 1}`);
           publishReview();
         }
       }),
@@ -116,10 +96,9 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
     ];
     let merge: MergeView | undefined;
     let view: EditorView;
-    const docFor = (side: "original" | "modified"): Text | undefined => side === "original"
-      ? (merge ? merge.a.state.doc : getOriginalDoc(view.state))
-      : (merge ? merge.b.state.doc : view.state.doc);
-    const chunksNow = () => getChunks((merge?.b ?? view).state)?.chunks ?? [];
+    // Side-by-side keeps a document per side; inline has its own reader below.
+    const docFor = (side: "original" | "modified"): Text | undefined => merge && (side === "original" ? merge.a : merge.b).state.doc;
+    const chunksNow = () => (merge ? getChunks(merge.b.state)?.chunks : undefined) ?? [];
     // A comment on one side of a diff carries the passage it replaced, or was
     // replaced by, so the note can be read without the comparison in front of you.
     const counterpartFor = (side: "original" | "modified", from: number, to: number): AnnotationSpan | undefined => {
@@ -137,65 +116,93 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
     const sideExtensions = (side: "original" | "modified"): Extension[] => [
       extensions,
       commentHighlightsExtension(commentHighlights.filter((item) => !item.side || item.side === side)),
-      ...(props.onAnnotate ? [annotationExtension({ side, onSelect: selectAnnotation, counterpart: counterpartFor, read: split ? undefined : readDeletedSelection })] : []),
+      ...(props.onAnnotate ? [annotationExtension({ side, onSelect: selectAnnotation, counterpart: counterpartFor })] : []),
     ];
-    /**
-     * In the unified layout the removed lines are widgets, not document text, so
-     * the editor's own selection cannot describe a drag that touches them.
-     */
-    const readDeletedSelection = (target: EditorView): AnnotationReading | null | undefined => {
-      const clear = <T,>(result: T): T => {
-        paintAnnotationRange(target, null);
-        return result;
-      };
-      const selection = target.dom.ownerDocument.getSelection();
-      if (!selection || selection.rangeCount === 0) return undefined;
-      const range = selection.getRangeAt(0);
-      if (!target.contentDOM.contains(range.commonAncestorContainer)) return clear(undefined);
-      const chunks = chunksNow();
-      const widgets = Array.from(target.contentDOM.querySelectorAll(".cm-deletedChunk"));
-      const locate = (node: Node, offset: number) => {
-        const [leaf, at] = descend(node, offset);
-        const element = leaf.nodeType === Node.TEXT_NODE ? leaf.parentElement : leaf as Element;
-        const widget = element?.closest(".cm-deletedChunk") ?? null;
-        const chunk = widget ? chunks[widgets.indexOf(widget)] : undefined;
-        if (chunk) return { chunk, offset: deletedOffset(widget!, leaf, at) };
-        // A point the editor cannot place, such as a widget it did not build.
-        try {
-          return widget ? {} : { pos: target.posAtDOM(leaf, at) };
-        } catch {
-          return {};
-        }
-      };
-      const start = locate(range.startContainer, range.startOffset);
-      const end = locate(range.endContainer, range.endOffset);
-      if (!start.chunk && !end.chunk) return clear(undefined);
-      if (start.pos === undefined && !start.chunk) return clear(undefined);
-      if (end.pos === undefined && !end.chunk) return clear(undefined);
-      if (range.collapsed) return clear(null);
-      const original = docFor("original");
-      const originalFrom = start.chunk ? start.chunk.fromA + (start.offset ?? 0) : end.chunk!.fromA;
-      const originalTo = end.chunk ? end.chunk.fromA + (end.offset ?? 0) : start.chunk!.endA;
-      const modifiedFrom = start.chunk ? start.chunk.fromB : start.pos!;
-      const modifiedTo = end.chunk ? end.chunk.fromB : end.pos!;
-      const removed = original ? annotationSpan(original, "original", originalFrom, originalTo) : null;
-      const added = annotationSpan(target.state.doc, "modified", modifiedFrom, modifiedTo);
-      const span = added ?? removed;
-      if (!span) return clear(null);
-      paintAnnotationRange(target, added ? { from: modifiedFrom, to: modifiedTo } : null);
-      const counterpart = added
-        ? removed ?? counterpartFor("modified", modifiedFrom, modifiedTo)
-        : counterpartFor("original", originalFrom, originalTo);
-      const rect = range.getBoundingClientRect();
-      return { span, counterpart: counterpart ?? undefined, left: rect.left, bottom: rect.bottom };
+    // Inline, both sides are in the one document, so a comment is placed by the
+    // row it landed on rather than by the document's own line numbers.
+    const locateInline = (target: EditorView, item: Pick<CommentHighlight, "from" | "to" | "startColumn" | "endColumn" | "side">) => {
+      const rows = inlineRowsOf(target.state);
+      if (!rows) return null;
+      const side = item.side ?? "modified";
+      const from = inlineDocLine(rows, side, item.from);
+      const to = inlineDocLine(rows, side, item.to);
+      return from && to ? commentRange(target, { ...item, from, to }) : null;
     };
-    const options = { collapseUnchanged: { margin: 3, minSize: 8 } };
+    const readInline = (target: EditorView): AnnotationReading | null => {
+      const range = target.state.selection.main;
+      const rows = inlineRowsOf(target.state);
+      if (range.empty || !rows) return null;
+      const doc = target.state.doc;
+      const first = doc.lineAt(range.from).number;
+      const last = doc.lineAt(Math.max(range.from, range.to - 1)).number;
+      const belongs = (number: number, side: "original" | "modified") => {
+        const row = rows[number - 1];
+        return Boolean(row) && (side === "original" ? row!.kind !== "added" : row!.kind !== "removed");
+      };
+      const spanFor = (side: "original" | "modified", from: number, to: number, columns: boolean): AnnotationSpan | undefined => {
+        const numbers: number[] = [];
+        for (let number = from; number <= to && number <= rows.length; number++) if (belongs(number, side)) numbers.push(number);
+        if (!numbers.length) return undefined;
+        const head = doc.line(numbers[0]!);
+        const tail = doc.line(numbers.at(-1)!);
+        const lineOf = (number: number) => {
+          const row = rows[number - 1]!;
+          return (side === "original" ? row.original : row.modified) ?? 1;
+        };
+        return {
+          side,
+          from: lineOf(numbers[0]!),
+          to: lineOf(numbers.at(-1)!),
+          startColumn: columns && head.number === first ? range.from - head.from + 1 : 1,
+          endColumn: columns && tail.number === last ? Math.min(range.to, tail.to) - tail.from + 1 : tail.length + 1,
+          excerpt: numbers.map((number) => doc.line(number).text).join("\n"),
+        };
+      };
+      const primarySide = belongs(first, "modified") || !belongs(first, "original") ? "modified" : "original";
+      const otherSide = primarySide === "modified" ? "original" : "modified";
+      const span = spanFor(primarySide, first, last, true) ?? spanFor(otherSide, first, last, true);
+      if (!span) return null;
+      const other = span.side === primarySide ? otherSide : primarySide;
+      // A selection inside one half of a change still carries the other half,
+      // which is the whole run of changed rows it sits in.
+      let blockFrom = first, blockTo = last;
+      while (blockFrom > 1 && rows[blockFrom - 2]?.kind !== "context") blockFrom--;
+      while (blockTo < rows.length && rows[blockTo]?.kind !== "context") blockTo++;
+      const counterpart = spanFor(other, first, last, true) ?? spanFor(other, blockFrom, blockTo, false);
+      const coords = target.coordsAtPos(range.head);
+      if (!coords) return null;
+      return { span, counterpart, left: coords.left, bottom: coords.bottom };
+    };
+    const inlineExtensions = (diff: InlineDiff): Extension[] => [
+      extensions,
+      workspaceInlineDiff(diff.rows),
+      codeFolding({ placeholderText: "unchanged lines" }),
+      commentHighlightsExtension(commentHighlights, locateInline),
+      ...(props.onAnnotate ? [annotationExtension({ side: "modified", onSelect: selectAnnotation, read: readInline })] : []),
+    ];
+    let inline: InlineDiff | null = null;
+    let inlineSource = "";
     if (split) {
-      merge = workspaceMergeView({ parent: host, a: { doc: data.original, extensions: sideExtensions("original") }, b: { doc: data.modified, extensions: sideExtensions("modified") }, ...options });
+      merge = workspaceMergeView({ parent: host, a: { doc: data.original, extensions: sideExtensions("original") }, b: { doc: data.modified, extensions: sideExtensions("modified") }, collapseUnchanged: { margin: 3, minSize: 8 } });
       view = merge.b;
     } else {
-      view = new EditorView({ parent: host, doc: data.modified, extensions: [sideExtensions("modified"), workspaceUnifiedMerge(data.original, options)] });
+      inline = buildInlineDiff(data.original, data.modified, DIFF_CONFIG);
+      inlineSource = `${data.original}\u0000${data.modified}`;
+      view = new EditorView({ parent: host, doc: inline.doc, extensions: inlineExtensions(inline) });
     }
+    // Long stretches of untouched context fold away, as they did when the merge
+    // view collapsed them, and a click on the placeholder brings them back.
+    const foldContext = (target: EditorView, rows: InlineDiff["rows"]) => {
+      const doc = target.state.doc;
+      const effects = unchangedRuns(rows).flatMap((run) => {
+        if (run.to > doc.lines) return [];
+        const from = doc.line(run.from).from;
+        const to = doc.line(run.to).to;
+        return to > from ? [foldEffect.of({ from: Math.max(0, from - 1), to })] : [];
+      });
+      if (effects.length) target.dispatch({ effects });
+    };
+    if (inline) foldContext(view, inline.rows);
     const views = merge ? [merge.a, merge.b] : [view];
     activeView = view;
     const review = savedReview;
@@ -210,7 +217,7 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
         if (reveal?.path === data.path && reveal.nonce !== revealedNonce) {
           revealedNonce = reveal.nonce;
           const target = merge && reveal.side === "original" ? merge.a : view;
-          const range = commentRange(target, reveal);
+          const range = inline ? locateInline(target, reveal) : commentRange(target, reveal);
           if (range) target.dispatch({ selection: { anchor: range.from, head: range.to }, effects: EditorView.scrollIntoView(range.from, { y: "center" }) });
           selectAnnotation(null);
           target.focus();
@@ -231,21 +238,27 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
         return { from, to: end, insert: value.slice(from, nextEnd) };
       };
       const top = scroller.scrollTop, left = scroller.scrollLeft;
-      if (merge) {
-        if (merge.a.state.doc.toString() !== next.original) merge.a.dispatch({ changes: changesFor(merge.a.state.doc.toString(), next.original) });
-        if (merge.b.state.doc.toString() !== next.modified) merge.b.dispatch({ changes: changesFor(merge.b.state.doc.toString(), next.modified) });
-      } else {
-        const original = getOriginalDoc(view.state);
-        const effects = original && original.toString() !== next.original
-          ? [originalDocChangeEffect(view.state, ChangeSet.of(changesFor(original.toString(), next.original), original.length))]
-          : [];
-        const changed = view.state.doc.toString() !== next.modified;
-        if (changed || effects.length) view.dispatch({ changes: changed ? changesFor(view.state.doc.toString(), next.modified) : undefined, effects });
+      if (inline) {
+        const source = `${next.original}\u0000${next.modified}`;
+        if (source !== inlineSource) {
+          inlineSource = source;
+          inline = buildInlineDiff(next.original, next.modified, DIFF_CONFIG);
+          const current = view.state.doc.toString();
+          view.dispatch({ changes: changesFor(current, inline.doc), effects: setInlineRows.of(inline.rows) });
+          foldContext(view, inline.rows);
+          scroller.scrollTop = top;
+          scroller.scrollLeft = left;
+        }
+        setSummary({ added: inline.added, removed: inline.removed, precise: inline.precise });
+        return;
       }
+      if (!merge) return;
+      if (merge.a.state.doc.toString() !== next.original) merge.a.dispatch({ changes: changesFor(merge.a.state.doc.toString(), next.original) });
+      if (merge.b.state.doc.toString() !== next.modified) merge.b.dispatch({ changes: changesFor(merge.b.state.doc.toString(), next.modified) });
       scroller.scrollTop = top;
       scroller.scrollLeft = left;
       const chunks = getChunks(view.state)?.chunks ?? [];
-      const original = merge?.a.state.doc ?? getOriginalDoc(view.state);
+      const original = merge.a.state.doc;
       const count = (doc: typeof original, from: number, to: number) => to <= from ? 0 : doc.lineAt(Math.min(to - 1, doc.length)).number - doc.lineAt(from).number + 1;
       setSummary({
         added: chunks.reduce((n, chunk) => n + count(view.state.doc, chunk.fromB, chunk.toB), 0),

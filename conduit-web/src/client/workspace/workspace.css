@@ -195,7 +195,6 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-excerpt .cm-review-comment { box-shadow: none; background: color-mix(in oklch, var(--warn), transparent 78%); }
 .workspace-excerpt .cm-review-context { color: var(--muted-foreground); opacity: .55; }
 /* A comment leaves its lines faintly marked, and hovering them previews the note. */
-.cm-annotation-range { background: color-mix(in oklch, var(--foreground), transparent 78%); }
 .cm-review-comment { border-radius: 2px; background: color-mix(in oklch, var(--warn), transparent 90%); box-shadow: inset 2px 0 0 color-mix(in oklch, var(--warn), transparent 55%); }
 .cm-tooltip.cm-tooltip-hover:has(.workspace-review-comment-tooltip) { border: 1px solid var(--border); border-radius: 6px; background: var(--popover); box-shadow: var(--shadow-md); }
 .workspace-review-comment-tooltip { max-width: 280px; padding: 5px 7px; color: var(--popover-foreground); font: 11px/1.45 var(--font-sans); white-space: pre-wrap; overflow-wrap: anywhere; }
