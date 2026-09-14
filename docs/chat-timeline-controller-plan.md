@@ -53,8 +53,12 @@ The controller must:
    during prepend and row-height changes, and offer a return-to-latest control.
    Cache the 10 most recent chat positions and restore the same visible message
    when the reader returns to a chat.
-6. Virtualize settled rows only after stable identity and scroll ownership are
-   proven. Keep the live turn mounted outside the evicted range.
+6. Cache persisted projection by user-owned turn. The authoritative projector
+   assigns referenced and timestamp-fallback tools before it decides which
+   turn rows can be reused. Settlement rebuilds the changed final turn. History
+   prepend reuses a turn only when its message indexes remain valid.
+7. Keep the existing settled-row visibility virtualization. Keep the live turn
+   mounted outside any future DOM eviction changes.
 
 ## Acceptance criteria
 

@@ -9,7 +9,7 @@ import { loadConfig, resolveTemplate } from "./config.js";
 import { TerminalPasteStore } from "./terminal-paste-store.js";
 import { PiModelCatalog, resolveThinkingLevel } from "./pi-model-catalog.js";
 import { ProjectStore } from "./project-store.js";
-import { readSessionMetadata, readSessionPage } from "./session-store.js";
+import { pageSessionEntries, projectSessionEntries, readSessionMetadata, readSessionPage } from "./session-store.js";
 import { PiManager } from "./pi-manager.js";
 import { ChatStore, chatView, isChatId } from "./chat-store.js";
 import { AttachmentStore } from "./attachment-store.js";
@@ -509,6 +509,9 @@ manager.on("event", ({ record, event }) => {
           generationSeq: checkpoint.seq,
           chat: chatView(registry.metadata(record.chatId)),
         };
+        const latest = projectSessionEntries(pageSessionEntries(session.entries, { turnLimit: 1 }).entries);
+        latest.messages = await attachments.decorateMessages(project, record.chatId, latest.messages);
+        manager.publish(record, { type: "transcript_sync", generationId: checkpoint.id, ...latest });
         manager.publish(record, record.lastCheckpoint);
         runtimeHub.publish({ type: "chat_changed", chat: record.lastCheckpoint.chat, at: new Date().toISOString() });
         return session;

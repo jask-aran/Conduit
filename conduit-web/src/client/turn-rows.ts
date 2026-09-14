@@ -70,6 +70,22 @@ export type TurnRow =
   | { key: string; type: "message"; value: Message; index: number; live?: boolean; streamVersion?: number; displayKey?: string; precedingUserId?: string }
   | { key: string; type: "trace"; value: TurnTraceData };
 
+interface PersistedTurn {
+  userMessage: Message | null;
+  assistants: Message[];
+  leftoverTools: ToolItem[];
+  sourceTools: ToolItem[];
+}
+
+export interface PersistedTurnProjection {
+  key: string;
+  userMessage: Message | null;
+  assistants: Message[];
+  leftoverTools: ToolItem[];
+  firstMessageIndex: number;
+  rows: TurnRow[];
+}
+
 const thinkingOf = (message: Message): string => (message.blocks || [])
   .filter((block) => block.type === "thinking")
   .map((block) => block.thinking || "")
@@ -255,6 +271,24 @@ export function buildLiveToolItem(
   };
 }
 
+/** Commit final live tool records without assigning them to transcript turns. */
+export function settleGenerationTools(current: ToolItem[], generation: ActiveGenerationView): ToolItem[] {
+  const blocks = generation.assistantMessages.flatMap((message) => message.blocks)
+    .filter((block) => block.type === "toolCall");
+  if (!blocks.length) return current;
+  const settled = new Map(blocks.map((block) => {
+    const id = block.toolCallId || block.identity;
+    return [id, buildLiveToolItem(id, generation.toolExecutions[id], { name: block.name, args: block.arguments })];
+  }));
+  const next = current.map((tool) => settled.has(tool.id) ? { ...tool, ...settled.get(tool.id)! } : tool);
+  const known = new Set(current.map((tool) => tool.id));
+  for (const block of blocks) {
+    const id = block.toolCallId || block.identity;
+    if (!known.has(id)) next.push(settled.get(id)!);
+  }
+  return next;
+}
+
 function liveRows(generation: ActiveGenerationView, owner: Message | null, index: number): TurnRow[] {
   const classifications = textBlockClassifications(generation) as Record<string, "interim" | "answer">;
   const segments: TraceSegment[] = [];
@@ -351,6 +385,132 @@ export function projectLiveTurn(
   ];
 }
 
+function sameSources(
+  left: PersistedTurnProjection,
+  right: PersistedTurn,
+  sourceTools: ToolItem[],
+  firstMessageIndex: number,
+): boolean {
+  return left.userMessage === right.userMessage
+    && left.firstMessageIndex === firstMessageIndex
+    && left.assistants.length === right.assistants.length
+    && left.assistants.every((message, index) => message === right.assistants[index])
+    && left.leftoverTools.length === right.leftoverTools.length
+    && left.leftoverTools.every((tool, index) => tool === right.leftoverTools[index])
+    && left.sourceTools.length === sourceTools.length
+    && left.sourceTools.every((tool, index) => tool === sourceTools[index]);
+}
+
+function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById: Map<string, ToolItem>): TurnRow[] {
+  const rows: TurnRow[] = [];
+  if (turn.userMessage) {
+    rows.push({ key: `message:${messageKey(turn.userMessage)}`, type: "message", value: turn.userMessage, index: messages.indexOf(turn.userMessage) });
+  }
+  if (!turn.assistants.length) return rows;
+  const segments: TraceSegment[] = [];
+  const claimed = new Set<string>();
+  const finalAssistant = turn.assistants.at(-1) || null;
+  const lastToolAssistantIndex = turn.assistants.findLastIndex((assistant) => toolCallIdsOf(assistant).length > 0);
+  const answerAssistants = turn.assistants.filter((assistant, assistantIndex) => assistant.stopReason !== "toolUse"
+    && assistantIndex > lastToolAssistantIndex
+    && !(assistant.stopReason === "error" && assistant !== finalAssistant));
+  for (const assistant of turn.assistants) {
+    const thinking = thinkingOf(assistant);
+    if (thinking) segments.push({ kind: "thinking", id: `thinking:${assistant.id}`, text: thinking });
+    if (!answerAssistants.includes(assistant) && String(assistant.content || "").trim()) {
+      segments.push({ kind: "narration", id: `narration:${assistant.id}`, text: String(assistant.content) });
+    }
+    for (const id of toolCallIdsOf(assistant)) {
+      const tool = toolById.get(id);
+      if (tool && !claimed.has(id)) { claimed.add(id); segments.push({ kind: "tool", id: `tool:${id}`, tool }); }
+    }
+    if (assistant.stopReason === "error" && assistant !== finalAssistant) {
+      segments.push({ kind: "error", id: `error:${assistant.id}`, message: assistant });
+    }
+  }
+  for (const tool of turn.leftoverTools) {
+    if (!claimed.has(tool.id)) { claimed.add(tool.id); segments.push({ kind: "tool", id: `tool:${tool.id}`, tool }); }
+  }
+  if (segments.length > 0) {
+    const interrupted = turn.assistants.some((assistant) => assistant.stopped || assistant.stopReason === "aborted");
+    const failed = finalAssistant?.stopReason === "error" && !interrupted;
+    rows.push({
+      key: `trace:${turn.userMessage ? messageKey(turn.userMessage) : messageKey(turn.assistants[0]!)}`,
+      type: "trace",
+      value: { active: false, status: interrupted ? "interrupted" : failed ? "failed" : "complete", segments },
+    });
+  }
+  const answer = answerAssistants.at(-1) || null;
+  const answerText = answerAssistants.map((assistant) => String(assistant.content || "").trim()).filter(Boolean).join("\n\n");
+  if (answer && (answerText || (answer === finalAssistant && answer.stopReason === "error"))) {
+    const displayKey = answerDisplayKey(turn.userMessage, 0, `message:${messageKey(answer)}`);
+    rows.push({
+      key: displayKey,
+      displayKey,
+      type: "message",
+      value: answerAssistants.length === 1 ? answer : { ...answer, content: answerText },
+      index: messages.indexOf(answer),
+      precedingUserId: turn.userMessage?.id,
+    });
+  }
+  return rows;
+}
+
+export function projectPersistedTurns(
+  messages: Message[],
+  tools: ToolItem[],
+  previous: PersistedTurnProjection[] = [],
+): { rows: TurnRow[]; turns: PersistedTurnProjection[] } {
+  const turns: PersistedTurn[] = [];
+  let current: PersistedTurn = { userMessage: null, assistants: [], leftoverTools: [] };
+  for (const message of messages) {
+    if (message.role === "user") {
+      turns.push(current);
+      current = { userMessage: message, assistants: [], leftoverTools: [] };
+    } else if (message.role === "assistant") current.assistants.push(message);
+  }
+  turns.push(current);
+
+  const referenced = new Set<string>();
+  for (const turn of turns) for (const assistant of turn.assistants) for (const id of toolCallIdsOf(assistant)) referenced.add(id);
+  const timedTurns = turns.filter((turn) => turn.userMessage);
+  for (const tool of tools) {
+    if (referenced.has(tool.id)) continue;
+    const timestamp = Date.parse(tool.timestamp || "") || 0;
+    let owner: PersistedTurn | null = null;
+    for (const turn of timedTurns) {
+      const userTimestamp = Date.parse(turn.userMessage!.timestamp || "") || 0;
+      if (userTimestamp <= timestamp) owner = turn;
+    }
+    const fallback = owner || turns[turns.length - 1];
+    if (fallback) fallback.leftoverTools.push(tool);
+  }
+
+  const previousByKey = new Map(previous.map((turn) => [turn.key, turn]));
+  const toolById = new Map(tools.map((tool) => [tool.id, tool]));
+  const projected = turns.map((turn, turnIndex) => {
+    const key = turn.userMessage ? `user:${messageKey(turn.userMessage)}` : "preamble";
+    const firstMessage = turn.userMessage || turn.assistants[0] || null;
+    const firstMessageIndex = firstMessage ? messages.indexOf(firstMessage) : turnIndex;
+    const sourceTools = [
+      ...turn.assistants.flatMap((assistant) => toolCallIdsOf(assistant).map((id) => toolById.get(id)).filter((tool): tool is ToolItem => Boolean(tool))),
+      ...turn.leftoverTools,
+    ];
+    const cached = previousByKey.get(key);
+    if (cached && sameSources(cached, turn, sourceTools, firstMessageIndex)) return cached;
+    return {
+      key,
+      userMessage: turn.userMessage,
+      assistants: turn.assistants,
+      leftoverTools: turn.leftoverTools,
+      sourceTools,
+      firstMessageIndex,
+      rows: persistedRowsForTurn(turn, messages, toolById),
+    };
+  });
+  return { rows: projected.flatMap((turn) => turn.rows), turns: projected };
+}
+
 /**
  * Persisted history retains its transcript projection while a live Generation
  * projects directly from normalized Pi blocks.
@@ -362,98 +522,6 @@ export function buildTurnRows(
     activeGeneration?: ActiveGenerationView | null;
   } = {},
 ): TurnRow[] {
-  interface Turn { userMessage: Message | null; assistants: Message[]; leftoverTools: ToolItem[] }
-  const turns: Turn[] = [];
-  let current: Turn = { userMessage: null, assistants: [], leftoverTools: [] };
-  for (const message of messages) {
-    if (message.role === "user") {
-      turns.push(current);
-      current = { userMessage: message, assistants: [], leftoverTools: [] };
-    } else if (message.role === "assistant") {
-      current.assistants.push(message);
-    }
-  }
-  turns.push(current);
-
-  const referenced = new Set<string>();
-  for (const turn of turns) for (const assistant of turn.assistants) for (const id of toolCallIdsOf(assistant)) referenced.add(id);
-  const timedTurns = turns.filter((turn) => turn.userMessage);
-  for (const tool of tools) {
-    if (referenced.has(tool.id)) continue;
-    const timestamp = Date.parse(tool.timestamp || "") || 0;
-    let owner: Turn | null = null;
-    for (const turn of timedTurns) {
-      const userTimestamp = Date.parse(turn.userMessage!.timestamp || "") || 0;
-      if (userTimestamp <= timestamp) owner = turn;
-    }
-    const fallback = owner || turns[turns.length - 1];
-    if (fallback) fallback.leftoverTools.push(tool);
-  }
-
-  const liveOwner = opts.activeGeneration
-    ? [...messages].reverse().find((message) => message.role === "user" && !message.pending) || null
-    : null;
-  const rows: TurnRow[] = [];
-  let renderedLive = false;
-  turns.forEach((turn, turnIndex) => {
-    const directLive = Boolean(opts.activeGeneration && turn.userMessage === liveOwner);
-    if (turn.userMessage) {
-      rows.push({ key: `message:${messageKey(turn.userMessage)}`, type: "message", value: turn.userMessage, index: messages.indexOf(turn.userMessage) });
-    }
-    if (turn.assistants.length && !directLive) {
-      const segments: TraceSegment[] = [];
-      const claimed = new Set<string>();
-      const toolById = new Map(tools.map((tool) => [tool.id, tool]));
-      const finalAssistant = turn.assistants.at(-1) || null;
-      const lastToolAssistantIndex = turn.assistants.findLastIndex((assistant) => toolCallIdsOf(assistant).length > 0);
-      const answerAssistants = turn.assistants.filter((assistant, assistantIndex) => assistant.stopReason !== "toolUse"
-        && assistantIndex > lastToolAssistantIndex
-        && !(assistant.stopReason === "error" && assistant !== finalAssistant));
-      for (const assistant of turn.assistants) {
-        const thinking = thinkingOf(assistant);
-        if (thinking) segments.push({ kind: "thinking", id: `thinking:${assistant.id}`, text: thinking });
-        if (!answerAssistants.includes(assistant) && String(assistant.content || "").trim()) {
-          segments.push({ kind: "narration", id: `narration:${assistant.id}`, text: String(assistant.content) });
-        }
-        for (const id of toolCallIdsOf(assistant)) {
-          const tool = toolById.get(id);
-          if (tool && !claimed.has(id)) { claimed.add(id); segments.push({ kind: "tool", id: `tool:${id}`, tool }); }
-        }
-        if (assistant.stopReason === "error" && assistant !== finalAssistant) {
-          segments.push({ kind: "error", id: `error:${assistant.id}`, message: assistant });
-        }
-      }
-      for (const tool of turn.leftoverTools) {
-        if (!claimed.has(tool.id)) { claimed.add(tool.id); segments.push({ kind: "tool", id: `tool:${tool.id}`, tool }); }
-      }
-      if (segments.length > 0) {
-        const interrupted = turn.assistants.some((assistant) => assistant.stopped || assistant.stopReason === "aborted");
-        const failed = finalAssistant?.stopReason === "error" && !interrupted;
-        rows.push({
-          key: `trace:${turn.userMessage ? messageKey(turn.userMessage) : messageKey(turn.assistants[0]!)}`,
-          type: "trace",
-          value: { active: false, status: interrupted ? "interrupted" : failed ? "failed" : "complete", segments },
-        });
-      }
-      const answer = answerAssistants.at(-1) || null;
-      const answerText = answerAssistants.map((assistant) => String(assistant.content || "").trim()).filter(Boolean).join("\n\n");
-      if (answer && (answerText || (answer === finalAssistant && answer.stopReason === "error"))) {
-        const displayKey = answerDisplayKey(turn.userMessage, 0, `message:${messageKey(answer)}`);
-        rows.push({
-          key: displayKey,
-          displayKey,
-          type: "message",
-          value: answerAssistants.length === 1 ? answer : { ...answer, content: answerText },
-          index: messages.indexOf(answer),
-          precedingUserId: turn.userMessage?.id,
-        });
-      }
-    }
-    if (opts.activeGeneration && turn.userMessage === liveOwner) {
-      rows.push(...liveRows(opts.activeGeneration, liveOwner, messages.indexOf(turn.userMessage!)));
-      renderedLive = true;
-    }
-  });
-  if (opts.activeGeneration && !renderedLive) rows.push(...liveRows(opts.activeGeneration, null, messages.length));
-  return rows;
+  const persisted = projectPersistedTurns(messages, tools).rows;
+  return opts.activeGeneration ? projectLiveTurn(persisted, messages, opts.activeGeneration) : persisted;
 }
