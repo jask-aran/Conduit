@@ -1,5 +1,5 @@
 import { WorkbenchButton, WorkbenchStatus } from "./workspace-workbench";
-import { annotationExtension, WorkspaceAnnotationPopup, type AnnotationSelection } from "./workspace-annotate";
+import { annotationExtension, commentHighlightsExtension, WorkspaceAnnotationPopup, type AnnotationSelection, type CommentHighlight } from "./workspace-annotate";
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
 import { history, historyKeymap, indentWithTab, redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
 import { indentOnInput, indentUnit } from "@codemirror/language";
@@ -13,6 +13,7 @@ import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } f
 import { Menu, MenuContent, MenuGroup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "@/components/primitives";
 import { csvLanguage, isCsvFile } from "./csv-language";
 import { workspaceLanguageForFilename, workspaceLanguageForName, workspaceLanguages } from "./workspace-languages";
+import type { ReviewNavigationRequest } from "../chat/review-navigation";
 
 
 export function isVisualMarkdownFile(path: string) {
@@ -92,6 +93,8 @@ export default function WorkspaceEditor(props: {
   onToggleEditing?: () => void;
   onToggleWrap: () => void;
   onAnnotate?: (selection: AnnotationSelection, note: string) => boolean;
+  commentHighlights?: readonly CommentHighlight[];
+  reveal?: ReviewNavigationRequest | null;
   header?: JSX.Element;
   ref?: (handle: WorkspaceEditorHandle) => void;
 }) {
@@ -100,14 +103,17 @@ export default function WorkspaceEditor(props: {
   const [canUndo, setCanUndo] = createSignal(false);
   const [canRedo, setCanRedo] = createSignal(false);
   const [annotation, setAnnotation] = createSignal<AnnotationSelection | null>(null);
+  const [editorReady, setEditorReady] = createSignal(false);
   let view: EditorView | undefined;
   const editableCompartment = new Compartment();
   const wrappingCompartment = new Compartment();
   const languageCompartment = new Compartment();
   const historyCompartment = new Compartment();
   const indentationCompartment = new Compartment();
+  const commentHighlightsCompartment = new Compartment();
   const editable = () => props.editable !== false;
   let activePath = props.path;
+  let revealedNonce = 0;
   let savedDocument = Text.of(props.value.split("\n"));
   let languageLoadToken = 0;
   let lastDirty = false;
@@ -189,6 +195,7 @@ export default function WorkspaceEditor(props: {
       if (update.docChanged || update.selectionSet) updatePosition(update.state);
     }),
     ...(props.onAnnotate ? [annotationExtension({ side: "modified", onSelect: setAnnotation })] : []),
+    commentHighlightsCompartment.of(commentHighlightsExtension(props.commentHighlights ?? [])),
     keymap.of([{
       key: "Mod-s",
       preventDefault: true,
@@ -314,6 +321,22 @@ export default function WorkspaceEditor(props: {
     updatePosition(view.state);
     if (nextEditable) view.focus();
   });
+  createEffect(() => {
+    editorReady();
+    const highlights = props.commentHighlights ?? [];
+    if (view) view.dispatch({ effects: commentHighlightsCompartment.reconfigure(commentHighlightsExtension(highlights)) });
+  });
+  createEffect(() => {
+    editorReady();
+    const reveal = props.reveal;
+    if (!view || !reveal || reveal.path !== props.path || reveal.nonce === revealedNonce) return;
+    revealedNonce = reveal.nonce;
+    const start = view.state.doc.line(Math.max(1, Math.min(reveal.from, view.state.doc.lines)));
+    const end = view.state.doc.line(Math.max(1, Math.min(reveal.to, view.state.doc.lines)));
+    view.dispatch({ selection: { anchor: start.from, head: end.to }, effects: EditorView.scrollIntoView(start.from, { y: "center" }) });
+    setAnnotation(null);
+    view.focus();
+  });
 
   onMount(() => {
     const setup = () => {
@@ -322,6 +345,7 @@ export default function WorkspaceEditor(props: {
         parent: host,
         state: createDocumentState(activePath, props.value, indentation()),
       });
+      setEditorReady(true);
       updatePosition(view.state);
       view.contentDOM.setAttribute("aria-label", `${editable() ? "Edit" : "Preview"} ${activePath}`);
       if (editable()) view.focus();
@@ -337,7 +361,13 @@ export default function WorkspaceEditor(props: {
   });
 
   return <div class="workspace-code-surface" data-editable={editable()}>
-    <header class="workspace-preview-header">{props.header}</header>
+    <header class="workspace-preview-header">
+      {props.header}
+      <div class="workspace-editor-header-tools">
+        <WorkbenchButton aria-label="Find or replace" title="Find or replace (Ctrl+F)" onClick={() => runCommand(openSearchPanel)}><SearchIcon /></WorkbenchButton>
+        <WorkbenchButton aria-label={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={props.wrap} title={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} onClick={props.onToggleWrap}><WrapTextIcon /></WorkbenchButton>
+      </div>
+    </header>
     <div class="workspace-editor-content">
       <div ref={host} class="workspace-code-editor" data-markdown={isVisualMarkdownFile(props.path)} data-wrap={props.wrap} />
       <Show when={annotation()}>{(selection) => <WorkspaceAnnotationPopup selection={selection()} onAdd={(note) => props.onAnnotate?.(selection(), note) ?? false} onDismiss={() => setAnnotation(null)} />}</Show>
@@ -348,47 +378,45 @@ export default function WorkspaceEditor(props: {
           <Show when={editable()} fallback={<PencilIcon />}><EyeIcon /></Show><span>{editable() ? "Preview" : "Edit"}</span>
         </WorkbenchButton>
       </Show>
-      <WorkbenchButton aria-label="Find or replace" title="Find or replace (Ctrl+F)" onClick={() => runCommand(openSearchPanel)}><SearchIcon /></WorkbenchButton>
       <Show when={editable()}>
         <WorkbenchButton aria-label="Undo" title="Undo" disabled={!canUndo()} onClick={() => runEditCommand(undo)}><Undo2Icon /></WorkbenchButton>
         <WorkbenchButton aria-label="Redo" title="Redo" disabled={!canRedo()} onClick={() => runEditCommand(redo)}><Redo2Icon /></WorkbenchButton>
       </Show>
+      <Menu>
+        <MenuTrigger class="workspace-editor-picker" aria-label={`Indentation ${indentationLabel(indentation())}`} title="Indentation">
+          <span>{indentationLabel(indentation())}</span><ChevronDownIcon />
+        </MenuTrigger>
+        <MenuContent class="workspace-editor-picker-menu">
+          <MenuGroup>
+            <MenuRadioGroup value={indentation()} onChange={(value) => {
+              if (!isIndentation(value)) return;
+              setIndentation(value);
+              view?.dispatch({ effects: indentationCompartment.reconfigure(indentationExtensions(value)) });
+              view?.focus();
+            }}>
+              <For each={indentationOptions}>{(option) => <MenuRadioItem value={option.value}>{option.label}</MenuRadioItem>}</For>
+            </MenuRadioGroup>
+          </MenuGroup>
+        </MenuContent>
+      </Menu>
+      <Menu>
+        <MenuTrigger class="workspace-editor-picker" aria-label={`Language mode ${selectedLanguage()}`} title="Language mode">
+          <span>{selectedLanguage()}</span><ChevronDownIcon />
+        </MenuTrigger>
+        <MenuContent class="workspace-editor-picker-menu workspace-editor-language-menu">
+          <MenuGroup>
+            <MenuRadioGroup value={selectedLanguage()} onChange={(value) => void installLanguage(value).catch(() => undefined)}>
+              <MenuRadioItem value="Plain Text">Plain Text</MenuRadioItem>
+              <MenuRadioItem value="Markdown">Markdown</MenuRadioItem>
+              <MenuRadioItem value="CSV">CSV</MenuRadioItem>
+              <For each={workspaceLanguages}>{(language) => <MenuRadioItem value={language.name}>{language.name}</MenuRadioItem>}</For>
+            </MenuRadioGroup>
+          </MenuGroup>
+        </MenuContent>
+      </Menu>
     </>}>
-        <span class="workspace-editor-metadata" title={props.statusTitle ?? props.statusText}>{props.statusText}</span>
-        <WorkbenchButton type="button" ref={positionLabel} aria-label="Go to line" title="Go to line (Alt+G)" onClick={() => runCommand(gotoLine)}>Ln 1, Col 1</WorkbenchButton>
-        <WorkbenchButton aria-label={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={props.wrap} title={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} onClick={props.onToggleWrap}><WrapTextIcon /></WorkbenchButton>
-        <Menu>
-          <MenuTrigger class="workspace-editor-picker" aria-label={`Indentation ${indentationLabel(indentation())}`} title="Indentation">
-            <span>{indentationLabel(indentation())}</span><ChevronDownIcon />
-          </MenuTrigger>
-          <MenuContent class="workspace-editor-picker-menu">
-            <MenuGroup>
-              <MenuRadioGroup value={indentation()} onChange={(value) => {
-                if (!isIndentation(value)) return;
-                setIndentation(value);
-                view?.dispatch({ effects: indentationCompartment.reconfigure(indentationExtensions(value)) });
-                view?.focus();
-              }}>
-                <For each={indentationOptions}>{(option) => <MenuRadioItem value={option.value}>{option.label}</MenuRadioItem>}</For>
-              </MenuRadioGroup>
-            </MenuGroup>
-          </MenuContent>
-        </Menu>
-        <Menu>
-          <MenuTrigger class="workspace-editor-picker" aria-label={`Language mode ${selectedLanguage()}`} title="Language mode">
-            <span>{selectedLanguage()}</span><ChevronDownIcon />
-          </MenuTrigger>
-          <MenuContent class="workspace-editor-picker-menu workspace-editor-language-menu">
-            <MenuGroup>
-              <MenuRadioGroup value={selectedLanguage()} onChange={(value) => void installLanguage(value).catch(() => undefined)}>
-                <MenuRadioItem value="Plain Text">Plain Text</MenuRadioItem>
-                <MenuRadioItem value="Markdown">Markdown</MenuRadioItem>
-                <MenuRadioItem value="CSV">CSV</MenuRadioItem>
-                <For each={workspaceLanguages}>{(language) => <MenuRadioItem value={language.name}>{language.name}</MenuRadioItem>}</For>
-              </MenuRadioGroup>
-            </MenuGroup>
-          </MenuContent>
-        </Menu>
+      <span class="workspace-editor-metadata" title={props.statusTitle ?? props.statusText}>{props.statusText}</span>
+      <WorkbenchButton type="button" ref={positionLabel} aria-label="Go to line" title="Go to line (Alt+G)" onClick={() => runCommand(gotoLine)}>Ln 1, Col 1</WorkbenchButton>
     </WorkbenchStatus>
   </div>;
 }

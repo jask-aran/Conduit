@@ -1,15 +1,16 @@
 import { WorkbenchButton, WorkbenchStatus } from "./workspace-workbench";
 import { batch, createEffect, createSignal, lazy, on, onCleanup, Show, Suspense, type JSX } from "solid-js";
-import { CopyIcon, DownloadIcon, EllipsisIcon, PencilIcon, SaveIcon, Trash2Icon, UploadIcon, XIcon } from "lucide-solid";
+import { CopyIcon, DownloadIcon, FileCode2Icon, FileDiffIcon, GitCompareArrowsIcon, PencilIcon, SaveIcon, Trash2Icon, UploadIcon, XIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
-import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Menu, MenuContent, MenuItem, MenuTrigger, Spinner } from "@/components/primitives";
+import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
 import { FileTypeIcon } from "./file-type-icon";
 import { Capacitor } from "@capacitor/core";
 import type { WorkspaceEditorHandle } from "./workspace-editor";
-import { addReviewComment } from "../chat/review-comments";
+import { addReviewComment, reviewComments } from "../chat/review-comments";
+import type { ReviewNavigationRequest } from "../chat/review-navigation";
 
 let workspaceEditorPromise: Promise<typeof import("./workspace-editor")> | undefined;
 export const preloadWorkspaceEditor = () => {
@@ -157,6 +158,7 @@ export default function WorkspaceFileSlot(props: {
   empty?: string;
   onToggleWrap: () => void;
   annotationChatId?: string | null;
+  reveal?: ReviewNavigationRequest | null;
   onFocus: () => void;
   onClose: () => void;
   onError: (message: string) => void;
@@ -449,16 +451,13 @@ export default function WorkspaceFileSlot(props: {
   const editable = () => Boolean(preview() && !preview()!.readOnly && !preview()!.truncated);
   const hasChanges = () => Boolean(props.gitFile && (props.gitFile.status === "??" || props.gitFile.status[1] !== " "));
   const hasStaged = () => Boolean(props.gitFile && props.gitFile.status[0] !== " " && props.gitFile.status[0] !== "?");
-  const fileActions = () => <Menu>
-    <MenuTrigger class="workspace-document-menu workspace-file-actions" aria-label="File actions" title="File actions"><EllipsisIcon /></MenuTrigger>
-    <MenuContent>
-      <MenuItem onSelect={() => copy(currentText())}><CopyIcon />Copy contents</MenuItem>
-      <MenuItem onSelect={() => copy(props.path ?? "")}><CopyIcon />Copy path</MenuItem>
-      <MenuItem onSelect={() => void download()}><DownloadIcon />Download working file</MenuItem>
-      <Show when={hasChanges()}><MenuItem onSelect={() => props.onShowDiff?.(false)}>Review unstaged changes</MenuItem></Show>
-      <Show when={hasStaged()}><MenuItem onSelect={() => props.onShowDiff?.(true)}>Review staged changes</MenuItem></Show>
-    </MenuContent>
-  </Menu>;
+  const fileActions = () => <div class="workspace-file-actions">
+    <Show when={hasChanges()}><WorkbenchButton type="button" aria-label="Review unstaged changes" title="Review unstaged changes" onClick={() => props.onShowDiff?.(false)}><FileDiffIcon /></WorkbenchButton></Show>
+    <Show when={hasStaged()}><WorkbenchButton type="button" aria-label="Review staged changes" title="Review staged changes" onClick={() => props.onShowDiff?.(true)}><GitCompareArrowsIcon /></WorkbenchButton></Show>
+    <WorkbenchButton type="button" aria-label="Copy contents" title="Copy contents" onClick={() => copy(currentText())}><CopyIcon /></WorkbenchButton>
+    <WorkbenchButton type="button" aria-label="Copy path" title="Copy path" onClick={() => copy(props.path ?? "")}><FileCode2Icon /></WorkbenchButton>
+    <WorkbenchButton type="button" aria-label="Download working file" title="Download working file" onClick={() => void download()}><DownloadIcon /></WorkbenchButton>
+  </div>;
   const gitControls = () => <Show when={props.gitFile}>{(file) =>
     <code class="workspace-file-git-status" data-status={file().status === "??" ? "U" : file().status.trim()} title="Git status">{file().status === "??" ? "U" : file().status.trim()}</code>
   }</Show>;
@@ -474,7 +473,7 @@ export default function WorkspaceFileSlot(props: {
     <Show when={props.closable}><WorkbenchButton type="button" class="workspace-preview-action workspace-preview-close" aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><XIcon /></WorkbenchButton></Show>
   </>;
   const previewStatus = (file: FileMetadata & { kind: FileKind; mime: string }) => <WorkbenchStatus commands={
-    <span class="workspace-editor-metadata">Working copy · Preview</span>
+    <span class="workspace-editor-metadata">Working copy</span>
   }>
     <Show when={file.kind === "image" && imageDimensions()}>{(dimensions) =>
       <span class="workspace-editor-metadata">{dimensions().width} × {dimensions().height}</span>
@@ -575,12 +574,14 @@ export default function WorkspaceFileSlot(props: {
                   wrap={props.wrap}
                   editable={editing()}
                   canEdit={editable()}
-                  statusText={["Working copy", hasUnsavedChanges() ? "Unsaved" : editing() ? "Editing" : "Preview", formatFileSize(file().size)].join(" · ")}
+                  statusText={["Working copy", hasUnsavedChanges() ? "Unsaved" : editing() ? "Editing" : "", formatFileSize(file().size)].filter(Boolean).join(" · ")}
                   statusTitle={[hasUnsavedChanges() ? "Unsaved" : formatFileSize(file().size), fileTimeMetadata(file())].filter(Boolean).join(" · ")}
                   onDirtyChange={setEditorDirty}
                   onSave={(value) => void save(value)}
                   onToggleEditing={() => editing() ? setEditing(false) : void edit()}
                   onToggleWrap={props.onToggleWrap}
+                  commentHighlights={reviewComments(props.annotationChatId ?? "").filter((comment) => comment.scope === "file" && comment.path === file().path)}
+                  reveal={props.reveal}
                   onAnnotate={props.annotationChatId ? (selection, note) => {
                     const chatId = props.annotationChatId;
                     if (!chatId) return false;

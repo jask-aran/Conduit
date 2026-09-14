@@ -4,8 +4,9 @@ import type { ComparisonPayload, ComparisonViewState } from "./workspace-compari
 import { WorkspaceReviewNavigator, type WorkspaceReviewFile } from "./workspace-review";
 import { WorkbenchButton } from "./workspace-workbench";
 import { readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace-panel-storage";
-import { addReviewComment } from "../chat/review-comments";
+import { addReviewComment, reviewComments } from "../chat/review-comments";
 import type { AnnotationSelection } from "./workspace-annotate";
+import type { ReviewNavigationRequest } from "../chat/review-navigation";
 
 const WorkspaceComparison = lazy(() => import("./workspace-comparison"));
 const MIN_NAVIGATOR_WIDTH = 128;
@@ -22,8 +23,8 @@ export interface WorkspaceDiffViewProps {
   error: string;
   empty: string;
   comparisonSource?: JSX.Element;
-  comparisonLabel?: JSX.Element;
   annotationChatId?: string | null;
+  reveal?: ReviewNavigationRequest | null;
   onSelect: (path: string) => void;
   onOpenWorkingFile: (path: string) => void;
   onViewStateChange: (state: ComparisonViewState) => void;
@@ -92,15 +93,16 @@ export function WorkspaceDiffView(props: WorkspaceDiffViewProps) {
       }} />
     </Show>
     <div class="workspace-review-comparison">
-      <Show when={props.comparison} fallback={<div class="workspace-panel-empty">{props.loading ? "Loading changes…" : "Select a changed file."}</div>}>
+      <Show when={props.comparison} fallback={<div class="workspace-panel-empty">{props.loading ? "Loading changes…" : props.files.length ? "Select a changed file." : props.error || props.empty}</div>}>
         {(comparison) => <Suspense fallback={<div class="workspace-panel-empty">Loading comparison…</div>}>
           <WorkspaceComparison
             comparison={comparison()}
             sourceKey={props.sourceKey}
             viewState={props.viewState}
-            headerAction={<WorkbenchButton type="button" aria-label="Open working file" title="Open working file" onClick={() => props.onOpenWorkingFile(comparison().path)}><PencilIcon /><span>Open working file</span></WorkbenchButton>}
+            headerAction={<WorkbenchButton type="button" aria-label="Open working file" title="Open working file" onClick={() => props.onOpenWorkingFile(comparison().path)}><PencilIcon /></WorkbenchButton>}
             comparisonSource={props.comparisonSource}
-            comparisonLabel={props.comparisonLabel}
+            commentHighlights={reviewComments(props.annotationChatId ?? "").filter((comment) => comment.path === comparison().path && comment.scope === comparison().scope)}
+            reveal={props.reveal}
             onAnnotate={props.annotationChatId ? addAnnotation : undefined}
             onViewStateChange={props.onViewStateChange}
           />

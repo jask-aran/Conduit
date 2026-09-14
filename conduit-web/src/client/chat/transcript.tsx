@@ -911,7 +911,7 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
                 </div></Show>
 
                 <Show when={user() && message().attachments?.length}><AttachmentCards items={message().attachments!} chatId={props.chat.loadedId()} label="Message attachments" /></Show>
-                <Show when={user() && review().comments.length}><ReviewCommentCards items={review().comments} label="Code references" /></Show>
+                <Show when={user() && review().comments.length}><ReviewCommentCards items={review().comments} chatId={props.chat.loadedId() ?? ""} label="Code references" /></Show>
                 <Show when={message().stopped}><div class="marker">{message().status === "stopping" ? "Stopping…" : "Stopped"}</div></Show>
                 <Actions message={message()} precedingUserId={precedingUserId()} chat={props.chat} partialContinue={props.partialContinue} />
               </div>

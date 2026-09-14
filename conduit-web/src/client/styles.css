@@ -420,9 +420,12 @@ svg { stroke-width: 1.5; }
 .attachment-copy small { color: var(--muted-foreground); }
 .review-comment-tray { display: flex; max-width: 100%; flex-wrap: wrap; gap: 4px; margin: 0 0 6px; }
 .review-comment-chip { display: inline-flex; min-width: 0; max-width: min(360px, 100%); align-items: center; gap: 4px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); font-size: 10px; line-height: 1.2; }
-.review-comment-chip > svg { width: 11px; height: 11px; flex: none; color: var(--muted-foreground); }
-.review-comment-chip strong { flex: none; font-weight: 600; }
-.review-comment-chip > span { overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
+.review-comment-chip-link { display: inline-flex; min-width: 0; align-items: center; gap: 4px; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.review-comment-chip-link:disabled { cursor: default; }
+.review-comment-chip-link:focus-visible { border-radius: 3px; outline: 1px solid var(--ring); outline-offset: 2px; }
+.review-comment-chip-link > svg { width: 11px; height: 11px; flex: none; color: var(--muted-foreground); }
+.review-comment-chip-link strong { flex: none; font-weight: 600; }
+.review-comment-chip-link > span { overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
 .review-comment-chip [data-slot="button"] { width: 16px; height: 16px; flex: none; padding: 0; }
 .review-comment-chip [data-slot="button"] svg { width: 10px; height: 10px; }
 .review-comment-editor { gap: 10px; max-width: 640px; border-color: var(--border); border-radius: 11px; background: var(--popover); }

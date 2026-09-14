@@ -2,10 +2,12 @@ import { createSignal, For, Show } from "solid-js";
 import { FileCode2Icon, PencilIcon, XIcon } from "lucide-solid";
 import type { ProjectedReviewComment, ReviewComment } from "./review-comments";
 import { Button, Dialog, DialogContent, Textarea } from "@/components/primitives";
+import { requestReviewNavigation } from "./review-navigation";
 
 export function ReviewCommentCards(props: {
   items: readonly (ReviewComment | ProjectedReviewComment)[];
   label: string;
+  chatId?: string;
   onRemove?: (item: ReviewComment) => void;
   onUpdate?: (item: ReviewComment, note: string) => void;
 }) {
@@ -21,14 +23,16 @@ export function ReviewCommentCards(props: {
       const lines = item.from === item.to ? `:${item.from}` : `:${item.from}-${item.to}`;
       return <>
         <div class="review-comment-chip" title={item.excerpt}>
-          <FileCode2Icon />
-          <strong>{item.path.split("/").at(-1)}</strong>
-          <span>{lines}</span>
-          <Show when={item.note}><span>· {item.note}</span></Show>
+          <button type="button" class="review-comment-chip-link" disabled={!props.chatId} onClick={() => props.chatId && requestReviewNavigation(props.chatId, item)}>
+            <FileCode2Icon />
+            <strong>{item.path.split("/").at(-1)}</strong>
+            <span>{lines}</span>
+            <Show when={item.note}><span>· {item.note}</span></Show>
+          </button>
           <Show when={props.onUpdate && removable}>{(comment) => <Button variant="ghost" size="icon-sm" aria-label={`Edit comment for ${item.path}`} onClick={() => { setNote(comment().note); setEditing(true); }}><PencilIcon /></Button>}</Show>
           <Show when={props.onRemove && removable}>{(comment) => <Button variant="ghost" size="icon-sm" aria-label={`Remove reference to ${item.path}`} onClick={() => props.onRemove?.(comment())}><XIcon /></Button>}</Show>
         </div>
-        <Show when={props.onUpdate && removable}>{() => <Dialog open={editing()} onOpenChange={(open) => {
+        <Show when={props.onUpdate && removable}><Dialog open={editing()} onOpenChange={(open) => {
           if (!open) setNote(item.note);
           setEditing(open);
         }}>
@@ -41,7 +45,7 @@ export function ReviewCommentCards(props: {
               <Button onClick={commit}>Save comment</Button>
             </div>
           </DialogContent>
-        </Dialog>}</Show>
+        </Dialog></Show>
       </>;
     }}</For>
   </div></Show>;
