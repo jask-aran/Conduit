@@ -240,6 +240,30 @@
   .terminal-header-command { display: none; }
 }
 
+.terminal-server-status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4.8px;
+  padding-inline: 6.4px;
+  color: var(--muted-foreground);
+  font-size: 8.8px;
+  white-space: nowrap;
+}
+
+.terminal-server-status svg {
+  width: 11.2px;
+  height: 11.2px;
+}
+
+.terminal-server-status[data-tone="danger"] { color: var(--destructive); }
+.terminal-server-status[data-tone="warn"] { color: var(--warn); }
+
+/* The panel mount is narrow; the dot alone still carries the state there. */
+@container (max-width: 520px) {
+  .terminal-server-status small { display: none; }
+}
+
 .terminal-pane[data-terminal-focused="true"] .terminal-canvas[data-active="true"] {
   outline: 1px solid color-mix(in oklch, var(--accent-cool), transparent 42%);
   outline-offset: -1px;
