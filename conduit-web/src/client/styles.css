@@ -425,6 +425,9 @@ svg { stroke-width: 1.5; }
 .review-comment-chip > span { overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
 .review-comment-chip [data-slot="button"] { width: 16px; height: 16px; flex: none; padding: 0; }
 .review-comment-chip [data-slot="button"] svg { width: 10px; height: 10px; }
+.review-comment-editor { gap: 10px; max-width: 640px; border-color: var(--border); border-radius: 11px; background: var(--popover); }
+.review-comment-editor textarea { min-height: 220px; resize: vertical; font: 13px/1.45 var(--font-sans); }
+.review-comment-editor-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .composer-wrap > .review-comment-tray { margin-inline: 2px; }
 .message-user .review-comment-tray { justify-content: flex-end; margin-bottom: 0; }
 .chat-drop-overlay { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; pointer-events: none; background: color-mix(in oklch, var(--background), transparent 22%); backdrop-filter: blur(9.6px); }
