@@ -32,9 +32,8 @@ WorkspacePanel
 │  └─ Patch
 ├─ ChatView
 │  ├─ History
-│  ├─ DiffShell
-│  ├─ Outputs
-│  └─ Interactive UI
+│  └─ Agent changes
+│     └─ DiffShell
 └─ TerminalView
 ```
 
@@ -90,9 +89,9 @@ source-control modes.
 
 ## Chat view
 
-Retain History, Agent changes, Outputs, and Interactive UI. Agent changes uses
-`DiffShell` with the existing current-chat and selected-turn ranges. History and
-agent changes remain in this view because both depend on chat identity.
+Retain History and Agent changes. Agent changes uses `DiffShell` with the
+existing current-chat and selected-turn ranges. Both modes remain in this view
+because they depend on chat identity.
 
 ## Migration
 
@@ -102,8 +101,8 @@ agent changes remain in this view because both depend on chat identity.
    the reverse action from a comparison to the working file.
 3. **Built:** Remove `FilesMode`, temporary comparisons, and comparison
    rendering from `WorkspaceFileSlot`.
-4. **Built:** Rename Artifacts to Chat in code and visible labels. Keep History,
-   Agent changes, Outputs, and Interactive UI inside it.
+4. **Built:** Rename Artifacts to Chat in code and visible labels. Keep History
+   and Agent changes inside it.
 5. **Built:** Remove dead diff props and crossover CSS from the file components.
 6. Extract larger product views from `workspace-panel.tsx` only where the split
    produces clear ownership. Do not add a general view framework.
