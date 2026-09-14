@@ -139,6 +139,7 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Tran
   return <div class="response-actions">
     <Show when={!assistant() && !isOptimisticId(props.message.id)}>
       <Button variant="ghost" size="icon-sm" aria-label={props.chat.editingEntryId() === props.message.id ? "Cancel editing" : "Edit from here"} onClick={() => props.chat.edit(props.message)}><PencilIcon /></Button>
+      <Button variant="ghost" size="icon-sm" aria-label="Regenerate from here" onClick={() => void props.chat.regenerate(props.message.id)}><RefreshCwIcon /></Button>
     </Show>
     <Show when={assistant()}>
       <Button

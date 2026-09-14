@@ -30,7 +30,7 @@ import { canCoalesceTextDelta, enqueueOverflowLiveEvent, mergeTextDeltaEvents } 
 import type { AttachmentsStore, UploadAttachment } from "./attachments";
 import type { DraftsStore } from "./drafts";
 import type { CatalogueStore } from "./catalogue";
-import type { ActiveGenerationView, LiveGenerationChange } from "../turn-rows";
+import { settleGenerationTools, type ActiveGenerationView, type LiveGenerationChange } from "../turn-rows";
 import type { ModelSettings } from "./model-settings";
 import type { PermissionSettings } from "./permission-settings";
 import type { RuntimeStore } from "./runtime";
@@ -685,6 +685,7 @@ export function createActiveChat(options: ActiveChatOptions) {
             && (event.generationSeq == null || current.lastSeq >= event.generationSeq)) {
             if (current.status === "complete") {
               batch(() => {
+                setTools((existing) => settleGenerationTools(existing, current));
                 generationStore.clear();
                 setActiveGenerationChange(null);
                 setActiveGeneration(null);

@@ -6,6 +6,7 @@ import type {
   ActiveGenerationView,
   LiveGenerationChange,
   LiveProjectionIndex,
+  PersistedTurnProjection,
   TraceSegment,
   TurnRow,
 } from "../turn-rows";
@@ -14,8 +15,8 @@ import {
   buildLiveProjectionIndex,
   buildLiveToolItem,
   buildLiveToolSegment,
-  buildTurnRows,
   projectLiveTurn,
+  projectPersistedTurns,
 } from "../turn-rows";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 
@@ -88,6 +89,7 @@ export function createTimelineStore(
   let persistedMessages: Message[] | null = null;
   let persistedTools: ToolItem[] | null = null;
   let persistedRows: TurnRow[] = [];
+  let persistedTurns: PersistedTurnProjection[] = [];
   let rowIndexes = new Map<string, number>();
   let liveIndex: LiveProjectionIndex | null = null;
 
@@ -241,7 +243,9 @@ export function createTimelineStore(
       || settledPrefixChanged(persistedMessages, inputMessages)
     );
     if (mustRefreshPersisted) {
-      persistedRows = buildTurnRows(inputMessages, inputTools);
+      const projection = projectPersistedTurns(inputMessages, inputTools, persistedTurns);
+      persistedRows = projection.rows;
+      persistedTurns = projection.turns;
       persistedMessages = inputMessages;
       persistedTools = inputTools;
     }
