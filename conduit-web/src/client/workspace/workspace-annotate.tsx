@@ -11,6 +11,8 @@ export interface AnnotationSpan {
   startColumn: number;
   endColumn: number;
   excerpt: string;
+  /** Set on a counterpart the selection ran through, rather than one added as context. */
+  selected?: boolean;
 }
 
 export interface AnnotationSelection extends AnnotationSpan {
@@ -89,6 +91,14 @@ export function commentHighlightsExtension(items: readonly CommentHighlight[], l
   ];
 }
 
+const POPUP_WIDTH = 300;
+
+/** Where a popup should sit so it clears the selection: just past its end. */
+export function selectionEnd(view: EditorView) {
+  const range = view.state.selection.main;
+  return view.coordsAtPos(range.to) ?? view.coordsAtPos(range.head) ?? view.coordsAtPos(range.from);
+}
+
 export function annotationExtension(options: {
   side: ReviewCommentSide;
   onSelect: (selection: AnnotationSelection | null) => void;
@@ -106,10 +116,12 @@ export function annotationExtension(options: {
     // Columns pin the comment to the characters the reader chose; the excerpt
     // still carries the whole lines so the span has context around it.
     const host = view.dom.closest(".workspace-comparison-content, .workspace-editor-content")?.getBoundingClientRect();
+    const left = reading.left - (host?.left ?? 0);
     options.onSelect({
       ...reading.span,
       counterpart: reading.counterpart,
-      left: reading.left - (host?.left ?? 0),
+      // The box sits past the end of the selection, and inside the view.
+      left: Math.max(4, host ? Math.min(left, host.width - POPUP_WIDTH) : left),
       top: reading.bottom - (host?.top ?? 0),
     });
   };
@@ -117,7 +129,7 @@ export function annotationExtension(options: {
     const range = view.state.selection.main;
     if (range.empty) return null;
     const span = annotationSpan(view.state.doc, options.side, range.from, range.to);
-    const coords = view.coordsAtPos(range.head);
+    const coords = selectionEnd(view);
     if (!span || !coords) return null;
     return { span, counterpart: options.counterpart?.(options.side, range.from, range.to), left: coords.left, bottom: coords.bottom };
   };
