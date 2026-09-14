@@ -221,21 +221,53 @@ export function mergeTranscriptProjection(
   };
 }
 
+/**
+ * Whether two user messages are the same turn.
+ *
+ * Text, because ids are exactly what this path does not have. The comparison is
+ * deliberately loose: a persisted message can carry an attachment envelope
+ * around the text the client sent, and reading that as a different turn would
+ * duplicate the bubble. Only a message that shares no text at all is a
+ * different turn.
+ */
+function sameTurn(left: Message | undefined, right: Message | undefined) {
+  const before = (left?.content || "").trim();
+  const after = (right?.content || "").trim();
+  if (!before || !after) return true;
+  return before === after || before.includes(after) || after.includes(before);
+}
+
+/**
+ * Where in the transcript the synced range begins.
+ *
+ * Ids settle it when the client has them. Otherwise the range is placed by
+ * finding which of the synced turns is the client's own last turn, and counting
+ * back from there. Simply counting the sync's turns back from the end assumed
+ * the client had seen every turn the sync covers, which steering breaks: an
+ * interrupting message is prompted as a turn of its own that the client never
+ * minted a bubble for, so the count landed one turn early and replaced the
+ * interrupted turn -- stopped answer and all -- with its replacement.
+ */
 function syncAnchor(messages: Message[], incoming: Message[]): number | null {
   const incomingIds = new Set(incoming.map((message) => message.id).filter(Boolean));
   const byId = messages.findIndex((message) => message.id && incomingIds.has(message.id));
   if (byId >= 0) return byId;
 
-  const turns = incoming.filter((message) => message.role === "user").length;
-  if (!turns) return null;
-  let seen = 0;
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index]!;
-    if (message.role !== "user" || message.pending) continue;
-    seen += 1;
-    if (seen === turns) return index;
+  const users = incoming.filter((message) => message.role === "user");
+  if (!users.length) return null;
+  // Pending messages are the composer's, not the transcript's.
+  const userPositions = messages.flatMap((message, index) =>
+    message.role === "user" && !message.pending ? [index] : []);
+  if (!userPositions.length) return 0;
+  const lastUser = messages[userPositions[userPositions.length - 1]!];
+  for (let turn = users.length - 1; turn >= 0; turn -= 1) {
+    if (!sameTurn(lastUser, users[turn])) continue;
+    // The client's last turn is this one, so the sync begins `turn` turns
+    // earlier. Fewer turns than that means the sync covers the whole transcript.
+    return userPositions[userPositions.length - 1 - turn] ?? 0;
   }
-  // The transcript holds fewer turns than the sync covers, so all of it is
-  // inside the synced range.
-  return 0;
+  // No turn in the sync is one the client has: it is all new, and belongs after
+  // what the client already holds.
+  return messages.length;
 }
+

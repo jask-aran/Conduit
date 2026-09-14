@@ -115,6 +115,65 @@ test("a queued message survives an id-less sync", () => {
   assert.deepEqual(merged.map((item) => item.id), ["e1", "e2", "queued_0"]);
 });
 
+/**
+ * Interrupt and send: the turn is aborted and the steering message is prompted
+ * as a new turn, so the newest turn the backend holds is one the client has not
+ * seen yet - the client never mints a bubble for a steered message. Counting one
+ * turn back from the end would land on the interrupted turn and replace it with
+ * the new one, taking the stopped answer with it.
+ */
+test("a sync of a turn the client has not seen appends rather than replacing the last one", () => {
+  const live = [
+    message("u0", "user", "write a long story"),
+    message("a0", "assistant", "Once upon a", { stopReason: "aborted", stopped: true }),
+  ];
+  const merged = mergeTranscript(live, [
+    message("e1", "user", "make it about australia"),
+    message("e2", "assistant", "Mara found the key"),
+  ]);
+  assert.deepEqual(merged.map((item) => item.id), ["u0", "a0", "e1", "e2"]);
+  assert.equal(merged[1].content, "Once upon a");
+});
+
+/**
+ * Interrupting with a steering message prompts it as a turn of its own, which
+ * the client never minted a bubble for, and the server then syncs both turns.
+ * The interrupted turn must be replaced in place - keeping its stopped answer -
+ * rather than overwritten by its successor.
+ */
+test("an interrupt syncs both turns without eating the interrupted one", () => {
+  const live = [
+    message("u0", "user", "write a long story"),
+    message("a0", "assistant", "Once upon a", { stopReason: "aborted", stopped: true }),
+  ];
+  const merged = mergeTranscript(live, [
+    message("e1", "user", "write a long story"),
+    message("e2", "assistant", "Once upon a", { stopReason: "aborted", stopped: true }),
+    message("e3", "user", "make it about australia"),
+    message("e4", "assistant", "Mara found the key"),
+  ]);
+  assert.deepEqual(merged.map((item) => item.id), ["e1", "e2", "e3", "e4"]);
+  assert.equal(merged[1].stopReason, "aborted");
+});
+
+/** The same interrupt, with an earlier turn the sync does not cover. */
+test("an interrupt leaves the turns before it alone", () => {
+  const live = [
+    message("uA", "user", "hello"),
+    message("aA", "assistant", "hi"),
+    message("u0", "user", "write a long story"),
+    message("a0", "assistant", "Once upon a", { stopReason: "aborted", stopped: true }),
+  ];
+  const merged = mergeTranscript(live, [
+    message("e1", "user", "write a long story"),
+    message("e2", "assistant", "Once upon a", { stopReason: "aborted", stopped: true }),
+    message("e3", "user", "make it about australia"),
+    message("e4", "assistant", "Mara found the key"),
+  ]);
+  assert.deepEqual(merged.map((item) => item.id), ["uA", "aA", "e1", "e2", "e3", "e4"]);
+  assert.equal(merged[1].content, "hi");
+});
+
 test("a sync carrying no user message is not placed at all", () => {
   const live = [message("u1", "user", "hello"), message("a1", "assistant", "hi")];
   assert.equal(mergeTranscript(live, [message("e9", "assistant", "orphan")]), live);
