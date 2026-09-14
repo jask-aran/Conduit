@@ -192,3 +192,24 @@ test("a comment without a counterpart parses back without one", () => {
   assert.equal(parsed.comments.length, 1);
   assert.equal(parsed.comments[0].counterpart, undefined);
 });
+
+test("a counterpart the selection ran through is marked as selected", () => {
+  const projected = projectReviewComments("", [comment({
+    scope: "turn",
+    side: "original",
+    counterpart: { side: "modified", from: 5, to: 6, startColumn: 1, endColumn: 12, excerpt: "new one\nnew two", selected: true },
+  })]);
+
+  assert.match(projected, /columns="1-12" selected="true">/);
+  assert.equal(parseReviewComments(projected).comments[0].counterpart.selected, true);
+});
+
+test("a counterpart that is only context stays unmarked", () => {
+  const projected = projectReviewComments("", [comment({
+    scope: "turn",
+    counterpart: { side: "original", from: 5, to: 5, startColumn: 1, endColumn: 8, excerpt: "old one" },
+  })]);
+
+  assert.doesNotMatch(projected, /selected=/);
+  assert.equal(parseReviewComments(projected).comments[0].counterpart.selected, undefined);
+});

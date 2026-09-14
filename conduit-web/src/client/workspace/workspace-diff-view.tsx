@@ -104,7 +104,10 @@ export function WorkspaceDiffView(props: WorkspaceDiffViewProps) {
             viewState={props.viewState}
             headerAction={<WorkbenchButton type="button" aria-label="Open working file" title="Open working file" onClick={() => props.onOpenWorkingFile(comparison().path)}><PencilIcon /></WorkbenchButton>}
             comparisonSource={props.comparisonSource}
-            commentHighlights={reviewComments(props.annotationChatId ?? "").filter((comment) => comment.path === comparison().path && comment.scope === comparison().scope)}
+            commentHighlights={reviewComments(props.annotationChatId ?? "")
+              .filter((comment) => comment.path === comparison().path && comment.scope === comparison().scope)
+              // A comment written across a change is marked on both of its sides.
+              .flatMap((comment) => comment.counterpart?.selected ? [comment, { ...comment.counterpart, note: comment.note }] : [comment])}
             reveal={props.reveal}
             onAnnotate={props.annotationChatId ? addAnnotation : undefined}
             onViewStateChange={props.onViewStateChange}

@@ -59,15 +59,25 @@ export default function WorkspaceExcerptView(props: {
           // the lines that came along for context step back.
           EditorView.decorations.of((target) => {
             const doc = target.state.doc;
-            const from = diff ? inlineDocLine(diff.rows, side, highlight.from) : 1;
-            const to = diff ? inlineDocLine(diff.rows, side, highlight.to) : doc.lines;
-            const range = from && to ? commentRange(target, { ...highlight, from, to }) : null;
-            if (!range) return Decoration.none;
-            return Decoration.set([
-              ...(range.from > 0 ? [Decoration.mark({ class: "cm-review-context" }).range(0, range.from)] : []),
-              Decoration.mark({ class: "cm-review-comment" }).range(range.from, range.to),
-              ...(range.to < doc.length ? [Decoration.mark({ class: "cm-review-context" }).range(range.to, doc.length)] : []),
-            ]);
+            const locate = (item: { side: ReviewCommentSide; from: number; to: number; startColumn: number; endColumn: number }) => {
+              const from = diff ? inlineDocLine(diff.rows, item.side, item.from) : 1;
+              const to = diff ? inlineDocLine(diff.rows, item.side, item.to) : doc.lines;
+              return from && to ? commentRange(target, { ...item, from, to }) : null;
+            };
+            // A drag that ran through both sides is commented on both sides.
+            const ranges = [locate(highlight), counterpart?.selected ? locate(counterpart) : null]
+              .filter((range) => range !== null)
+              .sort((left, right) => left.from - right.from);
+            if (!ranges.length) return Decoration.none;
+            const marks = [];
+            let cursor = 0;
+            for (const range of ranges) {
+              if (range.from > cursor) marks.push(Decoration.mark({ class: "cm-review-context" }).range(cursor, range.from));
+              marks.push(Decoration.mark({ class: "cm-review-comment" }).range(range.from, range.to));
+              cursor = Math.max(cursor, range.to);
+            }
+            if (cursor < doc.length) marks.push(Decoration.mark({ class: "cm-review-context" }).range(cursor, doc.length));
+            return Decoration.set(marks);
           }),
         ],
       }),

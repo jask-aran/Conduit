@@ -12,6 +12,8 @@ export interface ReviewCommentCounterpart {
   startColumn: number;
   endColumn: number;
   excerpt: string;
+  /** True when the selection ran through this side too, rather than it being context. */
+  selected?: boolean;
 }
 
 export interface ReviewComment {
@@ -98,7 +100,7 @@ export function projectReviewComments(text: string, values: readonly ReviewComme
     escapeText(comment.excerpt),
     "</excerpt>",
     ...(comment.counterpart ? [
-      `<counterpart side="${comment.counterpart.side}" lines="${comment.counterpart.from}-${comment.counterpart.to}" columns="${comment.counterpart.startColumn}-${comment.counterpart.endColumn}">`,
+      `<counterpart side="${comment.counterpart.side}" lines="${comment.counterpart.from}-${comment.counterpart.to}" columns="${comment.counterpart.startColumn}-${comment.counterpart.endColumn}"${comment.counterpart.selected ? ' selected="true"' : ""}>`,
       escapeText(comment.counterpart.excerpt),
       "</counterpart>",
     ] : []),
@@ -144,14 +146,14 @@ export function parseReviewComments(value: string): { text: string; comments: Pr
   const text = value.slice(0, start).trimEnd();
   const suffix = value.slice(start);
   // Columns arrived after the first messages were sent, so they stay optional.
-  const pattern = /<review_comment path="([^"]*)" lines="(\d+)-(\d+)"(?: columns="(\d+)-(\d+)")? side="(original|modified)" scope="([^"]*)">\n<excerpt>\n([\s\S]*?)\n<\/excerpt>\n(?:<counterpart side="(original|modified)" lines="(\d+)-(\d+)" columns="(\d+)-(\d+)">\n([\s\S]*?)\n<\/counterpart>\n)?<note>\n([\s\S]*?)\n<\/note>\n<\/review_comment>/gy;
+  const pattern = /<review_comment path="([^"]*)" lines="(\d+)-(\d+)"(?: columns="(\d+)-(\d+)")? side="(original|modified)" scope="([^"]*)">\n<excerpt>\n([\s\S]*?)\n<\/excerpt>\n(?:<counterpart side="(original|modified)" lines="(\d+)-(\d+)" columns="(\d+)-(\d+)"( selected="true")?>\n([\s\S]*?)\n<\/counterpart>\n)?<note>\n([\s\S]*?)\n<\/note>\n<\/review_comment>/gy;
   const comments: ProjectedReviewComment[] = [];
   let offset = 0;
   while (offset < suffix.length) {
     pattern.lastIndex = offset;
     const match = pattern.exec(suffix);
     if (!match) return { text: value, comments: [] };
-    const [, encodedPath = "", from = "0", to = "0", startColumn, endColumn, side = "modified", scope = "", excerpt = "", otherSide, otherFrom, otherTo, otherStart, otherEnd, otherExcerpt, note = ""] = match;
+    const [, encodedPath = "", from = "0", to = "0", startColumn, endColumn, side = "modified", scope = "", excerpt = "", otherSide, otherFrom, otherTo, otherStart, otherEnd, otherSelected, otherExcerpt, note = ""] = match;
     if (!isReviewScope(scope)) return { text: value, comments: [] };
     const excerptText = decodeText(excerpt);
     comments.push({
@@ -171,6 +173,7 @@ export function parseReviewComments(value: string): { text: string; comments: Pr
           startColumn: Number(otherStart),
           endColumn: Number(otherEnd),
           excerpt: decodeText(otherExcerpt ?? ""),
+          ...(otherSelected ? { selected: true } : {}),
         },
       } : {}),
       note: decodeText(note),

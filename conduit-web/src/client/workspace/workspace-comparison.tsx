@@ -12,7 +12,7 @@ import { readSetting, writeSetting, WORKSPACE_PANEL_GLOBAL_SCOPE } from "./works
 import { workspaceReadOnlySetup } from "./workspace-editor-base";
 import { workspaceLanguageForFilename } from "./workspace-languages";
 import { FileTypeIcon } from "./file-type-icon";
-import { annotationExtension, annotationSpan, commentHighlightsExtension, commentRange, WorkspaceAnnotationPopup, type AnnotationReading, type AnnotationSelection, type AnnotationSpan, type CommentHighlight } from "./workspace-annotate";
+import { annotationExtension, annotationSpan, commentHighlightsExtension, commentRange, selectionEnd, WorkspaceAnnotationPopup, type AnnotationReading, type AnnotationSelection, type AnnotationSpan, type CommentHighlight } from "./workspace-annotate";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import "./workspace-comparison.css";
 
@@ -168,8 +168,9 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
       let blockFrom = first, blockTo = last;
       while (blockFrom > 1 && rows[blockFrom - 2]?.kind !== "context") blockFrom--;
       while (blockTo < rows.length && rows[blockTo]?.kind !== "context") blockTo++;
-      const counterpart = spanFor(other, first, last, true) ?? spanFor(other, blockFrom, blockTo, false);
-      const coords = target.coordsAtPos(range.head);
+      const through = spanFor(other, first, last, true);
+      const counterpart = through ? { ...through, selected: true } : spanFor(other, blockFrom, blockTo, false);
+      const coords = selectionEnd(target);
       if (!coords) return null;
       return { span, counterpart, left: coords.left, bottom: coords.bottom };
     };
