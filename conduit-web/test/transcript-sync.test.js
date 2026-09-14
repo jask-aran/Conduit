@@ -9,12 +9,11 @@ test("a synced turn replaces the version the client assembled", () => {
     message("u1", "user", "write a story"),
     message("a1", "assistant", "half a stor"),
   ];
-  const synced = [
+  const merged = mergeTranscript(live, [
     message("u1", "user", "write a story"),
     message("a1", "assistant", "half a story", { stopReason: "aborted", stopped: true }),
-  ];
-  const merged = mergeTranscript(live, synced);
-  assert.equal(merged.length, 2);
+  ]);
+  assert.deepEqual(merged.map((item) => item.id), ["u1", "a1"]);
   assert.equal(merged[1].content, "half a story");
   assert.equal(merged[1].stopReason, "aborted");
 });
@@ -54,75 +53,68 @@ test("an empty sync changes nothing", () => {
   assert.equal(mergeTranscript(live, []), live);
 });
 
-// Pi streams messages without ids - they live on the session entries - so the
-// client's copy of a turn never matches the synced copy by id. This is the
-// ordinary case, not the exception.
-test("a turn the client minted ids for is replaced, not appended", () => {
+/**
+ * Pi puts ids on session entries, not on the messages it streams, so the
+ * client's copy of a turn never matches the synced copy by id. What it does
+ * carry is the generation it was minted for, and the sync says which generation
+ * it closes - so the turn is found by correlation rather than by position.
+ */
+test("the client's copy of a turn is replaced through the generation it belongs to", () => {
   const live = [
-    message("user_1700", "user", "write a story"),
-    message("assistant_1701", "assistant", "half a stor"),
+    message("user_1700", "user", "write a story", { generationId: "g1" }),
+    message("end_g1:m1", "assistant", "half a stor", { generationId: "g1", stopped: true }),
   ];
   const merged = mergeTranscript(live, [
     message("d8f7a8eb", "user", "write a story"),
     message("7dab869c", "assistant", "half a story", { stopReason: "aborted" }),
-  ]);
+  ], "g1");
   assert.deepEqual(merged.map((item) => item.id), ["d8f7a8eb", "7dab869c"]);
 });
 
-test("earlier turns survive an id-less sync of the last turn", () => {
+test("earlier turns survive a sync of the turn that follows them", () => {
   const live = [
     message("u0", "user", "earlier"),
     message("a0", "assistant", "earlier answer"),
-    message("user_1700", "user", "write a story"),
-    message("assistant_1701", "assistant", "partial"),
+    message("user_1700", "user", "write a story", { generationId: "g2" }),
+    message("end_g2:m1", "assistant", "partial", { generationId: "g2" }),
   ];
   const merged = mergeTranscript(live, [
     message("d8f7a8eb", "user", "write a story"),
     message("7dab869c", "assistant", "complete"),
-  ]);
+  ], "g2");
   assert.deepEqual(merged.map((item) => item.id), ["u0", "a0", "d8f7a8eb", "7dab869c"]);
   assert.equal(merged[1].content, "earlier answer");
 });
 
-test("a two-turn sync replaces exactly two turns", () => {
+/**
+ * The two-turn sync an interrupt ends with: the interrupted turn is named by
+ * the ids the earlier sync gave it, and the replacement turn by the generation
+ * it was prompted as. Both are stated, so neither is counted.
+ */
+test("an interrupt's two-turn sync replaces both turns and nothing else", () => {
   const live = [
     message("u0", "user", "first"),
     message("a0", "assistant", "first answer"),
-    message("user_1", "user", "second"),
-    message("assistant_1", "assistant", "second partial"),
-    message("user_2", "user", "third"),
-    message("assistant_2", "assistant", "third partial"),
+    message("e1", "user", "write a long story"),
+    message("e2", "assistant", "Once upon a", { stopped: true, stopReason: "aborted" }),
+    message("user_1701", "user", "make it about australia", { generationId: "g3" }),
   ];
   const merged = mergeTranscript(live, [
-    message("e1", "user", "second"),
-    message("e2", "assistant", "second answer"),
-    message("e3", "user", "third"),
-    message("e4", "assistant", "third answer"),
-  ]);
+    message("e1", "user", "write a long story"),
+    message("e2", "assistant", "Once upon a", { stopped: true, stopReason: "aborted" }),
+    message("e3", "user", "make it about australia"),
+    message("e4", "assistant", "Mara found the key"),
+  ], "g3");
   assert.deepEqual(merged.map((item) => item.id), ["u0", "a0", "e1", "e2", "e3", "e4"]);
-});
-
-test("a queued message survives an id-less sync", () => {
-  const live = [
-    message("user_1", "user", "write a story"),
-    message("assistant_1", "assistant", "partial"),
-    message("queued_0", "user", "make it about australia", { pending: true }),
-  ];
-  const merged = mergeTranscript(live, [
-    message("e1", "user", "write a story"),
-    message("e2", "assistant", "complete"),
-  ]);
-  assert.deepEqual(merged.map((item) => item.id), ["e1", "e2", "queued_0"]);
+  assert.equal(merged[3].stopped, true);
 });
 
 /**
- * Interrupt and send: the turn is aborted and the steering message is prompted
- * as a new turn, so the newest turn the backend holds is one the client has not
- * seen yet - the client never mints a bubble for a steered message. Counting one
- * turn back from the end would land on the interrupted turn and replace it with
- * the new one, taking the stopped answer with it.
+ * The property that matters: a sync the client cannot place must never be able
+ * to remove a turn the user watched being generated. Appending leaves a
+ * duplicate at worst, and the next sync - which names both - resolves it.
  */
-test("a sync of a turn the client has not seen appends rather than replacing the last one", () => {
+test("a sync that names nothing the client holds appends rather than replacing", () => {
   const live = [
     message("u0", "user", "write a long story"),
     message("a0", "assistant", "Once upon a", { stopReason: "aborted", stopped: true }),
@@ -135,67 +127,31 @@ test("a sync of a turn the client has not seen appends rather than replacing the
   assert.equal(merged[1].content, "Once upon a");
 });
 
-/**
- * Interrupting with a steering message prompts it as a turn of its own, which
- * the client never minted a bubble for, and the server then syncs both turns.
- * The interrupted turn must be replaced in place - keeping its stopped answer -
- * rather than overwritten by its successor.
- */
-test("an interrupt syncs both turns without eating the interrupted one", () => {
+test("a stale generation tag does not pull an unrelated turn into the range", () => {
   const live = [
-    message("u0", "user", "write a long story"),
-    message("a0", "assistant", "Once upon a", { stopReason: "aborted", stopped: true }),
+    message("u0", "user", "first", { generationId: "g1" }),
+    message("a0", "assistant", "first answer", { generationId: "g1" }),
+    message("u1", "user", "second", { generationId: "g2" }),
   ];
   const merged = mergeTranscript(live, [
-    message("e1", "user", "write a long story"),
-    message("e2", "assistant", "Once upon a", { stopReason: "aborted", stopped: true }),
-    message("e3", "user", "make it about australia"),
-    message("e4", "assistant", "Mara found the key"),
-  ]);
-  assert.deepEqual(merged.map((item) => item.id), ["e1", "e2", "e3", "e4"]);
-  assert.equal(merged[1].stopReason, "aborted");
-});
-
-/** The same interrupt, with an earlier turn the sync does not cover. */
-test("an interrupt leaves the turns before it alone", () => {
-  const live = [
-    message("uA", "user", "hello"),
-    message("aA", "assistant", "hi"),
-    message("u0", "user", "write a long story"),
-    message("a0", "assistant", "Once upon a", { stopReason: "aborted", stopped: true }),
-  ];
-  const merged = mergeTranscript(live, [
-    message("e1", "user", "write a long story"),
-    message("e2", "assistant", "Once upon a", { stopReason: "aborted", stopped: true }),
-    message("e3", "user", "make it about australia"),
-    message("e4", "assistant", "Mara found the key"),
-  ]);
-  assert.deepEqual(merged.map((item) => item.id), ["uA", "aA", "e1", "e2", "e3", "e4"]);
-  assert.equal(merged[1].content, "hi");
-});
-
-test("a sync carrying no user message is not placed at all", () => {
-  const live = [message("u1", "user", "hello"), message("a1", "assistant", "hi")];
-  assert.equal(mergeTranscript(live, [message("e9", "assistant", "orphan")]), live);
+    message("e3", "user", "second"),
+    message("e4", "assistant", "second answer"),
+  ], "g2");
+  assert.deepEqual(merged.map((item) => item.id), ["u0", "a0", "e3", "e4"]);
 });
 
 test("a synced turn replaces its tools and retains tools from older turns", () => {
   const live = [
-    message("u0", "user", "earlier"),
-    message("a0", "assistant", "done", { blocks: [{ type: "toolCall", id: "old-tool" }] }),
-    message("u1", "user", "latest"),
-    message("a1", "assistant", "partial", { blocks: [{ type: "toolCall", id: "stale-tool" }] }),
+    message("u0", "user", "earlier", { blocks: [{ type: "toolCall", id: "t0" }] }),
+    message("a0", "assistant", "earlier answer"),
+    message("u1", "user", "now", { generationId: "g4" }),
+    message("end_g4:m1", "assistant", "partial", { generationId: "g4", blocks: [{ type: "toolCall", id: "t1" }] }),
   ];
-  const projection = mergeTranscriptProjection(live, [
-    { id: "old-tool", name: "read", done: true },
-    { id: "stale-tool", name: "write", done: false },
-  ], [
-    message("e1", "user", "latest"),
-    message("e2", "assistant", "complete", { blocks: [{ type: "toolCall", id: "real-tool" }] }),
-  ], [
-    { id: "real-tool", name: "write", done: true },
-  ]);
-
+  const tools = [{ id: "t0", name: "read" }, { id: "t1", name: "write" }];
+  const projection = mergeTranscriptProjection(live, tools, [
+    message("e1", "user", "now"),
+    message("e2", "assistant", "done", { blocks: [{ type: "toolCall", id: "t2" }] }),
+  ], [{ id: "t2", name: "write" }], "g4");
   assert.deepEqual(projection.messages.map((item) => item.id), ["u0", "a0", "e1", "e2"]);
-  assert.deepEqual(projection.tools.map((item) => item.id), ["old-tool", "real-tool"]);
+  assert.deepEqual(projection.tools.map((tool) => tool.id), ["t0", "t2"]);
 });

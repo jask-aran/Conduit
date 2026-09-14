@@ -36,6 +36,7 @@ import type { PermissionSettings } from "./permission-settings";
 import type { RuntimeStore } from "./runtime";
 import { createClientActiveGenerationStore } from "./active-generation-store.js";
 import { clearReviewComments, parseReviewComments, projectReviewComments, restoreReviewComments, reviewComments } from "../chat/review-comments";
+import { isOptimisticId } from "../reconcile-messages";
 
 type UnknownRecord = Record<string, unknown>;
 type ErrorHandler = (error: unknown) => void;
@@ -358,20 +359,18 @@ export function createActiveChat(options: ActiveChatOptions) {
     const recorder = getHarnessRecorder();
     const reduceStartedAt = recorder ? performance.now() : 0;
     let result: ReturnType<typeof generationStore.apply> | undefined;
-    // The next turn's start installs a fresh live generation over this one, and
-    // an interrupted turn lives nowhere else until its persisted copy arrives.
-    // Freeze it into the transcript first, so steering does not blank the
-    // answer it is steering away from.
-    const supersedes = event.type === "generation_started"
-      && previous?.status === "stopped"
-      && previous.id !== event.generationId;
     batch(() => {
-      if (supersedes && previous) {
-        const frozen = freezeGeneration(previous);
-        if (frozen.length) {
-          setTools((existing) => settleGenerationTools(existing, previous));
-          setMessages((existing) => [...existing, ...frozen]);
-        }
+      // The message that started this turn is the last one the client minted,
+      // and until Pi writes it there is nothing else to call it. Tagging it
+      // with the generation is what lets that turn's sync find it again.
+      if (event.type === "generation_started") {
+        setMessages((existing) => {
+          const index = existing.findLastIndex((message) => message.role === "user"
+            && !message.pending && isOptimisticId(message.id) && message.generationId == null);
+          if (index < 0) return existing;
+          const tagged = { ...existing[index]!, generationId: event.generationId };
+          return [...existing.slice(0, index), tagged, ...existing.slice(index + 1)];
+        });
       }
       result = generationStore.apply(event);
       if (result.changed && result.state) {
@@ -382,6 +381,23 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (!result) return;
     const next = result.state as ActiveGenerationView | null;
     if (!next) return;
+    // A stopped turn is finished streaming, so it moves into the transcript at
+    // once rather than waiting for a sync that may be a whole response away.
+    // The live view is cleared with it: whatever it held is now in the
+    // transcript, and leaving both would render the turn twice.
+    if (next.status === "stopped" && previous?.status !== "stopped") {
+      const frozen = freezeGeneration(next);
+      batch(() => {
+        if (frozen.length) {
+          setTools((existing) => settleGenerationTools(existing, next));
+          setMessages((existing) => [...existing, ...frozen]);
+        }
+        generationStore.clear();
+        setActiveGenerationChange(null);
+        setActiveGeneration(null);
+      });
+      return;
+    }
     if (recorder) {
       const eventRecord = event as Record<string, unknown>;
       const nestedBlock = eventRecord.block && typeof eventRecord.block === "object"
@@ -735,29 +751,13 @@ export function createActiveChat(options: ActiveChatOptions) {
         break;
       case "transcript_sync":
         batch(() => {
-          const incomingMessages = asList<Message>(event.messages);
           const projection = mergeTranscriptProjection(
-            messages(), tools(), incomingMessages,
+            messages(), tools(), asList<Message>(event.messages),
             assignToolSeq(event.tools as ToolItem[]),
+            event.generationId || null,
           );
           setMessages(projection.messages);
           setTools(projection.tools);
-          const current = activeGeneration();
-          // The live view is where an interrupted turn's trace and stopped
-          // partial are rendered from, so tearing it down hands that turn over
-          // to the persisted rows. Only do that once the merged transcript
-          // actually holds the interrupted message: a sync that landed in the
-          // wrong place, or arrived before Pi flushed the partial, would
-          // otherwise leave the turn with nothing on screen until a reload.
-          const persistedInterrupt = incomingMessages.filter((message) => message.role === "assistant"
-            && (message.stopped || message.stopReason === "aborted"));
-          const mergedIds = new Set(projection.messages.map((message) => message.id));
-          const handedOver = persistedInterrupt.some((message) => message.id && mergedIds.has(message.id));
-          if (current?.status === "stopped" && handedOver) {
-            generationStore.clear();
-            setActiveGenerationChange(null);
-            setActiveGeneration(null);
-          }
         });
         break;
       case "message_end":
