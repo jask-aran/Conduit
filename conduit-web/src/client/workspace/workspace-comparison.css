@@ -5,25 +5,6 @@
 .workspace-comparison-counts > :last-child { color: var(--workspace-git-added); }
 .workspace-comparison-content { position: relative; flex: 1; min-height: 0; overflow: hidden; }
 .workspace-comparison-editor { height: 100%; }
-.workspace-comparison-editor .cm-content { caret-color: transparent !important; }
-.workspace-comparison-editor .cm-cursor { display: none; }
 .workspace-comparison-content .cm-mergeView { height: 100%; overflow: auto; }
 .workspace-comparison-content .cm-mergeViewEditor { min-width: 0; }
 .workspace-comparison-content .cm-mergeViewEditor + .cm-mergeViewEditor { border-left: 1px solid var(--border); }
-.workspace-comparison-content .cm-changeGutter { width: 0; min-width: 0; overflow: visible; padding: 0; }
-.workspace-comparison-content .cm-changeGutter .cm-gutterElement { width: 3px; min-width: 3px; padding: 0; transform: translateX(-3px); }
-.workspace-comparison-content .cm-merge-a .cm-changedLine,
-.workspace-comparison-content .cm-deletedChunk { background: color-mix(in srgb, var(--destructive) 14%, transparent); }
-.workspace-comparison-content .cm-merge-b .cm-changedLine { background: color-mix(in srgb, var(--workspace-git-added) 14%, transparent); }
-.workspace-comparison-content .cm-changedText,
-.workspace-comparison-content .cm-deletedText {
-  background: none !important;
-  text-decoration: none;
-}
-.workspace-comparison-content .cm-merge-a .cm-changedLineGutter,
-.workspace-comparison-content .cm-deletedLineGutter { background: var(--destructive); }
-.workspace-comparison-content .cm-merge-b .cm-changedLineGutter { background: var(--workspace-git-added); }
-.workspace-comparison-content .cm-mergeSpacer { background: repeating-linear-gradient(135deg, transparent, transparent 3px, var(--border) 3px, var(--border) 4px); opacity: .45; }
-.workspace-comparison-content .cm-collapsedLines { border: 0; border-block: 1px solid var(--border); background: transparent; color: var(--muted-foreground); padding: 4px 10px; font: 10px var(--font-sans); cursor: pointer; }
-.workspace-comparison-content .cm-collapsedLines:hover { background: var(--accent); color: var(--foreground); }
-.workspace-comparison-content .cm-deletedLine { text-decoration: none; }

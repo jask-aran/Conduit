@@ -1,6 +1,6 @@
 import { Compartment, EditorState } from "@codemirror/state";
 import { Decoration, EditorView } from "@codemirror/view";
-import { unifiedMergeView } from "@codemirror/merge";
+import { workspaceUnifiedMerge } from "./workspace-diff-setup";
 import { createEffect, onCleanup } from "solid-js";
 import type { ReviewCommentCounterpart, ReviewCommentSide } from "../chat/review-comments";
 import { commentRange } from "./workspace-annotate";
@@ -55,13 +55,7 @@ export default function WorkspaceExcerptView(props: {
               ...(range.to < end ? [Decoration.mark({ class: "cm-review-context" }).range(range.to, end)] : []),
             ]);
           })] : []),
-          ...(original === undefined ? [] : [unifiedMergeView({
-            original,
-            mergeControls: false,
-            gutter: true,
-            highlightChanges: true,
-            syntaxHighlightDeletions: true,
-          })]),
+          ...(original === undefined ? [] : [workspaceUnifiedMerge(original)]),
         ],
       }),
     });
