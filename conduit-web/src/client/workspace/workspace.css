@@ -189,12 +189,18 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-excerpt .cm-scroller { font: 11px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; }
 .workspace-excerpt .cm-content { padding: 6px 0; }
 .workspace-excerpt .cm-gutters { background: transparent; }
-.workspace-excerpt[data-comparison="true"] .cm-editor .cm-deletedChunk { background: color-mix(in srgb, var(--destructive) 22%, transparent); }
-.workspace-excerpt[data-comparison="true"] .cm-editor .cm-changedLine { background: color-mix(in srgb, var(--workspace-git-added) 22%, transparent); }
-.workspace-excerpt[data-comparison="true"] .cm-editor .cm-changedText,
-.workspace-excerpt[data-comparison="true"] .cm-editor .cm-deletedText { background: color-mix(in srgb, currentColor 16%, transparent); }
-.workspace-excerpt[data-comparison="true"] .cm-editor .cm-deletedLine { padding-inline: 10px; text-decoration: none; }
-.workspace-excerpt[data-comparison="true"] .cm-editor .cm-deletedLine del { text-decoration: none; }
+/* A dialog sits outside the panel, so the diff tokens are restated here. */
+.workspace-excerpt[data-comparison="true"] { --workspace-git-added: #98c379; }
+.workspace-excerpt .cm-changeGutter { width: 0; min-width: 0; overflow: visible; padding: 0; }
+.workspace-excerpt .cm-changeGutter .cm-gutterElement { width: 3px; min-width: 3px; padding: 0; transform: translateX(-3px); }
+.workspace-excerpt .cm-deletedChunk { background: color-mix(in srgb, var(--destructive) 14%, transparent); }
+.workspace-excerpt .cm-merge-b .cm-changedLine { background: color-mix(in srgb, var(--workspace-git-added) 14%, transparent); }
+.workspace-excerpt .cm-changedText,
+.workspace-excerpt .cm-deletedText { background: none !important; text-decoration: none; }
+.workspace-excerpt .cm-deletedLineGutter { background: var(--destructive); }
+.workspace-excerpt .cm-merge-b .cm-changedLineGutter { background: var(--workspace-git-added); }
+.workspace-excerpt .cm-deletedLine,
+.workspace-excerpt .cm-deletedLine del { text-decoration: none; }
 .workspace-excerpt .cm-review-comment { box-shadow: none; background: color-mix(in oklch, var(--warn), transparent 78%); }
 .workspace-excerpt .cm-review-context { color: var(--muted-foreground); opacity: .55; }
 /* A comment leaves its lines faintly marked, and hovering them previews the note. */

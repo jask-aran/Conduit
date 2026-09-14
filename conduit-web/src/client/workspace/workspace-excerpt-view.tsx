@@ -58,7 +58,7 @@ export default function WorkspaceExcerptView(props: {
           ...(original === undefined ? [] : [unifiedMergeView({
             original,
             mergeControls: false,
-            gutter: false,
+            gutter: true,
             highlightChanges: true,
             syntaxHighlightDeletions: true,
           })]),
