@@ -90,6 +90,7 @@ export function createLiveSessionStream({
         projectId: prepared.context.project.id,
         projectKind: prepared.context.project.kind,
         workingRoot: prepared.context.project.workingRoot,
+        sessionFile: record.sessionFile || prepared.context.chat.piSessionFile || null,
       });
     } catch (error) {
       console.warn("Could not capture turn checkpoint", error.message);

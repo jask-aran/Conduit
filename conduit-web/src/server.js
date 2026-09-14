@@ -495,8 +495,13 @@ manager.on("event", ({ record, event }) => {
   const checkpoint = { id: generation.id, seq: generation.lastSeq };
   pendingCheckpoints.add(checkpointId);
   setTimeout(() => {
+    // The decoration below needs the project too, so it outlives the lookup.
+    let project = null;
     projects.get(record.projectId)
-      .then((project) => project && registry.syncFile(record.chatId, record.sessionFile, project, { waitForFileMs: 2000, markUnread: true }))
+      .then((found) => {
+        project = found;
+        return project && registry.syncFile(record.chatId, record.sessionFile, project, { waitForFileMs: 2000, markUnread: true });
+      })
       .then(async (session) => {
         if (!session) return null;
         await sessionNameTasks.get(record.chatId)?.catch(() => {});
