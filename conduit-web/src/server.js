@@ -15,6 +15,7 @@ import { ChatStore, chatView, isChatId } from "./chat-store.js";
 import { AttachmentStore } from "./attachment-store.js";
 import { RuntimeHub } from "./runtime-hub.js";
 import { defaultsFromEnv, RuntimeSettingsStore } from "./runtime-settings.js";
+import { DraftStore } from "./draft-store.js";
 import { PreferencesStore } from "./preferences-store.js";
 import { SessionNameService } from "./session-name-service.js";
 import { normalizeTemplateId, templatePublicView } from "../../scripts/pi-runtime.mjs";
@@ -48,6 +49,7 @@ import { registerAuthRoutes } from "./server/routes/auth.js";
 import { registerPiAuthRoutes } from "./server/routes/pi-auth.js";
 import { registerPtyRoutes } from "./server/routes/ptys.js";
 import { registerTerminalPasteRoutes } from "./server/routes/terminal-paste.js";
+import { registerDraftRoutes } from "./server/routes/drafts.js";
 import { registerRuntimeRoutes } from "./server/routes/runtime.js";
 import { registerChatRoutes } from "./server/routes/chats.js";
 import { registerHarnessRoutes } from "./server/routes/harnesses.js";
@@ -124,6 +126,8 @@ const preferences = new PreferencesStore(
   { knownTemplateIds },
 );
 await preferences.load();
+const drafts = new DraftStore(config.draftsFile);
+await drafts.load();
 const authStore = new AuthStore(config.authFile);
 await authStore.load();
 await authStore.pruneExpired();
@@ -544,6 +548,7 @@ for (const adapter of adapterInstances()) {
   });
   adapter.on?.("removed", ({ id, chatId }) => runtimeHub.publishProcessRemoved(id, chatId));
 }
+registerDraftRoutes(app, { drafts });
 registerRuntimeRoutes(app, {
   attachments,
   config,

@@ -117,9 +117,13 @@ export function createAttachments(
     drain();
   };
 
-  const clear = () => {
+  /**
+   * `discard` deletes the server rows. Leaving a chat must not: its draft is
+   * persisted and still references these uploads, so only local state is dropped.
+   */
+  const clear = (options: { discard?: boolean } = {}) => {
     loadSequence += 1;
-    const owner = chatId();
+    const owner = options.discard === false ? "" : chatId();
     const abandoned = items();
     uploadEpoch += 1;
     queue.splice(0);
@@ -137,7 +141,7 @@ export function createAttachments(
   };
 
   const select = async (nextChatId: string) => {
-    clear();
+    clear({ discard: false });
     const sequence = loadSequence;
     setChatId(nextChatId);
     if (!nextChatId) return;

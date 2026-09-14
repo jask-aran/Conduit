@@ -1,4 +1,4 @@
-import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 import { deriveFineActivity } from "../../activity.js";
 import { api, asList } from "../api/client";
 import { webSocketUrl } from "../api/transport";
@@ -28,6 +28,7 @@ import { reconcileMessages } from "../reconcile-messages";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { canCoalesceTextDelta, enqueueOverflowLiveEvent, mergeTextDeltaEvents } from "./text-delta-batcher";
 import type { AttachmentsStore, UploadAttachment } from "./attachments";
+import type { DraftsStore } from "./drafts";
 import type { CatalogueStore } from "./catalogue";
 import type { ActiveGenerationView, LiveGenerationChange } from "../turn-rows";
 import type { ModelSettings } from "./model-settings";
@@ -68,6 +69,7 @@ interface ActiveChatOptions {
   models: ModelSettings;
   permissions?: PermissionSettings;
   attachments: AttachmentsStore;
+  drafts?: DraftsStore;
   onError: ErrorHandler;
   onModelRecovered: (details: { from: string; to: string }) => void;
   defaultTemplateId: () => string;
@@ -86,7 +88,23 @@ export function createActiveChat(options: ActiveChatOptions) {
   const [loadedId, setLoadedId] = createSignal<string | null>(null);
   const [pageBefore, setPageBefore] = createSignal<string | null>(null);
   const [loadingOlder, setLoadingOlder] = createSignal(false);
-  const [draft, setDraft] = createSignal("");
+  const [draft, setDraftSignal] = createSignal("");
+  /**
+   * Persisting through the setter rather than an effect is what keeps `reset()`
+   * from wiping the stored draft: it clears `loadedId` before the draft, so the
+   * clear has no owner to write to. Every other caller does have one, so
+   * sending and failing both reach the store correctly.
+   */
+  const setDraft: typeof setDraftSignal = ((value: Parameters<typeof setDraftSignal>[0]) => {
+    const next = setDraftSignal(value);
+    const chatId = loadedId();
+    if (chatId) options.drafts?.save(chatId, next, attachments.pendingIds());
+    return next;
+  }) as typeof setDraftSignal;
+  const hydrateDraft = (chatId: string) => {
+    const saved = options.drafts?.draftFor(chatId);
+    if (saved?.text && !untrack(draft)) setDraftSignal(saved.text);
+  };
   const [generation, setGeneration] = createSignal<GenerationState>("idle");
   const [editingEntryId, setEditingEntryId] = createSignal<string | null>(null);
   const [contextUsage, setContextUsage] = createSignal<ContextUsage | null>(null);
@@ -748,6 +766,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     });
     models.select(project.id, chat.id, detail, { reloadChat: detail.status !== "active" });
     void attachments.select(chat.id);
+    hydrateDraft(chat.id);
     applyDetail(detail);
     if (detail.status === "active") await openLive(chat.id, project.id, {}, selection);
   };
@@ -765,6 +784,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     models.select(project.id, chat.id, detail, { reloadChat: (detail?.status || chat.status) !== "active" });
     void permissions?.select(chat.id);
     void attachments.select(chat.id);
+    hydrateDraft(chat.id);
     if (detail) applyDetail(detail);
     else { setMessages([]); setTools([]); setPageBefore(null); setLoadedId(chat.id); }
   };

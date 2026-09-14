@@ -1439,9 +1439,7 @@ function App() {
     }
     const entries = drafts.stash();
     if (!entries.length) return;
-    void restoreStash(entries[0]!.id).then(() => {
-      if (entries.length > 1) toast(`${entries.length - 1} more stashed prompt${entries.length === 2 ? "" : "s"}.`);
-    });
+    void restoreStash(entries[0]!.id);
   };
 
   const paletteActions: PaletteActions = {
