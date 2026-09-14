@@ -60,6 +60,9 @@ The controller must:
    the new turns and preserves every unchanged cached turn.
 7. Keep the existing settled-row visibility virtualization. Keep the live turn
    mounted outside any future DOM eviction changes.
+8. Preserve expanded thinking traces and tool cards for the 10 most recent
+   chats. A cached transcript and reading position must restore its interaction
+   state as one surface.
 
 ## Acceptance criteria
 

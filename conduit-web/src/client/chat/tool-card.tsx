@@ -27,8 +27,8 @@ function stringify(value: unknown) {
   return typeof value === "string" ? value : JSON.stringify(value ?? {}, null, 2);
 }
 
-export function ToolCard(props: { tool?: ToolItem; sessionId?: string | null }) {
-  const [open, setOpen] = createSignal(false);
+export function ToolCard(props: { tool?: ToolItem; sessionId?: string | null; initialOpen?: boolean; onOpenChange?: (open: boolean) => void }) {
+  const [open, setOpen] = createSignal(Boolean(props.initialOpen));
   const [loaded, setLoaded] = createSignal<unknown>(undefined);
   const [loading, setLoading] = createSignal(false);
   const [full, setFull] = createSignal(false);
@@ -53,6 +53,7 @@ export function ToolCard(props: { tool?: ToolItem; sessionId?: string | null }) 
     if (!current) return;
     const next = !open();
     setOpen(next);
+    props.onOpenChange?.(next);
     if (!next || !current.resultDeferred || loaded() !== undefined || loading() || !props.sessionId) return;
     setLoading(true);
     try {
