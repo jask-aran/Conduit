@@ -90,11 +90,17 @@ type DashboardRowContent = {
   trailing?: JSX.Element;
 };
 
-type DashboardRowProps = DashboardRowContent & (
-  | ({ element?: "div" } & Omit<JSX.HTMLAttributes<HTMLDivElement>, "children">)
-  | ({ element: "button" } & Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "children">)
-  | ({ element: "a" } & Omit<JSX.AnchorHTMLAttributes<HTMLAnchorElement>, "children">)
-);
+// Deliberately one flat type rather than a union discriminated on `element`.
+// Kobalte's polymorphic `as` prop passes these props through Omit, and Omit
+// over a union keeps only the keys every member shares, which silently dropped
+// every anchor- and button-specific attribute at each `as={DashboardRow}` call
+// site. Element-specific attributes are optional here instead.
+type DashboardRowProps = DashboardRowContent
+  & { element?: "div" | "button" | "a" }
+  & Omit<JSX.HTMLAttributes<HTMLElement>, "children" | "ref">
+  & { ref?: (element: HTMLElement) => void }
+  & Partial<Pick<JSX.AnchorHTMLAttributes<HTMLAnchorElement>, "href" | "target" | "rel" | "download">>
+  & Partial<Pick<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "type" | "disabled" | "form">>;
 
 export function DashboardRow(props: DashboardRowProps) {
   const [local, rest] = splitProps(props, ["element", "leading", "content", "meta", "trailing", "class"]);

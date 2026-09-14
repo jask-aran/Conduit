@@ -293,7 +293,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const [historyTree, setHistoryTree] = createSignal<HistoryTree | null>(null);
   const [historyLoading, setHistoryLoading] = createSignal(false);
   let historyChatId: string | null = null;
-  let historyLoad: { chatId: string; promise: Promise<void> } | null = null;
+  // `token` identifies one load attempt. Comparing the promise itself would
+  // read the binding from inside its own initializer, and comparing chatId
+  // would let a finished load clear a newer load of the same chat.
+  let historyLoad: { chatId: string; token: object; promise: Promise<void> } | null = null;
   const loadHistory = async () => {
     const chatId = props.artifactChatId?.();
     if (!chatId || !props.historyAvailable?.()) {
@@ -304,6 +307,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     if (historyLoad?.chatId === chatId) return historyLoad.promise;
     const initialLoad = historyChatId !== chatId || !historyTree();
     if (initialLoad) setHistoryLoading(true);
+    const token = {};
     const promise = (async () => {
       try {
         const result = await api<HistoryTree>(`/v0/chats/${encodeURIComponent(chatId)}/history`, { cache: "no-store" });
@@ -315,10 +319,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         reportError((cause as Error).message);
       } finally {
         if (props.artifactChatId?.() === chatId) setHistoryLoading(false);
-        if (historyLoad?.promise === promise) historyLoad = null;
+        if (historyLoad?.token === token) historyLoad = null;
       }
     })();
-    historyLoad = { chatId, promise };
+    historyLoad = { chatId, token, promise };
     return promise;
   };
   const historyActivePath = createMemo(() => {
