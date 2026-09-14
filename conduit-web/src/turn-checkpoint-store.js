@@ -6,8 +6,26 @@ import { runBoundedGit } from "./workspace-inspector.js";
 const MAX_FILE_BYTES = 1024 * 1024;
 const MAX_CHECKPOINT_BYTES = 16 * 1024 * 1024;
 const MAX_CHECKPOINTS_PER_CHAT = 50;
+const ANCHOR_TAIL_BYTES = 64 * 1024;
+const MAX_ANCHOR_HOPS = 8;
 
 const keyFor = (value) => crypto.createHash("sha256").update(String(value)).digest("hex").slice(0, 32);
+const FILE = Symbol("checkpoint file");
+
+/**
+ * Identifies the state a checkpoint captured. Two adjacent checkpoints with the
+ * same digest mean the turn between them changed nothing, so the earlier one
+ * carries no information and can be dropped.
+ */
+const digestOf = (checkpoint) => {
+  if (checkpoint.digest) return checkpoint.digest;
+  const hash = crypto.createHash("sha256").update(`${checkpoint.repository}\u0000${checkpoint.head ?? ""}`);
+  for (const relativePath of Object.keys(checkpoint.entries).sort()) {
+    const entry = checkpoint.entries[relativePath];
+    hash.update(`\u0000${relativePath}\u0000${entry.kind}\u0000${entry.mode ?? ""}\u0000${entry.size ?? ""}\u0000${entry.content ?? ""}`);
+  }
+  return hash.digest("hex");
+};
 
 export class TurnCheckpointStore {
   constructor(root) {
@@ -15,10 +33,10 @@ export class TurnCheckpointStore {
     this.queues = new Map();
   }
 
-  async capture({ chatId, projectId, projectKind, workingRoot }) {
+  async capture({ chatId, projectId, projectKind, workingRoot, sessionFile = null }) {
     const chatKey = keyFor(chatId);
     const previous = this.queues.get(chatKey) || Promise.resolve();
-    const task = previous.then(() => this.#capture({ chatId, projectId, projectKind, workingRoot, chatKey }));
+    const task = previous.then(() => this.#capture({ chatId, projectId, projectKind, workingRoot, sessionFile, chatKey }));
     const queued = task.catch(() => {});
     this.queues.set(chatKey, queued);
     try { return await task; }
@@ -39,10 +57,33 @@ export class TurnCheckpointStore {
 
   async timeline(chatId, workingRoot) {
     const root = path.resolve(workingRoot);
-    return (await this.#checkpoints(chatId))
-      .filter((checkpoint) => checkpoint.version === 1 && checkpoint.workingRoot === root)
-      .toReversed()
-      .map(({ id, turnId, createdAt }) => ({ id, turnId, createdAt }));
+    const checkpoints = await this.#prune((await this.#checkpoints(chatId))
+      .filter((checkpoint) => checkpoint.version === 1 && checkpoint.workingRoot === root));
+    // Checkpoints written before sequences existed fall back to counting.
+    let counter = 0;
+    return checkpoints
+      .map(({ id, turnId, createdAt, sequence, anchorEntryId }) => ({ id, turnId, createdAt, anchorEntryId: anchorEntryId ?? null, sequence: (counter = sequence ?? counter + 1) }))
+      .toReversed();
+  }
+
+  /**
+   * Drops checkpoints that record the same state as the one after them. Their
+   * turn changed nothing, so every remaining comparison keeps exactly the
+   * content it had; only the empty boundary disappears. Sequence numbers are
+   * stored, not positional, so pruning leaves gaps rather than renumbering.
+   */
+  async #prune(checkpoints) {
+    const kept = [];
+    const removed = [];
+    for (const [index, checkpoint] of checkpoints.entries()) {
+      const next = checkpoints[index + 1];
+      if (next && digestOf(checkpoint) === digestOf(next)) removed.push(checkpoint);
+      else kept.push(checkpoint);
+    }
+    await Promise.all(removed.map((checkpoint) => checkpoint[FILE]
+      ? fs.unlink(checkpoint[FILE]).catch((error) => { if (error.code !== "ENOENT") throw error; })
+      : Promise.resolve()));
+    return kept;
   }
 
   async review(chatId, workingRoot, baseline = "chat", checkpointId = null) {
@@ -80,7 +121,7 @@ export class TurnCheckpointStore {
     return this.#compare(checkpoint, relativePath, git, baseline === "turn" ? "turn" : "session", targetCheckpoint);
   }
 
-  async #capture({ chatId, projectId, projectKind, workingRoot, chatKey }) {
+  async #capture({ chatId, projectId, projectKind, workingRoot, sessionFile, chatKey }) {
     const root = path.resolve(workingRoot);
     const git = (args, maxBuffer = 2 * 1024 * 1024) => runBoundedGit(root, args, { maxBuffer });
     const repository = projectKind === "workspace";
@@ -123,7 +164,20 @@ export class TurnCheckpointStore {
     const directory = path.join(this.root, chatKey);
     const file = path.join(directory, `${createdAt.replaceAll(":", "-")}-${id}.json`);
     await fs.mkdir(directory, { recursive: true });
-    await this.#write(file, { version: 1, id, chatId, projectId, workingRoot: root, repository, turnId: null, createdAt, head, entries });
+    const existing = (await fs.readdir(directory).catch(() => [])).filter((name) => name.endsWith(".json")).sort();
+    const previousFile = existing.at(-1) ? path.join(directory, existing.at(-1)) : null;
+    const previous = previousFile
+      ? await fs.readFile(previousFile, "utf8").then(JSON.parse, () => null)
+      : null;
+    const digest = digestOf({ repository, head, entries });
+    const sequence = (previous?.sequence ?? existing.length) + 1;
+    // The transcript entry this turn will hang under: the user message Pi is
+    // about to write becomes its child, which is what ties a checkpoint to the
+    // exchange that produced it.
+    const anchorEntryId = await this.#anchor(sessionFile);
+    await this.#write(file, { version: 1, id, chatId, projectId, workingRoot: root, repository, turnId: null, createdAt, sequence, anchorEntryId, head, digest, entries });
+    // The previous checkpoint's turn changed nothing, so it records no information.
+    if (previous && previousFile && digestOf(previous) === digest) await fs.unlink(previousFile).catch(() => {});
     const names = (await fs.readdir(directory)).filter((name) => name.endsWith(".json")).sort();
     await Promise.all(names.slice(0, -MAX_CHECKPOINTS_PER_CHAT).map((name) => fs.unlink(path.join(directory, name))));
     return { id, file, turnId: null };
@@ -200,12 +254,49 @@ export class TurnCheckpointStore {
     };
   }
 
+  /**
+   * Reads the last transcript entry from a Pi session file. A freshly forked
+   * session holds only its header, so the walk follows `parentSession` until an
+   * entry turns up. Only the tail of each file is read: transcripts grow, and
+   * the last entry is all this needs.
+   */
+  async #anchor(sessionFile, hop = 0) {
+    if (typeof sessionFile !== "string" || !sessionFile || hop >= MAX_ANCHOR_HOPS) return null;
+    let handle;
+    try { handle = await fs.open(sessionFile, "r"); }
+    catch { return null; }
+    let parentSession = null;
+    try {
+      const { size } = await handle.stat();
+      const length = Math.min(size, ANCHOR_TAIL_BYTES);
+      const buffer = Buffer.alloc(length);
+      await handle.read(buffer, 0, length, size - length);
+      const lines = buffer.toString("utf8").split("\n");
+      if (length < size) lines.shift();
+      for (const line of lines.reverse()) {
+        if (!line.trim()) continue;
+        let entry;
+        try { entry = JSON.parse(line); }
+        catch { continue; }
+        if (entry?.type === "session") { parentSession = typeof entry.parentSession === "string" ? entry.parentSession : null; continue; }
+        if (typeof entry?.id === "string" && entry.id) return entry.id;
+      }
+    } catch { return null; }
+    finally { await handle.close().catch(() => {}); }
+    return parentSession ? this.#anchor(parentSession, hop + 1) : null;
+  }
+
   async #checkpoints(chatId) {
     const directory = path.join(this.root, keyFor(chatId));
     const names = await fs.readdir(directory).catch((error) => error.code === "ENOENT" ? [] : Promise.reject(error));
     const checkpoints = [];
     for (const name of names.filter((item) => item.endsWith(".json")).sort()) {
-      try { checkpoints.push(JSON.parse(await fs.readFile(path.join(directory, name), "utf8"))); }
+      try {
+        const file = path.join(directory, name);
+        const checkpoint = JSON.parse(await fs.readFile(file, "utf8"));
+        checkpoint[FILE] = file;
+        checkpoints.push(checkpoint);
+      }
       catch (error) { if (error.code !== "ENOENT") throw error; }
     }
     return checkpoints;

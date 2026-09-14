@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import fs from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
@@ -51,6 +52,14 @@ let eventOffset = 0;
 input.on("line", (line) => {
   const command = JSON.parse(line);
   fs.appendFileSync(commandLog, JSON.stringify({ pid: process.pid, command }) + "\\n");
+  // Pi answers transcript reads itself, and the prompt path waits on one before
+  // it sends anything. Tests drive the interesting exchanges through the event
+  // log; answering this one here keeps them from stalling behind it.
+  if (command.id && command.type === "get_entries") {
+    process.stdout.write(JSON.stringify({
+      id: command.id, type: "response", command: "get_entries", success: true, data: { entries: [], leafId: null },
+    }) + "\\n");
+  }
 });
 function flushEvents() {
   let lines = [];
@@ -74,16 +83,25 @@ flushEvents();
   return { conduitPi, nativePi };
 }
 
-async function writeFakeCodex(root) {
+async function writeFakeCodex(root, wsModulePath) {
   const command = path.join(root, "codex");
   await fs.writeFile(command, `#!/usr/bin/env node
 if (process.argv.includes("--version")) { console.log("codex-cli 0.test"); process.exit(0); }
-const readline = require("node:readline");
-const input = readline.createInterface({ input: process.stdin });
-const send = (message) => process.stdout.write(JSON.stringify(message) + "\\n");
-input.on("line", (line) => {
-  const message = JSON.parse(line);
+const fs = require("node:fs");
+const http = require("node:http");
+const net = require("node:net");
+const os = require("node:os");
+const path = require("node:path");
+const { spawn } = require("node:child_process");
+const { WebSocketServer } = require(${JSON.stringify(wsModulePath)});
+
+const controlDirectory = path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "app-server-control");
+const socketPath = path.join(controlDirectory, "app-server-control.sock");
+const pidFile = path.join(controlDirectory, "daemon.pid");
+
+function handle(message, send) {
   if (message.method === "initialize") return send({ id: message.id, result: { userAgent: "conduit-test" } });
+  if (message.method === "initialized") return;
   if (message.method === "thread/start" || message.method === "thread/resume") {
     const id = message.params.threadId || "thread-test";
     const model = message.params.model || "codex-test";
@@ -93,7 +111,7 @@ input.on("line", (line) => {
   }
   if (message.method === "thread/read") return send({ id: message.id, result: { thread: { id: message.params.threadId, turns: [] } } });
   if (message.method === "thread/list") {
-    const elsewhere = process.env.CONDUIT_TEST_ELSEWHERE || require("node:os").tmpdir();
+    const elsewhere = process.env.CONDUIT_TEST_ELSEWHERE || os.tmpdir();
     // The workspace thread echoes the requested cwd so workspace-scoped lookups
     // find it, except when the request is scoped to the unrelated folder.
     const workspace = message.params.cwd && message.params.cwd !== elsewhere ? message.params.cwd : process.cwd();
@@ -118,7 +136,59 @@ input.on("line", (line) => {
     return;
   }
   if (message.method === "turn/interrupt") return send({ id: message.id, result: {} });
-});
+  // A real server always answers. Dropping an unmodelled request would stall
+  // the caller for its full 15s timeout instead of failing a test outright.
+  if (message.id != null) return send({ id: message.id, result: {} });
+}
+
+// Conduit talks to Codex over the daemon's control socket, so the fake has to
+// be daemon-shaped too: \`daemon start\` detaches a server and returns, and the
+// server answers JSON-RPC over one WebSocket per connection.
+function serve() {
+  fs.mkdirSync(controlDirectory, { recursive: true });
+  try { fs.unlinkSync(socketPath); } catch (error) { if (error.code !== "ENOENT") throw error; }
+  const server = http.createServer();
+  const sockets = new WebSocketServer({ server });
+  sockets.on("connection", (socket) => {
+    socket.on("message", (data) => {
+      let message;
+      try { message = JSON.parse(String(data)); } catch { return; }
+      handle(message, (reply) => { if (socket.readyState === 1) socket.send(JSON.stringify(reply)); });
+    });
+  });
+  const shutdown = () => {
+    try { fs.unlinkSync(socketPath); } catch {}
+    try { fs.unlinkSync(pidFile); } catch {}
+    process.exit(0);
+  };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
+  server.listen(socketPath, () => fs.writeFileSync(pidFile, String(process.pid)));
+}
+
+function reachable() {
+  return new Promise((resolve) => {
+    const probe = net.connect(socketPath);
+    probe.once("connect", () => { probe.destroy(); resolve(true); });
+    probe.once("error", () => resolve(false));
+  });
+}
+
+async function daemonStart() {
+  if (await reachable()) return;
+  const child = spawn(process.execPath, [__filename, "--serve"], { detached: true, stdio: "ignore" });
+  child.unref();
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (await reachable()) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error("fake Codex daemon did not start");
+}
+
+if (process.argv.includes("--serve")) serve();
+else if (process.argv.includes("daemon") && process.argv.includes("start")) {
+  daemonStart().then(() => process.exit(0), (error) => { console.error(error.message); process.exit(1); });
+}
 `);
   await fs.chmod(command, 0o755);
   return command;
@@ -153,7 +223,7 @@ export async function startConduitHarness({ env = {} } = {}) {
   const commandLog = path.join(root, "pi-commands.jsonl");
   const eventLog = path.join(root, "pi-events.jsonl");
   const { conduitPi, nativePi } = await writeFakePi(root);
-  const codexCommand = await writeFakeCodex(root);
+  const codexCommand = await writeFakeCodex(root, createRequire(import.meta.url).resolve("ws"));
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: path.resolve(import.meta.dirname, "../.."),
     stdio: ["ignore", "pipe", "pipe"],
@@ -348,6 +418,9 @@ export async function startConduitHarness({ env = {} } = {}) {
     },
     async terminate(signal = "SIGTERM") {
       for (const stream of streams) stream.close();
+      // The fake Codex daemon is detached, so it outlives the server it served.
+      const pid = Number(await fs.readFile(path.join(root, ".codex", "app-server-control", "daemon.pid"), "utf8").catch(() => ""));
+      if (pid) { try { process.kill(pid, "SIGTERM"); } catch { /* already gone */ } }
       if (child.exitCode == null) {
         child.kill(signal);
         await new Promise((resolve, reject) => {
