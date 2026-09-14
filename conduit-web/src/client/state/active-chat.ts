@@ -729,9 +729,17 @@ export function createActiveChat(options: ActiveChatOptions) {
           setMessages(projection.messages);
           setTools(projection.tools);
           const current = activeGeneration();
-          const persistedInterrupt = incomingMessages.some((message) => message.role === "assistant"
+          // The live view is where an interrupted turn's trace and stopped
+          // partial are rendered from, so tearing it down hands that turn over
+          // to the persisted rows. Only do that once the merged transcript
+          // actually holds the interrupted message: a sync that landed in the
+          // wrong place, or arrived before Pi flushed the partial, would
+          // otherwise leave the turn with nothing on screen until a reload.
+          const persistedInterrupt = incomingMessages.filter((message) => message.role === "assistant"
             && (message.stopped || message.stopReason === "aborted"));
-          if (current?.status === "stopped" && persistedInterrupt) {
+          const mergedIds = new Set(projection.messages.map((message) => message.id));
+          const handedOver = persistedInterrupt.some((message) => message.id && mergedIds.has(message.id));
+          if (current?.status === "stopped" && handedOver) {
             generationStore.clear();
             setActiveGenerationChange(null);
             setActiveGeneration(null);
