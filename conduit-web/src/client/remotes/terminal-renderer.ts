@@ -57,10 +57,19 @@ async function loadTerminalFont() {
   return fontPromise;
 }
 
-export async function createTerminalRenderer(host: HTMLElement): Promise<TerminalRenderer> {
+/**
+ * Turns the image files on a paste into the text to type into the PTY. The
+ * renderer does not know where they go; the pane spools them and hands back a
+ * path, which reaches the TUI as an ordinary bracketed paste.
+ */
+export type TerminalPasteFiles = (files: File[]) => Promise<string>;
+
+export type TerminalRendererOptions = { pasteFiles?: TerminalPasteFiles };
+
+export async function createTerminalRenderer(host: HTMLElement, options: TerminalRendererOptions = {}): Promise<TerminalRenderer> {
   await loadTerminalFont();
   host.style.setProperty("--conduit-terminal-background", CONDUIT_TERMINAL_THEME.background);
-  return createXtermRenderer(host);
+  return createXtermRenderer(host, options);
 }
 
 type TerminalFit = {
@@ -141,13 +150,79 @@ function observeHostSize(host: HTMLElement, terminal: ResizableTerminal & Refres
   };
 }
 
-function installClipboardShortcuts(terminal: ClipboardTerminal) {
+/**
+ * An image on the clipboard still carries a text flavour, and that flavour is
+ * usually whitespace. A terminal cannot render the image, so pasting the
+ * flavour only injects blank lines into whatever is reading the prompt. Text
+ * with something in it is the only text worth sending.
+ */
+export function pastableText(text: string | null | undefined): string {
+  return text && text.trim() ? text : "";
+}
+
+function imageFiles(items: FileList | null | undefined): File[] {
+  return [...(items ?? [])].filter((file) => file.type.startsWith("image/"));
+}
+
+/**
+ * Reads whatever the clipboard is offering and reduces it to the text a
+ * terminal can accept: real text as-is, an image as the path it was spooled to.
+ * Text wins when both are present, which is what every other terminal does.
+ */
+export async function clipboardPasteText(pasteFiles?: TerminalPasteFiles): Promise<string> {
+  if (navigator.clipboard?.read) {
+    try {
+      for (const item of await navigator.clipboard.read()) {
+        if (item.types.includes("text/plain")) {
+          const text = pastableText(await (await item.getType("text/plain")).text());
+          if (text) return text;
+        }
+        const imageType = item.types.find((type) => type.startsWith("image/"));
+        if (!imageType || !pasteFiles) continue;
+        const blob = await item.getType(imageType);
+        return await pasteFiles([new File([blob], "pasted", { type: imageType })]);
+      }
+      return "";
+    } catch {
+      // `read()` may be refused where `readText()` is still granted.
+    }
+  }
+  if (!navigator.clipboard?.readText) return "";
+  return pastableText(await navigator.clipboard.readText());
+}
+
+function installClipboardShortcuts(host: HTMLElement, terminal: ClipboardTerminal, options: TerminalRendererOptions) {
+  // The browser's own paste is the only one a non-secure context has, so it
+  // stays enabled and keeps working there. It just must not hand xterm an
+  // image's text flavour, which is whitespace and arrives as blank lines.
+  // Capturing on the host runs this ahead of xterm's handler on the textarea.
+  const interceptPaste = (event: ClipboardEvent) => {
+    if (pastableText(event.clipboardData?.getData("text/plain"))) return;
+    event.preventDefault();
+    const files = imageFiles(event.clipboardData?.files);
+    if (!files.length || !options.pasteFiles) return;
+    void options.pasteFiles(files).then((text) => { if (text) terminal.paste?.(text); }).catch(() => {});
+  };
+  host.addEventListener("paste", interceptPaste, { capture: true });
+
   terminal.attachCustomKeyEventHandler?.((event) => {
+    // xterm uses the bare Alt key to enter rectangular-selection mode. That
+    // conflicts with terminal programs such as Codex that own Alt shortcuts,
+    // and can remain latched when the OS consumes the matching key-up event.
+    if (event.key === "Alt") return false;
     if (event.type !== "keydown") return true;
     const key = event.key.toLowerCase();
     const isApple = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
     const copy = key === "c" && (isApple ? event.metaKey && !event.ctrlKey : event.ctrlKey && event.shiftKey);
-    const paste = key === "v" && (isApple ? event.metaKey && !event.ctrlKey : event.ctrlKey);
+
+    // A terminal reached through a browser is almost never running on the
+    // machine the browser is on, so a paste has to mean the browser's
+    // clipboard. TUIs disagree on which modifier pastes -- Ctrl+V, Alt+V,
+    // Cmd+V -- and one left unclaimed reaches the TUI, which then reads the
+    // host's clipboard instead: the wrong machine's, and silently so. Conduit
+    // claims all three.
+    const paste = key === "v" && (event.ctrlKey || event.metaKey || event.altKey);
+    const browserPasteGesture = isApple ? event.metaKey : event.ctrlKey;
 
     // The async Clipboard API only exists in a secure context, so it is absent
     // whenever Conduit is reached over plain HTTP on a LAN address. Falling
@@ -161,18 +236,23 @@ function installClipboardShortcuts(terminal: ClipboardTerminal) {
       return false;
     }
     if (paste && terminal.paste) {
-      if (!navigator.clipboard?.readText) return true;
+      // Without the async Clipboard API the browser's own paste is the only
+      // way in, and it answers to Ctrl/Cmd+V alone. Alt+V has no fallback, so
+      // swallow it rather than let it through to read the host's clipboard.
+      if (!navigator.clipboard?.read && !navigator.clipboard?.readText) return browserPasteGesture;
       event.preventDefault();
-      void navigator.clipboard.readText()
+      void clipboardPasteText(options.pasteFiles)
         .then((text) => { if (text) terminal.paste?.(text); })
         .catch(() => {});
       return false;
     }
     return true;
   });
+
+  return () => host.removeEventListener("paste", interceptPaste, { capture: true });
 }
 
-async function createXtermRenderer(host: HTMLElement): Promise<TerminalRenderer> {
+async function createXtermRenderer(host: HTMLElement, options: TerminalRendererOptions): Promise<TerminalRenderer> {
   const [{ Terminal }, { FitAddon }, { ClipboardAddon, Base64 }, { WebglAddon }] = await Promise.all([
     import("@xterm/xterm"),
     import("@xterm/addon-fit"),
@@ -184,6 +264,7 @@ async function createXtermRenderer(host: HTMLElement): Promise<TerminalRenderer>
     fontSize: terminalFontSize(),
     fontFamily: '"Conduit Terminal Font", monospace',
     cursorBlink: false,
+    altClickMovesCursor: false,
     scrollback: 1000,
     theme: CONDUIT_TERMINAL_THEME,
   });
@@ -208,7 +289,7 @@ async function createXtermRenderer(host: HTMLElement): Promise<TerminalRenderer>
   } catch {
     webgl.dispose();
   }
-  installClipboardShortcuts(terminal);
+  const stopClipboardShortcuts = installClipboardShortcuts(host, terminal, options);
   const stopObservingHost = observeHostSize(host, terminal, fit);
   return {
     id: "xterm",
@@ -223,6 +304,6 @@ async function createXtermRenderer(host: HTMLElement): Promise<TerminalRenderer>
     resize: (cols, rows) => resizeTerminal(terminal, cols, rows),
     onData: (listener) => { const subscription = terminal.onData(listener); return () => subscription.dispose(); },
     onResize: (listener) => { const subscription = terminal.onResize(listener); return () => subscription.dispose(); },
-    dispose: () => { stopObservingHost(); contextLoss.dispose(); webgl.dispose(); clipboard.dispose(); fit.dispose?.(); terminal.dispose(); },
+    dispose: () => { stopClipboardShortcuts(); stopObservingHost(); contextLoss.dispose(); webgl.dispose(); clipboard.dispose(); fit.dispose?.(); terminal.dispose(); },
   };
 }

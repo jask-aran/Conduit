@@ -22,7 +22,7 @@ import {
 } from "@/components/primitives";
 import { api } from "../api/client";
 import { terminalSocketUrl } from "../api/transport";
-import { createTerminalRenderer, type TerminalRenderer } from "./terminal-renderer";
+import { clipboardPasteText, createTerminalRenderer, type TerminalPasteFiles, type TerminalRenderer } from "./terminal-renderer";
 import { terminalRecoveryView, type TerminalConnectionState } from "./terminal-recovery";
 import { LEGACY_TERMINAL_SHORTCUTS_STORAGE_KEY, normalizeTerminalShortcuts, readLegacyTerminalShortcuts, type TerminalShortcut } from "./terminal-shortcuts";
 
@@ -128,17 +128,38 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     clearMobileModifiers();
     inputTerminal(sequence, false);
   };
+  /**
+   * A terminal has nowhere to put an image, so a pasted one is spooled to a
+   * file on the Conduit host and only its path is typed in. From the TUI's
+   * side that is indistinguishable from pasting a path in a native terminal.
+   */
+  const spoolPastedImages: TerminalPasteFiles = async (files) => {
+    const paths: string[] = [];
+    for (const file of files) {
+      try {
+        const spooled = await api<{ path: string }>("/v0/terminal-paste", {
+          method: "POST",
+          headers: { "content-type": file.type },
+          body: file,
+        });
+        paths.push(spooled.path);
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Pasted image could not be saved");
+      }
+    }
+    return paths.join(" ");
+  };
   const pasteFromClipboard = async () => {
     clearMobileModifiers();
     // Reading the clipboard needs a secure context, which a plain-HTTP LAN
     // address is not. Say so rather than blaming a permission the browser
     // never offered to grant.
-    if (!navigator.clipboard?.readText) {
+    if (!navigator.clipboard?.read && !navigator.clipboard?.readText) {
       setError("Pasting needs a secure connection. Use the keyboard's own paste, or reach Conduit over HTTPS or localhost.");
       return;
     }
     try {
-      const text = await navigator.clipboard.readText();
+      const text = await clipboardPasteText(spoolPastedImages);
       if (text) inputTerminal(text, false);
     } catch {
       setError("Clipboard access was denied");
@@ -263,7 +284,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     disposeRenderer();
     host.dataset.terminalReady = "false";
     const startedAt = performance.now();
-    const created = await createTerminalRenderer(host);
+    const created = await createTerminalRenderer(host, { pasteFiles: spoolPastedImages });
     if (!host || activeProjectId !== props.projectId) {
       created.dispose();
       throw new Error("Terminal Workspace changed while the renderer was loading");
