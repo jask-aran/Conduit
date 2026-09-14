@@ -185,13 +185,20 @@ export function commitAssistantMessage(messages: Message[], eventMessage: Protoc
  * whole number of turns, so the fallback anchor is the same number of user
  * messages counted back from the end.
  */
-export function mergeTranscript(messages: Message[], incoming: Message[]): Message[] {
+export function mergeTranscript(messages: Message[], incoming: Message[], generationId?: string | null): Message[] {
   if (!incoming.length) return messages;
-  const anchor = syncAnchor(messages, incoming);
-  if (anchor == null) return messages;
+  const replaced = replacedRange(messages, incoming, generationId);
+  // Nothing of the client's is recognisably part of this sync: it is a turn the
+  // client has not seen, and it belongs after what it holds. Appending can at
+  // worst leave a duplicate, which the next sync resolves; guessing at a
+  // position can destroy a turn the sync never carried.
+  if (replaced.at == null) return [...messages, ...incoming];
   // A pending message is the composer's, not the transcript's, so it survives.
-  const pending = messages.slice(anchor).filter((message) => message.pending);
-  return [...messages.slice(0, anchor), ...incoming, ...pending];
+  const pending = messages.slice(replaced.at).filter((message) => message.pending);
+  const kept = messages.filter((message, index) => index < replaced.at! && !replaced.ids.has(message.id));
+  const tail = messages.slice(replaced.at)
+    .filter((message) => !message.pending && !replaced.ids.has(message.id));
+  return [...kept, ...incoming, ...tail, ...pending];
 }
 
 function toolIds(messages: Message[]): Set<string> {
@@ -210,64 +217,47 @@ export function mergeTranscriptProjection(
   tools: ToolItem[],
   incomingMessages: Message[],
   incomingTools: ToolItem[],
+  generationId?: string | null,
 ): { messages: Message[]; tools: ToolItem[] } {
   if (!incomingMessages.length) return { messages, tools };
-  const anchor = syncAnchor(messages, incomingMessages);
-  if (anchor == null) return { messages, tools };
-  const retainedIds = toolIds(messages.slice(0, anchor));
+  const merged = mergeTranscript(messages, incomingMessages, generationId);
+  const incomingIds = new Set(incomingTools.map((tool) => tool.id));
+  // The turns the sync did not replace keep the tools they own.
+  const retainedIds = toolIds(merged.filter((message) => !incomingMessages.includes(message)));
   return {
-    messages: mergeTranscript(messages, incomingMessages),
-    tools: [...tools.filter((tool) => retainedIds.has(tool.id)), ...incomingTools],
+    messages: merged,
+    tools: [...tools.filter((tool) => retainedIds.has(tool.id) && !incomingIds.has(tool.id)), ...incomingTools],
   };
 }
 
 /**
- * Whether two user messages are the same turn.
+ * Which of the client's messages this sync is the persisted copy of.
  *
- * Text, because ids are exactly what this path does not have. The comparison is
- * deliberately loose: a persisted message can carry an attachment envelope
- * around the text the client sent, and reading that as a different turn would
- * duplicate the bubble. Only a message that shares no text at all is a
- * different turn.
- */
-function sameTurn(left: Message | undefined, right: Message | undefined) {
-  const before = (left?.content || "").trim();
-  const after = (right?.content || "").trim();
-  if (!before || !after) return true;
-  return before === after || before.includes(after) || after.includes(before);
-}
-
-/**
- * Where in the transcript the synced range begins.
+ * Two keys, both stated rather than inferred. A message the sync names by id is
+ * plainly the same message. A message the client froze out of a live generation
+ * carries the generation that produced it, and the sync says which generation
+ * it closes -- which is the only handle a turn has before Pi has written it,
+ * because Pi puts ids on session entries, not on the messages it streams.
  *
- * Ids settle it when the client has them. Otherwise the range is placed by
- * finding which of the synced turns is the client's own last turn, and counting
- * back from there. Simply counting the sync's turns back from the end assumed
- * the client had seen every turn the sync covers, which steering breaks: an
- * interrupting message is prompted as a turn of its own that the client never
- * minted a bubble for, so the count landed one turn early and replaced the
- * interrupted turn -- stopped answer and all -- with its replacement.
+ * What this deliberately does not do is guess by position. Counting the sync's
+ * turns back from the end of the transcript is right only when the two lists
+ * agree about how many turns there are, and a sync is sent at exactly the
+ * moments they do not: it doubled a turn when it counted short, and destroyed
+ * one when it counted long.
  */
-function syncAnchor(messages: Message[], incoming: Message[]): number | null {
+function replacedRange(messages: Message[], incoming: Message[], generationId?: string | null):
+{ at: number | null; ids: Set<string> } {
   const incomingIds = new Set(incoming.map((message) => message.id).filter(Boolean));
-  const byId = messages.findIndex((message) => message.id && incomingIds.has(message.id));
-  if (byId >= 0) return byId;
-
-  const users = incoming.filter((message) => message.role === "user");
-  if (!users.length) return null;
-  // Pending messages are the composer's, not the transcript's.
-  const userPositions = messages.flatMap((message, index) =>
-    message.role === "user" && !message.pending ? [index] : []);
-  if (!userPositions.length) return 0;
-  const lastUser = messages[userPositions[userPositions.length - 1]!];
-  for (let turn = users.length - 1; turn >= 0; turn -= 1) {
-    if (!sameTurn(lastUser, users[turn])) continue;
-    // The client's last turn is this one, so the sync begins `turn` turns
-    // earlier. Fewer turns than that means the sync covers the whole transcript.
-    return userPositions[userPositions.length - 1 - turn] ?? 0;
-  }
-  // No turn in the sync is one the client has: it is all new, and belongs after
-  // what the client already holds.
-  return messages.length;
+  const ids = new Set<string>();
+  let at: number | null = null;
+  messages.forEach((message, index) => {
+    const matched = (message.id && incomingIds.has(message.id))
+      || (generationId != null && message.generationId === generationId);
+    if (!matched || message.pending) return;
+    ids.add(message.id);
+    if (at == null) at = index;
+  });
+  return { at, ids };
 }
+
 

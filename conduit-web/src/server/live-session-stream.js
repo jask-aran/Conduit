@@ -60,7 +60,11 @@ export function createLiveSessionStream({
    * turn it assembled from deltas. Reading the backend's own transcript and
    * publishing that is how the client stops having to be right on its own.
    */
-  async function syncTranscript(record, turns = 1) {
+  // The generation the sync closes: the client's copy of that turn is frozen
+  // out of a live generation and carries the same id, which is the only handle
+  // an unwritten turn has. Without it the client has to guess where the range
+  // belongs.
+  async function syncTranscript(record, turns = 1, generationId = null) {
     const adapter = adapterFor(record);
     if (record.ephemeral) return;
     try {
@@ -71,7 +75,7 @@ export function createLiveSessionStream({
       });
       if (projection.messages?.length) {
         projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages);
-        adapter.publish(record, { type: "transcript_sync", ...projection });
+        adapter.publish(record, { type: "transcript_sync", generationId, ...projection });
       }
     } catch (error) {
       // A sync is a repair, never the only path to correctness.
@@ -206,10 +210,11 @@ export function createLiveSessionStream({
             { code: "clear_queue_unsupported" });
         }
       }
-      await adapter.cancel(record.id, command.generationId || null);
+      const cancelledGenerationId = command.generationId || record.activeGeneration?.id || null;
+      await adapter.cancel(record.id, cancelledGenerationId);
       const interrupted = interruptedPromptInput(taken, command.message, command.attachmentIds);
       if (!interrupted.message) {
-        await syncTranscript(record);
+        await syncTranscript(record, 1, cancelledGenerationId);
         return null;
       }
       // Before the replacement, not only after it: the interrupted turn is
@@ -217,7 +222,7 @@ export function createLiveSessionStream({
       // it while the client still has nothing else arriving. Leaving it until
       // after the replacement prompt meant the client carried an unreconciled
       // interrupted turn for the whole of the next response.
-      await syncTranscript(record);
+      await syncTranscript(record, 1, cancelledGenerationId);
       await applyComposerModel(record, command);
       const prepared = await promptForChat(record, {
         ...command,
@@ -227,12 +232,13 @@ export function createLiveSessionStream({
       // Pi can write the aborted tool result just after cancel resolves, and
       // the steered message has no id until Pi writes it, so a two-turn sync
       // once the replacement is accepted is what names both turns.
-      await syncTranscript(record, 2);
+      await syncTranscript(record, 2, generationId);
       return generationId;
     }
     if (command.type === "stop_generation" || command.type === "abort") {
-      const stopped = await adapter.cancel(record.id, command.generationId || null);
-      await syncTranscript(record);
+      const stoppedGenerationId = command.generationId || record.activeGeneration?.id || null;
+      const stopped = await adapter.cancel(record.id, stoppedGenerationId);
+      await syncTranscript(record, 1, stoppedGenerationId);
       return stopped;
     }
     if (command.type === "fork_and_prompt") {

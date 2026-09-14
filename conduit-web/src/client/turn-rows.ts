@@ -288,14 +288,13 @@ export function settleGenerationTools(current: ToolItem[], generation: ActiveGen
 }
 
 /**
- * The stopped turn as transcript messages, so it survives the live view.
+ * The turn as transcript messages, so it survives the live view.
  *
- * An interrupted turn is only ever drawn from the live generation, and the
- * store installs a fresh one the moment the next turn starts - which is what
- * took an interrupted answer off the screen until its replacement finished and
- * a sync brought the persisted copy back. Freezing the turn into the
- * transcript keeps it there in the meantime; the persisted copy replaces it
- * when it arrives, matched the way any other unsynced turn is.
+ * A live generation is the only place a streaming turn exists, and the store
+ * installs a fresh one the moment the next turn starts. Freezing the turn the
+ * instant it stops puts it in the transcript, where nothing can take it away;
+ * the sync that closes the same generation replaces it, matched by the
+ * generationId each frozen message carries.
  */
 export function freezeGeneration(generation: ActiveGenerationView): Message[] {
   const classifications = textBlockClassifications(generation) as Record<string, "interim" | "answer">;
@@ -315,6 +314,7 @@ export function freezeGeneration(generation: ActiveGenerationView): Message[] {
     if (!content.trim() && !blocks.length) continue;
     frozen.push({
       id: `end_${generation.id}:${assistant.id}`,
+      generationId: generation.id,
       role: "assistant",
       content,
       blocks,
