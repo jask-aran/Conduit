@@ -178,6 +178,16 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
     anchorMessageId: string | null;
     anchorOffset: number;
   }>();
+  const expandedItems = new Map<string, Set<string>>();
+  const itemExpanded = (chatId: string | null, key: string) => Boolean(chatId && expandedItems.get(chatId)?.has(key));
+  const setItemExpanded = (chatId: string | null, key: string, open: boolean) => {
+    if (!chatId) return;
+    const items = expandedItems.get(chatId) || new Set<string>();
+    if (open) items.add(key); else items.delete(key);
+    expandedItems.delete(chatId);
+    expandedItems.set(chatId, items);
+    while (expandedItems.size > 10) expandedItems.delete(expandedItems.keys().next().value!);
+  };
   let historyLoad: Promise<void> | null = null;
   let layoutEpoch = 0;
   let previousMarkdownRenderer = props.markdownRenderer;
@@ -249,9 +259,12 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
     if (!saved || saved.following) return false;
     setFollowing(false);
     setTypewriterTailOwner("user", true);
+    // Apply the numeric position in the same reactive commit as the chat
+    // switch. Waiting for the anchor pass lets the browser paint a clamped
+    // position inherited from the previous transcript for one or two frames.
+    setViewportScrollTop(saved.scrollTop);
     requestAnimationFrame(() => requestAnimationFrame(() => {
       if (epoch !== layoutEpoch || props.chat.loadedId() !== chatId) return;
-      setViewportScrollTop(saved.scrollTop);
       if (!saved.anchorMessageId) return;
       const viewportTop = viewport.getBoundingClientRect().top;
       const anchor = [...thread.querySelectorAll<HTMLElement>("[data-message-id]")]
@@ -594,6 +607,7 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
       cancelTypewriterTailFrame();
       typewriterTailReasons.clear();
       scrollPositions.clear();
+      expandedItems.clear();
       setTypewriterTailOwner("app", true);
     }
   });
@@ -854,7 +868,8 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
         <For each={timeline}>{(item) => {
           if (item.type === "trace") {
             let traceRow!: HTMLDivElement;
-            return <div ref={traceRow} data-slot="message-scroller-item"><TurnTrace trace={item.value} sessionId={props.chat.loadedId()} renderer={markdownRenderer()} pacing={incremarkPacing()} profileLabel={props.profileLabel} onRendered={() => settleAfterMarkdown(traceRow)} /></div>;
+            const chatId = () => props.chat.loadedId();
+            return <div ref={traceRow} data-slot="message-scroller-item"><TurnTrace trace={item.value} sessionId={chatId()} renderer={markdownRenderer()} pacing={incremarkPacing()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} /></div>;
           }
           const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");

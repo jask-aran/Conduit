@@ -46,6 +46,8 @@ function TraceSegmentRow(props: {
   renderer?: MarkdownRendererId;
   pacing?: IncremarkPacingMode;
   profileLabel?: string;
+  toolOpen?: (id: string) => boolean;
+  onToolOpenChange?: (id: string, open: boolean) => void;
 }) {
   const tool = () => {
     const segment = props.segment();
@@ -72,7 +74,7 @@ function TraceSegmentRow(props: {
       {(message) => <TraceError message={message()} profileLabel={props.profileLabel} />}
     </Show>
   }>
-    {(item) => <ToolCard tool={item()} sessionId={props.sessionId} />}
+    {(item) => <ToolCard tool={item()} sessionId={props.sessionId} initialOpen={props.toolOpen?.(item().id)} onOpenChange={(open) => props.onToolOpenChange?.(item().id, open)} />}
   </Show>;
 }
 
@@ -110,10 +112,15 @@ const statusLabel = (status: TurnTraceData["status"]) => ({
   failed: "Failed",
 })[status];
 
-export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | null; renderer?: MarkdownRendererId; pacing?: IncremarkPacingMode; profileLabel?: string; onRendered?: () => void }) {
-  const [open, setOpen] = createSignal(false);
+export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | null; renderer?: MarkdownRendererId; pacing?: IncremarkPacingMode; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void }) {
+  const [open, setOpen] = createSignal(Boolean(props.initialOpen));
+  const toggle = () => {
+    const next = !open();
+    setOpen(next);
+    props.onOpenChange?.(next);
+  };
   return <div class="turn-trace" data-active={props.trace.active ? "true" : "false"}>
-    <button type="button" class="turn-trace-header" aria-expanded={open()} onClick={() => setOpen(!open())}>
+    <button type="button" class="turn-trace-header" aria-expanded={open()} onClick={toggle}>
       <BrainIcon />
       <div class="turn-trace-preview">
         <Suspense fallback={<span>{previewOf(props.trace).text}</span>}><ChatMarkdown inline renderer={props.renderer} pacing={props.pacing}>{previewOf(props.trace).text}</ChatMarkdown></Suspense>
@@ -125,7 +132,7 @@ export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | nul
     <Show when={open()}>
       <div class="turn-trace-body">
           <Index each={props.trace.segments}>{(segment) =>
-          <TraceSegmentRow segment={segment} sessionId={props.sessionId} renderer={props.renderer} pacing={props.pacing} profileLabel={props.profileLabel} onRendered={props.onRendered} />
+          <TraceSegmentRow segment={segment} sessionId={props.sessionId} renderer={props.renderer} pacing={props.pacing} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />
         }</Index>
       </div>
     </Show>
