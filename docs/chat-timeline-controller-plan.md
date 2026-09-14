@@ -41,8 +41,10 @@ The controller must:
    persisted projection while message and tool inputs are unchanged, and
    overlay only the live turn for structural generation events. A later slice
    can make transcript changes rebuild only their affected persisted turns.
-3. Add explicit settlement. Commit the final streamed message and replace only
-   the live turn at the durable checkpoint.
+3. Add explicit settlement. While a generation owns the current assistant
+   turn, defer projection of assistant `message_end` updates. At the durable
+   checkpoint, project the persisted transcript once and replace the live turn.
+   Earlier rows retain their object identity.
 4. Add a bounded per-chat timeline cache. Show cached rows immediately during
    chat navigation, then reconcile in the background.
 5. Make scroll ownership explicit: follow only at the end, preserve an anchor

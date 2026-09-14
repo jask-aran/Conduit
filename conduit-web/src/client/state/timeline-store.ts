@@ -59,6 +59,22 @@ function stableProjection(previous: TurnRow[], projected: TurnRow[]): TurnRow[] 
   });
 }
 
+function settledPrefixChanged(previous: Message[] | null, current: Message[]): boolean {
+  if (!previous) return true;
+  let latestUserIndex = -1;
+  for (let index = current.length - 1; index >= 0; index -= 1) {
+    if (current[index]?.role === "user") {
+      latestUserIndex = index;
+      break;
+    }
+  }
+  if (latestUserIndex < 0 || previous.length <= latestUserIndex) return true;
+  for (let index = 0; index <= latestUserIndex; index += 1) {
+    if (previous[index] !== current[index]) return true;
+  }
+  return false;
+}
+
 export function createTimelineStore(
   messages: Accessor<Message[]>,
   tools: Accessor<ToolItem[]>,
@@ -69,6 +85,8 @@ export function createTimelineStore(
   let previousProjectedRows: TurnRow[] = [];
   let previousMessages: Message[] | null = null;
   let previousTools: ToolItem[] | null = null;
+  let persistedMessages: Message[] | null = null;
+  let persistedTools: ToolItem[] | null = null;
   let persistedRows: TurnRow[] = [];
   let rowIndexes = new Map<string, number>();
   let liveIndex: LiveProjectionIndex | null = null;
@@ -216,8 +234,16 @@ export function createTimelineStore(
       return;
     }
 
-    if (previousMessages !== inputMessages || previousTools !== inputTools) {
+    const persistedInputsChanged = persistedMessages !== inputMessages || persistedTools !== inputTools;
+    const mustRefreshPersisted = persistedInputsChanged && (
+      !inputGeneration
+      || persistedTools !== inputTools
+      || settledPrefixChanged(persistedMessages, inputMessages)
+    );
+    if (mustRefreshPersisted) {
       persistedRows = buildTurnRows(inputMessages, inputTools);
+      persistedMessages = inputMessages;
+      persistedTools = inputTools;
     }
     const projected = stableProjection(previousProjectedRows, inputGeneration
       ? projectLiveTurn(persistedRows, inputMessages, inputGeneration)
