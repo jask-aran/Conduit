@@ -1,5 +1,5 @@
-import { StateEffect, StateField, type Extension, type Text } from "@codemirror/state";
-import { Decoration, EditorView, hoverTooltip, ViewPlugin, type DecorationSet } from "@codemirror/view";
+import type { Extension, Text } from "@codemirror/state";
+import { Decoration, EditorView, hoverTooltip } from "@codemirror/view";
 import { createEffect, createSignal, Show } from "solid-js";
 import type { ReviewCommentSide } from "../chat/review-comments";
 
@@ -61,15 +61,17 @@ export function commentRange(view: EditorView, item: Pick<CommentHighlight, "fro
   return to > from ? { from, to } : null;
 }
 
-export function commentHighlightsExtension(items: readonly CommentHighlight[]): Extension {
+export type CommentLocator = (view: EditorView, item: CommentHighlight) => { from: number; to: number } | null;
+
+export function commentHighlightsExtension(items: readonly CommentHighlight[], locate: CommentLocator = commentRange): Extension {
   return [
     EditorView.decorations.of((view) => Decoration.set(items.flatMap((item) => {
-      const range = commentRange(view, item);
+      const range = locate(view, item);
       return range ? [Decoration.mark({ class: "cm-review-comment" }).range(range.from, range.to)] : [];
     }).sort((left, right) => left.from - right.from))),
     hoverTooltip((view, position) => {
       const item = items.find((candidate) => {
-        const range = commentRange(view, candidate);
+        const range = locate(view, candidate);
         return range && position >= range.from && position <= range.to;
       });
       if (!item) return null;
@@ -87,51 +89,15 @@ export function commentHighlightsExtension(items: readonly CommentHighlight[]): 
   ];
 }
 
-const setAnnotationRange = StateEffect.define<{ from: number; to: number } | null>();
-
-/**
- * Paints the part of a cross-side drag the document actually holds. The browser
- * highlights a deleted chunk itself, but the editor draws its own selection and
- * hides the native one, so without this only the removed half looks selected.
- */
-const annotationRangeField = StateField.define<DecorationSet>({
-  create: () => Decoration.none,
-  update(value, transaction) {
-    let next = value.map(transaction.changes);
-    for (const effect of transaction.effects) {
-      if (effect.is(setAnnotationRange)) {
-        next = effect.value
-          ? Decoration.set([Decoration.mark({ class: "cm-annotation-range" }).range(effect.value.from, effect.value.to)])
-          : Decoration.none;
-      }
-    }
-    return next;
-  },
-  provide: (field) => EditorView.decorations.from(field),
-});
-
-const painted = new WeakMap<EditorView, string>();
-
-export function paintAnnotationRange(view: EditorView, range: { from: number; to: number } | null): void {
-  const key = range && range.to > range.from ? `${range.from}:${range.to}` : "";
-  if (painted.get(view) === key || !view.state.field(annotationRangeField, false)) return;
-  painted.set(view, key);
-  // Selections are read while the editor is updating, so the paint waits.
-  requestAnimationFrame(() => {
-    if (!view.dom.isConnected) return;
-    view.dispatch({ effects: setAnnotationRange.of(key ? range : null) });
-  });
-}
-
 export function annotationExtension(options: {
   side: ReviewCommentSide;
   onSelect: (selection: AnnotationSelection | null) => void;
   /** Pairs the selection with the same passage on the other side of a comparison. */
   counterpart?: (side: ReviewCommentSide, from: number, to: number) => AnnotationSpan | undefined;
   /**
-   * Reads selections the editor's own state cannot see, such as a unified
-   * diff's deleted lines, which are widgets rather than document text.
-   * Returns `undefined` to fall back to the editor's selection.
+   * Describes the selection in terms the view uses, such as an inline
+   * comparison's per-side rows. Returns `undefined` to fall back to the
+   * editor's own line numbers.
    */
   read?: (view: EditorView) => AnnotationReading | null | undefined;
 }): Extension {
@@ -163,25 +129,6 @@ export function annotationExtension(options: {
     EditorView.updateListener.of((update) => {
       if (update.selectionSet) publish(update.view, readSelection(update.view));
     }),
-    ...(options.read ? [annotationRangeField, ViewPlugin.define((view) => {
-      let frame = 0;
-      // Widget text is selected by the browser alone, so the editor never
-      // reports it; the document's own selection events are the only signal.
-      const track = () => {
-        cancelAnimationFrame(frame);
-        frame = requestAnimationFrame(() => {
-          const anchor = view.dom.ownerDocument.getSelection()?.anchorNode;
-          if (anchor && view.dom.contains(anchor)) publish(view, readSelection(view));
-        });
-      };
-      view.dom.ownerDocument.addEventListener("selectionchange", track);
-      return {
-        destroy() {
-          cancelAnimationFrame(frame);
-          view.dom.ownerDocument.removeEventListener("selectionchange", track);
-        },
-      };
-    })] : []),
   ];
 }
 
