@@ -1,4 +1,5 @@
 import { WorkbenchButton, WorkbenchStatus } from "./workspace-workbench";
+import { annotationExtension, WorkspaceAnnotationPopup, type AnnotationSelection } from "./workspace-annotate";
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
 import { history, historyKeymap, indentWithTab, redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
 import { indentOnInput, indentUnit } from "@codemirror/language";
@@ -90,6 +91,7 @@ export default function WorkspaceEditor(props: {
   onSave: (value: string) => void;
   onToggleEditing?: () => void;
   onToggleWrap: () => void;
+  onAnnotate?: (selection: AnnotationSelection, note: string) => boolean;
   header?: JSX.Element;
   ref?: (handle: WorkspaceEditorHandle) => void;
 }) {
@@ -97,6 +99,7 @@ export default function WorkspaceEditor(props: {
   let positionLabel: HTMLButtonElement | undefined;
   const [canUndo, setCanUndo] = createSignal(false);
   const [canRedo, setCanRedo] = createSignal(false);
+  const [annotation, setAnnotation] = createSignal<AnnotationSelection | null>(null);
   let view: EditorView | undefined;
   const editableCompartment = new Compartment();
   const wrappingCompartment = new Compartment();
@@ -175,7 +178,6 @@ export default function WorkspaceEditor(props: {
     languageCompartment.of(isCsvFile(path) ? csvLanguage : []),
     editableCompartment.of([
       EditorState.readOnly.of(!editable()),
-      EditorView.editable.of(editable()),
     ]),
     wrappingCompartment.of(props.wrap ? EditorView.lineWrapping : []),
     EditorView.contentAttributes.of({
@@ -186,6 +188,7 @@ export default function WorkspaceEditor(props: {
       if (update.docChanged) reportDirty(!update.state.doc.eq(savedDocument));
       if (update.docChanged || update.selectionSet) updatePosition(update.state);
     }),
+    ...(props.onAnnotate ? [annotationExtension({ side: "modified", onSelect: setAnnotation })] : []),
     keymap.of([{
       key: "Mod-s",
       preventDefault: true,
@@ -242,7 +245,6 @@ export default function WorkspaceEditor(props: {
       effects: [
         editableCompartment.reconfigure([
           EditorState.readOnly.of(!editable()),
-          EditorView.editable.of(editable()),
         ]),
         wrappingCompartment.reconfigure(props.wrap ? EditorView.lineWrapping : []),
       ],
@@ -306,7 +308,6 @@ export default function WorkspaceEditor(props: {
     view.dispatch({
       effects: editableCompartment.reconfigure([
         EditorState.readOnly.of(!nextEditable),
-        EditorView.editable.of(nextEditable),
       ]),
     });
     view.contentDOM.setAttribute("aria-label", `${nextEditable ? "Edit" : "Preview"} ${activePath}`);
@@ -337,7 +338,10 @@ export default function WorkspaceEditor(props: {
 
   return <div class="workspace-code-surface" data-editable={editable()}>
     <header class="workspace-preview-header">{props.header}</header>
-    <div ref={host} class="workspace-code-editor" data-markdown={isVisualMarkdownFile(props.path)} data-wrap={props.wrap} />
+    <div class="workspace-editor-content">
+      <div ref={host} class="workspace-code-editor" data-markdown={isVisualMarkdownFile(props.path)} data-wrap={props.wrap} />
+      <Show when={annotation()}>{(selection) => <WorkspaceAnnotationPopup selection={selection()} onAdd={(note) => props.onAnnotate?.(selection(), note) ?? false} onDismiss={() => setAnnotation(null)} />}</Show>
+    </div>
     <WorkbenchStatus commands={<>
       <Show when={props.onToggleEditing}>
         <WorkbenchButton class="workspace-editor-mode" aria-label={editable() ? "Preview file" : "Edit file"} title={editable() ? "Switch to preview" : "Edit working file"} disabled={!editable() && !props.canEdit} onClick={props.onToggleEditing}>

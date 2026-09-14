@@ -418,6 +418,15 @@ svg { stroke-width: 1.5; }
 .attachment-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 .attachment-copy strong, .attachment-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attachment-copy small { color: var(--muted-foreground); }
+.review-comment-tray { display: flex; max-width: 100%; flex-wrap: wrap; gap: 4px; margin: 0 0 6px; }
+.review-comment-chip { display: inline-flex; min-width: 0; max-width: min(360px, 100%); align-items: center; gap: 4px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); font-size: 10px; line-height: 1.2; }
+.review-comment-chip > svg { width: 11px; height: 11px; flex: none; color: var(--muted-foreground); }
+.review-comment-chip strong { flex: none; font-weight: 600; }
+.review-comment-chip > span { overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
+.review-comment-chip [data-slot="button"] { width: 16px; height: 16px; flex: none; padding: 0; }
+.review-comment-chip [data-slot="button"] svg { width: 10px; height: 10px; }
+.composer-wrap > .review-comment-tray { margin-inline: 2px; }
+.message-user .review-comment-tray { justify-content: flex-end; margin-bottom: 0; }
 .chat-drop-overlay { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; pointer-events: none; background: color-mix(in oklch, var(--background), transparent 22%); backdrop-filter: blur(9.6px); }
 .chat-drop-overlay > div { padding: 14.4px 17.6px; border: 0.8px solid var(--border); border-radius: 12.8px; background: var(--card); box-shadow: 0 14.4px 48px rgb(0 0 0 / 18%); }
 /* Decorative, deterministic meteor field for the entire chat main surface. */

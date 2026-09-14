@@ -35,6 +35,7 @@ import type { ModelSettings } from "./model-settings";
 import type { PermissionSettings } from "./permission-settings";
 import type { RuntimeStore } from "./runtime";
 import { createClientActiveGenerationStore } from "./active-generation-store.js";
+import { clearReviewComments, parseReviewComments, projectReviewComments, restoreReviewComments, reviewComments } from "../chat/review-comments";
 
 type UnknownRecord = Record<string, unknown>;
 type ErrorHandler = (error: unknown) => void;
@@ -846,11 +847,14 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (generation() === "stopping") return;
     if (options.runtime.connectivity() !== "online") return onError("Server unavailable");
     const text = draft().trim();
-    if (!text) return;
     const attachmentIds = attachments.pendingIds();
+    const chatId = loadedId() ?? "";
+    const comments = reviewComments(chatId);
+    if (!text && !attachmentIds.length && !comments.length) return;
+    const outbound = projectReviewComments(text, comments);
     const sentAttachments = attachments.items().filter((item) => attachmentIds.includes(item.id)).map(({ id, name, size, type, objectUrl }) => ({ id, name, size, type, objectUrl }));
     const busy = streaming();
-    const local: Message = { id: `user_${Date.now()}`, role: "user", content: text, timestamp: new Date().toISOString(), attachments: sentAttachments };
+    const local: Message = { id: `user_${Date.now()}`, role: "user", content: outbound, timestamp: new Date().toISOString(), attachments: sentAttachments };
 
     if (busy) {
       // Sending while the agent works steers by default: the message reaches
@@ -860,8 +864,9 @@ export function createActiveChat(options: ActiveChatOptions) {
       setDraft("");
       try {
         await ensureLive();
-        socket!.send(JSON.stringify({ type: queueMode === "steer" ? "steer" : "follow_up", message: text, attachmentIds }));
+        socket!.send(JSON.stringify({ type: queueMode === "steer" ? "steer" : "follow_up", message: outbound, attachmentIds }));
         attachments.markAnnounced(attachmentIds);
+        clearReviewComments(chatId);
       } catch (error) { setDraft(text); onError(error); }
       return;
     }
@@ -883,8 +888,9 @@ export function createActiveChat(options: ActiveChatOptions) {
     setGeneration("submitting");
     try {
       socket!.send(JSON.stringify(editId
-        ? { type: "fork_and_prompt", entryId: editId, message: text, attachmentIds, model: models.model(), thinkingLevel: models.effort() }
-        : { type: "prompt", message: text, attachmentIds }));
+        ? { type: "fork_and_prompt", entryId: editId, message: outbound, attachmentIds, model: models.model(), thinkingLevel: models.effort() }
+        : { type: "prompt", message: outbound, attachmentIds }));
+      clearReviewComments(chatId);
       setStatus("active");
       setGeneration("active");
       setEditingEntryId(null);
@@ -965,8 +971,11 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   const edit = (message: Message) => {
-    if (editingEntryId() === message.id) { setDraft(""); setEditingEntryId(null); attachments.restore([]); return; }
-    setDraft(message.content || "");
+    const chatId = loadedId() ?? "";
+    if (editingEntryId() === message.id) { setDraft(""); setEditingEntryId(null); attachments.restore([]); clearReviewComments(chatId); return; }
+    const review = parseReviewComments(message.content || "");
+    setDraft(review.text);
+    restoreReviewComments(chatId, review.comments);
     setEditingEntryId(message.id);
     attachments.restore(message.attachments || []);
   };

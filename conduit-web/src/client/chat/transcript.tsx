@@ -4,6 +4,8 @@ import { Button, Spinner } from "@/components/primitives";
 import type { Message, RuntimeActivity, ToolItem } from "../api/contracts";
 import type { TranscriptSource } from "./transcript-source";
 import { AttachmentCards } from "./attachments";
+import { ReviewCommentCards } from "./review-comment-cards";
+import { parseReviewComments } from "./review-comments";
 import { TurnTrace } from "./turn-trace";
 import { isOptimisticId } from "../reconcile-messages";
 import { createTimelineStore } from "../state/timeline-store";
@@ -873,6 +875,7 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
           }
           const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");
+          const review = createMemo(() => user() ? parseReviewComments(message().content || "") : { text: message().content || "", comments: [] });
           const failed = createMemo(() => !user() && message().stopReason === "error");
           const live = createMemo(() => {
             if (item.live != null) return item.live;
@@ -885,7 +888,7 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
             <article data-slot="message" data-align={user() ? "end" : "start"} class={user() ? "message-user" : "message-assistant"}>
               <div data-slot="message-content">
                 <Show when={message().timestamp}><time>{new Date(message().timestamp!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time></Show>
-                <div data-slot="bubble" data-align={user() ? "end" : "start"} data-error={failed() ? "true" : undefined} data-editing={props.chat.editingEntryId() === message().id ? "true" : "false"} data-composer-surface={user() ? composerSurface() : undefined} class={user() ? "bubble bubble-user composer-surface-material" : "bubble bubble-assistant"}>
+                <Show when={!user() || review().text}><div data-slot="bubble" data-align={user() ? "end" : "start"} data-error={failed() ? "true" : undefined} data-editing={props.chat.editingEntryId() === message().id ? "true" : "false"} data-composer-surface={user() ? composerSurface() : undefined} class={user() ? "bubble bubble-user composer-surface-material" : "bubble bubble-assistant"}>
                   <div data-slot="bubble-content">
                     <Show when={user()} fallback={<>
                       <Show when={message().content}><Suspense fallback={<div class="markdown-skeleton" />}>
@@ -903,11 +906,12 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
                           <pre>{message().errorMessage || "The model request failed."}</pre>
                         </details>
                       </Show>
-                    </>}><UserMessageText text={message().content || ""} /></Show>
+                    </>}><UserMessageText text={review().text} /></Show>
                   </div>
-                </div>
+                </div></Show>
 
                 <Show when={user() && message().attachments?.length}><AttachmentCards items={message().attachments!} chatId={props.chat.loadedId()} label="Message attachments" /></Show>
+                <Show when={user() && review().comments.length}><ReviewCommentCards items={review().comments} label="Code references" /></Show>
                 <Show when={message().stopped}><div class="marker">{message().status === "stopping" ? "Stopping…" : "Stopped"}</div></Show>
                 <Actions message={message()} precedingUserId={precedingUserId()} chat={props.chat} partialContinue={props.partialContinue} />
               </div>

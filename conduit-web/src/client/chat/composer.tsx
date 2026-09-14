@@ -32,6 +32,8 @@ import { toast } from "solid-sonner";
 import { audioTransferLost, beginDictatedRange, matchesShortcut, releasesShortcut, replaceDictatedRange, shouldAutoSend, shouldReportNoSignal } from "./voice-dictation";
 import { createVoiceWaveformController, MAX_RESPONSIVE_BAR_COUNT, VoiceWaveform, type VoiceWaveformController } from "./voice-waveform";
 import { ModelSelector } from "./model-selector";
+import { parseReviewComments, removeReviewComment, reviewComments } from "./review-comments";
+import { ReviewCommentCards } from "./review-comment-cards";
 import "./performance-composer.css";
 
 export const SPINNING_ACTIVITY = new Set(["starting", "thinking", "responding", "using_tool", "retrying", "compacting", "stopping", "waiting_for_model"]);
@@ -87,16 +89,19 @@ export function Composer(props: {
 
   const busy = createMemo(() => props.chat.streaming());
   const supports = (capability: keyof ChatCapabilities) => props.chat.capabilities()?.[capability] !== false;
+  const comments = createMemo(() => reviewComments(props.chat.loadedId() ?? ""));
   const hasText = createMemo(() => Boolean(props.chat.draft().trim()));
+  const hasPayload = createMemo(() => hasText() || comments().length > 0 || props.attachments.pendingIds().length > 0);
   const dictating = createMemo(() => ["starting", "listening", "finishing", "waiting", "transcribing"].includes(dictationState()));
   const recording = createMemo(() => dictationState() === "listening");
   const recorderMonitorState = createMemo(() => dictationState() === "starting" ? "connecting" : dictationState() === "listening" ? "listening" : "stopped");
-  const canSend = createMemo(() => hasText() && props.serverOnline && props.chat.generation() !== "stopping"
+  const canSend = createMemo(() => hasPayload() && props.serverOnline && props.chat.generation() !== "stopping"
     && (!busy() || supports("steer") || supports("followUpQueue")) && !dictating());
   const activity = createMemo(() => props.chat.activity());
   const sentPrompts = createMemo(() => props.chat.messages()
     .filter((message) => message.role === "user" && !message.pending && Boolean(message.content?.trim()))
-    .map((message) => message.content!));
+    .map((message) => parseReviewComments(message.content!).text)
+    .filter(Boolean));
   const slashCommandOptions = () => ({
     attachments: props.attachmentsSupported !== false,
     compaction: Boolean(props.chat.capabilities()?.compaction) && !busy() && !props.chat.compacting(),
@@ -475,6 +480,7 @@ export function Composer(props: {
     <Show when={props.attachmentsSupported !== false}>
       <AttachmentCards items={props.attachments.items()} chatId={props.chat.loadedId()} label="Attachments" removable onRemove={(item) => void props.attachments.remove(item)} />
     </Show>
+    <ReviewCommentCards items={comments()} label="File references" onRemove={(comment) => removeReviewComment(comment.id)} />
     <QueuedMessages
       messages={props.chat.pendingMessages()}
       surface={composerSurface()}

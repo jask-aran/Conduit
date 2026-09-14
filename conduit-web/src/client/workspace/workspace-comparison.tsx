@@ -9,6 +9,7 @@ import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "@
 import { readSetting, writeSetting, WORKSPACE_PANEL_GLOBAL_SCOPE } from "./workspace-panel-storage";
 import { workspaceReadOnlySetup } from "./workspace-editor-base";
 import { workspaceLanguageForFilename } from "./workspace-languages";
+import { annotationExtension, WorkspaceAnnotationPopup, type AnnotationSelection } from "./workspace-annotate";
 import "./workspace-comparison.css";
 
 export type ComparisonPayload = {
@@ -25,7 +26,7 @@ export interface ComparisonViewState {
   position: number;
 }
 
-export default function WorkspaceComparison(props: { comparison: ComparisonPayload; sourceKey: string; viewState: ComparisonViewState; headerAction?: JSX.Element; comparisonSource?: JSX.Element; comparisonLabel?: JSX.Element; onViewStateChange?: (state: ComparisonViewState) => void }) {
+export default function WorkspaceComparison(props: { comparison: ComparisonPayload; sourceKey: string; viewState: ComparisonViewState; headerAction?: JSX.Element; comparisonSource?: JSX.Element; comparisonLabel?: JSX.Element; onViewStateChange?: (state: ComparisonViewState) => void; onAnnotate?: (selection: AnnotationSelection, note: string) => boolean }) {
   let host!: HTMLDivElement;
   let activeView: EditorView | undefined;
   let captureReview = () => ({ ...props.viewState });
@@ -35,6 +36,10 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
   const [position, setPosition] = createSignal("Ln 1, Col 1");
   const [summary, setSummary] = createSignal({ added: 0, removed: 0, precise: true });
   const [languageName, setLanguageName] = createSignal("Plain text");
+  const [annotation, setAnnotation] = createSignal<AnnotationSelection | null>(null);
+  const selectAnnotation = (selection: AnnotationSelection | null) => {
+    setAnnotation(selection);
+  };
 
   let savedReview = { ...props.viewState };
   const identity = createMemo(() => `${props.sourceKey}:\u0000${props.comparison.kind}:\u0000${props.comparison.path}`);
@@ -61,7 +66,7 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
     const wrapping = new Compartment();
     const extensions: Extension[] = [
       workspaceReadOnlySetup,
-      EditorState.readOnly.of(true), EditorView.editable.of(false),
+      EditorState.readOnly.of(true),
       EditorView.contentAttributes.of({ "aria-label": `${data.path} comparison` }),
       language.of([]), wrapping.of([]),
       EditorView.updateListener.of((update) => {
@@ -74,14 +79,17 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
       }),
       EditorView.domEventHandlers({ focus: (_event, view) => { activeView = view; } }),
     ];
+    const sideExtensions = (side: "original" | "modified"): Extension[] => props.onAnnotate
+      ? [extensions, annotationExtension({ side, onSelect: selectAnnotation })]
+      : extensions;
     const options = { highlightChanges: true, gutter: true, collapseUnchanged: { margin: 3, minSize: 8 }, diffConfig: { scanLimit: 500, timeout: 40 } };
     let merge: MergeView | undefined;
     let view: EditorView;
     if (split) {
-      merge = new MergeView({ parent: host, a: { doc: data.original, extensions }, b: { doc: data.modified, extensions }, ...options });
+      merge = new MergeView({ parent: host, a: { doc: data.original, extensions: sideExtensions("original") }, b: { doc: data.modified, extensions: sideExtensions("modified") }, ...options });
       view = merge.b;
     } else {
-      view = new EditorView({ parent: host, doc: data.modified, extensions: [extensions, unifiedMergeView({ original: data.original, ...options, mergeControls: false, syntaxHighlightDeletions: true })] });
+      view = new EditorView({ parent: host, doc: data.modified, extensions: [sideExtensions("modified"), unifiedMergeView({ original: data.original, ...options, mergeControls: false, syntaxHighlightDeletions: true })] });
     }
     const views = merge ? [merge.a, merge.b] : [view];
     activeView = view;
@@ -136,6 +144,7 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
       if (!disposed) for (const item of views) item.dispatch({ effects: language.reconfigure(support) });
     }).catch(() => { if (!disposed) setLanguageName("Plain text"); });
     onCleanup(() => {
+      selectAnnotation(null);
       untrack(() => {
         savedReview = captureReview();
       });
@@ -175,7 +184,10 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
       </div>
     </Show>
     <Show when={props.comparison.kind === "text"} fallback={<div class="workspace-panel-empty">{props.comparison.kind === "unavailable" ? props.comparison.message : ""}</div>}>
-      <div ref={host} class="workspace-comparison-content workspace-code-editor" data-layout={layout()} />
+      <div class="workspace-comparison-content" data-layout={layout()}>
+        <div ref={host} class="workspace-comparison-editor workspace-code-editor" />
+        <Show when={annotation()}>{(selection) => <WorkspaceAnnotationPopup selection={selection()} onAdd={(note) => props.onAnnotate?.(selection(), note) ?? false} onDismiss={() => selectAnnotation(null)} />}</Show>
+      </div>
       <WorkbenchStatus commands={<>
         {props.comparisonSource}
         <WorkbenchButton aria-label="Find in comparison" title="Find in comparison (Ctrl+F)" onClick={() => { if (activeView) openSearchPanel(activeView); }}><SearchIcon /></WorkbenchButton>

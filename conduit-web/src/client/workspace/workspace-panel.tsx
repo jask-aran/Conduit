@@ -1793,6 +1793,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             busy={uploading()}
             wrap={wrapLines()}
             onToggleWrap={toggleWrapLines}
+            annotationChatId={props.artifactChatId?.()}
             onFocus={() => setFocusedSlot("primary")}
             onClose={() => closeSlot("primary")}
             onError={reportError}
@@ -1824,6 +1825,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
               busy={uploading()}
               wrap={wrapLines()}
               onToggleWrap={toggleWrapLines}
+              annotationChatId={props.artifactChatId?.()}
               onFocus={() => setFocusedSlot("secondary")}
               onClose={() => closeSlot("secondary")}
               onError={reportError}
@@ -1901,6 +1903,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         empty="No uncommitted changes."
         comparisonSource={comparisonSourceControls(sourceReview, openEmbeddedSourceReview, sourceControlScopes)}
         comparisonLabel={sourceReview.rangeLabel()}
+        annotationChatId={props.artifactChatId?.()}
         onSelect={(path) => void sourceReview.select(path)}
         onOpenWorkingFile={openWorkingFile}
         onViewStateChange={sourceReview.setViewState}
@@ -1924,6 +1927,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         empty="No changes in this scope."
         comparisonSource={comparisonSourceControls(chatReview, openEmbeddedReview, chatScopes)}
         comparisonLabel={chatReview.rangeLabel()}
+        annotationChatId={props.artifactChatId?.()}
         onSelect={selectEmbeddedReviewFile}
         onOpenWorkingFile={openWorkingFile}
         onViewStateChange={chatReview.setViewState}
