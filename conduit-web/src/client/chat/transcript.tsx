@@ -171,6 +171,12 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
   let panelMotion: ReturnType<typeof mountTranscriptPanelMotion> | null = null;
   let transcriptVisibility: ReturnType<typeof mountTranscriptVisibility> | null = null;
   let previousLoaded: string | null = null;
+  const scrollPositions = new Map<string, {
+    following: boolean;
+    scrollTop: number;
+    anchorMessageId: string | null;
+    anchorOffset: number;
+  }>();
   let historyLoad: Promise<void> | null = null;
   let layoutEpoch = 0;
   let previousMarkdownRenderer = props.markdownRenderer;
@@ -224,6 +230,36 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
   let previousUserMessageId: string | null = null;
   let previousRenderer: MarkdownRendererId | null = null;
   const currentViewportScrollTop = () => viewport?.scrollTop ?? 0;
+  const rememberScrollPosition = (chatId: string) => {
+    const viewportTop = viewport.getBoundingClientRect().top;
+    const anchor = [...thread.querySelectorAll<HTMLElement>("[data-message-id]")]
+      .find((element) => element.getBoundingClientRect().bottom > viewportTop);
+    scrollPositions.delete(chatId);
+    scrollPositions.set(chatId, {
+      following: following(),
+      scrollTop: viewport.scrollTop,
+      anchorMessageId: anchor?.dataset.messageId || null,
+      anchorOffset: anchor ? anchor.getBoundingClientRect().top - viewportTop : 0,
+    });
+    while (scrollPositions.size > 10) scrollPositions.delete(scrollPositions.keys().next().value!);
+  };
+  const restoreScrollPosition = (chatId: string, epoch: number) => {
+    const saved = scrollPositions.get(chatId);
+    if (!saved || saved.following) return false;
+    setFollowing(false);
+    setTypewriterTailOwner("user", true);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (epoch !== layoutEpoch || props.chat.loadedId() !== chatId) return;
+      setViewportScrollTop(saved.scrollTop);
+      if (!saved.anchorMessageId) return;
+      const viewportTop = viewport.getBoundingClientRect().top;
+      const anchor = [...thread.querySelectorAll<HTMLElement>("[data-message-id]")]
+        .find((element) => element.dataset.messageId === saved.anchorMessageId);
+      if (!anchor) return;
+      setViewportScrollTop(viewport.scrollTop + anchor.getBoundingClientRect().top - viewportTop - saved.anchorOffset);
+    }));
+    return true;
+  };
   const cancelTypewriterTailFrame = () => {
     if (typewriterTailFrame == null) return;
     cancelAnimationFrame(typewriterTailFrame);
@@ -503,9 +539,11 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
     const trailingUser = messages.at(-1)?.role === "user" ? messages.at(-1)! : null;
     const trailingUserId = trailingUser ? trailingUser.key || trailingUser.id : null;
     if (loaded !== previousLoaded) {
+      if (previousLoaded) rememberScrollPosition(previousLoaded);
       previousLoaded = loaded;
       previousUserMessageId = trailingUserId;
       const epoch = layoutEpoch;
+      if (loaded && restoreScrollPosition(loaded, epoch)) return;
       if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("loaded");
       else {
         setFollowing(true);
@@ -554,6 +592,7 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
       cancelTypewriterTailRejoin();
       cancelTypewriterTailFrame();
       typewriterTailReasons.clear();
+      scrollPositions.clear();
       setTypewriterTailOwner("app", true);
     }
   });
