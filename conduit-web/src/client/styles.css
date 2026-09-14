@@ -431,6 +431,9 @@ svg { stroke-width: 1.5; }
 .review-comment-editor { gap: 10px; max-width: 640px; border-color: var(--border); border-radius: 11px; background: var(--popover); }
 .review-comment-editor textarea { min-height: 220px; resize: vertical; font: 13px/1.45 var(--font-sans); }
 .review-comment-editor-actions { display: flex; justify-content: flex-end; gap: 6px; }
+/* The commented lines, whole, with the part the comment covers picked out. */
+.review-comment-excerpt { max-height: 168px; margin: 0; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--muted); padding: 8px 10px; color: var(--muted-foreground); font: 11px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.review-comment-excerpt mark { border-radius: 2px; background: color-mix(in oklch, var(--warn), transparent 82%); color: var(--foreground); }
 .composer-wrap > .review-comment-tray { margin-inline: 2px; }
 .message-user .review-comment-tray { justify-content: flex-end; margin-bottom: 0; }
 .chat-drop-overlay { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; pointer-events: none; background: color-mix(in oklch, var(--background), transparent 22%); backdrop-filter: blur(9.6px); }

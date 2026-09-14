@@ -1,5 +1,5 @@
 import { WorkbenchButton, WorkbenchStatus } from "./workspace-workbench";
-import { annotationExtension, commentHighlightsExtension, WorkspaceAnnotationPopup, type AnnotationSelection, type CommentHighlight } from "./workspace-annotate";
+import { annotationExtension, commentHighlightsExtension, commentRange, WorkspaceAnnotationPopup, type AnnotationSelection, type CommentHighlight } from "./workspace-annotate";
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
 import { history, historyKeymap, indentWithTab, redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
 import { indentOnInput, indentUnit } from "@codemirror/language";
@@ -331,9 +331,9 @@ export default function WorkspaceEditor(props: {
     const reveal = props.reveal;
     if (!view || !reveal || reveal.path !== props.path || reveal.nonce === revealedNonce) return;
     revealedNonce = reveal.nonce;
-    const start = view.state.doc.line(Math.max(1, Math.min(reveal.from, view.state.doc.lines)));
-    const end = view.state.doc.line(Math.max(1, Math.min(reveal.to, view.state.doc.lines)));
-    view.dispatch({ selection: { anchor: start.from, head: end.to }, effects: EditorView.scrollIntoView(start.from, { y: "center" }) });
+    const range = commentRange(view, reveal);
+    if (!range) return;
+    view.dispatch({ selection: { anchor: range.from, head: range.to }, effects: EditorView.scrollIntoView(range.from, { y: "center" }) });
     setAnnotation(null);
     view.focus();
   });

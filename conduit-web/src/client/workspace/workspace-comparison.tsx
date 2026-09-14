@@ -9,7 +9,7 @@ import { readSetting, writeSetting, WORKSPACE_PANEL_GLOBAL_SCOPE } from "./works
 import { workspaceReadOnlySetup } from "./workspace-editor-base";
 import { workspaceLanguageForFilename } from "./workspace-languages";
 import { FileTypeIcon } from "./file-type-icon";
-import { annotationExtension, commentHighlightsExtension, WorkspaceAnnotationPopup, type AnnotationSelection, type CommentHighlight } from "./workspace-annotate";
+import { annotationExtension, commentHighlightsExtension, commentRange, WorkspaceAnnotationPopup, type AnnotationSelection, type CommentHighlight } from "./workspace-annotate";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import "./workspace-comparison.css";
 
@@ -114,9 +114,8 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
         if (reveal?.path === data.path && reveal.nonce !== revealedNonce) {
           revealedNonce = reveal.nonce;
           const target = merge && reveal.side === "original" ? merge.a : view;
-          const start = target.state.doc.line(Math.max(1, Math.min(reveal.from, target.state.doc.lines)));
-          const end = target.state.doc.line(Math.max(1, Math.min(reveal.to, target.state.doc.lines)));
-          target.dispatch({ selection: { anchor: start.from, head: end.to }, effects: EditorView.scrollIntoView(start.from, { y: "center" }) });
+          const range = commentRange(target, reveal);
+          if (range) target.dispatch({ selection: { anchor: range.from, head: range.to }, effects: EditorView.scrollIntoView(range.from, { y: "center" }) });
           selectAnnotation(null);
           target.focus();
         }

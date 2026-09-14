@@ -12,6 +12,11 @@ export interface ReviewComment {
   scope: ReviewCommentScope;
   from: number;
   to: number;
+  /** 1-based column the selection starts at, within line `from`. */
+  startColumn: number;
+  /** 1-based column the selection ends at, within line `to`. */
+  endColumn: number;
+  /** Every line the selection touched, whole, so the span has context around it. */
   excerpt: string;
   note: string;
 }
@@ -75,7 +80,7 @@ export function restoreReviewComments(chatId: string, values: readonly Projected
 export function projectReviewComments(text: string, values: readonly ReviewComment[]): string {
   if (values.length === 0) return text;
   const blocks = values.map((comment) => [
-    `<review_comment path="${escapeAttribute(comment.path)}" lines="${comment.from}-${comment.to}" side="${comment.side}" scope="${comment.scope}">`,
+    `<review_comment path="${escapeAttribute(comment.path)}" lines="${comment.from}-${comment.to}" columns="${comment.startColumn}-${comment.endColumn}" side="${comment.side}" scope="${comment.scope}">`,
     "<excerpt>",
     escapeText(comment.excerpt),
     "</excerpt>",
@@ -85,6 +90,25 @@ export function projectReviewComments(text: string, values: readonly ReviewComme
     "</review_comment>",
   ].join("\n"));
   return [text, ...blocks].filter(Boolean).join("\n\n");
+}
+
+/**
+ * Splits an excerpt into the text before the selection, the selection, and the
+ * text after it. The excerpt holds whole lines, so the parts outside the span
+ * are the context the reader needs to place it.
+ */
+export function reviewCommentParts(comment: Pick<ReviewComment, "excerpt" | "startColumn" | "endColumn">): { before: string; selected: string; after: string } {
+  const lines = comment.excerpt.split("\n");
+  const lastLine = lines.at(-1) ?? "";
+  const start = Math.max(0, Math.min(comment.startColumn - 1, lines[0]?.length ?? 0));
+  const tail = Math.max(0, Math.min(comment.endColumn - 1, lastLine.length));
+  const end = comment.excerpt.length - (lastLine.length - tail);
+  if (end <= start) return { before: "", selected: comment.excerpt, after: "" };
+  return {
+    before: comment.excerpt.slice(0, start),
+    selected: comment.excerpt.slice(start, end),
+    after: comment.excerpt.slice(end),
+  };
 }
 
 const REVIEW_SCOPES: readonly ReviewCommentScope[] = ["changes", "staged", "head", "turn", "session", "file"];
@@ -101,22 +125,26 @@ export function parseReviewComments(value: string): { text: string; comments: Pr
   if (start < 0) return { text: value, comments: [] };
   const text = value.slice(0, start).trimEnd();
   const suffix = value.slice(start);
-  const pattern = /<review_comment path="([^"]*)" lines="(\d+)-(\d+)" side="(original|modified)" scope="([^"]*)">\n<excerpt>\n([\s\S]*?)\n<\/excerpt>\n<note>\n([\s\S]*?)\n<\/note>\n<\/review_comment>/gy;
+  // Columns arrived after the first messages were sent, so they stay optional.
+  const pattern = /<review_comment path="([^"]*)" lines="(\d+)-(\d+)"(?: columns="(\d+)-(\d+)")? side="(original|modified)" scope="([^"]*)">\n<excerpt>\n([\s\S]*?)\n<\/excerpt>\n<note>\n([\s\S]*?)\n<\/note>\n<\/review_comment>/gy;
   const comments: ProjectedReviewComment[] = [];
   let offset = 0;
   while (offset < suffix.length) {
     pattern.lastIndex = offset;
     const match = pattern.exec(suffix);
     if (!match) return { text: value, comments: [] };
-    const [, encodedPath = "", from = "0", to = "0", side = "modified", scope = "", excerpt = "", note = ""] = match;
+    const [, encodedPath = "", from = "0", to = "0", startColumn, endColumn, side = "modified", scope = "", excerpt = "", note = ""] = match;
     if (!isReviewScope(scope)) return { text: value, comments: [] };
+    const excerptText = decodeText(excerpt);
     comments.push({
       path: decodeText(encodedPath),
       from: Number(from),
       to: Number(to),
+      startColumn: startColumn ? Number(startColumn) : 1,
+      endColumn: endColumn ? Number(endColumn) : (excerptText.split("\n").at(-1)?.length ?? 0) + 1,
       side: side === "original" ? "original" : "modified",
       scope,
-      excerpt: decodeText(excerpt),
+      excerpt: excerptText,
       note: decodeText(note),
     });
     offset = pattern.lastIndex;

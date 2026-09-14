@@ -9,6 +9,7 @@ import {
   parseReviewComments,
   projectReviewComments,
   removeReviewComment,
+  reviewCommentParts,
   restoreReviewComments,
   reviewComments,
   updateReviewComment,
@@ -22,6 +23,8 @@ const comment = (overrides = {}) => ({
   scope: "file",
   from: 44,
   to: 51,
+  startColumn: 1,
+  endColumn: 20,
   excerpt: "  agentProfiles() {",
   note: "this literal goes away",
   ...overrides,
@@ -103,12 +106,12 @@ test("a forged closing tag in reviewed code cannot open a comment block", () => 
 
 test("projection round-trips through the parser", () => {
   const outbound = projectReviewComments("prose", [
-    comment({ path: 'weird "name".ts', side: "original", scope: "staged", from: 2, to: 5, excerpt: "a < b && c > d", note: "keep & <this>" }),
+    comment({ path: 'weird "name".ts', side: "original", scope: "staged", from: 2, to: 5, startColumn: 3, endColumn: 9, excerpt: "a < b && c > d", note: "keep & <this>" }),
   ]);
   const { text, comments } = parseReviewComments(outbound);
   assert.equal(text, "prose");
   assert.deepEqual(comments, [{
-    path: 'weird "name".ts', side: "original", scope: "staged", from: 2, to: 5, excerpt: "a < b && c > d", note: "keep & <this>",
+    path: 'weird "name".ts', side: "original", scope: "staged", from: 2, to: 5, startColumn: 3, endColumn: 9, excerpt: "a < b && c > d", note: "keep & <this>",
   }]);
   assert.deepEqual(parseReviewComments("no blocks here"), { text: "no blocks here", comments: [] });
 });
@@ -120,4 +123,41 @@ test("restoring an edited message replaces that chat's comments", (t) => {
   restoreReviewComments("chat-restore", comments);
   assert.deepEqual(reviewComments("chat-restore").map((item) => item.path), ["new.ts"]);
   assert.ok(reviewComments("chat-restore")[0].id.startsWith("rc_"), "restored comments get fresh ids");
+});
+
+test("a message sent before columns existed still parses, covering the whole excerpt", () => {
+  const legacy = [
+    'look',
+    '',
+    '<review_comment path="a.ts" lines="2-3" side="modified" scope="file">',
+    '<excerpt>',
+    'first line',
+    'second line',
+    '</excerpt>',
+    '<note>',
+    'an older note',
+    '</note>',
+    '</review_comment>',
+  ].join("\n");
+  const { text, comments } = parseReviewComments(legacy);
+  assert.equal(text, "look");
+  assert.equal(comments.length, 1);
+  assert.equal(comments[0].startColumn, 1);
+  assert.equal(comments[0].endColumn, "second line".length + 1, "the span defaults to the whole excerpt");
+  assert.deepEqual(reviewCommentParts(comments[0]), { before: "", selected: "first line\nsecond line", after: "" });
+});
+
+test("parts split an excerpt around the characters the comment covers", () => {
+  // Whole lines captured, but the reader only selected "quick brown".
+  const item = { excerpt: "the quick brown\nfox jumps", startColumn: 5, endColumn: 4 };
+  assert.deepEqual(reviewCommentParts(item), { before: "the ", selected: "quick brown\nfox", after: " jumps" });
+
+  const singleLine = { excerpt: "const value = 12;", startColumn: 7, endColumn: 12 };
+  assert.deepEqual(reviewCommentParts(singleLine), { before: "const ", selected: "value", after: " = 12;" });
+
+  const everything = { excerpt: "whole line", startColumn: 1, endColumn: 11 };
+  assert.deepEqual(reviewCommentParts(everything), { before: "", selected: "whole line", after: "" });
+
+  const degenerate = { excerpt: "abc", startColumn: 3, endColumn: 1 };
+  assert.deepEqual(reviewCommentParts(degenerate), { before: "", selected: "abc", after: "" }, "an impossible span falls back to the whole excerpt");
 });

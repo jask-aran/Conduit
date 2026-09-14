@@ -9,6 +9,8 @@ export interface ReviewNavigationRequest {
   side: ProjectedReviewComment["side"];
   from: number;
   to: number;
+  startColumn: number;
+  endColumn: number;
   note: string;
   nonce: number;
 }
@@ -22,6 +24,8 @@ export function requestReviewNavigation(chatId: string, item: ReviewComment | Pr
     side: item.side,
     from: item.from,
     to: item.to,
+    startColumn: item.startColumn,
+    endColumn: item.endColumn,
     note: item.note,
     nonce: Date.now(),
   } }));

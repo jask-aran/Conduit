@@ -1,6 +1,6 @@
 import { createSignal, For, Show } from "solid-js";
-import { FileCode2Icon, PencilIcon, XIcon } from "lucide-solid";
-import type { ProjectedReviewComment, ReviewComment } from "./review-comments";
+import { FileCode2Icon, FileDiffIcon, PencilIcon, XIcon } from "lucide-solid";
+import { reviewCommentParts, type ProjectedReviewComment, type ReviewComment } from "./review-comments";
 import { Button, Dialog, DialogContent, Textarea } from "@/components/primitives";
 import { requestReviewNavigation } from "./review-navigation";
 
@@ -21,10 +21,13 @@ export function ReviewCommentCards(props: {
         setEditing(false);
       };
       const lines = item.from === item.to ? `:${item.from}` : `:${item.from}-${item.to}`;
+      // A comparison comment can span added and removed text, so it says so.
+      const diff = item.scope !== "file";
+      const parts = () => reviewCommentParts(item);
       return <>
         <div class="review-comment-chip" title={item.excerpt}>
-          <button type="button" class="review-comment-chip-link" disabled={!props.chatId} onClick={() => props.chatId && requestReviewNavigation(props.chatId, item)}>
-            <FileCode2Icon />
+          <button type="button" class="review-comment-chip-link" title={diff ? "Comment on a comparison" : "Comment on the working file"} disabled={!props.chatId} onClick={() => props.chatId && requestReviewNavigation(props.chatId, item)}>
+            <Show when={diff} fallback={<FileCode2Icon />}><FileDiffIcon /></Show>
             <strong>{item.path.split("/").at(-1)}</strong>
             <span>{lines}</span>
             <Show when={item.note}><span>· {item.note}</span></Show>
@@ -36,7 +39,8 @@ export function ReviewCommentCards(props: {
           if (!open) setNote(item.note);
           setEditing(open);
         }}>
-          <DialogContent class="review-comment-editor" title="Edit review comment" description={`${item.path}${lines}`} closeLabel="Close comment editor">
+          <DialogContent class="review-comment-editor" title="Edit review comment" description={`${item.path}${lines}${diff ? " · comparison" : ""}`} closeLabel="Close comment editor">
+            <pre class="review-comment-excerpt" aria-label="Commented text"><span>{parts().before}</span><mark>{parts().selected}</mark><span>{parts().after}</span></pre>
             <Textarea autofocus aria-label={`Comment for ${item.path}`} maxlength={2000} rows={10} value={note()} onInput={(event) => setNote(event.currentTarget.value)} onKeyDown={(event) => {
               if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); commit(); }
             }} />
