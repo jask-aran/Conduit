@@ -40,7 +40,6 @@ function stableProjection(previous: TurnRow[], projected: TurnRow[]): TurnRow[] 
     if (!prior || prior.type !== row.type) return row;
     if (row.type === "message" && prior.type === "message") {
       return prior.value === row.value
-        && prior.index === row.index
         && prior.live === row.live
         && prior.streamVersion === row.streamVersion
         && prior.displayKey === row.displayKey
@@ -101,7 +100,7 @@ export function createTimelineStore(
       const prior = previousRowsByKey.get(row.key);
       if (!prior || prior.type !== row.type || prior.value !== row.value) return true;
       if (row.type !== "message" || prior.type !== "message") return false;
-      return prior.index !== row.index || prior.live !== row.live || prior.streamVersion !== row.streamVersion;
+      return prior.live !== row.live || prior.streamVersion !== row.streamVersion;
     }).map((row) => row.key)
       .concat(previous.filter((row) => !nextKeys.has(row.key)).map((row) => row.key));
   };
