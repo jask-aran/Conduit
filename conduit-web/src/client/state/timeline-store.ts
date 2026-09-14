@@ -15,10 +15,49 @@ import {
   buildLiveToolItem,
   buildLiveToolSegment,
   buildTurnRows,
+  projectLiveTurn,
 } from "../turn-rows";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 
 export type TimelineRow = TurnRow;
+
+function sameTraceSegment(left: TraceSegment, right: TraceSegment): boolean {
+  if (left.kind !== right.kind || left.id !== right.id) return false;
+  if (left.kind === "tool" && right.kind === "tool") return left.tool === right.tool;
+  if (left.kind === "error" && right.kind === "error") return left.message === right.message;
+  if ((left.kind === "thinking" || left.kind === "narration")
+    && (right.kind === "thinking" || right.kind === "narration")) {
+    return left.text === right.text && left.live === right.live;
+  }
+  return false;
+}
+
+function stableProjection(previous: TurnRow[], projected: TurnRow[]): TurnRow[] {
+  const previousByKey = new Map(previous.map((row) => [row.key, row]));
+  return projected.map((row) => {
+    const prior = previousByKey.get(row.key);
+    if (!prior || prior.type !== row.type) return row;
+    if (row.type === "message" && prior.type === "message") {
+      return prior.value === row.value
+        && prior.index === row.index
+        && prior.live === row.live
+        && prior.streamVersion === row.streamVersion
+        && prior.displayKey === row.displayKey
+        && prior.precedingUserId === row.precedingUserId
+        ? prior : row;
+    }
+    if (row.type === "trace" && prior.type === "trace") {
+      const left = prior.value;
+      const right = row.value;
+      return left.active === right.active
+        && left.status === right.status
+        && left.segments.length === right.segments.length
+        && left.segments.every((segment, index) => sameTraceSegment(segment, right.segments[index]!))
+        ? prior : row;
+    }
+    return row;
+  });
+}
 
 export function createTimelineStore(
   messages: Accessor<Message[]>,
@@ -30,6 +69,7 @@ export function createTimelineStore(
   let previousProjectedRows: TurnRow[] = [];
   let previousMessages: Message[] | null = null;
   let previousTools: ToolItem[] | null = null;
+  let persistedRows: TurnRow[] = [];
   let rowIndexes = new Map<string, number>();
   let liveIndex: LiveProjectionIndex | null = null;
 
@@ -176,9 +216,12 @@ export function createTimelineStore(
       return;
     }
 
-    const projected = buildTurnRows(inputMessages, inputTools, {
-      activeGeneration: inputGeneration,
-    });
+    if (previousMessages !== inputMessages || previousTools !== inputTools) {
+      persistedRows = buildTurnRows(inputMessages, inputTools);
+    }
+    const projected = stableProjection(previousProjectedRows, inputGeneration
+      ? projectLiveTurn(persistedRows, inputMessages, inputGeneration)
+      : persistedRows);
     const changed = rowChanges(previousProjectedRows, projected);
     setRows(reconcile(projected, { key: "key" }));
     previousProjectedRows = projected;

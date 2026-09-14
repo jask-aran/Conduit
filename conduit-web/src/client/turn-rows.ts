@@ -328,6 +328,29 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, index
   return rows;
 }
 
+/** Overlay one live turn onto an already projected persisted transcript. */
+export function projectLiveTurn(
+  persistedRows: TurnRow[],
+  messages: Message[],
+  generation: ActiveGenerationView,
+): TurnRow[] {
+  const owner = liveOwner(messages, generation);
+  if (!owner) return [...persistedRows, ...liveRows(generation, null, messages.length)];
+  const ownerRow = persistedRows.findIndex((row) => row.key === `message:${messageKey(owner)}`);
+  if (ownerRow < 0) return [...persistedRows, ...liveRows(generation, owner, messages.indexOf(owner))];
+  let nextTurn = ownerRow + 1;
+  while (nextTurn < persistedRows.length) {
+    const row = persistedRows[nextTurn]!;
+    if (row.type === "message" && row.value.role === "user") break;
+    nextTurn += 1;
+  }
+  return [
+    ...persistedRows.slice(0, ownerRow + 1),
+    ...liveRows(generation, owner, messages.indexOf(owner)),
+    ...persistedRows.slice(nextTurn),
+  ];
+}
+
 /**
  * Persisted history retains its transcript projection while a live Generation
  * projects directly from normalized Pi blocks.
