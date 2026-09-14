@@ -68,7 +68,7 @@ export type TurnRow =
   // each row rediscover it meant a backwards scan of the whole message list
   // per assistant row, which is quadratic in a long chat.
   | { key: string; type: "message"; value: Message; live?: boolean; streamVersion?: number; displayKey?: string; precedingUserId?: string }
-  | { key: string; type: "trace"; value: TurnTraceData };
+  | { key: string; type: "trace"; value: TurnTraceData; precedingUserId?: string; answerless?: boolean };
 
 interface PersistedTurn {
   userMessage: Message | null;
@@ -353,7 +353,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null): Turn
       : generation.status === "failed" ? "failed"
       : generation.status === "complete" ? "complete"
       : executingTool ? "executing_tool" : "thinking";
-    rows.push({ key: `trace:${owner ? messageKey(owner) : `live:${generation.id}`}`, type: "trace", value: { active: running, status, segments } });
+    rows.push({ key: `trace:${owner ? messageKey(owner) : `live:${generation.id}`}`, type: "trace", value: { active: running, status, segments }, precedingUserId: owner?.id, answerless: answers.length === 0 });
   }
   rows.push(...answers);
   return rows;
@@ -426,6 +426,9 @@ function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById
   for (const tool of turn.leftoverTools) {
     if (!claimed.has(tool.id)) { claimed.add(tool.id); segments.push({ kind: "tool", id: `tool:${tool.id}`, tool }); }
   }
+  const answer = answerAssistants.at(-1) || null;
+  const answerText = answerAssistants.map((assistant) => String(assistant.content || "").trim()).filter(Boolean).join("\n\n");
+  const hasAnswerRow = Boolean(answer && (answerText || (answer === finalAssistant && answer.stopReason === "error")));
   if (segments.length > 0) {
     const interrupted = turn.assistants.some((assistant) => assistant.stopped || assistant.stopReason === "aborted");
     const failed = finalAssistant?.stopReason === "error" && !interrupted;
@@ -433,11 +436,11 @@ function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById
       key: `trace:${turn.userMessage ? messageKey(turn.userMessage) : messageKey(turn.assistants[0]!)}`,
       type: "trace",
       value: { active: false, status: interrupted ? "interrupted" : failed ? "failed" : "complete", segments },
+      precedingUserId: turn.userMessage?.id,
+      answerless: !hasAnswerRow,
     });
   }
-  const answer = answerAssistants.at(-1) || null;
-  const answerText = answerAssistants.map((assistant) => String(assistant.content || "").trim()).filter(Boolean).join("\n\n");
-  if (answer && (answerText || (answer === finalAssistant && answer.stopReason === "error"))) {
+  if (hasAnswerRow && answer) {
     const displayKey = answerDisplayKey(turn.userMessage, 0, `message:${messageKey(answer)}`);
     rows.push({
       key: displayKey,

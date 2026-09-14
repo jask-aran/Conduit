@@ -3,6 +3,7 @@ import { ArrowDownIcon, CheckIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon
 import { Button, Spinner } from "@/components/primitives";
 import type { Message, RuntimeActivity, ToolItem } from "../api/contracts";
 import type { TranscriptSource } from "./transcript-source";
+import type { TurnArtifactSummary } from "../api/live-events";
 import { AttachmentCards } from "./attachments";
 import { ReviewCommentCards } from "./review-comment-cards";
 import { parseReviewComments } from "./review-comments";
@@ -136,7 +137,12 @@ function UserMessageText(props: { text: string }) {
   </>;
 }
 
-function Actions(props: { message: Message; precedingUserId?: string; chat: TranscriptSource; partialContinue: boolean }) {
+function TurnArtifactButton(props: { artifact: TurnArtifactSummary; chatId: string }) {
+  const range = () => `Turn ${props.artifact.sequence} → ${props.artifact.targetSequence === null ? "Working copy" : `Turn ${props.artifact.targetSequence}`}`;
+  return <button type="button" class="turn-change-summary" title={range()} aria-label={`Open ${range()} in Agent changes: ${props.artifact.summary!.added} additions and ${props.artifact.summary!.removed} removals`} onClick={() => requestTurnArtifactNavigation({ chatId: props.chatId, checkpointId: props.artifact.id, path: props.artifact.summary!.preferredPath })}><span data-change="added">+{props.artifact.summary!.added}</span><span data-change="removed">−{props.artifact.summary!.removed}</span></button>;
+}
+
+function Actions(props: { message: Message; precedingUserId?: string; chat: TranscriptSource; partialContinue: boolean; artifact?: TurnArtifactSummary }) {
   const [copied, setCopied] = createSignal(false);
   let copyButton: HTMLButtonElement | undefined;
   const assistant = () => props.message.role !== "user";
@@ -162,15 +168,9 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Tran
       >{copied() ? <CheckIcon /> : <CopyIcon />}</Button>
       <Show when={props.precedingUserId && !isOptimisticId(props.precedingUserId)}><Button variant="ghost" size="icon-sm" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(props.precedingUserId!)}><RefreshCwIcon /></Button></Show>
       <Show when={props.partialContinue && props.message.stopped}><Button variant="ghost" size="icon-sm" aria-label="Continue stopped response" onClick={() => void props.chat.continueResponse()}><PlayIcon /></Button></Show>
+      <Show when={props.artifact}>{(entry) => <TurnArtifactButton artifact={entry()} chatId={props.chat.loadedId()!} />}</Show>
     </Show>
   </div>;
-}
-
-interface TurnArtifactSummary {
-  id: string;
-  messageId: string | null;
-  sequence: number;
-  summary: { added: number; removed: number } | null;
 }
 
 export function Transcript(props: { chat: TranscriptSource; partialContinue: boolean; markdownRenderer: MarkdownRendererId; rendererControlsVisible: boolean; profileLabel?: string; projectId?: string }) {
@@ -200,12 +200,27 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
     while (expandedItems.size > 10) expandedItems.delete(expandedItems.keys().next().value!);
   };
   const [artifactSummaries, setArtifactSummaries] = createSignal(new Map<string, TurnArtifactSummary>());
+  createEffect(() => {
+    if (!props.chat.streaming()) return;
+    const userId = [...props.chat.messages()].reverse().find((message) => message.role === "user")?.id;
+    if (!userId) return;
+    setArtifactSummaries((current) => {
+      if (!current.has(userId)) return current;
+      const next = new Map(current);
+      next.delete(userId);
+      return next;
+    });
+  });
   createEffect(on(
-    () => [props.projectId ?? null, props.chat.loadedId(), props.chat.streaming()] as const,
-    ([projectId, chatId, streaming]) => {
-      if (!projectId || !chatId || streaming) return;
+    () => [props.projectId ?? null, props.chat.loadedId(), props.chat.turnArtifacts()] as const,
+    ([projectId, chatId, artifacts]) => {
+      if (!projectId || !chatId) return;
+      if (artifacts?.chatId === chatId) {
+        setArtifactSummaries(new Map(artifacts.items.filter((item) => item.messageId && item.summary).map((item) => [item.messageId!, item])));
+        return;
+      }
       const controller = new AbortController();
-      void api<TurnArtifactSummary[]>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?${new URLSearchParams({ chatId, timeline: "1" })}`, { signal: controller.signal })
+      void api<TurnArtifactSummary[]>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?${new URLSearchParams({ chatId, timeline: "1" })}`, { signal: controller.signal, cache: "no-store" })
         .then((items) => setArtifactSummaries(new Map(items.filter((item) => item.messageId && item.summary).map((item) => [item.messageId!, item]))))
         .catch((error) => { if (error?.name !== "AbortError") setArtifactSummaries(new Map()); });
       onCleanup(() => controller.abort());
@@ -892,7 +907,8 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
           if (item.type === "trace") {
             let traceRow!: HTMLDivElement;
             const chatId = () => props.chat.loadedId();
-            return <div ref={traceRow} data-slot="message-scroller-item"><TurnTrace trace={item.value} sessionId={chatId()} renderer={markdownRenderer()} pacing={incremarkPacing()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} /></div>;
+            const artifact = () => item.answerless && item.precedingUserId ? artifactSummaries().get(item.precedingUserId) : undefined;
+            return <div ref={traceRow} data-slot="message-scroller-item"><TurnTrace trace={item.value} sessionId={chatId()} renderer={markdownRenderer()} pacing={incremarkPacing()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} /><Show when={artifact()}>{(entry) => <div class="response-actions"><TurnArtifactButton artifact={entry()} chatId={chatId()!} /></div>}</Show></div>;
           }
           const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");
@@ -938,8 +954,7 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
                 <Show when={user() && message().attachments?.length}><AttachmentCards items={message().attachments!} chatId={props.chat.loadedId()} label="Message attachments" /></Show>
                 <Show when={user() && review().comments.length}><ReviewCommentCards items={review().comments} chatId={props.chat.loadedId() ?? ""} label="Code references" /></Show>
                 <Show when={message().stopped}><div class="marker">{message().status === "stopping" ? "Stopping…" : "Stopped"}</div></Show>
-                <Show when={!user() && artifact()}>{(entry) => <button type="button" class="turn-change-summary" aria-label={`Open agent changes through turn ${entry().sequence}: ${entry().summary!.added} additions and ${entry().summary!.removed} removals`} onClick={() => requestTurnArtifactNavigation({ chatId: props.chat.loadedId()!, checkpointId: entry().id })}><span data-change="added">+{entry().summary!.added}</span><span data-change="removed">−{entry().summary!.removed}</span></button>}</Show>
-                <Actions message={message()} precedingUserId={precedingUserId()} chat={props.chat} partialContinue={props.partialContinue} />
+                <Actions message={message()} precedingUserId={precedingUserId()} chat={props.chat} partialContinue={props.partialContinue} artifact={artifact()} />
               </div>
             </article>
           </div>;

@@ -848,10 +848,11 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     if (!request || request.chatId !== props.artifactChatId?.()) return;
     props.onRequestOpen?.();
     const side = panePosition("chat") ?? focusedPane();
+    setReviewReveal(null);
     selectChatMode("changes");
     setPaneTab(side, "chat");
-    chatReview.setScope("chat", request.checkpointId);
-    void chatReview.refresh();
+    chatReview.setScope("turn", request.checkpointId);
+    void chatReview.refresh(request.path);
   };
   window.addEventListener(TURN_ARTIFACT_NAVIGATION_EVENT, resolveTurnArtifactNavigation);
   onCleanup(() => window.removeEventListener(TURN_ARTIFACT_NAVIGATION_EVENT, resolveTurnArtifactNavigation));

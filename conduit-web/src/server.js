@@ -513,6 +513,8 @@ manager.on("event", ({ record, event }) => {
           generationId: checkpoint.id,
           generationSeq: checkpoint.seq,
           chat: chatView(registry.metadata(record.chatId)),
+          artifacts: await turnCheckpoints.timeline(record.chatId, project.workingRoot, record.sessionFile)
+            .catch((error) => { console.error("Could not compute turn artifacts", error); return null; }),
         };
         const latest = projectSessionEntries(pageSessionEntries(session.entries, { turnLimit: 1 }).entries);
         latest.messages = await attachments.decorateMessages(project, record.chatId, latest.messages);

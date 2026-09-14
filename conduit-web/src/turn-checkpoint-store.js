@@ -34,45 +34,56 @@ export class TurnCheckpointStore {
     this.queues = new Map();
   }
 
-  async capture({ chatId, projectId, projectKind, workingRoot, sessionFile = null }) {
+  async capture({ chatId, projectId, projectKind, workingRoot, sessionFile = null, sourceCheckpointId = null }) {
     const chatKey = keyFor(chatId);
     const previous = this.queues.get(chatKey) || Promise.resolve();
-    const task = previous.then(() => this.#capture({ chatId, projectId, projectKind, workingRoot, sessionFile, chatKey }));
+    const task = previous.then(() => this.#capture({ chatId, projectId, projectKind, workingRoot, sessionFile, sourceCheckpointId, chatKey }));
     const queued = task.catch(() => {});
     this.queues.set(chatKey, queued);
     try { return await task; }
     finally { if (this.queues.get(chatKey) === queued) this.queues.delete(chatKey); }
   }
 
-  async assignTurn(checkpoint, turnId) {
+  async assignTurn(checkpoint, turnId, messageId = null) {
     if (!checkpoint || typeof turnId !== "string" || !turnId) return checkpoint;
     const content = JSON.parse(await fs.readFile(checkpoint.file, "utf8"));
     content.turnId = turnId;
+    if (typeof messageId === "string" && messageId) content.messageId = messageId;
     await this.#write(checkpoint.file, content);
-    return { ...checkpoint, turnId };
+    return { ...checkpoint, turnId, messageId: content.messageId ?? null };
   }
 
   async latest(chatId) {
     return (await this.#checkpoints(chatId)).at(-1) || null;
   }
 
+  async checkpointForMessage(chatId, workingRoot, sessionFile, messageId) {
+    const root = path.resolve(workingRoot);
+    const stored = (await this.#checkpoints(chatId))
+      .filter((checkpoint) => checkpoint.version === 1 && checkpoint.workingRoot === root);
+    const { checkpoints, mappings } = await this.#activeCheckpoints(sessionFile, stored);
+    return checkpoints.find((checkpoint) => mappings.get(checkpoint.id)?.messageId === messageId)?.id ?? null;
+  }
+
   async timeline(chatId, workingRoot, sessionFile = null) {
     const root = path.resolve(workingRoot);
-    const checkpoints = await this.#prune((await this.#checkpoints(chatId))
-      .filter((checkpoint) => checkpoint.version === 1 && checkpoint.workingRoot === root));
-    const userMessageIds = await this.#userMessageIds(sessionFile, checkpoints);
-    // Checkpoints written before sequences existed fall back to counting.
-    let counter = 0;
+    const stored = (await this.#checkpoints(chatId))
+      .filter((checkpoint) => checkpoint.version === 1 && checkpoint.workingRoot === root);
+    const { checkpoints, mappings } = await this.#activeCheckpoints(sessionFile, stored);
+    const numbered = checkpoints.map((checkpoint) => ({ checkpoint, sequence: mappings.get(checkpoint.id).sequence }));
     const timeline = [];
-    for (const [index, checkpoint] of checkpoints.entries()) {
-      const summary = await this.#summary(checkpoint, checkpoints[index + 1] || null);
+    for (const [index, item] of numbered.entries()) {
+      const { checkpoint, sequence } = item;
+      const target = numbered[index + 1] || null;
+      const summary = await this.#summary(checkpoint, target?.checkpoint || null);
       timeline.push({
         id: checkpoint.id,
         turnId: checkpoint.turnId,
         createdAt: checkpoint.createdAt,
         anchorEntryId: checkpoint.anchorEntryId ?? null,
-        messageId: userMessageIds.get(checkpoint.id) ?? null,
-        sequence: (counter = checkpoint.sequence ?? counter + 1),
+        messageId: mappings.get(checkpoint.id).messageId,
+        sequence,
+        targetSequence: target?.sequence ?? null,
         summary,
       });
     }
@@ -99,8 +110,8 @@ export class TurnCheckpointStore {
     return kept;
   }
 
-  async review(chatId, workingRoot, baseline = "chat", checkpointId = null) {
-    const { checkpoint, targetCheckpoint } = await this.#comparisonRange(chatId, workingRoot, baseline, checkpointId);
+  async review(chatId, workingRoot, baseline = "chat", checkpointId = null, sessionFile = null) {
+    const { checkpoint, targetCheckpoint } = await this.#comparisonRange(chatId, workingRoot, baseline, checkpointId, sessionFile);
     if (!checkpoint || path.resolve(workingRoot) !== checkpoint.workingRoot) return null;
     const git = (args, maxBuffer = 2 * 1024 * 1024) => runBoundedGit(checkpoint.workingRoot, args, { maxBuffer });
     const targetPaths = targetCheckpoint
@@ -126,21 +137,27 @@ export class TurnCheckpointStore {
     return { id: checkpoint.id, turnId: checkpoint.turnId, createdAt: checkpoint.createdAt, files };
   }
 
-  async compare(chatId, workingRoot, relativePath, checkpointId, baseline = "chat") {
-    const { checkpoint, targetCheckpoint } = await this.#comparisonRange(chatId, workingRoot, baseline, checkpointId);
+  async compare(chatId, workingRoot, relativePath, checkpointId, baseline = "chat", sessionFile = null) {
+    const { checkpoint, targetCheckpoint } = await this.#comparisonRange(chatId, workingRoot, baseline, checkpointId, sessionFile);
     if (!checkpoint || path.resolve(workingRoot) !== checkpoint.workingRoot) return null;
     if (typeof relativePath !== "string" || !relativePath || relativePath.includes("\0") || relativePath.split("/").some((part) => !part || part === "." || part === "..")) throw new Error("Invalid checkpoint path");
     const git = (args, maxBuffer = 2 * 1024 * 1024) => runBoundedGit(checkpoint.workingRoot, args, { maxBuffer });
     return this.#compare(checkpoint, relativePath, git, baseline === "turn" ? "turn" : "session", targetCheckpoint);
   }
 
-  async #capture({ chatId, projectId, projectKind, workingRoot, sessionFile, chatKey }) {
+  async #capture({ chatId, projectId, projectKind, workingRoot, sessionFile, sourceCheckpointId, chatKey }) {
     const root = path.resolve(workingRoot);
     const git = (args, maxBuffer = 2 * 1024 * 1024) => runBoundedGit(root, args, { maxBuffer });
-    const repository = projectKind === "workspace";
+    const source = sourceCheckpointId
+      ? (await this.#checkpoints(chatId)).find((checkpoint) => checkpoint.id === sourceCheckpointId && checkpoint.workingRoot === root)
+      : null;
+    const repository = source ? source.repository : projectKind === "workspace";
     let head = null;
     let paths;
-    if (repository) {
+    if (source) {
+      head = source.head ?? null;
+      paths = [];
+    } else if (repository) {
       const [{ stdout: topLevel }, { stdout: status }, revision] = await Promise.all([
         git(["rev-parse", "--show-toplevel"]),
         git(["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"]),
@@ -152,7 +169,7 @@ export class TurnCheckpointStore {
     } else {
       paths = await this.#workspacePaths(root);
     }
-    const entries = {};
+    const entries = source ? structuredClone(source.entries) : {};
     let byteLength = 0;
     for (const relativePath of paths) {
       const target = path.resolve(root, relativePath);
@@ -188,9 +205,7 @@ export class TurnCheckpointStore {
     // about to write becomes its child, which is what ties a checkpoint to the
     // exchange that produced it.
     const anchorEntryId = await this.#anchor(sessionFile);
-    await this.#write(file, { version: 1, id, chatId, projectId, workingRoot: root, repository, turnId: null, createdAt, sequence, anchorEntryId, head, digest, entries });
-    // The previous checkpoint's turn changed nothing, so it records no information.
-    if (previous && previousFile && digestOf(previous) === digest) await fs.unlink(previousFile).catch(() => {});
+    await this.#write(file, { version: 1, id, chatId, projectId, workingRoot: root, repository, turnId: null, createdAt, sequence, anchorEntryId, sessionFile: sessionFile ? path.resolve(sessionFile) : null, head, digest, entries });
     const names = (await fs.readdir(directory)).filter((name) => name.endsWith(".json")).sort();
     await Promise.all(names.slice(0, -MAX_CHECKPOINTS_PER_CHAT).map((name) => fs.unlink(path.join(directory, name))));
     return { id, file, turnId: null };
@@ -262,25 +277,28 @@ export class TurnCheckpointStore {
     const paths = new Set([...Object.keys(checkpoint.entries), ...targetPaths]);
     let added = 0;
     let removed = 0;
+    let preferredPath = null;
     for (const relativePath of paths) {
       const comparison = await this.#compare(checkpoint, relativePath, git, "turn", targetCheckpoint);
       if (comparison.kind !== "text") {
         if (comparison.reason !== "unchanged") return null;
         continue;
       }
+      preferredPath ??= relativePath;
       const lineNumber = (text, offset) => text.slice(0, offset).split("\n").length;
       for (const change of presentableDiff(comparison.original, comparison.modified)) {
         added += change.toB <= change.fromB ? 0 : lineNumber(comparison.modified, change.toB - 1) - lineNumber(comparison.modified, change.fromB) + 1;
         removed += change.toA <= change.fromA ? 0 : lineNumber(comparison.original, change.toA - 1) - lineNumber(comparison.original, change.fromA) + 1;
       }
     }
-    return added || removed ? { added, removed } : null;
+    return added || removed ? { added, removed, preferredPath } : null;
   }
 
   async #userMessageIds(sessionFile, checkpoints) {
     const result = new Map();
     if (typeof sessionFile !== "string" || !sessionFile) return result;
     const entries = new Map();
+    const entryFiles = new Map();
     let currentFile = path.resolve(sessionFile);
     let leafId = null;
     for (let hop = 0; currentFile && hop < MAX_ANCHOR_HOPS; hop += 1) {
@@ -296,6 +314,7 @@ export class TurnCheckpointStore {
         }
         if (typeof entry?.id === "string" && entry.id) {
           entries.set(entry.id, entry);
+          entryFiles.set(entry.id, currentFile);
           if (hop === 0) leafId = entry.id;
         }
       }
@@ -312,18 +331,62 @@ export class TurnCheckpointStore {
     }
     lineage.reverse();
     const positions = new Map(lineage.map((entry, index) => [entry.id, index]));
-    for (const checkpoint of checkpoints) {
-      const start = checkpoint.anchorEntryId == null ? -1 : positions.get(checkpoint.anchorEntryId);
-      if (start === undefined) continue;
-      const user = lineage.slice(start + 1).find((entry) => entry.type === "message" && entry.message?.role === "user");
-      if (user) result.set(checkpoint.id, user.id);
+    const userNumbers = new Map(lineage
+      .filter((entry) => entry.type === "message" && entry.message?.role === "user")
+      .map((entry, index) => [entry.id, index + 1]));
+    for (const [index, checkpoint] of checkpoints.entries()) {
+      if (typeof checkpoint.messageId === "string" && positions.has(checkpoint.messageId)) {
+        result.set(checkpoint.id, { messageId: checkpoint.messageId, sequence: userNumbers.get(checkpoint.messageId) });
+        continue;
+      }
+      // An anchor the lineage does not contain was recorded on a branch the
+      // session has since left: a fork keeps what came before its point and
+      // abandons the rest, and a checkpoint captured just after one anchors on
+      // the leaf of the branch it forked from. Searching the whole lineage
+      // instead of dropping the checkpoint is what lets a regenerated turn
+      // carry its changes; the session-file guard below is what stops a
+      // checkpoint from the abandoned branch claiming a turn that is not its.
+      const anchored = checkpoint.anchorEntryId == null ? -1 : (positions.get(checkpoint.anchorEntryId) ?? -1);
+      const nextAnchor = checkpoints[index + 1]?.anchorEntryId;
+      const end = typeof nextAnchor === "string" ? positions.get(nextAnchor) : undefined;
+      const candidates = lineage.slice(anchored + 1, end === undefined ? undefined : end + 1);
+      const user = candidates.findLast((entry) => entry.type === "message" && entry.message?.role === "user");
+      if (!user) continue;
+      if (anchored === -1) {
+        const checkpointSession = typeof checkpoint.sessionFile === "string" ? path.resolve(checkpoint.sessionFile) : null;
+        const userSession = entryFiles.get(user.id);
+        const elapsed = Date.parse(user.timestamp) - Date.parse(checkpoint.createdAt);
+        if (checkpointSession ? checkpointSession !== userSession : !Number.isFinite(elapsed) || elapsed < 0 || elapsed > 60_000) continue;
+      }
+      result.set(checkpoint.id, { messageId: user.id, sequence: userNumbers.get(user.id) });
     }
     return result;
   }
 
-  async #comparisonRange(chatId, workingRoot, baseline, checkpointId) {
+  async #activeCheckpoints(sessionFile, checkpoints) {
+    const mappings = await this.#userMessageIds(sessionFile, checkpoints);
+    const latestByMessage = new Map();
+    for (const checkpoint of checkpoints) {
+      const mapping = mappings.get(checkpoint.id);
+      if (mapping) latestByMessage.set(mapping.messageId, checkpoint.id);
+    }
+    const active = checkpoints.filter((checkpoint) => {
+      const mapping = mappings.get(checkpoint.id);
+      return mapping && latestByMessage.get(mapping.messageId) === checkpoint.id;
+    });
+    return {
+      checkpoints: active.filter((checkpoint, index) => {
+        const next = active[index + 1];
+        return !next || digestOf(checkpoint) !== digestOf(next);
+      }),
+      mappings,
+    };
+  }
+
+  async #comparisonRange(chatId, workingRoot, baseline, checkpointId, sessionFile) {
     const root = path.resolve(workingRoot);
-    const checkpoints = (await this.#checkpoints(chatId)).filter((checkpoint) => checkpoint.version === 1 && typeof checkpoint.repository === "boolean" && checkpoint.workingRoot === root);
+    const stored = (await this.#checkpoints(chatId)).filter((checkpoint) => checkpoint.version === 1 && typeof checkpoint.repository === "boolean" && checkpoint.workingRoot === root);
+    const { checkpoints } = await this.#activeCheckpoints(sessionFile, stored);
     const index = checkpointId ? checkpoints.findIndex((checkpoint) => checkpoint.id === checkpointId) : baseline === "turn" ? checkpoints.length - 1 : 0;
     if (index < 0) return { checkpoint: null, targetCheckpoint: null };
     if (baseline === "chat") return {
