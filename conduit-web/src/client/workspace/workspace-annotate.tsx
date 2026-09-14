@@ -7,6 +7,8 @@ export interface AnnotationSelection {
   side: ReviewCommentSide;
   from: number;
   to: number;
+  startColumn: number;
+  endColumn: number;
   excerpt: string;
   left: number;
   top: number;
@@ -15,23 +17,36 @@ export interface AnnotationSelection {
 export interface CommentHighlight {
   from: number;
   to: number;
+  startColumn: number;
+  endColumn: number;
   note: string;
   side?: ReviewCommentSide;
+}
+
+/** Resolves a comment's line and column pair against a document. */
+export function commentRange(view: EditorView, item: Pick<CommentHighlight, "from" | "to" | "startColumn" | "endColumn">) {
+  const doc = view.state.doc;
+  const start = doc.line(Math.max(1, Math.min(item.from, doc.lines)));
+  const end = doc.line(Math.max(1, Math.min(item.to, doc.lines)));
+  const from = start.from + Math.max(0, Math.min(item.startColumn - 1, start.length));
+  const to = end.from + Math.max(0, Math.min(item.endColumn - 1, end.length));
+  return to > from ? { from, to } : null;
 }
 
 export function commentHighlightsExtension(items: readonly CommentHighlight[]): Extension {
   return [
     EditorView.decorations.of((view) => Decoration.set(items.flatMap((item) => {
-      const start = view.state.doc.line(Math.max(1, Math.min(item.from, view.state.doc.lines)));
-      const end = view.state.doc.line(Math.max(1, Math.min(item.to, view.state.doc.lines)));
-      return start.from < end.to ? [Decoration.mark({ class: "cm-review-comment" }).range(start.from, end.to)] : [];
+      const range = commentRange(view, item);
+      return range ? [Decoration.mark({ class: "cm-review-comment" }).range(range.from, range.to)] : [];
     }).sort((left, right) => left.from - right.from))),
     hoverTooltip((view, position) => {
-      const line = view.state.doc.lineAt(position);
-      const item = items.find((candidate) => line.number >= candidate.from && line.number <= candidate.to);
+      const item = items.find((candidate) => {
+        const range = commentRange(view, candidate);
+        return range && position >= range.from && position <= range.to;
+      });
       if (!item) return null;
       return {
-        pos: line.from,
+        pos: view.state.doc.lineAt(position).from,
         above: true,
         create: () => {
           const dom = document.createElement("div");
@@ -59,11 +74,15 @@ export function annotationExtension(options: {
     const end = update.state.doc.lineAt(Math.max(range.from, range.to - 1));
     const coords = update.view.coordsAtPos(range.head);
     if (!coords) return;
+    // Columns pin the comment to the characters the reader chose; the excerpt
+    // still carries the whole lines so the span has context around it.
     const host = update.view.dom.closest(".workspace-comparison-content, .workspace-editor-content")?.getBoundingClientRect();
     options.onSelect({
       side: options.side,
       from: start.number,
       to: end.number,
+      startColumn: range.from - start.from + 1,
+      endColumn: range.to - end.from + 1,
       excerpt: update.state.doc.sliceString(start.from, end.to),
       left: coords.left - (host?.left ?? 0),
       top: coords.bottom - (host?.top ?? 0),

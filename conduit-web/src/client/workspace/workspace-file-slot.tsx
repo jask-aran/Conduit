@@ -593,6 +593,8 @@ export default function WorkspaceFileSlot(props: {
                       scope: "file",
                       from: selection.from,
                       to: selection.to,
+                      startColumn: selection.startColumn,
+                      endColumn: selection.endColumn,
                       excerpt: selection.excerpt,
                       note,
                     });
