@@ -843,18 +843,36 @@ export function createActiveChat(options: ActiveChatOptions) {
     else { setMessages([]); setTools([]); setPageBefore(null); setLoadedId(chat.id); }
   };
 
+  const prepareOutboundMessage = () => {
+    const chatId = loadedId() ?? "";
+    const text = draft().trim();
+    const attachmentIds = attachments.pendingIds();
+    const comments = reviewComments(chatId);
+    const sentAttachments = attachments.items()
+      .filter((item) => attachmentIds.includes(item.id))
+      .map(({ id, name, size, type, objectUrl }) => ({ id, name, size, type, objectUrl }));
+    return {
+      chatId,
+      text,
+      message: projectReviewComments(text, comments),
+      attachmentIds,
+      sentAttachments,
+      hasContent: Boolean(text || attachmentIds.length || comments.length),
+    };
+  };
+
+  const acceptOutboundMessage = (prepared: ReturnType<typeof prepareOutboundMessage>) => {
+    attachments.markAnnounced(prepared.attachmentIds);
+    clearReviewComments(prepared.chatId);
+  };
+
   const send = async (mode?: "steer" | "follow_up") => {
     if (generation() === "stopping") return;
     if (options.runtime.connectivity() !== "online") return onError("Server unavailable");
-    const text = draft().trim();
-    const attachmentIds = attachments.pendingIds();
-    const chatId = loadedId() ?? "";
-    const comments = reviewComments(chatId);
-    if (!text && !attachmentIds.length && !comments.length) return;
-    const outbound = projectReviewComments(text, comments);
-    const sentAttachments = attachments.items().filter((item) => attachmentIds.includes(item.id)).map(({ id, name, size, type, objectUrl }) => ({ id, name, size, type, objectUrl }));
+    const prepared = prepareOutboundMessage();
+    if (!prepared.hasContent) return;
     const busy = streaming();
-    const local: Message = { id: `user_${Date.now()}`, role: "user", content: outbound, timestamp: new Date().toISOString(), attachments: sentAttachments };
+    const local: Message = { id: `user_${Date.now()}`, role: "user", content: prepared.message, timestamp: new Date().toISOString(), attachments: prepared.sentAttachments };
 
     if (busy) {
       // Sending while the agent works steers by default: the message reaches
@@ -864,10 +882,9 @@ export function createActiveChat(options: ActiveChatOptions) {
       setDraft("");
       try {
         await ensureLive();
-        socket!.send(JSON.stringify({ type: queueMode === "steer" ? "steer" : "follow_up", message: outbound, attachmentIds }));
-        attachments.markAnnounced(attachmentIds);
-        clearReviewComments(chatId);
-      } catch (error) { setDraft(text); onError(error); }
+        socket!.send(JSON.stringify({ type: queueMode === "steer" ? "steer" : "follow_up", message: prepared.message, attachmentIds: prepared.attachmentIds }));
+        acceptOutboundMessage(prepared);
+      } catch (error) { setDraft(prepared.text); onError(error); }
       return;
     }
 
@@ -884,21 +901,19 @@ export function createActiveChat(options: ActiveChatOptions) {
       const index = current.findIndex((item) => item.id === editId);
       return index >= 0 ? [...current.slice(0, index), local] : [...current, local];
     });
-    attachments.markAnnounced(attachmentIds);
     setGeneration("submitting");
     try {
       socket!.send(JSON.stringify(editId
-        ? { type: "fork_and_prompt", entryId: editId, message: outbound, attachmentIds, model: models.model(), thinkingLevel: models.effort() }
-        : { type: "prompt", message: outbound, attachmentIds }));
-      clearReviewComments(chatId);
+        ? { type: "fork_and_prompt", entryId: editId, message: prepared.message, attachmentIds: prepared.attachmentIds, model: models.model(), thinkingLevel: models.effort() }
+        : { type: "prompt", message: prepared.message, attachmentIds: prepared.attachmentIds }));
+      acceptOutboundMessage(prepared);
       setStatus("active");
       setGeneration("active");
       setEditingEntryId(null);
     } catch (error) {
       setMessages(previous);
       setEditingEntryId(editId);
-      attachments.restoreDraft(sentAttachments);
-      setDraft(text);
+      setDraft(prepared.text);
       setGeneration("idle");
       onError(error);
     }
@@ -1030,20 +1045,19 @@ export function createActiveChat(options: ActiveChatOptions) {
    * the whole sequence now and the client sends one message.
    */
   const interruptAndSend = () => {
-    const text = draft().trim();
-    if (!pendingMessages().length && !text) return void stop();
-    const attachmentIds = attachments.pendingIds();
+    const prepared = prepareOutboundMessage();
+    if (!pendingMessages().length && !prepared.hasContent) return void stop();
     setQueue({ steering: [], followUp: [] });
     setDraft("");
     setGeneration("submitting");
     try {
-      socket!.send(JSON.stringify({ type: "interrupt_and_send", message: text, attachmentIds,
+      socket!.send(JSON.stringify({ type: "interrupt_and_send", message: prepared.message, attachmentIds: prepared.attachmentIds,
         model: models.model(), thinkingLevel: models.effort() }));
-      attachments.markAnnounced(attachmentIds);
+      acceptOutboundMessage(prepared);
       setStatus("active");
       setGeneration("active");
     } catch (error) {
-      setDraft(text);
+      setDraft(prepared.text);
       setGeneration("idle");
       onError(error);
     }
