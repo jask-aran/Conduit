@@ -131,8 +131,16 @@ export function normalizePiBackendEvent(event) {
     case "generation_resume":
       return { ...base, type: "generation_replay", generationId: event.generationId,
         sequence: event.seq, generation: event.generation };
+    // The server reads Pi's own session file after a turn and republishes it as
+    // the authority on what was said. Without a case here it fell through to
+    // the opaque `pi_event`, so the browser kept its optimistic message ids -
+    // and anything keyed by a persisted id (turn artifacts, fork, regenerate)
+    // only worked after a reload.
+    case "transcript_sync":
+      return { ...base, type: "transcript_sync", messages: event.messages || [], tools: event.tools || [] };
     case "session_checkpoint":
       return { ...base, type: "session_checkpoint", sequence: event.generationSeq ?? null,
+        artifacts: event.artifacts ?? null,
         chatId: event.chat?.id || event.chatId || "", title: event.chat?.title || event.title || null };
     case "queue_update":
       // Pi reports its queue as top-level arrays, not a nested object, so the
