@@ -261,7 +261,7 @@ function cacheWorkspace(projectId: string, patch: Partial<WorkspaceCacheEntry>) 
   while (workspaceCache.size > MAX_CACHED_WORKSPACES) workspaceCache.delete(workspaceCache.keys().next().value!);
 }
 
-export default function WorkspacePanel(props: { connectivity?: () => Connectivity; projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onRequestOpen?: () => void; onToggleExpanded: () => void; onClose: () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing> }) {
+export default function WorkspacePanel(props: { connectivity?: () => Connectivity; projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; commentChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onRequestOpen?: () => void; onToggleExpanded: () => void; onClose: () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing> }) {
   let projectGeneration = 0;
   let requestVersion = 0;
   let projectController = new AbortController();
@@ -358,6 +358,9 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   const [treeCollapsed, setTreeCollapsed] = createSignal(readGeometrySetting("tree-collapsed") === "true");
   const sourceControlScopes = diffScopes.filter((scope) => scope.value === "head" || scope.value === "changes" || scope.value === "staged");
   const chatScopes = diffScopes.filter((scope) => scope.value === "chat" || scope.value === "turn");
+  // Review comments ride the composer, which a dashboard has before its chat
+  // exists, so they follow the loaded chat rather than the panel's own scope.
+  const commentChatId = () => props.commentChatId?.() ?? props.artifactChatId?.() ?? null;
   const chatReview = createWorkspaceReview({ projectId: props.projectId, chatId: () => props.artifactChatId?.() ?? null, gitFiles: () => diff()?.files ?? [],
     scopes: chatScopes.map((scope) => scope.value), scopeKey: "chat:review-scope" });
   const sourceReview = createWorkspaceReview({ projectId: props.projectId, chatId: () => props.artifactChatId?.() ?? null, gitFiles: () => diff()?.files ?? [],
@@ -820,7 +823,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   };
   const resolveReviewNavigation = (event: Event) => {
     const request = (event as CustomEvent<ReviewNavigationRequest>).detail;
-    if (!request || request.chatId !== props.artifactChatId?.()) return;
+    if (!request || request.chatId !== commentChatId()) return;
     props.onRequestOpen?.();
     setReviewReveal(request);
     if (request.scope === "file") {
@@ -1988,7 +1991,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
             busy={uploading()}
             wrap={wrapLines()}
             onToggleWrap={toggleWrapLines}
-            annotationChatId={props.artifactChatId?.()}
+            annotationChatId={commentChatId()}
             reveal={reviewReveal()}
             onFocus={() => setFocusedSlot("primary")}
             onClose={() => closeSlot("primary")}
@@ -2021,7 +2024,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
               busy={uploading()}
               wrap={wrapLines()}
               onToggleWrap={toggleWrapLines}
-              annotationChatId={props.artifactChatId?.()}
+              annotationChatId={commentChatId()}
               reveal={reviewReveal()}
               onFocus={() => setFocusedSlot("secondary")}
               onClose={() => closeSlot("secondary")}
@@ -2099,7 +2102,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
         error={sourceReview.error()}
         empty="No uncommitted changes."
         comparisonSource={comparisonSourceControls(sourceReview, openEmbeddedSourceReview, sourceControlScopes)}
-        annotationChatId={props.artifactChatId?.()}
+        annotationChatId={commentChatId()}
         reveal={reviewReveal()}
         onSelect={(path) => void sourceReview.select(path)}
         onOpenWorkingFile={openWorkingFile}
@@ -2130,7 +2133,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
         error={chatReview.error()}
         empty={props.artifactChatId?.() ? "No changes in this scope." : "Open a chat to review agent changes."}
         comparisonSource={comparisonSourceControls(chatReview, openEmbeddedReview, chatScopes)}
-        annotationChatId={props.artifactChatId?.()}
+        annotationChatId={commentChatId()}
         reveal={reviewReveal()}
         onSelect={selectEmbeddedReviewFile}
         onOpenWorkingFile={openWorkingFile}
