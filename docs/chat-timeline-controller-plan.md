@@ -45,8 +45,10 @@ The controller must:
    turn, defer projection of assistant `message_end` updates. At the durable
    checkpoint, project the persisted transcript once and replace the live turn.
    Earlier rows retain their object identity.
-4. Add a bounded per-chat timeline cache. Show cached rows immediately during
-   chat navigation, then reconcile in the background.
+4. Add a bounded per-chat transcript cache. Keep the 10 most recently used
+   settled transcripts by catalogue revision. Show cached content immediately
+   during repeat navigation, then reconcile a fresh response in the background.
+   Active chats bypass the cache.
 5. Make scroll ownership explicit: follow only at the end, preserve an anchor
    during prepend and row-height changes, and offer a return-to-latest control.
 6. Virtualize settled rows only after stable identity and scroll ownership are

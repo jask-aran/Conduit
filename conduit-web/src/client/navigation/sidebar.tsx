@@ -154,6 +154,7 @@ export function Sidebar(props: {
   projects: Project[];
   projectId: string;
   selectedId: string | null;
+  navigatingId?: string | null;
   dashboard: boolean;
   computer: boolean;
   terminal: boolean;
@@ -784,7 +785,9 @@ export function Sidebar(props: {
         void props.onOpenChat(menuProps.chat, menuProps.project);
       }}
     >
-      <RuntimeIndicator process={processFor(menuProps.chat)} stale={props.runtime.stale()} unread={menuProps.chat.unread} fallback={<ThreadHarnessMark id={menuProps.chat.harnessId} />} />
+      <Show when={props.navigatingId === menuProps.chat.id} fallback={<RuntimeIndicator process={processFor(menuProps.chat)} stale={props.runtime.stale()} unread={menuProps.chat.unread} fallback={<ThreadHarnessMark id={menuProps.chat.harnessId} />} />}>
+        <span class="runtime-indicator runtime-indicator-muted" role="status" aria-label="Opening chat"><Spinner class="size-3" /></span>
+      </Show>
       <SidebarChatTitle title={title} animate={animateTitle} />
     </ContextMenuTrigger>
     <ContextMenuContent class="w-60 sidebar-context-menu">
