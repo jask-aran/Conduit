@@ -190,15 +190,23 @@ export function createLiveSessionStream({
         }
       }
       await adapter.cancel(record.id, command.generationId || null);
-      await syncTranscript(record);
       const interrupted = interruptedPromptInput(taken, command.message, command.attachmentIds);
-      if (!interrupted.message) return null;
+      if (!interrupted.message) {
+        await syncTranscript(record);
+        return null;
+      }
       await applyComposerModel(record, command);
       const prepared = await promptForChat(record, {
         ...command,
         attachmentIds: interrupted.attachmentIds,
       }, interrupted.message);
-      return sendPrompt(record, prepared);
+      const generationId = await sendPrompt(record, prepared);
+      // Pi can write the aborted tool result just after cancel resolves. Once
+      // the replacement prompt is accepted, a two-turn sync includes both the
+      // interrupted turn and its replacement, so the live timeline does not
+      // depend on a later reload.
+      await syncTranscript(record, 2);
+      return generationId;
     }
     if (command.type === "stop_generation" || command.type === "abort") {
       const stopped = await adapter.cancel(record.id, command.generationId || null);
