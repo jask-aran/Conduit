@@ -1,6 +1,6 @@
 import { WorkbenchButton, WorkbenchStatus } from "./workspace-workbench";
 import { MergeView, unifiedMergeView, getChunks, getOriginalDoc, originalDocChangeEffect } from "@codemirror/merge";
-import { ChangeSet, Compartment, EditorState, type Extension } from "@codemirror/state";
+import { ChangeSet, Compartment, EditorState, type Extension, type Text } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { gotoLine, openSearchPanel } from "@codemirror/search";
 import { Columns2Icon, SearchIcon, WrapTextIcon } from "lucide-solid";
@@ -9,7 +9,7 @@ import { readSetting, writeSetting, WORKSPACE_PANEL_GLOBAL_SCOPE } from "./works
 import { workspaceReadOnlySetup } from "./workspace-editor-base";
 import { workspaceLanguageForFilename } from "./workspace-languages";
 import { FileTypeIcon } from "./file-type-icon";
-import { annotationExtension, commentHighlightsExtension, commentRange, WorkspaceAnnotationPopup, type AnnotationSelection, type CommentHighlight } from "./workspace-annotate";
+import { annotationExtension, annotationSpan, commentHighlightsExtension, commentRange, WorkspaceAnnotationPopup, type AnnotationReading, type AnnotationSelection, type AnnotationSpan, type CommentHighlight } from "./workspace-annotate";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import "./workspace-comparison.css";
 
@@ -25,6 +25,33 @@ export interface ComparisonViewState {
   top: number;
   left: number;
   position: number;
+}
+
+/** Walks an element point down to the text node the browser actually selected. */
+function descend(node: Node, offset: number): [Node, number] {
+  let target = node, at = offset;
+  while (target.nodeType === Node.ELEMENT_NODE && target.childNodes.length) {
+    const past = at >= target.childNodes.length;
+    const child = target.childNodes[Math.min(at, target.childNodes.length - 1)]!;
+    target = child;
+    at = past ? (child.nodeType === Node.TEXT_NODE ? child.textContent!.length : child.childNodes.length) : 0;
+  }
+  return [target, at];
+}
+
+/** Offset of a point inside a deleted chunk, within that chunk's original text. */
+function deletedOffset(widget: Element, node: Node, offset: number): number {
+  let total = 0;
+  for (const line of widget.querySelectorAll(".cm-deletedLine")) {
+    if (line.contains(node)) {
+      const range = line.ownerDocument.createRange();
+      range.selectNodeContents(line);
+      range.setEnd(node, offset);
+      return total + range.toString().length;
+    }
+    if (node.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_PRECEDING) total += (line.textContent?.length ?? 0) + 1;
+  }
+  return Math.max(0, total - 1);
 }
 
 export default function WorkspaceComparison(props: { comparison: ComparisonPayload; sourceKey: string; viewState: ComparisonViewState; headerAction?: JSX.Element; comparisonSource?: JSX.Element; commentHighlights?: readonly CommentHighlight[]; reveal?: ReviewNavigationRequest | null; onViewStateChange?: (state: ComparisonViewState) => void; onAnnotate?: (selection: AnnotationSelection, note: string) => boolean }) {
@@ -86,14 +113,77 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
       }),
       EditorView.domEventHandlers({ focus: (_event, view) => { activeView = view; } }),
     ];
+    let merge: MergeView | undefined;
+    let view: EditorView;
+    const docFor = (side: "original" | "modified"): Text | undefined => side === "original"
+      ? (merge ? merge.a.state.doc : getOriginalDoc(view.state))
+      : (merge ? merge.b.state.doc : view.state.doc);
+    const chunksNow = () => getChunks((merge?.b ?? view).state)?.chunks ?? [];
+    // A comment on one side of a diff carries the passage it replaced, or was
+    // replaced by, so the note can be read without the comparison in front of you.
+    const counterpartFor = (side: "original" | "modified", from: number, to: number): AnnotationSpan | undefined => {
+      const hits = chunksNow().filter((chunk) => side === "modified"
+        ? chunk.fromB < to && chunk.endB > from
+        : chunk.fromA < to && chunk.endA > from);
+      const other = side === "modified" ? "original" : "modified";
+      const doc = docFor(other);
+      if (!hits.length || !doc) return undefined;
+      const first = hits[0]!, last = hits.at(-1)!;
+      const start = other === "original" ? first.fromA : first.fromB;
+      const end = Math.min(other === "original" ? last.endA : last.endB, doc.length);
+      return annotationSpan(doc, other, start, end) ?? undefined;
+    };
     const sideExtensions = (side: "original" | "modified"): Extension[] => [
       extensions,
       commentHighlightsExtension(commentHighlights.filter((item) => !item.side || item.side === side)),
-      ...(props.onAnnotate ? [annotationExtension({ side, onSelect: selectAnnotation })] : []),
+      ...(props.onAnnotate ? [annotationExtension({ side, onSelect: selectAnnotation, counterpart: counterpartFor, read: split ? undefined : readDeletedSelection })] : []),
     ];
+    /**
+     * In the unified layout the removed lines are widgets, not document text, so
+     * the editor's own selection cannot describe a drag that touches them.
+     */
+    const readDeletedSelection = (target: EditorView): AnnotationReading | null | undefined => {
+      const selection = target.dom.ownerDocument.getSelection();
+      if (!selection || selection.rangeCount === 0) return undefined;
+      const range = selection.getRangeAt(0);
+      if (!target.contentDOM.contains(range.commonAncestorContainer)) return undefined;
+      const chunks = chunksNow();
+      const widgets = Array.from(target.contentDOM.querySelectorAll(".cm-deletedChunk"));
+      const locate = (node: Node, offset: number) => {
+        const [leaf, at] = descend(node, offset);
+        const element = leaf.nodeType === Node.TEXT_NODE ? leaf.parentElement : leaf as Element;
+        const widget = element?.closest(".cm-deletedChunk") ?? null;
+        const chunk = widget ? chunks[widgets.indexOf(widget)] : undefined;
+        if (chunk) return { chunk, offset: deletedOffset(widget!, leaf, at) };
+        // A point the editor cannot place, such as a widget it did not build.
+        try {
+          return widget ? {} : { pos: target.posAtDOM(leaf, at) };
+        } catch {
+          return {};
+        }
+      };
+      const start = locate(range.startContainer, range.startOffset);
+      const end = locate(range.endContainer, range.endOffset);
+      if (!start.chunk && !end.chunk) return undefined;
+      if (start.pos === undefined && !start.chunk) return undefined;
+      if (end.pos === undefined && !end.chunk) return undefined;
+      if (range.collapsed) return null;
+      const original = docFor("original");
+      const originalFrom = start.chunk ? start.chunk.fromA + (start.offset ?? 0) : end.chunk!.fromA;
+      const originalTo = end.chunk ? end.chunk.fromA + (end.offset ?? 0) : start.chunk!.endA;
+      const modifiedFrom = start.chunk ? start.chunk.fromB : start.pos!;
+      const modifiedTo = end.chunk ? end.chunk.fromB : end.pos!;
+      const removed = original ? annotationSpan(original, "original", originalFrom, originalTo) : null;
+      const added = annotationSpan(target.state.doc, "modified", modifiedFrom, modifiedTo);
+      const span = added ?? removed;
+      if (!span) return null;
+      const counterpart = added
+        ? removed ?? counterpartFor("modified", modifiedFrom, modifiedTo)
+        : counterpartFor("original", originalFrom, originalTo);
+      const rect = range.getBoundingClientRect();
+      return { span, counterpart: counterpart ?? undefined, left: rect.left, bottom: rect.bottom };
+    };
     const options = { highlightChanges: true, gutter: true, collapseUnchanged: { margin: 3, minSize: 8 }, diffConfig: { scanLimit: 500, timeout: 40 } };
-    let merge: MergeView | undefined;
-    let view: EditorView;
     if (split) {
       merge = new MergeView({ parent: host, a: { doc: data.original, extensions: sideExtensions("original") }, b: { doc: data.modified, extensions: sideExtensions("modified") }, ...options });
       view = merge.b;

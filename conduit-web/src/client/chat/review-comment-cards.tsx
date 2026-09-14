@@ -45,7 +45,7 @@ export function ReviewCommentCards(props: {
           <DialogContent class="review-comment-editor" title="Edit review comment" description={`${item.path}${lines}${diff ? " · comparison" : ""}`} closeLabel="Close comment editor">
             <div class="review-comment-excerpt" data-scope={diff ? "comparison" : "file"}>
               <Suspense fallback={<pre class="review-comment-excerpt-fallback"><span>{parts().before}</span><mark>{parts().selected}</mark><span>{parts().after}</span></pre>}>
-                <WorkspaceExcerptView path={item.path} text={item.excerpt} firstLine={item.from} startColumn={item.startColumn} endColumn={item.endColumn} note={item.note} side={diff ? item.side : undefined} />
+                <WorkspaceExcerptView path={item.path} text={item.excerpt} firstLine={item.from} startColumn={item.startColumn} endColumn={item.endColumn} note={item.note} side={diff ? item.side : undefined} counterpart={item.counterpart} />
               </Suspense>
             </div>
             <Textarea autofocus aria-label={`Comment for ${item.path}`} maxlength={2000} rows={10} value={note()} onInput={(event) => setNote(event.currentTarget.value)} onKeyDown={(event) => {

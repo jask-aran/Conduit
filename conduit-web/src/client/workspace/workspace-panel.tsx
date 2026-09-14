@@ -20,6 +20,7 @@ import { createWorkspaceReview, diffScopes, isDiffScope, type DiffScope } from "
 import { WorkbenchButton } from "./workspace-workbench";
 import { WorkspaceDiffView } from "./workspace-diff-view";
 import { REVIEW_NAVIGATION_EVENT, type ReviewNavigationRequest } from "../chat/review-navigation";
+import { TURN_ARTIFACT_NAVIGATION_EVENT, type TurnArtifactNavigationRequest } from "../chat/turn-artifact-navigation";
 
 
 interface TreeEntry { name: string; path: string; type: "directory" | "file" | "other"; }
@@ -740,8 +741,8 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       <div class="workspace-turn-navigation" aria-label="Turn navigation">
         <WorkbenchButton aria-label="Older turn" title="Older turn" disabled={source.loading() || source.turnIndex() >= source.timeline().length - 1} onClick={() => void source.stepTurn(1, source.turnIndex() + 1)}><ChevronLeftIcon /></WorkbenchButton>
         <Menu>
-          <MenuTrigger class="workspace-scope-picker" aria-label="Select turn">{source.turnIndex() === 0 ? "Latest turn" : `${source.scope() === "chat" ? "Through turn" : "Turn"} ${source.turnNumber(source.turnIndex())}`}<ChevronDownIcon /></MenuTrigger>
-          <MenuContent><For each={source.timeline()}>{(turn, index) => <MenuItem onSelect={() => void source.stepTurn(1, index())}>{index() === 0 ? "Latest turn" : `${source.scope() === "chat" ? "Through turn" : "Turn"} ${source.turnNumber(index())}`} · {turnTime(turn.createdAt)}</MenuItem>}</For></MenuContent>
+          <MenuTrigger class="workspace-scope-picker" aria-label="Select turn">{source.timeline().length ? `${source.scope() === "chat" ? "Through turn" : "Turn"} ${source.turnNumber(source.turnIndex())}` : "Latest turn"}<ChevronDownIcon /></MenuTrigger>
+          <MenuContent><For each={source.timeline()}>{(turn, index) => <MenuItem onSelect={() => void source.stepTurn(1, index())}>{`${source.scope() === "chat" ? "Through turn" : "Turn"} ${source.turnNumber(index())}`} · {turnTime(turn.createdAt)}</MenuItem>}</For></MenuContent>
         </Menu>
         <WorkbenchButton aria-label="Newer turn" title="Newer turn" disabled={source.loading() || source.turnIndex() <= 0} onClick={() => void source.stepTurn(-1, source.turnIndex() - 1)}><ChevronRightIcon /></WorkbenchButton>
       </div>
@@ -839,6 +840,18 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   };
   window.addEventListener(REVIEW_NAVIGATION_EVENT, resolveReviewNavigation);
   onCleanup(() => window.removeEventListener(REVIEW_NAVIGATION_EVENT, resolveReviewNavigation));
+  const resolveTurnArtifactNavigation = (event: Event) => {
+    const request = (event as CustomEvent<TurnArtifactNavigationRequest>).detail;
+    if (!request || request.chatId !== props.artifactChatId?.()) return;
+    props.onRequestOpen?.();
+    const side = panePosition("chat") ?? focusedPane();
+    selectChatMode("changes");
+    setPaneTab(side, "chat");
+    chatReview.setScope("chat", request.checkpointId);
+    void chatReview.refresh();
+  };
+  window.addEventListener(TURN_ARTIFACT_NAVIGATION_EVENT, resolveTurnArtifactNavigation);
+  onCleanup(() => window.removeEventListener(TURN_ARTIFACT_NAVIGATION_EVENT, resolveTurnArtifactNavigation));
   let pendingEdit: string | null = null;
   const editFile = (path: string) => {
     const slot = slotForPath(path);
