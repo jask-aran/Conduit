@@ -32,7 +32,7 @@ import { toast } from "solid-sonner";
 import { audioTransferLost, beginDictatedRange, matchesShortcut, releasesShortcut, replaceDictatedRange, shouldAutoSend, shouldReportNoSignal } from "./voice-dictation";
 import { createVoiceWaveformController, MAX_RESPONSIVE_BAR_COUNT, VoiceWaveform, type VoiceWaveformController } from "./voice-waveform";
 import { ModelSelector } from "./model-selector";
-import { parseReviewComments, removeReviewComment, reviewComments } from "./review-comments";
+import { parseReviewComments, removeReviewComment, reviewComments, updateReviewComment } from "./review-comments";
 import { ReviewCommentCards } from "./review-comment-cards";
 import "./performance-composer.css";
 
@@ -480,7 +480,7 @@ export function Composer(props: {
     <Show when={props.attachmentsSupported !== false}>
       <AttachmentCards items={props.attachments.items()} chatId={props.chat.loadedId()} label="Attachments" removable onRemove={(item) => void props.attachments.remove(item)} />
     </Show>
-    <ReviewCommentCards items={comments()} label="File references" onRemove={(comment) => removeReviewComment(comment.id)} />
+    <ReviewCommentCards items={comments()} label="File references" onRemove={(comment) => removeReviewComment(comment.id)} onUpdate={(comment, note) => updateReviewComment(comment.id, note)} />
     <QueuedMessages
       messages={props.chat.pendingMessages()}
       surface={composerSurface()}

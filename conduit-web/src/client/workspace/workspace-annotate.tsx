@@ -46,12 +46,17 @@ export function WorkspaceAnnotationPopup(props: {
 }) {
   const [open, setOpen] = createSignal(false);
   const [note, setNote] = createSignal("");
+  const [error, setError] = createSignal("");
   createEffect(() => {
     props.selection;
     setOpen(false);
     setNote("");
+    setError("");
   });
-  const add = () => { if (props.onAdd(note())) props.onDismiss(); };
+  const add = () => {
+    if (props.onAdd(note())) props.onDismiss();
+    else setError("Limit of 12 references reached");
+  };
   return <div class="workspace-annotation" style={{ left: `${props.selection.left}px`, top: `${props.selection.top}px` }}>
     <Show when={open()} fallback={<button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => setOpen(true)}>Comment</button>}>
       <textarea autofocus aria-label={`Comment on lines ${props.selection.from}-${props.selection.to}`} rows={2} maxlength={2000} value={note()} onInput={(event) => setNote(event.currentTarget.value)} onKeyDown={(event) => {
@@ -59,6 +64,7 @@ export function WorkspaceAnnotationPopup(props: {
         if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); add(); }
       }} />
       <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={add}>Add</button>
+      <Show when={error()}><small role="alert">{error()}</small></Show>
     </Show>
   </div>;
 }
