@@ -8,7 +8,12 @@
 .chat-main[data-shortcut-scope="chat"] { outline: none; }
 .chat-main[data-shortcut-scope="chat"]:focus-within .chat-header-title strong { color: var(--shortcut-focus); }
 .transcript { position: relative; z-index: 1; }
-.chat-main:not(.chat-main-empty) .thread { padding-bottom: 147.2px; }
+/* The tail of the thread clears the composer stack. The fallbacks below are
+   the resting heights; the transcript measures the stack and writes
+   --transcript-composer-inset, so anything that makes the stack taller - a
+   multi-line draft, attachments, the queued-message card - pushes the last
+   output up instead of being covered by it. */
+.chat-main:not(.chat-main-empty) .thread { padding-bottom: var(--transcript-composer-inset, 147.2px); }
 .chat-main:not(.chat-main-empty) .composer-stack {
   position: absolute;
   right: 0;
@@ -37,7 +42,7 @@
 .composer-actions { position: relative; z-index: 2; }
 
 @media (--conduit-phone-layout) {
-  .chat-main:not(.chat-main-empty) .thread { padding-bottom: 128px; }
+  .chat-main:not(.chat-main-empty) .thread { padding-bottom: var(--transcript-composer-inset, 128px); }
   .composer-stack,
   .chat-main-empty .composer-stack { background: transparent; }
   .chat-main:not(.chat-main-empty) .composer-stack {
@@ -56,7 +61,7 @@
    panel-motion subtree. */
 .work-area-conversation { position: relative; }
 .transcript { position: relative; z-index: 1; }
-.chat-main:not(.chat-main-empty) .thread { padding-bottom: 184px; }
+.chat-main:not(.chat-main-empty) .thread { padding-bottom: var(--transcript-composer-inset, 184px); }
 .chat-main:not(.chat-main-empty) .composer-stack {
   position: absolute;
   right: 0;
@@ -85,7 +90,7 @@
 .composer-actions { position: relative; z-index: 2; }
 
 @media (--conduit-phone-layout) {
-  .chat-main:not(.chat-main-empty) .thread { padding-bottom: 160px; }
+  .chat-main:not(.chat-main-empty) .thread { padding-bottom: var(--transcript-composer-inset, 160px); }
   .composer-stack,
   .chat-main-empty .composer-stack { background: transparent; }
   .chat-main:not(.chat-main-empty) .composer-stack {
