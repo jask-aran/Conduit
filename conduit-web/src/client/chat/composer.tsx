@@ -480,7 +480,7 @@ export function Composer(props: {
     <Show when={props.attachmentsSupported !== false}>
       <AttachmentCards items={props.attachments.items()} chatId={props.chat.loadedId()} label="Attachments" removable onRemove={(item) => void props.attachments.remove(item)} />
     </Show>
-    <ReviewCommentCards items={comments()} label="File references" onRemove={(comment) => removeReviewComment(comment.id)} onUpdate={(comment, note) => updateReviewComment(comment.id, note)} />
+    <ReviewCommentCards items={comments()} chatId={props.chat.loadedId() ?? ""} label="File references" onRemove={(comment) => removeReviewComment(comment.id)} onUpdate={(comment, note) => updateReviewComment(comment.id, note)} />
     <QueuedMessages
       messages={props.chat.pendingMessages()}
       surface={composerSurface()}

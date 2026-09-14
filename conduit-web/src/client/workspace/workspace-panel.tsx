@@ -1,5 +1,5 @@
-import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, Show, type Accessor } from "solid-js";
-import { Columns2Icon, CheckIcon, ChevronsUpIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileDiffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, FolderUpIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, HistoryIcon, Maximize2Icon, MessageSquareIcon, Minimize2Icon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, SendIcon, TerminalIcon, Trash2Icon, Undo2Icon, UploadIcon, XIcon } from "lucide-solid";
+import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, Show, type Accessor, type JSX } from "solid-js";
+import { Columns2Icon, CheckIcon, ChevronsUpIcon, EllipsisIcon, ListCollapseIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileDiffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, FolderUpIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, HistoryIcon, Maximize2Icon, MessageSquareIcon, Minimize2Icon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, SendIcon, TerminalIcon, Trash2Icon, Undo2Icon, UploadIcon, WrapTextIcon, XIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
 import { Button, ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Menu, MenuContent, MenuItem, MenuRadioGroup, MenuRadioItem, MenuTrigger, Spinner } from "@/components/primitives";
 import { api, asList } from "../api/client";
@@ -9,6 +9,7 @@ import { COMMAND_IDS } from "../commands/command-registry";
 import { focusFirst, isMobileLayout, restoreFocus } from "../navigation/mobile-layout";
 import { ownsWorkspaceRequest, type WorkspaceRequest } from "./request-ownership";
 import { TerminalPane } from "../remotes/terminal-pane";
+import type { Connectivity } from "../state/runtime";
 import { dispatchPanelGeometryMotion } from "../panel-motion";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import { FileTypeIcon, FolderTypeIcon } from "./file-type-icon";
@@ -18,6 +19,7 @@ import "./workspace.css";
 import { createWorkspaceReview, diffScopes, isDiffScope, type DiffScope } from "./workspace-review-source";
 import { WorkbenchButton } from "./workspace-workbench";
 import { WorkspaceDiffView } from "./workspace-diff-view";
+import { REVIEW_NAVIGATION_EVENT, type ReviewNavigationRequest } from "../chat/review-navigation";
 
 
 interface TreeEntry { name: string; path: string; type: "directory" | "file" | "other"; }
@@ -43,7 +45,7 @@ type FileSlotId = "primary" | "secondary";
 type OpenFiles = { primary: string | null; secondary: string | null };
 type UploadTarget = { kind: "directory"; path: string } | { kind: "replacement"; path: string };
 
-const PANEL_TABS = ["files", "diff", "chat", "terminal"] satisfies PanelTab[];
+const PANEL_TABS = ["files", "chat", "terminal", "diff"] satisfies PanelTab[];
 function historyEntryLabel(node: HistoryNode): string {
   if (node.label) return node.label;
   return node.entry.display || node.entry.type.replaceAll("_", " ");
@@ -60,24 +62,77 @@ function primaryHistoryIndex(nodes: HistoryNode[], activePath: Set<string>): num
     : nodes.reduce((best, node, index) => historyLength(node) > historyLength(nodes[best]!) ? index : best, 0));
 }
 
-function HistoryNodeRow(props: { node: HistoryNode; activePath: Set<string>; leafId: string | null; connected: boolean }) {
-  const node = () => props.node;
-  return <div class="workspace-history-row" data-kind={node().entry.kind} data-active={props.activePath.has(node().entry.id)} data-leaf={props.leafId === node().entry.id} title={historyEntryLabel(node())}>
+function historyEntryTime(entry: HistoryEntry): string {
+  const at = new Date(entry.timestamp);
+  return Number.isNaN(at.getTime()) ? "" : at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+/**
+ * The longest chain of tool entries starting at this node. Sequential tool
+ * calls are nested one per level rather than listed as siblings, so the run is
+ * found by walking down; a fork or a non-tool entry ends it.
+ */
+function historyToolRun(node: HistoryNode): HistoryNode[] {
+  if (node.entry.kind !== "tool" || node.entry.hidden) return [];
+  const run = [node];
+  let current = node;
+  for (;;) {
+    let next: HistoryNode | undefined = current.children.length === 1 ? current.children[0] : undefined;
+    // Pi threads hidden assistant and system entries between visible tool
+    // calls. They are never drawn, so walk straight through them: a run the
+    // reader sees as consecutive has to be one run here too.
+    while (next?.entry.hidden && next.children.length === 1) next = next.children[0];
+    if (!next || next.entry.hidden || next.entry.kind !== "tool") break;
+    run.push(next);
+    current = next;
+  }
+  return run;
+}
+
+function HistoryToolRun(props: { run: HistoryNode[]; activePath: Set<string>; leafId: string | null; connected: boolean }) {
+  // The run stands for a span of time, so it carries the last stamp in it.
+  const last = () => props.run[props.run.length - 1]!;
+  const active = () => props.run.some((node) => props.activePath.has(node.entry.id));
+  const leaf = () => props.run.some((node) => props.leafId === node.entry.id);
+  const detail = () => props.run.map((node) => historyEntryLabel(node)).join("\n");
+  return <div class="workspace-history-row" data-kind="tool" data-collapsed="true" data-active={active()} data-leaf={leaf()} title={detail()}>
       <Show when={props.connected}><span class="workspace-history-branch-tick" aria-hidden="true" /></Show>
-      <span><Show when={node().entry.kind === "user" || node().entry.kind === "assistant"} fallback={historyEntryLabel(node())}><strong>{node().entry.kind}:</strong>{` ${historyEntryLabel(node()).replace(/^\w+:\s*/, "")}`}</Show></span>
+      <Show when={historyEntryTime(last().entry)}>{(time) => <time class="workspace-history-time" datetime={last().entry.timestamp}>{time()}</time>}</Show>
+      <span class="workspace-history-text">{`${props.run.length} tool calls`}</span>
     </div>;
 }
 
-function HistoryNodes(props: { nodes: HistoryNode[]; activePath: Set<string>; leafId: string | null; connected?: boolean }) {
+function HistoryNodeRow(props: { node: HistoryNode; activePath: Set<string>; leafId: string | null; connected: boolean }) {
+  const node = () => props.node;
+  const time = () => historyEntryTime(node().entry);
+  return <div class="workspace-history-row" data-kind={node().entry.kind} data-active={props.activePath.has(node().entry.id)} data-leaf={props.leafId === node().entry.id} title={`${time() ? `${new Date(node().entry.timestamp).toLocaleString()} · ` : ""}${historyEntryLabel(node())}`}>
+      <Show when={props.connected}><span class="workspace-history-branch-tick" aria-hidden="true" /></Show>
+      <Show when={time()}><time class="workspace-history-time" datetime={node().entry.timestamp}>{time()}</time></Show>
+      <span class="workspace-history-text"><Show when={node().entry.kind === "user" || node().entry.kind === "assistant"} fallback={historyEntryLabel(node())}><strong>{node().entry.kind}:</strong>{` ${historyEntryLabel(node()).replace(/^\w+:\s*/, "")}`}</Show></span>
+    </div>;
+}
+
+function HistoryNodes(props: { nodes: HistoryNode[]; activePath: Set<string>; leafId: string | null; connected?: boolean; depth?: number; collapseTools?: boolean }) {
   const primary = () => primaryHistoryIndex(props.nodes, props.activePath);
-  const content = (node: HistoryNode, connected: boolean) => <>
-    <Show when={!node.entry.hidden}><HistoryNodeRow node={node} activePath={props.activePath} leafId={props.leafId} connected={connected} /></Show>
-    <HistoryNodes nodes={node.children} activePath={props.activePath} leafId={props.leafId} connected={connected} />
-  </>;
-  return <For each={props.nodes}>{(node, index) => <Show when={index() !== primary()} fallback={content(node, Boolean(props.connected))}>
-    <div class="workspace-history-branch">
+  const depth = () => props.depth ?? 0;
+  const content = (node: HistoryNode, connected: boolean, level: number) => {
+    const run = props.collapseTools ? historyToolRun(node) : [];
+    if (run.length > 1) return <>
+      <HistoryToolRun run={run} activePath={props.activePath} leafId={props.leafId} connected={connected} />
+      <HistoryNodes nodes={run[run.length - 1]!.children} activePath={props.activePath} leafId={props.leafId} connected={connected} depth={level} collapseTools={props.collapseTools} />
+    </>;
+    return <>
+      <Show when={!node.entry.hidden}><HistoryNodeRow node={node} activePath={props.activePath} leafId={props.leafId} connected={connected} /></Show>
+      <HistoryNodes nodes={node.children} activePath={props.activePath} leafId={props.leafId} connected={connected} depth={level} collapseTools={props.collapseTools} />
+    </>;
+  };
+  // Nesting is published as a depth rather than as padding on the wrapper: the
+  // timestamp column has to stay at the far left, so only the text and the
+  // tree lines may move right.
+  return <For each={props.nodes}>{(node, index) => <Show when={index() !== primary()} fallback={content(node, Boolean(props.connected), depth())}>
+    <div class="workspace-history-branch" style={{ "--history-depth": String(depth() + 1) }}>
       <span class="workspace-history-branch-rail" aria-hidden="true" />
-      <div class="workspace-history-branch-content">{content(node, true)}</div>
+      <div class="workspace-history-branch-content">{content(node, true, depth() + 1)}</div>
     </div>
   </Show>}</For>;
 }
@@ -205,7 +260,7 @@ function cacheWorkspace(projectId: string, patch: Partial<WorkspaceCacheEntry>) 
   while (workspaceCache.size > MAX_CACHED_WORKSPACES) workspaceCache.delete(workspaceCache.keys().next().value!);
 }
 
-export default function WorkspacePanel(props: { projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onToggleExpanded: () => void; onClose: () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing> }) {
+export default function WorkspacePanel(props: { connectivity?: () => Connectivity; projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onRequestOpen?: () => void; onToggleExpanded: () => void; onClose: () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing> }) {
   let projectGeneration = 0;
   let requestVersion = 0;
   let projectController = new AbortController();
@@ -259,10 +314,27 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const [uploading, setUploading] = createSignal(false);
   const [uploadTarget, setUploadTarget] = createSignal<UploadTarget>({ kind: "directory", path: "" });
   const [primaryFile, setPrimaryFile] = createSignal<FileSummary | null>(null);
+  // The comment a chip asked to reveal, carried down to whichever view shows it.
+  const [reviewReveal, setReviewReveal] = createSignal<ReviewNavigationRequest | null>(null);
   const [openPaths, setOpenPaths] = createSignal<OpenFiles>({ primary: readSetting(fileScope(), "file"), secondary: readSetting(fileScope(), "file-secondary") });
   const [focusedSlot, setFocusedSlot] = createSignal<FileSlotId>("primary");
   const slotHandles = new Map<FileSlotId, FileSlotHandle>();
   const [wrapLines, setWrapLines] = createSignal(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines") === "true");
+  // History wraps independently of the editors: one is prose, the other code.
+  const [historyWrap, setHistoryWrap] = createSignal(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "history-wrap") === "true");
+  const toggleHistoryWrap = () => {
+    const next = !historyWrap();
+    setHistoryWrap(next);
+    writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "history-wrap", String(next));
+    stickHistoryToBottom();
+  };
+  const [collapseTools, setCollapseTools] = createSignal(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "history-collapse-tools") === "true");
+  const toggleCollapseTools = () => {
+    const next = !collapseTools();
+    setCollapseTools(next);
+    writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "history-collapse-tools", String(next));
+    stickHistoryToBottom();
+  };
   const [diff, setDiff] = createSignal<DiffPayload | null>(null);
   const [commitDetail, setCommitDetail] = createSignal<GitCommitDetail | null>(null);
   const [commitDetailLoading, setCommitDetailLoading] = createSignal(false);
@@ -283,16 +355,42 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const [shellGap, setShellGap] = createSignal(props.open() && !isMobileLayout() ? 8 : 0);
   const [treeWidth, setTreeWidth] = createSignal(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(readGeometrySetting("tree-width")) || DEFAULT_TREE_WIDTH)));
   const [treeCollapsed, setTreeCollapsed] = createSignal(readGeometrySetting("tree-collapsed") === "true");
-  const chatReview = createWorkspaceReview({ projectId: props.projectId, chatId: () => props.artifactChatId?.() ?? null, gitFiles: () => diff()?.files ?? [] });
-  const sourceReview = createWorkspaceReview({ projectId: props.projectId, chatId: () => props.artifactChatId?.() ?? null, gitFiles: () => diff()?.files ?? [] });
+  const sourceControlScopes = diffScopes.filter((scope) => scope.value === "head" || scope.value === "changes" || scope.value === "staged");
+  const chatScopes = diffScopes.filter((scope) => scope.value === "chat" || scope.value === "turn");
+  const chatReview = createWorkspaceReview({ projectId: props.projectId, chatId: () => props.artifactChatId?.() ?? null, gitFiles: () => diff()?.files ?? [],
+    scopes: chatScopes.map((scope) => scope.value), scopeKey: "chat:review-scope" });
+  const sourceReview = createWorkspaceReview({ projectId: props.projectId, chatId: () => props.artifactChatId?.() ?? null, gitFiles: () => diff()?.files ?? [],
+    scopes: sourceControlScopes.map((scope) => scope.value), scopeKey: "diff:review-scope" });
   const [navigatorOpen, setNavigatorOpen] = createSignal(false);
   const [splitRatio, setSplitRatio] = createSignal(Math.max(0, Math.min(100, Number(readGeometrySetting("split-ratio")) || 50)));
   const [splitWidth, setSplitWidth] = createSignal(0);
   const [fileSplitRatio, setFileSplitRatio] = createSignal(Math.max(25, Math.min(75, Number(readGeometrySetting("file-split-ratio")) || 50)));
-  const [chatMode, setChatMode] = createSignal<ChatMode>("history");
+  const storedChatMode = (): ChatMode => readPanelSetting("chat:mode") === "changes" ? "changes" : "history";
+  const [chatMode, setChatMode] = createSignal<ChatMode>(storedChatMode());
+  const selectChatMode = (next: ChatMode) => {
+    setChatMode(next);
+    writeSetting(panelScope(), "chat:mode", next);
+  };
   const [historyTree, setHistoryTree] = createSignal<HistoryTree | null>(null);
   const [historyLoading, setHistoryLoading] = createSignal(false);
   let historyChatId: string | null = null;
+  let historyScroller: HTMLDivElement | undefined;
+  // Newest entries are at the bottom, so the list follows them — but only for a
+  // reader who is already there. Scrolling up to read is never interrupted.
+  let historyPinned = true;
+  const HISTORY_BOTTOM_SLACK = 24;
+  const trackHistoryScroll = () => {
+    const element = historyScroller;
+    if (!element) return;
+    historyPinned = element.scrollHeight - element.scrollTop - element.clientHeight <= HISTORY_BOTTOM_SLACK;
+  };
+  const stickHistoryToBottom = () => {
+    // After the rows this update produced are in the DOM.
+    queueMicrotask(() => {
+      const element = historyScroller;
+      if (element?.isConnected && historyPinned) element.scrollTop = element.scrollHeight;
+    });
+  };
   // `token` identifies one load attempt. Comparing the promise itself would
   // read the binding from inside its own initializer, and comparing chatId
   // would let a finished load clear a newer load of the same chat.
@@ -306,7 +404,10 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     }
     if (historyLoad?.chatId === chatId) return historyLoad.promise;
     const initialLoad = historyChatId !== chatId || !historyTree();
-    if (initialLoad) setHistoryLoading(true);
+    if (initialLoad) {
+      historyPinned = true;
+      setHistoryLoading(true);
+    }
     const token = {};
     const promise = (async () => {
       try {
@@ -325,6 +426,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     historyLoad = { chatId, token, promise };
     return promise;
   };
+  createEffect(on(historyTree, stickHistoryToBottom));
   const historyActivePath = createMemo(() => {
     const result = new Set<string>();
     const tree = historyTree();
@@ -546,10 +648,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     setSourceControlMode(mode);
     writeSetting(panelScope(), "diff:mode", mode);
     setCommitDetail(null);
-    if (mode === "review") {
-      sourceReview.setScope("head");
-      void sourceReview.refresh();
-    }
+    if (mode === "review") void sourceReview.refresh();
     if (mode === "patch" && !diff()?.diff) void loadDiff(true, false, true);
     if (mode === "graph" && !diff()?.commits) void loadDiff(false, true, true);
   };
@@ -622,8 +721,12 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   const showFileNavigator = () => filesWide() ? toggleTreeCollapsed() : setNavigatorOpen(true);
   type ReviewOpener = (scope: DiffScope, path?: string, checkpoint?: string | null) => void;
   type WorkspaceReviewController = ReturnType<typeof createWorkspaceReview>;
-  const sourceControlScopes = diffScopes.filter((scope) => scope.value === "head" || scope.value === "changes" || scope.value === "staged");
-  const chatScopes = diffScopes.filter((scope) => scope.value === "chat" || scope.value === "turn");
+  // Times alone read as out of order once the list crosses midnight.
+  const turnTime = (value: string) => {
+    const moment = new Date(value);
+    const time = moment.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    return moment.toDateString() === new Date().toDateString() ? time : `${moment.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`;
+  };
   const comparisonSourceControls = (source: WorkspaceReviewController, open: ReviewOpener, scopes: typeof diffScopes) => <div class="workspace-comparison-source-controls">
     <Menu>
       <MenuTrigger class="workspace-scope-picker" aria-label="Comparison source">{diffScopes.find((scope) => scope.value === source.scope())?.label}<ChevronDownIcon /></MenuTrigger>
@@ -635,35 +738,41 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     </Menu>
     <Show when={source.scope() === "chat" || source.scope() === "turn"}>
       <div class="workspace-turn-navigation" aria-label="Turn navigation">
-        <WorkbenchButton aria-label="Older turn" title="Older turn" disabled={source.loading() || source.turnIndex() >= source.timeline().length - 1} onClick={() => moveReviewTurn(source, 1, open)}><ChevronLeftIcon /></WorkbenchButton>
+        <WorkbenchButton aria-label="Older turn" title="Older turn" disabled={source.loading() || source.turnIndex() >= source.timeline().length - 1} onClick={() => void source.stepTurn(1, source.turnIndex() + 1)}><ChevronLeftIcon /></WorkbenchButton>
         <Menu>
-          <MenuTrigger class="workspace-scope-picker" aria-label="Select turn">{source.turnIndex() === 0 ? "Latest turn" : `${source.scope() === "chat" ? "Through turn" : "Turn"} ${source.timeline().length - source.turnIndex()}`}<ChevronDownIcon /></MenuTrigger>
-          <MenuContent><For each={source.timeline()}>{(turn, index) => <MenuItem onSelect={() => open(source.scope(), undefined, index() === 0 ? null : turn.id)}>{index() === 0 ? "Latest turn" : `${source.scope() === "chat" ? "Through turn" : "Turn"} ${source.timeline().length - index()}`} · {new Date(turn.createdAt).toLocaleTimeString()}</MenuItem>}</For></MenuContent>
+          <MenuTrigger class="workspace-scope-picker" aria-label="Select turn">{source.turnIndex() === 0 ? "Latest turn" : `${source.scope() === "chat" ? "Through turn" : "Turn"} ${source.turnNumber(source.turnIndex())}`}<ChevronDownIcon /></MenuTrigger>
+          <MenuContent><For each={source.timeline()}>{(turn, index) => <MenuItem onSelect={() => void source.stepTurn(1, index())}>{index() === 0 ? "Latest turn" : `${source.scope() === "chat" ? "Through turn" : "Turn"} ${source.turnNumber(index())}`} · {turnTime(turn.createdAt)}</MenuItem>}</For></MenuContent>
         </Menu>
-        <WorkbenchButton aria-label="Newer turn" title="Newer turn" disabled={source.loading() || source.turnIndex() <= 0} onClick={() => moveReviewTurn(source, -1, open)}><ChevronRightIcon /></WorkbenchButton>
+        <WorkbenchButton aria-label="Newer turn" title="Newer turn" disabled={source.loading() || source.turnIndex() <= 0} onClick={() => void source.stepTurn(-1, source.turnIndex() - 1)}><ChevronRightIcon /></WorkbenchButton>
       </div>
     </Show>
+    <span class="workspace-editor-metadata" title="Comparison endpoints">{source.rangeLabel()}</span>
     <Show when={source.loading()}><Spinner /></Show>
     <Show when={source.error()}><WorkbenchButton class="workspace-review-retry" title={source.error()} onClick={() => open(source.scope(), undefined, source.checkpointId())}>Retry</WorkbenchButton></Show>
   </div>;
-  const moveReviewTurn = (source: WorkspaceReviewController, offset: number, open: ReviewOpener) => {
-    const index = source.turnIndex() + offset;
-    const checkpoint = source.timeline()[index];
-    if (checkpoint) open(source.scope(), undefined, index === 0 ? null : checkpoint.id);
-  };
   const openEmbeddedReview: ReviewOpener = (scope, _path, checkpoint = null) => {
     if (scope !== "chat" && scope !== "turn") return;
     chatReview.setScope(scope, checkpoint);
     void chatReview.refresh();
   };
   const showAgentChanges = () => {
-    setChatMode("changes");
-    openEmbeddedReview("chat");
+    selectChatMode("changes");
+    openEmbeddedReview(chatReview.scope() === "turn" ? "turn" : "chat", undefined, chatReview.checkpointId());
   };
+  // A review belongs to one project and chat. Moving to either a different
+  // project or a different chat drops what is on screen before reloading, and
+  // a context with no chat at all leaves the view blank. The one exception is
+  // stepping from a chat to its own project's dashboard, which keeps showing
+  // the chat that was just open.
   createEffect(on(
-    () => [props.projectId(), props.artifactChatId?.(), chatMode(), tabVisible("chat")] as const,
-    ([_projectId, _chatId, mode, visible]) => {
-      if (!visible || mode !== "changes") return;
+    () => [props.projectId(), props.artifactChatId?.() ?? null, chatMode(), tabVisible("chat")] as const,
+    ([projectId, chatId, mode, visible], previous) => {
+      const movedProject = previous ? previous[0] !== projectId : false;
+      const movedChat = previous ? previous[1] !== chatId : false;
+      if (movedChat && !movedProject && !chatId) return;
+      if (movedChat || movedProject) chatReview.reset();
+      if (movedProject) sourceReview.reset();
+      if (!visible || mode !== "changes" || !chatId) return;
       if (chatReview.scope() !== "chat" && chatReview.scope() !== "turn") chatReview.setScope("chat");
       void chatReview.refresh();
     },
@@ -708,6 +817,28 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     const filesSide = panePosition("files") ?? diffSide;
     queueMicrotask(() => focusTabDefault("files", filesSide));
   };
+  const resolveReviewNavigation = (event: Event) => {
+    const request = (event as CustomEvent<ReviewNavigationRequest>).detail;
+    if (!request || request.chatId !== props.artifactChatId?.()) return;
+    props.onRequestOpen?.();
+    setReviewReveal(request);
+    if (request.scope === "file") {
+      openWorkingFile(request.path);
+      return;
+    }
+    if (request.scope === "changes" || request.scope === "staged" || request.scope === "head") {
+      if (!props.sourceControlEnabled()) return reportError("Source control is unavailable for this workspace.");
+      void openSourceControlReview(request.scope, request.path);
+      return;
+    }
+    const side = panePosition("chat") ?? focusedPane();
+    selectChatMode("changes");
+    setPaneTab(side, "chat");
+    chatReview.setScope(request.scope === "session" ? "chat" : "turn");
+    void chatReview.refresh(request.path);
+  };
+  window.addEventListener(REVIEW_NAVIGATION_EVENT, resolveReviewNavigation);
+  onCleanup(() => window.removeEventListener(REVIEW_NAVIGATION_EVENT, resolveReviewNavigation));
   let pendingEdit: string | null = null;
   const editFile = (path: string) => {
     const slot = slotForPath(path);
@@ -1559,6 +1690,41 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     cacheWorkspace(props.projectId(), { expanded: next });
   };
 
+  // One definition per quick action, rendered three ways: the horizontal
+  // toolbar under the tree, the overflow menu it spills into, and the vertical
+  // rail shown while the navigator is collapsed.
+  interface TreeAction { id: string; label: () => string; title: () => string; icon: () => JSX.Element; disabled?: () => boolean; pressed?: () => boolean; run: () => void }
+  const treeActions: TreeAction[] = [
+    { id: "new-file", label: () => "New file", title: () => "Create a file in the workspace root", icon: () => <FilePlusIcon />, disabled: uploading, run: () => void createFile() },
+    { id: "new-folder", label: () => "New folder", title: () => "Create a folder in the workspace root", icon: () => <FolderPlusIcon />, disabled: uploading, run: () => void createDirectory() },
+    { id: "collapse", label: () => "Collapse all folders", title: () => "Collapse all folders", icon: () => <ChevronsUpIcon />, run: collapseTree },
+    { id: "hidden", label: () => showHidden() ? "Hide hidden files" : "Show hidden files", title: () => showHidden() ? "Hide hidden files" : "Show hidden files", icon: () => <Show when={showHidden()} fallback={<EyeOffIcon />}><EyeIcon /></Show>, pressed: showHidden, run: toggleHidden },
+    { id: "upload", label: () => "Upload files", title: () => "Upload files to workspace root", icon: () => <Show when={uploading()} fallback={<UploadIcon />}><Spinner /></Show>, disabled: uploading, run: () => chooseUpload() },
+    { id: "refresh", label: () => "Refresh files", title: () => "Refresh files", icon: () => <RefreshCwIcon />, disabled: filesLoading, run: () => void refreshFiles() },
+  ];
+  const treeActionButton = (action: TreeAction) =>
+    <button type="button" data-tree-action={action.id} aria-label={action.label()} title={action.title()} aria-pressed={action.pressed?.()} disabled={action.disabled?.()} onClick={action.run}>{action.icon()}</button>;
+  const [visibleTreeActions, setVisibleTreeActions] = createSignal(treeActions.length);
+  // Buttons are uniform, so one measured button plus the row gap is enough to
+  // work out how many fit; the cache is invalidated on a height change, which
+  // is what the layout breakpoints move.
+  let treeActionsRow: HTMLDivElement | undefined;
+  let treeActionMetrics: { unit: number; gap: number; height: number } | null = null;
+  const measureTreeActions = (width: number, height: number) => {
+    const row = treeActionsRow;
+    const first = row?.querySelector("button");
+    if (!row || !first) return;
+    if (!treeActionMetrics || treeActionMetrics.height !== height) {
+      const style = getComputedStyle(row);
+      const gap = parseFloat(style.columnGap) || 0;
+      treeActionMetrics = { unit: first.offsetWidth + gap, gap, height };
+    }
+    const { unit, gap } = treeActionMetrics;
+    if (unit <= 0) return;
+    const fits = Math.floor((width + gap) / unit);
+    setVisibleTreeActions(fits >= treeActions.length ? treeActions.length : Math.max(1, fits - 1));
+  };
+
   const Tree = (treeProps: { directory: string; depth?: number }) => {
     const depth = () => treeProps.depth || 0;
     return <>
@@ -1727,6 +1893,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       >
         <div class="workspace-tree-pane">
           <div class="workspace-tree-tools workspace-tree-search">
+            <button type="button" aria-label="Hide file navigator" title="Hide file navigator" onClick={hideFileNavigator}><PanelLeftCloseIcon /></button>
             <label class="workspace-tree-filter">
               <SearchIcon />
               <input
@@ -1740,7 +1907,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
                 onKeyDown={onFileFilterKeyDown}
               />
             </label>
-            <button type="button" aria-label="Hide file navigator" title="Hide file navigator" onClick={hideFileNavigator}><PanelLeftCloseIcon /></button>
           </div>
           <Show when={workspaceStale()}><div class="workspace-freshness-notice" role="status" aria-live="polite"><span>Not updating</span><span aria-hidden="true">·</span><button type="button" onClick={retryWorkspacePoll}>Retry</button></div></Show>
           <nav ref={(element) => {
@@ -1751,20 +1917,36 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             <Tree directory="" />
             <Show when={directories()[""] && !directories()[""]?.oversize && visibleEntries("").length === 0}><div class="workspace-tree-empty">{fileFilter() ? "No loaded files match this filter." : "No files to show."}</div></Show>
           </nav>
-          <div class="workspace-tree-tools workspace-tree-actions" role="toolbar" aria-label="File tree actions">
-            <button type="button" aria-label="New file" title="Create a file in the workspace root" disabled={uploading()} onClick={() => void createFile()}><FilePlusIcon /></button>
-            <button type="button" aria-label="New folder" title="Create a folder in the workspace root" disabled={uploading()} onClick={() => void createDirectory()}><FolderPlusIcon /></button>
-            <button type="button" aria-label="Collapse all folders" title="Collapse all folders" onClick={collapseTree}><ChevronsUpIcon /></button>
-            <button type="button" aria-label={showHidden() ? "Hide hidden files" : "Show hidden files"} title={showHidden() ? "Hide hidden files" : "Show hidden files"} aria-pressed={showHidden()} onClick={toggleHidden}>
-              <Show when={showHidden()} fallback={<EyeOffIcon />}><EyeIcon /></Show>
-            </button>
-            <button type="button" aria-label="Upload files" title="Upload files to workspace root" disabled={uploading()} onClick={() => chooseUpload()}><Show when={uploading()} fallback={<UploadIcon />}><Spinner /></Show></button>
-            <button type="button" aria-label="Refresh files" title="Refresh files" disabled={filesLoading()} onClick={() => void refreshFiles()}><RefreshCwIcon /></button>
+          <div class="workspace-tree-tools workspace-tree-actions" role="toolbar" aria-label="File tree actions" ref={(element) => {
+            treeActionsRow = element;
+            const observer = new ResizeObserver((entries) => {
+              const box = entries[entries.length - 1]?.contentBoxSize?.[0];
+              measureTreeActions(box ? box.inlineSize : element.clientWidth, box ? box.blockSize : element.clientHeight);
+            });
+            observer.observe(element);
+            onCleanup(() => { observer.disconnect(); if (treeActionsRow === element) treeActionsRow = undefined; });
+          }}>
+            <For each={treeActions}>{(action, index) => <Show when={index() < visibleTreeActions()}>{treeActionButton(action)}</Show>}</For>
+            <Show when={visibleTreeActions() < treeActions.length}>
+              <Menu>
+                <MenuTrigger class="workspace-tree-more" aria-label="More file actions" title="More file actions"><EllipsisIcon /></MenuTrigger>
+                <MenuContent>
+                  <For each={treeActions.slice(visibleTreeActions())}>{(action) =>
+                    <MenuItem disabled={action.disabled?.()} onSelect={action.run}>{action.icon()}{action.label()}</MenuItem>
+                  }</For>
+                </MenuContent>
+              </Menu>
+            </Show>
             <input ref={fileUploadInput} class="workspace-file-input" type="file" multiple={uploadTarget().kind === "directory"} onChange={(event) => void uploadFiles(event.currentTarget.files)} />
           </div>
         </div>
         <Show when={filesWide() ? treeCollapsed() : !navigatorOpen()}>
-          <div class="workspace-tree-collapsed-rail"><button type="button" aria-label="Show file navigator" title="Show file navigator" onClick={showFileNavigator}><PanelLeftOpenIcon /></button></div>
+          <div class="workspace-tree-collapsed-rail">
+            <button type="button" aria-label="Show file navigator" title="Show file navigator" onClick={showFileNavigator}><PanelLeftOpenIcon /></button>
+            <div class="workspace-tree-rail-actions" role="toolbar" aria-label="File tree actions">
+              <For each={treeActions}>{(action) => treeActionButton(action)}</For>
+            </div>
+          </div>
         </Show>
         <Show when={filesWide()}>
           <div
@@ -1794,6 +1976,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
             wrap={wrapLines()}
             onToggleWrap={toggleWrapLines}
             annotationChatId={props.artifactChatId?.()}
+            reveal={reviewReveal()}
             onFocus={() => setFocusedSlot("primary")}
             onClose={() => closeSlot("primary")}
             onError={reportError}
@@ -1826,6 +2009,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
               wrap={wrapLines()}
               onToggleWrap={toggleWrapLines}
               annotationChatId={props.artifactChatId?.()}
+              reveal={reviewReveal()}
               onFocus={() => setFocusedSlot("secondary")}
               onClose={() => closeSlot("secondary")}
               onError={reportError}
@@ -1902,8 +2086,8 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         error={sourceReview.error()}
         empty="No uncommitted changes."
         comparisonSource={comparisonSourceControls(sourceReview, openEmbeddedSourceReview, sourceControlScopes)}
-        comparisonLabel={sourceReview.rangeLabel()}
         annotationChatId={props.artifactChatId?.()}
+        reveal={reviewReveal()}
         onSelect={(path) => void sourceReview.select(path)}
         onOpenWorkingFile={openWorkingFile}
         onViewStateChange={sourceReview.setViewState}
@@ -1913,8 +2097,15 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         </Show></Show>
     </section></Show>
     <Show when={tabVisible("chat")}><section class="workspace-chat-view" data-position={panePosition("chat")}>
-      <div class="workspace-chat-modes" role="radiogroup" aria-label="Chat view"><div><Show when={props.historyAvailable?.()}><button role="radio" aria-checked={chatMode() === "history"} onClick={() => { setChatMode("history"); void loadHistory(); }}>History</button></Show><button role="radio" aria-checked={chatMode() === "changes"} onClick={showAgentChanges}>Agent changes</button></div></div>
-      <Show when={chatMode() === "history"}><Show when={!historyLoading()} fallback={<div class="workspace-panel-empty">Loading history…</div>}><Show when={historyTree()?.tree.length} fallback={<div class="workspace-panel-empty"><div><HistoryIcon /><strong>No chat history</strong><p>Send a message to start this tree.</p></div></div>}><div class="workspace-chat-history" role="tree" aria-label="Chat history"><HistoryNodes nodes={historyTree()!.tree} activePath={historyActivePath()} leafId={historyTree()!.leafId} /></div></Show></Show></Show>
+      <div class="workspace-chat-modes" role="radiogroup" aria-label="Chat view"><div><Show when={props.historyAvailable?.()}><button role="radio" aria-checked={chatMode() === "history"} onClick={() => { selectChatMode("history"); void loadHistory(); }}>History</button></Show><button role="radio" aria-checked={chatMode() === "changes"} onClick={showAgentChanges}>Agent changes</button></div>
+        <Show when={chatMode() === "history"}>
+          <div class="workspace-history-toolbar">
+            <WorkbenchButton class="workspace-history-toggle" aria-label={collapseTools() ? "Expand tool calls" : "Collapse sequential tool calls"} aria-pressed={collapseTools()} title={collapseTools() ? "Expand tool calls" : "Collapse sequential tool calls"} onClick={toggleCollapseTools}><ListCollapseIcon /></WorkbenchButton>
+            <WorkbenchButton class="workspace-history-toggle" aria-label={historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={historyWrap()} title={historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} onClick={toggleHistoryWrap}><WrapTextIcon /></WorkbenchButton>
+          </div>
+        </Show></div>
+      <Show when={chatMode() === "history"}><Show when={!historyLoading()} fallback={<div class="workspace-panel-empty">Loading history…</div>}><Show when={historyTree()?.tree.length} fallback={<div class="workspace-panel-empty"><div><HistoryIcon /><strong>No chat history</strong><p>Send a message to start this tree.</p></div></div>}><div class="workspace-chat-history" role="tree" aria-label="Chat history" data-wrap={historyWrap() ? "true" : "false"}
+          ref={(element) => { historyScroller = element; stickHistoryToBottom(); }} onScroll={trackHistoryScroll}><HistoryNodes nodes={historyTree()!.tree} activePath={historyActivePath()} leafId={historyTree()!.leafId} collapseTools={collapseTools()} /></div></Show></Show></Show>
       <Show when={chatMode() === "changes"}><WorkspaceDiffView
         title="Changed files"
         files={chatReview.files()}
@@ -1924,16 +2115,16 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         viewState={chatReview.viewState()}
         loading={chatReview.loading()}
         error={chatReview.error()}
-        empty="No changes in this scope."
+        empty={props.artifactChatId?.() ? "No changes in this scope." : "Open a chat to review agent changes."}
         comparisonSource={comparisonSourceControls(chatReview, openEmbeddedReview, chatScopes)}
-        comparisonLabel={chatReview.rangeLabel()}
         annotationChatId={props.artifactChatId?.()}
+        reveal={reviewReveal()}
         onSelect={selectEmbeddedReviewFile}
         onOpenWorkingFile={openWorkingFile}
         onViewStateChange={chatReview.setViewState}
       /></Show>
     </section></Show>
-    <Show when={tabVisible("terminal")}><section class="workspace-terminal-slot" data-position={panePosition("terminal")}><TerminalPane projectId={props.settingsScope?.() === "computer" ? "computer" : props.projectId()} projectName={props.settingsScope?.() === "computer" ? "Computer" : props.projectName()} workingRoot={props.settingsScope?.() === "computer" ? props.workingRoot() : undefined} terminalId={props.requestedTab?.()?.terminalId} focusRequest={terminalFocusRequest()} /></section></Show>
+    <Show when={tabVisible("terminal")}><section class="workspace-terminal-slot" data-position={panePosition("terminal")}><TerminalPane projectId={props.settingsScope?.() === "computer" ? "computer" : props.projectId()} projectName={props.settingsScope?.() === "computer" ? "Computer" : props.projectName()} workingRoot={props.settingsScope?.() === "computer" ? props.workingRoot() : undefined} terminalId={props.requestedTab?.()?.terminalId} focusRequest={terminalFocusRequest()} connectivity={props.connectivity} /></section></Show>
     </main>
     <Show when={loading()}><div class="workspace-panel-loading"><Spinner /><span>Loading workspace</span></div></Show>
     </div>

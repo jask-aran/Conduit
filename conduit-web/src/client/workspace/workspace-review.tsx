@@ -1,5 +1,5 @@
 import { WorkbenchButton } from "./workspace-workbench";
-import { ChevronDownIcon, ChevronUpIcon, PanelLeftCloseIcon } from "lucide-solid";
+import { PanelLeftCloseIcon } from "lucide-solid";
 import { For, Show } from "solid-js";
 import { FileTypeIcon } from "./file-type-icon";
 
@@ -10,13 +10,8 @@ export interface WorkspaceReviewFile {
 }
 
 export function WorkspaceReviewNavigator(props: { title: string; files: WorkspaceReviewFile[]; selectedPath: string | null; empty?: string; onSelect: (path: string) => void; onCollapse?: () => void }) {
-  const index = () => props.files.findIndex((file) => file.path === props.selectedPath);
-  const move = (offset: number) => {
-    if (!props.files.length) return;
-    props.onSelect(props.files[(index() + offset + props.files.length) % props.files.length]!.path);
-  };
   return <nav class="workspace-review-files" aria-label={props.title}>
-      <header><strong>{props.title}</strong><small>{index() >= 0 ? `${index() + 1} / ${props.files.length}` : props.files.length}</small><WorkbenchButton type="button" aria-label="Previous file" disabled={props.files.length < 2} onClick={() => move(-1)}><ChevronUpIcon /></WorkbenchButton><WorkbenchButton type="button" aria-label="Next file" disabled={props.files.length < 2} onClick={() => move(1)}><ChevronDownIcon /></WorkbenchButton><Show when={props.onCollapse}><WorkbenchButton type="button" aria-label="Hide changed files" title="Hide changed files" onClick={props.onCollapse}><PanelLeftCloseIcon /></WorkbenchButton></Show></header>
+      <header><Show when={props.onCollapse}><WorkbenchButton type="button" aria-label="Hide changed files" title="Hide changed files" onClick={props.onCollapse}><PanelLeftCloseIcon /></WorkbenchButton></Show><strong>{props.title}</strong></header>
       <Show when={props.files.length} fallback={<div class="workspace-tree-empty">{props.empty ?? "No changed files."}</div>}><div class="workspace-changes"><For each={props.files}>{(file) => {
         const name = () => file.path.split("/").at(-1) ?? file.path;
         const directory = () => file.path.split("/").slice(0, -1).join("/");

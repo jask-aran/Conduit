@@ -1,5 +1,5 @@
 import type { Extension } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
+import { Decoration, EditorView, hoverTooltip } from "@codemirror/view";
 import { createEffect, createSignal, Show } from "solid-js";
 import type { ReviewCommentSide } from "../chat/review-comments";
 
@@ -10,6 +10,38 @@ export interface AnnotationSelection {
   excerpt: string;
   left: number;
   top: number;
+}
+
+export interface CommentHighlight {
+  from: number;
+  to: number;
+  note: string;
+  side?: ReviewCommentSide;
+}
+
+export function commentHighlightsExtension(items: readonly CommentHighlight[]): Extension {
+  return [
+    EditorView.decorations.of((view) => Decoration.set(items.flatMap((item) => {
+      const start = view.state.doc.line(Math.max(1, Math.min(item.from, view.state.doc.lines)));
+      const end = view.state.doc.line(Math.max(1, Math.min(item.to, view.state.doc.lines)));
+      return start.from < end.to ? [Decoration.mark({ class: "cm-review-comment" }).range(start.from, end.to)] : [];
+    }).sort((left, right) => left.from - right.from))),
+    hoverTooltip((view, position) => {
+      const line = view.state.doc.lineAt(position);
+      const item = items.find((candidate) => line.number >= candidate.from && line.number <= candidate.to);
+      if (!item) return null;
+      return {
+        pos: line.from,
+        above: true,
+        create: () => {
+          const dom = document.createElement("div");
+          dom.className = "workspace-review-comment-tooltip";
+          dom.textContent = item.note || "Referenced without a note";
+          return { dom };
+        },
+      };
+    }),
+  ];
 }
 
 export function annotationExtension(options: {
@@ -47,6 +79,9 @@ export function WorkspaceAnnotationPopup(props: {
   const [open, setOpen] = createSignal(false);
   const [note, setNote] = createSignal("");
   const [error, setError] = createSignal("");
+  let noteInput: HTMLTextAreaElement | undefined;
+  // `autofocus` only applies while the document parses; this box arrives later.
+  createEffect(() => { if (open()) queueMicrotask(() => noteInput?.focus({ preventScroll: true })); });
   createEffect(() => {
     props.selection;
     setOpen(false);
@@ -54,12 +89,15 @@ export function WorkspaceAnnotationPopup(props: {
     setError("");
   });
   const add = () => {
-    if (props.onAdd(note())) props.onDismiss();
-    else setError("Limit of 12 references reached");
+    if (!props.onAdd(note())) return setError("Limit of 12 references reached");
+    props.onDismiss();
+    queueMicrotask(() => {
+      document.querySelector<HTMLTextAreaElement>(".composer textarea:not([disabled])")?.focus({ preventScroll: true });
+    });
   };
   return <div class="workspace-annotation" style={{ left: `${props.selection.left}px`, top: `${props.selection.top}px` }}>
     <Show when={open()} fallback={<button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => setOpen(true)}>Comment</button>}>
-      <textarea autofocus aria-label={`Comment on lines ${props.selection.from}-${props.selection.to}`} rows={2} maxlength={2000} value={note()} onInput={(event) => setNote(event.currentTarget.value)} onKeyDown={(event) => {
+      <textarea ref={noteInput} aria-label={`Comment on lines ${props.selection.from}-${props.selection.to}`} rows={2} maxlength={2000} value={note()} onInput={(event) => setNote(event.currentTarget.value)} onKeyDown={(event) => {
         if (event.key === "Escape") { event.preventDefault(); setOpen(false); }
         if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); add(); }
       }} />

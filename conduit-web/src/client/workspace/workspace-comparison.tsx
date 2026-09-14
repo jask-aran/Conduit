@@ -1,15 +1,16 @@
 import { WorkbenchButton, WorkbenchStatus } from "./workspace-workbench";
-import { MergeView, unifiedMergeView, getChunks, goToNextChunk, goToPreviousChunk, getOriginalDoc, originalDocChangeEffect } from "@codemirror/merge";
+import { MergeView, unifiedMergeView, getChunks, getOriginalDoc, originalDocChangeEffect } from "@codemirror/merge";
 import { ChangeSet, Compartment, EditorState, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { gotoLine, openSearchPanel } from "@codemirror/search";
-import { ChevronDownIcon, ChevronUpIcon, SearchIcon, WrapTextIcon } from "lucide-solid";
+import { Columns2Icon, SearchIcon, WrapTextIcon } from "lucide-solid";
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js";
-import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "@/components/primitives";
 import { readSetting, writeSetting, WORKSPACE_PANEL_GLOBAL_SCOPE } from "./workspace-panel-storage";
 import { workspaceReadOnlySetup } from "./workspace-editor-base";
 import { workspaceLanguageForFilename } from "./workspace-languages";
-import { annotationExtension, WorkspaceAnnotationPopup, type AnnotationSelection } from "./workspace-annotate";
+import { FileTypeIcon } from "./file-type-icon";
+import { annotationExtension, commentHighlightsExtension, WorkspaceAnnotationPopup, type AnnotationSelection, type CommentHighlight } from "./workspace-annotate";
+import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import "./workspace-comparison.css";
 
 export type ComparisonPayload = {
@@ -26,13 +27,16 @@ export interface ComparisonViewState {
   position: number;
 }
 
-export default function WorkspaceComparison(props: { comparison: ComparisonPayload; sourceKey: string; viewState: ComparisonViewState; headerAction?: JSX.Element; comparisonSource?: JSX.Element; comparisonLabel?: JSX.Element; onViewStateChange?: (state: ComparisonViewState) => void; onAnnotate?: (selection: AnnotationSelection, note: string) => boolean }) {
+export default function WorkspaceComparison(props: { comparison: ComparisonPayload; sourceKey: string; viewState: ComparisonViewState; headerAction?: JSX.Element; comparisonSource?: JSX.Element; commentHighlights?: readonly CommentHighlight[]; reveal?: ReviewNavigationRequest | null; onViewStateChange?: (state: ComparisonViewState) => void; onAnnotate?: (selection: AnnotationSelection, note: string) => boolean }) {
   let host!: HTMLDivElement;
   let activeView: EditorView | undefined;
   let captureReview = () => ({ ...props.viewState });
   const [layout, setLayout] = createSignal<"unified" | "split">(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "diff-layout") === "split" ? "split" : props.viewState.layout);
   createEffect(() => writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "diff-layout", layout()));
-  const [wrap, setWrap] = createSignal(props.viewState.wrap);
+  // Wrapping is a reading preference, not a property of one comparison.
+  const storedWrap = readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "diff-wrap");
+  const [wrap, setWrap] = createSignal(storedWrap === null ? props.viewState.wrap : storedWrap === "true");
+  createEffect(() => writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "diff-wrap", String(wrap())));
   const [position, setPosition] = createSignal("Ln 1, Col 1");
   const [summary, setSummary] = createSignal({ added: 0, removed: 0, precise: true });
   const [languageName, setLanguageName] = createSignal("Plain text");
@@ -42,6 +46,7 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
   };
 
   let savedReview = { ...props.viewState };
+  let revealedNonce = 0;
   const identity = createMemo(() => `${props.sourceKey}:\u0000${props.comparison.kind}:\u0000${props.comparison.path}`);
   let renderedIdentity = "";
   createEffect(() => {
@@ -51,6 +56,8 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
       renderedIdentity = nextIdentity;
     }
     const data = untrack(() => props.comparison);
+    const commentHighlights = props.commentHighlights ?? [];
+    const reveal = props.reveal;
     const split = layout() === "split";
     if (data.kind !== "text") return;
     let disposed = false;
@@ -79,9 +86,11 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
       }),
       EditorView.domEventHandlers({ focus: (_event, view) => { activeView = view; } }),
     ];
-    const sideExtensions = (side: "original" | "modified"): Extension[] => props.onAnnotate
-      ? [extensions, annotationExtension({ side, onSelect: selectAnnotation })]
-      : extensions;
+    const sideExtensions = (side: "original" | "modified"): Extension[] => [
+      extensions,
+      commentHighlightsExtension(commentHighlights.filter((item) => !item.side || item.side === side)),
+      ...(props.onAnnotate ? [annotationExtension({ side, onSelect: selectAnnotation })] : []),
+    ];
     const options = { highlightChanges: true, gutter: true, collapseUnchanged: { margin: 3, minSize: 8 }, diffConfig: { scanLimit: 500, timeout: 40 } };
     let merge: MergeView | undefined;
     let view: EditorView;
@@ -99,7 +108,21 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
     view.dispatch({ selection: { anchor: Math.min(review.position, view.state.doc.length) } });
     scroller.addEventListener("scroll", publishReview, { passive: true });
     const restoreFrame = requestAnimationFrame(() => {
-      if (!disposed) { scroller.scrollTop = review.top; scroller.scrollLeft = review.left; ready = true; publishReview(); }
+      if (!disposed) {
+        scroller.scrollTop = review.top;
+        scroller.scrollLeft = review.left;
+        if (reveal?.path === data.path && reveal.nonce !== revealedNonce) {
+          revealedNonce = reveal.nonce;
+          const target = merge && reveal.side === "original" ? merge.a : view;
+          const start = target.state.doc.line(Math.max(1, Math.min(reveal.from, target.state.doc.lines)));
+          const end = target.state.doc.line(Math.max(1, Math.min(reveal.to, target.state.doc.lines)));
+          target.dispatch({ selection: { anchor: start.from, head: end.to }, effects: EditorView.scrollIntoView(start.from, { y: "center" }) });
+          selectAnnotation(null);
+          target.focus();
+        }
+        ready = true;
+        publishReview();
+      }
     });
     createEffect(() => {
       const next = props.comparison;
@@ -156,47 +179,26 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
     });
   });
 
-  const move = (forward: boolean) => {
-    if (!activeView) return;
-    (forward ? goToNextChunk : goToPreviousChunk)(activeView);
-    activeView.focus();
-  };
-  const rangeLabel = () => props.comparisonLabel ?? { changes: "Index → Working copy", staged: "HEAD → Index", head: "HEAD → Working copy", turn: "Turn start → Working copy", session: "Chat start → Working copy" }[props.comparison.scope];
   return <section class="workspace-comparison">
     <header class="workspace-preview-header">
-      <span class="workspace-comparison-path">{props.comparison.path}</span>
+      <div class="workspace-preview-file" title={props.comparison.path}><FileTypeIcon name={props.comparison.path} /><span>{props.comparison.path}</span></div>
       {props.headerAction}
       <Show when={props.comparison.kind === "text"}>
-        <Menu>
-          <MenuTrigger class="workspace-document-menu" aria-label="Comparison view options">View<ChevronDownIcon /></MenuTrigger>
-          <MenuContent>
-            <MenuRadioGroup value={layout()} onChange={(value) => { if (value === "unified" || value === "split") setLayout(value); }}>
-              <MenuRadioItem value="unified">Unified diff</MenuRadioItem>
-              <MenuRadioItem value="split">Side-by-side diff</MenuRadioItem>
-            </MenuRadioGroup>
-          </MenuContent>
-        </Menu>
+        <div class="workspace-editor-header-tools">
+          <WorkbenchButton aria-label="Find in comparison" title="Find in comparison (Ctrl+F)" onClick={() => { if (activeView) openSearchPanel(activeView); }}><SearchIcon /></WorkbenchButton>
+          <WorkbenchButton aria-label={wrap() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={wrap()} title={wrap() ? "Disable line wrapping" : "Enable line wrapping"} onClick={() => setWrap(!wrap())}><WrapTextIcon /></WorkbenchButton>
+          <WorkbenchButton aria-label={layout() === "split" ? "Show unified diff" : "Show side-by-side diff"} aria-pressed={layout() === "split"} title={layout() === "split" ? "Show unified diff" : "Show side-by-side diff"} onClick={() => setLayout(layout() === "split" ? "unified" : "split")}><Columns2Icon /></WorkbenchButton>
+        </div>
       </Show>
     </header>
-    <Show when={props.comparison.kind === "text"}>
-      <div class="workspace-comparison-context">
-        <span class="workspace-comparison-counts" title={summary().precise ? "Changed lines" : "Approximate changed lines"}><span>−{summary().removed}</span><span>+{summary().added}</span></span>
-      </div>
-    </Show>
     <Show when={props.comparison.kind === "text"} fallback={<div class="workspace-panel-empty">{props.comparison.kind === "unavailable" ? props.comparison.message : ""}</div>}>
       <div class="workspace-comparison-content" data-layout={layout()}>
         <div ref={host} class="workspace-comparison-editor workspace-code-editor" />
         <Show when={annotation()}>{(selection) => <WorkspaceAnnotationPopup selection={selection()} onAdd={(note) => props.onAnnotate?.(selection(), note) ?? false} onDismiss={() => selectAnnotation(null)} />}</Show>
       </div>
-      <WorkbenchStatus commands={<>
-        {props.comparisonSource}
-        <WorkbenchButton aria-label="Find in comparison" title="Find in comparison (Ctrl+F)" onClick={() => { if (activeView) openSearchPanel(activeView); }}><SearchIcon /></WorkbenchButton>
-        <WorkbenchButton aria-label="Previous change" title="Previous change" onClick={() => move(false)}><ChevronUpIcon /></WorkbenchButton>
-        <WorkbenchButton aria-label="Next change" title="Next change" onClick={() => move(true)}><ChevronDownIcon /></WorkbenchButton>
-      </>}>
-        <span class="workspace-editor-metadata" title="Comparison endpoints">{rangeLabel()}</span>
+      <WorkbenchStatus commands={props.comparisonSource}>
+        <span class="workspace-comparison-counts" title={summary().precise ? "Changed lines" : "Approximate changed lines"}><span>−{summary().removed}</span><span>+{summary().added}</span></span>
         <WorkbenchButton aria-label="Go to line" title="Go to line (Alt+G)" onClick={() => { if (activeView) gotoLine(activeView); }}>{position()}</WorkbenchButton>
-        <WorkbenchButton aria-label={wrap() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={wrap()} title={wrap() ? "Disable line wrapping" : "Enable line wrapping"} onClick={() => setWrap(!wrap())}><WrapTextIcon /></WorkbenchButton>
         <span class="workspace-editor-metadata">{languageName()} · Read-only</span>
       </WorkbenchStatus>
     </Show>
