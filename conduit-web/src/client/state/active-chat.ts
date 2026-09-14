@@ -652,36 +652,41 @@ export function createActiveChat(options: ActiveChatOptions) {
           catalogue.patchChat(event.chatId, { title: event.title });
           if (event.chatId === selectedId()) setTitle(event.title);
         }
-        void catalogue.refresh();
         if (event.chatId === selectedId()) {
           const current = activeGeneration();
           const terminal = current && ["stopped", "complete", "failed"].includes(current.status);
           if (terminal && current.id === event.generationId
             && (event.generationSeq == null || current.lastSeq >= event.generationSeq)) {
-            const selection = selectionToken;
-            const checkpointGenerationId = event.generationId;
-            const checkpointGenerationSeq = event.generationSeq;
-            queueMicrotask(() => {
-              void api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(event.chatId)}`, { cache: "no-store" }).then((detail) => {
-                if (selection !== selectionToken || event.chatId !== selectedId()) return;
-                const matching = activeGeneration();
-                if (!matching || matching.id !== checkpointGenerationId
-                  || !["stopped", "complete", "failed"].includes(matching.status)
-                  || (checkpointGenerationSeq != null && matching.lastSeq < checkpointGenerationSeq)) return;
-                const liveProviderError = matching.status === "failed"
-                  && matching.assistantMessages.some((message) => message.stopReason === "error");
-                const persistedProviderError = asList<Message>(detail.messages)
-                  .some((message) => message.role === "assistant" && message.stopReason === "error");
-                batch(() => {
-                  applyDetail(detail, true);
-                  if (liveProviderError && !persistedProviderError) return;
-                  generationStore.clear();
-                  setActiveGenerationChange(null);
-                  setActiveGeneration(null);
-                });
-              }).catch((error) => onError(error));
-            });
-          } else if (!current) void loadDetail(event.chatId, true).catch((error) => onError(error));
+            if (current.status === "complete") {
+              batch(() => {
+                generationStore.clear();
+                setActiveGenerationChange(null);
+                setActiveGeneration(null);
+              });
+            } else {
+              const selection = selectionToken;
+              const checkpointGenerationId = event.generationId;
+              queueMicrotask(() => {
+                void api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(event.chatId)}`, { cache: "no-store" }).then((detail) => {
+                  if (selection !== selectionToken || event.chatId !== selectedId()) return;
+                  const matching = activeGeneration();
+                  if (!matching || matching.id !== checkpointGenerationId
+                    || !["stopped", "failed"].includes(matching.status)) return;
+                  const liveProviderError = matching.status === "failed"
+                    && matching.assistantMessages.some((message) => message.stopReason === "error");
+                  const persistedProviderError = asList<Message>(detail.messages)
+                    .some((message) => message.role === "assistant" && message.stopReason === "error");
+                  batch(() => {
+                    applyDetail(detail, true);
+                    if (liveProviderError && !persistedProviderError) return;
+                    generationStore.clear();
+                    setActiveGenerationChange(null);
+                    setActiveGeneration(null);
+                  });
+                }).catch((error) => onError(error));
+              });
+            }
+          }
         }
         break;
       case "transcript_sync":
@@ -705,7 +710,6 @@ export function createActiveChat(options: ActiveChatOptions) {
         break;
       case "message_end":
         if (event.message.role === "user") {
-          void catalogue.refresh();
           setMessages((current) => promotePendingUser(current, event.message));
         } else if (event.message.role === "assistant") {
           setMessages((current) => commitAssistantMessage(current, event.message));

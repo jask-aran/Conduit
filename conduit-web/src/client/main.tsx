@@ -2032,8 +2032,8 @@ function App() {
     </main>
     <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} requestedTab={workspaceViewRequest} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
     <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel projectId={() => selectedProject()!.id} projectName={() => selectedProject()!.name} sourceControlEnabled={() => selectedProject()!.kind === "workspace"} workingRoot={() => selectedProject()!.workingRoot} chatId={() => workspacePanelScope()!} artifactChatId={() => routeKind() === "chat" ? chat.loadedId() : null} historyAvailable={() => {
-      const active = selectedProject()!.sessions.find((item) => item.id === chat.loadedId());
-      return active?.backend?.implementation === "conduit_pi" || active?.backend?.implementation === "native_pi" || active?.runtime?.kind === "native_pi";
+      const runtime = chat.runtimeIdentity();
+      return runtime?.kind === "conduit_profile" || runtime?.kind === "native_pi";
     }} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} requestedTab={workspaceViewRequest} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </div>
     </Show>
