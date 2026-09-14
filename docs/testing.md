@@ -11,8 +11,8 @@ Always pick the lowest tier that can prove the change. Do not escalate to Tier 3
 | :--- | :--- | :--- | :--- | :--- |
 | **Tier 1: Static & Isolated** | < 2s | **Minimal** (clean exit) | `npm run typecheck`<br>`node --test test/<file>.test.js` | Contract changes, types, server routes, isolated logic. |
 | **Tier 2: Fast Deterministic Harnesses** | < 1s | **Low** (compact JSON) | `node scripts/run-harness.mjs [--profile ...]`<br>`node scripts/bench-renderer.mjs`<br>`curl` with `conduit-auth.mjs mint-session` | WebSocket lifecycles, streaming backpressure, KaTeX/markdown parser, live server HTTP headers. |
-| **Tier 3: Targeted Browser** | 3–8s | **Moderate** | `npx playwright test <file>.js -g "<name>" --project desktop-chromium` | Real DOM interactions, focus/keyboard traps, CSS layout regressions. |
-| **Tier 4: Broad Sweeps & Canaries** | 30s–2m+ | **Prohibitive** (context poison) | `npm test`<br>`npm run test:browser`<br>`npm run test:browser:setpieces` | Release verification only. **Do not run during iterative coding turns.** |
+| **Tier 3: Targeted Browser** | 10–30s | **Moderate** | `npm run qa:agent-browser`<br>`npm run agent-browser:local -- --session <id> ...` | Real DOM interactions, focus/keyboard traps, CSS layout regressions. Driven, not asserted. |
+| **Tier 4: Broad Sweeps & Canaries** | 30s–5m+ | **Prohibitive** (context poison) | `npm test` | Release verification only. **Do not run during iterative coding turns.** |
 
 ## Local authentication
 
@@ -29,7 +29,7 @@ node scripts/conduit-auth.mjs mint-session \
 - `token`: raw session token
 - `cookie`: `conduit_session=...` for HTTP or browser cookie import
 - `json`: token and session metadata
-- `playwright`: Playwright `storageState` JSON
+- `playwright`: browser `storageState` JSON, for any external automation
 - Omit `--output` to write to stdout. Output files use mode `0600`.
 - Agent Browser and Windows DevTools mint and install their own sessions.
 
@@ -38,7 +38,6 @@ node scripts/conduit-auth.mjs mint-session \
 | Surface | Use |
 | --- | --- |
 | Agent Browser | authenticated navigation, accessibility, screenshots, ordinary UI QA |
-| Playwright | deterministic fixtures, DOM/layout metrics, release canaries |
 | Windows Chrome DevTools | headed native frame, compositor, GPU, paint, layout, console, and network profiling |
 
 ### Agent Browser
@@ -67,43 +66,6 @@ Commands available through `agent-browser:local`:
 - Evidence: `screenshot`, `diff snapshot`
 - Session: `close`
 - Reference: `agent-browser skills get core --full`
-
-### Playwright
-
-Pre-built tests:
-
-```bash
-npm run test:browser:setpieces
-npm run test:terminal-performance
-npm run test:terminal-performance:throttled
-npm run test:browser
-```
-
-Playwright selectors and modes:
-
-```bash
-npx playwright test --list
-npx playwright test test/browser/app.spec.js
-npx playwright test test/browser/app.spec.js:123
-npx playwright test --grep "test name" --project desktop-chromium
-npx playwright test --headed --workers 1
-npx playwright test --debug
-npx playwright test --last-failed
-```
-
-- Projects: `desktop-chromium`, `mobile-chromium`
-- Main flags: `--grep`, `--project`, `--headed`, `--debug`, `--workers`, `--trace`, `--last-failed`, `--list`
-- Reference: `npx playwright test --help`
-
-For custom Playwright work against port 4310, create state at the repository
-root and pass the file as Playwright `storageState`:
-
-```bash
-node scripts/conduit-auth.mjs mint-session \
-  --user-agent conduit-playwright \
-  --format playwright \
-  --output /tmp/conduit-playwright.json
-```
 
 ### Windows Chrome DevTools
 
@@ -178,4 +140,4 @@ npm run perf:live -- --target local --origin http://127.0.0.1:4310 --chat-id <id
 
 - `startConduitHarness()`: isolated HTTP, WebSocket, SSE, persistence, PTY, and Pi lifecycle tests
 - `perf:live`: cost-bearing provider and deployed-path timing
-- `/tmp`: temporary JSON, traces, screenshots, cookie files, and Playwright state
+- `/tmp`: temporary JSON, traces, screenshots, cookie files, and browser state

@@ -21,7 +21,6 @@
     "android:build": "npm run cap:sync && cd android && ./gradlew assembleDebug",
     "android:open": "cap open android",
     "android:run": "npm run cap:sync && cap run android",
-    "test:setpieces": "CONDUIT_SETPIECES=1 playwright test",
     "bench:renderer": "node scripts/bench-renderer.mjs"
   },
   "dependencies": {
@@ -89,7 +88,6 @@
   },
   "devDependencies": {
     "@capacitor/cli": "8.5.0",
-    "@playwright/test": "1.61.1",
     "@tailwindcss/vite": "^4.3.2",
     "tailwindcss": "^4.3.2",
     "typescript": "7.0.2",
