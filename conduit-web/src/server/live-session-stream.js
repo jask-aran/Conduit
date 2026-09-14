@@ -3,6 +3,7 @@ import { messagesFromEntries } from "../session-store.js";
 import { chatView } from "../chat-store.js";
 import { parseAttachmentEnvelope } from "../attachment-envelope.js";
 import { ChatBackendRegistry } from "../pi-rpc-adapter.js";
+import { startWebSocketKeepalive } from "./ws-keepalive.js";
 
 export function interruptedPromptInput(taken, message, attachmentIds = []) {
   const queued = [...(taken?.steering || []), ...(taken?.followUp || [])]
@@ -237,6 +238,7 @@ export function createLiveSessionStream({
   }
 
   const handleUpgrade = (id, request, socket, head) => wss.handleUpgrade(request, socket, head, (ws) => {
+    startWebSocketKeepalive(ws);
     const record = backends.get(id);
     const adapter = adapterFor(record);
     const generationResume = adapter.attach(id, ws);

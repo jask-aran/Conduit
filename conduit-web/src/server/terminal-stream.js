@@ -1,6 +1,7 @@
 import { WebSocketServer } from "ws";
 import { PtyOutputBatcher } from "../pty-output-batcher.js";
 import { PTY_MAX_INPUT_BYTES } from "../pty-manager.js";
+import { startWebSocketKeepalive } from "./ws-keepalive.js";
 
 const TERMINAL_PENDING_LIMIT = 1024 * 1024;
 const PTY_IN_USE_CLOSE_CODE = 4009;
@@ -71,6 +72,7 @@ export function createTerminalStream({ terminals }) {
   const handleUpgrade = (id, request, socket, head) => {
     if (shuttingDown) return socket.destroy();
     return wss.handleUpgrade(request, socket, head, (ws) => {
+    startWebSocketKeepalive(ws);
     const requestUrl = new URL(request.url || "/", "http://localhost");
     const takeover = requestUrl.searchParams.get("takeover") === "1";
     // Reserve synchronously before terminals.attach() does asynchronous tmux

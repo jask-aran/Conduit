@@ -4,6 +4,7 @@ import { WebSocket } from "ws";
 import { OPENAI_LIVE_ADAPTER, OPENAI_LIVE_MODEL } from "../voice-settings.js";
 import { createSegmentationProvider, segmentationObservationMetadata } from "./voice-segmentation.js";
 import { selectSileroVadRanges } from "./voice-vad.js";
+import { startWebSocketKeepalive } from "./ws-keepalive.js";
 
 const DEFAULT_LIMITS = Object.freeze({
   maxSessions: 2,
@@ -1766,6 +1767,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
   const dictationClients = new Set();
   const sessionCloseWaiters = new Set();
   const handleUpgrade = (request, socket, head) => wss.handleUpgrade(request, socket, head, (client) => {
+    startWebSocketKeepalive(client);
     if (activeSessions >= limits.maxSessions) {
       client.send(JSON.stringify({ type: "error", code: "dictation_capacity", message: "The Conduit server is already handling the maximum number of dictation sessions" }));
       client.close(1013, "Dictation capacity reached");
