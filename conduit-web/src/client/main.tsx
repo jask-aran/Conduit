@@ -50,6 +50,7 @@ import { WorkspaceAppearanceEditor } from "./project/workspace-appearance-editor
 import { checkForPwaUpdate, forcePwaUpdate, rememberPwaRegistration, resetPwaAppCache } from "./pwa-update";
 import { createActiveChat, type ActiveChatStore } from "./state/active-chat";
 import { createAttachments, DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
+import { createDrafts } from "./state/drafts";
 import { createCatalogueStore } from "./state/catalogue";
 import { createModelSettings } from "./state/model-settings";
 import { createPermissionSettings } from "./state/permission-settings";
@@ -57,7 +58,7 @@ import { createRuntimeStore } from "./state/runtime";
 import { VoiceWaveform } from "./chat/voice-waveform";
 import { browserShortcutEnvironmentProvider } from "./shortcuts/shortcut-environment";
 import { ShortcutManager } from "./shortcuts/shortcut-manager";
-import { dropScope, migrateWorkspacePanelStorage, readSetting, writeSetting } from "./workspace/workspace-panel-storage";
+import { dropScope, migrateWorkspacePanelStorage, readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace/workspace-panel-storage";
 import { publishUiPreference, saveUiPreference, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
 import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
 import { INCREMARK_PACING_STORAGE_KEY } from "./chat/incremark-pacing";
@@ -443,8 +444,7 @@ function App() {
   const [panelOpen, setPanelOpen] = createSignal(false);
   const [workspaceExpanded, setWorkspaceExpandedState] = createSignal(false);
   const setWorkspaceExpanded = (next: boolean, persist = true) => {
-    const scope = workspacePanelScope();
-    if (persist && scope) writeSetting(scope, "expanded", String(next));
+    if (persist) writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "expanded", String(next));
     if (next === workspaceExpanded()) return;
     setWorkspaceExpandedState(next);
   };
@@ -525,6 +525,8 @@ function App() {
   });
   const permissions = createPermissionSettings(showError);
   const attachments = createAttachments(showError, maxAttachmentBytes);
+  const drafts = createDrafts(showError);
+  void drafts.load();
   const driveAttachments = { items: () => [] as never[], addFiles: () => {}, remove: () => {} } as never;
 
   const saveWorkspaceDefault = async (workspaceId: string, templateId: string | null) => {
@@ -567,6 +569,7 @@ function App() {
     models,
     permissions,
     attachments,
+    drafts,
     onError: showError,
     onModelRecovered: ({ from, to }) => toast.warning(`This chat's previous model ${from} is no longer scoped. It resumed with ${to}.`, {
       id: "model-scope-recovery",
@@ -609,9 +612,14 @@ function App() {
   createEffect(() => {
     const scope = workspacePanelScope();
     if (!scope) return;
-    const storedOpen = readSetting(scope, "open");
-    setPanelOpen(scope === "computer" ? storedOpen !== "false" : storedOpen === "true");
-    setWorkspaceExpanded(readSetting(scope, "expanded") === "true", false);
+    const globalOpen = readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "open");
+    const globalExpanded = readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "expanded");
+    const open = globalOpen ?? readSetting(scope, "open") ?? (scope === "computer" ? "true" : "false");
+    const expanded = globalExpanded ?? readSetting(scope, "expanded") ?? "false";
+    if (globalOpen === null) writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "open", open);
+    if (globalExpanded === null) writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "expanded", expanded);
+    setPanelOpen(open === "true");
+    setWorkspaceExpanded(expanded === "true", false);
   });
 
   createEffect(() => {
@@ -628,10 +636,9 @@ function App() {
     if (!next && document.activeElement instanceof HTMLElement && document.activeElement.closest(".workspace-panel")) {
       document.querySelector<HTMLElement>(".chat-header [aria-label='Toggle workspace panel']")?.focus({ preventScroll: true });
     }
-    const scope = workspacePanelScope();
     if (!next) setWorkspaceExpanded(false);
     setPanelOpen(next);
-    if (scope) writeSetting(scope, "open", String(next));
+    writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "open", String(next));
   };
 
   /** Phone overlays are exclusive: opening one closes the other. */
@@ -1400,6 +1407,43 @@ function App() {
     chatSort: chatSort(),
   }));
 
+  const restoreStash = async (id: string) => {
+    const entry = await drafts.restore(id);
+    if (!entry) return;
+    chat.setDraft(chat.draft() ? `${chat.draft()}\n${entry.text}` : entry.text);
+    // Attachments stay with the chat that uploaded them. Restoring elsewhere
+    // brings the prose only, and says so rather than pretending otherwise.
+    if (!entry.attachmentIds.length) return;
+    if (entry.chatId && entry.chatId === chat.loadedId()) void attachments.select(entry.chatId);
+    else toast(`${entry.attachmentIds.length} attached file${entry.attachmentIds.length === 1 ? "" : "s"} stayed with the original chat.`);
+  };
+
+  const stashPrompt = () => {
+    const chatId = chat.loadedId();
+    if (!chatId) return;
+    const text = chat.draft();
+    const pending = attachments.pendingIds();
+    if (text.trim() || pending.length) {
+      if (attachments.items().some((item) => item.status === "queued" || item.status === "uploading")) {
+        return showError("Wait for uploads to finish before stashing this prompt.");
+      }
+      void drafts.park(chatId, text, pending).then((entry) => {
+        if (!entry) return;
+        chat.setDraft("");
+        // Drops the rows from the composer without deleting them: the stash
+        // entry still references those uploads.
+        attachments.markAnnounced(pending);
+        toast("Prompt stashed", { action: { label: "Undo", onClick: () => void restoreStash(entry.id) } });
+      });
+      return;
+    }
+    const entries = drafts.stash();
+    if (!entries.length) return;
+    void restoreStash(entries[0]!.id).then(() => {
+      if (entries.length > 1) toast(`${entries.length - 1} more stashed prompt${entries.length === 2 ? "" : "s"}.`);
+    });
+  };
+
   const paletteActions: PaletteActions = {
     logout: () => { void logout(); },
     newChat: (project, launch) => void createChat(project ?? undefined, launch ?? {}),
@@ -1407,6 +1451,7 @@ function App() {
     newWorkspace: () => runSidebar("new-workspace"),
     openRuntimeChat: () => void createChat(undefined, { templateId: "runtime" }),
     attach: () => attachFileInput?.click(),
+    stashPrompt,
     toggleDictation: () => window.dispatchEvent(new Event("conduit:toggle-dictation")),
     toggleSidebar: () => runSidebar("toggle-sidebar"),
     toggleWorkspacePanel: togglePanel,
@@ -1608,6 +1653,8 @@ function App() {
       shortcutManager.registerHandler(COMMAND_IDS.toggleSidebar, "application", () => runSidebar("toggle-sidebar")),
       shortcutManager.registerHandler(COMMAND_IDS.toggleWorkspacePanel, "application", togglePanel),
       shortcutManager.registerHandler(COMMAND_IDS.maximizeWorkspacePanel, "application", maximizeWorkspacePanel),
+      shortcutManager.registerHandler(COMMAND_IDS.stashPrompt, "composer", stashPrompt),
+      shortcutManager.registerHandler(COMMAND_IDS.stashPrompt, "chat", stashPrompt),
       shortcutManager.registerHandler(COMMAND_IDS.focusComposer, "application", focusComposer, { when: hasComposer }),
       shortcutManager.registerHandler(COMMAND_IDS.focusComposer, "chat", focusComposer, { when: hasComposer }),
       shortcutManager.registerHandler(COMMAND_IDS.focusWorkspacePanel, "application", focusWorkspacePanel, { when: () => Boolean(workspacePanelScope()) }),

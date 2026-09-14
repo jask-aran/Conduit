@@ -1,5 +1,5 @@
 import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, Show, type Accessor } from "solid-js";
-import { BoxesIcon, Columns2Icon, CheckIcon, ChevronsUpIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileDiffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, FolderUpIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, HistoryIcon, Maximize2Icon, MessageSquareIcon, Minimize2Icon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, SendIcon, TerminalIcon, Trash2Icon, Undo2Icon, UploadIcon, XIcon } from "lucide-solid";
+import { Columns2Icon, CheckIcon, ChevronsUpIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileDiffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, FolderUpIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, HistoryIcon, Maximize2Icon, MessageSquareIcon, Minimize2Icon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, SendIcon, TerminalIcon, Trash2Icon, Undo2Icon, UploadIcon, XIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
 import { Button, ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Menu, MenuContent, MenuItem, MenuRadioGroup, MenuRadioItem, MenuTrigger, Spinner } from "@/components/primitives";
 import { api, asList } from "../api/client";
@@ -33,7 +33,7 @@ interface GitChangedFile { status: string; path: string; stagedCounts?: GitLineC
 interface DiffPayload { repository: boolean; branch?: string; upstream?: string | null; ahead?: number; behind?: number; commits?: GitCommit[]; refs?: GitRef[]; files: GitChangedFile[]; diff: string; }
 interface GitCommitDetail { hash: string; content: string; }
 type PanelTab = "files" | "diff" | "chat" | "terminal";
-type ChatMode = "history" | "changes" | "outputs" | "interactive";
+type ChatMode = "history" | "changes";
 interface HistoryEntry { id: string; parentId: string | null; timestamp: string; type: string; display: string; kind: "user" | "assistant" | "tool" | "summary" | "system"; hidden: boolean; }
 interface HistoryNode { entry: HistoryEntry; children: HistoryNode[]; label?: string; }
 interface HistoryTree { tree: HistoryNode[]; leafId: string | null; }
@@ -57,7 +57,7 @@ function primaryHistoryIndex(nodes: HistoryNode[], activePath: Set<string>): num
   const activeIndex = nodes.findIndex((node) => activePath.has(node.entry.id));
   return Math.max(0, activeIndex >= 0
     ? activeIndex
-    : nodes.reduce((best, node, index) => historyLength(node) > historyLength(nodes[best]) ? index : best, 0));
+    : nodes.reduce((best, node, index) => historyLength(node) > historyLength(nodes[best]!) ? index : best, 0));
 }
 
 function HistoryNodeRow(props: { node: HistoryNode; activePath: Set<string>; leafId: string | null; connected: boolean }) {
@@ -228,15 +228,23 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   let mobileReturnFocus: HTMLElement | null = null;
   let mobileWasOpen = false;
   const [pending, setPending] = createSignal(new Map<number, { foreground: boolean }>());
-  const panelScope = () => props.chatId();
-  const projectScope = () => props.settingsScope?.() || props.projectId();
-  const fileScope = () => props.settingsScope ? props.projectId() : panelScope();
+  const panelScope = () => WORKSPACE_PANEL_GLOBAL_SCOPE;
+  const projectScope = () => WORKSPACE_PANEL_GLOBAL_SCOPE;
+  const fileScope = () => props.settingsScope ? props.projectId() : props.chatId();
+  const readPanelSetting = (name: string, legacyScope = props.chatId()) => {
+    const globalValue = readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, name);
+    if (globalValue !== null) return globalValue;
+    const legacyValue = readSetting(legacyScope, name);
+    if (legacyValue !== null) writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, name, legacyValue);
+    return legacyValue;
+  };
+  const readGeometrySetting = (name: string) => readPanelSetting(name, props.settingsScope?.() || props.projectId());
   const storedTab = () => {
-    const value = readSetting(panelScope(), "tab") || "";
+    const value = readPanelSetting("tab") || "";
     return panelTab(value) ?? "files";
   };
   const storedSecondary = () => {
-    const stored = readSetting(panelScope(), "secondary-tab") || "";
+    const stored = readPanelSetting("secondary-tab") || "";
     return panelTab(stored);
   };
   const [tab, setTab] = createSignal<PanelTab>(storedTab());
@@ -270,17 +278,17 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
   // failing file cannot spam the corner every poll.
   const reportError = (message: string) => { if (message) toast.error(message); };
   const storedOpenFiles = (): OpenFiles => ({ primary: readSetting(fileScope(), "file"), secondary: readSetting(fileScope(), "file-secondary") });
-  const [width, setWidth] = createSignal(Math.max(MIN_WORKSPACE_PANE_WIDTH, Math.min(496, Number(readSetting(projectScope(), "width")) || 336)));
+  const [width, setWidth] = createSignal(Math.max(MIN_WORKSPACE_PANE_WIDTH, Math.min(496, Number(readGeometrySetting("width")) || 336)));
   const [shellWidth, setShellWidth] = createSignal(props.open() ? width() : 0);
   const [shellGap, setShellGap] = createSignal(props.open() && !isMobileLayout() ? 8 : 0);
-  const [treeWidth, setTreeWidth] = createSignal(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(readSetting(projectScope(), "tree-width")) || DEFAULT_TREE_WIDTH)));
-  const [treeCollapsed, setTreeCollapsed] = createSignal(readSetting(projectScope(), "tree-collapsed") === "true");
+  const [treeWidth, setTreeWidth] = createSignal(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(readGeometrySetting("tree-width")) || DEFAULT_TREE_WIDTH)));
+  const [treeCollapsed, setTreeCollapsed] = createSignal(readGeometrySetting("tree-collapsed") === "true");
   const chatReview = createWorkspaceReview({ projectId: props.projectId, chatId: () => props.artifactChatId?.() ?? null, gitFiles: () => diff()?.files ?? [] });
   const sourceReview = createWorkspaceReview({ projectId: props.projectId, chatId: () => props.artifactChatId?.() ?? null, gitFiles: () => diff()?.files ?? [] });
   const [navigatorOpen, setNavigatorOpen] = createSignal(false);
-  const [splitRatio, setSplitRatio] = createSignal(Math.max(0, Math.min(100, Number(readSetting(projectScope(), "split-ratio")) || 50)));
+  const [splitRatio, setSplitRatio] = createSignal(Math.max(0, Math.min(100, Number(readGeometrySetting("split-ratio")) || 50)));
   const [splitWidth, setSplitWidth] = createSignal(0);
-  const [fileSplitRatio, setFileSplitRatio] = createSignal(Math.max(25, Math.min(75, Number(readSetting(projectScope(), "file-split-ratio")) || 50)));
+  const [fileSplitRatio, setFileSplitRatio] = createSignal(Math.max(25, Math.min(75, Number(readGeometrySetting("file-split-ratio")) || 50)));
   const [chatMode, setChatMode] = createSignal<ChatMode>("history");
   const [historyTree, setHistoryTree] = createSignal<HistoryTree | null>(null);
   const [historyLoading, setHistoryLoading] = createSignal(false);
@@ -319,13 +327,13 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
     return result;
   });
   const [terminalFocusRequest, setTerminalFocusRequest] = createSignal(0);
-  const detailOpenFor = (nextTab: PanelTab) => readSetting(panelScope(), `${nextTab}:detail-open`)
-    ?? (nextTab === "chat" ? readSetting(panelScope(), "artifacts:detail-open") : null)
+  const detailOpenFor = (nextTab: PanelTab) => readPanelSetting(`${nextTab}:detail-open`)
+    ?? (nextTab === "chat" ? readPanelSetting("artifacts:detail-open") : null)
     ?? (nextTab === "diff" ? "false" : "true");
   const storedSourceControlMode = (): SourceControlMode => {
-    const stored = readSetting(panelScope(), "diff:mode");
+    const stored = readPanelSetting("diff:mode");
     if (isSourceControlMode(stored)) return stored;
-    if (readSetting(panelScope(), "diff:source-detail-open") !== "true") return "changes";
+    if (readPanelSetting("diff:source-detail-open") !== "true") return "changes";
     return detailOpenFor("diff") === "true" ? "patch" : "graph";
   };
   const [sourceControlMode, setSourceControlMode] = createSignal<SourceControlMode>(storedSourceControlMode());
@@ -1273,12 +1281,12 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
       setSourceControlMode(storedSourceControlMode());
       setCommitDetail(null);
       if (projectChanged) {
-        pendingWidthCommit = Number(readSetting(projectScope(), "width")) || 336;
-        setTreeWidth(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(readSetting(projectScope(), "tree-width")) || DEFAULT_TREE_WIDTH)));
-        setTreeCollapsed(readSetting(projectScope(), "tree-collapsed") === "true");
-        setSplitRatio(Math.max(0, Math.min(100, Number(readSetting(projectScope(), "split-ratio")) || 50)));
-        setFileSplitRatio(Math.max(25, Math.min(75, Number(readSetting(projectScope(), "file-split-ratio")) || 50)));
-        setShowHidden(readSetting(projectScope(), "show-hidden") === "true");
+        pendingWidthCommit = Number(readGeometrySetting("width")) || 336;
+        setTreeWidth(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(readGeometrySetting("tree-width")) || DEFAULT_TREE_WIDTH)));
+        setTreeCollapsed(readGeometrySetting("tree-collapsed") === "true");
+        setSplitRatio(Math.max(0, Math.min(100, Number(readGeometrySetting("split-ratio")) || 50)));
+        setFileSplitRatio(Math.max(25, Math.min(75, Number(readGeometrySetting("file-split-ratio")) || 50)));
+        setShowHidden(readGeometrySetting("show-hidden") === "true");
       }
       setTab(nextTab);
       setSecondaryTab(storedSecondary());
@@ -1881,7 +1889,7 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         </Show></Show>
     </section></Show>
     <Show when={tabVisible("chat")}><section class="workspace-chat-view" data-position={panePosition("chat")}>
-      <div class="workspace-chat-modes" role="radiogroup" aria-label="Chat view"><div><Show when={props.historyAvailable?.()}><button role="radio" aria-checked={chatMode() === "history"} onClick={() => { setChatMode("history"); void loadHistory(); }}>History</button></Show><button role="radio" aria-checked={chatMode() === "changes"} onClick={showAgentChanges}>Agent changes</button><button role="radio" aria-checked={chatMode() === "outputs"} onClick={() => setChatMode("outputs")}>Outputs</button><button role="radio" aria-checked={chatMode() === "interactive"} onClick={() => setChatMode("interactive")}>Interactive UI</button></div></div>
+      <div class="workspace-chat-modes" role="radiogroup" aria-label="Chat view"><div><Show when={props.historyAvailable?.()}><button role="radio" aria-checked={chatMode() === "history"} onClick={() => { setChatMode("history"); void loadHistory(); }}>History</button></Show><button role="radio" aria-checked={chatMode() === "changes"} onClick={showAgentChanges}>Agent changes</button></div></div>
       <Show when={chatMode() === "history"}><Show when={!historyLoading()} fallback={<div class="workspace-panel-empty">Loading history…</div>}><Show when={historyTree()?.tree.length} fallback={<div class="workspace-panel-empty"><div><HistoryIcon /><strong>No chat history</strong><p>Send a message to start this tree.</p></div></div>}><div class="workspace-chat-history" role="tree" aria-label="Chat history"><HistoryNodes nodes={historyTree()!.tree} activePath={historyActivePath()} leafId={historyTree()!.leafId} /></div></Show></Show></Show>
       <Show when={chatMode() === "changes"}><WorkspaceDiffView
         title="Changed files"
@@ -1899,7 +1907,6 @@ export default function WorkspacePanel(props: { projectId: Accessor<string>; pro
         onOpenWorkingFile={openWorkingFile}
         onViewStateChange={chatReview.setViewState}
       /></Show>
-      <Show when={chatMode() === "outputs" || chatMode() === "interactive"}><div class="workspace-panel-empty"><div><BoxesIcon /><strong>{chatMode() === "outputs" ? "No artifacts in the loaded transcript" : "Interactive artifacts are not enabled"}</strong><p>{chatMode() === "outputs" ? "Code blocks and file outputs will appear here as transcript artifact projection lands." : "This boundary is reserved for sandboxed, explicitly trusted generated interfaces."}</p></div></div></Show>
     </section></Show>
     <Show when={tabVisible("terminal")}><section class="workspace-terminal-slot" data-position={panePosition("terminal")}><TerminalPane projectId={props.settingsScope?.() === "computer" ? "computer" : props.projectId()} projectName={props.settingsScope?.() === "computer" ? "Computer" : props.projectName()} workingRoot={props.settingsScope?.() === "computer" ? props.workingRoot() : undefined} terminalId={props.requestedTab?.()?.terminalId} focusRequest={terminalFocusRequest()} /></section></Show>
     </main>
