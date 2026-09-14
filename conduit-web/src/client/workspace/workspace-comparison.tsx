@@ -1,5 +1,6 @@
 import { WorkbenchButton, WorkbenchStatus } from "./workspace-workbench";
-import { MergeView, unifiedMergeView, getChunks, getOriginalDoc, originalDocChangeEffect } from "@codemirror/merge";
+import { MergeView, getChunks, getOriginalDoc, originalDocChangeEffect } from "@codemirror/merge";
+import { workspaceMergeView, workspaceUnifiedMerge } from "./workspace-diff-setup";
 import { ChangeSet, Compartment, EditorState, type Extension, type Text } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { gotoLine, openSearchPanel } from "@codemirror/search";
@@ -188,12 +189,12 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
       const rect = range.getBoundingClientRect();
       return { span, counterpart: counterpart ?? undefined, left: rect.left, bottom: rect.bottom };
     };
-    const options = { highlightChanges: true, gutter: true, collapseUnchanged: { margin: 3, minSize: 8 }, diffConfig: { scanLimit: 500, timeout: 40 } };
+    const options = { collapseUnchanged: { margin: 3, minSize: 8 } };
     if (split) {
-      merge = new MergeView({ parent: host, a: { doc: data.original, extensions: sideExtensions("original") }, b: { doc: data.modified, extensions: sideExtensions("modified") }, ...options });
+      merge = workspaceMergeView({ parent: host, a: { doc: data.original, extensions: sideExtensions("original") }, b: { doc: data.modified, extensions: sideExtensions("modified") }, ...options });
       view = merge.b;
     } else {
-      view = new EditorView({ parent: host, doc: data.modified, extensions: [sideExtensions("modified"), unifiedMergeView({ original: data.original, ...options, mergeControls: false, syntaxHighlightDeletions: true })] });
+      view = new EditorView({ parent: host, doc: data.modified, extensions: [sideExtensions("modified"), workspaceUnifiedMerge(data.original, options)] });
     }
     const views = merge ? [merge.a, merge.b] : [view];
     activeView = view;
