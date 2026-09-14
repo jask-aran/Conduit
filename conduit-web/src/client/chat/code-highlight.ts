@@ -280,7 +280,6 @@ export class StreamingCodeHighlighter {
     // Only whole lines are stable enough to colour.
     const lastBreak = text.lastIndexOf("\n");
     const stable = lastBreak < 0 ? "" : text.slice(0, lastBreak);
-    const tail = lastBreak < 0 ? text : text.slice(lastBreak + 1);
     const now = typeof performance === "undefined" ? Date.now() : performance.now();
     const grew = stable.length !== this.prefixLength;
     if (grew && now - this.lastRunAt >= STREAM_REHIGHLIGHT_MS) {

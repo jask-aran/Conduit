@@ -160,13 +160,6 @@ function computePreparedTypewriterNode(node: any): any {
   return changed ? { ...node, children } : node;
 }
 
-export function prepareTypewriterBlocks<T extends { node: any }>(blocks: T[]): T[] {
-  return blocks.map((block) => {
-    const node = prepareTypewriterNode(block.node);
-    return node === block.node ? block : { ...block, node };
-  });
-}
-
 function countVisibleBlocks(blocks: Array<{ node?: any; displayNode?: any }>, display = false) {
   let total = 0;
   for (const block of blocks) total += visibleAstCharacters(display ? block.displayNode : block.node);

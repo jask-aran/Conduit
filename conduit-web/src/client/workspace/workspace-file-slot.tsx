@@ -1,7 +1,6 @@
 import { WorkbenchButton, WorkbenchStatus } from "./workspace-workbench";
 import { batch, createEffect, createSignal, lazy, on, onCleanup, Show, Suspense, type JSX } from "solid-js";
 import { CopyIcon, DownloadIcon, FileCode2Icon, FileDiffIcon, GitCompareArrowsIcon, PencilIcon, SaveIcon, Trash2Icon, UploadIcon, XIcon } from "lucide-solid";
-import { toast } from "solid-sonner";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";
@@ -31,7 +30,6 @@ const IMAGE_MIME: Record<string, string> = {
   webp: "image/webp", avif: "image/avif", bmp: "image/bmp", ico: "image/x-icon", svg: "image/svg+xml",
 };
 const MAX_INLINE_IMAGE_BYTES = 100 * 1024 * 1024;
-const MAX_PREVIEW_BYTES = 25 * 1024 * 1024;
 
 export type FileKind = "text" | "image" | "pdf" | "audio" | "video" | "binary";
 

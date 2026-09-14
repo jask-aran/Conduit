@@ -1,5 +1,5 @@
 import type { CacheStats, ChatCapabilities, ContextUsage, HostUiRequest, QueueState, RetryState, SessionStats } from "./contracts";
-import type { ProtocolMessage, ToolLifecycleEvent } from "../timeline-order";
+import type { ProtocolMessage } from "../timeline-order";
 
 type UnknownRecord = Record<string, unknown>;
 

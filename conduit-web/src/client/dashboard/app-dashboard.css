@@ -51,10 +51,6 @@
 .computer-dashboard .computer-explorer-toolbar select { width: auto; height: 24px; min-height: 24px; max-width: 88px; border: 1px solid var(--border); border-radius: 5px; background: var(--background); padding: 2px 4px; color: var(--muted-foreground); font-size: 8.5px; }
 .computer-item-count { flex: none; color: var(--muted-foreground); font-size: 8px; white-space: nowrap; }
 .computer-explorer-actions { display: flex; min-width: 0; min-height: 32px; align-items: center; gap: 4px; padding: 4px 6px; border-bottom: 1px solid var(--border); }
-.computer-folder-summary { display: grid; min-width: 0; margin-right: auto; gap: 1px; }
-.computer-folder-summary strong, .computer-folder-summary small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.computer-folder-summary strong { font-size: 9px; }
-.computer-folder-summary small { color: var(--muted-foreground); font-size: 8px; }
 .computer-explorer-actions > button { display: inline-flex; width: auto; min-height: 24px; flex: none; align-items: center; gap: 4px; border: 0; border-radius: 5px; background: transparent; padding: 3px 6px; color: var(--muted-foreground); font-size: 8.5px; white-space: nowrap; }
 .computer-explorer-actions > button:hover { background: var(--accent); color: var(--foreground); }
 .computer-explorer-actions svg { width: 11px; height: 11px; }

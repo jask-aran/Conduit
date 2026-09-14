@@ -80,13 +80,6 @@ export function buildInlineDiff(original: string, modified: string, config?: Inl
   };
 }
 
-/** The side a row belongs to, and its line number there. */
-export function inlineRowSide(row: InlineRow): { side: "original" | "modified"; line: number } {
-  return row.kind === "removed"
-    ? { side: "original", line: row.original ?? 1 }
-    : { side: "modified", line: row.modified ?? row.original ?? 1 };
-}
-
 /** The number the gutter shows for a row: each side counts in its own document. */
 export function inlineRowNumber(row: InlineRow | undefined): string {
   if (!row) return "";

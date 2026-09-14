@@ -262,14 +262,11 @@
 
 }
 
-.sidebar-area-label { padding: 8px 8px 4px; color: var(--muted-foreground); font-size: 9px; font-weight: 600; }
-.sidebar-area-divider { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
 .sidebar-area-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; margin: 2px 0 8px; padding: 2px; border: 1px solid var(--sidebar-border); border-radius: var(--radius-md); }
 .sidebar-area-toggle button { min-width: 0; height: 24px; border: 0; border-radius: calc(var(--radius-md) - 2px); background: transparent; color: var(--muted-foreground); font-size: 10px; font-weight: 600; }
 .sidebar-area-toggle button:hover { color: var(--sidebar-foreground); }
 .sidebar-area-toggle button[aria-pressed="true"] { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 .sidebar-area-toggle button:focus-visible { outline: 1px solid var(--ring); outline-offset: -1px; }
-.conduit-sidebar[data-visual-state="collapsed"] .sidebar-area-label { display: none; }
 .conduit-sidebar[data-visual-state="collapsed"] .sidebar-area-toggle { display: none; }
 .conduit-sidebar[data-visual-state="collapsed"] .sidebar-harness-tiles { display: none; }
 

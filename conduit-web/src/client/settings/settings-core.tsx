@@ -13,7 +13,7 @@ import type { VoiceDictationSettings } from "../chat/voice-dictation-types";
 import { isWarmMicrophoneActive, stopWarmMicrophone } from "../chat/voice-dictation-client";
 import { createVoiceWaveformController, VoiceWaveform } from "../chat/voice-waveform";
 import { ModelSelector } from "../chat/model-selector";
-import type { Installation, Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalModel, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
+import type { Installation, Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
 import { MAX_SIDEBAR_CHAT_LIMIT, MIN_SIDEBAR_CHAT_LIMIT } from "../navigation/sidebar-preferences";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";

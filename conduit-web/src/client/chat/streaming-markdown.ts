@@ -210,7 +210,6 @@ function findUnescapedDelimiter(source: string, delimiter: string, start: number
 }
 
 function looksLikeShellVariable(body: string) {
-  const trimmed = body.trim();
   const bareVariable = /^([A-Za-z_][A-Za-z0-9_]*(?:[./:-][A-Za-z0-9_.-]*)*)[.,;:!?)]*$/.exec(body)?.[1];
   if (bareVariable) {
     // A single uppercase symbol is common at the start of a streamed

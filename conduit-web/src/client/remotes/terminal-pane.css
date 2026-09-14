@@ -343,9 +343,6 @@
   line-height: 1.45;
 }
 
-.terminal-pane-warning {
-  color: var(--muted-foreground);
-}
 
 .terminal-pane-error {
   border-color: color-mix(in oklch, var(--destructive), transparent 45%);
@@ -389,9 +386,6 @@
   }
 }
 
-.terminal-pane-warning + .terminal-pane-error {
-  bottom: 46.4px;
-}
 
 @media (pointer: coarse) {
   .terminal-pane-mobile-actions {
@@ -556,9 +550,6 @@
   line-height: 1.45;
 }
 
-.terminal-pane-warning {
-  color: var(--muted-foreground);
-}
 
 .terminal-pane-error {
   border-color: color-mix(in oklch, var(--destructive), transparent 45%);
@@ -576,9 +567,6 @@
   }
 }
 
-.terminal-pane-warning + .terminal-pane-error {
-  bottom: 58px;
-}
 
 }
 

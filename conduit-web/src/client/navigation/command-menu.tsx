@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/primitives";
 import type { ChatSummary, ModelOption, Project } from "../api/contracts";
 import {
-  chatDateSection, groupPaletteCommands, PALETTE_PAGES, resolvePaletteCommands,
+  groupPaletteCommands, PALETTE_PAGES, resolvePaletteCommands,
 } from "../palette/command-registry";
 import type { PaletteActions, PaletteCommand, PaletteContext } from "../palette/command-registry";
 import { rankPaletteResults } from "../palette/palette-search";

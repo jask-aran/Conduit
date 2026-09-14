@@ -238,14 +238,6 @@ function storedPaths(scopeId: string, name: string) {
   }
 }
 
-function formatFileSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ["KB", "MB", "GB", "TB"];
-  const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)) - 1, units.length - 1);
-  const value = bytes / 1024 ** (unit + 1);
-  return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: value < 10 ? 1 : 0 }).format(value)} ${units[unit]}`;
-}
-
 function cachedWorkspace(projectId: string) {
   const cached = workspaceCache.get(projectId);
   if (!cached) return null;
@@ -314,7 +306,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   const [filesWide, setFilesWide] = createSignal(false);
   const [uploading, setUploading] = createSignal(false);
   const [uploadTarget, setUploadTarget] = createSignal<UploadTarget>({ kind: "directory", path: "" });
-  const [primaryFile, setPrimaryFile] = createSignal<FileSummary | null>(null);
   // The comment a chip asked to reveal, carried down to whichever view shows it.
   const [reviewReveal, setReviewReveal] = createSignal<ReviewNavigationRequest | null>(null);
   const [openPaths, setOpenPaths] = createSignal<OpenFiles>({ primary: readSetting(fileScope(), "file"), secondary: readSetting(fileScope(), "file-secondary") });
@@ -868,7 +859,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     openFile(path);
   };
   const noteSlotLoaded = (slot: FileSlotId, file: FileSummary | null) => {
-    if (slot === "primary") setPrimaryFile(file);
     if (file && pendingEdit === file.path) {
       pendingEdit = null;
       slotHandles.get(slot)?.edit();

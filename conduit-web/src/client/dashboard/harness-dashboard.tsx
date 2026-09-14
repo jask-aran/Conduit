@@ -2,7 +2,6 @@ import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX 
 import { ArrowRightIcon, FolderIcon, HomeIcon, SearchIcon, XIcon } from "lucide-solid";
 import { api } from "../api/client";
 import type { ChatSummary, ComputerLocation, HarnessSummary, HarnessThread, HarnessThreadDiscovery, HarnessThreadGroup, ModelOption, ModelState, Project } from "../api/contracts";
-import { Composer } from "../chat/composer";
 import type { ComposerModels } from "../chat/composer-models";
 import { saveChatSort, useChatSort } from "../preferences/chat-sort";
 import { HarnessMark, ThreadHarnessMark } from "../harness-brand";

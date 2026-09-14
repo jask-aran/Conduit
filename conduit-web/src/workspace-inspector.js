@@ -7,7 +7,6 @@ import path from "node:path";
 export const MAX_PREVIEW_BYTES = 25 * 1024 * 1024;
 export const GIT_COMMAND_TIMEOUT_MS = 10_000;
 export const MAX_CONCURRENT_GIT_PROCESSES = 4;
-export const WORKSPACE_FILE_KINDS = ["text", "image", "pdf", "audio", "video", "binary"];
 const MAX_DIRECTORY_ENTRIES = 500;
 const MAX_FILE_SNIFF_BYTES = 4 * 1024;
 const INSPECTION_CACHE_MS = 2_000;

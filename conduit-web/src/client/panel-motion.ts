@@ -1,8 +1,5 @@
 export const PANEL_GEOMETRY_MOTION_EVENT = "conduit:panel-geometry-motion";
 
-/** Authored open/close duration. Frame rate stays at the display refresh. */
-export const PANEL_MOTION_DURATION_MS = 160;
-
 export type PanelGeometryMotionSource = "sidebar" | "workspace";
 
 export type PanelGeometryMotionDetail = {
