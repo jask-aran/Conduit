@@ -24,6 +24,7 @@ export const COMMAND_IDS = {
   newWorkspace: "new-workspace",
   openRuntimeChat: "runtime-chat",
   attachFiles: "attach",
+  stashPrompt: "stash-prompt",
   toggleDictation: "voice-dictation",
   toggleSidebar: "toggle-sidebar",
   toggleWorkspacePanel: "toggle-workspace-panel",
@@ -191,6 +192,19 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     icon: "profile",
     keywords: ["admin", "template", "plugin", "install", "runtime"],
     contexts: ["palette.root"],
+    palette: true,
+  }),
+  command({
+    id: COMMAND_IDS.stashPrompt,
+    label: "Stash prompt",
+    description: "Park the current prompt, or restore the last one you parked",
+    group: "commands",
+    icon: "attach",
+    keywords: ["stash", "draft", "park", "save", "restore", "prompt"],
+    contexts: ["composer", "chat", "palette.root"],
+    // Plain mod+S is the browser's Save Page. Rebind it in Settings if you
+    // would rather have the shorter key and can live with intercepting it.
+    defaultBindings: [binding(stroke("KeyS", "S", ["primary", "shift"]))],
     palette: true,
   }),
   command({

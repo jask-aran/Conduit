@@ -74,6 +74,7 @@ export function loadConfig(env = process.env) {
     promptOverridesRoot: absolute(env.CONDUIT_PROMPT_OVERRIDES_ROOT || path.join(dataRoot, "prompt-overrides")),
     sessionNamePrompt: path.join(templatesRoot, "chat-naming", "SYSTEM.md"),
     preferencesFile: absolute(env.CONDUIT_PREFERENCES_FILE || path.join(dataRoot, "preferences.json")),
+    draftsFile: absolute(env.CONDUIT_DRAFTS_FILE || path.join(dataRoot, "drafts.json")),
     piAgentDir,
     searchConfigFile: absolute(env.CONDUIT_SEARCH_CONFIG_FILE || path.join(piAgentDir, "web-search.json")),
     voiceConfigFile: absolute(env.CONDUIT_VOICE_CONFIG_FILE || path.join(dataRoot, "voice.json")),

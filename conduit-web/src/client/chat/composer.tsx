@@ -24,6 +24,7 @@ import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../navigation/mobile-layout
 import { QueuedMessages } from "./queued-messages";
 import { AttachmentCards } from "./attachments";
 import { composerSlashCommands } from "./composer-slash-commands";
+import { fileFromPastedText, insertTextAt, shouldAttachPastedText } from "./large-paste";
 import { COMPOSER_SURFACE_CHANGE_EVENT, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
 import { createVoiceDictationClient, type VoiceDictationState } from "./voice-dictation-client";
 import type { AudioSignalLevel } from "./voice-audio";
@@ -81,6 +82,8 @@ export function Composer(props: {
   let pushToTalkActive = false;
   let dictationRestoreFocus = true;
   let pendingDictationLaunch: { inputFocused: boolean; keyboardOpen: boolean; acceptedAt: number } | null = null;
+  let historyIndex: number | null = null;
+  let historyDraft = "";
 
   const busy = createMemo(() => props.chat.streaming());
   const supports = (capability: keyof ChatCapabilities) => props.chat.capabilities()?.[capability] !== false;
@@ -91,6 +94,9 @@ export function Composer(props: {
   const canSend = createMemo(() => hasText() && props.serverOnline && props.chat.generation() !== "stopping"
     && (!busy() || supports("steer") || supports("followUpQueue")) && !dictating());
   const activity = createMemo(() => props.chat.activity());
+  const sentPrompts = createMemo(() => props.chat.messages()
+    .filter((message) => message.role === "user" && !message.pending && Boolean(message.content?.trim()))
+    .map((message) => message.content!));
   const slashCommandOptions = () => ({
     attachments: props.attachmentsSupported !== false,
     compaction: Boolean(props.chat.capabilities()?.compaction) && !busy() && !props.chat.compacting(),
@@ -147,6 +153,8 @@ export function Composer(props: {
 
   const change = (value: string, manual = true) => {
     if (manual) {
+      historyIndex = null;
+      historyDraft = "";
       setDictationSelectionOwned(false);
       if (dictatedRange()) {
         dictationCancelled = true;
@@ -274,6 +282,8 @@ export function Composer(props: {
   };
 
   const sendMessage = async (mode?: "steer" | "follow_up") => {
+    historyIndex = null;
+    historyDraft = "";
     setDictatedRange(null);
     setDictationSelectionOwned(false);
     setDictationError("");
@@ -310,9 +320,35 @@ export function Composer(props: {
 
   const paste = (event: ClipboardEvent) => {
     const files = filesFromDataTransfer(event.clipboardData);
-    if (!files.length) return;
+    if (files.length) {
+      event.preventDefault();
+      props.attachments.addFiles(files);
+      return;
+    }
+    const text = event.clipboardData?.getData("text/plain") ?? "";
+    if (!shouldAttachPastedText(text, { attachmentsSupported: props.attachmentsSupported !== false })) return;
     event.preventDefault();
-    props.attachments.addFiles(files);
+    const start = input.selectionStart ?? props.chat.draft().length;
+    const end = input.selectionEnd ?? start;
+    const file = fileFromPastedText(text);
+    props.attachments.addFiles([file]);
+    const attached = props.attachments.items().at(-1);
+    toast(`Pasted text attached as ${file.name}`, {
+      description: "Large pastes are attached so they do not fill the model's context.",
+      action: {
+        label: "Paste inline",
+        onClick: () => {
+          if (attached) void props.attachments.remove(attached);
+          const next = insertTextAt(props.chat.draft(), start, end, text);
+          props.chat.setDraft(next.text);
+          queueMicrotask(() => {
+            resize();
+            input.focus({ preventScroll: true });
+            input.setSelectionRange(next.caret, next.caret);
+          });
+        },
+      },
+    });
   };
 
   const keydown = (event: KeyboardEvent) => {
@@ -337,6 +373,34 @@ export function Composer(props: {
       event.preventDefault();
       sendMessage("steer");
     }
+    if (event.key === "ArrowUp" && (historyIndex !== null || props.chat.draft() === "")) {
+      const prompts = sentPrompts();
+      if (!prompts.length) return;
+      event.preventDefault();
+      if (historyIndex === null) {
+        historyDraft = props.chat.draft();
+        historyIndex = prompts.length - 1;
+      } else {
+        historyIndex = Math.max(0, historyIndex - 1);
+      }
+      props.chat.setDraft(prompts[historyIndex]!);
+      queueMicrotask(() => {
+        resize();
+        input.setSelectionRange(input.value.length, input.value.length);
+      });
+    }
+    if (event.key === "ArrowDown" && historyIndex !== null) {
+      event.preventDefault();
+      const prompts = sentPrompts();
+      historyIndex += 1;
+      const value = historyIndex < prompts.length ? prompts[historyIndex]! : historyDraft;
+      if (historyIndex >= prompts.length) historyIndex = null;
+      props.chat.setDraft(value);
+      queueMicrotask(() => {
+        resize();
+        input.setSelectionRange(input.value.length, input.value.length);
+      });
+    }
   };
 
   const selectionChanged = () => {
@@ -359,6 +423,11 @@ export function Composer(props: {
       busy();
       dictating();
       queueMicrotask(resize);
+    });
+    createEffect(() => {
+      props.chat.loadedId();
+      historyIndex = null;
+      historyDraft = "";
     });
     const composerSurfaceChanged = (event: Event) => setComposerSurface((event as CustomEvent<ComposerSurfaceMode>).detail);
     const voiceKeyDown = (event: KeyboardEvent) => {
