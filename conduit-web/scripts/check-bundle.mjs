@@ -22,9 +22,11 @@ console.log(`Bundle: initial JS ${initialJs} B gzip, initial CSS ${initialCss} B
 
 const budgets = {
   // Voice diagnostics, capture lifecycle, and persistent sidebar state add
-  // bounded client behaviour. Revisit this allowance in the planned
-  // performance review instead of hiding evidence behind a size cap.
-  initialJs: Number(process.env.CONDUIT_BUDGET_INITIAL_JS_GZIP || 206_000),
+  // bounded client behaviour. Review comments add the chip tray, its editor and
+  // the navigation they dispatch; the excerpt preview that renders them is lazy
+  // and costs the initial payload only its import. Revisit this allowance in the
+  // planned performance review instead of hiding evidence behind a size cap.
+  initialJs: Number(process.env.CONDUIT_BUDGET_INITIAL_JS_GZIP || 208_000),
   initialCss: Number(process.env.CONDUIT_BUDGET_INITIAL_CSS_GZIP || 80_000),
   lazyJs: Number(process.env.CONDUIT_BUDGET_LAZY_JS_GZIP || 300_000),
 };
