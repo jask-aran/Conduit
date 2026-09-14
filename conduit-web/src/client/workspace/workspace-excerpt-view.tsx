@@ -1,9 +1,9 @@
 import { Compartment, EditorState } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
+import { Decoration, EditorView } from "@codemirror/view";
 import { unifiedMergeView } from "@codemirror/merge";
 import { createEffect, onCleanup } from "solid-js";
 import type { ReviewCommentCounterpart, ReviewCommentSide } from "../chat/review-comments";
-import { commentHighlightsExtension } from "./workspace-annotate";
+import { commentRange } from "./workspace-annotate";
 import { workspaceExcerptSetup } from "./workspace-editor-base";
 import { workspaceLanguageForFilename } from "./workspace-languages";
 import "./workspace.css";
@@ -43,13 +43,18 @@ export default function WorkspaceExcerptView(props: {
           EditorView.contentAttributes.of({
             "aria-label": `${props.path} lines ${props.firstLine} to ${props.firstLine + props.text.split("\n").length - 1}`,
           }),
-          ...(onModified ? [commentHighlightsExtension([{
-            from: 1,
-            to: lines,
-            startColumn: props.startColumn,
-            endColumn: props.endColumn,
-            note: props.note ?? "",
-          }])] : []),
+          // The commented characters read as they do when a chip reveals them;
+          // the lines that came along for context step back.
+          ...(onModified ? [EditorView.decorations.of((view) => {
+            const range = commentRange(view, { from: 1, to: lines, startColumn: props.startColumn, endColumn: props.endColumn });
+            const end = view.state.doc.length;
+            if (!range) return Decoration.none;
+            return Decoration.set([
+              ...(range.from > 0 ? [Decoration.mark({ class: "cm-review-context" }).range(0, range.from)] : []),
+              Decoration.mark({ class: "cm-review-comment" }).range(range.from, range.to),
+              ...(range.to < end ? [Decoration.mark({ class: "cm-review-context" }).range(range.to, end)] : []),
+            ]);
+          })] : []),
           ...(original === undefined ? [] : [unifiedMergeView({
             original,
             mergeControls: false,
