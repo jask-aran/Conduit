@@ -1,6 +1,6 @@
 import { textBlockClassifications } from "../active-generation.js";
 import { mergeContinuation } from "../continuation.js";
-import type { Message, ToolItem } from "./api/contracts";
+import type { ContentBlock, Message, ToolItem } from "./api/contracts";
 
 type LiveBlock = {
   type: "thinking" | "text" | "toolCall";
@@ -285,6 +285,47 @@ export function settleGenerationTools(current: ToolItem[], generation: ActiveGen
     if (!known.has(id)) next.push(settled.get(id)!);
   }
   return next;
+}
+
+/**
+ * The stopped turn as transcript messages, so it survives the live view.
+ *
+ * An interrupted turn is only ever drawn from the live generation, and the
+ * store installs a fresh one the moment the next turn starts - which is what
+ * took an interrupted answer off the screen until its replacement finished and
+ * a sync brought the persisted copy back. Freezing the turn into the
+ * transcript keeps it there in the meantime; the persisted copy replaces it
+ * when it arrives, matched the way any other unsynced turn is.
+ */
+export function freezeGeneration(generation: ActiveGenerationView): Message[] {
+  const classifications = textBlockClassifications(generation) as Record<string, "interim" | "answer">;
+  const frozen: Message[] = [];
+  for (const assistant of generation.assistantMessages) {
+    const content = assistant.blocks
+      .filter((block) => block.type === "text" && classifications[block.identity] === "answer")
+      .map((block) => block.text || "")
+      .join("\n");
+    const blocks: ContentBlock[] = assistant.blocks.flatMap((block) => {
+      if (block.type === "thinking") return [{ type: "thinking", thinking: block.text || "" } as ContentBlock];
+      if (block.type === "toolCall") {
+        return [{ type: "toolCall", id: block.toolCallId || block.identity, name: block.name, arguments: block.arguments } as ContentBlock];
+      }
+      return [] as ContentBlock[];
+    });
+    if (!content.trim() && !blocks.length) continue;
+    frozen.push({
+      id: `end_${generation.id}:${assistant.id}`,
+      role: "assistant",
+      content,
+      blocks,
+      stopped: true,
+      stopReason: "aborted",
+      provider: assistant.provider || null,
+      model: assistant.model || null,
+      timestamp: assistant.timestamp || new Date().toISOString(),
+    });
+  }
+  return frozen;
 }
 
 function liveRows(generation: ActiveGenerationView, owner: Message | null): TurnRow[] {
