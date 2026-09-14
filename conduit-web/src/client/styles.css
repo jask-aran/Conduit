@@ -1970,33 +1970,30 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   -webkit-mask-size: contain;
 }
 
-/* Messages sent while the agent is working, floating above the composer.
+/* Messages sent while the agent is working, docked just above the composer.
 
-   Floating rather than docked: it is absolutely positioned against the
-   composer wrapper, so it never takes layout space and the composer does not
-   move when a message is queued or taken. Frosted glass matches the composer
-   surface, so it reads as belonging to the composer rather than to the
-   transcript scrolling behind it. */
+   In flow rather than floating: the composer stack is bottom-anchored, so a
+   docked card grows the stack upward without moving the composer, and the
+   transcript - which reserves the stack's measured height - dodges the card
+   instead of letting it cover the output it is about. Frosted glass matches
+   the composer surface, so it reads as belonging to the composer rather than
+   to the transcript scrolling behind it.
+
+   One row: label, what is waiting, and icon actions. */
 .queued-float {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  right: 0;
-  left: 0;
-  z-index: 3;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 9px 11px 8px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 3px 4px 3px 10px;
   /* Material comes from .composer-surface-material, which the composer, the
      Follow button and the header pill also use. Nothing about border,
      background, blur or shadow belongs here. */
   border-radius: var(--composer-radius, 12px);
 }
-.queued-float-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.queued-float-title { font-size: 11px; font-weight: 600; }
-.queued-float-hint { color: var(--muted-foreground); font-size: 9.6px; }
+.queued-float-title { flex: none; color: var(--muted-foreground); font-size: 9.6px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
 
-.queued-float-list { display: flex; flex-direction: column; gap: 3px; margin: 0; padding: 0; list-style: none; }
+.queued-float-list { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; margin: 0; padding: 0; list-style: none; }
 .queued-line { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
 .queued-line-body {
   flex: 1; min-width: 0; margin: 0; font-size: 12px; line-height: 1.45;
@@ -2013,9 +2010,10 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .queued-line-expander:hover { background: oklch(1 0 0 / 10%); color: inherit; }
 .queued-line-expander svg { width: 12px; height: 12px; }
 
-.queued-float-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px; }
+.queued-float-actions { display: flex; flex: none; align-items: center; gap: 2px; }
+.queued-float-actions [data-slot="button"] { width: 24px; height: 24px; border-radius: 8px; }
+.queued-float-actions [data-slot="button"] svg { width: 13px; height: 13px; }
 
 @media (--conduit-phone-layout) {
-  .queued-float { bottom: calc(100% + 6px); padding: 8px 9px; }
-  .queued-float-actions > * { flex: 1 1 auto; }
+  .queued-float { gap: 6px; padding: 3px 4px 3px 8px; }
 }

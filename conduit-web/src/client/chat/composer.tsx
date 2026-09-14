@@ -511,8 +511,12 @@ export function Composer(props: {
             <div ref={mobileActions} class="composer-actions-right">
               <Show when={!recording()}><span class="composer-status-state composer-actions-status" role="status" aria-live="polite"><Show when={dictationLabel()} fallback={<><Show when={SPINNING_ACTIVITY.has(activity()?.kind || "")}><Spinner /></Show><Show when={["request_failed", "runtime_failed"].includes(activity()?.kind || "")}><TriangleAlertIcon aria-hidden="true" /></Show>{activity()?.label || "Ready"}</>}>{dictationLabel()}</Show></span></Show>
               <Button variant={recording() ? "default" : "ghost"} size="icon-sm" class="dictation-trigger" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || ["finishing", "waiting", "transcribing"].includes(dictationState())} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={["starting", "finishing", "waiting", "transcribing"].includes(dictationState())} fallback={<MicIcon />}><Spinner /></Show></Button>
-              <Show when={busy() || props.chat.stopping()} fallback={<Button variant="ghost" size="icon-sm" class="composer-send-trigger" aria-label="Send message" disabled={!canSend()} onClick={() => sendMessage()}><ArrowUpIcon /></Button>}>
-                <Show when={supports("cancel")}><Button variant="default" size="icon-sm" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button></Show>
+              {/* Send stays next to Stop while the agent works: sending during a
+                  turn queues the message for the agent, and that was reachable
+                  only from the keyboard. */}
+              <Button variant="ghost" size="icon-sm" class="composer-send-trigger" aria-label={busy() ? "Send to the agent" : "Send message"} title={busy() ? "Send — the agent takes it when the current step finishes" : undefined} disabled={!canSend()} onClick={() => sendMessage()}><ArrowUpIcon /></Button>
+              <Show when={(busy() || props.chat.stopping()) && supports("cancel")}>
+                <Button variant="default" size="icon-sm" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button>
               </Show>
             </div>
           </div>

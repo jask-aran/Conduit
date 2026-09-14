@@ -733,11 +733,25 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
       latestButtonAnchorFrame = requestAnimationFrame(syncLatestButtonAnchor);
     };
     const composerStack = transcriptRoot.closest<HTMLElement>(".work-area-conversation")?.querySelector<HTMLElement>(".composer-stack");
+    // The composer floats over the bottom of the transcript, so the thread has
+    // to reserve its height itself. A fixed reservation only ever matched the
+    // resting composer: a multi-line draft, attachments, or the queued-message
+    // card each grew the stack over the newest output and left it covered.
+    // Reserving the measured height instead makes the thread taller, which the
+    // tail spring reads as the bottom moving and follows -- so the output steps
+    // up out of the way while the card is there, and back down when it goes.
+    const COMPOSER_CLEARANCE_PX = 40;
+    const syncComposerInset = (blockSize: number) => {
+      const inset = `${Math.round(blockSize + COMPOSER_CLEARANCE_PX)}px`;
+      if (transcriptRoot.style.getPropertyValue("--transcript-composer-inset") === inset) return;
+      transcriptRoot.style.setProperty("--transcript-composer-inset", inset);
+    };
     const composerResizeObserver = new ResizeObserver((entries) => {
       const entry = entries[0];
       const blockSize = entry?.borderBoxSize[0]?.blockSize ?? entry?.contentRect.height ?? 0;
       if (Math.abs(blockSize - composerBlockSize) < 0.5) return;
       composerBlockSize = blockSize;
+      syncComposerInset(blockSize);
       scheduleLatestButtonAnchor();
     });
     if (composerStack) composerResizeObserver.observe(composerStack);
@@ -864,6 +878,7 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
       visualViewport?.removeEventListener("resize", scheduleLatestButtonAnchor);
       if (latestButtonAnchorFrame != null) cancelAnimationFrame(latestButtonAnchorFrame);
       latestButton?.style.removeProperty("--message-scroller-button-bottom");
+      transcriptRoot.style.removeProperty("--transcript-composer-inset");
       scheduleLatestButtonAnchor = () => {};
       if (scrollFrame != null) cancelAnimationFrame(scrollFrame);
       if (highlightIdle != null) cancelIdleCallback(highlightIdle);

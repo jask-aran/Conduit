@@ -1,6 +1,6 @@
 import { createSignal, createEffect, For, Show } from "solid-js";
 import { Button } from "@/components/primitives";
-import { ChevronDownIcon, ChevronUpIcon } from "lucide-solid";
+import { ChevronDownIcon, ChevronUpIcon, PencilIcon, SendHorizontalIcon, XIcon } from "lucide-solid";
 import type { Message } from "../api/contracts";
 
 /**
@@ -32,12 +32,17 @@ function QueuedLine(props: { text: string }) {
 }
 
 /**
- * Messages sent while the agent is working, floating above the composer until
- * the model takes them.
+ * Messages sent while the agent is working, sitting directly above the composer
+ * until the model takes them.
  *
- * Sending during a turn steers: the agent reads it as soon as the running tool
- * call settles. The actions here are the ways out of that - take it to the
- * model now by stopping the turn, put it back in the composer, or drop it.
+ * One row: what is waiting, and the ways out of that - take it to the model now
+ * by stopping the turn, put it back in the composer, or drop it. The actions are
+ * icons because the row is a status line, not a dialog; spelling them out cost
+ * three lines of the transcript for three rarely-pressed buttons.
+ *
+ * It is in flow rather than floating, so the composer stack really is as tall as
+ * it looks. The transcript reserves that measured height, which is what keeps
+ * the card off the output it is about.
  */
 export function QueuedMessages(props: {
   messages: Message[];
@@ -49,21 +54,19 @@ export function QueuedMessages(props: {
   onDiscard: () => void;
 }) {
   const lines = () => props.messages.map((message) => message.content || "").filter((text) => text.trim());
+  const hint = () => props.busy ? "Sent when the current step finishes" : "Sends next";
 
   return <Show when={lines().length}>
     <aside class="queued-float composer-surface-material" data-composer-surface={props.surface} aria-label="Messages waiting for the agent">
-      <header class="queued-float-head">
-        <span class="queued-float-title">{props.busy ? "Steering the agent" : "Waiting to send"}</span>
-        <span class="queued-float-hint">{props.busy ? "Sent when the current step finishes" : "Sends next"}</span>
-      </header>
+      <span class="queued-float-title" title={hint()}>{props.busy ? "Steering" : "Queued"}</span>
       <ul class="queued-float-list"><For each={lines()}>{(text) => <QueuedLine text={text} />}</For></ul>
-      <footer class="queued-float-actions">
+      <div class="queued-float-actions">
         <Show when={props.busy && props.canInterrupt}>
-          <Button size="sm" variant="default" onClick={props.onInterruptAndSend}>Interrupt and send now</Button>
+          <Button size="icon-sm" variant="ghost" aria-label="Interrupt and send now" title="Interrupt and send now" onClick={props.onInterruptAndSend}><SendHorizontalIcon /></Button>
         </Show>
-        <Button size="sm" variant="ghost" onClick={props.onEdit}>Edit</Button>
-        <Button size="sm" variant="ghost" onClick={props.onDiscard}>Discard</Button>
-      </footer>
+        <Button size="icon-sm" variant="ghost" aria-label="Edit" title="Edit in the composer" onClick={props.onEdit}><PencilIcon /></Button>
+        <Button size="icon-sm" variant="ghost" aria-label="Discard" title="Discard" onClick={props.onDiscard}><XIcon /></Button>
+      </div>
     </aside>
   </Show>;
 }
