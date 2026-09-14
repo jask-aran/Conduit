@@ -49,8 +49,10 @@ The controller must:
    settled transcripts by catalogue revision. Show cached content immediately
    during repeat navigation, then reconcile a fresh response in the background.
    Active chats bypass the cache.
-5. Make scroll ownership explicit: follow only at the end, preserve an anchor
+5. Keep scroll ownership explicit: follow only at the end, preserve an anchor
    during prepend and row-height changes, and offer a return-to-latest control.
+   Cache the 10 most recent chat positions and restore the same visible message
+   when the reader returns to a chat.
 6. Virtualize settled rows only after stable identity and scroll ownership are
    proven. Keep the live turn mounted outside the evicted range.
 
