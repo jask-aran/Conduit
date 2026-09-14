@@ -185,6 +185,12 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-code-surface[data-editable="false"] .cm-content { caret-color: transparent !important; }
 .workspace-code-surface[data-editable="false"] .cm-cursor { display: none; }
 .workspace-editor-content { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; overflow: hidden; }
+.workspace-excerpt .cm-editor { background: transparent; }
+.workspace-excerpt .cm-scroller { font: 11px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.workspace-excerpt .cm-content { padding: 6px 0; }
+.workspace-excerpt .cm-gutters { border-right: 1px solid var(--border); background: transparent; }
+.workspace-excerpt[data-side="original"] .cm-gutters { border-right-color: color-mix(in oklch, var(--destructive), transparent 50%); }
+.workspace-excerpt[data-side="modified"] .cm-gutters { border-right-color: color-mix(in oklch, var(--workspace-git-added), transparent 50%); }
 /* A comment leaves its lines faintly marked, and hovering them previews the note. */
 .cm-review-comment { border-radius: 2px; background: color-mix(in oklch, var(--warn), transparent 90%); box-shadow: inset 2px 0 0 color-mix(in oklch, var(--warn), transparent 55%); }
 .cm-tooltip.cm-tooltip-hover:has(.workspace-review-comment-tooltip) { border: 1px solid var(--border); border-radius: 6px; background: var(--popover); box-shadow: var(--shadow-md); }

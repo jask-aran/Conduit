@@ -1,8 +1,11 @@
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For, lazy, Show, Suspense } from "solid-js";
 import { FileCode2Icon, FileDiffIcon, PencilIcon, XIcon } from "lucide-solid";
 import { reviewCommentParts, type ProjectedReviewComment, type ReviewComment } from "./review-comments";
 import { Button, Dialog, DialogContent, Textarea } from "@/components/primitives";
 import { requestReviewNavigation } from "./review-navigation";
+
+// The preview pulls in CodeMirror, so it arrives with the dialog, not the chat.
+const WorkspaceExcerptView = lazy(() => import("../workspace/workspace-excerpt-view"));
 
 export function ReviewCommentCards(props: {
   items: readonly (ReviewComment | ProjectedReviewComment)[];
@@ -40,7 +43,11 @@ export function ReviewCommentCards(props: {
           setEditing(open);
         }}>
           <DialogContent class="review-comment-editor" title="Edit review comment" description={`${item.path}${lines}${diff ? " · comparison" : ""}`} closeLabel="Close comment editor">
-            <pre class="review-comment-excerpt" aria-label="Commented text"><span>{parts().before}</span><mark>{parts().selected}</mark><span>{parts().after}</span></pre>
+            <div class="review-comment-excerpt" data-scope={diff ? "comparison" : "file"}>
+              <Suspense fallback={<pre class="review-comment-excerpt-fallback"><span>{parts().before}</span><mark>{parts().selected}</mark><span>{parts().after}</span></pre>}>
+                <WorkspaceExcerptView path={item.path} text={item.excerpt} firstLine={item.from} startColumn={item.startColumn} endColumn={item.endColumn} note={item.note} side={diff ? item.side : undefined} />
+              </Suspense>
+            </div>
             <Textarea autofocus aria-label={`Comment for ${item.path}`} maxlength={2000} rows={10} value={note()} onInput={(event) => setNote(event.currentTarget.value)} onKeyDown={(event) => {
               if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); commit(); }
             }} />
