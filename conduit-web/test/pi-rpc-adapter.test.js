@@ -26,6 +26,13 @@ test("Pi adapter maps required neutral events and retains Pi richness", () => {
     generationId: "g1", pi: delta, type: "assistant_content", phase: "delta",
     sequence: 2, messageId: "m1", contentIndex: 0, blockKind: "text", delta: "hi",
   });
+  // The server's post-turn repair: the browser needs the persisted messages,
+  // not an opaque pi_event, or its optimistic ids never get replaced.
+  const sync = { type: "transcript_sync", generationId: "g1", messages: [{ id: "user-1", role: "user" }], tools: [] };
+  assert.deepEqual(normalizePiBackendEvent(sync), {
+    generationId: "g1", pi: sync, type: "transcript_sync",
+    messages: [{ id: "user-1", role: "user" }], tools: [],
+  });
   const unknown = { type: "pi_extension_event", value: 4 };
   assert.deepEqual(normalizePiBackendEvent(unknown), { generationId: null, pi: unknown, type: "pi_event" });
   assert.ok(Object.values(PI_CAPABILITIES).every(Boolean));

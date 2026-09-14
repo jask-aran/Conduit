@@ -66,6 +66,7 @@ test("preserves a checkpoint's durable chat title", () => {
     generationSeq: 18,
     chatId: "chat_1",
     title: "Tell me a long story",
+    artifacts: null,
   });
 });
 
