@@ -931,9 +931,12 @@ runtime-cache `/v0`. After a build, `npm test` also runs
 `test/pwa-artifacts.test.js` against `dist/` (skipped when `dist/` is absent).
 
 Phone chrome (full-bleed drawers, header palette entry, long-press menus) has
-no automated coverage. The Playwright suite that used to assert it was removed:
-it took over twelve minutes, most of it was failing, and none of the failures
-told us anything about the app. Rebuild it deliberately if it earns its place.
+no automated coverage. The Playwright suite that used to assert it was removed
+first: it took over twelve minutes, most of it was failing, and none of the
+failures told us anything about the app. The remaining specs went the same way
+for the same reason, and the repository now has no headless browser suite at
+all. Browser-level checking is Agent Browser, driven rather than asserted.
+Rebuild a suite deliberately if it earns its place.
 
 ## Android shell
 
@@ -971,7 +974,7 @@ installed Android SDK.
 
 Use [`../docs/testing.md`](../docs/testing.md) as the
 single source of truth for fast checks, deterministic harnesses, browser QA,
-Playwright canaries, live transport measurements, and deployment proof.
+live transport measurements, and deployment proof.
 # Managed-scope Git discovery
 
 New terminals and agent processes in Chats and managed projects set

@@ -113,16 +113,9 @@ they do not establish a repository-wide clean-tree requirement for future work.
   artefacts could move.
 - `npm run test:harness` — deterministic transport scenario emitting versioned
   JSON, for streaming, batching or reconnect work.
-- `npm run test:setpieces` — optional Playwright run over a small curated set of
-  browser behaviours, about two and a half minutes. Run it when navigation,
-  settings, the sidebar, the workspace panel or phone chrome change.
 - `npm run qa:agent-browser` — drive a real browser when a change needs to be
-  seen rather than asserted.
-
-Keep the setpieces small and green. A setpiece asserts something a reader would
-notice, not a pixel constant that moves when the interface is rescaled. Fix or
-delete one that fails while the app is right: a suite expected to fail is not a
-gate.
+  seen rather than asserted. This is the only browser-level check; there is no
+  headless browser suite.
 
 ## Commits and history
 

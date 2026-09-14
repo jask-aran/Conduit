@@ -5,7 +5,6 @@ version: 2
 secret:
   ignored_paths:
     - "conduit-web/test/**"
-    - "conduit-web/test/browser/**"
   # Also ignore the "Generic Password" detector for the spec document that
   # shows auth.json's schema with placeholder fields.
   ignored_detectors:
