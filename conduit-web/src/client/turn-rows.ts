@@ -249,8 +249,9 @@ export function buildLiveToolItem(
     args: execution.arguments ?? fallback.args,
     partialResult: execution.partialResult,
     result: execution.result,
-    done: execution.status === "complete" || execution.status === "error",
+    done: execution.status === "complete" || execution.status === "error" || execution.status === "cancelled",
     error: Boolean(execution.isError || execution.status === "error"),
+    cancelled: execution.status === "cancelled",
   };
 }
 

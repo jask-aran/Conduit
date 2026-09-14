@@ -17,7 +17,14 @@ function managerWithFakePi() {
       child = new EventEmitter();
       child.stdout = new PassThrough();
       child.stderr = new PassThrough();
-      child.stdin = { write: (line) => writes.push(JSON.parse(line)) };
+      child.stdin = { write: (line) => {
+        const command = JSON.parse(line);
+        writes.push(command);
+        if (command.type === "get_state") queueMicrotask(() => child.stdout.write(`${JSON.stringify({
+          type: "response", id: command.id, command: "get_state", success: true,
+          data: { isStreaming: false },
+        })}\n`));
+      } };
       child.kill = () => true;
       return child;
     },
@@ -39,7 +46,13 @@ test("an interrupted turn still reports its assistant message", async () => {
 
   const prompt = manager.promptAccepted(record.id, "write a long story");
   await settle();
+  emit({ type: "response", id: writes.at(-1).id, command: "get_entries", success: true,
+    data: { leafId: null, entries: [] } });
+  await settle();
   emit({ type: "response", id: writes.at(-1).id, command: "prompt", success: true });
+  await settle();
+  emit({ type: "response", id: writes.at(-1).id, command: "get_entries", success: true,
+    data: { leafId: null, entries: [] } });
   await prompt;
 
   emit({ type: "message_start", message: { role: "assistant", content: [] } });
@@ -71,7 +84,13 @@ test("a closed generation still ignores a later unrelated turn", async () => {
   const { manager, record, writes, emit, settle } = managerWithFakePi();
   const prompt = manager.promptAccepted(record.id, "hello");
   await settle();
+  emit({ type: "response", id: writes.at(-1).id, command: "get_entries", success: true,
+    data: { leafId: null, entries: [] } });
+  await settle();
   emit({ type: "response", id: writes.at(-1).id, command: "prompt", success: true });
+  await settle();
+  emit({ type: "response", id: writes.at(-1).id, command: "get_entries", success: true,
+    data: { leafId: null, entries: [] } });
   await prompt;
 
   const abort = manager.abortGeneration(record.id);

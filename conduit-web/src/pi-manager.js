@@ -206,7 +206,7 @@ function deliveryEventBytes(event) {
   return Buffer.byteLength(JSON.stringify(event));
 }
 
-const ABORT_TERMINAL_EVENTS = new Set(["message_end", "turn_end"]);
+const ABORT_TERMINAL_EVENTS = new Set(["tool_execution_end", "message_end", "turn_end"]);
 
 export class PiManager extends EventEmitter {
   constructor({
@@ -606,7 +606,7 @@ export class PiManager extends EventEmitter {
         // take the next one immediately. Conduit never asked for that
         // generation, so without opening one here its events are discarded as
         // belonging to the closed generation, and the reply never arrives.
-        if (event.type === "turn_start" && (!record.generation || record.generation.closed)) {
+        if (event.type === "turn_start" && (!record.generation || (record.generation.closed && !record.stopping))) {
           this.beginQueuedGeneration(record);
         }
 
@@ -964,7 +964,7 @@ export class PiManager extends EventEmitter {
     return { message: [message, ...files].filter(Boolean).join("\n\n"), images };
   }
 
-  async prompt(id, message, { continuationBase = "", streamingBehavior = null, attachments = [] } = {}) {
+  prompt(id, message, { continuationBase = "", streamingBehavior = null } = {}) {
     const record = this.processes.get(id);
     if (!record) throw new Error("Unknown live session");
     if (record.stopping) throw Object.assign(new Error("Pi is still stopping the previous response"), { code: "generation_stopping" });
@@ -975,12 +975,11 @@ export class PiManager extends EventEmitter {
     const generationId = `g${++record.generationSequence}`;
     const previousGeneration = record.generation;
     const structured = this.beginActiveGeneration(record, generationId, continuationBase);
-    record.generation = { id: generationId, closed: false, settled: false, continuationBase };
+    const generation = { id: generationId, closed: false, settled: false, continuationBase };
+    record.generation = generation;
     record.activity = "working";
     try {
-      const prepared = await this.attachmentPrompt(message, attachments);
-      const payload = { type: "prompt", message: prepared.message };
-      if (prepared.images.length) payload.images = prepared.images;
+      const payload = { type: "prompt", message };
       if (streamingBehavior === "steer" || streamingBehavior === "followUp") {
         payload.streamingBehavior = streamingBehavior;
       }
@@ -1003,7 +1002,8 @@ export class PiManager extends EventEmitter {
     const generationId = `g${++record.generationSequence}`;
     const previousGeneration = record.generation;
     const structured = this.beginActiveGeneration(record, generationId, continuationBase);
-    record.generation = { id: generationId, closed: false, settled: false, continuationBase };
+    const generation = { id: generationId, closed: false, settled: false, continuationBase };
+    record.generation = generation;
     record.activity = "working";
     const before = await this.request(id, { type: "get_entries" });
     const afterMessageId = before.data?.leafId || null;
@@ -1014,6 +1014,11 @@ export class PiManager extends EventEmitter {
     try {
       await this.request(id, payload);
     } catch (error) {
+      // Pi rejects the pending prompt request when a concurrent abort succeeds.
+      // That response confirms cancellation; it is not a failed user request.
+      if (record.generation === generation && generation.aborting && /abort/i.test(error.message)) {
+        return { generationId, attachmentIdentity: null };
+      }
       record.generation = previousGeneration;
       this.restoreActiveGeneration(record, structured.previous);
       record.activity = deriveCoarseActivity(record);
@@ -1107,6 +1112,20 @@ export class PiManager extends EventEmitter {
       record.active = false;
       record.child.kill("SIGKILL");
       if (record.sessionFile) this.bySessionFile.delete(record.sessionFile);
+    }
+    if (!processTerminated && record.status === "running") {
+      try {
+        // Pi can acknowledge abort before its final agent event reaches this
+        // process. Read its authoritative idle state before publishing Stop.
+        const state = await this.request(id, { type: "get_state" }, { timeout: 3000 });
+        if (state.data?.isStreaming != null) {
+          record.active = Boolean(state.data.isStreaming);
+          if (!record.active) generation.settled = true;
+        }
+      } catch {
+        // The abort already succeeded. A later agent event can still settle
+        // activity, so a failed repair read must not turn Stop into a failure.
+      }
     }
     record.stopping = false;
     record.activity = processTerminated || record.status === "stopped" ? "idle" : deriveCoarseActivity(record);
