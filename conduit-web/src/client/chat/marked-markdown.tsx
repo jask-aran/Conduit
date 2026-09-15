@@ -243,6 +243,20 @@ function hasTokenPrefix(value: string[], prefix: string[]) {
   return prefix.every((entry, index) => value[index] === entry);
 }
 
+/**
+ * Where two sources first differ, counted in code points.
+ *
+ * Diagnostic only, and reached only when the source was not a clean append.
+ * One pass rather than the two the inline form used to make, and the arrays
+ * are built here so the common appending path never allocates them at all.
+ */
+function firstCodePointMismatch(next: string, previous: string) {
+  const nextCharacters = Array.from(next);
+  const previousCharacters = Array.from(previous);
+  const index = nextCharacters.findIndex((character, position) => character !== previousCharacters[position]);
+  return index >= 0 ? index : Math.min(nextCharacters.length, previousCharacters.length);
+}
+
 function moveBefore(anchor: Comment, nodes: Node[]) {
   if (!nodes.length) return;
   const fragment = document.createDocumentFragment();
@@ -395,16 +409,19 @@ export function MarkedMarkdown(props: ChatMarkdownProps) {
     const parts = tokenParts(markdownSource);
     const nextStableRaws = tokenRaws(parts.stable);
     const nextTailRaws = tokenRaws(parts.tail);
-    const previousRenderedMarkdownSourceCharacters = Array.from(renderedMarkdownSource).length;
-    const markdownCharacters = Array.from(markdownSource);
-    const renderedMarkdownCharacters = Array.from(renderedMarkdownSource);
     const sourceAppended = markdownSource.startsWith(renderedMarkdownSource);
     const fullSourceAppended = source.startsWith(renderedSource);
-    const firstSourceMismatchIndex = sourceAppended
+    // Comparing by code point allocates two arrays the size of the whole
+    // message, and both values below are only ever metric fields. Gathering
+    // them unconditionally made every streamed delta pay an allocation
+    // proportional to the message so far.
+    const recorder = getHarnessRecorder();
+    const previousRenderedMarkdownSourceCharacters = recorder
+      ? Array.from(renderedMarkdownSource).length
+      : 0;
+    const firstSourceMismatchIndex = !recorder || sourceAppended
       ? null
-      : markdownCharacters.findIndex((character, index) => character !== renderedMarkdownCharacters[index]) >= 0
-        ? markdownCharacters.findIndex((character, index) => character !== renderedMarkdownCharacters[index])
-        : Math.min(markdownCharacters.length, renderedMarkdownCharacters.length);
+      : firstCodePointMismatch(markdownSource, renderedMarkdownSource);
     const stablePrefixUnchanged = hasTokenPrefix(nextStableRaws, stableTokenRaws);
     const promoted = nextStableRaws.slice(stableTokenRaws.length);
     const oldTailPromoted = hasTokenPrefix(promoted, tailTokenRaws)
@@ -416,7 +433,7 @@ export function MarkedMarkdown(props: ChatMarkdownProps) {
       && tailNodes.length > 0;
     const canReuse = trimToPending || (sourceAppended && stablePrefixUnchanged
       && (tailTokenRaws.length === 0 || oldTailPromoted || tailRemainsMutable));
-    const renderStartedAt = getHarnessRecorder() ? performance.now() : 0;
+    const renderStartedAt = recorder ? performance.now() : 0;
     let incrementalMode = "append-tail";
 
     if (trimToPending) {
@@ -454,7 +471,6 @@ export function MarkedMarkdown(props: ChatMarkdownProps) {
     tailTokenRaws = nextTailRaws;
     renderedMarkdownSource = markdownSource;
     renderPending(pending);
-    const recorder = getHarnessRecorder();
     if (recorder) {
       recordHarnessMetric(recorder, {
         stage: "markdown-reconcile",

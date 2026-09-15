@@ -116,16 +116,29 @@ export interface LiveProjectionIndex {
   activeBlockCount: number;
 }
 
-const liveOwner = (messages: Message[], generation: ActiveGenerationView) =>
-  [...messages].reverse().find((message) => message.role === "user" && !message.pending) || null;
+// Returns the index as well as the message: the caller needs both, and asking
+// for the index separately meant a second full pass over the list. Scanning
+// backwards in place also avoids copying the whole list to read one element.
+const liveOwnerIndex = (messages: Message[]) => {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]!;
+    if (message.role === "user" && !message.pending) return index;
+  }
+  return -1;
+};
+const liveOwner = (messages: Message[], generation: ActiveGenerationView) => {
+  const index = liveOwnerIndex(messages);
+  return index < 0 ? null : messages[index]!;
+};
 
 export function buildLiveProjectionIndex(
   generation: ActiveGenerationView,
   messages: Message[],
 ): LiveProjectionIndex {
   const classifications = textBlockClassifications(generation) as Record<string, "interim" | "answer">;
-  const owner = liveOwner(messages, generation);
-  const messageIndex = owner ? messages.indexOf(owner) : messages.length;
+  const ownerIndex = liveOwnerIndex(messages);
+  const owner = ownerIndex < 0 ? null : messages[ownerIndex]!;
+  const messageIndex = ownerIndex < 0 ? messages.length : ownerIndex;
   const traceRowKey = `trace:${owner ? messageKey(owner) : `live:${generation.id}`}`;
   const blockLocations = new Map<string, LiveBlockLocation>();
   const toolLocations = new Map<string, { rowKey: string; segmentIndex: number }>();
@@ -388,7 +401,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null): Turn
   const rows: TurnRow[] = [];
   if (segments.length) {
     const running = active(generation);
-    const latestTool = [...segments].reverse().find((segment) => segment.kind === "tool");
+    const latestTool = segments.findLast((segment) => segment.kind === "tool");
     const executingTool = running && latestTool?.kind === "tool" && latestTool.tool.done === false;
     const status = generation.status === "stopped" ? "interrupted"
       : generation.status === "failed" ? "failed"

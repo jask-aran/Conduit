@@ -201,7 +201,7 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
   const [artifactSummaries, setArtifactSummaries] = createSignal(new Map<string, TurnArtifactSummary>());
   createEffect(() => {
     if (!props.chat.streaming()) return;
-    const userId = [...props.chat.messages()].reverse().find((message) => message.role === "user")?.id;
+    const userId = props.chat.messages().findLast((message) => message.role === "user")?.id;
     if (!userId) return;
     setArtifactSummaries((current) => {
       if (!current.has(userId)) return current;
