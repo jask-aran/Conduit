@@ -1161,7 +1161,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     });
     if (hostUiRequests().length) return { kind: "waiting_for_user", label: "Waiting for your confirmation" };
     if (derived.kind === "idle") {
-      const lastAssistant = [...messages()].reverse().find((message) => message.role === "assistant");
+      const lastAssistant = messages().findLast((message) => message.role === "assistant");
       if (lastAssistant?.stopReason === "error") {
         return { kind: "request_failed", label: "Request failed · Ready to retry" };
       }

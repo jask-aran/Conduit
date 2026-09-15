@@ -251,7 +251,10 @@ export function createTimelineStore(
     const projected = stableProjection(previousProjectedRows, inputGeneration
       ? projectLiveTurn(persistedRows, inputMessages, inputGeneration)
       : persistedRows);
-    const changed = rowChanges(previousProjectedRows, projected);
+    // Diffing the row sets allocates a Map and a Set the size of the whole
+    // transcript, and the result is only ever a metric field. Every other
+    // measurement here is already gated on the recorder; this one was not.
+    const changed = recorder ? rowChanges(previousProjectedRows, projected) : [];
     setRows(reconcile(projected, { key: "key" }));
     previousProjectedRows = projected;
     previousMessages = inputMessages;
