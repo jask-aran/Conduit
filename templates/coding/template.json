@@ -6,6 +6,7 @@
   "posture": "read / edit / shell / web search / source fetch",
   "systemPrompt": "SYSTEM.md",
   "tools": ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check"],
+  "runtimeOverlays": ["web-search"],
   "models": [
     "openai-codex/gpt-5.6-luna",
     "openai-codex/gpt-5.6-sol",

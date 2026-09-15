@@ -233,6 +233,7 @@ export class PiManager extends EventEmitter {
     this.agentDir = agentDir;
     this.template = template;
     this.processes = new Map();
+    this.byChatId = new Map();
     this.bySessionFile = new Map();
     this.requestSequence = 0;
     this.now = now;
@@ -419,12 +420,17 @@ export class PiManager extends EventEmitter {
       const existingId = this.bySessionFile.get(resolvedFile);
       const existing = this.processes.get(existingId);
       if (existing && ["starting", "running"].includes(existing.status)) {
-        if (chatId) existing.chatId = chatId;
+        if (chatId && existing.chatId !== chatId) {
+          if (this.byChatId.get(existing.chatId) === existing.id) this.byChatId.delete(existing.chatId);
+          existing.chatId = chatId;
+          this.byChatId.set(chatId, existing.id);
+        }
         this.touchActivity(existing);
         return existing;
       }
       this.bySessionFile.delete(resolvedFile);
       this.processes.delete(existingId);
+      if (this.byChatId.get(existing?.chatId) === existingId) this.byChatId.delete(existing.chatId);
     }
 
     const liveOthers = this.liveRecords().filter((record) => record.chatId !== chatId);
@@ -453,6 +459,7 @@ export class PiManager extends EventEmitter {
     const record = {
       id,
       chatId,
+      adapterImplementation: "conduit_pi",
       projectId: project.id,
       projectSlug: project.slug,
       cwd: launchSpec?.cwd || project.workingRoot,
@@ -504,6 +511,7 @@ export class PiManager extends EventEmitter {
       statsTimer: null,
     };
     this.processes.set(id, record);
+    if (chatId) this.byChatId.set(chatId, id);
     if (resolvedFile) this.bySessionFile.set(resolvedFile, id);
 
     child.stdout.setEncoding("utf8");
@@ -558,6 +566,7 @@ export class PiManager extends EventEmitter {
       }
       this.emit("process_removed", { id: record.id, chatId: record.chatId });
       this.processes.delete(record.id);
+      if (this.byChatId.get(record.chatId) === record.id) this.byChatId.delete(record.chatId);
     });
     this.emit("process_changed", { record, reason: "created" });
     return record;
@@ -1005,8 +1014,7 @@ export class PiManager extends EventEmitter {
     const generation = { id: generationId, closed: false, settled: false, continuationBase };
     record.generation = generation;
     record.activity = "working";
-    const before = await this.request(id, { type: "get_entries" });
-    const afterMessageId = before.data?.leafId || null;
+    const afterMessageId = record.transcriptLeafId || null;
     const prepared = await this.attachmentPrompt(message, attachments);
     const payload = { type: "prompt", message: prepared.message };
     if (prepared.images.length) payload.images = prepared.images;
@@ -1035,11 +1043,7 @@ export class PiManager extends EventEmitter {
       record.pendingQueuedPrompts.push({ type: streamingBehavior, message, attachmentIds: attachments.map((item) => item.id), attachmentIdentity });
       return { generationId, attachmentIdentity };
     }
-    const accepted = await this.request(id, afterMessageId
-      ? { type: "get_entries", since: afterMessageId }
-      : { type: "get_entries" });
-    const user = (accepted.data?.entries || []).findLast((entry) => entry.type === "message" && entry.message?.role === "user");
-    return { generationId, attachmentIdentity: user?.id ? { messageId: user.id } : { afterMessageId } };
+    return { generationId, attachmentIdentity: { afterMessageId } };
   }
 
   async queueAccepted(id, type, message, { attachments = [] } = {}) {
@@ -1169,7 +1173,27 @@ export class PiManager extends EventEmitter {
     const record = this.processes.get(id);
     if (!record) throw new Error("Unknown live session");
     const response = await this.request(id, { type: "get_tree" });
-    if (!record.sessionFile) return response.data;
+    return this.#mergeHistoryFamily(record, response.data);
+  }
+
+  async readHistoryTree(opaqueSession, workingRoot) {
+    if (typeof opaqueSession !== "string" || !opaqueSession) {
+      throw Object.assign(new Error("This chat has no saved agent session"), { code: "history_unavailable", status: 409 });
+    }
+    const sessionFile = path.resolve(opaqueSession);
+    const cwd = typeof workingRoot === "string" && workingRoot ? path.resolve(workingRoot) : path.dirname(sessionFile);
+    const tree = SessionManager.open(sessionFile, path.dirname(sessionFile), cwd).getTree();
+    const leaf = (() => {
+      let nodes = tree;
+      let node = null;
+      while (nodes?.length) { node = nodes.at(-1); nodes = node.children; }
+      return node?.entry?.id || null;
+    })();
+    return this.#mergeHistoryFamily({ sessionFile, sessionDir: path.dirname(sessionFile), cwd }, { leafId: leaf, tree });
+  }
+
+  async #mergeHistoryFamily(record, currentTree) {
+    if (!record.sessionFile) return currentTree;
 
     const currentPath = path.resolve(record.sessionFile);
     const sessionDir = path.dirname(currentPath);
@@ -1224,7 +1248,7 @@ export class PiManager extends EventEmitter {
       if (sessionPath === currentPath) continue;
       collect(SessionManager.open(sessionPath, path.dirname(sessionPath), record.cwd).getTree());
     }
-    collect(response.data?.tree);
+    collect(currentTree?.tree);
 
     const roots = [];
     for (const node of nodes.values()) {
@@ -1232,7 +1256,7 @@ export class PiManager extends EventEmitter {
       if (parent) parent.children.push(node);
       else roots.push(node);
     }
-    return { ...response.data, tree: roots };
+    return { ...currentTree, tree: roots };
   }
 
   attach(id, socket) {
@@ -1467,8 +1491,8 @@ export class PiManager extends EventEmitter {
       chatId: safe.chatId,
       projectId: safe.projectId,
       projectSlug: safe.projectSlug,
-      sessionFile: safe.runtime?.kind === "native_pi" ? null : safe.sessionFile,
-      sessionId: safe.runtime?.kind === "native_pi" ? null : safe.sessionId || null,
+      sessionFile: safe.sessionFile,
+      sessionId: safe.sessionId || null,
       model: safe.model,
       thinkingLevel: safe.thinkingLevel,
       template: safe.template || null,
@@ -1511,7 +1535,12 @@ export class PiManager extends EventEmitter {
   }
 
   getByChatId(chatId) {
-    return [...this.processes.values()].find((record) => record.chatId === chatId
-      && ["starting", "running"].includes(record.status)) || null;
+    const id = this.byChatId.get(chatId);
+    const record = id ? this.processes.get(id) : null;
+    return record && ["starting", "running"].includes(record.status) ? record : null;
+  }
+
+  rawRecords() {
+    return [...this.processes.values()].filter((record) => record.status !== "stopped");
   }
 }

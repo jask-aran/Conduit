@@ -23,6 +23,7 @@ export class SessionRecords {
   }
 
   add(record) {
+    record.adapterImplementation ||= this.backend.implementation;
     this.records.set(record.id, record);
     this.byChatId.set(record.chatId, record.id);
     return record;
@@ -49,6 +50,7 @@ export class SessionRecords {
   }
 
   list() { return [...this.records.values()].map((record) => this.view(record)); }
+  rawRecords() { return [...this.records.values()].filter((record) => record.status !== "stopped"); }
 
   view(record) {
     return {
@@ -72,6 +74,7 @@ export class SessionRecords {
 
   publish(record, event) {
     record.events.push(event);
+    if (record.events.length > 500) record.events.splice(0, record.events.length - 500);
     this.onPublish?.(record, event);
     for (const socket of record.clients) if (socket.readyState === 1) socket.send(JSON.stringify(event));
   }

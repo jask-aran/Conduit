@@ -1,53 +1,60 @@
-import { MANIFESTS } from "./harnesses/index.js";
+import { implementationsOf, MANIFESTS } from "./harnesses/index.js";
+export { conduitPiSessionFile, opaqueSessionFor } from "./backend-session.js";
 
 // Harness-backed profiles come from the manifests; Pi profiles come from the
 // template catalogue, which is why the built-in Pi manifest is not one of these.
 const PROFILE_MANIFESTS = MANIFESTS.filter((manifest) => manifest.profile);
 
-export function harnessIdForImplementation(implementation) {
+export function harnessIdForImplementation(implementation, installationId = "") {
   if (implementation === "conduit_pi") return "conduit";
-  if (implementation === "native_pi") return "pi";
   return implementation || "conduit";
 }
 
 // Pi identity metadata only. Runtime dispatch still belongs to PiManager.
 export function piBackendFor(chat) {
-  const native = chat.runtime?.kind === "native_pi";
   return {
-    profileId: native ? "host-pi" : chat.templateId || chat.runtime?.profileId || null,
-    profileRevision: native ? null : chat.templateVersion || chat.runtime?.profileVersion || null,
-    management: native ? "agent" : "conduit",
+    profileId: chat.templateId || chat.runtime?.profileId || null,
+    profileRevision: chat.templateVersion || chat.runtime?.profileVersion || null,
+    management: "conduit",
     protocol: "pi_rpc",
-    implementation: native ? "native_pi" : "conduit_pi",
-    installationId: native ? "host-pi" : chat.runtime?.installationId || "conduit-pinned",
-    opaqueSession: chat.piSessionFile || null,
+    implementation: "conduit_pi",
+    installationId: chat.runtime?.installationId || "conduit-pinned",
+    opaqueSession: chat.backend?.implementation === "conduit_pi" ? chat.backend.opaqueSession || null : null,
   };
 }
 
-// Read neutral rows through the current Pi execution fields during slice 2.
+// Convert legacy Pi columns at the registry boundary. Runtime code only reads
+// backend.opaqueSession, and the next flush removes the old columns.
 export function withPiCompatibilityFields(item) {
-  const backend = item.backend;
-  if (!backend) return item;
-  if (backend.protocol !== "pi_rpc" || !["conduit_pi", "native_pi"].includes(backend.implementation)) {
-    return item;
-  }
-  const native = backend.implementation === "native_pi";
+  const legacyFile = item.piSessionFile || item.file || null;
+  const backend = item.backend || (legacyFile ? piBackendFor(item) : null);
+  const { piSessionId: _piSessionId, piSessionFile: _piSessionFile, nativeId: _nativeId, file: _file, ...neutral } = item;
+  if (!backend) return neutral;
+  if (backend.protocol !== "pi_rpc" || !["conduit_pi", "native_pi"].includes(backend.implementation)) return { ...neutral, backend };
+  const native = item.runtime?.kind === "native_pi" || backend.installationId === "host-pi"
+    || backend.implementation === "native_pi";
   return {
-    ...item,
+    ...neutral,
     templateId: item.templateId ?? (native ? null : backend.profileId),
     templateVersion: item.templateVersion ?? backend.profileRevision,
-    piSessionFile: item.piSessionFile ?? backend.opaqueSession,
+    backend: {
+      ...backend,
+      management: "conduit",
+      implementation: "conduit_pi",
+      installationId: "conduit-pinned",
+      opaqueSession: backend.opaqueSession || legacyFile,
+    },
     runtime: item.runtime ?? {
-      kind: native ? "native_pi" : "conduit_profile",
-      installationId: backend.installationId,
-      profileId: native ? null : backend.profileId,
-      profileVersion: native ? null : backend.profileRevision,
+      kind: "conduit_profile",
+      installationId: native ? "conduit-pinned" : backend.installationId,
+      profileId: native ? item.templateId || null : backend.profileId,
+      profileVersion: native ? item.templateVersion || null : backend.profileRevision,
     },
   };
 }
 
 export function agentProfiles(templates, { available = null } = {}) {
-  const usable = (id) => !available || available.has(id);
+  const usable = (manifest) => !available || implementationsOf(manifest).some((implementation) => available.has(implementation));
   return [
     ...templates.map((template) => ({
       id: template.id,
@@ -55,18 +62,14 @@ export function agentProfiles(templates, { available = null } = {}) {
       management: "conduit",
       agent: { protocol: "pi_rpc", implementation: "conduit_pi", installationId: "conduit-pinned" },
     })),
-    {
-      id: "host-pi",
-      label: "Host Pi",
-      management: "agent",
-      agent: { protocol: "pi_rpc", implementation: "native_pi", installationId: "host-pi" },
-    },
     ...PROFILE_MANIFESTS.map((manifest) => ({
       id: manifest.id,
       label: manifest.profileLabel || manifest.label,
       ...(manifest.description ? { description: manifest.description } : {}),
       management: "agent",
-      disabled: !usable(manifest.id),
+      disabled: !usable(manifest),
+      capabilities: manifest.capabilities,
+      drive: manifest.drive === true,
       agent: { protocol: manifest.protocol, implementation: manifest.id, installationId: manifest.installationId },
     })),
   ];
@@ -79,16 +82,19 @@ export function profileSelection(body = {}) {
     throw Object.assign(new Error("profileId must be a non-empty string"), { code: "invalid_profile", status: 400 });
   }
   const profileId = body.profileId.trim();
+  if (profileId === "host-pi") {
+    throw Object.assign(new Error("Host Pi is not supported"), { code: "invalid_profile", status: 400 });
+  }
   if (PROFILE_MANIFESTS.some((manifest) => manifest.id === profileId)) {
     if (body.runtimeKind != null || body.templateId != null) {
       throw Object.assign(new Error("Profile selection conflicts with legacy fields"), { code: "profile_conflict", status: 400 });
     }
     return { ...body, profileId };
   }
-  const runtimeKind = profileId === "host-pi" ? "native_pi" : "conduit_profile";
+  const runtimeKind = "conduit_profile";
   if ((body.runtimeKind != null && body.runtimeKind !== runtimeKind)
-    || (profileId !== "host-pi" && body.templateId != null && body.templateId !== profileId)) {
+    || (body.templateId != null && body.templateId !== profileId)) {
     throw Object.assign(new Error("Profile selection conflicts with legacy fields"), { code: "profile_conflict", status: 400 });
   }
-  return { ...body, runtimeKind, ...(profileId === "host-pi" ? {} : { templateId: profileId }) };
+  return { ...body, runtimeKind, templateId: profileId };
 }

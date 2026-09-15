@@ -1,4 +1,5 @@
 import { messagesFromEntries } from "./session-store.js";
+import { conduitPiSessionFile } from "./backend-session.js";
 
 const RECENT_CHAT_LIMIT = 10;
 const PREVIEW_LENGTH = 180;
@@ -27,9 +28,10 @@ const opaqueThreadId = (chat) => typeof chat.backend?.opaqueSession === "string"
 async function recentChatView(chat, project, process, readPage, backendSessions) {
   let lastMessagePreview = backendSessions.get(opaqueThreadId(chat))?.preview || "";
   let lastMessageAt = chat.updatedAt || chat.createdAt || null;
-  if (chat.piSessionFile) {
+  const sessionFile = conduitPiSessionFile(chat);
+  if (sessionFile) {
     try {
-      const page = await readPage(chat.piSessionFile, project, { turnLimit: 1, characterLimit: 12_000 });
+      const page = await readPage(sessionFile, project, { turnLimit: 1, characterLimit: 12_000 });
       const messages = messagesFromEntries(page.entries)
         .filter((item) => ["user", "assistant"].includes(item.role) && item.content?.trim());
       lastMessagePreview = previewText(page.entries);
@@ -76,7 +78,7 @@ export async function buildProjectDashboard({
     .slice(0, RECENT_CHAT_LIMIT);
   const backendSessions = new Map();
   const implementations = [...new Set(recent.map((chat) => chat.backend?.implementation)
-    .filter((implementation) => implementation && !["conduit_pi", "native_pi"].includes(implementation)))];
+    .filter((implementation) => implementation && implementation !== "conduit_pi"))];
   await Promise.all(implementations.map(async (implementation) => {
     const sessions = await listBackendSessions?.(implementation, project.workingRoot).catch(() => []) || [];
     for (const session of sessions) backendSessions.set(session.id, session);

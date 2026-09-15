@@ -73,6 +73,6 @@ test("Pi adapter delegates the neutral lifecycle to the existing manager", async
 test("backend registry resolves persisted Pi identity without compatibility shims", () => {
   const registry = new ChatBackendRegistry({});
   assert.equal(registry.forChat({ backend: { protocol: "pi_rpc", implementation: "conduit_pi" } }), registry.forImplementation("conduit_pi"));
-  assert.equal(registry.forChat({ backend: { protocol: "pi_rpc", implementation: "native_pi" } }), registry.forImplementation("native_pi"));
+  assert.throws(() => registry.forChat({ backend: { protocol: "pi_rpc", implementation: "native_pi" } }), { code: "backend_unavailable" });
   assert.throws(() => registry.forChat({ backend: { protocol: "acp", implementation: "codex" } }), { code: "backend_unavailable" });
 });

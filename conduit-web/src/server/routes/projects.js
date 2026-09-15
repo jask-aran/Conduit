@@ -6,6 +6,7 @@ import fs from "node:fs/promises";
 import express from "express";
 import { resolveTemplate } from "../../config.js";
 import { chatView } from "../../chat-store.js";
+import { conduitPiSessionFile } from "../../backend-session.js";
 import { removeProjectSessions, removeSession } from "../../session-store.js";
 import {
   createWorkspaceDirectory,
@@ -19,12 +20,11 @@ import {
 import {
   findDeletableSession,
   moveRegisteredChat,
-  stopSessionProcesses,
+  stopProjectProcesses, stopSessionProcesses,
 } from "../../session-operations.js";
 
-function resolveProjectDefaultTemplateId(config, requested, fallback = null, { allowHostPi = false } = {}) {
+function resolveProjectDefaultTemplateId(config, requested, fallback = null) {
   if (requested == null || requested === "") return fallback;
-  if (requested === "host-pi" && allowHostPi) return requested;
   const template = resolveTemplate(config, requested);
   if (!template) {
     const error = new Error(`Unknown template: ${requested}`);
@@ -285,7 +285,7 @@ export function registerProjectRoutes(app, {
         changes.name = String(request.body.name || "").trim();
         if (!changes.name) return response.status(400).json({ error: "project_name_required" });
       }
-      if (hasDefault) changes.defaultTemplateId = resolveProjectDefaultTemplateId(config, request.body.defaultTemplateId, null, { allowHostPi: current.kind === "workspace" });
+      if (hasDefault) changes.defaultTemplateId = resolveProjectDefaultTemplateId(config, request.body.defaultTemplateId, null);
       if (hasAppearance) {
         if (current.kind !== "workspace" && !["linked", "created", "cloned"].includes(current.origin)) return response.status(400).json({ error: "workspace_appearance_not_supported" });
         changes.workspaceAppearance = normalizeWorkspaceAppearance(request.body.workspaceAppearance);
@@ -429,12 +429,12 @@ export function registerProjectRoutes(app, {
       const chatId = typeof request.query.chatId === "string" ? request.query.chatId : "";
       const chat = registry.metadata(chatId);
       if (!chat || chat.projectId !== project.id) return response.json(null);
-      if (request.query.timeline === "1") return response.json(await turnCheckpoints.timeline(chatId, project.workingRoot, chat.piSessionFile));
+      if (request.query.timeline === "1") return response.json(await turnCheckpoints.timeline(chatId, project.workingRoot));
       const baseline = request.query.baseline === "turn" ? "turn" : "chat";
       const checkpointId = typeof request.query.checkpointId === "string" ? request.query.checkpointId : null;
       const artifact = request.query.path
-        ? await turnCheckpoints.compare(chatId, project.workingRoot, request.query.path, checkpointId, baseline, chat.piSessionFile)
-        : await turnCheckpoints.review(chatId, project.workingRoot, baseline, checkpointId, chat.piSessionFile);
+        ? await turnCheckpoints.compare(chatId, project.workingRoot, request.query.path, checkpointId, baseline)
+        : await turnCheckpoints.review(chatId, project.workingRoot, baseline, checkpointId);
       response.json(artifact);
     } catch (error) { next(error); }
   });
@@ -481,17 +481,14 @@ export function registerProjectRoutes(app, {
         await projects.validate(target);
         if (source.id === target.id) throw Object.assign(new Error("Project target is unchanged"), { code: "project_target_unchanged", status: 409 });
         const chats = registry.listProject(source.id, { includeHidden: true });
-        if (chats.some((chat) => chat.runtime?.kind === "native_pi")) {
-          throw Object.assign(new Error("Host Pi chats cannot move between working roots."), { code: "chat_move_not_supported", status: 409 });
-        }
         const moved = [];
         for (const { id } of chats) {
           const item = await lifecycle.run(id, async () => {
             const chat = registry.metadata(id);
             if (!chat || chat.projectId !== source.id) return null;
             const projectList = await projects.list();
-            const session = chat.piSessionFile ? await registry.find(projectList, chat.id) : null;
-            await stopSessionProcesses(manager, chat);
+            const session = conduitPiSessionFile(chat) ? await registry.find(projectList, chat.id) : null;
+            await stopSessionProcesses(backends, chat);
             lifecycle.assertAvailable(chat.id, source.id);
             lifecycle.assertAvailable(chat.id, target.id);
             await moveRegisteredChat({ chat, source, target, session, registry });
@@ -535,11 +532,10 @@ export function registerProjectRoutes(app, {
       for (const { id } of chats) {
         await lifecycle.run(id, async () => {
           const chat = registry.metadata(id);
-          if (chat?.projectId === project.id) await stopSessionProcesses(manager, chat);
+          if (chat?.projectId === project.id) await stopSessionProcesses(backends, chat);
         });
       }
-      const matching = manager.list().filter((item) => item.projectId === project.id);
-      await Promise.all(matching.map((item) => manager.stopAndWait(item.id)));
+      await stopProjectProcesses(backends, project.id);
       await terminals.removeProject(project.id);
       const sessions = (await Promise.all(chats
         .map((chat) => findDeletableSession(registry, projectList, chat)))).filter(Boolean);

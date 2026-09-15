@@ -143,6 +143,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   let currentGeneration: string | null = null;
   let stopPending = false;
   let openToken = 0;
+  let openingLive: { chatId: string; request: Promise<LiveRecord | null> } | null = null;
   let selectionToken = 0;
   let navigationToken = 0;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -552,13 +553,61 @@ export function createActiveChat(options: ActiveChatOptions) {
     });
   };
 
+  const waitForSocket = () => new Promise<void>((resolve, reject) => {
+    const current = socket;
+    if (!current) return reject(new Error("Could not connect to the agent"));
+    if (current.readyState === WebSocket.OPEN) return resolve();
+    current.addEventListener("open", () => resolve(), { once: true });
+    current.addEventListener("error", () => reject(new Error("The live stream failed. Try again.")), { once: true });
+    current.addEventListener("close", () => reject(new Error("The live stream closed before it connected.")), { once: true });
+  });
+
+  const attachResident = async (chatId: string, selection: number): Promise<LiveRecord | null> => {
+    const resident = options.runtime.getProcess(chatId);
+    if (!resident?.id || resident.status === "stopped" || resident.status === "none") return null;
+    const record: LiveRecord = {
+      id: resident.id,
+      chatId,
+      streamUrl: `/v0/live-sessions/${resident.id}/stream`,
+      runtime: resident.runtime,
+      capabilities: resident.capabilities,
+      contextUsage: resident.contextUsage,
+      sessionStats: resident.sessionStats,
+      cacheStats: resident.cacheStats,
+      modelProfile: resident.modelProfile,
+    };
+    setLive(record);
+    if (record.capabilities) setCapabilities(record.capabilities);
+    if (record.runtime) setRuntimeIdentity(record.runtime);
+    if (record.contextUsage) setContextUsage(record.contextUsage);
+    if (record.sessionStats) setSessionStats(record.sessionStats);
+    if (record.cacheStats) setCacheStats(record.cacheStats);
+    await connect(record, chatId, selection);
+    await waitForSocket();
+    return selection === selectionToken && selectedId() === chatId ? record : null;
+  };
+
   const openLive = async (chatId: string, ownerProjectId: string, launch: UnknownRecord = {}, selection = selectionToken): Promise<LiveRecord | null> => {
     if (selection !== selectionToken || selectedId() !== chatId) return null;
+    const preserveDraft = status() === "draft";
     const token = ++openToken;
-    setConnectingId(chatId);
     const intent = String(launch.intent || "open");
-    const hostFallback = Boolean(launch.hostFallback);
     try {
+      // The runtime stream is the server's process catalogue. Attach its
+      // resident record directly; POST is only for a cold start or stale view.
+      try {
+        const resident = await attachResident(chatId, selection);
+        if (resident) {
+          void models.reloadChat(chatId).catch(onError);
+          return resident;
+        }
+      } catch {
+        cancelReconnect();
+        socket?.close();
+        socket = null;
+        setLive(null);
+      }
+      setConnectingId(chatId);
       const record = await api<LiveRecord>("/v0/live-sessions", {
         method: "POST",
         body: JSON.stringify({
@@ -578,39 +627,18 @@ export function createActiveChat(options: ActiveChatOptions) {
       if (record.sessionStats) setSessionStats(record.sessionStats);
       if (record.cacheStats) setCacheStats(record.cacheStats);
       await connect(record, chatId, selection);
-      await new Promise<void>((resolve, reject) => {
-        const current = socket;
-        if (!current) return reject(new Error("Could not connect to Pi"));
-        if (current.readyState === WebSocket.OPEN) return resolve();
-        current.addEventListener("open", () => resolve(), { once: true });
-        current.addEventListener("error", () => reject(new Error("Pi is starting or the live stream failed. Try again.")), { once: true });
-      });
+      await waitForSocket();
       if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
       await models.reloadChat(chatId);
-      const refreshedProjects = await catalogue.refresh();
-      if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
-      const refreshed = refreshedProjects.flatMap((project) => project.sessions).find((chat) => chat.id === chatId);
-      if (refreshed) setTitle(refreshed.title);
+      if (!preserveDraft) {
+        const refreshedProjects = await catalogue.refresh();
+        if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
+        const refreshed = refreshedProjects.flatMap((project) => project.sessions).find((chat) => chat.id === chatId);
+        if (refreshed) setTitle(refreshed.title);
+      }
       return record;
     } catch (error) {
       if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
-      const detail = error as Error & { error?: string };
-      const project = catalogue.projects().find((item) => item.id === ownerProjectId);
-      const hostFailed = !hostFallback && runtimeIdentity()?.kind === "native_pi" && project?.defaultTemplateId === "host-pi"
-        && !["live_process_limit", "generation_limit"].includes(detail.error || "");
-      if (hostFailed && project) {
-        await options.saveWorkspaceDefault(project.id, null);
-        if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
-        const fallback = options.defaultTemplateId() || "assistant";
-        const chat = await api<ChatSummary>(`/v0/chats/${encodeURIComponent(chatId)}`, {
-          method: "PATCH",
-          body: JSON.stringify({ templateId: fallback, runtimeKind: "conduit_profile" }),
-        });
-        if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
-        setTemplateId(chat.templateId || fallback);
-        setRuntimeIdentity(chat.runtime || null);
-        return openLive(chatId, ownerProjectId, { intent, hostFallback: true, modelOverride: "", thinkingOverride: "" }, selection);
-      }
       throw error;
     } finally { if (token === openToken) setConnectingId(null); }
   };
@@ -645,9 +673,17 @@ export function createActiveChat(options: ActiveChatOptions) {
     const chatId = selectedId();
     if (!chatId) throw new Error("Chat is not ready yet");
     const selection = selectionToken;
-    const record = await openLive(chatId, projectId(), { intent }, selection);
-    if (!record) throw new Error("Chat switched before Pi was ready");
-    return record;
+    const active = openingLive?.chatId === chatId
+      ? openingLive
+      : { chatId, request: openLive(chatId, projectId(), { intent }, selection) };
+    openingLive = active;
+    try {
+      const record = await active.request;
+      if (!record) throw new Error("Chat switched before Pi was ready");
+      return record;
+    } finally {
+      if (openingLive === active) openingLive = null;
+    }
   };
 
   const resumeLive = () => {
@@ -702,7 +738,6 @@ export function createActiveChat(options: ActiveChatOptions) {
         break;
       case "session_checkpoint":
         if (event.title) {
-          catalogue.patchChat(event.chatId, { title: event.title });
           if (event.chatId === selectedId()) setTitle(event.title);
         }
         if (event.chatId === selectedId()) {
@@ -949,7 +984,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   const regenerate = async (entryId: string) => {
-    if (!entryId || streaming() || stopping()) return;
+    if (!entryId || !capabilities()?.regenerate || streaming() || stopping()) return;
     try {
       await ensureLive();
       setMessages((current) => truncateForRegenerate(current, entryId));
@@ -1113,9 +1148,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   const activity = createMemo(() => {
-    if (connectingId() === selectedId()) return runtimeIdentity()?.kind === "codex"
-      ? { kind: "starting", label: "Connecting to Codex CLI…" }
-      : { kind: "starting", label: "Starting agent…" };
+    if (connectingId() === selectedId()) return { kind: "starting", label: "Starting agent…" };
     const process = options.runtime.getProcess(selectedId());
     const derived = deriveFineActivity({
       generation: generation(),

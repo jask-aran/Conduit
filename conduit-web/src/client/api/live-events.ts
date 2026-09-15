@@ -205,7 +205,9 @@ export function normalizeLiveEvent(value: unknown): LiveEvent {
       return { type: "assistant_message_completed", generationId, seq: seq ?? 0,
         messageId: text(source.messageId), blocks: list(source.blocks).map((block) => {
           const item = record(block);
-          return { ...item, type: item.kind === "tool_call" ? "toolCall" : item.kind };
+          return item.kind === "tool_call"
+            ? { ...item, type: "toolCall", arguments: item.input }
+            : { ...item, type: item.kind };
         }), stopReason: text(source.stopReason || "stop"), errorMessage: optionalText(source.errorMessage) };
     }
     case "tool_activity": return {

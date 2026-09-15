@@ -36,7 +36,9 @@ export function createCatalogueStore() {
 
   const patchChat = (chatId: string, patch: Partial<ChatSummary>) => setProjects((current) => current.map((project) => ({
     ...project,
-    sessions: project.sessions.map((chat) => chat.id === chatId ? { ...chat, ...patch } : chat),
+    sessions: project.sessions.map((chat) => chat.id === chatId && Object.entries(patch).some(([key, value]) => Reflect.get(chat, key) !== value)
+      ? { ...chat, ...patch }
+      : chat),
   })));
 
   return { projects, setProjects, selectedId, setSelectedId, projectId, setProjectId, selected, refresh, select, selectProject, patchChat };

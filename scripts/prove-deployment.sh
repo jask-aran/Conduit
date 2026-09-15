@@ -103,10 +103,9 @@ const workspace = await (await request("/v0/projects", {
 }, cookie)).json();
 const installations = await (await request("/v0/pi-installations", {}, cookie)).json();
 const isolated = installations.installations.find((item) => item.id === "conduit-pinned");
-const host = installations.installations.find((item) => item.id === "host-pi");
-if (isolated?.version !== "0.84.1") throw new Error("Pinned Isolated Pi version is not 0.84.1");
-if (host?.available) throw new Error("Host Pi must not be available in the container");
-console.log(JSON.stringify({ cookie, chatId: chat.id, attachmentId, workspaceId: workspace.id, workspacePath: workspace.path, isolatedVersion: isolated.version, hostAvailable: host?.available || false }));
+if (isolated?.version !== "0.84.1") throw new Error("Pinned Conduit Pi version is not 0.84.1");
+if (installations.installations.length !== 1) throw new Error("Unexpected Pi installation exposed");
+console.log(JSON.stringify({ cookie, chatId: chat.id, attachmentId, workspaceId: workspace.id, workspacePath: workspace.path, isolatedVersion: isolated.version }));
 ' "$PASSWORD"
 }
 
@@ -137,9 +136,8 @@ const fs = await import("node:fs/promises");
 if (await fs.readFile("/workspaces/proof-workspace/proof.txt", "utf8") !== "workspace fixture\n") throw new Error("Workspace file did not survive");
 const installations = await (await request("/v0/pi-installations")).json();
 const isolated = installations.installations.find((item) => item.id === "conduit-pinned");
-const host = installations.installations.find((item) => item.id === "host-pi");
-if (isolated?.version !== fixture.isolatedVersion || host?.available) throw new Error("Pi runtime boundary changed");
-console.log(JSON.stringify({ health, chatId: chat.id, attachmentId: fixture.attachmentId, workspaceId: workspace.id, hostAvailable: host?.available || false }));
+if (isolated?.version !== fixture.isolatedVersion || installations.installations.length !== 1) throw new Error("Pi runtime boundary changed");
+console.log(JSON.stringify({ health, chatId: chat.id, attachmentId: fixture.attachmentId, workspaceId: workspace.id }));
 ' "$(<"$fixture_file")" "$RELEASE"
 }
 

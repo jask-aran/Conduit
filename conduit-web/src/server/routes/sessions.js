@@ -1,4 +1,5 @@
 import path from "node:path";
+import { conduitPiSessionFile } from "../../backend-session.js";
 import { chatView, isChatId } from "../../chat-store.js";
 import {
   projectSessionEntries,
@@ -24,15 +25,16 @@ export function registerSessionRoutes(app, {
   findChatContext,
   findRegisteredSession,
   lifecycle,
-  manager,
   sessionNames,
   projects,
   readSessionPage,
   registry,
 }) {
   async function transcriptFor(context) {
-    const session = await findRegisteredSession(context.chat.id);
-    if (session) return transcriptFromEntries(session.entries).trim();
+    if (context.chat.backend?.implementation === "conduit_pi") {
+      const session = await findRegisteredSession(context.chat.id);
+      if (session) return transcriptFromEntries(session.entries).trim();
+    }
     const projection = await backends.forChat(context.chat).readTranscript({
       chatId: context.chat.id,
       opaqueSession: context.chat.backend?.opaqueSession,
@@ -45,7 +47,7 @@ export function registerSessionRoutes(app, {
     try {
       const context = await findChatContext(request.params.id);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
-      if (!context.chat.piSessionFile) {
+      if (context.chat.backend?.implementation !== "conduit_pi") {
         // Backends without a Pi session file keep their own history; any adapter
         // that can hand one over serves the transcript here.
         const adapter = backends.forChat(context.chat);
@@ -59,7 +61,7 @@ export function registerSessionRoutes(app, {
       }
       let session;
       try {
-        session = await readSessionPage(context.chat.piSessionFile, context.project, { before: request.query.before });
+        session = await readSessionPage(conduitPiSessionFile(context.chat), context.project, { before: request.query.before });
       } catch (error) {
         if (error.code === "ENOENT") return response.json({
           ...chatView(context.chat), messages: [], tools: [], attachments: [], page: { before: null },
@@ -157,11 +159,10 @@ export function registerSessionRoutes(app, {
           const current = await findChatContext(request.params.id);
           if (!current) return null;
           if (current.chat.backend?.protocol !== "pi_rpc") return { error: "chat_move_not_supported", status: 409, message: "Agent-managed chats cannot move between working roots." };
-          if (current.chat.runtime?.kind === "native_pi") return { error: "chat_move_not_supported", status: 409, message: "Host Pi chats cannot move between working roots." };
           if (current.chat.projectId === target.id) return { error: "session_project_unchanged", status: 409 };
           await projects.validate(target);
           const session = await registry.find(await projects.list(), current.chat.id);
-          await stopSessionProcesses(manager, current.chat);
+          await stopSessionProcesses(backends, current.chat);
           lifecycle.assertAvailable(current.chat.id, current.project.id);
           lifecycle.assertAvailable(current.chat.id, target.id);
           await moveRegisteredChat({ chat: current.chat, source: current.project, target, session, registry });
@@ -182,19 +183,17 @@ export function registerSessionRoutes(app, {
         if (!context) return false;
         return lifecycle.withProjects([context.project.id], async () => {
           const session = await findDeletableSession(registry, await projects.list(), context.chat);
-          const external = backends?.getByChatId(context.chat.id);
-          if (external?.adapterImplementation) await backends.adapterForRecord(external).close(external.id);
           const installationRoot = sessionDirectoryRootForChat(config, context.chat);
           const sessionOptions = session && installationRoot
             ? { sessionsDir: path.dirname(session.file), allowedRoot: installationRoot }
             : { sessionsDir: sessionDirectoryForChat(config, context.chat, context.project) };
           const family = session ? await sessionFamilyFiles(session.file, context.project, sessionOptions) : [];
-          await stopSessionFamilyProcesses(manager, context.chat, family);
+          await stopSessionFamilyProcesses(backends, context.chat, family);
           if (session) await removeSessionFamily(session.file, context.project, sessionOptions);
           const familyFiles = new Set(family.map((file) => path.resolve(file)));
           const relatedChats = registry.listProject(context.project.id, { includeHidden: true })
             .filter((chat) => chat.id === context.chat.id
-              || (chat.piSessionFile && familyFiles.has(path.resolve(chat.piSessionFile))));
+              || (conduitPiSessionFile(chat) && familyFiles.has(path.resolve(conduitPiSessionFile(chat)))));
           await Promise.all(relatedChats.map((chat) => registry.remove(chat.id, context.project)));
           return true;
         });

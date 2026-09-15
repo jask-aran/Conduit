@@ -13,18 +13,10 @@ function noStore(response) {
   response.set("Cache-Control", "no-store");
 }
 
-export function registerPiAuthRoutes(app, { piAuth, installationViews, clearHostPiDefaults, detectHost }) {
+export function registerPiAuthRoutes(app, { piAuth, installationViews }) {
   app.get("/v0/pi-installations", async (_request, response, next) => {
     try { response.json({ installations: await installationViews() }); }
     catch (error) { next(error); }
-  });
-
-  app.post("/v0/pi-installations/host/detect", async (_request, response, next) => {
-    try {
-      const detected = await detectHost();
-      if (!detected.available) await clearHostPiDefaults();
-      response.json((await installationViews()).find((item) => item.id === "host-pi"));
-    } catch (error) { next(error); }
   });
 
   app.get("/v0/pi-auth", (request, response, next) => {

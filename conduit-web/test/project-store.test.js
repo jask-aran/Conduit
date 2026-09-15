@@ -135,7 +135,6 @@ test("links allow-listed directories without deleting them on unregister", async
   assert.equal(linked.path, external);
   assert.equal(linked.defaultTemplateId, null);
   assert.equal((await store.update(linked.id, { defaultTemplateId: "workspace" })).defaultTemplateId, "workspace");
-  assert.equal((await store.update(linked.id, { defaultTemplateId: "host-pi" })).defaultTemplateId, "host-pi");
   assert.equal((await store.update(linked.id, { defaultTemplateId: null })).defaultTemplateId, null);
   assert.equal(linked.deletesFilesOnRemove, false);
   await fs.writeFile(path.join(external, ".conduit", "user-owned.txt"), "keep");

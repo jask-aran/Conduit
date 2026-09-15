@@ -5,18 +5,20 @@ import {
   sessionDirectoryFor,
 } from "./session-store.js";
 
-export async function stopSessionProcesses(manager, session) {
+export async function stopSessionProcesses(backends, session) {
   const chatId = session.chatId || session.id;
-  const sessionFile = session.piSessionFile || session.file;
-  const matching = manager.list().filter((item) => item.chatId === chatId || (sessionFile && item.sessionFile === sessionFile));
-  await Promise.all(matching.map((item) => manager.stopAndWait(item.id)));
+  const matching = backends.rawRecords().filter((record) => record.chatId === chatId);
+  await Promise.all(matching.map((record) => backends.adapterForRecord(record).close(record.id)));
 }
 
-export async function stopSessionFamilyProcesses(manager, chat, files) {
-  const sessionFiles = new Set(files.map((file) => path.resolve(file)));
-  const matching = manager.list().filter((item) => item.chatId === chat.id
-    || (item.sessionFile && sessionFiles.has(path.resolve(item.sessionFile))));
-  await Promise.all(matching.map((item) => manager.stopAndWait(item.id)));
+export async function stopSessionFamilyProcesses(backends, chat, _files) {
+  const matching = backends.rawRecords().filter((record) => record.chatId === chat.id);
+  await Promise.all(matching.map((record) => backends.adapterForRecord(record).close(record.id)));
+}
+
+export async function stopProjectProcesses(backends, projectId) {
+  await Promise.all(backends.rawRecords().filter((record) => record.projectId === projectId)
+    .map((record) => backends.adapterForRecord(record).close(record.id)));
 }
 
 export function sessionDirectoryForChat(config, chat, project) {

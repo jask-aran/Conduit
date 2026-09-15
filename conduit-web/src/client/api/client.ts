@@ -1,5 +1,5 @@
-import { httpUrl, loginUrl } from "./transport";
-import { authorizedFetch } from "./native-auth-client";
+import { httpUrl, loginUrl } from "./transport.js";
+import { authorizedFetch } from "./native-auth-client.ts";
 import { Capacitor } from "@capacitor/core";
 
 export interface ApiRequestMetadata {

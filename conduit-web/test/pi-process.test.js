@@ -12,7 +12,7 @@ test("Windows runs JavaScript Pi entry points through Node", () => {
   });
 });
 
-test("native Pi commands are unchanged on Windows", () => {
+test("Pi executable commands are unchanged on Windows", () => {
   assert.deepEqual(resolvePiProcess("C:/conduit/pi/pi.exe", ["--mode", "rpc"], {
     platform: "win32",
     nodePath: "C:/Program Files/nodejs/node.exe",

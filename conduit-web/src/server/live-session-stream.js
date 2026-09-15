@@ -3,6 +3,7 @@ import { messagesFromEntries } from "../session-store.js";
 import { chatView } from "../chat-store.js";
 import { parseAttachmentEnvelope } from "../attachment-envelope.js";
 import { ChatBackendRegistry } from "../pi-rpc-adapter.js";
+import { manifestForImplementation } from "../harnesses/index.js";
 import { startWebSocketKeepalive } from "./ws-keepalive.js";
 
 export function interruptedPromptInput(taken, message, attachmentIds = []) {
@@ -31,8 +32,10 @@ export function createLiveSessionStream({
   findRegisteredSession,
   chatModelView,
   backends = new ChatBackendRegistry(manager),
+  lifecycle,
   autoNameSession = async () => {},
 }) {
+  if (!lifecycle) throw new TypeError("Live session stream requires a chat lifecycle");
   const namingChats = new Set();
 
   function adapterFor(record) {
@@ -85,9 +88,12 @@ export function createLiveSessionStream({
 
   async function sendPrompt(record, prepared, options) {
     const { sourceCheckpointId = null, ...promptOptions } = options || {};
-    const backendNames = backends.manifestFor?.(record.adapterImplementation)?.nameGeneration === "backend";
+    const backendNames = manifestForImplementation(record.adapterImplementation)?.nameGeneration === "backend";
     const needsName = !backendNames && !prepared.context.chat.title && !namingChats.has(prepared.context.chat.id);
     const adapter = adapterFor(record);
+    if (prepared.attachments.length && !adapter.getCapabilities().attachments) {
+      throw Object.assign(new Error("This agent does not support attachments"), { code: "attachments_unsupported", status: 400 });
+    }
     let checkpoint = null;
     try {
       checkpoint = await turnCheckpoints?.capture({
@@ -95,7 +101,6 @@ export function createLiveSessionStream({
         projectId: prepared.context.project.id,
         projectKind: prepared.context.project.kind,
         workingRoot: prepared.context.project.workingRoot,
-        sessionFile: record.sessionFile || prepared.context.chat.piSessionFile || null,
         sourceCheckpointId,
       });
     } catch (error) {
@@ -112,9 +117,10 @@ export function createLiveSessionStream({
     }
     await registry.markUserMessage(prepared.context.chat.id);
     if (prepared.context.chat.status === "draft") {
-      await registry.update(prepared.context.chat.id, record.adapterImplementation && record.adapterImplementation !== "conduit_pi" && record.adapterImplementation !== "native_pi"
-        ? { status: "active", backend: { ...prepared.context.chat.backend, opaqueSession: record.sessionId } }
-        : { status: "active", piSessionId: record.sessionId || null, piSessionFile: record.sessionFile });
+      await registry.update(prepared.context.chat.id, { status: "active", backend: {
+        ...prepared.context.chat.backend,
+        opaqueSession: manifestForImplementation(record.adapterImplementation)?.profile ? record.sessionId : record.sessionFile,
+      } });
     }
     if (needsName) {
       namingChats.add(prepared.context.chat.id);
@@ -140,22 +146,33 @@ export function createLiveSessionStream({
     if (thinkingLevel && thinkingLevel !== current.thinkingLevel) await adapter.setThinkingLevel(record.id, thinkingLevel);
   }
 
-  async function syncForkedChat(record) {
+  async function syncForkedChat(record, forked) {
     const context = await findChatContext(record.chatId);
     if (!context) throw new Error("Chat no longer exists");
     const adapter = adapterFor(record);
-    const native = context.chat.backend?.protocol === "native_api";
-    await registry.update(context.chat.id, native
-      ? { backend: { ...context.chat.backend, opaqueSession: record.sessionId } }
-      : { piSessionId: record.sessionId || context.chat.piSessionId, piSessionFile: record.sessionFile });
+    await registry.update(context.chat.id, { backend: {
+      ...context.chat.backend,
+      opaqueSession: forked?.opaqueSession,
+    } });
+    let projection;
+    try {
+      projection = await adapter.readTranscript({
+        liveSessionId: record.id,
+        chatId: record.chatId,
+        project: context.project,
+        turns: Number.MAX_SAFE_INTEGER,
+        characterLimit: Number.MAX_SAFE_INTEGER,
+      });
+    } catch (error) {
+      // Pi assigns a fork path before it creates the JSONL when the retained
+      // branch has no assistant message. Keep the last durable registry pointer;
+      // the turn-end checkpoint commits this child after the prompt writes it.
+      if (error.code !== "ENOENT") throw error;
+      const updated = registry.metadata(context.chat.id);
+      adapter.publish(record, { type: "history_forked", chat: chatView(updated) });
+      return updated;
+    }
     adapter.publish(record, { type: "history_forked", chat: chatView(registry.metadata(context.chat.id)) });
-    const projection = await adapter.readTranscript({
-      liveSessionId: record.id,
-      chatId: record.chatId,
-      project: context.project,
-      turns: Number.MAX_SAFE_INTEGER,
-      characterLimit: Number.MAX_SAFE_INTEGER,
-    });
     projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages || []);
     adapter.publish(record, { type: "transcript_sync", generationId: null, replaceAll: true, ...projection });
     return registry.metadata(context.chat.id);
@@ -182,6 +199,9 @@ export function createLiveSessionStream({
     }
     if (command.type === "follow_up" || command.type === "steer") {
       const prepared = await promptForChat(record, command, String(command.message || ""));
+      if (prepared.attachments.length && !adapter.getCapabilities().attachments) {
+        throw Object.assign(new Error("This agent does not support attachments"), { code: "attachments_unsupported", status: 400 });
+      }
       if (command.type === "steer") {
         try {
           await turnCheckpoints?.capture({
@@ -189,7 +209,6 @@ export function createLiveSessionStream({
             projectId: prepared.context.project.id,
             projectKind: prepared.context.project.kind,
             workingRoot: prepared.context.project.workingRoot,
-            sessionFile: record.sessionFile || prepared.context.chat.piSessionFile || null,
           });
         } catch (error) {
           console.warn("Could not capture steering checkpoint", error.message);
@@ -201,7 +220,8 @@ export function createLiveSessionStream({
       return null;
     }
     if (command.type === "clear_queue") {
-      return adapter.clearQueue ? clearQueuedMessages(record, adapter) : null;
+      const capabilities = adapter.getCapabilities();
+      return capabilities.steer || capabilities.followUpQueue ? clearQueuedMessages(record, adapter) : null;
     }
     // Pi's documented interrupt recipe, run in order on this side of the
     // socket. Clearing first is what stops the abort from continuing the queue
@@ -212,7 +232,8 @@ export function createLiveSessionStream({
       // place makes the backend deliver it anyway, so a half-run sequence
       // duplicates the message rather than steering with it.
       let taken = { steering: [], followUp: [] };
-      if (adapter.clearQueue) {
+      const capabilities = adapter.getCapabilities();
+      if (capabilities.steer || capabilities.followUpQueue) {
         try {
           taken = await clearQueuedMessages(record, adapter);
         } catch (error) {
@@ -252,25 +273,27 @@ export function createLiveSessionStream({
       return stopped;
     }
     if (command.type === "fork_and_prompt") {
+      if (!adapter.getCapabilities().fork) throw Object.assign(new Error("This agent does not support forks"), { code: "fork_unsupported", status: 409 });
       const context = await findChatContext(record.chatId);
       const sourceCheckpointId = context ? await turnCheckpoints?.checkpointForMessage(
-        context.chat.id, context.project.workingRoot, record.sessionFile || context.chat.piSessionFile, command.entryId,
+        context.chat.id, context.project.workingRoot, command.entryId,
       ) : null;
-      await adapter.fork(record.id, command.entryId);
-      await syncForkedChat(record);
+      const forked = await adapter.fork(record.id, { nodeId: command.entryId });
+      await syncForkedChat(record, forked);
       await applyComposerModel(record, command);
       const prepared = await promptForChat(record, command, String(command.message || ""));
       return sendPrompt(record, prepared, { sourceCheckpointId });
     }
     if (command.type === "regenerate") {
+      if (!adapter.getCapabilities().regenerate) throw Object.assign(new Error("This agent does not support regeneration"), { code: "regenerate_unsupported", status: 409 });
       const context = await findChatContext(record.chatId);
       const sourceCheckpointId = context ? await turnCheckpoints?.checkpointForMessage(
-        context.chat.id, context.project.workingRoot, record.sessionFile || context.chat.piSessionFile, command.entryId,
+        context.chat.id, context.project.workingRoot, command.entryId,
       ) : null;
-      const forked = await adapter.fork(record.id, command.entryId);
-      await syncForkedChat(record);
+      const forked = await adapter.fork(record.id, { nodeId: command.entryId });
+      await syncForkedChat(record, forked);
       await applyComposerModel(record, command);
-      const prepared = await promptForChat(record, command, forked.text);
+      const prepared = await promptForChat(record, command, forked.sourceMessage?.text || forked.text);
       return sendPrompt(record, prepared, { sourceCheckpointId });
     }
     if (command.type === "continue") {
@@ -314,15 +337,23 @@ export function createLiveSessionStream({
     // not overtake an earlier one while attachment paths or an abort resolve.
     let commands = Promise.resolve();
     ws.on("message", (data) => {
-      const command = JSON.parse(String(data));
-      const run = () => handleClientCommand(record, command);
       const report = (error) => {
         if (ws.readyState === 1) ws.send(JSON.stringify(adapter.toClientEvent({
           type: "client_error", code: error.code, message: error.message,
         })));
       };
-      // A prompt RPC remains pending for the full model turn. Stop must bypass
-      // that queue or Pi cannot receive the abort until the turn ends itself.
+      let command;
+      try { command = JSON.parse(String(data)); }
+      catch (error) { report(Object.assign(error, { code: "invalid_request" })); return; }
+      const bypassLifecycle = record.ephemeral || command.type === "stop_generation" || command.type === "abort";
+      const run = () => bypassLifecycle ? handleClientCommand(record, command) : lifecycle.run(record.chatId, async () => {
+        const context = await findChatContext(record.chatId);
+        if (!context) throw Object.assign(new Error("Chat no longer exists"), { code: "chat_not_found" });
+        lifecycle.assertAvailable(record.chatId, context.project.id);
+        return handleClientCommand(record, command);
+      });
+      // Stop bypasses the ordered command chain so it can interrupt work that
+      // an earlier command started. Prompt acceptance normally resolves fast.
       if (command.type === "stop_generation" || command.type === "abort") {
         void run().catch(report);
         return;

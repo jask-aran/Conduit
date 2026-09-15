@@ -1,7 +1,10 @@
 import { resolveTemplate } from "../../config.js";
 import { chatView, isChatId } from "../../chat-store.js";
 import { stopSessionProcesses } from "../../session-operations.js";
-import { agentProfiles, profileSelection } from "../../chat-backend.js";
+import { agentProfiles, conduitPiSessionFile, profileSelection } from "../../chat-backend.js";
+import { manifestForImplementation } from "../../harnesses/index.js";
+import { resolveModelProfile } from "../../model-profiles.js";
+import { usesWebSearchOverlay } from "../../model-profile-runtime.js";
 
 const opaqueSessionId = (chat) => typeof chat.backend?.opaqueSession === "string"
   ? chat.backend.opaqueSession
@@ -33,7 +36,6 @@ export function registerChatRoutes(app, {
   findChatContext,
   launchLiveSession,
   lifecycle,
-  manager,
   modelCatalog,
   preferences,
   projects,
@@ -42,12 +44,26 @@ export function registerChatRoutes(app, {
   templateForChat,
 }) {
   const discoverable = discoverableFrom(backends);
+  const defaultDiscovery = () => backends.where((manifest) => manifest.discovery !== "none")[0] || "";
+  const profileFor = (profileId) => agentProfiles(config.piTemplates, {
+    available: new Set([...backends.adapters.keys()]),
+  }).find((profile) => profile.id === profileId && profile.agent?.protocol === "native_api");
+  const completeCreation = (request, response, chat, project) => {
+    response.status(201).json(chatView(chat));
+    if (request.body?.start !== true) return;
+    void launchLiveSession({
+      chatId: chat.id,
+      requestedProject: project.id,
+      model: request.body?.model || "",
+      thinkingLevel: request.body?.thinkingLevel || "",
+    }).catch((error) => console.error("Could not start new chat runtime", { chatId: chat.id, error }));
+  };
   app.get("/v0/projects/:projectId/backend-sessions", async (request, response, next) => {
     try {
       const project = await projects.get(request.params.projectId);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       await projects.validate(project);
-      const implementation = String(request.query.implementation || "codex");
+      const implementation = String(request.query.implementation || defaultDiscovery());
       if (!discoverable(implementation)) {
         return response.status(409).json({ error: "backend_discovery_unavailable" });
       }
@@ -66,7 +82,7 @@ export function registerChatRoutes(app, {
       if (!project) return response.status(404).json({ error: "project_not_found" });
       await lifecycle.withProjects([project.id], async () => {
         await projects.validate(project);
-        const implementation = String(request.query.implementation || "codex");
+        const implementation = String(request.query.implementation || defaultDiscovery());
         const manifest = discoverable(implementation);
         if (!manifest) return response.status(409).json({ error: "backend_discovery_unavailable" });
         const adapter = backends.forImplementation(implementation);
@@ -141,45 +157,35 @@ export function registerChatRoutes(app, {
       if (!project) return response.status(404).json({ error: "project_not_found" });
       await lifecycle.withProjects([project.id], async () => {
         await projects.validate(project);
-        if (["codex", "chatgpt-web"].includes(request.body?.profileId)) {
+        const selectedProfile = request.body?.profileId ? profileFor(request.body.profileId) : null;
+        if (selectedProfile) {
           const profileId = request.body.profileId;
-          if (!backends.adapters.has(profileId)) return response.status(409).json({ error: `${profileId}_unavailable` });
-          const installationId = profileId === "codex" ? "host-codex" : "user-chatgpt-account";
+          if (selectedProfile.disabled || !backends.adapters.has(selectedProfile.agent.implementation)) {
+            return response.status(409).json({ error: `${profileId}_unavailable` });
+          }
           const chat = await registry.create(project, { backend: {
-            profileId, profileRevision: null, management: "agent", protocol: "native_api",
-            implementation: profileId, installationId, opaqueSession: null,
+            profileId, profileRevision: null, management: selectedProfile.management,
+            ...selectedProfile.agent, opaqueSession: null,
           } });
-          return response.status(201).json(chatView(chat));
+          return completeCreation(request, response, chat, project);
         }
-        const hostDefault = project.defaultTemplateId === "host-pi" && request.body?.templateId == null && request.body?.runtimeKind == null;
-        const hostAvailable = config.installations.get("host-pi").available;
-        if (hostDefault && !hostAvailable) {
-          await projects.update(project.id, { defaultTemplateId: null });
-          project.defaultTemplateId = null;
-        }
-        const requestedTemplateId = request.body?.templateId || (project.defaultTemplateId === "host-pi" ? null : project.defaultTemplateId) || null;
+        const requestedTemplateId = request.body?.templateId || project.defaultTemplateId || null;
         const template = requestedTemplateId
           ? resolveTemplate(config, requestedTemplateId)
           : defaultTemplate();
         if (!template) return response.status(400).json({ error: "unknown_template", templateId: requestedTemplateId });
         if (template.defaultable === false) return response.status(400).json({ error: "special_template", templateId: template.id });
-        const runtimeKind = request.body?.runtimeKind || (hostDefault && hostAvailable ? "native_pi" : "conduit_profile");
-        if (!new Set(["conduit_profile", "native_pi"]).has(runtimeKind)) {
+        const runtimeKind = request.body?.runtimeKind || "conduit_profile";
+        if (runtimeKind !== "conduit_profile") {
           return response.status(400).json({ error: "unknown_runtime_kind" });
         }
-        if (runtimeKind === "native_pi" && project.kind !== "workspace") {
-          return response.status(400).json({ error: "native_pi_requires_workspace" });
-        }
         const runtime = runtimeFor({ runtimeKind, template });
-        if (runtimeKind === "native_pi" && !config.installations.get("host-pi").available) {
-          return response.status(409).json({ error: "native_pi_unavailable" });
-        }
         const chat = await registry.create(project, {
           templateId: template.id,
           templateVersion: template.version,
           runtime,
         });
-        response.status(201).json(chatView(chat));
+        completeCreation(request, response, chat, project);
       });
     } catch (error) { next(error); }
   });
@@ -196,13 +202,17 @@ export function registerChatRoutes(app, {
     try {
       const context = await findChatContext(request.params.chatId);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
-      const manifest = backends.manifestFor?.(context.chat.backend?.implementation
-        || (context.chat.runtime?.kind === "native_pi" ? "native_pi" : "conduit_pi"));
-      if (manifest?.history !== "tree") return response.status(409).json({ error: "chat_history_unavailable" });
+      const adapter = backends.forChat(context.chat);
+      const capabilities = adapter.getCapabilities();
+      if (capabilities.history === "none") return response.status(409).json({ error: "chat_history_unavailable" });
       const resident = backends.getByChatId(context.chat.id);
       if (!resident && context.chat.status === "draft") return response.json({ leafId: null, tree: [] });
-      if (!resident) return response.status(409).json({ error: "live_session_required" });
-      response.json(await backends.forChat(context.chat).getHistoryTree(resident.id));
+      response.json(await adapter.readHistory({
+        liveSessionId: resident?.id,
+        chatId: context.chat.id,
+        opaqueSession: context.chat.backend?.opaqueSession,
+        project: context.project,
+      }));
     } catch (error) { next(error); }
   });
 
@@ -210,8 +220,9 @@ export function registerChatRoutes(app, {
     try {
       const context = await findChatContext(request.params.chatId);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
-      if (context.chat.backend?.implementation !== "codex") return response.json({ modes: [], selected: "" });
       const adapter = backends.forChat(context.chat);
+      if (!adapter.getCapabilities().permissions || typeof adapter.listPermissionModes !== "function"
+        || typeof adapter.listAvailablePermissionModes !== "function") return response.json({ modes: [], selected: "" });
       const resident = backends.getByChatId(context.chat.id);
       const modes = resident
         ? await adapter.listPermissionModes(resident.id, context.project.workingRoot)
@@ -225,37 +236,43 @@ export function registerChatRoutes(app, {
 
   app.patch("/v0/chats/:chatId/permission-profiles", async (request, response, next) => {
     try {
-      const context = await findChatContext(request.params.chatId);
-      if (!context) return response.status(404).json({ error: "chat_not_found" });
-      if (context.chat.backend?.implementation !== "codex") return response.status(409).json({ error: "permission_profiles_unavailable" });
-      const adapter = backends.forChat(context.chat);
-      const resident = backends.getByChatId(context.chat.id);
-      const modes = resident
-        ? await adapter.listPermissionModes(resident.id, context.project.workingRoot)
-        : await adapter.listAvailablePermissionModes(context.project.workingRoot);
-      const selected = String(request.body?.permissionMode || "").trim();
-      const mode = modes.find((candidate) => candidate.id === selected && candidate.allowed);
-      if (!mode) {
-        return response.status(400).json({ error: "invalid_permission_mode" });
-      }
-      if (resident) await adapter.setPermissionMode(resident.id, mode);
-      const backend = { ...context.chat.backend, permissionMode: selected };
-      if (mode.profile) backend.permissionProfile = mode.profile;
-      else delete backend.permissionProfile;
-      if (mode.approvalPolicy) backend.approvalPolicy = mode.approvalPolicy;
-      else delete backend.approvalPolicy;
-      if (mode.approvalsReviewer) backend.approvalsReviewer = mode.approvalsReviewer;
-      else delete backend.approvalsReviewer;
-      await registry.update(context.chat.id, { backend });
-      response.json({ modes, selected });
+      await lifecycle.run(request.params.chatId, async () => {
+        const context = await findChatContext(request.params.chatId);
+        if (!context) return response.status(404).json({ error: "chat_not_found" });
+        lifecycle.assertAvailable(context.chat.id, context.project.id);
+        const adapter = backends.forChat(context.chat);
+        if (!adapter.getCapabilities().permissions || typeof adapter.listPermissionModes !== "function"
+          || typeof adapter.listAvailablePermissionModes !== "function" || typeof adapter.setPermissionMode !== "function") {
+          return response.status(409).json({ error: "permission_profiles_unavailable" });
+        }
+        const resident = backends.getByChatId(context.chat.id);
+        const modes = resident
+          ? await adapter.listPermissionModes(resident.id, context.project.workingRoot)
+          : await adapter.listAvailablePermissionModes(context.project.workingRoot);
+        const selected = String(request.body?.permissionMode || "").trim();
+        const mode = modes.find((candidate) => candidate.id === selected && candidate.allowed);
+        if (!mode) return response.status(400).json({ error: "invalid_permission_mode" });
+        if (resident) await adapter.setPermissionMode(resident.id, mode);
+        const backend = { ...context.chat.backend, permissionMode: selected };
+        if (mode.profile) backend.permissionProfile = mode.profile;
+        else delete backend.permissionProfile;
+        if (mode.approvalPolicy) backend.approvalPolicy = mode.approvalPolicy;
+        else delete backend.approvalPolicy;
+        if (mode.approvalsReviewer) backend.approvalsReviewer = mode.approvalsReviewer;
+        else delete backend.approvalsReviewer;
+        await registry.update(context.chat.id, { backend });
+        response.json({ modes, selected });
+      });
     } catch (error) { next(error); }
   });
 
   app.patch("/v0/chats/:chatId", async (request, response, next) => {
     try {
+      await lifecycle.run(request.params.chatId, async () => {
       request.body = profileSelection(request.body);
       const context = await findChatContext(request.params.chatId);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
+      lifecycle.assertAvailable(context.chat.id, context.project.id);
       if (request.body?.profileId && (context.chat.status !== "draft" || context.chat.lastUserMessageAt)) {
         return response.status(409).json({
           error: "backend_locked",
@@ -263,21 +280,27 @@ export function registerChatRoutes(app, {
           fork: { required: true, profileId: request.body.profileId },
         });
       }
-      if (["codex", "chatgpt-web"].includes(request.body?.profileId)) {
+      const selectedProfile = request.body?.profileId ? profileFor(request.body.profileId) : null;
+      if (selectedProfile) {
         const profileId = request.body.profileId;
-        if (!backends.adapters.has(profileId)) return response.status(409).json({ error: `${profileId}_unavailable` });
-        const installationId = profileId === "codex" ? "host-codex" : "user-chatgpt-account";
+        if (selectedProfile.disabled || !backends.adapters.has(selectedProfile.agent.implementation)) {
+          return response.status(409).json({ error: `${profileId}_unavailable` });
+        }
+        const resident = backends.getByChatId(context.chat.id);
+        if (resident) await backends.stop(resident.id);
         await registry.update(context.chat.id, {
           templateId: null,
           templateVersion: null,
           runtime: null,
-          backend: { profileId, profileRevision: null, management: "agent", protocol: "native_api",
-            implementation: profileId, installationId, opaqueSession: null },
+          backend: { profileId, profileRevision: null, management: selectedProfile.management,
+            ...selectedProfile.agent, opaqueSession: null },
+        });
+        await launchLiveSession({
+          chatId: context.chat.id,
+          requestedProject: context.project.id,
+          alreadyLocked: true,
         });
         return response.json(chatView(registry.metadata(context.chat.id)));
-      }
-      if (lifecycle.isBusy(context.chat.id) && (request.body?.templateId != null || request.body?.runtimeKind != null)) {
-        return response.status(409).json({ error: "runtime_locked", message: "Pi is already starting for this chat." });
       }
       let selectedTemplate = templateForChat(context.chat, context.project);
       if (request.body?.templateId != null) {
@@ -285,7 +308,7 @@ export function registerChatRoutes(app, {
         if (currentTemplate?.special === true) {
           return response.status(409).json({ error: "special_chat_locked" });
         }
-        if (context.chat.status !== "draft" || context.chat.piSessionFile) {
+        if (context.chat.status !== "draft" || conduitPiSessionFile(context.chat)) {
           return response.status(409).json({ error: "template_locked" });
         }
         const template = resolveTemplate(config, request.body.templateId);
@@ -302,23 +325,18 @@ export function registerChatRoutes(app, {
         selectedTemplate = template;
       }
       if (request.body?.runtimeKind != null) {
-        if (request.body.runtimeKind === "native_pi" && context.project.kind !== "workspace") {
-          return response.status(400).json({ error: "native_pi_requires_workspace" });
-        }
-        if (context.chat.status !== "draft" || context.chat.piSessionFile) {
+        if (context.chat.status !== "draft" || conduitPiSessionFile(context.chat)) {
           return response.status(409).json({ error: "runtime_locked" });
         }
         const runtimeKind = request.body.runtimeKind;
-        if (!new Set(["conduit_profile", "native_pi"]).has(runtimeKind)) {
+        if (runtimeKind !== "conduit_profile") {
           return response.status(400).json({ error: "unknown_runtime_kind" });
         }
         const runtime = runtimeFor({ runtimeKind, template: selectedTemplate });
-        if (runtimeKind === "native_pi" && !config.installations.get("host-pi").available) {
-          return response.status(409).json({ error: "native_pi_unavailable" });
-        }
         await registry.update(context.chat.id, { runtime });
       }
       response.json(chatView(registry.metadata(context.chat.id)));
+      });
     } catch (error) { next(error); }
   });
 
@@ -332,8 +350,10 @@ export function registerChatRoutes(app, {
 
   app.patch("/v0/chats/:chatId/models", async (request, response, next) => {
     try {
+      await lifecycle.run(request.params.chatId, async () => {
       const context = await findChatContext(request.params.chatId);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
+      lifecycle.assertAvailable(context.chat.id, context.project.id);
       const spec = String(request.body?.model || "").trim();
       const thinkingLevel = String(request.body?.thinkingLevel || "").trim();
       const current = await chatModelView(context);
@@ -345,24 +365,8 @@ export function registerChatRoutes(app, {
       if (thinkingLevel && target && !target.thinkingLevels.includes(thinkingLevel)) {
         return response.status(400).json({ error: "invalid_thinking_level" });
       }
-      if (context.chat.backend?.implementation === "chatgpt-web") {
-        const effort = thinkingLevel || context.chat.modelThinkingLevels?.[targetModel]
-          || target?.defaultThinkingLevel || target?.thinkingLevels[0] || "";
-        const resident = backends.getByChatId(context.chat.id);
-        if (resident) {
-          const adapter = backends.forChat(context.chat);
-          await adapter.setModel(resident.id, targetModel);
-          if (effort) await adapter.setThinkingLevel(resident.id, effort);
-        }
-        const modelThinkingLevels = effort
-          ? { ...(context.chat.modelThinkingLevels || {}), [targetModel]: effort }
-          : context.chat.modelThinkingLevels || {};
-        await registry.update(context.chat.id, {
-          backend: { ...context.chat.backend, model: targetModel }, modelThinkingLevels,
-        });
-        return response.json({ ...current, model: targetModel, thinkingLevel: effort, modelThinkingLevels });
-      }
-      if (context.chat.backend?.implementation === "codex") {
+      if (manifestForImplementation(context.chat.backend?.implementation)?.profile) {
+        const implementation = context.chat.backend.implementation;
         const model = targetModel;
         const effort = thinkingLevel || context.chat.modelThinkingLevels?.[model]
           || target?.defaultThinkingLevel || target?.thinkingLevels[0] || "";
@@ -381,7 +385,7 @@ export function registerChatRoutes(app, {
         await preferences.save({
           backendModelDefaults: {
             ...preferences.get().backendModelDefaults,
-            codex: { model, ...(effort ? { thinkingLevel: effort } : {}) },
+            [implementation]: { model, ...(effort ? { thinkingLevel: effort } : {}) },
           },
         });
         return response.json({ ...current, model, thinkingLevel: effort, modelThinkingLevels });
@@ -395,30 +399,43 @@ export function registerChatRoutes(app, {
       const resident = backends.getByChatId(context.chat.id);
       if (resident) {
         const adapter = backends.forChat(context.chat);
+        const template = templateForChat(context.chat, context.project);
+        const targetProfile = targetModel && usesWebSearchOverlay(template)
+          ? resolveModelProfile(config.modelProfiles, targetModel) : null;
+        const changesProfile = Boolean(targetProfile && resident.modelProfile?.id !== targetProfile.id);
+        if (changesProfile && (resident.active || resident.stopping || resident.activity === "working")) {
+          return response.status(409).json({
+            error: "model_profile_transition_busy",
+            message: "Finish the current response before changing to a model with different runtime settings.",
+          });
+        }
         if (spec && spec !== current.model) {
           await adapter.setModel(resident.id, spec);
+        }
+        if (changesProfile) {
+          await adapter.close(resident.id);
+          await launchLiveSession({
+            chatId: context.chat.id,
+            requestedProject: context.project.id,
+            model: targetModel,
+            thinkingLevel,
+            forceModel: true,
+            alreadyLocked: true,
+          });
         }
         const activeResident = backends.getByChatId(context.chat.id);
         if (thinkingLevel && activeResident) await adapter.setThinkingLevel(activeResident.id, thinkingLevel);
       } else {
-        if (context.chat.status !== "draft" || context.chat.piSessionFile) {
+        if (context.chat.status !== "draft" || conduitPiSessionFile(context.chat)) {
           return response.status(409).json({ error: "live_session_required" });
         }
         const template = templateForChat(context.chat, context.project);
         const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });
-        if (runtime.kind === "native_pi") {
-          const chat = await saveThinkingPreference();
-          return response.json({
-            ...current,
-            model: spec || current.model,
-            thinkingLevel: thinkingLevel || current.thinkingLevel,
-            modelThinkingLevels: chat?.modelThinkingLevels || {},
-          });
-        }
         if (spec) await catalogFor(runtime, template).updateDefault(context.project.workingRoot, spec, thinkingLevel);
       }
       await saveThinkingPreference();
       response.json(await chatModelView(context));
+      });
     } catch (error) { next(error); }
   });
 
@@ -448,7 +465,7 @@ export function registerChatRoutes(app, {
         const context = await findChatContext(request.params.chatId);
         if (!context) return null;
         return lifecycle.withProjects([context.project.id], async () => {
-          await stopSessionProcesses(manager, context.chat);
+          await stopSessionProcesses(backends, context.chat);
           return registry.removeEmptyDraft(context.chat.id, context.project);
         });
       });

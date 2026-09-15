@@ -37,9 +37,9 @@ interface DiffPayload { repository: boolean; branch?: string; upstream?: string 
 interface GitCommitDetail { hash: string; content: string; }
 type PanelTab = "files" | "diff" | "chat" | "terminal";
 type ChatMode = "history" | "changes";
-interface HistoryEntry { id: string; parentId: string | null; timestamp: string; type: string; display: string; kind: "user" | "assistant" | "tool" | "summary" | "system"; hidden: boolean; }
+interface HistoryEntry { id: string; parentId: string | null; timestamp: string; type: string; display: string; kind: "user" | "assistant" | "tool" | "summary" | "system"; hidden: boolean; forkable: boolean; regeneratable: boolean; }
 interface HistoryNode { entry: HistoryEntry; children: HistoryNode[]; label?: string; }
-interface HistoryTree { tree: HistoryNode[]; leafId: string | null; }
+interface HistoryTree { mode: "linear" | "tree"; tree: HistoryNode[]; leafId: string | null; }
 type SourceControlMode = "changes" | "review" | "graph" | "patch";
 type GitAction = "stage" | "stage-all" | "unstage" | "unstage-all" | "commit" | "fetch" | "pull" | "push";
 type FileSlotId = "primary" | "secondary";

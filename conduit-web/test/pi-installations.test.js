@@ -15,10 +15,10 @@ function executable(root, name, source) {
 test("explicit Conduit overrides report their actual version", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "conduit-installation-"));
   const override = executable(root, "override-pi", 'if [ "$1" = "--version" ]; then echo 9.9.9; exit 0; fi\nif [ "$1" = "--help" ]; then echo "--mode --session --append-system-prompt --skill --approve --no-approve"; exit 0; fi');
-  const registry = new PiInstallationRegistry({ conduitAgentDir: path.join(root, "agent"), conduitCommand: override, nativeCommand: override });
+  const registry = new PiInstallationRegistry({ conduitAgentDir: path.join(root, "agent"), conduitCommand: override });
   const installation = registry.get("conduit-pinned");
   assert.equal(installation.source, "override");
-  assert.equal(installation.label, "Isolated Pi override");
+  assert.equal(installation.label, "Conduit Pi override");
   assert.equal(installation.version, "9.9.9");
   const publicInstallation = registry.publicList().find((item) => item.id === "conduit-pinned");
   assert.equal(publicInstallation.executablePath, override);
@@ -28,21 +28,7 @@ test("explicit Conduit overrides report their actual version", () => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test("host Pi requires the RPC flags used by Native Workspace launches", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "conduit-native-compat-"));
-  const incompatible = executable(root, "old-pi", 'if [ "$1" = "--version" ]; then echo 0.1.0; exit 0; fi\nif [ "$1" = "--help" ]; then echo "--mode --session"; exit 0; fi');
-  const registry = new PiInstallationRegistry({
-    conduitAgentDir: path.join(root, "agent"),
-    nativeCommand: incompatible,
-    nativeAgentDir: path.join(root, "native-agent"),
-  });
-  const installation = registry.get("host-pi");
-  assert.equal(installation.version, "0.1.0");
-  assert.equal(installation.compatible, false);
-  assert.equal(installation.available, false);
-  assert.equal(installation.capabilities.mode, true);
-  assert.equal(installation.capabilities.session, true);
-  assert.equal(installation.capabilities.skill, false);
-  assert.match(installation.error, /required RPC capabilities/);
-  fs.rmSync(root, { recursive: true, force: true });
+test("the installation registry exposes only Conduit's pinned Pi", () => {
+  const registry = new PiInstallationRegistry({ conduitAgentDir: "/tmp/conduit-pi" });
+  assert.deepEqual(registry.list().map((item) => item.id), ["conduit-pinned"]);
 });

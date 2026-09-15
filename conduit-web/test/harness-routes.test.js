@@ -9,8 +9,8 @@ import { startConduitHarness } from "./helpers/conduit-harness.js";
 test("harness catalog exposes installed adapter capabilities", () => {
   const backends = { adapters: new Map([["codex", {}]]) };
   assert.deepEqual(harnessCatalog(backends), [
-    { id: "codex", label: "Codex", available: true, sessions: true, drive: true, discovery: "machine" },
-    { id: "chatgpt-web", label: "ChatGPT Web", available: false, sessions: false, drive: false, discovery: "none" },
+    { id: "codex", label: "Codex", profileLabel: "Codex CLI", available: true, sessions: true, drive: true, discovery: "machine" },
+    { id: "chatgpt-web", label: "ChatGPT Web", profileLabel: "ChatGPT Web", available: false, sessions: false, drive: false, discovery: "none" },
   ]);
 });
 

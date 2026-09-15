@@ -11,6 +11,7 @@ import { PiModelCatalog, resolveThinkingLevel } from "./pi-model-catalog.js";
 import { ProjectStore } from "./project-store.js";
 import { pageSessionEntries, projectSessionEntries, readSessionMetadata, readSessionPage } from "./session-store.js";
 import { PiManager } from "./pi-manager.js";
+import { manifestForImplementation } from "./harnesses/index.js";
 import { ChatStore, chatView, isChatId } from "./chat-store.js";
 import { AttachmentStore } from "./attachment-store.js";
 import { RuntimeHub } from "./runtime-hub.js";
@@ -20,13 +21,13 @@ import { PreferencesStore } from "./preferences-store.js";
 import { SessionNameService } from "./session-name-service.js";
 import { normalizeTemplateId, templatePublicView } from "../../scripts/pi-runtime.mjs";
 import { formatWorkspacePath, isPathInside, listDirectorySuggestions } from "./workspace-paths.js";
-import { hasTrustRequiringProjectResources, ProjectTrustStore } from "@earendil-works/pi-coding-agent";
 import fs from "node:fs/promises";
 import { resolvePiLaunch } from "./pi-launch.js";
-import { validateNativeProjectResources } from "./native-resource-validation.js";
 import { AuthStore } from "./auth-store.js";
 import { PiAuthBroker } from "./pi-auth-broker.js";
 import { ChatLifecycle } from "./chat-lifecycle.js";
+import { ModelProfileRuntime, usesWebSearchOverlay } from "./model-profile-runtime.js";
+import { publicModelProfile, resolveModelProfile } from "./model-profiles.js";
 import {
   authStartupViolation,
   nativeCors,
@@ -66,6 +67,7 @@ import { ChatBackendRegistry, serializePiV0 } from "./pi-rpc-adapter.js";
 import { MANIFESTS } from "./harnesses/index.js";
 import { detect } from "./harnesses/probe.js";
 import { TurnCheckpointStore } from "./turn-checkpoint-store.js";
+import { conduitPiSessionFile } from "./backend-session.js";
 
 const config = loadConfig();
 const turnCheckpoints = new TurnCheckpointStore(path.join(config.dataRoot, "turn-checkpoints"));
@@ -77,15 +79,10 @@ for (const project of await projects.list()) {
 }
 const terminals = new PtyManager({ filePath: config.remotesFile });
 await terminals.load();
-async function clearHostPiDefaults() {
-  const changed = [];
-  for (const project of await projects.list()) {
-    if (project.kind !== "workspace" || project.defaultTemplateId !== "host-pi") continue;
-    changed.push(await projects.update(project.id, { defaultTemplateId: null }));
-  }
-  return changed;
-}
-if (!config.installations.get("host-pi").available) await clearHostPiDefaults();
+const modelProfileRuntime = new ModelProfileRuntime({
+  agentDir: config.piAgentDir,
+  searchConfigFile: config.searchConfigFile,
+});
 const pinnedInstallation = config.installations.get("conduit-pinned");
 const registry = new ChatStore(config.sessionRegistryFile, {
   defaultRuntime: {
@@ -176,7 +173,7 @@ async function recycleIdleIsolatedPiProcesses() {
 }
 const runtimeHub = new RuntimeHub({ listViews: () => backends.list() });
 manager.on("process_changed", ({ record, reason }) => {
-  runtimeHub.publishProcess(manager.view(record), reason || "update");
+  runtimeHub.publishProcess(backends.view(record), reason || "update");
 });
 manager.on("process_removed", ({ id, chatId }) => {
   runtimeHub.publishProcessRemoved(id, chatId);
@@ -213,37 +210,22 @@ function defaultTemplate() {
 
 function catalogFor(runtime, template) {
   const installation = config.installations.get(runtime.installationId);
-  const key = runtime.kind === "native_pi"
-    ? `host:${installation?.agentDir || "unavailable"}`
-    : `isolated:${template?.id || config.piTemplate.id}`;
+  const key = `isolated:${template?.id || config.piTemplate.id}`;
   if (!modelCatalogs.has(key)) {
-    modelCatalogs.set(key, runtime.kind === "native_pi"
-      ? new PiModelCatalog({ agentDir: installation.agentDir })
-      : new PiModelCatalog({ agentDir: config.piAgentDir, modelPatterns: template?.models || config.piTemplate.models }));
+    modelCatalogs.set(key, new PiModelCatalog({ agentDir: config.piAgentDir, modelPatterns: template?.models || config.piTemplate.models }));
   }
   return modelCatalogs.get(key);
 }
 
 async function chatModelView(context) {
-  if (context.chat.backend?.implementation === "chatgpt-web") {
-    const adapter = backends.forChat(context.chat);
-    const resident = backends.getByChatId(context.chat.id);
-    const models = await adapter.listModels(resident?.id);
-    const model = resident?.model || context.chat.backend.model || models[0]?.spec || "";
-    const selected = models.find((item) => item.spec === model);
-    const savedThinkingLevel = context.chat.modelThinkingLevels?.[model] || "";
-    const thinkingLevel = resident?.thinkingLevel || (selected?.thinkingLevels.includes(savedThinkingLevel) ? savedThinkingLevel : selected?.defaultThinkingLevel || "");
-    return { installationId: "user-chatgpt-account", runtimeKind: "chatgpt-web", models, model, thinkingLevel,
-      defaultModel: models[0]?.spec || "", defaultThinkingLevel: selected?.defaultThinkingLevel || "",
-      modelThinkingLevels: context.chat.modelThinkingLevels || {},
-      requiresAuthentication: false, warnings: [], source: resident ? "live" : "catalog" };
-  }
-  if (context.chat.backend?.implementation === "codex") {
+  if (manifestForImplementation(context.chat.backend?.implementation)?.profile) {
+    const implementation = context.chat.backend.implementation;
+    const manifest = manifestForImplementation(implementation);
     const adapter = backends.forChat(context.chat);
     const resident = backends.getByChatId(context.chat.id);
     if (!resident) {
       const models = await adapter.listAvailableModels(context.project.workingRoot);
-      const remembered = preferences.get().backendModelDefaults.codex;
+      const remembered = preferences.get().backendModelDefaults?.[implementation];
       const rememberedModel = models.some((item) => item.spec === remembered?.model) ? remembered.model : "";
       const model = context.chat.backend.model || rememberedModel || models[0]?.spec || "";
       const selected = models.find((item) => item.spec === model);
@@ -251,14 +233,16 @@ async function chatModelView(context) {
       const savedThinkingLevel = context.chat.modelThinkingLevels?.[model] || remembered?.thinkingLevel || "";
       const thinkingLevel = selected?.thinkingLevels.includes(savedThinkingLevel) ? savedThinkingLevel : defaultThinkingLevel;
       return {
-        installationId: "host-codex", runtimeKind: "codex", models, model,
+        installationId: manifest?.installationId || context.chat.backend.installationId,
+        runtimeKind: implementation, models, model,
         thinkingLevel, defaultModel: models[0]?.spec || "", defaultThinkingLevel,
         modelThinkingLevels: context.chat.modelThinkingLevels || {}, requiresAuthentication: false, warnings: [], source: "catalog",
       };
     }
     const [models, state] = await Promise.all([adapter.listModels(resident.id), adapter.getModelState(resident.id)]);
     return {
-      installationId: "host-codex", runtimeKind: "codex", models, ...state,
+      installationId: manifest?.installationId || context.chat.backend.installationId,
+      runtimeKind: implementation, models, ...state,
       defaultModel: models[0]?.spec || "",
       defaultThinkingLevel: models.find((item) => item.spec === state.model)?.defaultThinkingLevel || "",
       modelThinkingLevels: context.chat.modelThinkingLevels || {},
@@ -272,9 +256,10 @@ async function chatModelView(context) {
   let model = catalogView.defaultModel;
   let thinkingLevel = catalogView.defaultThinkingLevel;
   let source = "runtime_default";
-  if (context.chat.piSessionFile) {
+  const sessionFile = conduitPiSessionFile(context.chat);
+  if (sessionFile) {
     try {
-      const persisted = await readSessionMetadata(context.chat.piSessionFile, context.project);
+      const persisted = await readSessionMetadata(sessionFile, context.project);
       model = persisted.model || model;
       thinkingLevel = persisted.thinkingLevel || thinkingLevel;
       source = "jsonl";
@@ -311,6 +296,9 @@ async function chatModelView(context) {
   }
   const selectedModel = models.find((item) => item.spec === model);
   if (selectedModel) thinkingLevel = resolveThinkingLevel(thinkingLevel, selectedModel.thinkingLevels, catalogView.defaultThinkingLevel);
+  const modelProfile = model && usesWebSearchOverlay(template)
+    ? publicModelProfile(resident?.modelProfile || resolveModelProfile(config.modelProfiles, model))
+    : null;
   return {
     installationId: runtime.installationId,
     runtimeKind: runtime.kind,
@@ -322,7 +310,7 @@ async function chatModelView(context) {
     defaultThinkingLevel: catalogView.defaultThinkingLevel,
     requiresAuthentication: catalogView.requiresAuthentication,
     warnings: catalogView.warnings,
-    modelProfile: null,
+    modelProfile,
     source,
   };
 }
@@ -331,9 +319,7 @@ async function installationViews() {
   const project = await projects.get("chat");
   return Promise.all(config.installations.publicList().map(async (installation) => {
     if (!installation.available || !project) return { ...installation, models: null };
-    const runtime = installation.id === "host-pi"
-      ? { kind: "native_pi", installationId: installation.id }
-      : { kind: "conduit_profile", installationId: installation.id };
+    const runtime = { kind: "conduit_profile", installationId: installation.id };
     const catalog = catalogFor(runtime, config.piTemplate);
     try {
       await projects.validate(project);
@@ -341,7 +327,7 @@ async function installationViews() {
       return {
         ...installation,
         models: {
-          access: installation.id === "host-pi" ? "read-only" : "managed",
+          access: "managed",
           enabledModels: view.models.map((model) => model.spec),
           defaultModel: view.defaultModel,
           warnings: view.warnings,
@@ -364,72 +350,14 @@ function templateForChat(chat, project = null) {
 }
 
 function runtimeFor({ runtimeKind = "conduit_profile", template }) {
-  const installation = config.installations.get(runtimeKind === "native_pi" ? "host-pi" : "conduit-pinned");
-  return runtimeKind === "native_pi"
-    ? {
-        kind: "native_pi",
-        installationId: installation.id,
-        binaryVersion: installation.version,
-        profileId: null,
-        profileVersion: null,
-      }
-    : {
-        kind: "conduit_profile",
-        installationId: installation.id,
-        binaryVersion: installation.version,
-        profileId: template.id,
-        profileVersion: template.version,
-      };
-}
-
-async function nativeResourceClasses(cwd) {
-  const candidates = [
-    [".pi/settings.json", "settings"],
-    [".pi/extensions", "extensions"],
-    [".pi/packages", "packages"],
-    [".pi/skills", "skills"],
-    [".pi/prompts", "prompts"],
-    [".pi/themes", "themes"],
-    [".pi/SYSTEM.md", "system prompt"],
-    [".pi/APPEND_SYSTEM.md", "appended system prompt"],
-    [".agents/skills", "agent skills"],
-  ];
-  const found = [];
-  for (const [relative, label] of candidates) {
-    try { await fs.access(path.join(cwd, relative)); found.push(label); }
-    catch (error) { if (error.code !== "ENOENT") throw error; }
-  }
-  let current = path.dirname(path.resolve(cwd));
-  while (true) {
-    const inherited = path.join(current, ".agents", "skills");
-    if (inherited !== path.join(os.homedir(), ".agents", "skills")) {
-      try { await fs.access(inherited); if (!found.includes("agent skills")) found.push("agent skills"); }
-      catch (error) { if (error.code !== "ENOENT") throw error; }
-    }
-    const parent = path.dirname(current);
-    if (parent === current) break;
-    current = parent;
-  }
-  return found;
-}
-
-async function nativePreflight(project) {
-  const installation = config.installations.get("host-pi");
-  if (!installation.available) {
-    return { available: false, error: installation.error, version: installation.version, trustRequired: false, resources: [] };
-  }
-  const trustStore = new ProjectTrustStore(installation.agentDir);
-  const decision = trustStore.get(project.workingRoot);
-  const requiresResources = hasTrustRequiringProjectResources(project.workingRoot);
-  const resources = requiresResources ? await nativeResourceClasses(project.workingRoot) : [];
-  if (requiresResources) await validateNativeProjectResources(project.workingRoot);
-  if (requiresResources && resources.length === 0) resources.push("inherited project resources");
+  if (runtimeKind !== "conduit_profile") throw Object.assign(new Error("Unknown Pi runtime"), { code: "unknown_runtime_kind", status: 400 });
+  const installation = config.installations.get("conduit-pinned");
   return {
-    available: true,
-    version: installation.version,
-    savedTrust: decision,
-    trustRequired: false,
-    resources,
+    kind: "conduit_profile",
+    installationId: installation.id,
+    binaryVersion: installation.version,
+    profileId: template.id,
+    profileVersion: template.version,
   };
 }
 
@@ -567,7 +495,6 @@ registerRuntimeRoutes(app, {
   isPathInside,
   isShuttingDown: () => shuttingDown,
   listDirectorySuggestions,
-  nativePreflight,
   preferences,
   resolveTemplate,
   runtimeHub,
@@ -579,8 +506,6 @@ registerRuntimeRoutes(app, {
 registerPiAuthRoutes(app, {
   piAuth,
   installationViews,
-  clearHostPiDefaults,
-  detectHost: () => config.installations.detectHost(),
 });
 
 registerSearchRoutes(app, {
@@ -621,7 +546,7 @@ const launchLiveSession = registerLiveSessionRoutes(app, {
   findChatContext,
   lifecycle,
   manager,
-  nativePreflight,
+  modelProfileRuntime,
   registry,
   runtimeFor,
   runtimeSettings,
@@ -631,12 +556,11 @@ registerChatRoutes(app, {
   backends,
   catalogFor,
   chatModelView,
+  lifecycle,
   config,
   defaultTemplate,
   findChatContext,
   launchLiveSession,
-  lifecycle,
-  manager,
   modelCatalog,
   preferences,
   projects,
@@ -652,7 +576,6 @@ registerSessionRoutes(app, {
   findChatContext,
   findRegisteredSession,
   lifecycle,
-  manager,
   sessionNames,
   projects,
   readSessionPage,
@@ -704,7 +627,6 @@ app.use((error, _request, response, _next) => {
       "special_chat_locked",
       "unknown_template",
       "unknown_runtime_kind",
-      "native_pi_requires_workspace",
       "invalid_workspace_path",
       "hidden_workspace_path",
       "workspace_path_symlink",
@@ -768,6 +690,7 @@ const liveSessionStream = createLiveSessionStream({
   findChatContext,
   findRegisteredSession,
   chatModelView,
+  lifecycle,
   async autoNameSession(record, context, message) {
     const task = sessionNames.run({
       chatId: context.chat.id,
@@ -824,6 +747,7 @@ server.on("upgrade", async (request, socket, head) => {
   }
   if (dictationMatch) return dictationStream.handleUpgrade(request, socket, head);
   if (ptyMatch) return terminalStream.handleUpgrade(ptyMatch[1], request, socket, head);
+  if (!backends.get(match[1])) return socket.destroy();
   return liveSessionStream.handleUpgrade(match[1], request, socket, head);
 });
 

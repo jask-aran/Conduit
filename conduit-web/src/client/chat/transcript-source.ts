@@ -1,6 +1,6 @@
 import type { Accessor } from "solid-js";
 import type { TurnArtifactSummary } from "../api/live-events";
-import type { Message, ToolItem } from "../api/contracts";
+import type { ChatCapabilities, Message, ToolItem } from "../api/contracts";
 import type { ActiveGenerationView, LiveGenerationChange } from "../turn-rows";
 
 /**
@@ -23,6 +23,7 @@ export interface TranscriptSource {
   pageBefore: Accessor<string | null>;
   loadingOlder: Accessor<boolean>;
   editingEntryId: Accessor<string | null>;
+  capabilities: Accessor<ChatCapabilities | null>;
   /** Unavailable without a Conduit chat; a read-only source may no-op these. */
   edit: (message: Message) => void;
   regenerate: (userMessageId: string) => Promise<unknown> | void;

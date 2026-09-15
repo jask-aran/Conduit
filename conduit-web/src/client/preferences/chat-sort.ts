@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { publishUiPreference, UI_PREFERENCE_CHANGE_EVENT } from "./ui-preferences";
+import { publishUiPreference, UI_PREFERENCE_CHANGE_EVENT } from "./ui-preferences.ts";
 
 export const CHAT_SORT_STORAGE_KEY = "conduit:chat-sort";
 export type ChatSort = "latest" | "created";

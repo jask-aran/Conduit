@@ -14,7 +14,7 @@ const runtime = { kind: "conduit_profile", installationId: "conduit-pinned" };
 const template = { id: "chat", version: "7", runtimeOverlays: ["web-search"] };
 const project = { id: "project_test", slug: "test", path: "/tmp/test", workingRoot: "/tmp/test" };
 
-async function routeFixture({ busy = false } = {}) {
+async function routeFixture({ busy = false, creation = false } = {}) {
   const app = express();
   app.use(express.json());
   const context = {
@@ -22,7 +22,7 @@ async function routeFixture({ busy = false } = {}) {
     project,
   };
   let currentModel = "anthropic/test-model";
-  let resident = { id: "resident-1", modelProfile: { id: "brave-search" } };
+  let resident = { id: "resident-1", active: busy, modelProfile: { id: "brave-search" } };
   const calls = [];
   const modelView = async () => ({
     models: [
@@ -45,12 +45,18 @@ async function routeFixture({ busy = false } = {}) {
       resident = { id: "resident-2", model: currentModel, modelProfile: { id: "openai-search" } };
       return resident;
     },
-    lifecycle: { isBusy: () => false },
+    lifecycle: {
+      isBusy: () => false,
+      run: (_id, operation) => operation(),
+      assertAvailable: () => {},
+      withProjects: (_ids, operation) => operation(),
+    },
     // The route reaches the resident process through `backends` and drives it
     // through the adapter that owns it; `manager` is left only what it still
     // answers. A fixture missing `backends` made every request a 500, which the
     // status assertions then read as an ordinary failure.
     backends: {
+      ...(creation ? { adapters: new Map([["codex", {}]]) } : {}),
       getByChatId: () => resident,
       forChat: () => ({
         setModel: async (_id, spec) => {
@@ -66,8 +72,11 @@ async function routeFixture({ busy = false } = {}) {
     },
     manager: { isBusy: () => busy },
     modelCatalog: {},
-    projects: {},
-    registry: { update: async () => context.chat },
+    projects: { get: async () => project, validate: async () => {} },
+    registry: {
+      create: async (_project, options) => ({ id: chatId, projectId: project.id, status: "draft", title: "", ...options }),
+      update: async () => context.chat,
+    },
     runtimeFor: () => runtime,
     templateForChat: () => template,
   });
@@ -85,8 +94,32 @@ async function routeFixture({ busy = false } = {}) {
         body: JSON.stringify({ model: "openai-codex/test-model", thinkingLevel: "medium" }),
       });
     },
+    async create(body) {
+      return fetch(`http://127.0.0.1:${port}/v0/chats`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    },
   };
 }
+
+test("chat creation starts its adapter lifecycle when requested", async () => {
+  const fixture = await routeFixture({ creation: true });
+  try {
+    const response = await fixture.create({ projectId: project.id, profileId: "codex", start: true, model: "codex-test", thinkingLevel: "medium" });
+    assert.equal(response.status, 201);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(fixture.calls, [{ type: "launch", options: {
+      chatId,
+      requestedProject: project.id,
+      model: "codex-test",
+      thinkingLevel: "medium",
+    } }]);
+  } finally {
+    await fixture.close();
+  }
+});
 
 test("idle cross-profile model changes replace the Pi process on the same chat", async () => {
   const fixture = await routeFixture();

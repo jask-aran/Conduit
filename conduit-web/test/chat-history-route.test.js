@@ -10,7 +10,10 @@ async function fixture(status) {
   const app = express();
   registerChatRoutes(app, {
     backends: {
-      manifestFor: () => ({ history: "tree" }),
+      forChat: () => ({
+        getCapabilities: () => ({ history: "tree" }),
+        readHistory: async () => ({ mode: "tree", leafId: "leaf", tree: [] }),
+      }),
       getByChatId: () => null,
     },
     findChatContext: async () => ({
@@ -38,12 +41,12 @@ test("history is empty before a draft starts its live session", async () => {
   }
 });
 
-test("history still requires a resident session for an active chat", async () => {
+test("history can load from the adapter without a resident session", async () => {
   const server = await fixture("active");
   try {
     const response = await server.get();
-    assert.equal(response.status, 409);
-    assert.deepEqual(await response.json(), { error: "live_session_required" });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { mode: "tree", leafId: "leaf", tree: [] });
   } finally {
     await server.close();
   }

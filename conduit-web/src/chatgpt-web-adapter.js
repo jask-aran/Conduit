@@ -10,9 +10,10 @@ import { SessionRecords } from "./harnesses/session-records.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 export const CHATGPT_WEB_CAPABILITIES = Object.freeze({
+  history: "linear", fork: false, regenerate: false,
   steer: false, followUpQueue: false, cancel: true, compaction: false,
   thinkingLevels: true, modelSwitch: true, toolUse: false, permissions: false,
-  usage: false, replay: true,
+  usage: false, replay: false, attachments: false,
 });
 
 const adapterError = (message, code = "backend_unavailable", status = 409, extra = {}) =>
@@ -34,7 +35,11 @@ export class ChatGptWebAdapter extends EventEmitter {
       }),
       // This backend has no server-side history to re-read, so its own journal
       // is the transcript: every published event is durable before broadcast.
-      onPublish: (record, event) => this.appendJournal(record.chatId, event),
+      onPublish: (record, event) => {
+        if (event.type === "transcript_message" || (event.type === "assistant_content" && event.phase === "final")) {
+          this.appendJournal(record.chatId, event);
+        }
+      },
     });
     this.records = this.sessions.records;
     this.byChatId = this.sessions.byChatId;
@@ -90,23 +95,38 @@ export class ChatGptWebAdapter extends EventEmitter {
   setCredential(cookie) { return this.request("/credential", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cookie }) }); }
   removeCredential() { return this.request("/credential", { method: "DELETE" }); }
 
+  async launch(context, { model = "", thinkingLevel = "", forceModel = false }) {
+    const selectedModel = (forceModel ? String(model).trim() : "") || String(context.chat.backend.model || "").trim();
+    const selectedThinkingLevel = (forceModel ? String(thinkingLevel).trim() : "")
+      || String(context.chat.modelThinkingLevels?.[selectedModel] || "").trim();
+    const options = { chatId: context.chat.id, project: context.project,
+      model: selectedModel, thinkingLevel: selectedThinkingLevel };
+    const live = context.chat.backend.opaqueSession
+      ? await this.restore(context.chat.backend.opaqueSession, options) : await this.create(options);
+    return { live, mapping: {
+      backend: { ...context.chat.backend, model: selectedModel, opaqueSession: live.sessionId },
+      ...(selectedThinkingLevel ? { modelThinkingLevels: {
+        ...(context.chat.modelThinkingLevels || {}), [selectedModel]: selectedThinkingLevel,
+      } } : {}),
+    }, modelRecovery: null };
+  }
+
   create(options) { return this.start(null, options); }
   restore(opaqueSession, options) { return this.start(opaqueSession, options); }
-  async start(opaqueSession, { chatId, model = "", thinkingLevel = "" }) {
+  async start(opaqueSession, { chatId, project, model = "", thinkingLevel = "" }) {
     const existing = this.getByChatId(chatId);
     if (existing) return existing;
     await this.ensureSidecar();
     const cursor = typeof opaqueSession === "object" && opaqueSession ? opaqueSession : {};
     const record = {
-      id: crypto.randomUUID(), chatId, status: "running", activity: "idle", adapterImplementation: "chatgpt-web",
+      id: crypto.randomUUID(), chatId, projectId: project?.id, status: "running", activity: "idle",
       active: false, stopping: false, sessionId: { conversationId: cursor.conversationId || "", parentMessageId: cursor.parentMessageId || "" },
       model: model || cursor.model || "", thinkingLevel: thinkingLevel || cursor.thinkingLevel || "medium",
       generation: null, clients: new Set(), events: [], eventSequence: 0,
       abortController: null,
     };
-    record.events = this.readJournal(chatId);
-    this.records.set(record.id, record);
-    this.byChatId.set(chatId, record.id);
+    record.events = this.readJournal(chatId).slice(-500);
+    this.sessions.add(record);
     return record;
   }
 
@@ -262,8 +282,26 @@ export class ChatGptWebAdapter extends EventEmitter {
     const record = liveSessionId ? this.get(liveSessionId) : null;
     return { messages: this.transcript(chatId || record?.chatId), tools: [] };
   }
+  async readHistory(options) {
+    const { messages } = await this.readTranscript(options);
+    let child = null;
+    let leafId = null;
+    for (const message of [...messages].reverse()) {
+      if (!message.id) continue;
+      const node = { entry: {
+        id: message.id, parentId: null, timestamp: message.timestamp || null, type: "message",
+        display: `${message.role}: ${String(message.content || "").replace(/\s+/g, " ").trim().slice(0, 240)}`,
+        kind: message.role, hidden: false, forkable: false, regeneratable: false,
+      }, children: child ? [child] : [] };
+      if (child) child.entry.parentId = node.entry.id;
+      else leafId = node.entry.id;
+      child = node;
+    }
+    return { mode: "linear", leafId, tree: child ? [child] : [] };
+  }
   get(id) { return this.sessions.get(id); }
   getByChatId(chatId) { return this.sessions.getByChatId(chatId); }
+  rawRecords() { return this.sessions.rawRecords(); }
   list() { return this.sessions.list(); }
   stop(id) { void this.close(id); return Boolean(this.get(id)); }
 }

@@ -9,10 +9,7 @@ import { loadConfig } from "../src/config.js";
 const manifest = JSON.parse(fs.readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8"));
 const pinnedPiVersion = manifest.dependencies["@earendil-works/pi-coding-agent"];
 
-const configEnv = (overrides = {}) => ({
-  CONDUIT_NATIVE_PI_COMMAND: "/definitely/missing/pi",
-  ...overrides,
-});
+const configEnv = (overrides = {}) => ({ ...overrides });
 
 test("default runtime paths are owned by the repository root", () => {
   const config = loadConfig(configEnv());
