@@ -912,8 +912,9 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   const openSlotHandles = () => [...slotHandles.entries()]
     .filter(([slot]) => Boolean(openPaths()[slot]))
     .map(([, handle]) => handle);
+  const clampFileSplitRatio = (next: number) => Math.max(25, Math.min(75, Math.round(next)));
   const saveFileSplitRatio = (next: number) => {
-    const value = Math.max(25, Math.min(75, Math.round(next)));
+    const value = clampFileSplitRatio(next);
     setFileSplitRatio(value);
     writeSetting(projectScope(), "file-split-ratio", String(value));
   };
@@ -925,17 +926,39 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     const left = primary.getBoundingClientRect().left;
     const width = secondary.getBoundingClientRect().right - left;
     if (width <= 0) return;
-    const move = (moveEvent: PointerEvent) => saveFileSplitRatio(((moveEvent.clientX - left) / width) * 100);
+    // Pointer events arrive faster than the display can show them, and each one
+    // used to write localStorage synchronously. Track the pointer once per
+    // frame, and persist the settled ratio once, when the drag ends.
+    let pending = fileSplitRatio();
+    let frame = 0;
+    let stopped = false;
+    const apply = () => {
+      frame = 0;
+      setFileSplitRatio(clampFileSplitRatio(pending));
+    };
+    const move = (moveEvent: PointerEvent) => {
+      pending = ((moveEvent.clientX - left) / width) * 100;
+      if (!frame) frame = requestAnimationFrame(apply);
+    };
     const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      if (frame) {
+        cancelAnimationFrame(frame);
+        apply();
+      }
+      saveFileSplitRatio(pending);
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
       window.removeEventListener("pointercancel", stop);
+      window.removeEventListener("blur", stop);
       document.body.classList.remove("workspace-split-resizing");
     };
     document.body.classList.add("workspace-split-resizing");
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop, { once: true });
     window.addEventListener("pointercancel", stop, { once: true });
+    window.addEventListener("blur", stop, { once: true });
   };
   // Downloading works on any tree entry, open or not, so it stays in the panel.
   const downloadPath = async (path: string) => {
@@ -1615,8 +1638,9 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     setWrapLines(next);
     writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines", String(next));
   };
+  const clampTreeWidth = (next: number) => Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, next));
   const saveTreeWidth = (next: number) => {
-    const value = Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, next));
+    const value = clampTreeWidth(next);
     setTreeWidth(value);
     writeSetting(projectScope(), "tree-width", String(value));
   };
@@ -1655,34 +1679,72 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     if (!splitHost) return;
     event.preventDefault();
     const bounds = splitHost.getBoundingClientRect();
-    const move = (moveEvent: PointerEvent) => saveSplitRatio(((moveEvent.clientX - bounds.left) / bounds.width) * 100, bounds.width);
+    let pending = splitRatio();
+    let frame = 0;
+    let stopped = false;
+    const apply = () => {
+      frame = 0;
+      setSplitRatio(clampSplitRatio(pending, bounds.width));
+    };
+    const move = (moveEvent: PointerEvent) => {
+      pending = ((moveEvent.clientX - bounds.left) / bounds.width) * 100;
+      if (!frame) frame = requestAnimationFrame(apply);
+    };
     const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      if (frame) {
+        cancelAnimationFrame(frame);
+        apply();
+      }
+      saveSplitRatio(pending, bounds.width);
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
       window.removeEventListener("pointercancel", stop);
+      window.removeEventListener("blur", stop);
       document.body.classList.remove("workspace-split-resizing");
     };
     document.body.classList.add("workspace-split-resizing");
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop, { once: true });
     window.addEventListener("pointercancel", stop, { once: true });
+    window.addEventListener("blur", stop, { once: true });
   };
   const startTreeResize = (event: PointerEvent) => {
     event.preventDefault();
     treeResizeHandle?.setPointerCapture(event.pointerId);
     const startX = event.clientX;
     const startWidth = treeWidth();
-    const move = (moveEvent: PointerEvent) => saveTreeWidth(startWidth + moveEvent.clientX - startX);
+    let pending = startWidth;
+    let frame = 0;
+    let stopped = false;
+    const apply = () => {
+      frame = 0;
+      setTreeWidth(clampTreeWidth(pending));
+    };
+    const move = (moveEvent: PointerEvent) => {
+      pending = startWidth + moveEvent.clientX - startX;
+      if (!frame) frame = requestAnimationFrame(apply);
+    };
     const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      if (frame) {
+        cancelAnimationFrame(frame);
+        apply();
+      }
+      saveTreeWidth(pending);
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
       window.removeEventListener("pointercancel", stop);
+      window.removeEventListener("blur", stop);
       document.body.classList.remove("workspace-tree-resizing");
     };
     document.body.classList.add("workspace-tree-resizing");
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop, { once: true });
     window.addEventListener("pointercancel", stop, { once: true });
+    window.addEventListener("blur", stop, { once: true });
   };
   const toggleKeptVisible = (path: string) => {
     const next = new Set(keptVisible());

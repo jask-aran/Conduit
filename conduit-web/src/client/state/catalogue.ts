@@ -34,12 +34,26 @@ export function createCatalogueStore() {
     setProjectId(project.id);
   };
 
-  const patchChat = (chatId: string, patch: Partial<ChatSummary>) => setProjects((current) => current.map((project) => ({
-    ...project,
-    sessions: project.sessions.map((chat) => chat.id === chatId && Object.entries(patch).some(([key, value]) => Reflect.get(chat, key) !== value)
-      ? { ...chat, ...patch }
-      : chat),
-  })));
+  // A patch touches one chat, so every other project keeps its identity. The
+  // spread used to run unconditionally, which handed a fresh object to every
+  // project on every patch -- re-reconciling each sidebar and dashboard list
+  // for a title or timestamp that belonged to one chat in one of them.
+  const patchChat = (chatId: string, patch: Partial<ChatSummary>) => setProjects((current) => {
+    let touched = false;
+    const next = current.map((project) => {
+      let changed = false;
+      const sessions = project.sessions.map((chat) => {
+        if (chat.id !== chatId) return chat;
+        if (!Object.entries(patch).some(([key, value]) => Reflect.get(chat, key) !== value)) return chat;
+        changed = true;
+        return { ...chat, ...patch };
+      });
+      if (!changed) return project;
+      touched = true;
+      return { ...project, sessions };
+    });
+    return touched ? next : current;
+  });
 
   return { projects, setProjects, selectedId, setSelectedId, projectId, setProjectId, selected, refresh, select, selectProject, patchChat };
 }

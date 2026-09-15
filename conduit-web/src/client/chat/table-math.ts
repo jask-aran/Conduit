@@ -208,6 +208,16 @@ function findInlineDollarClose(source: string, start: number) {
 export function projectTableMathSource(source: string, options: { convertTexDisplayDelimiters?: boolean; sentinel?: string } = {}): TableMathProjection {
   const sentinel = options.sentinel && !source.includes(options.sentinel) ? options.sentinel : chooseSentinel(source);
   if (!sentinel) return { source, sentinel: null, pipeRepairs: 0 };
+  // Only table rows are ever rewritten, and a line is a table row only if it
+  // contains a pipe, so a pipe-free source projects to itself. Skipping the
+  // split-and-rebuild matters because this runs against the whole accumulated
+  // message on every streamed delta, beside a parser that only ever appends.
+  //
+  // The sentinel is still returned. Callers compare it against the previous
+  // one to decide whether the parser can append, so handing back null here
+  // would fail that check on the first delta that adds a pipe -- and, because
+  // a null sentinel is stored as "", on every delta before it too.
+  if (!source.includes("|")) return { source, sentinel, pipeRepairs: 0 };
   const lines = splitLines(source);
   const tableLines = tableLineMask(lines);
   let pipeRepairs = 0;
