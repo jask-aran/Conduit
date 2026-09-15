@@ -2,7 +2,7 @@
 
 export type SessionSurface = "chat" | "terminal";
 export type AgentProtocol = "pi_rpc" | "acp" | "native_api" | "pty";
-export type AgentImplementation = "conduit_pi" | "native_pi" | "codex" | "opencode" | "chatgpt-web" | (string & {});
+export type AgentImplementation = "conduit_pi" | "codex" | "opencode" | "chatgpt-web" | (string & {});
 export type ProfileManagement = "conduit" | "agent";
 
 export interface AgentProfile {
@@ -19,7 +19,6 @@ export interface AgentProfile {
 export interface PersistedChatBackend {
   /** Null for imported Pi chats whose profile has not yet been assigned. */
   profileId: string | null;
-  /** Host Pi has no Conduit profile revision. */
   profileRevision: string | null;
   management: ProfileManagement;
   protocol: AgentProtocol;
@@ -31,6 +30,9 @@ export interface PersistedChatBackend {
 }
 
 export interface ChatCapabilities {
+  history: "none" | "linear" | "tree";
+  fork: boolean;
+  regenerate: boolean;
   steer: boolean;
   followUpQueue: boolean;
   cancel: boolean;
@@ -41,9 +43,21 @@ export interface ChatCapabilities {
   permissions: boolean;
   usage: boolean;
   replay: boolean;
+  attachments: boolean;
+}
+
+export interface HistoryTarget { nodeId: string; }
+export interface ForkResult {
+  opaqueSession: unknown;
+  sourceMessage: { id: string; text: string } | null;
 }
 
 export interface ChatBackendAdapter<LiveSession = unknown, ModelCatalog = unknown> {
+  launch(context: unknown, request: unknown, services: unknown): Promise<{
+    live: LiveSession;
+    mapping: Record<string, unknown>;
+    modelRecovery: unknown;
+  }>;
   create(options: unknown): Promise<LiveSession>;
   restore(opaqueSession: unknown, options?: unknown): Promise<LiveSession>;
   prompt(liveSessionId: string, message: string, options?: unknown): Promise<string>;
@@ -58,7 +72,7 @@ export interface ChatBackendAdapter<LiveSession = unknown, ModelCatalog = unknow
   publish(liveSession: unknown, event: unknown): unknown;
   queue(liveSessionId: string, mode: "steer" | "follow_up", message: string, options?: unknown): Promise<unknown>;
   clearQueue(liveSessionId: string): Promise<{ steering: unknown[]; followUp: unknown[] }>;
-  fork(liveSessionId: string, entryId: string): Promise<unknown>;
+  fork(liveSessionId: string, target: HistoryTarget): Promise<ForkResult>;
   setModel(liveSessionId: string, model: string): Promise<unknown>;
   setThinkingLevel(liveSessionId: string, level: string): Promise<unknown>;
   refreshContext(liveSessionId: string): Promise<unknown>;
@@ -66,6 +80,17 @@ export interface ChatBackendAdapter<LiveSession = unknown, ModelCatalog = unknow
   get(liveSessionId: string): LiveSession | null;
   getByChatId(chatId: string): LiveSession | null;
   list(): unknown[];
+  rawRecords(): Iterable<LiveSession>;
+  readHistory(options: {
+    liveSessionId?: string;
+    chatId?: string;
+    opaqueSession?: unknown;
+    project?: unknown;
+  }): Promise<{
+    mode: "linear" | "tree";
+    leafId: string | null;
+    tree: unknown[];
+  }>;
 
   /**
    * Project the transcript the backend has actually recorded.
@@ -89,7 +114,7 @@ export interface ChatBackendAdapter<LiveSession = unknown, ModelCatalog = unknow
   getModelState(liveSessionId: string): Promise<{ model: string; thinkingLevel: string }>;
 }
 
-export const CHAT_CAPABILITY_KEYS: readonly (keyof ChatCapabilities)[];
+export const CHAT_CAPABILITY_KEYS: readonly Exclude<keyof ChatCapabilities, "history">[];
 export const REQUIRED_CHAT_BACKEND_METHODS: readonly (keyof ChatBackendAdapter)[];
 export function assertChatBackendAdapter<T extends ChatBackendAdapter>(
   adapter: T,

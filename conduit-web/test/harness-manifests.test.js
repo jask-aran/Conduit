@@ -143,18 +143,27 @@ test("a closed socket is never written to", () => {
   assert.equal(record.events.length, 1, "the replay buffer still records it");
 });
 
+test("session replay keeps only the latest 500 events", () => {
+  const records = new SessionRecords({ capabilities: {}, backend: {} });
+  const record = { id: "live", chatId: "chat", events: [], clients: new Set() };
+  records.add(record);
+  for (let sequence = 0; sequence < 505; sequence += 1) records.publish(record, { type: "status", sequence });
+  assert.equal(record.events.length, 500);
+  assert.equal(record.events[0].sequence, 5);
+});
+
 test("refusals are derived from the capability flags, not hand-written", () => {
   const capable = unsupported(
     { permissions: true, steer: true, followUpQueue: true, modelSwitch: true, thinkingLevels: true, usage: true },
     { label: "Full", protocol: "pi_rpc" },
   );
-  assert.deepEqual(Object.keys(capable), ["fork"], "only forks, which no flag covers, are refused");
+  assert.deepEqual(Object.keys(capable), ["compact", "fork"]);
 
   const limited = unsupported(
     { permissions: false, steer: false, followUpQueue: false, modelSwitch: false, thinkingLevels: false, usage: false },
     { label: "Thin" },
   );
-  for (const method of ["respondHostUi", "queue", "clearQueue", "setModel", "setThinkingLevel", "fork"]) {
+  for (const method of ["respondHostUi", "queue", "clearQueue", "setModel", "setThinkingLevel", "compact", "fork"]) {
     assert.throws(() => limited[method](), { code: "unsupported_interaction", status: 400 }, method);
   }
   assert.throws(() => limited.queue(), /Thin does not support steering or follow-up queues/);

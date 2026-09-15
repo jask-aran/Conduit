@@ -39,17 +39,14 @@ if (process.argv.includes("--help")) { console.log("--mode --session --append-sy
 process.exit(0);
 `);
   await fs.chmod(conduitPi, 0o755);
-  const nativePi = path.join(root, "native-pi");
-  await fs.writeFile(nativePi, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 0.80.10; exit 0; fi\nif [ \"$1\" = \"--help\" ]; then echo '--mode --session --append-system-prompt --skill --approve --no-approve'; exit 0; fi\nexit 1\n");
-  await fs.chmod(nativePi, 0o755);
-  return { conduitPi, nativePi };
+  return { conduitPi };
 }
 
 async function spawnServer(env, { password } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-auth-server-"));
   const port = await availablePort();
   const origin = `http://127.0.0.1:${port}`;
-  const { conduitPi, nativePi } = await fakePi(root);
+  const { conduitPi } = await fakePi(root);
   if (password) {
     const store = new AuthStore(path.join(root, "auth.json"));
     await store.setPassword(password);
@@ -76,8 +73,6 @@ async function spawnServer(env, { password } = {}) {
       CONDUIT_AUTH_FILE: path.join(root, "auth.json"),
       CONDUIT_CLIENT_DIST: clientDist,
       CONDUIT_PI_COMMAND: conduitPi,
-      CONDUIT_NATIVE_PI_COMMAND: nativePi,
-      CONDUIT_NATIVE_PI_AGENT_DIR: path.join(root, "native-agent"),
       CONDUIT_WORKSPACE_ALLOWLIST: root,
       ...env,
     },
@@ -348,7 +343,7 @@ test("native auth uses exact-origin bearer sessions and single-use socket ticket
 test("a non-loopback bind with no password and no override rejects startup", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-auth-startup-"));
   const port = await availablePort();
-  const { conduitPi, nativePi } = await fakePi(root);
+  const { conduitPi } = await fakePi(root);
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: path.resolve(import.meta.dirname, ".."),
     stdio: ["ignore", "pipe", "pipe"],
@@ -365,8 +360,6 @@ test("a non-loopback bind with no password and no override rejects startup", asy
       CONDUIT_PI_AGENT_DIR: path.join(root, "pi"),
       CONDUIT_AUTH_FILE: path.join(root, "auth.json"),
       CONDUIT_PI_COMMAND: conduitPi,
-      CONDUIT_NATIVE_PI_COMMAND: nativePi,
-      CONDUIT_NATIVE_PI_AGENT_DIR: path.join(root, "native-agent"),
       CONDUIT_WORKSPACE_ALLOWLIST: root,
     },
   });
@@ -487,7 +480,7 @@ test("a long-dormant session is pruned at server startup and rejected on use", a
   // startup, the row is gone, and the stale cookie is rejected.
   const port = await availablePort();
   const origin = `http://127.0.0.1:${port}`;
-  const { conduitPi, nativePi } = await fakePi(root);
+  const { conduitPi } = await fakePi(root);
   const workspace = path.join(root, "workspace");
   await fs.mkdir(workspace, { recursive: true });
   const child = spawn(process.execPath, ["src/server.js"], {
@@ -506,8 +499,6 @@ test("a long-dormant session is pruned at server startup and rejected on use", a
       CONDUIT_PI_AGENT_DIR: path.join(root, "pi"),
       CONDUIT_AUTH_FILE: path.join(root, "auth.json"),
       CONDUIT_PI_COMMAND: conduitPi,
-      CONDUIT_NATIVE_PI_COMMAND: nativePi,
-      CONDUIT_NATIVE_PI_AGENT_DIR: path.join(root, "native-agent"),
       CONDUIT_WORKSPACE_ALLOWLIST: root,
     },
   });

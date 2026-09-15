@@ -146,9 +146,9 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Tran
   let copyButton: HTMLButtonElement | undefined;
   const assistant = () => props.message.role !== "user";
   return <div class="response-actions">
-    <Show when={!assistant() && !isOptimisticId(props.message.id)}>
+    <Show when={!assistant() && !isOptimisticId(props.message.id) && props.chat.capabilities()?.fork}>
       <Button variant="ghost" size="icon-sm" aria-label={props.chat.editingEntryId() === props.message.id ? "Cancel editing" : "Edit from here"} onClick={() => props.chat.edit(props.message)}><PencilIcon /></Button>
-      <Button variant="ghost" size="icon-sm" aria-label="Regenerate from here" onClick={() => void props.chat.regenerate(props.message.id)}><RefreshCwIcon /></Button>
+      <Show when={props.chat.capabilities()?.regenerate}><Button variant="ghost" size="icon-sm" aria-label="Regenerate from here" onClick={() => void props.chat.regenerate(props.message.id)}><RefreshCwIcon /></Button></Show>
     </Show>
     <Show when={assistant()}>
       <Button
@@ -165,7 +165,7 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Tran
           setTimeout(() => setCopied(false), 1600);
         }}
       >{copied() ? <CheckIcon /> : <CopyIcon />}</Button>
-      <Show when={props.precedingUserId && !isOptimisticId(props.precedingUserId)}><Button variant="ghost" size="icon-sm" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(props.precedingUserId!)}><RefreshCwIcon /></Button></Show>
+      <Show when={props.chat.capabilities()?.regenerate && props.precedingUserId && !isOptimisticId(props.precedingUserId)}><Button variant="ghost" size="icon-sm" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(props.precedingUserId!)}><RefreshCwIcon /></Button></Show>
       <Show when={props.partialContinue && props.message.stopped}><Button variant="ghost" size="icon-sm" aria-label="Continue stopped response" onClick={() => void props.chat.continueResponse()}><PlayIcon /></Button></Show>
       <Show when={props.artifact}>{(entry) => <TurnArtifactButton artifact={entry()} chatId={props.chat.loadedId()!} />}</Show>
     </Show>

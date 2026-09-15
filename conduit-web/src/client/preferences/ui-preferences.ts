@@ -1,4 +1,4 @@
-import { api } from "../api/client";
+import { api } from "../api/client.ts";
 
 export const UI_PREFERENCE_CHANGE_EVENT = "conduit:ui-preference-change";
 

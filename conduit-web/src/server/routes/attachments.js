@@ -1,4 +1,5 @@
 import { readAnnouncedAttachmentIds } from "../../session-store.js";
+import { conduitPiSessionFile } from "../../backend-session.js";
 
 export function registerAttachmentRoutes(app, { attachments, findChatContext }) {
   app.put("/v0/chats/:chatId/attachments/:attachmentId", async (request, response, next) => {
@@ -28,8 +29,9 @@ export function registerAttachmentRoutes(app, { attachments, findChatContext }) 
       const context = await findChatContext(request.params.chatId);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
       let announced = new Set();
-      if (context.chat.piSessionFile) {
-        try { announced = await readAnnouncedAttachmentIds(context.chat.piSessionFile, context.project); }
+      const sessionFile = conduitPiSessionFile(context.chat);
+      if (sessionFile) {
+        try { announced = await readAnnouncedAttachmentIds(sessionFile, context.project); }
         catch (error) { if (error.code !== "ENOENT") throw error; }
       }
       response.json({ attachments: (await attachments.list(context.project, context.chat.id))

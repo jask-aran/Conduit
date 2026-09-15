@@ -20,9 +20,24 @@ test("native adapter restores its saved model unless a prompt changes it", async
   const calls = [];
   const updates = [];
   const live = { id: "live-native", sessionId: { conversationId: "", parentMessageId: "" } };
-  const adapter = { create: async (options) => { calls.push(options); return live; } };
+  const adapter = {
+    create: async (options) => { calls.push(options); return live; },
+    async launch(context, request) {
+      const selectedModel = request.forceModel ? request.model : context.chat.backend.model;
+      const selectedThinkingLevel = request.forceModel ? request.thinkingLevel : "";
+      const started = await this.create({ model: selectedModel, thinkingLevel: selectedThinkingLevel });
+      return { live: started, mapping: {
+        backend: { ...context.chat.backend, model: selectedModel, opaqueSession: started.sessionId },
+        ...(selectedThinkingLevel ? { modelThinkingLevels: { [selectedModel]: selectedThinkingLevel } } : {}),
+      }, modelRecovery: null };
+    },
+  };
   const launcher = createLiveSessionLauncher({
-    backends: { forChat: () => adapter, getByChatId: () => null },
+    backends: {
+      forChat: () => adapter,
+      getByChatId: () => null,
+      manifestFor: () => ({ profile: { id: "chatgpt-web" } }),
+    },
     findChatContext: async () => ({ chat, project }),
     lifecycle: { assertAvailable: () => {}, runLaunch: (_id, work) => work(), withProjects: (_ids, work) => work() },
     registry: { update: async (id, mapping) => updates.push({ id, mapping }) },
@@ -54,7 +69,7 @@ test("live session launcher selects and materializes the model profile before Pi
     id: chatId,
     status: "draft",
     runtime: { kind: "conduit_profile", installationId: "conduit-pinned", profileId: "chat", profileVersion: "7" },
-    piSessionFile: null,
+    backend: { implementation: "conduit_pi", opaqueSession: null },
   };
   const template = {
     id: "chat",
@@ -136,7 +151,7 @@ test("live session launcher selects and materializes the model profile before Pi
     assert.equal(launchCalls[0].model, "openai-codex/test-model");
     assert.equal(launchCalls[0].launchSpec.env.PI_CODING_AGENT_DIR, path.join(agentDir, "model-profiles", "openai-search"));
     assert.equal(launchCalls[0].launchSpec.modelProfile.id, "openai-search");
-    assert.equal(registryUpdates[0].mapping.piSessionFile, live.sessionFile);
+    assert.equal(registryUpdates[0].mapping.backend.opaqueSession, live.sessionFile);
     const derived = JSON.parse(await fs.readFile(path.join(agentDir, "model-profiles", "openai-search", "web-search.json"), "utf8"));
     assert.deepEqual(derived.searchRouting.providers, ["openai", "brave"]);
   } finally {
@@ -163,7 +178,7 @@ test("live session launcher repairs an obsolete persisted thinking level", async
     id: chatId,
     status: "active",
     runtime: { kind: "conduit_profile", installationId: "conduit-pinned", profileId: "chat", profileVersion: "7" },
-    piSessionFile: sessionFile,
+    backend: { implementation: "conduit_pi", opaqueSession: sessionFile },
     modelThinkingLevels: {},
   };
   const template = {
@@ -243,7 +258,7 @@ test("live session launcher recovers an out-of-scope persisted model", async () 
     id: chatId,
     status: "active",
     runtime: { kind: "conduit_profile", installationId: "conduit-pinned", profileId: "chat", profileVersion: "7" },
-    piSessionFile: sessionFile,
+    backend: { implementation: "conduit_pi", opaqueSession: sessionFile },
     modelThinkingLevels: {},
   };
   const template = {

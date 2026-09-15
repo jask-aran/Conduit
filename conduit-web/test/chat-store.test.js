@@ -30,7 +30,7 @@ test("migrates Pi sessions behind stable Conduit chat metadata", async () => {
   const store = new ChatStore(registryFile);
   await store.initialize([project]);
   assert.equal(store.listProject(project.id)[0].id, "session-test");
-  assert.equal(store.metadata("session-test").piSessionFile, sessionFile);
+  assert.equal(store.metadata("session-test").backend.opaqueSession, sessionFile);
   assert.equal(store.metadata("session-test").runtime.kind, "conduit_profile");
   assert.equal(store.metadata("session-test").runtime.installationId, "conduit-pinned");
   assert.equal((await store.find([project], "session-test")).file, sessionFile);
@@ -91,7 +91,7 @@ test("stored session mappings reject headerless JSONL", async () => {
   await fs.rm(root, { recursive: true, force: true });
 });
 
-test("temporarily missing Native Pi files retain their durable chat mapping", async () => {
+test("obsolete Host Pi rows with missing files are discarded", async () => {
   const { root, project, registryFile } = await fixture();
   const missingFile = path.join(root, "host-pi", "missing.jsonl");
   await fs.writeFile(registryFile, `${JSON.stringify({ version: 3, chats: [{
@@ -102,8 +102,7 @@ test("temporarily missing Native Pi files retain their durable chat mapping", as
   }] })}\n`);
   const store = new ChatStore(registryFile);
   await store.initialize([project]);
-  assert.equal(store.metadata("chat-native-missing").piSessionFile, missingFile);
-  assert.equal(store.metadata("chat-native-missing").runtime.kind, "native_pi");
+  assert.equal(store.metadata("chat-native-missing"), null);
   await fs.rm(root, { recursive: true, force: true });
 });
 
@@ -115,7 +114,7 @@ test("creates invisible drafts before Pi and reveals them after a completed atta
   assert.equal(chat.status, "draft");
   assert.equal(chat.templateId, "workspace");
   assert.equal(chat.templateVersion, "1");
-  assert.equal(chat.piSessionId, null);
+  assert.equal("piSessionId" in chat, false);
   assert.equal(chat.runtime.profileId, "workspace");
   await store.update(chat.id, { templateId: "chat", templateVersion: "3" });
   assert.equal(store.metadata(chat.id).runtime.profileId, "chat");
@@ -201,7 +200,7 @@ test("keeps a pre-prompt Pi mapping as a draft across startup", async () => {
   const store = new ChatStore(registryFile);
   await store.initialize([project]);
   assert.equal(store.metadata(id).status, "draft");
-  assert.equal(store.metadata(id).piSessionFile, piSessionFile);
+  assert.equal(store.metadata(id).backend.opaqueSession, piSessionFile);
   assert.deepEqual(store.listProject(project.id), []);
   await fs.rm(root, { recursive: true, force: true });
 });
@@ -225,7 +224,7 @@ test("waits for a newly reported fork file before checkpointing it", async () =>
   const session = await store.syncFile(chat.id, forkFile, project, { waitForFileMs: 500 });
   await write;
   assert.equal(session.nativeId, "delayed-native");
-  assert.equal(store.metadata(chat.id).piSessionFile, forkFile);
+  assert.equal(store.metadata(chat.id).backend.opaqueSession, forkFile);
   await fs.rm(root, { recursive: true, force: true });
 });
 
@@ -280,7 +279,7 @@ test("startup keeps regenerated branches attached to their durable Conduit chat"
   const store = new ChatStore(registryFile);
   await store.initialize([project]);
   assert.deepEqual(store.listProject(project.id).map((chat) => chat.id), [chatId]);
-  assert.equal(store.metadata(chatId).piSessionFile, currentForkFile);
+  assert.equal(store.metadata(chatId).backend.opaqueSession, currentForkFile);
   await fs.access(originalFile);
   await fs.access(firstForkFile);
   await fs.access(currentForkFile);

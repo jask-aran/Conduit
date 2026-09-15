@@ -10,11 +10,13 @@ import { SessionRecords } from "./harnesses/session-records.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 export const CODEX_CAPABILITIES = Object.freeze({
+  history: "linear", fork: true, regenerate: true,
   steer: true, followUpQueue: true, cancel: true, compaction: true,
   thinkingLevels: true, modelSwitch: true, toolUse: true, permissions: true,
   // `replay` means resuming a generation in progress, which Codex cannot do:
   // its `replay` returns the current runtime state, not a generation.
   usage: false, replay: false,
+  attachments: true,
 });
 
 // Codex asks for approval with a JSON-RPC *request* - it carries an id and
@@ -114,7 +116,6 @@ export class CodexAppServerAdapter extends EventEmitter {
     this.records = this.sessions.records;
     this.byChatId = this.sessions.byChatId;
     const unsupportedMethods = unsupported(CODEX_CAPABILITIES, { label: "Codex" });
-    delete unsupportedMethods.fork;
     Object.assign(this, unsupportedMethods);
   }
 
@@ -130,8 +131,30 @@ export class CodexAppServerAdapter extends EventEmitter {
     return this.daemonStart;
   }
 
+  async launch(context, { model = "", thinkingLevel = "", forceModel = false }) {
+    const selectedModel = (forceModel ? String(model).trim() : "") || String(context.chat.backend.model || "").trim();
+    const selectedThinkingLevel = (forceModel ? String(thinkingLevel).trim() : "")
+      || String(context.chat.modelThinkingLevels?.[selectedModel] || "").trim();
+    const options = {
+      chatId: context.chat.id, project: context.project, model: selectedModel,
+      thinkingLevel: selectedThinkingLevel,
+      permissionMode: String(context.chat.backend.permissionMode || "").trim(),
+      permissionProfile: String(context.chat.backend.permissionProfile || "").trim(),
+      approvalPolicy: String(context.chat.backend.approvalPolicy || "").trim(),
+      approvalsReviewer: String(context.chat.backend.approvalsReviewer || "").trim(),
+    };
+    const live = context.chat.backend.opaqueSession
+      ? await this.restore(context.chat.backend.opaqueSession, options) : await this.create(options);
+    return { live, mapping: {
+      backend: { ...context.chat.backend, model: selectedModel, opaqueSession: live.sessionId },
+      ...(selectedThinkingLevel ? { modelThinkingLevels: {
+        ...(context.chat.modelThinkingLevels || {}), [selectedModel]: selectedThinkingLevel,
+      } } : {}),
+    }, modelRecovery: null };
+  }
+
   async create({ chatId, project, model = "", thinkingLevel = "", permissionMode = "", permissionProfile = "", approvalPolicy = "", approvalsReviewer = "", sandbox = null }) {
-    const record = await this.start({ chatId, cwd: project.workingRoot });
+    const record = await this.start({ chatId, projectId: project.id, cwd: project.workingRoot });
     try {
       const result = await this.request(record, "thread/start", {
         cwd: project.workingRoot,
@@ -158,7 +181,7 @@ export class CodexAppServerAdapter extends EventEmitter {
   }
 
   async restore(opaqueSession, { chatId, project, model = "", thinkingLevel = "", permissionMode = "", permissionProfile = "", approvalPolicy = "", approvalsReviewer = "", sandbox = null }) {
-    const record = await this.start({ chatId, cwd: project.workingRoot });
+    const record = await this.start({ chatId, projectId: project.id, cwd: project.workingRoot });
     const threadId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!threadId) throw error("Codex thread identity is missing");
     try {
@@ -190,10 +213,10 @@ export class CodexAppServerAdapter extends EventEmitter {
    * page of items at a time. This walks those pages so a resumed thread arrives
    * with the work in it, not just whatever the summary happened to carry.
    */
-  async items(record, threadId) {
+  async items(record, threadId, pageLimit = REPLAY_PAGE_LIMIT) {
     const rows = [];
     let cursor = null;
-    for (let page = 0; page < REPLAY_PAGE_LIMIT; page += 1) {
+    for (let page = 0; page < pageLimit; page += 1) {
       const result = await this.request(record, "thread/items/list", { threadId, limit: 100, ...(cursor ? { cursor } : {}) });
       rows.push(...(result?.data || []));
       if (!result?.nextCursor || result.nextCursor === cursor) break;
@@ -334,20 +357,45 @@ export class CodexAppServerAdapter extends EventEmitter {
     return { messages, tools };
   }
 
-  async readTranscript({ liveSessionId, chatId, opaqueSession, project }) {
+  async readTranscript({ liveSessionId, chatId, opaqueSession, project, turns: turnLimit }) {
     const live = (liveSessionId ? this.get(liveSessionId) : null) || this.getByChatId(chatId);
     const threadId = live?.sessionId
       || (typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId);
     if (!threadId) return { messages: [], tools: [] };
     const transport = live || await this.discovery(project?.workingRoot);
     const result = await this.request(transport, "thread/read", { threadId, includeTurns: true });
-    const turns = result?.thread?.turns || [];
+    const allTurns = result?.thread?.turns || [];
+    const turns = Number.isSafeInteger(turnLimit) && turnLimit > 0 ? allTurns.slice(-turnLimit) : allTurns;
     const rows = turns.flatMap((turn) => (turn.items || [])
       .map((item) => ({ turnId: turn.id, turnStatus: turn.status, item })));
     const transcriptRows = rows.length || result?.thread?.historyMode !== "paginated"
       ? rows
-      : await this.items(transport, threadId);
+      : await this.items(transport, threadId,
+        Number.isSafeInteger(turnLimit) && turnLimit > 0 ? Math.min(turnLimit, REPLAY_PAGE_LIMIT) : REPLAY_PAGE_LIMIT);
     return CodexAppServerAdapter.threadTranscript(CodexAppServerAdapter.recent(transcriptRows));
+  }
+  async readHistory(options) {
+    const { messages } = await this.readTranscript(options);
+    let child = null;
+    let leafId = null;
+    for (const message of [...messages].reverse()) {
+      if (!message.id) continue;
+      const node = { entry: {
+        id: message.id,
+        parentId: null,
+        timestamp: message.timestamp || null,
+        type: "message",
+        display: `${message.role}: ${String(message.content || "").replace(/\s+/g, " ").trim().slice(0, 240)}`,
+        kind: message.role,
+        hidden: false,
+        forkable: message.role === "user",
+        regeneratable: message.role === "user",
+      }, children: child ? [child] : [] };
+      if (child) child.entry.parentId = node.entry.id;
+      else leafId = node.entry.id;
+      child = node;
+    }
+    return { mode: "linear", leafId, tree: child ? [child] : [] };
   }
 
   /**
@@ -364,19 +412,18 @@ export class CodexAppServerAdapter extends EventEmitter {
     return "";
   }
 
-  async start({ chatId, cwd }) {
+  async start({ chatId, projectId, cwd }) {
     const existing = this.getByChatId(chatId);
     if (existing) return existing;
     const record = {
-      id: crypto.randomUUID(), chatId, cwd, status: "starting", activity: "starting", adapterImplementation: "codex",
+      id: crypto.randomUUID(), chatId, projectId, cwd, status: "starting", activity: "starting",
       active: false, stopping: false, sessionId: null, model: "", thinkingLevel: "", generation: null,
       clients: new Set(), events: [], pending: new Map(), approvals: new Map(),
       steering: [], followUp: [],
       permissionMode: "", permissionProfile: "", approvalPolicy: "", approvalsReviewer: "",
       sequence: 0, eventSequence: 0, messageIds: new Set(),
     };
-    this.records.set(record.id, record);
-    this.byChatId.set(chatId, record.id);
+    this.sessions.add(record);
     try {
       // The daemon socket carries one JSON-RPC message per WebSocket text
       // frame. Rust's websocket endpoint rejects extension negotiation, so do
@@ -536,7 +583,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       record.turn = { id: turnId, messageId, blocks: [] };
     }
     record.turn.blocks.push({ kind: "tool_call", contentIndex: record.turn.blocks.length,
-      id: toolCallId, toolCallId, name: activity.name, arguments: activity.input });
+      id: toolCallId, toolCallId, name: activity.name, input: activity.input });
     this.publish(record, { type: "assistant_content", generationId: turnId, phase: "final",
       sequence: ++record.eventSequence, messageId: record.turn.messageId, stopReason: "toolUse",
       errorMessage: null, blocks: record.turn.blocks });
@@ -596,9 +643,11 @@ export class CodexAppServerAdapter extends EventEmitter {
       const messageId = params.item.id || `assistant-${turnId}`;
       if (!record.messageIds.has(params.item.id)) this.publish(record, { type: "assistant_content", generationId: turnId,
         phase: "start", sequence: ++record.eventSequence, messageId });
-      record.turn = { id: turnId, messageId, blocks: [{ kind: "text", contentIndex: 0, text: params.item.text || "" }] };
+      record.turn = { id: turnId, messageId, phase: params.item.phase || null,
+        blocks: [{ kind: "text", contentIndex: 0, text: params.item.text || "" }] };
       this.publish(record, { type: "assistant_content", generationId: turnId, phase: "final", sequence: ++record.eventSequence,
-        messageId, stopReason: "stop", errorMessage: null, blocks: record.turn.blocks });
+        messageId, stopReason: params.item.phase === "final_answer" ? "stop" : "toolUse",
+        errorMessage: null, blocks: record.turn.blocks });
     } else if (method === "item/completed" && params.item?.type === "reasoning") {
       const messageId = params.item.id || `reasoning-${turnId}`;
       const text = itemPartsText(params.item.summary);
@@ -635,6 +684,12 @@ export class CodexAppServerAdapter extends EventEmitter {
       record.activity = failed ? "failed" : "idle";
       if (record.generation) Object.assign(record.generation, { closed: true, settled: true });
       for (const [requestId, pending] of record.approvals) this.settleApproval(record, requestId, pending.generationId);
+      if (!failed && record.turn?.phase == null && record.turn?.blocks?.some((block) => block.kind === "text")
+        && !record.turn.blocks.some((block) => block.kind === "tool_call")) {
+        this.publish(record, { type: "assistant_content", generationId: turnId, phase: "final",
+          sequence: ++record.eventSequence, messageId: record.turn.messageId, stopReason: "stop",
+          errorMessage: null, blocks: record.turn.blocks });
+      }
       this.publish(record, failed
         ? { type: "error", generationId: turnId, error: { code: "backend_unavailable", message: params.turn?.error?.message || "Codex turn failed" } }
         : { type: "status", generationId: turnId, sequence: ++record.eventSequence, status: "idle", activity: "idle", detail: "settled" });
@@ -760,7 +815,13 @@ export class CodexAppServerAdapter extends EventEmitter {
     if (!record?.sessionId || !turnId) return false;
     record.stopping = true;
     record.activity = "stopping";
-    await this.request(record, "turn/interrupt", { threadId: record.sessionId, turnId });
+    try {
+      await this.request(record, "turn/interrupt", { threadId: record.sessionId, turnId });
+    } catch (cause) {
+      record.stopping = false;
+      record.activity = record.active ? "working" : "idle";
+      throw cause;
+    }
     return true;
   }
 
@@ -814,7 +875,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     return mode.id;
   }
   async listPermissionModes(id, cwd) {
-    const record = id ? this.get(id) : [...this.records.values()][0];
+    const record = id ? this.get(id) : null;
     if (!record) return [];
     const params = { ...(cwd ? { cwd } : {}) };
     const [catalogue, configResult, requirementsResult] = await Promise.all([
@@ -857,7 +918,8 @@ export class CodexAppServerAdapter extends EventEmitter {
       if (record) await this.close(record.id);
     }
   }
-  async fork(id, entryId) {
+  async fork(id, historyTarget) {
+    const entryId = historyTarget.nodeId;
     const record = this.get(id);
     if (!record?.sessionId) throw error("Codex thread is not ready");
     const sourceThreadId = record.sessionId;
@@ -894,14 +956,20 @@ export class CodexAppServerAdapter extends EventEmitter {
     record.permissionProfile = result.activePermissionProfile?.id || result.activePermissionProfile || record.permissionProfile;
     await this.request(record, "thread/unsubscribe", { threadId: sourceThreadId });
     this.emit("changed", { record, reason: "forked" });
-    return { text: CodexAppServerAdapter.itemText(target.item), sessionId: record.sessionId };
+    const text = CodexAppServerAdapter.itemText(target.item);
+    return {
+      text,
+      sessionId: record.sessionId,
+      opaqueSession: record.sessionId,
+      sourceMessage: { id: entryId, text },
+    };
   }
   waitForSession() { return Promise.resolve(); }
   replay(id) { return this.runtimeState(this.get(id)); }
   getCapabilities() { return CODEX_CAPABILITIES; }
   toClientEvent(event) { return event; }
   async listModels(id) {
-    const record = id ? this.get(id) : [...this.records.values()][0];
+    const record = id ? this.get(id) : null;
     if (!record) return [];
     const result = await this.request(record, "model/list", {});
     return (result.data || []).filter((item) => !item.hidden).map((item) => {
@@ -1009,6 +1077,7 @@ export class CodexAppServerAdapter extends EventEmitter {
   }
   get(id) { return this.sessions.get(id); }
   getByChatId(chatId) { return this.sessions.getByChatId(chatId); }
+  rawRecords() { return this.sessions.rawRecords(); }
   track(id, chatId) { return this.sessions.reassign(id, chatId); }
   list() { return this.sessions.list(); }
   stop(id) { void this.close(id); return Boolean(this.get(id)); }

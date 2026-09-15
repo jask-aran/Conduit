@@ -53,11 +53,11 @@ export class TurnCheckpointStore {
     return { ...checkpoint, turnId, messageId: content.messageId ?? null };
   }
 
-  async checkpointForMessage(chatId, workingRoot, sessionFile, messageId) {
+  async checkpointForMessage(chatId, workingRoot, messageId) {
     const root = path.resolve(workingRoot);
     const stored = (await this.#checkpoints(chatId))
       .filter((checkpoint) => checkpoint.version === 1 && checkpoint.workingRoot === root);
-    const { checkpoints, mappings } = await this.#activeCheckpoints(sessionFile, stored);
+    const { checkpoints, mappings } = await this.#activeCheckpoints(null, stored);
     return checkpoints.find((checkpoint) => mappings.get(checkpoint.id)?.messageId === messageId)?.id ?? null;
   }
 
@@ -290,7 +290,17 @@ export class TurnCheckpointStore {
 
   async #userMessageIds(sessionFile, checkpoints) {
     const result = new Map();
-    if (typeof sessionFile !== "string" || !sessionFile) return result;
+    if (typeof sessionFile !== "string" || !sessionFile) {
+      let sequence = 0;
+      for (const checkpoint of checkpoints) {
+        sequence += 1;
+        result.set(checkpoint.id, {
+          messageId: typeof checkpoint.messageId === "string" && checkpoint.messageId ? checkpoint.messageId : null,
+          sequence,
+        });
+      }
+      return result;
+    }
     const entries = new Map();
     const entryFiles = new Map();
     let currentFile = path.resolve(sessionFile);
@@ -370,11 +380,11 @@ export class TurnCheckpointStore {
     const latestByMessage = new Map();
     for (const checkpoint of branch) {
       const mapping = mappings.get(checkpoint.id);
-      if (mapping) latestByMessage.set(mapping.messageId, checkpoint.id);
+      if (mapping) latestByMessage.set(mapping.messageId || checkpoint.id, checkpoint.id);
     }
     const active = branch.filter((checkpoint) => {
       const mapping = mappings.get(checkpoint.id);
-      return mapping && latestByMessage.get(mapping.messageId) === checkpoint.id;
+      return mapping && latestByMessage.get(mapping.messageId || checkpoint.id) === checkpoint.id;
     });
     return {
       checkpoints: active.filter((checkpoint, index) => {

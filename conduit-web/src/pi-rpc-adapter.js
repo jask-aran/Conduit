@@ -3,11 +3,15 @@ import { normalizeHostUiRequest } from "./activity.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { assertChatBackendAdapter } from "./chat-backend-contract.js";
 import { detect } from "./harnesses/probe.js";
+import { launchConduitPi } from "./pi-launch.js";
+import { publicModelProfile } from "./model-profiles.js";
 
 export const PI_CAPABILITIES = Object.freeze({
+  history: "tree", fork: true, regenerate: true,
   steer: true, followUpQueue: true, cancel: true, compaction: true,
   thinkingLevels: true, modelSwitch: true, toolUse: true, permissions: true,
   usage: true, replay: true,
+  attachments: true,
 });
 
 // Keep the complete Pi payload until the v0 client no longer needs it. No event
@@ -66,6 +70,8 @@ const historyTreeView = (tree) => {
     display,
     kind,
     hidden: settings || toolOnlyAssistant,
+    forkable: kind === "user",
+    regeneratable: kind === "user",
   },
   ...(node.label ? { label: node.label } : {}),
   children: (node.children || []).map(project),
@@ -193,6 +199,7 @@ export function serializePiV0(event) {
 
 export class PiRpcAdapter {
   constructor(manager) { this.manager = manager; }
+  launch(context, request, services) { return launchConduitPi(this, context, request, services); }
   create(options) { return this.manager.createWithCapacity({ ...options, sessionFile: null }); }
   restore(opaqueSession, options) { return this.manager.createWithCapacity({ ...options, sessionFile: opaqueSession }); }
   prompt(id, message, options) { return this.manager.promptAccepted(id, message, options); }
@@ -211,6 +218,7 @@ export class PiRpcAdapter {
   get(id) { return this.manager.get(id); }
   getByChatId(chatId) { return this.manager.getByChatId(chatId); }
   list() { return this.manager.list(); }
+  rawRecords() { return this.manager.rawRecords(); }
   waitForSession(id) { return this.manager.waitForSession(id); }
   attach(id, socket) {
     const replay = this.manager.attach(id, socket);
@@ -219,10 +227,20 @@ export class PiRpcAdapter {
   queue(id, type, message, options) { return this.manager.queueAccepted(id, type, message, options); }
   clearQueue(id) { return this.manager.clearQueue(id); }
   readTranscript({ liveSessionId, ...options }) { return this.manager.readTranscript(liveSessionId, options); }
-  fork(id, entryId) { return this.manager.fork(id, entryId); }
-  async getHistoryTree(id) {
-    const result = await this.manager.getHistoryTree(id);
-    return { leafId: result?.leafId || null, tree: historyTreeView(result?.tree || []) };
+  async fork(id, target) {
+    const result = await this.manager.fork(id, target.nodeId);
+    const record = this.manager.get(id);
+    return {
+      ...result,
+      opaqueSession: record?.sessionFile || null,
+      sourceMessage: result?.text ? { id: target.nodeId, text: result.text } : null,
+    };
+  }
+  async readHistory({ liveSessionId, opaqueSession, project }) {
+    const result = liveSessionId
+      ? await this.manager.getHistoryTree(liveSessionId)
+      : await this.manager.readHistoryTree(opaqueSession, project?.workingRoot);
+    return { mode: "tree", leafId: result?.leafId || null, tree: historyTreeView(result?.tree || []) };
   }
   setModel(id, model) { return this.manager.setModel(id, model); }
   setThinkingLevel(id, level) { return this.manager.setThinkingLevel(id, level); }
@@ -230,7 +248,8 @@ export class PiRpcAdapter {
   compact(id) { return this.manager.compact(id); }
   publish(record, event) { return this.manager.publish(record, event); }
   view(record) {
-    return { ...this.manager.view(record), capabilities: PI_CAPABILITIES };
+    const view = this.manager.view(record);
+    return { ...view, modelProfile: publicModelProfile(view.modelProfile), capabilities: PI_CAPABILITIES };
   }
 }
 
@@ -249,7 +268,6 @@ export class ChatBackendRegistry {
     if (manager) {
       const pi = assertChatBackendAdapter(new PiRpcAdapter(manager), "conduit-pi");
       this.adapters.set("conduit_pi", pi);
-      this.adapters.set("native_pi", pi);
     }
   }
 
@@ -305,14 +323,20 @@ export class ChatBackendRegistry {
   }
   forChat(chat) {
     const implementation = chat?.backend?.implementation
-      || (chat?.runtime?.kind === "native_pi" ? "native_pi" : "conduit_pi");
+      || "conduit_pi";
     const adapter = this.adapters.get(implementation);
     if (!adapter) {
       throw Object.assign(new Error("Chat backend is unavailable"), { code: "backend_unavailable", status: 409 });
     }
     return adapter;
   }
-  adapterForRecord(record) { return this.adapters.get(record?.adapterImplementation || "conduit_pi"); }
+  adapterForRecord(record) {
+    const implementation = record?.adapterImplementation;
+    if (!implementation) throw Object.assign(new Error("Live session has no backend identity"), { code: "backend_identity_missing" });
+    const adapter = this.adapters.get(implementation);
+    if (!adapter) throw Object.assign(new Error(`Chat backend is unavailable: ${implementation}`), { code: "backend_unavailable" });
+    return adapter;
+  }
   get(id) {
     for (const adapter of new Set(this.adapters.values())) {
       const record = adapter.get(id);
@@ -329,6 +353,9 @@ export class ChatBackendRegistry {
   }
   list() {
     return [...new Set(this.adapters.values())].flatMap((adapter) => adapter.list());
+  }
+  rawRecords() {
+    return [...new Set(this.adapters.values())].flatMap((adapter) => [...adapter.rawRecords()]);
   }
   view(record) { return this.adapterForRecord(record).view(record); }
   async stop(id) {

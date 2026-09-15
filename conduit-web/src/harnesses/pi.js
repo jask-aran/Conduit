@@ -7,12 +7,11 @@ import { READY } from "./probe.js";
 export const manifest = {
   id: "conduit-pi",
   label: "Conduit Pi",
-  implementations: ["conduit_pi", "native_pi"],
+  implementations: ["conduit_pi"],
   protocol: "pi_rpc",
   installationId: "conduit-pinned",
   capabilities: PI_CAPABILITIES,
   discovery: "none",
-  history: "tree",
   drive: false,
   // Pi profiles come from the template catalogue rather than this manifest.
   profile: false,

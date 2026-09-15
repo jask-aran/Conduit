@@ -24,9 +24,10 @@ test("Codex notifications map to neutral streaming events", () => {
 
 test("Codex adapter advertises only implemented capabilities", () => {
   assert.deepEqual(CODEX_CAPABILITIES, {
+    history: "linear", fork: true, regenerate: true,
     steer: true, followUpQueue: true, cancel: true, compaction: true,
     thinkingLevels: true, modelSwitch: true, toolUse: true, permissions: true,
-    usage: false, replay: false,
+    usage: false, replay: false, attachments: true,
   });
 });
 
@@ -72,7 +73,7 @@ test("Codex prompt writes the installed app-server turn/start shape", async () =
     effort: "high",
   } });
   adapter.receive(live, JSON.stringify({ id: 1, result: { turn: { id: "turn-1" } } }));
-  assert.equal(await pending, "turn-1");
+  assert.deepEqual(await pending, { generationId: "turn-1", attachmentIdentity: { messageId: clientUserMessageId } });
 });
 
 test("Codex discovery uses the metadata database and exact workspace filter", async () => {
@@ -228,6 +229,25 @@ test("a thread with no stored history yields an empty transcript", async () => {
   assert.deepEqual(await new CodexAppServerAdapter().readTranscript({ chatId: "missing" }), { messages: [], tools: [] });
 });
 
+test("a one-turn transcript sync reads one paginated history page", async () => {
+  const adapter = new CodexAppServerAdapter();
+  const live = record();
+  adapter.records.set(live.id, live);
+  let pages = 0;
+  adapter.request = async (_target, method) => {
+    if (method === "thread/read") return { thread: { turns: [], historyMode: "paginated" } };
+    pages += 1;
+    return { data: [
+      { turnId: "turn-1", item: { type: "userMessage", id: "u1", content: [{ type: "text", text: "Go" }] } },
+      { turnId: "turn-1", item: { type: "agentMessage", id: "a1", text: "Done." } },
+    ], nextCursor: "more" };
+  };
+
+  const transcript = await adapter.readTranscript({ liveSessionId: live.id, turns: 1 });
+  assert.equal(pages, 1);
+  assert.deepEqual(transcript.messages.map((message) => message.content), ["Go", "Done."]);
+});
+
 test("a live command hangs off the turn's message so the rollup claims it", () => {
   const adapter = new CodexAppServerAdapter();
   const live = record();
@@ -240,12 +260,25 @@ test("a live command hangs off the turn's message so the rollup claims it", () =
   const finals = live.events.filter((event) => event.type === "assistant_content" && event.phase === "final");
   // The commentary message is re-sent carrying the command, which is what marks
   // it interim; the answer that follows carries nothing after it.
-  assert.deepEqual(finals.map((event) => [event.messageId, event.stopReason]), [["m1", "stop"], ["m1", "toolUse"], ["m2", "stop"]]);
+  assert.deepEqual(finals.map((event) => [event.messageId, event.stopReason]), [["m1", "toolUse"], ["m1", "toolUse"], ["m2", "stop"]]);
   assert.deepEqual(finals[1].blocks.map((block) => block.kind), ["text", "tool_call"]);
   assert.equal(finals[1].blocks[1].toolCallId, "e1");
   assert.deepEqual(finals[2].blocks.map((block) => block.kind), ["text"]);
   const tools = live.events.filter((event) => event.type === "tool_activity");
   assert.deepEqual(tools.map((event) => [event.phase, event.name]), [["start", "command"], ["end", "command"]]);
+});
+
+test("a live phase-less final message is promoted when its turn settles", () => {
+  const adapter = new CodexAppServerAdapter();
+  const live = record();
+  adapter.notification(live, "turn/started", { turn: { id: "turn-1" } });
+  adapter.notification(live, "item/completed", {
+    turnId: "turn-1", item: { type: "agentMessage", id: "m1", text: "Done." },
+  });
+  adapter.notification(live, "turn/completed", { turn: { id: "turn-1", status: "completed" } });
+
+  const finals = live.events.filter((event) => event.type === "assistant_content" && event.phase === "final");
+  assert.deepEqual(finals.map((event) => event.stopReason), ["toolUse", "stop"]);
 });
 
 test("a command with no message before it gets a carrier of its own", () => {
@@ -351,10 +384,10 @@ test("a turn that completes with a prompt outstanding does not strand it", () =>
 test("thread policy overrides only what Conduit was asked for", () => {
   assert.deepEqual(CodexAppServerAdapter.policy(), {}, "no override leaves the user's config.toml alone");
   assert.deepEqual(CodexAppServerAdapter.policy("on-request"), { approvalPolicy: "on-request" });
-  assert.deepEqual(CodexAppServerAdapter.policy("", "workspace-write"), { sandbox: { type: "workspace-write" } });
+  assert.deepEqual(CodexAppServerAdapter.policy("", "", "workspace-write"), { sandbox: { type: "workspace-write" } });
   assert.deepEqual(CodexAppServerAdapter.policy("nonsense"), {}, "an unknown policy is not forwarded");
   assert.deepEqual(
-    CodexAppServerAdapter.policy("never", { type: "workspace-write", networkAccess: false, writableRoots: ["/repo"] }),
+    CodexAppServerAdapter.policy("never", "", { type: "workspace-write", networkAccess: false, writableRoots: ["/repo"] }),
     { approvalPolicy: "never", sandbox: { type: "workspace-write", networkAccess: false, writableRoots: ["/repo"] } },
   );
 });
@@ -373,7 +406,8 @@ test("steering stays visible until Codex reports that it consumed the message", 
 <user_message>
 use the other file
 </user_message>`);
-  assert.deepEqual(result, { queued: "steer" });
+  assert.equal(result.queued, "steer");
+  assert.equal(typeof result.attachmentIdentity.messageId, "string");
   assert.equal(sent[0].method, "turn/steer");
   assert.equal(sent[0].params.expectedTurnId, "turn-1");
   assert.equal(sent[0].params.threadId, "thread-1");
@@ -404,7 +438,7 @@ test("a follow-up waits for the turn and then starts the next one", async () => 
   const prompted = [];
   adapter.prompt = (id, message) => { prompted.push({ id, message }); return Promise.resolve("turn-2"); };
 
-  assert.deepEqual(await adapter.queue(live.id, "follow_up", "then run the tests"), { queued: "follow_up" });
+  assert.equal((await adapter.queue(live.id, "follow_up", "then run the tests")).queued, "follow_up");
   assert.deepEqual(live.events.at(-1).queue.followUp, ["then run the tests"]);
   assert.deepEqual(prompted, [], "nothing is sent while the turn is running");
 

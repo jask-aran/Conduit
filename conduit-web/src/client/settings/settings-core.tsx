@@ -249,7 +249,6 @@ export function Settings(props: {
   const [promptStatus, setPromptStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
   const [promptSaving, setPromptSaving] = createSignal(false);
   const [promptError, setPromptError] = createSignal("");
-  const [detecting, setDetecting] = createSignal(false);
   const [workspaceId, setWorkspaceId] = createSignal<string | null>(null);
   const [authProviders, setAuthProviders] = createSignal<PiAuthProvider[]>([]);
   const [authAttempt, setAuthAttempt] = createSignal<PiAuthAttempt | null>(null);
@@ -983,25 +982,12 @@ export function Settings(props: {
     .sort((left, right) => (left.id === workspaceId() ? -1 : right.id === workspaceId() ? 1 : left.name.localeCompare(right.name))));
   const workspaceDefaultLabel = (workspace: Project) => {
     const id = workspace.defaultTemplateId;
-    if (id === "host-pi") return "Host Pi";
     return props.templates.find((item) => item.id === id)?.label || `Inherit global (${props.templates.find((item) => item.id === props.defaultTemplateId)?.label || "General"})`;
   };
   const saveWorkspace = async (workspace: Project, templateId: string | null) => props.onWorkspaceDefaultChange(workspace.id, templateId);
   const toggleContextMetric = (id: ContextMetricId, enabled: boolean) => {
     const next = enabled ? [...props.contextMetrics, id] : props.contextMetrics.filter((current) => current !== id);
     props.onContextMetricsChange(next);
-  };
-
-  const redetect = async () => {
-    setDetecting(true);
-    setRuntimeError("");
-    try {
-      const host = await api<Installation>("/v0/pi-installations/host/detect", { method: "POST" });
-      props.onInstallationsChange(props.installations.some((item) => item.id === "host-pi")
-        ? props.installations.map((item) => item.id === "host-pi" ? host : item)
-        : [...props.installations, host]);
-    } catch (error) { setRuntimeError((error as Error).message); }
-    finally { setDetecting(false); }
   };
 
   const updateRuntime = (next: RuntimeSettings) => { setRuntime(next); setRuntimeEdited(true); setRuntimeError(""); };
@@ -1195,14 +1181,13 @@ export function Settings(props: {
                 <Button variant="outline" disabled={!runtimeDirty() || runtimeSaving()} onClick={() => void saveRuntime()}>{runtimeSaving() ? <Spinner /> : null}Save runtime settings</Button>
               </FieldGroup>
             </Show>
-            <details class="settings-disclosure"><summary><span><ActivityIcon /><strong>Pi installations</strong><small>{props.installations.filter((item) => item.available).length} ready on this server</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary><Show when={!props.installationsLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading Pi installations…</span></div>}><div class="installations"><For each={props.installations}>{(item) => <article><h3>{item.label}</h3><p>{item.available ? item.version ? `Pi ${item.version}` : "Available" : item.reason || (item as Installation & { error?: string }).error || "Unavailable"}</p></article>}</For><Button variant="outline" disabled={detecting()} onClick={() => void redetect()}>{detecting() ? <Spinner /> : null}Re-detect Host Pi</Button></div></Show></details>
+            <details class="settings-disclosure"><summary><span><ActivityIcon /><strong>Pi installation</strong><small>{props.installations[0]?.available ? "Ready" : "Unavailable"}</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary><Show when={!props.installationsLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading Pi installation…</span></div>}><div class="installations"><For each={props.installations}>{(item) => <article><h3>{item.label}</h3><p>{item.available ? item.version ? `Pi ${item.version}` : "Available" : item.reason || (item as Installation & { error?: string }).error || "Unavailable"}</p></article>}</For></div></Show></details>
           </Show>
           <Show when={section() === "workspaces"}>
             <Show when={!props.templatesLoading && !props.installationsLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading workspace settings…</span></div>}><Show when={workspaceProjects().find((workspace) => workspace.id === workspaceId())} fallback={<p>This workspace is not available.</p>}>{(workspace) => <div class="workspace-settings-card" data-current="true"><h3>{workspace().name}</h3><p>{workspace().workingRoot}</p><p>Override: {workspaceDefaultLabel(workspace()).startsWith("Inherit") ? "None" : workspaceDefaultLabel(workspace())}</p>
               <Field><FieldLabel for={`workspace-default-profile-${workspace().id}`}>Default profile</FieldLabel><select id={`workspace-default-profile-${workspace().id}`} aria-label={`${workspace().name} default profile`} value={workspace().defaultTemplateId || ""} onChange={(event) => void saveWorkspace(workspace(), event.currentTarget.value || null)}>
                 <option value="">Inherit global ({props.templates.find((item) => item.id === props.defaultTemplateId)?.label || "General"})</option>
                 <For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For>
-                <option value="host-pi" disabled={!props.installations.find((item) => item.id === "host-pi")?.available}>Host Pi</option>
               </select></Field>
             </div>}</Show></Show>
           </Show>
@@ -1365,14 +1350,14 @@ export function Settings(props: {
               <Show when={chatGptError()}><p role="alert" class="settings-inline-error">{chatGptError()}</p></Show>
             </div></details>
             <details class="settings-disclosure"><summary><span><BotIcon /><strong>Provider accounts</strong><small>{authProviders().filter((provider) => provider.auth.configured).length} connected</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary><div class="pi-auth-panel">
-              <p>Credentials are stored only in the Isolated Pi runtime. Host Pi accounts and environment credentials are never exposed or changed here.</p>
+              <p>Credentials are stored only in Conduit's pinned Pi runtime.</p>
               <Show when={authUnavailable()}><p role="alert" class="settings-inline-error">Set a Conduit password with <code>node scripts/conduit-auth.mjs set-password</code>, then sign in to manage Pi credentials here.</p></Show>
               <Show when={authError() && !authUnavailable()}><p role="alert" class="settings-inline-error">{authError()}</p></Show>
               <Show when={!authUnavailable() && authLoading() && !authProviders().length} fallback={<Show when={!authUnavailable()}>
                 <FieldGroup>
                   <Field><FieldLabel for="pi-auth-provider">Provider</FieldLabel><select id="pi-auth-provider" aria-label="Pi authentication provider" value={authProviderId()} onChange={(event) => setAuthProviderId(event.currentTarget.value)}><For each={authProviders()}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></select></Field>
                   <Show when={authProviders().find((provider) => provider.id === authProviderId())?.oauth}><Button disabled={authLoading() || Boolean(authAttempt()?.active)} onClick={() => void startOAuth()}>{authLoading() ? <Spinner /> : null}Sign in with browser</Button></Show>
-                  <Field><FieldLabel for="pi-api-key">API key</FieldLabel><Input id="pi-api-key" type="password" autocomplete="off" value={apiKey()} onInput={(event) => setApiKey(event.currentTarget.value)} placeholder="Stored in Isolated Pi only" /></Field>
+                  <Field><FieldLabel for="pi-api-key">API key</FieldLabel><Input id="pi-api-key" type="password" autocomplete="off" value={apiKey()} onInput={(event) => setApiKey(event.currentTarget.value)} placeholder="Stored in Conduit Pi only" /></Field>
                   <Button variant="outline" disabled={authLoading() || !apiKey()} onClick={() => void saveApiKey()}>{authLoading() ? <Spinner /> : null}Save API key</Button>
                 </FieldGroup>
                 <Show when={authAttempt()?.owned}>
@@ -1385,7 +1370,7 @@ export function Settings(props: {
                     <Show when={authAttempt()!.active}><Button variant="ghost" onClick={() => void cancelOAuth()}>Cancel sign-in</Button></Show>
                   </article>
                 </Show>
-                <div class="settings-cards"><For each={authProviders().filter((provider) => provider.auth.configured)}>{(provider) => <article><h3>{provider.label}</h3><p>{provider.auth.source === "stored" ? "Credential stored in Isolated Pi" : provider.auth.source === "environment" ? "Credential available from the server environment" : "Credential managed by Pi configuration"}</p><Show when={provider.auth.removable}><Button variant="outline" size="sm" disabled={authLoading()} onClick={() => void removePiAuth(provider.id)}>Remove credential</Button></Show></article>}</For></div>
+                <div class="settings-cards"><For each={authProviders().filter((provider) => provider.auth.configured)}>{(provider) => <article><h3>{provider.label}</h3><p>{provider.auth.source === "stored" ? "Credential stored in Conduit Pi" : provider.auth.source === "environment" ? "Credential available from the server environment" : "Credential managed by Pi configuration"}</p><Show when={provider.auth.removable}><Button variant="outline" size="sm" disabled={authLoading()} onClick={() => void removePiAuth(provider.id)}>Remove credential</Button></Show></article>}</For></div>
               </Show>}><div class="settings-loading"><Spinner /><span>Loading Pi authentication…</span></div></Show>
             </div></details>
           </Show>

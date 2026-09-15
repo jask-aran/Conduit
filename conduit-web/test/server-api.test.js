@@ -54,9 +54,6 @@ input.on("line", (line) => {
 });
 `);
   await fs.chmod(conduitPi, 0o755);
-  const nativePi = path.join(root, "native-pi");
-  await fs.writeFile(nativePi, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 0.80.10; exit 0; fi\nif [ \"$1\" = \"--help\" ]; then echo '--mode --session --append-system-prompt --skill --approve --no-approve'; exit 0; fi\nexit 1\n");
-  await fs.chmod(nativePi, 0o755);
   const fakeGitDirectory = path.join(root, "fake-bin");
   const fakeGit = path.join(fakeGitDirectory, "git");
   const fakeGitMarker = path.join(root, "fake-git.pid");
@@ -92,8 +89,6 @@ exit 0
       CONDUIT_AUTH_FILE: path.join(root, "auth.json"),
       CONDUIT_PI_AGENT_DIR: path.join(root, "pi"),
       CONDUIT_PI_COMMAND: conduitPi,
-      CONDUIT_NATIVE_PI_COMMAND: nativePi,
-      CONDUIT_NATIVE_PI_AGENT_DIR: path.join(root, "native-agent"),
       CONDUIT_WORKSPACE_ALLOWLIST: root,
       CONDUIT_WORKSPACE_DEFAULT_ROOT: workspaceParent,
       CONDUIT_WORKSPACE_SUGGESTION_ROOT: workspaceParent,
@@ -141,16 +136,13 @@ exit 0
 
     const installations = await (await fetch(`${origin}/v0/pi-installations`)).json();
     const isolatedInstallation = installations.installations.find((item) => item.id === "conduit-pinned");
-    const hostInstallation = installations.installations.find((item) => item.id === "host-pi");
     assert.equal(isolatedInstallation.version, "0.84.1");
     assert.equal(isolatedInstallation.executablePath, conduitPi);
     assert.equal(isolatedInstallation.agentHome.path, path.join(root, "pi"));
     assert.equal(isolatedInstallation.models.access, "managed");
-    assert.equal(hostInstallation.version, "0.80.10");
-    assert.equal(hostInstallation.executablePath, nativePi);
-    assert.equal(hostInstallation.models.access, "read-only");
+    assert.deepEqual(installations.installations.map((item) => item.id), ["conduit-pinned"]);
     assert.equal("command" in installations.installations[0], false);
-    assert.equal("environment" in installations.installations[1], false);
+    assert.equal("environment" in installations.installations[0], false);
 
     const linkedResponse = await fetch(`${origin}/v0/projects`, {
       method: "POST",
@@ -312,56 +304,13 @@ exit 0
     assert.equal(destructiveDelete.status, 204);
     await assert.rejects(fs.access(createdWorkspace.path), { code: "ENOENT" });
     await fs.mkdir(path.join(workspace, ".pi", "themes"), { recursive: true });
-    const preflight = await (await fetch(`${origin}/v0/workspaces/${linked.id}/native-preflight`)).json();
-    assert.equal(preflight.available, true);
-    assert.equal(preflight.version, "0.80.10");
-    assert.equal(preflight.savedTrust, null);
-    assert.equal(preflight.trustRequired, false);
-    assert.ok(preflight.resources.includes("themes"));
-
     const nativeChatResponse = await fetch(`${origin}/v0/chats`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ projectId: linked.id, runtimeKind: "native_pi" }),
     });
-    assert.equal(nativeChatResponse.status, 201);
-    const nativeChat = await nativeChatResponse.json();
-    assert.equal(nativeChat.runtime.kind, "native_pi");
-    assert.equal(nativeChat.runtime.installationId, "host-pi");
-
-    const automaticTrustLaunch = await fetch(`${origin}/v0/live-sessions`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        chatId: nativeChat.id,
-        projectId: linked.id,
-        model: "missing/provider-model",
-      }),
-    });
-    assert.equal(automaticTrustLaunch.status, 400);
-    assert.equal((await automaticTrustLaunch.json()).error, "invalid_model");
-    const savedPreflight = await (await fetch(`${origin}/v0/workspaces/${linked.id}/native-preflight`)).json();
-    assert.equal(savedPreflight.savedTrust, true);
-    assert.equal(savedPreflight.trustRequired, false);
-
-    const nativeMove = await fetch(`${origin}/v0/sessions/${nativeChat.id}/move`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ projectId: "project_chat" }),
-    });
-    assert.equal(nativeMove.status, 409);
-    assert.equal((await nativeMove.json()).error, "chat_move_not_supported");
-
-    const isolatedSwitch = await fetch(`${origin}/v0/chats/${nativeChat.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ templateId: "assistant", runtimeKind: "conduit_profile" }),
-    });
-    assert.equal(isolatedSwitch.status, 200);
-    const isolatedChat = await isolatedSwitch.json();
-    assert.equal(isolatedChat.templateId, "assistant");
-    assert.equal(isolatedChat.runtime.kind, "conduit_profile");
-    assert.equal(isolatedChat.runtime.profileId, "assistant");
+    assert.equal(nativeChatResponse.status, 400);
+    assert.equal((await nativeChatResponse.json()).error, "unknown_runtime_kind");
 
     const invalidNative = await fetch(`${origin}/v0/chats`, {
       method: "POST",
@@ -369,14 +318,13 @@ exit 0
       body: JSON.stringify({ projectId: "project_chat", runtimeKind: "native_pi" }),
     });
     assert.equal(invalidNative.status, 400);
-    assert.equal((await invalidNative.json()).error, "native_pi_requires_workspace");
+    assert.equal((await invalidNative.json()).error, "unknown_runtime_kind");
 
     const externalAgents = path.join(root, "external-agents");
     await fs.mkdir(path.join(externalAgents, "skills"), { recursive: true });
     await fs.symlink(externalAgents, path.join(workspace, ".agents"));
-    const symlinkedPreflight = await fetch(`${origin}/v0/workspaces/${linked.id}/native-preflight`);
-    assert.equal(symlinkedPreflight.status, 400);
-    assert.equal((await symlinkedPreflight.json()).error, "native_resource_symlink");
+    const removedPreflight = await fetch(`${origin}/v0/workspaces/${linked.id}/native-preflight`);
+    assert.equal(removedPreflight.status, 404);
 
     const runtimeDefault = await fetch(`${origin}/v0/preferences`, {
       method: "PATCH",
@@ -485,15 +433,14 @@ exit 0
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ defaultTemplateId: "host-pi" }),
     });
-    assert.equal((await hostOverride.json()).defaultTemplateId, "host-pi");
+    assert.equal(hostOverride.status, 400);
     const hostDefaultChat = await fetch(`${origin}/v0/chats`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ projectId: linked.id }),
     });
     const hostDefaultChatBody = await hostDefaultChat.json();
-    assert.equal(hostDefaultChatBody.runtime.kind, "native_pi");
-    assert.equal(hostDefaultChatBody.templateId, "coding");
+    assert.equal(hostDefaultChatBody.runtime.kind, "conduit_profile");
     const appearancePatch = await fetch(`${origin}/v0/projects/${linked.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -582,7 +529,7 @@ exit 0
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ chatId: chat.id, projectId: "project_chat" }),
     });
-    assert.equal(freshLive.status, 201);
+    assert.equal(freshLive.status, 201, await freshLive.clone().text());
     const freshLiveBody = await freshLive.json();
     assert.equal(freshLiveBody.status, "running");
     assert.deepEqual(freshLiveBody.modelProfile, {

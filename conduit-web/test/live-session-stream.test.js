@@ -9,6 +9,10 @@ const queuedAttachment = {
   storedName: "13dd7444-3bc5-4e9f-880d-2d83b6554862--notes.txt",
   name: "notes.txt",
 };
+const lifecycle = {
+  run: (_chatId, operation) => operation(),
+  assertAvailable: () => {},
+};
 
 test("interrupt and send preserves queued and composer attachments", () => {
   const queued = serializeAttachmentEnvelope({
@@ -78,6 +82,7 @@ test("one socket delivers backend commands in browser order", async () => {
       chat: { id: "chat_interrupt" },
       project: { id: "project-1" },
     }),
+    lifecycle,
     backends,
   });
 
@@ -87,8 +92,8 @@ test("one socket delivers backend commands in browser order", async () => {
   await new Promise((resolve) => setTimeout(resolve, 40));
 
   assert.equal(delivered.length, 2);
-  assert.match(delivered[0], /<user_message>\nfirst\n<\/user_message>/);
-  assert.match(delivered[1], /<user_message>\nsecond\n<\/user_message>/);
+  assert.equal(delivered[0], "first");
+  assert.equal(delivered[1], "second");
 });
 
 test("a successful fork replaces the browser transcript before the new prompt", async () => {
@@ -98,11 +103,12 @@ test("a successful fork replaces the browser transcript before the new prompt", 
     sessionFile: "/tmp/fork.jsonl", hostUiRequests: [],
   };
   const adapter = {
+    getCapabilities: () => ({ fork: true, regenerate: true }),
     attach: () => null,
     view: () => record,
     toClientEvent: (event) => event,
     refreshContext: async () => {},
-    fork: async () => { operations.push("fork"); },
+    fork: async () => { operations.push("fork"); return { opaqueSession: "/tmp/fork.jsonl" }; },
     publish: (_record, event) => { operations.push(event); },
     readTranscript: async () => ({
       messages: [{ id: "user-kept", role: "user", content: "keep" }],
@@ -129,6 +135,7 @@ test("a successful fork replaces the browser transcript before the new prompt", 
     },
     config: {},
     findChatContext: async () => ({ chat, project }),
+    lifecycle,
     backends: { get: () => record, forChat: () => adapter },
   });
 
@@ -145,6 +152,64 @@ test("a successful fork replaces the browser transcript before the new prompt", 
     tools: [],
   });
   assert.equal(operations[3], "prompt");
+});
+
+test("a fork submits its prompt before Pi creates the child session file", async () => {
+  const operations = [];
+  const updates = [];
+  const sent = [];
+  const record = {
+    id: "live-1", chatId: "chat-1", projectId: "project-1", status: "running",
+    sessionFile: "/tmp/provisional-fork.jsonl", hostUiRequests: [],
+  };
+  const adapter = {
+    getCapabilities: () => ({ fork: true, regenerate: true }),
+    attach: () => null,
+    view: () => record,
+    toClientEvent: (event) => event,
+    refreshContext: async () => {},
+    fork: async () => { operations.push("fork"); return { opaqueSession: "/tmp/provisional-fork.jsonl" }; },
+    publish: (_record, event) => { operations.push(event.type); },
+    readTranscript: async () => {
+      operations.push("read");
+      throw Object.assign(new Error("session file not written"), { code: "ENOENT" });
+    },
+    prompt: async () => { operations.push("prompt"); return "generation-1"; },
+  };
+  const chat = {
+    id: "chat-1", status: "active", title: "Chat",
+    backend: { implementation: "conduit_pi", opaqueSession: "/tmp/durable-session.jsonl" },
+  };
+  const project = { id: "project-1", kind: "workspace", workingRoot: "/tmp" };
+  const ws = new EventEmitter();
+  ws.readyState = 1;
+  ws.send = (message) => { sent.push(JSON.parse(message)); };
+  const stream = createLiveSessionStream({
+    manager: {},
+    wss: { handleUpgrade: (_request, _socket, _head, accept) => accept(ws) },
+    attachments: {
+      resolveMany: async () => [],
+      recordMessage: async () => {},
+    },
+    registry: {
+      metadata: () => chat,
+      update: async (_id, patch) => { updates.push(patch); return chat; },
+      markUserMessage: async () => chat,
+    },
+    config: {},
+    findChatContext: async () => ({ chat, project }),
+    lifecycle,
+    backends: { get: () => record, forChat: () => adapter },
+  });
+
+  stream.handleUpgrade(record.id, {}, {}, null);
+  ws.emit("message", JSON.stringify({ type: "fork_and_prompt", entryId: "user-old", message: "replacement" }));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(operations, ["fork", "read", "history_forked", "prompt"]);
+  assert.deepEqual(updates, [{ backend: { implementation: "conduit_pi", opaqueSession: "/tmp/provisional-fork.jsonl" } }]);
+  assert.equal(chat.backend.opaqueSession, "/tmp/durable-session.jsonl");
+  assert.equal(sent.some((event) => event.type === "client_error"), false);
 });
 
 test("an unknown browser command cannot reach a backend escape hatch", async () => {
@@ -165,7 +230,11 @@ test("an unknown browser command cannot reach a backend escape hatch", async () 
     attachments: {},
     registry: { metadata: () => ({ backend: { implementation: "conduit_pi" } }) },
     config: {},
-    findChatContext: async () => null,
+    findChatContext: async () => ({
+      chat: { id: "chat-1" },
+      project: { id: "project-1" },
+    }),
+    lifecycle,
     backends: { get: () => record, forChat: () => adapter },
   });
 

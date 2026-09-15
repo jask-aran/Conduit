@@ -77,10 +77,7 @@ function flushEvents() {
 flushEvents();
 `);
   await fs.chmod(conduitPi, 0o755);
-  const nativePi = path.join(root, "native-pi");
-  await fs.copyFile(conduitPi, nativePi);
-  await fs.chmod(nativePi, 0o755);
-  return { conduitPi, nativePi };
+  return { conduitPi };
 }
 
 async function writeFakeCodex(root, wsModulePath) {
@@ -222,7 +219,7 @@ export async function startConduitHarness({ env = {} } = {}) {
   const origin = `http://127.0.0.1:${port}`;
   const commandLog = path.join(root, "pi-commands.jsonl");
   const eventLog = path.join(root, "pi-events.jsonl");
-  const { conduitPi, nativePi } = await writeFakePi(root);
+  const { conduitPi } = await writeFakePi(root);
   const codexCommand = await writeFakeCodex(root, createRequire(import.meta.url).resolve("ws"));
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: path.resolve(import.meta.dirname, "../.."),
@@ -243,8 +240,6 @@ export async function startConduitHarness({ env = {} } = {}) {
       CONDUIT_VOICE_RECORDINGS_ROOT: path.join(root, "voice-recordings"),
       CONDUIT_PI_AGENT_DIR: path.join(root, "pi"),
       CONDUIT_PI_COMMAND: conduitPi,
-      CONDUIT_NATIVE_PI_COMMAND: nativePi,
-      CONDUIT_NATIVE_PI_AGENT_DIR: path.join(root, "native-agent"),
       CONDUIT_CODEX_COMMAND: codexCommand,
       CONDUIT_WORKSPACE_ALLOWLIST: root,
       TEST_PI_COMMAND_LOG: commandLog,

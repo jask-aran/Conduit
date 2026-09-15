@@ -11,7 +11,6 @@ export function registerRuntimeRoutes(app, {
   isPathInside,
   isShuttingDown,
   listDirectorySuggestions,
-  nativePreflight,
   preferences,
   resolveTemplate,
   runtimeHub,
@@ -40,7 +39,7 @@ export function registerRuntimeRoutes(app, {
     templates: true,
     workspaces: true,
     workspaceModes: ["managed", "linked", "created", "cloned"],
-    piRuntimes: ["conduit_profile", "native_pi"],
+    piRuntimes: ["conduit_profile"],
     maxAttachmentBytes: attachments.maxBytes,
   }));
 
@@ -50,15 +49,6 @@ export function registerRuntimeRoutes(app, {
     } catch (error) {
       next(Object.assign(new Error("Unable to determine this host's Tailscale address"), { cause: error }));
     }
-  });
-
-  app.get("/v0/workspaces/:id/native-preflight", async (request, response, next) => {
-    try {
-      const project = await projects.get(request.params.id);
-      if (!project || project.kind !== "workspace") return response.status(404).json({ error: "workspace_not_found" });
-      await projects.validate(project);
-      response.json(await nativePreflight(project));
-    } catch (error) { next(error); }
   });
 
   const workspacePolicy = () => {

@@ -27,6 +27,64 @@ test("chat lifecycle serializes a move behind launch work", async () => {
   assert.deepEqual(order, ["launch", "launch-complete", "move"]);
 });
 
+test("concurrent launch requests join the chat creation launch", async () => {
+  const lifecycle = new ChatLifecycle();
+  const ready = deferred();
+  const release = deferred();
+  let starts = 0;
+  const first = lifecycle.runLaunch("chat-a", async () => {
+    starts += 1;
+    ready.resolve();
+    await release.promise;
+    return "live-a";
+  });
+  await ready.promise;
+  const second = lifecycle.runLaunch("chat-a", async () => {
+    starts += 1;
+    return "live-b";
+  });
+  release.resolve();
+  assert.deepEqual(await Promise.all([first, second]), ["live-a", "live-a"]);
+  assert.equal(starts, 1);
+});
+
+test("concurrent launch requests reject different settings", async () => {
+  const lifecycle = new ChatLifecycle();
+  const ready = deferred();
+  const release = deferred();
+  const first = lifecycle.runLaunch("chat-a", async () => {
+    ready.resolve();
+    await release.promise;
+  }, { model: "one" });
+  await ready.promise;
+  await assert.rejects(lifecycle.runLaunch("chat-a", async () => {}, { model: "two" }), {
+    code: "live_session_start_mismatch",
+  });
+  release.resolve();
+  await first;
+});
+
+test("a passive open joins a launch that already selected its model", async () => {
+  const lifecycle = new ChatLifecycle();
+  let release;
+  let started;
+  const running = new Promise((resolve) => { started = resolve; });
+  const first = lifecycle.runLaunch("chat", async () => {
+    await running;
+    return new Promise((resolve) => { release = resolve; });
+  }, {
+    requestedProject: "project", model: "gpt", thinkingLevel: "high", forceModel: true,
+  });
+  started();
+  while (!release) await Promise.resolve();
+  const second = lifecycle.runLaunch("chat", () => assert.fail("duplicate launch"), {
+    requestedProject: "project", model: "", thinkingLevel: "", forceModel: false,
+  });
+  release("live");
+  assert.equal(await second, "live");
+  await first;
+});
+
 test("chat deletion prevents a concurrent launch before process inspection", async () => {
   const lifecycle = new ChatLifecycle();
   const deleting = deferred();
@@ -35,7 +93,7 @@ test("chat deletion prevents a concurrent launch before process inspection", asy
   });
   await assert.rejects(
     lifecycle.runLaunch("chat-a", async () => {}),
-    { code: "live_session_starting" },
+    { code: "chat_deleting" },
   );
   deleting.resolve();
   await removal;
@@ -59,4 +117,14 @@ test("project deletion blocks new launches and waits for an in-flight mapping co
   const finish = await deletion;
   finish();
   await launch;
+});
+
+test("project deletion releases its guard when active work does not drain", async () => {
+  const lifecycle = new ChatLifecycle({ projectDrainTimeoutMs: 5 });
+  const held = deferred();
+  const work = lifecycle.withProjects(["project-a"], () => held.promise);
+  await assert.rejects(lifecycle.beginProjectDeletion("project-a"), { code: "project_busy" });
+  assert.doesNotThrow(() => lifecycle.assertAvailable("chat-a", "project-a"));
+  held.resolve();
+  await work;
 });

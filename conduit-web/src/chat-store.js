@@ -4,6 +4,7 @@ import path from "node:path";
 import { readSessionMetadata, readSessionParentSession, validateSessionFile } from "./session-store.js";
 import { ensureChatTree } from "./owned-paths.js";
 import { harnessIdForImplementation, piBackendFor, withPiCompatibilityFields } from "./chat-backend.js";
+import { conduitPiSessionFile } from "./backend-session.js";
 
 const CHAT_ID = /^[a-zA-Z0-9_-]{8,128}$/;
 const COMPLETED_ATTACHMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}--.+$/i;
@@ -33,11 +34,11 @@ export function chatDirectory(project, chatId) {
 
 export function chatView(chat) {
   if (!chat) return null;
-  const { piSessionId, piSessionFile, backend, ...view } = chat;
+  const { backend, ...view } = chat;
   const { opaqueSession, ...identity } = backend || piBackendFor(chat);
   return {
     ...view,
-    harnessId: harnessIdForImplementation(identity.implementation),
+    harnessId: harnessIdForImplementation(identity.implementation, identity.installationId),
     backend: identity,
     profileId: identity.profileId,
     profileRevision: identity.profileRevision,
@@ -45,7 +46,8 @@ export function chatView(chat) {
 }
 
 function sessionFileFor(item) {
-  return item?.piSessionFile || item?.file ? path.resolve(item.piSessionFile || item.file) : null;
+  const file = conduitPiSessionFile(item);
+  return file ? path.resolve(file) : null;
 }
 
 function modelThinkingLevelsFor(item) {
@@ -80,8 +82,7 @@ function sessionFamilies(files, parents) {
 }
 
 function preferredFamilyChat(rows) {
-  return rows.find((item) => item.id !== (item.piSessionId || item.nativeId))
-    || [...rows].sort((left, right) => String(right.updatedAt || right.createdAt || "").localeCompare(String(left.updatedAt || left.createdAt || "")))[0];
+  return [...rows].sort((left, right) => String(right.updatedAt || right.createdAt || "").localeCompare(String(left.updatedAt || left.createdAt || "")))[0];
 }
 
 export class ChatStore {
@@ -104,11 +105,9 @@ export class ChatStore {
     const stored = item?.runtime;
     if (stored?.kind === "native_pi") {
       return {
-        kind: "native_pi",
-        installationId: "host-pi",
-        binaryVersion: stored.binaryVersion || null,
-        profileId: null,
-        profileVersion: null,
+        ...this.defaultRuntime,
+        profileId: templateId || this.defaultRuntime.profileId || null,
+        profileVersion: templateVersion || this.defaultRuntime.profileVersion || null,
       };
     }
     return {
@@ -168,16 +167,15 @@ export class ChatStore {
       if (family && familyOwners.get(family) !== item.id) {
         continue;
       }
-      const nativeRuntime = item.runtime?.kind === "native_pi";
       const active = legacyRegistry
         ? item.status === "active" || item.status === "persisted" || Boolean(item.file)
         : item.status === "active";
       const externalBackend = item.backend && item.backend.protocol !== "pi_rpc";
-      if (active && (!piSessionFile || !await fileExists(piSessionFile)) && !nativeRuntime && !externalBackend) continue;
+      if (active && (!piSessionFile || !await fileExists(piSessionFile)) && !externalBackend) continue;
       let sessionMetadata = null;
       if (piSessionFile && await fileExists(piSessionFile)) {
         try { sessionMetadata = await readSessionMetadata(piSessionFile, project); }
-        catch { if (!nativeRuntime) continue; }
+        catch { continue; }
       }
       if (!active && piSessionFile && !await fileExists(piSessionFile)) piSessionFile = null;
       const createdAt = item.createdAt || new Date(this.now()).toISOString();
@@ -191,9 +189,10 @@ export class ChatStore {
           ? item.templateVersion.trim()
           : null,
         runtime: externalBackend ? null : this.runtimeFor(item, item.templateId, item.templateVersion),
-        backend: item.backend || null,
-        piSessionId: item.piSessionId || item.nativeId || (active ? item.id : null),
-        piSessionFile,
+        backend: externalBackend ? item.backend : {
+          ...(item.backend || piBackendFor(item)),
+          opaqueSession: piSessionFile,
+        },
         modelThinkingLevels: modelThinkingLevelsFor(item),
         createdAt,
         updatedAt: item.updatedAt || createdAt,
@@ -247,8 +246,7 @@ export class ChatStore {
               templateId: null,
               templateVersion: null,
               runtime: this.runtimeFor(null),
-              piSessionId: session.nativeId || session.id,
-              piSessionFile: session.file,
+              backend: { ...piBackendFor({ runtime: this.defaultRuntime }), opaqueSession: session.file },
               modelThinkingLevels: {},
               createdAt: session.createdAt,
               updatedAt: session.updatedAt,
@@ -353,10 +351,11 @@ export class ChatStore {
 
   async find(projects, id) {
     const chat = this.metadata(id);
-    if (!chat?.piSessionFile) return null;
+    const sessionFile = conduitPiSessionFile(chat);
+    if (!sessionFile) return null;
     const project = projects.find((item) => item.id === chat.projectId);
     if (!project) return null;
-    try { return { ...(await validateSessionFile(chat.piSessionFile, project)), chatId: chat.id }; }
+    try { return { ...(await validateSessionFile(sessionFile, project)), chatId: chat.id }; }
     catch (error) { if (error.code === "ENOENT") return null; throw error; }
   }
 
@@ -373,8 +372,6 @@ export class ChatStore {
         : null,
       runtime: backend?.protocol === "pi_rpc" || !backend ? this.runtimeFor({ runtime }, templateId, templateVersion) : null,
       backend,
-      piSessionId: null,
-      piSessionFile: null,
       modelThinkingLevels: {},
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -395,8 +392,7 @@ export class ChatStore {
     const previousAssistantCompletedAt = chat.lastAssistantCompletedAt;
     Object.assign(chat, {
       status: "active",
-      piSessionId: session.nativeId || session.id || chat.piSessionId,
-      piSessionFile: path.resolve(session.file),
+      backend: { ...(chat.backend || piBackendFor(chat)), opaqueSession: path.resolve(session.file) },
       updatedAt: session.updatedAt || new Date(this.now()).toISOString(),
       lastUserMessageAt: session.lastUserMessageAt || chat.lastUserMessageAt || null,
       lastAssistantCompletedAt: session.lastAssistantCompletedAt || chat.lastAssistantCompletedAt || null,
@@ -436,7 +432,7 @@ export class ChatStore {
   async update(chatId, patch) {
     const chat = this.metadata(chatId);
     if (!chat) return null;
-    const canSelectBackend = chat.status === "draft" && !chat.piSessionFile && !chat.lastUserMessageAt;
+    const canSelectBackend = chat.status === "draft" && !conduitPiSessionFile(chat) && !chat.lastUserMessageAt;
     const allowed = [
       "projectId",
       "title",
@@ -444,8 +440,6 @@ export class ChatStore {
       "templateVersion",
       "runtime",
       "backend",
-      "piSessionId",
-      "piSessionFile",
       "modelThinkingLevels",
       "updatedAt",
       "lastUserMessageAt",
@@ -461,8 +455,7 @@ export class ChatStore {
     }
     if (chat.runtime) chat.runtime = this.runtimeFor(chat, chat.templateId, chat.templateVersion);
     if (patch.status === "draft" || patch.status === "active") chat.status = patch.status;
-    if (chat.piSessionFile) chat.piSessionFile = path.resolve(chat.piSessionFile);
-    if (canSelectBackend && patch.backend == null && !patch.piSessionFile
+    if (canSelectBackend && patch.backend == null
       && ["templateId", "templateVersion", "runtime"].some((key) => Object.hasOwn(patch, key))) {
       chat.backend = piBackendFor(chat);
     }
@@ -528,7 +521,8 @@ export class ChatStore {
   async removeEmptyDraft(chatId, project) {
     const chat = this.metadata(chatId);
     if (!chat || chat.status !== "draft" || await this.hasAttachments(project, chatId)) return false;
-    if (chat.piSessionFile) await fs.rm(chat.piSessionFile, { force: true });
+    const sessionFile = conduitPiSessionFile(chat);
+    if (sessionFile) await fs.rm(sessionFile, { force: true });
     await this.remove(chatId, project);
     return true;
   }
@@ -542,9 +536,9 @@ export class ChatStore {
   flush() {
     for (const chat of this.chats) {
       if (chat.backend?.protocol !== "pi_rpc") chat.backend ||= piBackendFor(chat);
-      else chat.backend = { ...(chat.backend || piBackendFor(chat)), opaqueSession: chat.piSessionFile || null };
+      else chat.backend = { ...(chat.backend || piBackendFor(chat)), opaqueSession: conduitPiSessionFile(chat) };
     }
-    const value = `${JSON.stringify({ version: 4, chats: this.chats }, null, 2)}\n`;
+    const value = `${JSON.stringify({ version: 5, chats: this.chats }, null, 2)}\n`;
     this.writeQueue = this.writeQueue.then(async () => {
       await fs.mkdir(path.dirname(this.file), { recursive: true });
       const temporary = `${this.file}.tmp`;

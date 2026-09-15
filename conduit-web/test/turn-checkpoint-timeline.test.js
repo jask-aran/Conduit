@@ -34,6 +34,21 @@ const message = (id, parentId, role, text, timestamp) => JSON.stringify({
   type: "message", id, parentId, timestamp, message: { role, content: text },
 });
 
+test("neutral timeline keeps a checkpoint before the adapter supplies a message id", async () => {
+  const { store, files } = await workspace();
+  await writeCheckpoint(store, { id: "accepted-generation", createdAt: "2026-01-01T00:00:00.000Z", workingRoot: files });
+  await fs.writeFile(path.join(files, "note.txt"), "one\ntwo\n");
+
+  const checkpoints = new TurnCheckpointStore(store);
+  const timeline = await checkpoints.timeline(CHAT, files);
+  assert.deepEqual(timeline.map(({ id, messageId }) => ({ id, messageId })), [
+    { id: "accepted-generation", messageId: null },
+  ]);
+  assert.deepEqual(timeline[0].summary, { added: 2, removed: 0, preferredPath: "note.txt" });
+  const review = await checkpoints.review(CHAT, files, "turn", "accepted-generation");
+  assert.deepEqual(review.files.map((file) => file.path), ["note.txt"]);
+});
+
 /**
  * A regenerate forks the session: Pi keeps what came before the forked entry,
  * writes the rest to a new file, and the turn that follows gets entirely new

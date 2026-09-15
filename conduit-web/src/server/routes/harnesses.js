@@ -138,7 +138,7 @@ export function registerHarnessRoutes(app, { backends, preferences, projects, re
         ? remembered.thinkingLevel
         : selected?.defaultThinkingLevel || selected?.thinkingLevels[0] || "";
       response.json({
-        installationId: implementation === "codex" ? "host-codex" : implementation,
+        installationId: backends.manifestFor(implementation)?.installationId || implementation,
         runtimeKind: implementation,
         models,
         model,

@@ -12,5 +12,7 @@ export const manifestFor = (id) => MANIFESTS.find((manifest) => manifest.id === 
 /** Implementation keys a manifest answers to, defaulting to its own id. */
 export const implementationsOf = (manifest) => manifest.implementations || [manifest.id];
 
-export const manifestForImplementation = (implementation) =>
-  MANIFESTS.find((manifest) => implementationsOf(manifest).includes(implementation)) || null;
+const MANIFEST_BY_IMPLEMENTATION = new Map(MANIFESTS.flatMap((manifest) =>
+  implementationsOf(manifest).map((implementation) => [implementation, manifest])));
+
+export const manifestForImplementation = (implementation) => MANIFEST_BY_IMPLEMENTATION.get(implementation) || null;

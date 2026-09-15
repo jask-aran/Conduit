@@ -1,8 +1,12 @@
-export type RuntimeKind = "conduit_profile" | "native_pi" | "codex";
+export type RuntimeKind = "conduit_profile" | "codex";
 export interface ChatCapabilities {
+  history: "none" | "linear" | "tree";
+  fork: boolean;
+  regenerate: boolean;
   steer: boolean; followUpQueue: boolean; cancel: boolean; compaction: boolean;
   thinkingLevels: boolean; modelSwitch: boolean; toolUse: boolean; permissions: boolean;
   usage: boolean; replay: boolean;
+  attachments: boolean;
 }
 
 export interface HarnessCommand {
@@ -301,6 +305,8 @@ export interface Template {
   runtimeOverlays?: string[];
   runtime?: RuntimeIdentity;
   disabled?: boolean;
+  capabilities?: ChatCapabilities;
+  drive?: boolean;
 }
 
 export interface Installation {
@@ -408,6 +414,8 @@ export interface RuntimeProcess {
   compacting?: boolean;
   retry?: RetryState | null;
   modelProfile?: ModelProfileView | null;
+  runtime?: RuntimeIdentity;
+  capabilities?: ChatCapabilities;
 }
 
 export interface LiveRecord {

@@ -17,7 +17,7 @@ import type { ChatSummary, Project, Template } from "../api/contracts";
 import {
   COMMAND_IDS, getCommandDefinition,
 } from "../commands/command-registry.ts";
-import { chatSortStamp, compareChatsBySort } from "../preferences/chat-sort";
+import { chatSortStamp, compareChatsBySort } from "../preferences/chat-sort.ts";
 
 export interface PaletteContext {
   nativeApp: boolean;

@@ -89,7 +89,7 @@ export function createModelSettings(onError: ErrorHandler, onThinkingLevelRecove
       }
       pendingThinkingLevels.delete(chatId);
       setNotice(catalog.requiresAuthentication
-        ? `Authenticate ${catalog.runtimeKind === "native_pi" ? "Host Pi" : "Isolated Pi"} to use models.`
+        ? "Authenticate Conduit Pi to use models."
         : "");
     } catch (error) {
       if (activeChatId === chatId && requestId === requestSequence) onError(error);

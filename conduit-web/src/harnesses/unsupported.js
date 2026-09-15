@@ -29,7 +29,7 @@ export function unsupported(capabilities, { label, overrides = {} } = {}) {
   // a throw would surface as a failed chat rather than an absent number.
   if (!capabilities.usage) stubs.refreshContext = () => Promise.resolve(null);
   if (!capabilities.compaction) stubs.compact = refuse(`${label} does not support compaction`);
-  // History forks have no capability flag; no backend but Pi implements one.
-  stubs.fork = refuse(`${label} history forks are unavailable`);
+  if (!capabilities.fork) stubs.fork = refuse(`${label} history forks are unavailable`);
+  if (capabilities.history === "none") stubs.readHistory = refuse(`${label} history is unavailable`);
   return { ...stubs, ...overrides };
 }
