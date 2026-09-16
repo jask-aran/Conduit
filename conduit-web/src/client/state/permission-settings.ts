@@ -11,15 +11,25 @@ export function createPermissionSettings(onError: ErrorHandler) {
   let requestSequence = 0;
 
   const select = async (chatId: string) => {
+    const changed = activeChatId !== chatId;
     activeChatId = chatId;
     const requestId = ++requestSequence;
+    // Drop the previous chat's modes before asking for this one's. They belong
+    // to a session with its own harness, and leaving them up for the length of
+    // a request put another harness's permission profiles in front of someone
+    // -- offering a choice this chat cannot make.
+    if (changed) { setProfiles([]); setSelected(""); }
     try {
       const state = await api<PermissionModeState>(`/v0/chats/${encodeURIComponent(chatId)}/permission-profiles`);
       if (activeChatId !== chatId || requestId !== requestSequence) return;
       setProfiles(asList<PermissionMode>(state.modes));
       setSelected(state.selected || "");
     } catch (error) {
-      if (activeChatId === chatId && requestId === requestSequence) onError(error);
+      if (activeChatId !== chatId || requestId !== requestSequence) return;
+      // Showing nothing is the honest answer when we could not find out.
+      setProfiles([]);
+      setSelected("");
+      onError(error);
     }
   };
 

@@ -16,7 +16,7 @@ import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, 
 import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/client";
 import { buildHttpUrl, clearServerOrigin, configuredServerOrigin, loginUrl, logoutUrl, normalizeServerOrigin, saveServerOrigin, transcriptUrl } from "./api/transport";
 import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
-import type { ChatCapabilities, ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
+import type { BooleanCapability, ChatCapabilities, ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
 import { AppDashboard } from "./dashboard/app-dashboard";
@@ -584,6 +584,31 @@ function App() {
   });
   const activeProfile = createMemo(() => profiles().find((item) => item.id === chat.templateId())
     || profiles().find((item) => item.id === defaultTemplateId()) || null);
+  /**
+   * Whether a capability is on for the chat currently in front of us.
+   *
+   * Two sources describe a session: the harness manifest carried by its
+   * profile, which says what this harness can ever do, and the capabilities the
+   * chat itself reported, which arrive with a live record and refine it. Either
+   * one saying no is enough. Reading them separately is what let a control
+   * survive a chat switch -- a signal belonging to the session before this one
+   * is still a signal, and it lit up a control the new session could not
+   * honour. Capability-gated UI asks here rather than reaching for either
+   * source, so there is one place to be right as more of it appears.
+   */
+  const chatCapability = (name: BooleanCapability, fallback = false): boolean => {
+    const manifest = activeProfile()?.capabilities?.[name];
+    const reported = chat.capabilities()?.[name];
+    // The manifest decides, and it is known the moment a chat is selected, so
+    // the UI is right before any process exists. A live record may only narrow
+    // it: a resident process can be older than the profile the chat now names
+    // -- profileRevision tracks exactly that skew -- so it can lack something
+    // the manifest promises. It may never add one. A control that appears only
+    // once a process is running is a control that flickers in, or worse, one
+    // still holding the answer for the session before this one.
+    if (manifest === undefined) return reported === undefined ? fallback : Boolean(reported);
+    return manifest === false ? false : reported !== false;
+  };
   const emptyChat = createMemo(() => chat.loadedId() === catalogue.selectedId() && !chat.messages().length && !chat.tools().length && !isChatContentActivity(chat.activity()));
   diagnosticContext = () => {
     const identity = chat.runtimeIdentity();
@@ -1915,9 +1940,9 @@ function App() {
             composer={<Composer
               chat={chat}
               attachments={attachments}
-              attachmentsSupported={chat.capabilities()?.attachments !== false && activeProfile()?.capabilities?.attachments !== false}
+              attachmentsSupported={chatCapability("attachments", true)}
               models={models}
-              permissions={chat.capabilities()?.permissions ? permissions : undefined}
+              permissions={chatCapability("permissions") ? permissions : undefined}
               profiles={profiles()}
               activeProfile={activeProfile()}
               serverOnline={runtime.connectivity() === "online"}
@@ -2002,7 +2027,7 @@ function App() {
             <section class="work-area-conversation" aria-label="Conversation">
               <Transcript chat={chat} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} projectId={selectedProject()?.id} />
               <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-                <Composer chat={chat} attachments={attachments} attachmentsSupported={chat.capabilities()?.attachments !== false && activeProfile()?.capabilities?.attachments !== false} models={models} permissions={chat.capabilities()?.permissions ? permissions : undefined} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
+                <Composer chat={chat} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissions") ? permissions : undefined} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
             </section>
           </div>
         </>}>
@@ -2011,9 +2036,9 @@ function App() {
             composer={<Composer
               chat={chat}
               attachments={attachments}
-              attachmentsSupported={chat.capabilities()?.attachments !== false && activeProfile()?.capabilities?.attachments !== false}
+              attachmentsSupported={chatCapability("attachments", true)}
               models={models}
-              permissions={chat.capabilities()?.permissions ? permissions : undefined}
+              permissions={chatCapability("permissions") ? permissions : undefined}
               profiles={profiles()}
               activeProfile={activeProfile()}
               serverOnline={runtime.connectivity() === "online"}
