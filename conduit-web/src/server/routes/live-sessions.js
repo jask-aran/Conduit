@@ -1,4 +1,5 @@
 import { createLiveSessionLauncher, maySpawnProcess } from "../live-session-launcher.js";
+import { rememberModel } from "../../profile-model-memory.js";
 
 export function registerLiveSessionRoutes(app, {
   attachments,
@@ -8,7 +9,7 @@ export function registerLiveSessionRoutes(app, {
   findChatContext,
   lifecycle,
   manager,
-  modelProfileRuntime,
+  preferences,
   registry,
   runtimeFor,
   runtimeSettings,
@@ -21,7 +22,6 @@ export function registerLiveSessionRoutes(app, {
     findChatContext,
     lifecycle,
     manager,
-    modelProfileRuntime,
     registry,
     runtimeFor,
     templateForChat,
@@ -152,6 +152,9 @@ export function registerLiveSessionRoutes(app, {
       }
       if (spec) await adapter.setModel(live.id, spec);
       if (thinkingLevel) await adapter.setThinkingLevel(live.id, thinkingLevel);
+      // Driving a harness thread is still choosing on that profile.
+      await rememberModel(preferences, live.adapterImplementation, targetModel,
+        thinkingLevel || current.thinkingLevel || "");
       response.json({ ...current, model: targetModel, thinkingLevel: thinkingLevel || current.thinkingLevel });
     } catch (error) { next(error); }
   });

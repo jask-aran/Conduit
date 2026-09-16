@@ -50,7 +50,6 @@ export function createLiveSessionLauncher({
   findChatContext,
   lifecycle,
   manager,
-  modelProfileRuntime,
   registry,
   runtimeFor,
   templateForChat,
@@ -82,7 +81,7 @@ export function createLiveSessionLauncher({
 
     await reclaimForNewProcess(context.chat.id);
     const result = await adapter.launch(context, { model, thinkingLevel, forceModel }, {
-      catalogFor, config, lifecycle, modelProfileRuntime, runtimeFor, templateForChat,
+      catalogFor, config, lifecycle, runtimeFor, templateForChat,
     });
     await registry.update(context.chat.id, result.mapping);
     return { live: result.live, modelRecovery: result.modelRecovery };

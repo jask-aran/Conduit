@@ -1,10 +1,9 @@
 import { resolveTemplate } from "../../config.js";
+import { rememberModel } from "../../profile-model-memory.js";
 import { chatView, isChatId } from "../../chat-store.js";
 import { stopSessionProcesses } from "../../session-operations.js";
 import { agentProfiles, conduitPiSessionFile, harnessCapabilities, profileSelection } from "../../chat-backend.js";
 import { manifestForImplementation } from "../../harnesses/index.js";
-import { resolveModelProfile } from "../../model-profiles.js";
-import { usesWebSearchOverlay } from "../../model-profile-runtime.js";
 
 const opaqueSessionId = (chat) => typeof chat.backend?.opaqueSession === "string"
   ? chat.backend.opaqueSession
@@ -430,12 +429,7 @@ export function registerChatRoutes(app, {
         await registry.update(context.chat.id, {
           backend: { ...context.chat.backend, model }, modelThinkingLevels,
         });
-        await preferences.save({
-          backendModelDefaults: {
-            ...preferences.get().backendModelDefaults,
-            [implementation]: { model, ...(effort ? { thinkingLevel: effort } : {}) },
-          },
-        });
+        await rememberModel(preferences, implementation, model, effort);
         return response.json({ ...current, model, thinkingLevel: effort, modelThinkingLevels });
       }
       const saveThinkingPreference = async () => {
@@ -447,32 +441,13 @@ export function registerChatRoutes(app, {
       const resident = backends.getByChatId(context.chat.id);
       if (resident) {
         const adapter = backends.forChat(context.chat);
-        const template = templateForChat(context.chat, context.project);
-        const targetProfile = targetModel && usesWebSearchOverlay(template)
-          ? resolveModelProfile(config.modelProfiles, targetModel) : null;
-        const changesProfile = Boolean(targetProfile && resident.modelProfile?.id !== targetProfile.id);
-        if (changesProfile && (resident.active || resident.stopping || resident.activity === "working")) {
-          return response.status(409).json({
-            error: "model_profile_transition_busy",
-            message: "Finish the current response before changing to a model with different runtime settings.",
-          });
-        }
-        if (spec && spec !== current.model) {
-          await adapter.setModel(resident.id, spec);
-        }
-        if (changesProfile) {
-          await adapter.close(resident.id);
-          await launchLiveSession({
-            chatId: context.chat.id,
-            requestedProject: context.project.id,
-            model: targetModel,
-            thinkingLevel,
-            forceModel: true,
-            alreadyLocked: true,
-          });
-        }
-        const activeResident = backends.getByChatId(context.chat.id);
-        if (thinkingLevel && activeResident) await adapter.setThinkingLevel(activeResident.id, thinkingLevel);
+        // Changing model is a live setting, not a relaunch. It used to restart
+        // the agent whenever the new model resolved to a different search
+        // overlay, because the overlay was materialised into the process at
+        // launch; the harness does its own web access now, so there is nothing
+        // to rebuild and nothing to restart.
+        if (spec && spec !== current.model) await adapter.setModel(resident.id, spec);
+        if (thinkingLevel) await adapter.setThinkingLevel(resident.id, thinkingLevel);
       } else {
         if (context.chat.status !== "draft" || conduitPiSessionFile(context.chat)) {
           return response.status(409).json({ error: "live_session_required" });
@@ -482,6 +457,8 @@ export function registerChatRoutes(app, {
         if (spec) await catalogFor(runtime, template).updateDefault(context.project.workingRoot, spec, thinkingLevel);
       }
       await saveThinkingPreference();
+      await rememberModel(preferences, templateForChat(context.chat, context.project)?.id, targetModel,
+        thinkingLevel || context.chat.modelThinkingLevels?.[targetModel] || "");
       response.json(await chatModelView(context));
       });
     } catch (error) { next(error); }

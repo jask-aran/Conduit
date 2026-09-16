@@ -8,6 +8,7 @@ import { saveChatSort, useChatSort } from "../preferences/chat-sort";
 import { HarnessMark, ThreadHarnessMark } from "../harness-brand";
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { RuntimeIndicator } from "../navigation/runtime-indicator";
+import { notifyModelFallback } from "../state/model-settings";
 import { createDriveChat } from "../state/drive-chat";
 import type { DriveChatStore } from "../state/drive-chat";
 import type { RuntimeStore } from "../state/runtime";
@@ -80,6 +81,9 @@ export function HarnessDashboard(props: {
       setCatalogModels(state.models);
       setCatalogModel(state.model || state.models[0]?.spec || "");
       setCatalogEffort(state.thinkingLevel || state.defaultThinkingLevel || "");
+      // The model this profile was last on has gone. The composer opens on a
+      // stand-in either way; it does not do it quietly.
+      if (state.modelFallback?.from && state.modelFallback.to) notifyModelFallback(state.modelFallback);
     } catch (cause) {
       if (request === catalogRequest) setCatalogNotice(cause instanceof Error ? cause.message : "Models could not be loaded");
     } finally {
@@ -112,6 +116,17 @@ export function HarnessDashboard(props: {
       if (request === permissionRequest) setPermissionModes([]);
     }
   };
+  // There is no chat to PATCH yet, so the choice is held here for the chat the
+  // first message creates - and remembered for the profile straight away, since
+  // choosing is the decision and a message may never come.
+  const rememberChoice = (model: string, thinkingLevel: string) => {
+    const implementation = props.harness?.id;
+    const cwd = scope();
+    if (!implementation || !model) return;
+    void api(`/v0/harnesses/${encodeURIComponent(implementation)}/models`, {
+      method: "PATCH", body: JSON.stringify({ model, thinkingLevel, path: cwd || undefined }),
+    }).catch(() => {});
+  };
   const catalog: ComposerModels = {
     models: catalogModels,
     model: catalogModel,
@@ -120,14 +135,17 @@ export function HarnessDashboard(props: {
     chooseModel: (spec) => {
       const selected = catalogModels().find((item) => item.spec === spec);
       if (!selected) return false;
+      const level = selected.defaultThinkingLevel || selected.thinkingLevels[0] || "";
       setCatalogModel(spec);
-      setCatalogEffort(selected.defaultThinkingLevel || selected.thinkingLevels[0] || "");
+      setCatalogEffort(level);
+      rememberChoice(spec, level);
       return true;
     },
     chooseEffort: (level) => {
       const selected = catalogModels().find((item) => item.spec === catalogModel());
       if (!selected?.thinkingLevels.includes(level)) return false;
       setCatalogEffort(level);
+      rememberChoice(catalogModel(), level);
       return true;
     },
   };

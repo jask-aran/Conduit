@@ -49,13 +49,10 @@ test("repository templates are discoverable launch presets", () => {
   assert.equal(view.defaultable, true);
   assert.deepEqual(workspace.tools, ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check"]);
   assert.deepEqual(workspace.extensions, [path.resolve(root, "../conduit-web/node_modules/pi-web-access")]);
-  assert.deepEqual(workspace.runtimeOverlays, ["web-search"]);
-  assert.deepEqual(view.runtimeOverlays, ["web-search"]);
   assert.ok(view.skillCount >= 1);
   assert.deepEqual(workspace.skills, [path.resolve(root, "coding/skills/git-github"), path.resolve(root, "coding/skills/web-research"), path.resolve(root, "coding/skills/develop-loop")]);
   assert.equal(general.label, "Assistant");
   assert.equal(general.version, "9");
-  assert.deepEqual(general.runtimeOverlays, ["web-search"]);
   assert.deepEqual(general.skills, [path.resolve(root, "coding/skills/web-research")]);
   assert.deepEqual(general.tools, ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check"]);
   assert.deepEqual(general.extensions, [path.resolve(root, "../conduit-web/node_modules/pi-web-access")]);
@@ -74,7 +71,6 @@ test("repository templates are discoverable launch presets", () => {
   assert.match(codemodePrompt, /sandboxed Python/);
   assert.match(codemodePrompt, /does not load Conduit's sandbox, web-search, or\s+skills extensions/);
   assert.equal(view.extensionCount, 1);
-  assert.deepEqual(templatePublicView(codemode).runtimeOverlays, []);
   assert.equal(templatePublicView(templates.find((template) => template.id === "runtime")).defaultable, false);
 });
 

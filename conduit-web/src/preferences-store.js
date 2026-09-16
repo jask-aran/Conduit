@@ -5,7 +5,7 @@ const DEFAULTS = {
   defaultTemplateId: "assistant",
   sessionNameModel: "",
   sessionNameThinkingLevel: "off",
-  backendModelDefaults: {},
+  profileModelDefaults: {},
   terminalShortcuts: [],
   sidebarPins: [],
   sidebarChatLimit: null,
@@ -88,13 +88,17 @@ const validVoicePreferences = (value) => value && typeof value === "object" && !
   && oneOf(value.activation, ["push_to_talk", "toggle"])
   && typeof value.autoSend === "boolean"
   && oneOf(value.captureProfile, ["raw", "processed"]);
-const normalizeBackendModelDefaults = (value) => {
+// The last model somebody chose on a profile, so choosing it once is enough.
+// Keyed by profile rather than by backend: "Assistant" and "Coding" are two
+// answers to the same question, and sharing one entry between them meant
+// picking a model in one silently moved the other.
+const normalizeProfileModelDefaults = (value) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return Object.fromEntries(Object.entries(value).flatMap(([implementation, selection]) => {
+  return Object.fromEntries(Object.entries(value).flatMap(([profileId, selection]) => {
     const model = typeof selection?.model === "string" ? selection.model.trim() : "";
     const thinkingLevel = typeof selection?.thinkingLevel === "string" ? selection.thinkingLevel.trim() : "";
-    return implementation.length <= 80 && model && model.length <= 200
-      ? [[implementation, { model, ...(thinkingLevel && thinkingLevel.length <= 40 ? { thinkingLevel } : {}) }]]
+    return profileId.length <= 80 && model && model.length <= 200
+      ? [[profileId, { model, ...(thinkingLevel && thinkingLevel.length <= 40 ? { thinkingLevel } : {}) }]]
       : [];
   }).slice(0, 20));
 };
@@ -183,7 +187,7 @@ export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTempl
     defaultTemplateId,
     sessionNameModel,
     sessionNameThinkingLevel,
-    backendModelDefaults: normalizeBackendModelDefaults(input.backendModelDefaults ?? fallback.backendModelDefaults),
+    profileModelDefaults: normalizeProfileModelDefaults(input.profileModelDefaults ?? fallback.profileModelDefaults),
     terminalShortcuts,
     sidebarPins,
     sidebarChatLimit: nullable("sidebarChatLimit", (value) => Number.isFinite(Number(value))

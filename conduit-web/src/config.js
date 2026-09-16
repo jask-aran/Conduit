@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 import { listPiTemplates, loadPiTemplate, normalizeTemplateId } from "../../scripts/pi-runtime.mjs";
 import { expandHome, parseAllowlist } from "./workspace-paths.js";
 import { PiInstallationRegistry } from "./pi-installations.js";
-import { loadModelProfiles } from "./model-profiles.js";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -54,7 +53,6 @@ export function loadConfig(env = process.env) {
     env.CONDUIT_WORKSPACE_DEFAULT_ROOT || env.CONDUIT_WORKSPACE_SUGGESTION_ROOT || os.homedir(),
   );
   const piAgentDir = absolute(env.CONDUIT_PI_AGENT_DIR || path.join(dataRoot, "pi"));
-  const modelProfilesFile = absolute(env.CONDUIT_MODEL_PROFILES_FILE || path.join(templatesRoot, "model-profiles.json"));
   const installations = new PiInstallationRegistry({
     conduitAgentDir: piAgentDir,
     conduitCommand: env.CONDUIT_PI_COMMAND || "",
@@ -77,8 +75,6 @@ export function loadConfig(env = process.env) {
     draftsFile: absolute(env.CONDUIT_DRAFTS_FILE || path.join(dataRoot, "drafts.json")),
     piAgentDir,
     searchConfigFile: absolute(env.CONDUIT_SEARCH_CONFIG_FILE || path.join(piAgentDir, "web-search.json")),
-    modelProfilesFile,
-    modelProfiles: loadModelProfiles(modelProfilesFile),
     voiceConfigFile: absolute(env.CONDUIT_VOICE_CONFIG_FILE || path.join(dataRoot, "voice.json")),
     voiceModelRoot: absolute(env.CONDUIT_VOICE_MODEL_ROOT || path.join(dataRoot, "voice", "models")),
     voiceRecordingsRoot: absolute(env.CONDUIT_VOICE_RECORDINGS_ROOT || path.join(dataRoot, "voice", "recordings")),

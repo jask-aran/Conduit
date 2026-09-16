@@ -35,7 +35,7 @@ test("raw JSON uploads publish atomically through the durable chat route", async
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-server-api-"));
   const port = await availablePort();
   const origin = `http://127.0.0.1:${port}`;
-  const freshSessionFile = path.join(sessionDirectoryFor(path.join(root, "files"), path.join(root, "pi", "model-profiles", "brave-search")), "future.jsonl");
+  const freshSessionFile = path.join(sessionDirectoryFor(path.join(root, "files"), path.join(root, "pi")), "future.jsonl");
   const conduitPi = path.join(root, "conduit-pi");
   await fs.writeFile(conduitPi, `#!/usr/bin/env node
 if (process.argv.includes("--version")) { console.log("0.84.1"); process.exit(0); }
@@ -532,18 +532,9 @@ exit 0
     assert.equal(freshLive.status, 201, await freshLive.clone().text());
     const freshLiveBody = await freshLive.json();
     assert.equal(freshLiveBody.status, "running");
-    assert.deepEqual(freshLiveBody.modelProfile, {
-      id: "brave-search",
-      label: "Brave search",
-      searchRouting: {
-        providers: ["brave", "exa", "parallel", "openai"],
-        fallbackOn: ["transient", "quota", "network"],
-      },
-    });
-    const derivedSearchConfig = JSON.parse(await fs.readFile(path.join(root, "pi", "model-profiles", "brave-search", "web-search.json"), "utf8"));
-    assert.deepEqual(derivedSearchConfig.searchRouting.providers, ["brave", "exa", "parallel", "openai"]);
-    assert.equal("provider" in derivedSearchConfig, false);
-    assert.equal("searchProvider" in derivedSearchConfig, false);
+    // The harness owns web access now: nothing is materialised for a launch,
+    // so a live record carries no search profile of Conduit's making.
+    assert.equal(freshLiveBody.modelProfile, undefined);
     await assert.rejects(fs.access(freshSessionFile), { code: "ENOENT" });
 
     const directory = path.join(root, "files", ".conduit", "chats", chat.id);

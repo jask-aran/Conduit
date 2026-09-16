@@ -1,11 +1,29 @@
 import { createSignal } from "solid-js";
+import { toast } from "solid-sonner";
 import { api, asList } from "../api/client";
 import type { ModelOption, ModelState } from "../api/contracts";
 
 type ErrorHandler = (error: unknown) => void;
 type ThinkingLevelRecoveryHandler = (details: { from: string; to: string }) => void;
+type ModelFallbackHandler = (details: { from: string; to: string }) => void;
 
-export function createModelSettings(onError: ErrorHandler, onThinkingLevelRecovered: ThinkingLevelRecoveryHandler = () => {}) {
+/**
+ * Say that a profile's remembered model has gone and something else is standing
+ * in. Shared with the launch composer, which has no chat behind it and so gets
+ * the same news from its own catalogue fetch.
+ */
+export const notifyModelFallback = ({ from, to }: { from: string; to: string }) => {
+  toast.warning(`${from} is unavailable. Using ${to}.`, {
+    id: "model-memory-fallback",
+    duration: 8_000,
+  });
+};
+
+export function createModelSettings(
+  onError: ErrorHandler,
+  onThinkingLevelRecovered: ThinkingLevelRecoveryHandler = () => {},
+  onModelFallback: ModelFallbackHandler = () => {},
+) {
   const [allModels, setAllModels] = createSignal<ModelOption[]>([]);
   const [enabledModels, setEnabledModels] = createSignal<string[]>([]);
   const [models, setModels] = createSignal<ModelOption[]>([]);
@@ -20,7 +38,7 @@ export function createModelSettings(onError: ErrorHandler, onThinkingLevelRecove
   const [saving, setSaving] = createSignal(false);
   let activeProjectId = "";
   let activeChatId = "";
-  let activeBackend = "";
+  let activeProfile = "";
   let requestSequence = 0;
   let initialCatalogRefresh = true;
   const pendingThinkingLevels = new Map<string, string>();
@@ -89,6 +107,10 @@ export function createModelSettings(onError: ErrorHandler, onThinkingLevelRecove
         onThinkingLevelRecovered({ from: pendingThinkingLevel, to: nextEffort });
       }
       pendingThinkingLevels.delete(chatId);
+      // The profile's remembered model has gone and the catalogue default is
+      // standing in. The toast carries a fixed id, so repeated reloads replace
+      // one notice rather than stacking up.
+      if (catalog.modelFallback) onModelFallback(catalog.modelFallback);
       setNotice(catalog.requiresAuthentication
         ? "Authenticate this harness to use models."
         : "");
@@ -103,25 +125,26 @@ export function createModelSettings(onError: ErrorHandler, onThinkingLevelRecove
     projectId: string,
     chatId: string,
     selection?: { model?: string; thinkingLevel?: string },
-    { reloadChat: shouldReloadChat = true, backend = "" }: { reloadChat?: boolean; backend?: string } = {},
+    { reloadChat: shouldReloadChat = true, profile = "" }: { reloadChat?: boolean; profile?: string } = {},
   ) => {
     const changedProject = activeProjectId !== projectId;
     const changedChat = activeChatId !== chatId;
     // Switching a chat's profile keeps its id and changes everything a model
-    // means: the catalogue belongs to the harness, not to the chat. Holding the
-    // previous harness's models offered a Codex model in a Pi profile, and the
-    // launch that followed was refused for a model that profile has never had.
-    const changedBackend = Boolean(backend) && activeBackend !== backend;
+    // means: the catalogue and the remembered selection belong to the profile,
+    // not to the chat. Watching the harness instead missed every switch between
+    // profiles that share one - Assistant to Coding kept whichever model was
+    // last picked anywhere on Pi, because nothing below here was asked again.
+    const changedProfile = Boolean(profile) && activeProfile !== profile;
     activeProjectId = projectId;
     activeChatId = chatId;
-    activeBackend = backend || activeBackend;
-    if (changedBackend && !changedChat) {
+    activeProfile = profile || activeProfile;
+    if (changedProfile && !changedChat) {
       setModels([]);
       setModel("");
       setEffort("");
       setNotice("");
     }
-    if (changedChat || changedBackend) {
+    if (changedChat || changedProfile) {
       setModelThinkingLevels({});
       if (selection?.thinkingLevel) pendingThinkingLevels.set(chatId, selection.thinkingLevel);
       else pendingThinkingLevels.delete(chatId);
@@ -130,7 +153,7 @@ export function createModelSettings(onError: ErrorHandler, onThinkingLevelRecove
     if (changedProject) void reload(projectId);
     // A catalogue that just changed hands is fetched now rather than behind the
     // launch: what the launch is allowed to ask for depends on it.
-    return shouldReloadChat || changedBackend ? reloadChat(chatId) : Promise.resolve();
+    return shouldReloadChat || changedProfile ? reloadChat(chatId) : Promise.resolve();
   };
 
   const saveScope = async (nextEnabled: string[], defaultModel = settingsDefaultModel()) => {

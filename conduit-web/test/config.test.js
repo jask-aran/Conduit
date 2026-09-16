@@ -39,8 +39,6 @@ test("default runtime paths are owned by the repository root", () => {
   assert.equal(config.remotesFile.endsWith(path.join("data", "remotes.json")), true);
   assert.equal(config.piAgentDir.endsWith(path.join("data", "pi")), true);
   assert.equal(config.searchConfigFile.endsWith(path.join("data", "pi", "web-search.json")), true);
-  assert.equal(config.modelProfilesFile.endsWith(path.join("templates", "model-profiles.json")), true);
-  assert.deepEqual(config.modelProfiles.profiles.map((profile) => profile.id), ["openai-search", "brave-search"]);
   // The pinned installation is whatever the dependency resolves to. Asserting a
   // literal here only records the version at the time of writing, and fails on
   // every legitimate bump.

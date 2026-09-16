@@ -39,7 +39,7 @@ When a chat begins with a Conduit error report, treat it as an incident diagnosi
 - Do not delete, move, rewrite, migrate, or force-delete chat data unless the
   user names the exact targets and confirms the destructive action in this chat.
   State what will be removed and whether it can be recovered.
-- Name runtime, template, and model-profile identities and paths precisely. Do
+- Name runtime and template identities and paths precisely. Do
   not call a path or ownership mismatch a version mismatch without evidence of a
   version mismatch.
 - If the safe recovery is to remove disposable chats, identify the exact chat

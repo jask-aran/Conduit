@@ -54,7 +54,7 @@ import { createActiveChat, type ActiveChatStore } from "./state/active-chat";
 import { createAttachments, DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
 import { createDrafts } from "./state/drafts";
 import { createCatalogueStore } from "./state/catalogue";
-import { createModelSettings } from "./state/model-settings";
+import { createModelSettings, notifyModelFallback } from "./state/model-settings";
 import { createPermissionSettings } from "./state/permission-settings";
 import { createServiceLevelSettings } from "./state/service-level-settings";
 import { createRuntimeStore } from "./state/runtime";
@@ -529,7 +529,7 @@ function App() {
       id: "thinking-level-recovery",
       duration: 6_000,
     });
-  });
+  }, notifyModelFallback);
   const permissions = createPermissionSettings(showError);
   const serviceLevels = createServiceLevelSettings(showError);
   const attachments = createAttachments(showError, maxAttachmentBytes);

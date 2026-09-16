@@ -26,8 +26,6 @@ import { resolvePiLaunch } from "./pi-launch.js";
 import { AuthStore } from "./auth-store.js";
 import { PiAuthBroker } from "./pi-auth-broker.js";
 import { ChatLifecycle } from "./chat-lifecycle.js";
-import { ModelProfileRuntime, usesWebSearchOverlay } from "./model-profile-runtime.js";
-import { publicModelProfile, resolveModelProfile } from "./model-profiles.js";
 import {
   authStartupViolation,
   nativeCors,
@@ -54,6 +52,8 @@ import { registerDraftRoutes } from "./server/routes/drafts.js";
 import { registerRuntimeRoutes } from "./server/routes/runtime.js";
 import { registerChatRoutes } from "./server/routes/chats.js";
 import { registerHarnessRoutes } from "./server/routes/harnesses.js";
+import { createHarnessModelCatalogue } from "./harnesses/model-catalogue.js";
+import { rememberedModel } from "./profile-model-memory.js";
 import { registerLiveSessionRoutes } from "./server/routes/live-sessions.js";
 import { registerProjectRoutes } from "./server/routes/projects.js";
 import { registerSessionRoutes } from "./server/routes/sessions.js";
@@ -79,10 +79,6 @@ for (const project of await projects.list()) {
 }
 const terminals = new PtyManager({ filePath: config.remotesFile });
 await terminals.load();
-const modelProfileRuntime = new ModelProfileRuntime({
-  agentDir: config.piAgentDir,
-  searchConfigFile: config.searchConfigFile,
-});
 const pinnedInstallation = config.installations.get("conduit-pinned");
 const registry = new ChatStore(config.sessionRegistryFile, {
   defaultRuntime: {
@@ -208,6 +204,10 @@ function defaultTemplate() {
   return selected?.defaultable !== false ? selected : config.piTemplate;
 }
 
+// Shared with the launch composer so a chat and the dashboard ask the harness
+// once between them rather than once each.
+const harnessModels = createHarnessModelCatalogue();
+
 function catalogFor(runtime, template) {
   const installation = config.installations.get(runtime.installationId);
   const key = `isolated:${template?.id || config.piTemplate.id}`;
@@ -224,18 +224,26 @@ async function chatModelView(context) {
     const adapter = backends.forChat(context.chat);
     const resident = backends.getByChatId(context.chat.id);
     if (!resident) {
-      const models = await adapter.listAvailableModels(context.project.workingRoot);
-      const remembered = preferences.get().backendModelDefaults?.[implementation];
+      const remembered = rememberedModel(preferences, implementation);
+      const models = await harnessModels.list(implementation, context.project.workingRoot, adapter, {
+        require: context.chat.backend.model || remembered?.model || "",
+      });
       const rememberedModel = models.some((item) => item.spec === remembered?.model) ? remembered.model : "";
       const model = context.chat.backend.model || rememberedModel || models[0]?.spec || "";
+      // The remembered model is gone and something else is standing in. Say so,
+      // rather than quietly running the chat on a model nobody chose.
+      const modelFallback = !context.chat.backend.model && remembered?.model && !rememberedModel && model
+        ? { from: remembered.model, to: model }
+        : null;
       const selected = models.find((item) => item.spec === model);
       const defaultThinkingLevel = selected?.defaultThinkingLevel || selected?.thinkingLevels[0] || "";
-      const savedThinkingLevel = context.chat.modelThinkingLevels?.[model] || remembered?.thinkingLevel || "";
+      const savedThinkingLevel = context.chat.modelThinkingLevels?.[model]
+        || (rememberedModel ? remembered.thinkingLevel : "") || "";
       const thinkingLevel = selected?.thinkingLevels.includes(savedThinkingLevel) ? savedThinkingLevel : defaultThinkingLevel;
       return {
         installationId: manifest?.installationId || context.chat.backend.installationId,
         runtimeKind: implementation, models, model,
-        thinkingLevel, defaultModel: models[0]?.spec || "", defaultThinkingLevel,
+        thinkingLevel, defaultModel: models[0]?.spec || "", defaultThinkingLevel, ...(modelFallback ? { modelFallback } : {}),
         modelThinkingLevels: context.chat.modelThinkingLevels || {}, requiresAuthentication: false, warnings: [], source: "catalog",
       };
     }
@@ -256,14 +264,33 @@ async function chatModelView(context) {
   let model = catalogView.defaultModel;
   let thinkingLevel = catalogView.defaultThinkingLevel;
   let source = "runtime_default";
+  let chatOwnsModel = false;
   const sessionFile = conduitPiSessionFile(context.chat);
   if (sessionFile) {
     try {
       const persisted = await readSessionMetadata(sessionFile, context.project);
+      chatOwnsModel = Boolean(persisted.model);
       model = persisted.model || model;
       thinkingLevel = persisted.thinkingLevel || thinkingLevel;
       source = "jsonl";
     } catch (error) { if (error.code !== "ENOENT") throw error; }
+  }
+  // A profile remembers the last model chosen on it, so picking one in the
+  // Assistant does not have to be picked again in the next Assistant chat. A
+  // chat that already ran on a model of its own keeps it: this only fills in
+  // the blank a brand new chat starts with. When the remembered model is no
+  // longer in the profile's catalogue the catalogue default stands in, and the
+  // substitution is reported rather than made quietly.
+  const remembered = rememberedModel(preferences, template?.id);
+  let modelFallback = null;
+  if (!chatOwnsModel && remembered?.model) {
+    if (catalogView.models.some((item) => item.spec === remembered.model)) {
+      model = remembered.model;
+      thinkingLevel = remembered.thinkingLevel || thinkingLevel;
+      source = "profile_default";
+    } else if (model) {
+      modelFallback = { from: remembered.model, to: model };
+    }
   }
   const resident = backends.getByChatId(context.chat.id);
   let models = catalogView.models;
@@ -280,6 +307,8 @@ async function chatModelView(context) {
     thinkingLevel = state.thinkingLevel || thinkingLevel;
     const currentModel = liveModels.find((item) => item.spec === model);
     if (currentModel && !models.some((item) => item.spec === model)) models = [...models, currentModel];
+    // A running process has a real model; nothing was substituted for it.
+    modelFallback = null;
     source = "live";
   }
   if (model && !models.some((item) => item.spec === model)) {
@@ -296,9 +325,6 @@ async function chatModelView(context) {
   }
   const selectedModel = models.find((item) => item.spec === model);
   if (selectedModel) thinkingLevel = resolveThinkingLevel(thinkingLevel, selectedModel.thinkingLevels, catalogView.defaultThinkingLevel);
-  const modelProfile = model && usesWebSearchOverlay(template)
-    ? publicModelProfile(resident?.modelProfile || resolveModelProfile(config.modelProfiles, model))
-    : null;
   return {
     installationId: runtime.installationId,
     runtimeKind: runtime.kind,
@@ -310,7 +336,7 @@ async function chatModelView(context) {
     defaultThinkingLevel: catalogView.defaultThinkingLevel,
     requiresAuthentication: catalogView.requiresAuthentication,
     warnings: catalogView.warnings,
-    modelProfile,
+    ...(modelFallback ? { modelFallback } : {}),
     source,
   };
 }
@@ -546,7 +572,7 @@ const launchLiveSession = registerLiveSessionRoutes(app, {
   findChatContext,
   lifecycle,
   manager,
-  modelProfileRuntime,
+  preferences,
   registry,
   runtimeFor,
   runtimeSettings,
@@ -568,7 +594,7 @@ registerChatRoutes(app, {
   runtimeFor,
   templateForChat,
 });
-registerHarnessRoutes(app, { backends, preferences, projects, registry });
+registerHarnessRoutes(app, { backends, harnessModels, preferences, projects, registry });
 registerSessionRoutes(app, {
   attachments,
   backends,

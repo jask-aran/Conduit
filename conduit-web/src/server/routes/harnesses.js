@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { rememberModel, rememberedModel } from "../../profile-model-memory.js";
 import fs from "node:fs/promises";
 import { chatView } from "../../chat-store.js";
 import { computerContext } from "../../computer-context.js";
@@ -42,19 +43,7 @@ const opaqueSessionId = (chat) => typeof chat.backend?.opaqueSession === "string
   ? chat.backend.opaqueSession
   : chat.backend?.opaqueSession?.threadId || null;
 
-export function registerHarnessRoutes(app, { backends, preferences, projects, registry }) {
-  const modelCatalogs = new Map();
-  const modelCatalogRequests = new Map();
-  const refreshModels = (implementation, cwd, adapter) => {
-    const key = `${implementation}\0${cwd}`;
-    const existing = modelCatalogRequests.get(key);
-    if (existing) return existing;
-    const request = adapter.listAvailableModels(cwd)
-      .then((models) => { modelCatalogs.set(key, models); return models; })
-      .finally(() => modelCatalogRequests.delete(key));
-    modelCatalogRequests.set(key, request);
-    return request;
-  };
+export function registerHarnessRoutes(app, { backends, harnessModels, preferences, projects, registry }) {
 
   // Listing permission modes without a chat costs a throwaway harness process,
   // so the answer is cached per folder and refreshed in the background exactly
@@ -143,14 +132,17 @@ export function registerHarnessRoutes(app, { backends, preferences, projects, re
       if (!adapter.listAvailableModels) return response.status(409).json({ error: "harness_models_unavailable" });
       const requested = typeof request.query.path === "string" && request.query.path ? request.query.path : null;
       const cwd = requested ? (await resolveFolder(requested)).workingRoot : (await computerContext()).workingRoot;
-      const key = `${implementation}\0${cwd}`;
-      let models = modelCatalogs.get(key);
-      if (models) void refreshModels(implementation, cwd, adapter).catch(() => {});
-      else models = await refreshModels(implementation, cwd, adapter);
-      const remembered = preferences.get().backendModelDefaults?.[implementation];
-      const model = models.some((item) => item.spec === remembered?.model) ? remembered.model : models[0]?.spec || "";
+      const remembered = rememberedModel(preferences, implementation);
+      const models = await harnessModels.list(implementation, cwd, adapter, { require: remembered?.model || "" });
+      const rememberedModel = models.some((item) => item.spec === remembered?.model) ? remembered.model : "";
+      const model = rememberedModel || models[0]?.spec || "";
+      // The profile's model is gone and this is a stand-in, which the composer
+      // says out loud rather than opening on a model nobody chose.
+      const modelFallback = remembered?.model && !rememberedModel && model
+        ? { from: remembered.model, to: model }
+        : null;
       const selected = models.find((item) => item.spec === model);
-      const thinkingLevel = selected?.thinkingLevels.includes(remembered?.thinkingLevel)
+      const thinkingLevel = rememberedModel && selected?.thinkingLevels.includes(remembered?.thinkingLevel)
         ? remembered.thinkingLevel
         : selected?.defaultThinkingLevel || selected?.thinkingLevels[0] || "";
       response.json({
@@ -163,8 +155,36 @@ export function registerHarnessRoutes(app, { backends, preferences, projects, re
         defaultThinkingLevel: selected?.defaultThinkingLevel || selected?.thinkingLevels[0] || "",
         requiresAuthentication: false,
         warnings: [],
+        ...(modelFallback ? { modelFallback } : {}),
         source: "catalog",
       });
+    } catch (error) { next(error); }
+  });
+
+  // The launch composer has no chat to PATCH, so a model chosen there would
+  // otherwise only stick once a message created one. The choice is the
+  // decision: it is remembered for the profile the moment it is made.
+  app.patch("/v0/harnesses/:implementation/models", async (request, response, next) => {
+    try {
+      const implementation = request.params.implementation;
+      if (!SUPPORTED.has(implementation) || !backends.adapters.has(implementation)) {
+        return response.status(404).json({ error: "harness_not_found" });
+      }
+      const adapter = backends.forImplementation(implementation);
+      if (!adapter.listAvailableModels) return response.status(409).json({ error: "harness_models_unavailable" });
+      const model = String(request.body?.model || "").trim();
+      const thinkingLevel = String(request.body?.thinkingLevel || "").trim();
+      if (!model) return response.status(400).json({ error: "invalid_model" });
+      const requested = typeof request.body?.path === "string" && request.body.path ? request.body.path : null;
+      const cwd = requested ? (await resolveFolder(requested)).workingRoot : (await computerContext()).workingRoot;
+      const models = await harnessModels.list(implementation, cwd, adapter, { require: model });
+      const selected = models.find((item) => item.spec === model);
+      if (!selected) return response.status(400).json({ error: "invalid_model" });
+      if (thinkingLevel && selected.thinkingLevels.length && !selected.thinkingLevels.includes(thinkingLevel)) {
+        return response.status(400).json({ error: "invalid_thinking_level" });
+      }
+      await rememberModel(preferences, implementation, model, thinkingLevel);
+      response.json({ model, thinkingLevel });
     } catch (error) { next(error); }
   });
 
