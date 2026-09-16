@@ -1,21 +1,10 @@
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import fs from "node:fs/promises";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { WebSocket } from "ws";
 
-async function availablePort() {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const { port } = server.address();
-      server.close((error) => error ? reject(error) : resolve(port));
-    });
-  });
-}
 
 export async function waitFor(check, message, { attempts = 160, delayMs = 25 } = {}) {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -215,8 +204,6 @@ function deferredEvent(events, predicate, timeoutMs) {
  */
 export async function startConduitHarness({ env = {} } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-harness-"));
-  const port = await availablePort();
-  const origin = `http://127.0.0.1:${port}`;
   const commandLog = path.join(root, "pi-commands.jsonl");
   const eventLog = path.join(root, "pi-events.jsonl");
   const { conduitPi } = await writeFakePi(root);
@@ -228,7 +215,11 @@ export async function startConduitHarness({ env = {} } = {}) {
       ...process.env,
       HOME: root,
       CONDUIT_HOST: "127.0.0.1",
-      CONDUIT_PORT: String(port),
+      // The server binds a free port and tells us which. Picking one here meant
+      // probing for a free port, closing the probe, and handing the number to a
+      // child that took a second to start: anything else listening on 0 in that
+      // window could be given the same port, and test files run side by side.
+      CONDUIT_PORT: "0",
       CONDUIT_FILES_ROOT: path.join(root, "files"),
       CONDUIT_CATALOG_FILE: path.join(root, "conduit.json"),
       CONDUIT_SESSION_REGISTRY_FILE: path.join(root, "sessions.json"),
@@ -250,11 +241,23 @@ export async function startConduitHarness({ env = {} } = {}) {
   let output = "";
   child.stdout.on("data", (chunk) => { output += String(chunk); });
   child.stderr.on("data", (chunk) => { output += String(chunk); });
+  let origin = "";
   try {
+    await waitFor(() => {
+      if (child.exitCode != null) throw new Error(`Conduit server exited with ${child.exitCode}: ${output}`);
+      const listening = output.match(/listening on (http:\/\/\S+)/);
+      if (listening) origin = listening[1];
+      return Boolean(origin);
+    }, "Conduit server did not report a port");
     await waitFor(async () => {
       if (child.exitCode != null) throw new Error(`Conduit server exited with ${child.exitCode}: ${output}`);
-      try { return (await fetch(`${origin}/healthz`)).ok; }
-      catch { return false; }
+      try {
+        const response = await fetch(`${origin}/healthz`);
+        // Confirm this is our server and not merely something answering on the
+        // port. A stray listener that says 200 to everything would otherwise
+        // pass for ready, and every later request would go to it instead.
+        return response.ok && (await response.json())?.status === "ready";
+      } catch { return false; }
     }, "Conduit server did not become ready");
   } catch (error) {
     child.kill("SIGTERM");
