@@ -80,6 +80,7 @@ export type LiveEvent = EventBase & (
   | { type: "transcript_sync"; messages: unknown[]; tools: unknown[]; replaceAll: boolean }
   | StructuredGenerationEvent
   | { type: "runtime_error" | "client_error"; code: string; message: string }
+  | { type: "runtime_exit"; deliberate: boolean }
   | { type: "unknown"; sourceType: string }
 );
 
@@ -279,6 +280,10 @@ export function normalizeLiveEvent(value: unknown): LiveEvent {
       };
     }
     case "message_end": return { type: "message_end", generationId, message: protocolMessage(source.message) };
+    // The process is gone. `deliberate` separates a stop the server chose --
+    // the reaper, or someone picking Stop process -- from a crash, because only
+    // the second is worth reconnecting through.
+    case "runtime_exit": return { type: "runtime_exit", generationId, deliberate: Boolean(source.deliberate) };
     case "runtime_error": return { type: "runtime_error", generationId, code: text(source.code), message: text(source.message) };
     case "client_error": return { type: "client_error", generationId, code: text(source.code), message: text(source.message) };
     default: return { type: "unknown", sourceType, generationId };

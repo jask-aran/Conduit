@@ -154,7 +154,7 @@ async function runLiveMeasurement(configuration, prompt) {
   const liveResult = await jsonRequest(configuration.origin, "/v0/live-sessions", {
     method: "POST",
     headers: { cookie },
-    body: JSON.stringify({ chatId: configuration.chatId, projectId: chat.projectId }),
+    body: JSON.stringify({ chatId: configuration.chatId, projectId: chat.projectId, intent: "prompt" }),
   });
   if (!liveResult.response.ok) throw new Error("Live session launch failed with HTTP " + liveResult.response.status);
   const live = liveResult.body;

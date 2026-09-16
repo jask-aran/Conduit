@@ -5,11 +5,11 @@ import path from "node:path";
 import test from "node:test";
 import { startConduitHarness, waitFor } from "./helpers/conduit-harness.js";
 
-async function pauseLaunch(harness, chat) {
+async function pauseLaunch(harness, chat, intent = "prompt") {
   const after = (await harness.pi.commands()).length;
   const launch = harness.request("/v0/live-sessions", {
     method: "POST",
-    body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId }),
+    body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId, intent }),
   });
   const stateRequest = await harness.pi.waitForCommand("get_state", { after });
   return { launch, stateRequest };
@@ -97,6 +97,66 @@ test("the harness attaches a real client stream to a live Pi process", async () 
   }
 });
 
+test("opening a chat attaches to a live process but never starts one", async () => {
+  const harness = await startConduitHarness();
+  try {
+    const chat = await harness.createChat();
+
+    // No process yet: an open is told so rather than being handed a new one.
+    // An open is a reconnect or a background fetch, and letting one start a
+    // process is exactly how a retry timer would undo the reaper.
+    const cold = await harness.request("/v0/live-sessions", {
+      method: "POST",
+      body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId, intent: "open" }),
+    });
+    assert.equal(cold.status, 409);
+    assert.equal((await cold.json()).error, "no_live_process");
+    assert.deepEqual((await (await harness.request("/v0/live-sessions")).json()).sessions, []);
+
+    // Real use may start one.
+    const { launch, stateRequest } = await pauseLaunch(harness, chat);
+    await completeState(harness, stateRequest, chat);
+    const live = await (await launch).json();
+
+    // And now an open attaches to exactly that process instead of a second one.
+    const warm = await harness.request("/v0/live-sessions", {
+      method: "POST",
+      body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId, intent: "open" }),
+    });
+    assert.equal(warm.status, 201);
+    assert.equal((await warm.json()).id, live.id);
+  } finally {
+    await harness.stop();
+  }
+});
+
+test("selecting a chat warms an agent so the first message is not a cold start", async () => {
+  const harness = await startConduitHarness();
+  try {
+    const chat = await harness.createChat();
+
+    // A person opening the chat is not a retry timer, so it may start the
+    // process the next message would otherwise have waited for.
+    const { launch, stateRequest } = await pauseLaunch(harness, chat, "select");
+    await completeState(harness, stateRequest, chat);
+    const live = await (await launch).json();
+    assert.ok(live.id);
+
+    const sessions = (await (await harness.request("/v0/live-sessions")).json()).sessions;
+    assert.deepEqual(sessions.map((session) => session.id), [live.id]);
+
+    // And the prompt that follows reuses it rather than starting a second.
+    const prompt = await harness.request("/v0/live-sessions", {
+      method: "POST",
+      body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId, intent: "prompt" }),
+    });
+    assert.equal(prompt.status, 201);
+    assert.equal((await prompt.json()).id, live.id);
+  } finally {
+    await harness.stop();
+  }
+});
+
 test("Codex app-server profile creates, streams, and reconnects through neutral events", async () => {
   const harness = await startConduitHarness();
   try {
@@ -110,7 +170,7 @@ test("Codex app-server profile creates, streams, and reconnects through neutral 
     });
     assert.equal(selected.status, 200);
     const launched = await harness.request("/v0/live-sessions", {
-      method: "POST", body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId }),
+      method: "POST", body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId, intent: "prompt" }),
     });
     assert.equal(launched.status, 201);
     const live = await launched.json();
@@ -181,7 +241,7 @@ test("reattachment receives a terminal generation and its durable checkpoint", a
     const after = (await harness.pi.commands()).length;
     const launch = harness.request("/v0/live-sessions", {
       method: "POST",
-      body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId }),
+      body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId, intent: "prompt" }),
     });
     const stateRequest = await harness.pi.waitForCommand("get_state", { after });
     await harness.pi.reply(stateRequest, { sessionFile, sessionId: `session-${chat.id}` });
@@ -257,7 +317,7 @@ test("a replaced cloned root cannot be inspected or launched, and unlink does no
     assert.equal((await inspected.json()).error, "workspace_identity_changed");
     const launch = await harness.request("/v0/live-sessions", {
       method: "POST",
-      body: JSON.stringify({ chatId: chat.id, projectId: project.id }),
+      body: JSON.stringify({ chatId: chat.id, projectId: project.id, intent: "prompt" }),
     });
     assert.equal(launch.status, 409);
     assert.equal((await harness.pi.commands()).length, 0);
@@ -295,7 +355,7 @@ test("a replaced managed root rejects every root-consuming action", async () => 
       }),
       harness.request("/v0/live-sessions", {
         method: "POST",
-        body: JSON.stringify({ chatId: chat.id, projectId: project.id }),
+        body: JSON.stringify({ chatId: chat.id, projectId: project.id, intent: "prompt" }),
       }),
     ]);
     for (const response of responses) assert.equal(response.status, 409);

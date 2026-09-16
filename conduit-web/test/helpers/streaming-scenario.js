@@ -119,7 +119,7 @@ export async function runDeterministicStreamingScenario(scenario) {
     const commandOffset = (await harness.pi.commands()).length;
     const launchRequest = harness.request("/v0/live-sessions", {
       method: "POST",
-      body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId }),
+      body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId, intent: "prompt" }),
     });
     const stateCommand = await harness.pi.waitForCommand("get_state", { after: commandOffset });
     await harness.pi.reply(stateCommand, { sessionFile, sessionId: `session-${chat.id}` });

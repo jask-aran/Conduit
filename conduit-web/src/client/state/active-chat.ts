@@ -40,6 +40,9 @@ import { clearReviewComments, parseReviewComments, projectReviewComments, restor
 type UnknownRecord = Record<string, unknown>;
 type ErrorHandler = (error: unknown) => void;
 
+/** Mirrors the server's SPAWNING_INTENTS; see the note at its only use. */
+const SPAWNING_INTENTS = new Set(["select", "prompt", "continue", "compact", "regenerate", "steer"]);
+
 function generationChangeFor(event: StructuredGenerationEvent): LiveGenerationChange {
   const block = event.block && typeof event.block === "object" ? event.block as UnknownRecord : null;
   const contentIndex = Number.isInteger(event.contentIndex)
@@ -607,7 +610,13 @@ export function createActiveChat(options: ActiveChatOptions) {
         socket = null;
         setLive(null);
       }
-      setConnectingId(chatId);
+      // Only an intent the server will act on may promise a start. An "open"
+      // attaches to a process that exists but never creates one, so showing
+      // "Starting agent…" for it puts a spinner on screen for the single frame
+      // it takes the server to answer that there is no process. The server owns
+      // this policy (SPAWNING_INTENTS in src/server/live-session-launcher.js);
+      // this copy decides nothing but whether the spinner is honest.
+      if (SPAWNING_INTENTS.has(intent)) setConnectingId(chatId);
       const record = await api<LiveRecord>("/v0/live-sessions", {
         method: "POST",
         body: JSON.stringify({
@@ -639,6 +648,16 @@ export function createActiveChat(options: ActiveChatOptions) {
       return record;
     } catch (error) {
       if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
+      // The server decides whether an intent may start a process; an "open"
+      // may not. Being told there is none is an answer, not a failure: the
+      // chat is simply not live, and reporting it as an error would put a
+      // toast in front of someone for opening a chat they had finished with.
+      // Returning rather than throwing also settles the reconnect timer, so a
+      // process the reaper stopped stays stopped.
+      if ((error as { error?: string } | null)?.error === "no_live_process") {
+        setLive(null);
+        return null;
+      }
       throw error;
     } finally { if (token === openToken) setConnectingId(null); }
   };
@@ -797,6 +816,20 @@ export function createActiveChat(options: ActiveChatOptions) {
           setMessages((current) => commitAssistantMessage(current, event.message));
         }
         break;
+      // A process the server deliberately stopped stays stopped. The socket
+      // close that follows is otherwise indistinguishable from a dropped
+      // connection, so the reconnect timer used to start a replacement process
+      // within a second -- which is why Stop process appeared to do nothing and
+      // the live dot came straight back. A crash still reconnects.
+      case "runtime_exit":
+        if (event.deliberate) {
+          cancelReconnect();
+          setLive(null);
+          resetLiveFlags();
+          setGeneration("idle");
+          socket?.close();
+        }
+        break;
       case "runtime_error":
       case "client_error":
         if (!stopPending) setGeneration(event.type === "runtime_error" ? "failed" : "idle");
@@ -853,7 +886,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     void attachments.select(chat.id);
     hydrateDraft(chat.id);
     applyDetail(detail);
-    if (detail.status === "active") await openLive(chat.id, project.id, {}, selection);
+    if (detail.status === "active") await openLive(chat.id, project.id, { intent: "select" }, selection);
     else if (cached) {
       void fetchTranscript(chat).then((fresh) => {
         if (selection !== selectionToken || selectedId() !== chat.id) return;
@@ -935,7 +968,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       const queueMode = mode || (capabilities()?.steer === false ? "follow_up" : "steer");
       setDraft("");
       try {
-        await ensureLive();
+        await ensureLive("steer");
         socket!.send(JSON.stringify({ type: queueMode === "steer" ? "steer" : "follow_up", message: prepared.message, attachmentIds: prepared.attachmentIds }));
         acceptOutboundMessage(prepared);
       } catch (error) { setDraft(prepared.text); onError(error); }
@@ -986,7 +1019,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   const regenerate = async (entryId: string) => {
     if (!entryId || !capabilities()?.regenerate || streaming() || stopping()) return;
     try {
-      await ensureLive();
+      await ensureLive("regenerate");
       setMessages((current) => truncateForRegenerate(current, entryId));
       setGeneration("active");
       socket!.send(JSON.stringify({ type: "regenerate", entryId, model: models.model(), thinkingLevel: models.effort() }));
@@ -995,13 +1028,13 @@ export function createActiveChat(options: ActiveChatOptions) {
 
   const continueResponse = async () => {
     if (streaming() || stopping()) return;
-    try { await ensureLive(); setGeneration("active"); socket!.send(JSON.stringify({ type: "continue" })); }
+    try { await ensureLive("continue"); setGeneration("active"); socket!.send(JSON.stringify({ type: "continue" })); }
     catch (error) { setGeneration("idle"); onError(error); }
   };
 
   const compact = async () => {
     if (streaming() || compacting() || !capabilities()?.compaction) return;
-    try { await ensureLive(); socket!.send(JSON.stringify({ type: "compact" })); }
+    try { await ensureLive("compact"); socket!.send(JSON.stringify({ type: "compact" })); }
     catch (error) { onError(error); }
   };
 

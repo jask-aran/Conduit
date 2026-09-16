@@ -264,25 +264,101 @@ test("reaper stops unattached idle processes after the TTL", async () => {
   assert.equal(manager.list().length, 0);
 });
 
-test("reaper keeps processes with attached clients or active generations", async () => {
-  const { manager, children, nowValue } = makeManager({ idleProcessTtlMs: 1_000 });
-  const attached = manager.create({ project: project("att"), chatId: "chat-att" });
+test("reaper keeps a busy process and an attached one that is still working", async () => {
+  // The default TTL is used deliberately: idleProcessTtlMs is clamped to a
+  // 30s floor, so a smaller value here would not be the value under test.
+  const { manager, children, nowValue } = makeManager({});
+  // Attached, and Pi has done something recently. An open chat is judged on
+  // real activity, not on when its socket arrived, so it survives.
+  const working = manager.create({ project: project("att"), chatId: "chat-att" });
   children[0].emit("spawn");
-  attached.clients.add({});
-  attached.lastClientAt = nowValue.t - 10_000;
-  attached.active = false;
-  attached.activity = "idle";
+  working.clients.add({});
+  working.lastClientAt = nowValue.t - 200_000;
+  working.active = false;
+  working.activity = "idle";
 
   const busy = manager.create({ project: project("busy"), chatId: "chat-busy" });
   children[1].emit("spawn");
   busy.clients.clear();
-  busy.lastClientAt = nowValue.t - 10_000;
+  busy.lastClientAt = nowValue.t - 200_000;
   busy.active = true;
   busy.activity = "working";
 
-  nowValue.t += 20_000;
+  nowValue.t += 121_000;
+  working.lastTurnAt = nowValue.t;
   assert.equal(await manager.reapIdleProcesses(), 0);
   assert.equal(manager.list().length, 2);
+});
+
+test("background chatter from an idle process does not defer the reaper", async () => {
+  // The failure this clock exists for: an idle Pi publishes often enough that
+  // lastActivityAt never ages past the TTL, so a reaper measuring against it
+  // never fires no matter how long the chat sits unused.
+  const { manager, children, nowValue } = makeManager({});
+  const record = manager.create({ project: project("chatter"), chatId: "chat-chatter" });
+  children[0].emit("spawn");
+  record.clients.add({});
+  record.active = false;
+  record.activity = "idle";
+  record.lastTurnAt = nowValue.t;
+
+  for (let elapsed = 0; elapsed < 180_000; elapsed += 60_000) {
+    nowValue.t += 60_000;
+    manager.touchActivity(record); // Pi says something; no turn begins.
+  }
+  assert.ok(nowValue.t - record.lastActivityAt < 120_000, "activity clock was kept fresh");
+  assert.equal(await manager.reapIdleProcesses(), 1, "reaped on the turn clock regardless");
+});
+
+test("reaper stops an idle process even while a client is attached", async () => {
+  const { manager, children, nowValue } = makeManager({});
+  const attached = manager.create({ project: project("att"), chatId: "chat-att" });
+  children[0].emit("spawn");
+  attached.clients.add({});
+  attached.active = false;
+  attached.activity = "idle";
+  // Attaching does not advance lastClientAt again, so an open chat used to sit
+  // here for ever. What matters is when the last turn began.
+  attached.lastClientAt = nowValue.t;
+  attached.lastTurnAt = nowValue.t;
+
+  nowValue.t += 119_000;
+  assert.equal(await manager.reapIdleProcesses(), 0, "still within the idle window");
+
+  nowValue.t += 2_000;
+  assert.equal(await manager.reapIdleProcesses(), 1);
+  assert.equal(manager.list().length, 0);
+});
+
+test("a deliberate stop tells clients not to reconnect", async () => {
+  const { manager, children } = makeManager({});
+  const record = manager.create({ project: project("stop"), chatId: "chat-stop" });
+  children[0].emit("spawn");
+  const events = [];
+  manager.on("event", ({ event }) => events.push(event));
+
+  const stopped = manager.stopAndWait(record.id);
+  children[0].emit("exit", 0, "SIGTERM");
+  await stopped;
+
+  const exit = events.find((event) => event.type === "runtime_exit");
+  assert.ok(exit, "an exit event is published");
+  assert.equal(exit.deliberate, true);
+});
+
+test("a crash is not reported as a deliberate stop", async () => {
+  const { manager, children } = makeManager({});
+  const record = manager.create({ project: project("crash"), chatId: "chat-crash" });
+  children[0].emit("spawn");
+  const events = [];
+  manager.on("event", ({ event }) => events.push(event));
+
+  children[0].emit("exit", 1, null);
+  assert.equal(record.status, "stopped");
+
+  const exit = events.find((event) => event.type === "runtime_exit");
+  assert.ok(exit, "an exit event is published");
+  assert.equal(exit.deliberate, false);
 });
 
 test("enforceLimit stops excess idle processes after max is lowered", async () => {
@@ -300,4 +376,41 @@ test("enforceLimit stops excess idle processes after max is lowered", async () =
   assert.equal(await manager.enforceLimit(), 2);
   assert.equal(manager.list().length, 2);
   assert.equal(manager.policy().maxLiveProcesses, 2);
+});
+
+test("a process stops being offered the moment its stop is accepted", async () => {
+  const { manager, children } = makeManager({});
+  const record = manager.create({ project: project("window"), chatId: "chat-window" });
+  children[0].emit("spawn");
+  assert.equal(manager.getByChatId("chat-window"), record);
+
+  const removed = [];
+  manager.on("process_removed", (payload) => removed.push(payload));
+
+  // SIGTERM leaves the record in place until the child actually exits. Nothing
+  // may hand that record out in between: a client that attaches to it gets a
+  // socket onto a process that is already leaving, comes away with no agent,
+  // and has to ask a second time to get one.
+  manager.stop(record.id);
+  assert.equal(record.status, "running", "the child has not exited yet");
+  assert.equal(manager.getByChatId("chat-window"), null);
+  assert.deepEqual(manager.list(), []);
+  assert.deepEqual(manager.rawRecords(), []);
+  assert.deepEqual(removed.map((item) => item.chatId), ["chat-window"]);
+});
+
+test("interrupting a turn does not take the process off the books", async () => {
+  const { manager, children } = makeManager({});
+  const record = manager.create({ project: project("interrupt"), chatId: "chat-interrupt" });
+  children[0].emit("spawn");
+
+  // record.stopping means two different things -- this turn is being
+  // interrupted, and this process is being killed -- and only the second one
+  // ends the process. Conflating them hides a perfectly live agent the moment
+  // someone stops a response, and sends the next prompt to a second process.
+  record.stopping = true;
+
+  assert.equal(manager.getByChatId("chat-interrupt"), record);
+  assert.equal(manager.list().length, 1);
+  assert.equal(manager.rawRecords().length, 1);
 });
