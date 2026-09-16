@@ -2,7 +2,7 @@ import { createEffect, createMemo, createRenderEffect, createSignal, For, lazy, 
 import { ArrowDownIcon, CheckIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, TriangleAlertIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { Message } from "../api/contracts";
-import type { TranscriptSource } from "./transcript-source";
+import { isChatContentActivity, type TranscriptSource } from "./transcript-source";
 import type { TurnArtifactSummary } from "../api/live-events";
 import { AttachmentCards } from "./attachments";
 import { ReviewCommentCards } from "./review-comment-cards";
@@ -259,7 +259,7 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
     props.chat.activeGeneration,
     props.chat.activeGenerationChange,
   );
-  const empty = createMemo(() => !timeline.length && !props.chat.activity()?.label);
+  const empty = createMemo(() => !timeline.length && !isChatContentActivity(props.chat.activity()));
 
   let scrollFrame: number | null = null;
   let typewriterTailFrame: number | null = null;

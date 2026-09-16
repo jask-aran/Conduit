@@ -30,3 +30,19 @@ export interface TranscriptSource {
   continueResponse: () => Promise<unknown> | void;
   loadOlder: () => Promise<boolean | undefined>;
 }
+
+/**
+ * Whether an activity means work is happening *in* the chat, rather than the
+ * backend still coming up.
+ *
+ * Starting the agent is not content. A chat with no messages is still an empty
+ * chat while the harness spins up, and that is exactly when the empty-chat
+ * layout -- the welcome line and the centred composer -- belongs on screen.
+ * Treating "Starting agent…" as content held that layout back until the
+ * backend answered, so a new chat opened bottom-docked and bare and then
+ * snapped to centred with a heading once it did. The composer still shows the
+ * label and its spinner throughout; that is the only place the wait belongs.
+ */
+export const isChatContentActivity = (
+  activity: { kind: string; label: string | null } | null | undefined,
+): boolean => Boolean(activity?.label) && activity?.kind !== "starting";
