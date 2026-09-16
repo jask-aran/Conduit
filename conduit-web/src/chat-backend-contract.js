@@ -1,6 +1,6 @@
 export const CHAT_CAPABILITY_KEYS = Object.freeze([
   "steer", "followUpQueue", "cancel", "compaction", "thinkingLevels",
-  "modelSwitch", "toolUse", "permissions", "usage", "replay",
+  "modelSwitch", "toolUse", "approvals", "permissionModes", "usage", "replay",
   "attachments", "fork", "regenerate",
 ]);
 export const CHAT_HISTORY_MODES = Object.freeze(["none", "linear", "tree"]);

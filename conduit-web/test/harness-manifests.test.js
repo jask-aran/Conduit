@@ -154,13 +154,13 @@ test("session replay keeps only the latest 500 events", () => {
 
 test("refusals are derived from the capability flags, not hand-written", () => {
   const capable = unsupported(
-    { permissions: true, steer: true, followUpQueue: true, modelSwitch: true, thinkingLevels: true, usage: true },
+    { approvals: true, steer: true, followUpQueue: true, modelSwitch: true, thinkingLevels: true, usage: true },
     { label: "Full", protocol: "pi_rpc" },
   );
   assert.deepEqual(Object.keys(capable), ["compact", "fork"]);
 
   const limited = unsupported(
-    { permissions: false, steer: false, followUpQueue: false, modelSwitch: false, thinkingLevels: false, usage: false },
+    { approvals: false, steer: false, followUpQueue: false, modelSwitch: false, thinkingLevels: false, usage: false },
     { label: "Thin" },
   );
   for (const method of ["respondHostUi", "queue", "clearQueue", "setModel", "setThinkingLevel", "compact", "fork"]) {
@@ -179,7 +179,7 @@ test("the migrated adapters expose exactly the refusals their flags imply", asyn
   const codex = new CodexAppServerAdapter({ command: "codex" });
   // Codex answers approval requests, so respondHostUi must be real rather than
   // a refusal - the flag and the method have to agree.
-  assert.equal(CODEX_CAPABILITIES.permissions, true);
+  assert.equal(CODEX_CAPABILITIES.approvals, true);
   assert.throws(() => codex.respondHostUi("missing-session", {}), { code: "backend_unavailable" },
     "it fails on the missing session, not because the interaction is unsupported");
   // Codex steers and queues, so `queue` must be real rather than a refusal.
@@ -190,17 +190,29 @@ test("the migrated adapters expose exactly the refusals their flags imply", asyn
   assert.equal(await codex.refreshContext(), null);
 });
 
-test("every profile the client can choose carries its harness capabilities", async () => {
-  const { agentProfiles } = await import("../src/chat-backend.js");
+test("a profile elects a harness and the harness declares the capabilities", async () => {
+  const { agentProfiles, harnessCapabilities } = await import("../src/chat-backend.js");
   const profiles = agentProfiles([{ id: "assistant", label: "Assistant" }]);
+  const harnesses = harnessCapabilities();
   assert.ok(profiles.length > 1, "both Pi templates and harness manifests are listed");
-  // The client gates capability-dependent UI on this, and has to be able to do
-  // it before a process exists. A profile without capabilities forces it to
-  // wait for a live record to find out what the session can do.
+
+  // A profile says which harness runs it and nothing about what that harness
+  // can do. Copying the answer onto each profile let a profile disagree with
+  // the harness running it, and had four Pi profiles holding four copies of one
+  // opinion that was never theirs.
   for (const profile of profiles) {
-    assert.ok(profile.capabilities, `profile ${profile.id} declares capabilities`);
-    assert.equal(typeof profile.capabilities.permissions, "boolean", `${profile.id} permissions`);
+    assert.equal(profile.capabilities, undefined, `profile ${profile.id} declares no capabilities`);
+    const implementation = profile.agent?.implementation;
+    assert.ok(harnesses[implementation], `profile ${profile.id} elects a known harness`);
   }
-  const pi = profiles.find((profile) => profile.id === "assistant");
-  assert.equal(pi.capabilities.toolUse, true);
+
+  // The client joins on implementation, which is what every chat carries.
+  assert.equal(harnesses.conduit_pi.toolUse, true);
+  assert.equal(harnesses.conduit_pi.approvals, true);
+  assert.equal(harnesses.conduit_pi.permissionModes, false);
+  assert.equal(harnesses.codex.permissionModes, true);
+  for (const capabilities of Object.values(harnesses)) {
+    assert.equal(typeof capabilities.approvals, "boolean");
+    assert.equal(typeof capabilities.permissionModes, "boolean");
+  }
 });

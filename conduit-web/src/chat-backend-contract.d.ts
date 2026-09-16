@@ -40,7 +40,10 @@ export interface ChatCapabilities {
   thinkingLevels: boolean;
   modelSwitch: boolean;
   toolUse: boolean;
-  permissions: boolean;
+  /** Answers host-UI approval requests, i.e. respondHostUi is real. */
+  approvals: boolean;
+  /** Offers selectable permission profiles to choose between. */
+  permissionModes: boolean;
   usage: boolean;
   replay: boolean;
   attachments: boolean;

@@ -9,7 +9,9 @@ import { publicModelProfile } from "./model-profiles.js";
 export const PI_CAPABILITIES = Object.freeze({
   history: "tree", fork: true, regenerate: true,
   steer: true, followUpQueue: true, cancel: true, compaction: true,
-  thinkingLevels: true, modelSwitch: true, toolUse: true, permissions: true,
+  thinkingLevels: true, modelSwitch: true, toolUse: true,
+  // Pi answers approval requests but has no profiles to pick between.
+  approvals: true, permissionModes: false,
   usage: true, replay: true,
   attachments: true,
 });

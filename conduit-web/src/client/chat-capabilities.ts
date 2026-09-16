@@ -1,24 +1,29 @@
-import type { BooleanCapability, ChatCapabilities, ChatSummary, Template } from "./api/contracts";
+import type { BooleanCapability, ChatCapabilities, ChatSummary } from "./api/contracts";
 
 /**
- * The harness manifest for a chat, resolved from that chat's own identity.
+ * What the harness running a chat can do.
  *
- * Deliberately not the profile the picker shows. That one falls back to the
- * default profile so there is always something to display, which is right for a
- * picker and wrong here: a chat whose profile is missing would be handed the
- * default harness's answers rather than told we do not know. It also reads a
+ * A profile elects a harness; the harness declares the capabilities. So the
+ * join is the chat's implementation, which is the key a manifest is registered
+ * under, and not its profile -- four Pi profiles have no separate opinion about
+ * whether Pi answers approvals.
+ *
+ * Deliberately not the profile the picker shows, either. That one falls back to
+ * a default so there is always something to display, which is right for a
+ * picker and wrong here: a chat whose harness is unknown would be handed the
+ * default one's answers rather than told we do not know. It also reads a
  * templateId that applyDetail sets after the selection commits, so during a
- * switch it still describes the chat before this one -- which is the whole
- * class of bug this exists to stop. A chat summary carries profileId at click
- * time, before the transcript and long before any process.
+ * switch it still describes the chat before this one -- the whole class of bug
+ * this exists to stop. A chat summary carries its implementation at click time,
+ * before the transcript and long before any process.
  */
 export function manifestForChat(
-  profiles: Template[],
+  harnesses: Record<string, ChatCapabilities>,
   chat: ChatSummary | null | undefined,
 ): ChatCapabilities | null {
-  const profileId = chat?.profileId || chat?.templateId;
-  if (!profileId) return null;
-  return profiles.find((profile) => profile.id === profileId)?.capabilities || null;
+  const implementation = chat?.backend?.implementation;
+  if (!implementation) return null;
+  return harnesses[implementation] || null;
 }
 
 /**

@@ -1,4 +1,4 @@
-import { implementationsOf, manifestForImplementation, MANIFESTS } from "./harnesses/index.js";
+import { implementationsOf, MANIFESTS } from "./harnesses/index.js";
 export { conduitPiSessionFile, opaqueSessionFor } from "./backend-session.js";
 
 // Harness-backed profiles come from the manifests; Pi profiles come from the
@@ -53,20 +53,29 @@ export function withPiCompatibilityFields(item) {
   };
 }
 
+/**
+ * What each harness can do, keyed by the implementation that names it.
+ *
+ * Capabilities belong to the harness, not to the profiles that elect it. Four
+ * Pi profiles do not have four opinions about whether Pi answers approvals;
+ * they have none, because it is not their question. Copying the answer onto
+ * each profile invited a profile to disagree with the harness running it, and
+ * made callers look capabilities up by the wrong key. Chats already carry
+ * backend.implementation, which is exactly the key a manifest is registered
+ * under, so this is the join both ends can make.
+ */
+export function harnessCapabilities() {
+  return Object.fromEntries(MANIFESTS.flatMap((manifest) =>
+    implementationsOf(manifest).map((implementation) => [implementation, manifest.capabilities])));
+}
+
 export function agentProfiles(templates, { available = null } = {}) {
   const usable = (manifest) => !available || implementationsOf(manifest).some((implementation) => available.has(implementation));
-  // A Pi profile is still served by a harness, so it carries that harness's
-  // capabilities like any other. Leaving them off meant the clients using these
-  // profiles -- most chats -- had no manifest to consult, and could only learn
-  // what the session could do once a process was running and said so. Deriving
-  // them from the implementation keeps the two from drifting apart.
-  const piCapabilities = manifestForImplementation("conduit_pi")?.capabilities;
   return [
     ...templates.map((template) => ({
       id: template.id,
       label: template.label,
       management: "conduit",
-      ...(piCapabilities ? { capabilities: piCapabilities } : {}),
       agent: { protocol: "pi_rpc", implementation: "conduit_pi", installationId: "conduit-pinned" },
     })),
     ...PROFILE_MANIFESTS.map((manifest) => ({
@@ -75,7 +84,6 @@ export function agentProfiles(templates, { available = null } = {}) {
       ...(manifest.description ? { description: manifest.description } : {}),
       management: "agent",
       disabled: !usable(manifest),
-      capabilities: manifest.capabilities,
       drive: manifest.drive === true,
       agent: { protocol: manifest.protocol, implementation: manifest.id, installationId: manifest.installationId },
     })),

@@ -411,6 +411,10 @@ function App() {
   };
   const [templates, setTemplates] = createSignal<Template[]>([]);
   const [externalProfiles, setExternalProfiles] = createSignal<Template[]>([]);
+  // Keyed by implementation, because that is what a manifest is registered
+  // under and what every chat carries. A profile elects a harness; the harness
+  // is what declares what it can do.
+  const [harnessCapabilities, setHarnessCapabilities] = createSignal<Record<string, ChatCapabilities>>({});
   const [templatesLoading, setTemplatesLoading] = createSignal(true);
   const [installations, setInstallations] = createSignal<Installation[]>([]);
   const [installationsLoading, setInstallationsLoading] = createSignal(true);
@@ -597,7 +601,7 @@ function App() {
    * honour. Capability-gated UI asks here rather than reaching for either
    * source, so there is one place to be right as more of it appears.
    */
-  const chatManifest = createMemo(() => manifestForChat(profiles(), catalogue.selected()?.chat));
+  const chatManifest = createMemo(() => manifestForChat(harnessCapabilities(), catalogue.selected()?.chat));
   const chatCapability = (name: BooleanCapability, fallback = false): boolean =>
     resolveCapability(chatManifest(), chat.capabilities(), name, fallback);
   const emptyChat = createMemo(() => chat.loadedId() === catalogue.selectedId() && !chat.messages().length && !chat.tools().length && !isChatContentActivity(chat.activity()));
@@ -1784,12 +1788,18 @@ function App() {
         setTemplatesLoading(false);
         return payload;
       });
-    void api<{ profiles: Array<{ id: string; label: string; description?: string; management: string; disabled?: boolean; capabilities?: ChatCapabilities; drive?: boolean; agent: { protocol: string; implementation: string } }> }>("/v0/profiles")
-      .then((payload) => setExternalProfiles((Array.isArray(payload.profiles) ? payload.profiles : [])
-        .filter((profile) => profile.management === "agent" && profile.agent?.protocol === "native_api")
-        .map((profile) => ({ id: profile.id, label: profile.label, description: profile.description,
-          disabled: profile.disabled, capabilities: profile.capabilities, drive: profile.drive }))))
-      .catch(() => setExternalProfiles([]));
+    void api<{
+      profiles: Array<{ id: string; label: string; description?: string; management: string; disabled?: boolean; drive?: boolean; agent: { protocol: string; implementation: string } }>;
+      harnesses?: Record<string, ChatCapabilities>;
+    }>("/v0/profiles")
+      .then((payload) => {
+        setHarnessCapabilities(payload.harnesses || {});
+        setExternalProfiles((Array.isArray(payload.profiles) ? payload.profiles : [])
+          .filter((profile) => profile.management === "agent" && profile.agent?.protocol === "native_api")
+          .map((profile) => ({ id: profile.id, label: profile.label, description: profile.description,
+            disabled: profile.disabled, implementation: profile.agent?.implementation, drive: profile.drive })));
+      })
+      .catch(() => { setExternalProfiles([]); setHarnessCapabilities({}); });
     void api<{ partialContinue?: boolean; maxAttachmentBytes?: number }>("/v0/capabilities")
       .then((payload) => {
         setPartialContinue(payload.partialContinue !== false);
@@ -1933,7 +1943,7 @@ function App() {
               attachments={attachments}
               attachmentsSupported={chatCapability("attachments", true)}
               models={models}
-              permissions={chatCapability("permissions") ? permissions : undefined}
+              permissions={chatCapability("permissionModes") ? permissions : undefined}
               profiles={profiles()}
               activeProfile={activeProfile()}
               serverOnline={runtime.connectivity() === "online"}
@@ -2002,7 +2012,7 @@ function App() {
           <ComputerDashboard projects={catalogue.projects()} runtime={runtime} location={computerLocation()} loading={computerLoading()} error={computerError()} selectedHarness={computerHarness()} onHarnessDriveChange={setComputerDriving} renderHarnessDrive={({ current, harness, store, onBack, onTrack }) => <div class="harness-drive-shared">
             <ChatHeader project={catalogue.projects().find((project) => project.workingRoot === current.cwd)} title={current.title} runtime={store.chat.runtimeIdentity()} live={store.chat.live() as unknown as Record<string, unknown>} chat={store.chat} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => openComputerHarness(harness.id)} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} onBack={onBack} extraAction={<Button variant="ghost" size="sm" onClick={onTrack}>Track this thread</Button>} />
             <div class="work-area"><section class="work-area-conversation" aria-label="Conversation"><Transcript chat={store.chat} partialContinue={false} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={harness.label} /><div class="composer-stack"><HostUiRequests requests={store.chat.hostUiRequests()} onRespond={store.chat.respondHostUi} /><Composer chat={store.chat} attachments={driveAttachments} attachmentsSupported={false} models={store.models} profiles={[]} activeProfile={null} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => {}} onStatusChange={setComposerStatus} /></div></section></div>
-          </div>} onOpenHarness={(id) => openComputerHarness(id)} onOpenHarnessHere={(id, cwd) => void openComputerHarnessHere(id, cwd)} harnessComposer={computerHarness() ? (cwd, harnessModels, modelsLoading) => <Composer chat={chat} attachments={attachments} attachmentsSupported={false} models={harnessModels} modelsLoading={modelsLoading} permissions={profiles().find((profile) => profile.id === computerHarness())?.capabilities?.permissions ? permissions : undefined} profiles={profiles().filter((profile) => profile.id === computerHarness())} activeProfile={profiles().find((profile) => profile.id === computerHarness()) || null} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => {}} onSendDraft={(prompt) => launchHarnessChat(computerHarness()!, cwd, prompt, { model: harnessModels.model(), thinkingLevel: harnessModels.effort() })} /> : undefined} onOpenHarnessChat={(target, project, prompt) => { void openChat(target, project).then(() => { if (prompt) { chat.setDraft(prompt); void chat.send(); } }); }} onBrowse={(path) => void browseComputer(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => void designateComputerWorkspace()} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProject(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={(path) => { setComputerFile({ path }); openWorkspaceView("files"); }} />
+          </div>} onOpenHarness={(id) => openComputerHarness(id)} onOpenHarnessHere={(id, cwd) => void openComputerHarnessHere(id, cwd)} harnessComposer={computerHarness() ? (cwd, harnessModels, modelsLoading) => <Composer chat={chat} attachments={attachments} attachmentsSupported={false} models={harnessModels} modelsLoading={modelsLoading} permissions={harnessCapabilities()[profiles().find((profile) => profile.id === computerHarness())?.implementation || ""]?.permissionModes ? permissions : undefined} profiles={profiles().filter((profile) => profile.id === computerHarness())} activeProfile={profiles().find((profile) => profile.id === computerHarness()) || null} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => {}} onSendDraft={(prompt) => launchHarnessChat(computerHarness()!, cwd, prompt, { model: harnessModels.model(), thinkingLevel: harnessModels.effort() })} /> : undefined} onOpenHarnessChat={(target, project, prompt) => { void openChat(target, project).then(() => { if (prompt) { chat.setDraft(prompt); void chat.send(); } }); }} onBrowse={(path) => void browseComputer(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => void designateComputerWorkspace()} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProject(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={(path) => { setComputerFile({ path }); openWorkspaceView("files"); }} />
         </Show>
         <Show when={routeKind() !== "dashboard" && routeKind() !== "computer"}>
         <Show when={routeKind() === "chat" && meteorField()}>
@@ -2018,7 +2028,7 @@ function App() {
             <section class="work-area-conversation" aria-label="Conversation">
               <Transcript chat={chat} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} projectId={selectedProject()?.id} />
               <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-                <Composer chat={chat} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissions") ? permissions : undefined} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
+                <Composer chat={chat} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
             </section>
           </div>
         </>}>
@@ -2029,7 +2039,7 @@ function App() {
               attachments={attachments}
               attachmentsSupported={chatCapability("attachments", true)}
               models={models}
-              permissions={chatCapability("permissions") ? permissions : undefined}
+              permissions={chatCapability("permissionModes") ? permissions : undefined}
               profiles={profiles()}
               activeProfile={activeProfile()}
               serverOnline={runtime.connectivity() === "online"}
