@@ -532,13 +532,13 @@ export function Sidebar(props: {
   };
 
   /** Live process map wins while SSE is online; fall back to the catalogue's live snapshot when offline. */
-  const processFor = (chat: ChatSummary): RuntimeProcess | null => props.runtime.getProcess(chat.id)
-    || (props.connectivity !== "online" && chat.liveStatus ? {
-      chatId: chat.id,
-      status: chat.liveStatus,
-      activity: chat.liveActivity || (chat.liveActive ? "working" : "idle"),
-      active: chat.liveActive,
-    } : null);
+  // Only the runtime stream says whether a chat has an agent. The chat summary
+  // carries a copy of that from whenever the list was last fetched, and falling
+  // back to it while the stream reconnected put pills on chats whose processes
+  // had been gone for minutes -- and left them there until a reload refetched
+  // the list. The stream's own last-known state is kept across a reconnect and
+  // marked stale, which is the honest version of the same answer.
+  const processFor = (chat: ChatSummary): RuntimeProcess | null => props.runtime.getProcess(chat.id);
 
   const railChats = () => [...props.projects.flatMap((project) => project.sessions
     .filter((chat) => chat.status !== "draft" || chat.id !== props.selectedId || chat.pinned || Boolean(props.runtime.getProcess(chat.id)))
@@ -699,7 +699,7 @@ export function Sidebar(props: {
       const count = target.targets.length;
       return {
         title: `Delete ${count} chats?`,
-        description: `This permanently deletes ${count} Pi session transcripts and their attached files.`,
+        description: `This permanently deletes ${count} session transcripts and their attached files.`,
       };
     }
     if (target?.type === "terminal") return { title: "Destroy this shell?", description: `This permanently stops ${target.terminal.title || "Shell"} and removes its terminal session.` };
@@ -708,9 +708,9 @@ export function Sidebar(props: {
       const harness = harnesses().find((item) => item.id === implementation);
       if (harness) return { title: "Delete this chat from Conduit?",
         description: `This deletes Conduit's link and attached files. The thread stays in ${harness.profileLabel}.` };
-      return { title: "Delete this chat?", description: "This permanently deletes the Pi session transcript and this chat's attached files." };
+      return { title: "Delete this chat?", description: "This permanently deletes the session transcript and this chat's attached files." };
     }
-    if (target?.type !== "project") return { title: "Delete this chat?", description: "This permanently deletes the Pi session transcript and this chat's attached files." };
+    if (target?.type !== "project") return { title: "Delete this chat?", description: "This permanently deletes the session transcript and this chat's attached files." };
     if (target.project.origin === "linked") return { title: "Unlink this workspace?", description: `This unregisters ${target.project.name} and deletes its Conduit chats. The linked directory on disk is kept.` };
     if (target.project.origin === "created") return { title: "Unlink this workspace?", description: `This unregisters ${target.project.name} and deletes its Conduit chats. The created directory on disk is kept.` };
     if (target.project.origin === "cloned") return { title: "Unlink this workspace?", description: `This unregisters ${target.project.name} and deletes its Conduit chats. The cloned directory on disk is kept.` };

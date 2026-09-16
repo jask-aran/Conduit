@@ -781,7 +781,7 @@ export function CommandMenu(props: {
         >
           <div class="conduit-modal-card">
             <KAlertDialog.Title>Delete {pendingDelete()?.length || 0} chats?</KAlertDialog.Title>
-            <KAlertDialog.Description>This permanently deletes the selected Pi session transcripts and attached files.</KAlertDialog.Description>
+            <KAlertDialog.Description>This permanently deletes the selected session transcripts and attached files.</KAlertDialog.Description>
             <div class="dialog-actions">
               <Button
                 ref={deleteCancelButton}

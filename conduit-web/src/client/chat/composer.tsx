@@ -16,9 +16,9 @@ import {
 import type { ChatCapabilities, Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import { filesFromDataTransfer } from "../state/attachments";
-import type { AttachmentsStore } from "../state/attachments";
+import type { ComposerAttachments } from "./composer-attachments";
 import type { ComposerModels } from "./composer-models";
-import type { PermissionSettings } from "../state/permission-settings";
+import type { ComposerPermissions } from "./composer-permissions";
 import type { ServiceLevelSettings } from "../state/service-level-settings";
 import type { VoiceDictationSettings } from "./voice-dictation-types";
 import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../navigation/mobile-layout";
@@ -53,10 +53,10 @@ export interface ComposerStatus {
 
 export function Composer(props: {
   chat: ActiveChatStore;
-  attachments: AttachmentsStore;
+  attachments: ComposerAttachments;
   models: ComposerModels;
   modelsLoading?: boolean;
-  permissions?: PermissionSettings;
+  permissions?: ComposerPermissions;
   serviceLevels?: ServiceLevelSettings;
   /** Surfaces without a Conduit chat behind them cannot carry attachments. */
   attachmentsSupported?: boolean;
@@ -497,16 +497,16 @@ export function Composer(props: {
         <div class="composer-content">
           <MobileComposerOptions composer={props} />
           <div class="composer-input-shell">
-            <textarea ref={input} rows={1} aria-label="Message Pi" data-has-text={hasText() ? "true" : "false"} data-dictated-range={dictationSelectionOwned() && dictatedRange() ? "true" : undefined} placeholder={props.serverOnline ? "Send a message..." : "Server unavailable"} value={props.chat.draft()} disabled={!props.serverOnline} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} />
+            <textarea ref={input} rows={1} aria-label="Message the agent" data-has-text={hasText() ? "true" : "false"} data-dictated-range={dictationSelectionOwned() && dictatedRange() ? "true" : undefined} placeholder={props.serverOnline ? "Send a message..." : "Server unavailable"} value={props.chat.draft()} disabled={!props.serverOnline} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} />
             <Show when={slashOpen() && slashCommand()}>{(item) => <div class="slash-completion" aria-hidden="true"><span>{props.chat.draft()}</span>{item().command.slice(props.chat.draft().length)} <small>{item().description}</small></div>}</Show>
           </div>
           <div class="composer-actions" data-mobile-actions-stacked={mobileActionsStacked()}>
             <div class="composer-actions-left">
               <Show when={props.attachmentsSupported !== false}><Button class="composer-desktop-attachment" variant="ghost" size="icon-sm" aria-label={`Attach files${props.attachments.items().length ? ` (${props.attachments.items().length})` : ""}`} disabled={!props.serverOnline} onClick={attach}><PaperclipIcon /></Button></Show>
-              <div class="composer-desktop-setting">
-                <ModelSelector models={props.models.models()} model={props.models.model()} thinkingLevel={props.models.effort()} notice={props.models.notice()} loading={props.modelsLoading || Boolean(props.chat.connectingId())} disabled={!props.serverOnline || !supports("modelSwitch")} onModelChange={(value) => void props.models.chooseModel(value)} onThinkingLevelChange={(value) => void props.models.chooseEffort(value)} onManageModels={() => props.onOpenSettings("models")} />
-              </div>
               <Show when={props.profiles.length}><div class="composer-desktop-setting"><Menu><MenuTrigger class="model-trigger" aria-label={`Profile ${props.activeProfile?.label || "General"}`} disabled={!props.serverOnline || props.chat.status() !== "draft"}><span>{props.activeProfile?.label || "Profile"}</span><ChevronDownIcon /></MenuTrigger><MenuContent class="w-72"><MenuGroup><MenuLabel>Profile</MenuLabel><Show when={props.chat.status() !== "draft"}><div class="px-2 pb-2 text-xs text-muted-foreground">Locked for this chat after the first message.</div></Show><MenuRadioGroup value={props.activeProfile?.id || ""} onChange={props.onChooseProfile}><For each={props.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={props.chat.status() !== "draft" || item.disabled}>{item.label}</MenuRadioItem>}</For></MenuRadioGroup></MenuGroup><MenuSeparator /><MenuItem onSelect={() => props.onOpenSettings("profiles")}>Manage profiles…</MenuItem></MenuContent></Menu></div></Show>
+              <div class="composer-desktop-setting">
+                <ModelSelector models={props.models.models()} model={props.models.model()} thinkingLevel={props.models.effort()} notice={props.models.notice()} loading={props.modelsLoading} disabled={!props.serverOnline || !supports("modelSwitch")} onModelChange={(value) => void props.models.chooseModel(value)} onThinkingLevelChange={(value) => void props.models.chooseEffort(value)} onManageModels={() => props.onOpenSettings("models")} />
+              </div>
               <Show when={props.permissions?.profiles().length || props.serviceLevels?.levels().length}><div class="composer-desktop-setting"><Menu><MenuTrigger class="model-trigger" aria-label="Session settings" disabled={!props.serverOnline}><ShieldCheckIcon /><span>{props.permissions?.profiles().find((profile) => profile.id === props.permissions?.selected())?.label || "Settings"}</span><ChevronDownIcon /></MenuTrigger><MenuContent class="w-72"><Show when={props.permissions?.profiles().length}><MenuGroup><MenuLabel>Permissions</MenuLabel><MenuRadioGroup value={props.permissions?.selected() || ""} onChange={(value) => void props.permissions?.choose(value)}><For each={props.permissions?.profiles() || []}>{(profile) => <MenuRadioItem value={profile.id} disabled={!profile.allowed}><span class="shrink-0 whitespace-nowrap">{profile.label}</span><Show when={profile.description}><span class="ml-auto max-w-40 truncate text-xs text-muted-foreground">{profile.description}</span></Show></MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></Show><Show when={props.serviceLevels?.levels().length}><Show when={props.permissions?.profiles().length}><MenuSeparator /></Show><MenuGroup><MenuLabel>Service level</MenuLabel><MenuRadioGroup value={props.serviceLevels?.selected() || ""} onChange={(value) => void props.serviceLevels?.choose(value)}><For each={props.serviceLevels?.levels() || []}>{(level) => <MenuRadioItem value={level.id}>{level.label}</MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></Show></MenuContent></Menu></div></Show>
             </div>
             <Show when={recording() && !phoneLayout()}><VoiceWaveform class="composer-status-waveform composer-actions-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={3} ariaLabel={dictationLabel() || "Microphone input level"} /></Show>

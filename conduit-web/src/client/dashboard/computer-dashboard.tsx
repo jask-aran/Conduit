@@ -4,6 +4,7 @@ import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, Con
 import { api } from "../api/client";
 import type { ChatSummary, ComputerLocation, HarnessSummary, Project } from "../api/contracts";
 import type { ComposerModels } from "../chat/composer-models";
+import type { ComposerPermissions } from "../chat/composer-permissions";
 import type { DriveChatStore } from "../state/drive-chat";
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
@@ -65,7 +66,7 @@ export function ComputerDashboard(props: {
   onOpenHarness?: (id: string | null) => void;
   onOpenHarnessHere?: (id: string, cwd: string) => void;
   onOpenHarnessChat?: (chat: ChatSummary, project: Project, prompt?: string) => void;
-  harnessComposer?: (cwd: string, models: ComposerModels, loading: boolean) => JSX.Element;
+  harnessComposer?: (cwd: string, models: ComposerModels, loading: boolean, permissions: ComposerPermissions) => JSX.Element;
   onHarnessDriveChange?: (open: boolean) => void;
   renderHarnessDrive?: (input: { current: { cwd: string; title: string; nativeSessionId: string }; harness: HarnessSummary; store: DriveChatStore; onBack: () => void; onTrack: () => void }) => JSX.Element;
   dialog?: boolean;
@@ -84,6 +85,11 @@ export function ComputerDashboard(props: {
   const [order, setOrder] = createSignal<ComputerOrder>(storedComputerOrder());
   const [sidebarWidth, setSidebarWidth] = createSignal(Number(localStorage.getItem("conduit.computer.sidebar-width")) || 168);
   const [harnesses, setHarnesses] = createSignal<HarnessSummary[]>([]);
+  // Whether the catalogue has answered at all. Without it an empty list reads
+  // as "this harness does not exist", and the dashboard said so while the
+  // request -- which probes each harness's health, and can take a while -- was
+  // still in flight.
+  const [harnessesLoaded, setHarnessesLoaded] = createSignal(false);
   let controller: AbortController | undefined;
   let stopSidebarResize: (() => void) | undefined;
 
@@ -112,7 +118,10 @@ export function ComputerDashboard(props: {
   });
   createEffect(() => {
     if (props.dialog) return;
-    void api<{ harnesses: HarnessSummary[] }>("/v0/harnesses").then((result) => setHarnesses(result.harnesses));
+    void api<{ harnesses: HarnessSummary[] }>("/v0/harnesses")
+      .then((result) => setHarnesses(result.harnesses))
+      .catch(() => setHarnesses([]))
+      .finally(() => setHarnessesLoaded(true));
   });
   createEffect(() => localStorage.setItem("conduit.computer.view", view()));
   createEffect(() => localStorage.setItem("conduit.computer.order", order()));
@@ -190,7 +199,7 @@ export function ComputerDashboard(props: {
       </aside></Show>
       <Show when={!props.selectedHarness}><div class="computer-sidebar-resize" role="separator" aria-label="Resize locations sidebar" aria-orientation="vertical" aria-valuemin="120" aria-valuemax="280" aria-valuenow={sidebarWidth()} onPointerDown={startSidebarResize} /></Show>
 
-      <Show when={!props.selectedHarness} fallback={<HarnessDashboard harness={harnesses().find((item) => item.id === props.selectedHarness)} projects={workspaces()} cwd={props.location?.project.workingRoot || ""} runtime={props.runtime} scope={harnessScope()} onScope={setHarnessScope} onOpenChat={props.onOpenHarnessChat} composer={props.harnessComposer} onDriveChange={props.onHarnessDriveChange} renderDrive={props.renderHarnessDrive} />}>
+      <Show when={!props.selectedHarness} fallback={<HarnessDashboard harness={harnesses().find((item) => item.id === props.selectedHarness)} catalogueLoaded={harnessesLoaded()} projects={workspaces()} cwd={props.location?.project.workingRoot || ""} runtime={props.runtime} scope={harnessScope()} onScope={setHarnessScope} onOpenChat={props.onOpenHarnessChat} composer={props.harnessComposer} onDriveChange={props.onHarnessDriveChange} renderDrive={props.renderHarnessDrive} />}>
       <div class="computer-explorer-main">
         <div class="computer-explorer-toolbar">
           <button type="button" aria-label="Home folder" title="Home folder" disabled={props.loading} onClick={() => props.onBrowse()}><HomeIcon /></button>

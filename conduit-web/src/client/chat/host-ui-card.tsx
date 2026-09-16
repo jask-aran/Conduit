@@ -9,8 +9,8 @@ function HostUiCard(props: { request: HostUiRequest; onRespond: (response: HostU
   const dismiss = () => props.onRespond({ id: props.request.id, cancelled: true });
   const submit = () => props.onRespond({ id: props.request.id, value: value() });
 
-  return <section class="host-ui-card" aria-label={props.request.title || "Pi needs your input"}>
-    <strong>{props.request.title || "Pi needs your input"}</strong>
+  return <section class="host-ui-card" aria-label={props.request.title || "The agent needs your input"}>
+    <strong>{props.request.title || "The agent needs your input"}</strong>
     <Show when={props.request.message}><p>{props.request.message}</p></Show>
     <Show when={props.request.kind === "select"}>
       <div class="host-ui-options">

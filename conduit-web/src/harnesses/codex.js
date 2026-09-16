@@ -10,6 +10,7 @@ export const manifest = {
   installationId: "host-codex",
   capabilities: CODEX_CAPABILITIES,
   discovery: "machine",
+  warm: "process",
   // App-server stores names but does not start the first-party client's hidden
   // naming turn for third-party threads.
   nameGeneration: "conduit",

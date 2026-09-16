@@ -422,6 +422,10 @@ export interface RuntimeProcess {
   chatId: string;
   projectId?: string;
   status?: string;
+  /** False while the harness is alive but cannot answer yet. */
+  ready?: boolean;
+  /** True while a request to the harness is outstanding. */
+  waiting?: boolean;
   process?: ProcessState;
   generation?: GenerationState | Record<string, unknown>;
   activity?: string | RuntimeActivity;

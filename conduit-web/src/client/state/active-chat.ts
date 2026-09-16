@@ -1,11 +1,13 @@
 import { batch, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 import { deriveFineActivity } from "../../activity.js";
 import { api, asList } from "../api/client";
+import { createAgentSession } from "./agent-session";
 import { webSocketUrl } from "../api/transport";
 import { isStructuredGenerationEvent, normalizeLiveEvent } from "../api/live-events";
 import type { LiveEvent, RuntimeStateEvent, StructuredGenerationEvent, TurnArtifactSummary } from "../api/live-events";
 import type {
   ChatStatus,
+  Attachment,
   ChatSummary,
   CacheStats,
   ChatCapabilities,
@@ -27,7 +29,7 @@ import { assignToolSeq, mergeTranscriptProjection, promotePendingUser, replaceTr
 import { reconcileMessages } from "../reconcile-messages";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { canCoalesceTextDelta, enqueueOverflowLiveEvent, mergeTextDeltaEvents } from "./text-delta-batcher";
-import type { AttachmentsStore } from "./attachments";
+import type { UploadAttachment } from "./attachments";
 import type { DraftsStore } from "./drafts";
 import type { CatalogueStore } from "./catalogue";
 import { freezeGeneration, settleGenerationTools, type ActiveGenerationView, type LiveGenerationChange } from "../turn-rows";
@@ -68,13 +70,62 @@ function generationChangeFor(event: StructuredGenerationEvent): LiveGenerationCh
   };
 }
 
+/**
+ * The slices of the two per-chat stores this one actually uses.
+ *
+ * Named so that a surface without them -- a harness thread with no Conduit
+ * chat behind it -- can supply something real instead of casting an object
+ * literal through `as never`. A cast satisfies the compiler and not the code:
+ * the drive composer shipped one missing a single method, and the surface died
+ * on "pendingIds is not a function" the moment somebody opened it.
+ */
+export interface ChatModels {
+  model: () => string;
+  effort: () => string;
+  reloadChat: (chatId?: string) => Promise<void>;
+  select: (projectId: string, chatId: string, selection?: { model?: string; thinkingLevel?: string },
+    options?: { reloadChat?: boolean; backend?: string }) => Promise<void>;
+}
+
+export interface ChatAttachments {
+  items: () => UploadAttachment[];
+  pendingIds: () => string[];
+  select: (chatId: string) => void | Promise<void>;
+  markAnnounced: (ids: string[]) => void;
+  restore: (attachments: Attachment[]) => void;
+}
+
+/** For a chat whose harness owns the model and whose surface carries no files. */
+export const HARNESS_OWNED_MODELS: ChatModels = {
+  model: () => "",
+  effort: () => "",
+  reloadChat: async () => {},
+  select: async () => {},
+};
+
+export const NO_CHAT_ATTACHMENTS: ChatAttachments = {
+  items: () => [],
+  pendingIds: () => [],
+  select: () => {},
+  markAnnounced: () => {},
+  restore: () => {},
+};
+
+/** The slice of the catalogue this store uses: which chat is open, and where. */
+export interface ChatCatalogue {
+  selectedId: () => string | null;
+  projectId: () => string;
+  select: (chat: ChatSummary, project: Project) => void;
+  refresh: () => Promise<Project[]>;
+}
+
 interface ActiveChatOptions {
-  catalogue: CatalogueStore;
+  catalogue: ChatCatalogue;
   runtime: RuntimeStore;
-  models: ModelSettings;
+  models: ChatModels;
   permissions?: PermissionSettings;
   serviceLevels?: ServiceLevelSettings;
-  attachments: AttachmentsStore;
+  attachments: ChatAttachments;
   drafts?: DraftsStore;
   onError: ErrorHandler;
   onModelRecovered: (details: { from: string; to: string }) => void;
@@ -141,19 +192,21 @@ export function createActiveChat(options: ActiveChatOptions) {
     setActiveGenerationRevision((revision) => revision + 1);
   };
   const generationStore = createClientActiveGenerationStore();
-  const [connectingId, setConnectingId] = createSignal<string | null>(null);
+  /*
+   * There is deliberately no "is this chat connecting?" signal here any more.
+   * A chat's agent state is the server's to report: it publishes the process
+   * when it spawns and again when the harness can answer, and both the sidebar
+   * row and the composer read that one record through `activity`. A promise in
+   * this client used to decide it instead, which is how "Starting agent…" came
+   * to cover a catalogue fetch, outlast a warm attach, and mean nothing.
+   */
   const [navigatingId, setNavigatingId] = createSignal<string | null>(null);
   let navigationRequest: Promise<void> | null = null;
-  let socket: WebSocket | null = null;
+
   let currentGeneration: string | null = null;
   let stopPending = false;
-  let openToken = 0;
-  let openingLive: { chatId: string; request: Promise<LiveRecord | null> } | null = null;
   let selectionToken = 0;
   let navigationToken = 0;
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let reconnectAttempts = 0;
-  let reconnectToken = 0;
   let pendingTextDelta: StructuredGenerationEvent | null = null;
   let pendingTextDeltaTimer: ReturnType<typeof setTimeout> | null = null;
   const transcriptPrefetches = new Map<string, {
@@ -210,6 +263,42 @@ export function createActiveChat(options: ActiveChatOptions) {
   const STOP_TERMINAL_EVENT_TYPES = new Set(["generation_stopping", "generation_stopped", "generation_settled", "generation_failed"]);
 
   const selectedId = catalogue.selectedId;
+  /**
+   * This chat's connection to its agent.
+   *
+   * The lifecycle lives in one place that owns nothing else: the process, the
+   * stream and the reconnect. What arrives from it is applied here, and what
+   * the UI says about it comes from the runtime stream, not from either.
+   */
+  const session = createAgentSession({
+    runtime: options.runtime,
+    chatId: () => selectedId(),
+    projectId: () => projectId(),
+    model: () => models.model(),
+    thinkingLevel: () => models.effort(),
+    onRecord: (record) => {
+      setLive(record);
+      if (record.capabilities) setCapabilities(record.capabilities);
+      if (record.runtime) setRuntimeIdentity(record.runtime);
+      if (record.contextUsage) setContextUsage(record.contextUsage);
+      if (record.sessionStats) setSessionStats(record.sessionStats);
+      if (record.cacheStats) setCacheStats(record.cacheStats);
+      if (record.modelRecovery) options.onModelRecovered(record.modelRecovery);
+    },
+    onDetail: (detail, chatId) => {
+      applyDetail({ ...detail, id: chatId });
+      setLoadedId(chatId);
+      setStatus("active");
+    },
+    onEvent: (data) => {
+      try { consume(normalizeLiveEvent(JSON.parse(data))); }
+      catch (error) { onError(error); }
+    },
+    onLost: () => setLive(null),
+    onError,
+  });
+  const ensureAgent = session.ensure;
+  const requireAgent = session.require;
   const projectId = catalogue.projectId;
   const streaming = createMemo(() => generation() === "active" || generation() === "submitting");
   const stopping = createMemo(() => generation() === "stopping");
@@ -220,13 +309,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     setActiveToolName(null);
     setRetry(null);
     setCompacting(false);
-  };
-
-  const cancelReconnect = () => {
-    reconnectToken += 1;
-    reconnectAttempts = 0;
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-    reconnectTimer = null;
   };
 
   const clearPendingLiveEvents = () => {
@@ -327,13 +409,9 @@ export function createActiveChat(options: ActiveChatOptions) {
   const reset = () => {
     navigationToken += 1;
     selectionToken += 1;
-    openToken += 1;
-    cancelReconnect();
-    setConnectingId(null);
     setLoadedId(null);
     setBackendImplementation(null);
-    socket?.close();
-    socket = null;
+    session.reset();
     setLive(null);
     setGeneration("idle");
     setDraft("");
@@ -370,7 +448,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     let result: ReturnType<typeof generationStore.apply> | undefined;
     batch(() => {
       // The message that started this turn is the last one the client minted,
-      // and until Pi writes it there is nothing else to call it. Tagging it
+      // and until the harness writes it there is nothing else to call it. Tagging it
       // with the generation is what lets that turn's sync find it again.
       if (event.type === "generation_started" || event.type === "generation_resume") {
         setMessages((existing) => tagOptimisticGenerationOwner(existing, event.generationId));
@@ -384,7 +462,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (!result) return;
     const next = result.state as ActiveGenerationView | null;
     if (!next) return;
-    // A terminal turn moves into the transcript exactly once. Pi can already
+    // A terminal turn moves into the transcript exactly once. A harness can already
     // have committed its final message; Codex does not. Both copies carry the
     // generation id, so this replacement handles either path and the later
     // backend transcript sync replaces the same range instead of appending.
@@ -474,8 +552,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       setGeneration("interrupted");
       if (event.type === "generation_stopped" && Boolean(event.processTerminated)) {
         setLive(null);
-        cancelReconnect();
-        socket?.close();
+        session.detach();
       }
     } else if (next.status === "complete") {
       stopPending = false;
@@ -523,205 +600,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     else if (turnOpen || session.active) setGeneration("active");
     else setGeneration((current) => current === "interrupted" ? current : "idle");
   };
-
-  const scheduleReconnect = (record: LiveRecord, chatId: string, selection: number) => {
-    if (reconnectTimer || selection !== selectionToken || selectedId() !== chatId) return;
-    const token = reconnectToken;
-    const delay = Math.min(250 * 2 ** Math.min(reconnectAttempts, 5), 8_000);
-    reconnectAttempts += 1;
-    reconnectTimer = setTimeout(async () => {
-      reconnectTimer = null;
-      if (token !== reconnectToken || selection !== selectionToken || selectedId() !== chatId) return;
-      try {
-        await openLive(chatId, projectId(), { intent: "open" }, selection);
-        reconnectAttempts = 0;
-      } catch {
-        if (token === reconnectToken) scheduleReconnect(record, chatId, selection);
-      }
-    }, delay);
-  };
-
-  const connect = async (record: LiveRecord, chatId: string, selection: number) => {
-    cancelReconnect();
-    socket?.close();
-    const next = new WebSocket(await webSocketUrl(record.streamUrl || `/v0/live-sessions/${record.id}/stream`));
-    socket = next;
-    next.onmessage = ({ data }) => {
-      if (socket !== next || selection !== selectionToken || selectedId() !== chatId) return;
-      try {
-        const event = normalizeLiveEvent(JSON.parse(String(data)));
-        consume(event);
-      } catch (error) { onError(error); }
-    };
-    next.addEventListener("close", () => {
-      if (socket !== next) return;
-      socket = null;
-      scheduleReconnect(record, chatId, selection);
-    });
-  };
-
-  const waitForSocket = () => new Promise<void>((resolve, reject) => {
-    const current = socket;
-    if (!current) return reject(new Error("Could not connect to the agent"));
-    if (current.readyState === WebSocket.OPEN) return resolve();
-    current.addEventListener("open", () => resolve(), { once: true });
-    current.addEventListener("error", () => reject(new Error("The live stream failed. Try again.")), { once: true });
-    current.addEventListener("close", () => reject(new Error("The live stream closed before it connected.")), { once: true });
-  });
-
-  const attachResident = async (chatId: string, selection: number): Promise<LiveRecord | null> => {
-    const resident = options.runtime.getProcess(chatId);
-    if (!resident?.id || resident.status === "stopped" || resident.status === "none") return null;
-    const record: LiveRecord = {
-      id: resident.id,
-      chatId,
-      streamUrl: `/v0/live-sessions/${resident.id}/stream`,
-      runtime: resident.runtime,
-      capabilities: resident.capabilities,
-      contextUsage: resident.contextUsage,
-      sessionStats: resident.sessionStats,
-      cacheStats: resident.cacheStats,
-      modelProfile: resident.modelProfile,
-    };
-    setLive(record);
-    if (record.capabilities) setCapabilities(record.capabilities);
-    if (record.runtime) setRuntimeIdentity(record.runtime);
-    if (record.contextUsage) setContextUsage(record.contextUsage);
-    if (record.sessionStats) setSessionStats(record.sessionStats);
-    if (record.cacheStats) setCacheStats(record.cacheStats);
-    await connect(record, chatId, selection);
-    await waitForSocket();
-    return selection === selectionToken && selectedId() === chatId ? record : null;
-  };
-
-  const openLive = async (chatId: string, ownerProjectId: string, launch: UnknownRecord = {}, selection = selectionToken): Promise<LiveRecord | null> => {
-    if (selection !== selectionToken || selectedId() !== chatId) return null;
-    const preserveDraft = status() === "draft";
-    const token = ++openToken;
-    const intent = String(launch.intent || "open");
-    try {
-      // The runtime stream is the server's process catalogue. Attach its
-      // resident record directly; POST is only for a cold start or stale view.
-      try {
-        const resident = await attachResident(chatId, selection);
-        if (resident) {
-          void models.reloadChat(chatId).catch(onError);
-          return resident;
-        }
-      } catch {
-        cancelReconnect();
-        socket?.close();
-        socket = null;
-        setLive(null);
-      }
-      // Only an intent the server will act on may promise a start. An "open"
-      // attaches to a process that exists but never creates one, so showing
-      // "Starting agent…" for it puts a spinner on screen for the single frame
-      // it takes the server to answer that there is no process. The server owns
-      // this policy (SPAWNING_INTENTS in src/server/live-session-launcher.js);
-      // this copy decides nothing but whether the spinner is honest.
-      if (SPAWNING_INTENTS.has(intent)) setConnectingId(chatId);
-      const record = await api<LiveRecord>("/v0/live-sessions", {
-        method: "POST",
-        body: JSON.stringify({
-          chatId,
-          projectId: ownerProjectId,
-          model: launch.modelOverride ?? models.model(),
-          thinkingLevel: launch.thinkingOverride ?? models.effort(),
-          intent,
-        }),
-      });
-      if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
-      setLive(record);
-      if (record.capabilities) setCapabilities(record.capabilities);
-      if (record.modelRecovery) options.onModelRecovered(record.modelRecovery);
-      if (record.runtime) setRuntimeIdentity(record.runtime);
-      if (record.contextUsage) setContextUsage(record.contextUsage);
-      if (record.sessionStats) setSessionStats(record.sessionStats);
-      if (record.cacheStats) setCacheStats(record.cacheStats);
-      await connect(record, chatId, selection);
-      await waitForSocket();
-      if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
-      await models.reloadChat(chatId);
-      if (!preserveDraft) {
-        const refreshedProjects = await catalogue.refresh();
-        if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
-        const refreshed = refreshedProjects.flatMap((project) => project.sessions).find((chat) => chat.id === chatId);
-        if (refreshed) setTitle(refreshed.title);
-      }
-      return record;
-    } catch (error) {
-      if (token !== openToken || selection !== selectionToken || selectedId() !== chatId) return null;
-      // The server decides whether an intent may start a process; an "open"
-      // may not. Being told there is none is an answer, not a failure: the
-      // chat is simply not live, and reporting it as an error would put a
-      // toast in front of someone for opening a chat they had finished with.
-      // Returning rather than throwing also settles the reconnect timer, so a
-      // process the reaper stopped stays stopped.
-      if ((error as { error?: string } | null)?.error === "no_live_process") {
-        setLive(null);
-        return null;
-      }
-      throw error;
-    } finally { if (token === openToken) setConnectingId(null); }
-  };
-
-  /**
-   * Adopt a live record somebody else created - a harness thread being driven
-   * from the Computer, which the server opened through its own endpoint. The
-   * chat id must already be selected, so the same guards and the same
-   * applyLiveEvent path serve it exactly as they serve a Conduit chat.
-   */
-  const attachLive = async (record: LiveRecord, detail?: TranscriptDetail) => {
-    const chatId = selectedId();
-    if (!chatId) throw new Error("Chat is not ready yet");
-    const selection = selectionToken;
-    // A thread with no Conduit chat brings its own settled history; without it
-    // only the live generation would survive, because each one replaces the last.
-    if (detail) applyDetail({ ...detail, id: chatId });
-    setLive({ ...record, chatId });
-    setLoadedId(chatId);
-    if (record.capabilities) setCapabilities(record.capabilities);
-    if (record.runtime) setRuntimeIdentity(record.runtime);
-    if (record.contextUsage) setContextUsage(record.contextUsage);
-    if (record.sessionStats) setSessionStats(record.sessionStats);
-    if (record.cacheStats) setCacheStats(record.cacheStats);
-    setStatus("active");
-    await connect({ ...record, chatId }, chatId, selection);
-    return record;
-  };
-
-  const ensureLive = async (intent = "open") => {
-    if (live() && live()!.chatId === selectedId() && socket?.readyState === WebSocket.OPEN) return live()!;
-    const chatId = selectedId();
-    if (!chatId) throw new Error("Chat is not ready yet");
-    const selection = selectionToken;
-    const active = openingLive?.chatId === chatId
-      ? openingLive
-      : { chatId, request: openLive(chatId, projectId(), { intent }, selection) };
-    openingLive = active;
-    try {
-      const record = await active.request;
-      if (!record) throw new Error("Chat switched before Pi was ready");
-      return record;
-    } finally {
-      if (openingLive === active) openingLive = null;
-    }
-  };
-
-  const resumeLive = () => {
-    if (document.visibilityState === "hidden") return;
-    if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
-    const record = live();
-    const chatId = selectedId();
-    if (record && chatId && record.chatId === chatId) void connect(record, chatId, selectionToken).catch(onError);
-  };
-  const restoreLive = (event: PageTransitionEvent) => {
-    if (event.persisted) resumeLive();
-  };
-  document.addEventListener("visibilitychange", resumeLive);
-  window.addEventListener("pageshow", restoreLive);
-  window.addEventListener("online", resumeLive);
 
   function applyLiveEvent(event: LiveEvent) {
     if (isStructuredGenerationEvent(event)) {
@@ -786,11 +664,10 @@ export function createActiveChat(options: ActiveChatOptions) {
       // the live dot came straight back. A crash still reconnects.
       case "runtime_exit":
         if (event.deliberate) {
-          cancelReconnect();
           setLive(null);
           resetLiveFlags();
           setGeneration("idle");
-          socket?.close();
+          session.detach();
         }
         break;
       case "runtime_error":
@@ -838,54 +715,122 @@ export function createActiveChat(options: ActiveChatOptions) {
    * that belongs to a chat belongs in here, so there is one list to add to and
    * no second place to forget.
    */
-  const chatScopes: Array<(scope: { chat: ChatSummary; project: Project; detail?: TranscriptDetail }) => void | Promise<void>> = [
-    ({ chat, project, detail }) => models.select(project.id, chat.id, detail),
+  const chatScopes: Array<(scope: { chat: ChatSummary; project: Project; detail?: TranscriptDetail; launching?: boolean }) => void | Promise<void>> = [
+    // A chat that is about to launch reloads its models when the process is
+    // up. Asking for them here as well raced the launch: the
+    // route answers from the live process the moment one is registered, and a
+    // process registered but not yet serving answers nothing, and the model
+    // request times out waiting for it. The selection itself is applied
+    // synchronously from the transcript detail either way, so the composer
+    // still shows the right model while the agent starts.
+    ({ chat, project, detail, launching }) => models.select(project.id, chat.id, detail, {
+      reloadChat: !launching,
+      backend: detail?.backend?.implementation || chat.backend?.implementation || "",
+    }),
     ({ chat }) => permissions?.select(chat.id),
     ({ chat }) => serviceLevels?.select(chat.id),
-    ({ chat }) => attachments.select(chat.id),
+    ({ chat }) => { void attachments.select(chat.id); },
     ({ chat }) => hydrateDraft(chat.id),
   ];
 
-  const reconcileChatScope = (chat: ChatSummary, project: Project, detail?: TranscriptDetail) =>
-    Promise.all(chatScopes.map((scope) => scope({ chat, project, detail }))).then(() => {});
+  const reconcileChatScope = (chat: ChatSummary, project: Project, detail?: TranscriptDetail, launching = false) =>
+    Promise.all(chatScopes.map((scope) => scope({ chat, project, detail, launching }))).then(() => {});
+
+  /**
+   * The one way a chat becomes the open chat.
+   *
+   * Creating a chat, restoring one from a URL, and clicking one in the sidebar
+   * all arrive here with the same three questions answered differently: what
+   * history it starts from, whether the address bar moves, and whether its
+   * agent should be warmed. They used to be two functions that each remembered
+   * a different subset of the work, which is how a chat could end up selected
+   * with somebody else's permission modes still on screen.
+   */
+  const enterChat = async (chat: ChatSummary, project: Project, entry: {
+    detail?: TranscriptDetail;
+    history?: "push" | "replace" | "none";
+    warm?: boolean;
+    onCommit?: () => void;
+    onShown?: () => void;
+  }) => {
+    const detail = entry.detail;
+    // Drop any previous chat's stream first: sending reuses an open socket
+    // without re-checking ownership, so a stale one would carry this chat's
+    // prompts into the previous chat's agent.
+    reset();
+    const selection = selectionToken;
+    batch(() => {
+      catalogue.select(chat, project);
+      if (entry.history === "push") history.pushState({}, "", `/chat/${chat.id}`);
+      else if (entry.history === "replace") history.replaceState({}, "", `/chat/${chat.id}`);
+      entry.onCommit?.();
+    });
+    // Every store that holds one chat's answers is told which chat, in one
+    // place, so adding one cannot mean remembering it in two.
+    const scopeReload = reconcileChatScope(chat, project, detail, entry.warm);
+    if (detail) applyDetail(detail);
+    else {
+      setMessages([]);
+      setTools([]);
+      setPageBefore(null);
+      setLoadedId(chat.id);
+      setStatus(chat.status);
+      setTitle(chat.title);
+      setTemplateId(chat.profileId || chat.templateId || options.defaultTemplateId() || "assistant");
+      setRuntimeIdentity(chat.runtime || null);
+      setBackendImplementation(chat.backend?.implementation || null);
+    }
+    // The chat somebody asked for is on screen: navigation is done. Whether its
+    // agent is warm is a separate question, answered in the sidebar by the
+    // process itself.
+    entry.onShown?.();
+    if (entry.warm) {
+      const draft = chat.status === "draft";
+      void ensureAgent({ chatId: chat.id, projectId: project.id, intent: "select" })
+        .then(async () => {
+          if (selection !== selectionToken || selectedId() !== chat.id) return;
+          // Read from the harness, so asked for once the agent can answer
+          // rather than in front of it.
+          await models.reloadChat(chat.id);
+          if (draft) return;
+          const projects = await catalogue.refresh();
+          if (selection !== selectionToken || selectedId() !== chat.id) return;
+          const refreshed = projects.flatMap((item) => item.sessions).find((session) => session.id === chat.id);
+          if (refreshed) setTitle(refreshed.title);
+        })
+        .catch(onError);
+    }
+    await scopeReload;
+  };
 
   const performSelect = async (
     chat: ChatSummary,
     project: Project,
-    navigationOptions: { history?: "push" | "replace" | "none"; onCommit?: () => void } = {},
+    navigationOptions: { history?: "push" | "replace" | "none"; onCommit?: () => void; onShown?: () => void } = {},
   ) => {
     const navigation = ++navigationToken;
     const cached = cachedTranscript(chat);
     const detail = cached || await loadTranscript(chat);
     if (chatIsLive(chat)) transcriptPrefetches.delete(chat.id);
     if (navigation !== navigationToken) return;
-    reset();
-    const selection = selectionToken;
-    const historyMode = navigationOptions.history || "replace";
-    batch(() => {
-      catalogue.select(chat, project);
-      if (historyMode === "push") history.pushState({}, "", `/chat/${chat.id}`);
-      else if (historyMode === "replace") history.replaceState({}, "", `/chat/${chat.id}`);
-      navigationOptions.onCommit?.();
+    await enterChat(chat, project, {
+      detail,
+      history: navigationOptions.history || "replace",
+      warm: detail.status === "active",
+      onCommit: navigationOptions.onCommit,
+      onShown: navigationOptions.onShown,
     });
-    const scopeReload = reconcileChatScope(chat, project, detail);
-    applyDetail(detail);
-    await scopeReload;
-    // The connector comes up behind the transcript rather than in front of it.
-    // Navigation used to wait for the socket, the model reload and a catalogue
-    // refresh before it counted as finished, and for that whole stretch the
-    // sidebar showed the row as still opening instead of showing its live
-    // process -- so warming an agent looked like the chat itself was slow. What
-    // the UI needs to be correct is the harness manifest, which is known the
-    // moment the chat is selected; the live record only ever refines it.
-    if (detail.status === "active") void openLive(chat.id, project.id, { intent: "select" }, selection).catch(onError);
-    else if (cached) {
+    // A cached transcript is shown first and corrected behind itself; a live one
+    // is corrected by its own stream.
+    if (detail.status !== "active" && cached) {
+      const selection = selectionToken;
       void fetchTranscript(chat).then((fresh) => {
         if (selection !== selectionToken || selectedId() !== chat.id) return;
         applyDetail(fresh, true);
       }).catch(onError);
     }
   };
+
   const select = (
     chat: ChatSummary,
     project: Project,
@@ -894,7 +839,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (navigatingId() === chat.id && navigationRequest) return navigationRequest;
     setNavigatingId(chat.id);
     let request: Promise<void>;
-    request = performSelect(chat, project, navigationOptions).finally(() => {
+    const shown = () => { if (navigatingId() === chat.id) setNavigatingId(null); };
+    request = performSelect(chat, project, { ...navigationOptions, onShown: shown }).finally(() => {
       if (navigationRequest !== request) return;
       navigationRequest = null;
       setNavigatingId(null);
@@ -903,22 +849,25 @@ export function createActiveChat(options: ActiveChatOptions) {
     return request;
   };
 
-  const initialize = async (chat: ChatSummary, project: Project, detail?: TranscriptDetail) => {
-    // Drop any previous chat's live socket/record first: send() reuses an open
-    // socket without re-checking ownership, so a stale stream would carry this
-    // chat's prompts into the previous chat's Pi process.
-    reset();
-    catalogue.select(chat, project);
-    setStatus(chat.status);
-    setTitle(chat.title);
-    setTemplateId(chat.profileId || chat.templateId || options.defaultTemplateId() || "assistant");
-    setRuntimeIdentity(chat.runtime || null);
-    setBackendImplementation(chat.backend?.implementation || null);
-    const scopeReload = reconcileChatScope(chat, project, detail);
-    if (detail) applyDetail(detail);
-    else { setMessages([]); setTools([]); setPageBefore(null); setLoadedId(chat.id); }
-    await scopeReload;
-  };
+  /**
+   * Open a chat this client just created, restored from a URL, or re-entered
+   * after switching its profile - the ways in that do not move history.
+   *
+   * It warms on the same rule as a click: a chat with a session behind it gets
+   * its agent started, behind the transcript. Every caller used to decide that
+   * for itself and they disagreed, which is why opening the same chat from two
+   * places felt like two different products.
+   */
+  const initialize = (chat: ChatSummary, project: Project, detail?: TranscriptDetail, entry: { warm?: boolean } = {}) =>
+    enterChat(chat, project, {
+      detail,
+      history: "none",
+      // A chat with a session behind it warms on sight. A brand new one does
+      // not, unless the caller says it is about to be used -- a chat somebody
+      // just created, where the alternative is paying the cold start on their
+      // first message.
+      warm: entry.warm ?? (detail?.status || chat.status) === "active",
+    });
 
   const prepareOutboundMessage = () => {
     const chatId = loadedId() ?? "";
@@ -958,16 +907,16 @@ export function createActiveChat(options: ActiveChatOptions) {
       const queueMode = mode || (capabilities()?.steer === false ? "follow_up" : "steer");
       setDraft("");
       try {
-        await ensureLive("steer");
-        socket!.send(JSON.stringify({ type: queueMode === "steer" ? "steer" : "follow_up", message: prepared.message, attachmentIds: prepared.attachmentIds }));
+        await requireAgent("steer");
+        session.send({ type: queueMode === "steer" ? "steer" : "follow_up", message: prepared.message, attachmentIds: prepared.attachmentIds });
         acceptOutboundMessage(prepared);
       } catch (error) { setDraft(prepared.text); onError(error); }
       return;
     }
 
-    if (!live() || live()!.chatId !== selectedId() || socket?.readyState !== WebSocket.OPEN) {
+    if (!live() || live()!.chatId !== selectedId() || !session.isOpen()) {
       setGeneration("submitting");
-      try { await ensureLive("prompt"); } catch (error) { setGeneration("idle"); onError(error); return; }
+      try { await requireAgent("prompt"); } catch (error) { setGeneration("idle"); onError(error); return; }
     }
 
     const previous = messages();
@@ -980,9 +929,9 @@ export function createActiveChat(options: ActiveChatOptions) {
     });
     setGeneration("submitting");
     try {
-      socket!.send(JSON.stringify(editId
+      session.send(editId
         ? { type: "fork_and_prompt", entryId: editId, message: prepared.message, attachmentIds: prepared.attachmentIds, model: models.model(), thinkingLevel: models.effort() }
-        : { type: "prompt", message: prepared.message, attachmentIds: prepared.attachmentIds }));
+        : { type: "prompt", message: prepared.message, attachmentIds: prepared.attachmentIds });
       acceptOutboundMessage(prepared);
       setStatus("active");
       setGeneration("active");
@@ -1001,30 +950,28 @@ export function createActiveChat(options: ActiveChatOptions) {
     flushPendingTextDelta();
     stopPending = true;
     setGeneration("stopping");
-    const command = JSON.stringify({ type: "stop_generation", generationId: currentGeneration });
-    if (socket?.readyState === WebSocket.OPEN) socket.send(command);
-    else void ensureLive("open").then(() => socket?.send(command)).catch((error) => onError(error));
+    session.sendWhenReady({ type: "stop_generation", generationId: currentGeneration });
   };
 
   const regenerate = async (entryId: string) => {
     if (!entryId || !capabilities()?.regenerate || streaming() || stopping()) return;
     try {
-      await ensureLive("regenerate");
+      await requireAgent("regenerate");
       setMessages((current) => truncateForRegenerate(current, entryId));
       setGeneration("active");
-      socket!.send(JSON.stringify({ type: "regenerate", entryId, model: models.model(), thinkingLevel: models.effort() }));
+      session.send({ type: "regenerate", entryId, model: models.model(), thinkingLevel: models.effort() });
     } catch (error) { setGeneration("idle"); onError(error); }
   };
 
   const continueResponse = async () => {
     if (streaming() || stopping()) return;
-    try { await ensureLive("continue"); setGeneration("active"); socket!.send(JSON.stringify({ type: "continue" })); }
+    try { await requireAgent("continue"); setGeneration("active"); session.send({ type: "continue" }); }
     catch (error) { setGeneration("idle"); onError(error); }
   };
 
   const compact = async () => {
     if (streaming() || compacting() || !capabilities()?.compaction) return;
-    try { await ensureLive("compact"); socket!.send(JSON.stringify({ type: "compact" })); }
+    try { await requireAgent("compact"); session.send({ type: "compact" }); }
     catch (error) { onError(error); }
   };
 
@@ -1033,7 +980,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (!chatId || commandsLoadedFor === chatId) return;
     if (commandsLoading) return commandsLoading;
     commandsLoading = (async () => {
-      const record = await ensureLive();
+      const record = await requireAgent("open");
       if (!record || selectedId() !== chatId) return;
       const result = await api<{ commands: HarnessCommand[] }>(`/v0/live-sessions/${encodeURIComponent(record.id)}/commands`);
       if (selectedId() !== chatId) return;
@@ -1073,8 +1020,8 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   const respondHostUi = (response: UnknownRecord) => {
-    if (!socket || socket.readyState !== WebSocket.OPEN) return onError("Not connected to the live session");
-    socket.send(JSON.stringify({ type: "extension_ui_response", ...response }));
+    if (!session.isOpen()) return onError("Not connected to the live session");
+    session.send({ type: "extension_ui_response", ...response });
     setHostUiRequests((current) => current.filter((item) => item.id !== response.id));
   };
 
@@ -1106,7 +1053,7 @@ export function createActiveChat(options: ActiveChatOptions) {
    */
   const takeQueued = () => {
     const text = pendingMessages().map((message) => message.content).filter(Boolean).join("\n");
-    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "clear_queue" }));
+    if (session.isOpen()) session.send({ type: "clear_queue" });
     setQueue({ steering: [], followUp: [] });
     return text;
   };
@@ -1141,8 +1088,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     setDraft("");
     setGeneration("submitting");
     try {
-      socket!.send(JSON.stringify({ type: "interrupt_and_send", message: prepared.message, attachmentIds: prepared.attachmentIds,
-        model: models.model(), thinkingLevel: models.effort() }));
+      session.send({ type: "interrupt_and_send", message: prepared.message, attachmentIds: prepared.attachmentIds,
+        model: models.model(), thinkingLevel: models.effort() });
       setMessages((current) => [...current, local]);
       acceptOutboundMessage(prepared);
       setStatus("active");
@@ -1171,7 +1118,6 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   const activity = createMemo(() => {
-    if (connectingId() === selectedId()) return { kind: "starting", label: "Starting agent…" };
     const process = options.runtime.getProcess(selectedId());
     const derived = deriveFineActivity({
       generation: generation(),
@@ -1189,25 +1135,23 @@ export function createActiveChat(options: ActiveChatOptions) {
         return { kind: "request_failed", label: "Request failed · Ready to retry" };
       }
     }
-    return derived.kind === "starting" ? { kind: "idle", label: null } : derived;
+    // "starting" now means the harness itself is not ready yet -- the server
+    // says so, and says when it stops being true -- so it is worth showing.
+    return derived.kind === "starting" ? { kind: "starting", label: "Starting agent…" } : derived;
   });
 
   onCleanup(() => {
-    cancelReconnect();
     transcriptPrefetches.clear();
     transcriptCache.clear();
-    socket?.close();
-    document.removeEventListener("visibilitychange", resumeLive);
-    window.removeEventListener("pageshow", restoreLive);
-    window.removeEventListener("online", resumeLive);
+    session.dispose();
   });
 
   return {
     status, setStatus, title, setTitle, templateId, setTemplateId, runtimeIdentity, setRuntimeIdentity, backendImplementation,
     live, messages, setMessages, tools, loadedId, pageBefore, loadingOlder, draft, setDraft,
     generation, editingEntryId, contextUsage, sessionStats, cacheStats, compacting, hostUiRequests, queue, pendingMessages, capabilities, harnessCommands, activeGeneration, activeGenerationChange, turnArtifacts,
-    connectingId, navigatingId, streaming, stopping, activity,
-    initialize, select, prefetch, loadDetail, openLive, attachLive, ensureLive, reset, send, stop, regenerate,
+    navigatingId, streaming, stopping, activity,
+    initialize, select, prefetch, loadDetail, ensureAgent, reset, send, stop, regenerate,
     continueResponse, compact, loadHarnessCommands, loadOlder, edit, respondHostUi, clearQueue, interruptAndSend, editQueued, discardQueued,
   };
 }

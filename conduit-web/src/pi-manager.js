@@ -207,6 +207,10 @@ function deliveryEventBytes(event) {
 }
 
 const ABORT_TERMINAL_EVENTS = new Set(["tool_execution_end", "message_end", "turn_end"]);
+/** An answer slower than this is worth a line in the log; it is what a slow chat feels like. */
+const SLOW_RPC_MS = 2_000;
+/** How long a request will wait for a freshly spawned Pi to say anything at all. */
+const BOOT_WAIT_MS = 20_000;
 
 export class PiManager extends EventEmitter {
   constructor({
@@ -324,6 +328,12 @@ export class PiManager extends EventEmitter {
     if (!record) return false;
     // Bootstrapping is not idle: never reclaim a process before it is running.
     if (record.status === "starting") return true;
+    // Neither is a process somebody is waiting on an answer from. Its activity
+    // says idle -- a model list is not a turn -- but stopping it answers the
+    // question with "the agent process exited before replying", which is what a
+    // chat opening at the moment the cap was hit, or the reaper's clock ran
+    // out, looked like from the outside.
+    if (record.pendingRequests?.size > 0) return true;
     if (this.isGenerating(record)) return true;
     const activity = record.activity || deriveCoarseActivity(record);
     return !["idle", "failed"].includes(activity);
@@ -538,13 +548,36 @@ export class PiManager extends EventEmitter {
       pendingRequests: new Map(),
       pendingQueuedPrompts: [],
       statsTimer: null,
+      // Pi is "running" the moment the OS spawns it, which is not the moment it
+      // can answer. Restoring a large session takes it seconds, and an RPC sent
+      // into that gap sat in its stdin while a five second clock ran out --
+      // "Pi RPC get_available_models timed out" on exactly the chats with the
+      // most history. This settles when Pi first speaks, and requests wait for
+      // it rather than spending their budget on somebody else's boot.
+      spoke: false,
+      speaking: null,
+      announceSpoke: null,
     };
+    record.speaking = new Promise((resolve) => { record.announceSpoke = resolve; });
     this.processes.set(id, record);
     if (chatId) this.byChatId.set(chatId, id);
     if (resolvedFile) this.bySessionFile.set(resolvedFile, id);
 
     child.stdout.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => this.handleStdout(record, chunk));
+    child.stdout.on("data", (chunk) => {
+      if (!record.spoke) {
+        record.spoke = true;
+        record.bootMs = this.now() - createdAtMs;
+        record.announceSpoke?.();
+        // Pi answering for the first time is what "warm" means, and it is the
+        // only moment anyone can honestly say so. Everything watching this chat
+        // -- the sidebar pill, the composer -- learns it from this one publish.
+        record.activity = deriveCoarseActivity(record);
+        this.touchActivity(record);
+        this.publishState(record);
+      }
+      this.handleStdout(record, chunk);
+    });
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk) => this.publish(record, { type: "runtime_stderr", message: String(chunk) }));
     // A deliberate stop can race a best-effort RPC (for example, context stats
@@ -557,6 +590,9 @@ export class PiManager extends EventEmitter {
       record.pendingRequests.clear();
       this.publish(record, { type: "runtime_error", message: error.message });
     });
+    // Spawning is not readiness: the process is alive here, which is what
+    // `status` reports, but Pi has not read its session yet and cannot answer.
+    // `spoke` carries that second question, and activity answers from it.
     child.once("spawn", () => {
       record.status = "running";
       record.activity = deriveCoarseActivity(record);
@@ -586,7 +622,7 @@ export class PiManager extends EventEmitter {
       record.activity = "idle";
       record.hostUiRequests = [];
       if (record.sessionFile) this.bySessionFile.delete(record.sessionFile);
-      for (const pending of record.pendingRequests.values()) pending.reject(new Error("Pi process exited before replying"));
+      for (const pending of record.pendingRequests.values()) pending.reject(new Error("The agent process exited before replying"));
       record.pendingRequests.clear();
       if (record.statsTimer) clearTimeout(record.statsTimer);
       this.ingestGenerationEvent(record, {
@@ -931,16 +967,44 @@ export class PiManager extends EventEmitter {
     if (!record || !["starting", "running"].includes(record.status)) return Promise.reject(new Error("Pi session process is not running"));
     const requestId = value.id || `conduit_${++this.requestSequence}`;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
+      const sentAt = this.now();
+      const settle = (outcome, argument) => {
+        const elapsed = this.now() - sentAt;
+        if (elapsed > SLOW_RPC_MS) {
+          console.warn("Slow Pi RPC", { type: value.type, ms: elapsed, bootMs: record.bootMs ?? null, chatId: record.chatId });
+        }
+        outcome(argument);
+      };
+      const entry = {
+        resolve: (answer) => settle(resolve, answer),
+        reject: (error) => settle(reject, error),
+        timer: null,
+      };
+      const expire = () => {
         record.pendingRequests.delete(requestId);
         const error = new Error(`Pi RPC ${value.type} timed out`);
         error.code = "rpc_timeout";
-        reject(error);
-      }, timeout);
-      record.pendingRequests.set(requestId, { resolve, reject, timer });
+        entry.reject(error);
+      };
+      // The request goes out now, but its clock starts when Pi is able to read
+      // it. Pi is "running" the moment the OS spawns it, and restoring a large
+      // session keeps it from its stdin for seconds -- long enough that a five
+      // second budget was spent entirely on somebody else's boot, which is why
+      // the chats with the most history were the ones that timed out. Until Pi
+      // first speaks the request waits under a boot budget instead, so a
+      // process that never speaks still fails rather than hanging.
+      entry.timer = setTimeout(expire, record.spoke ? timeout : BOOT_WAIT_MS);
+      if (!record.spoke && record.speaking) {
+        record.speaking.then(() => {
+          if (record.pendingRequests.get(requestId) !== entry) return;
+          clearTimeout(entry.timer);
+          entry.timer = setTimeout(expire, timeout);
+        }, () => {});
+      }
+      record.pendingRequests.set(requestId, entry);
       try { this.send(id, { ...value, id: requestId }); }
       catch (error) {
-        clearTimeout(timer);
+        clearTimeout(entry.timer);
         record.pendingRequests.delete(requestId);
         reject(error);
       }
@@ -1544,6 +1608,11 @@ export class PiManager extends EventEmitter {
       binaryVersion: safe.binaryVersion || null,
       trustPosture: safe.trustPosture || null,
       status: safe.status,
+      // Alive is not the same as able to answer; everything that shows a chat
+      // as warm waits for this rather than for the spawn.
+      ready: safe.spoke !== false,
+      // Somebody is waiting on an answer from it, so it is not free to reclaim.
+      waiting: record.pendingRequests?.size > 0,
       active: safe.active,
       activity: safe.activity || deriveCoarseActivity(record),
       activityDetail: safe.activityDetail || null,

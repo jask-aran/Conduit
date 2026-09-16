@@ -19,7 +19,7 @@ import {
 import type { Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import type { ComposerModels } from "./composer-models";
-import type { PermissionSettings } from "../state/permission-settings";
+import type { ComposerPermissions } from "./composer-permissions";
 import type { ServiceLevelSettings } from "../state/service-level-settings";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
@@ -28,7 +28,7 @@ type MobileOptionsPanel = "root" | "models" | "profiles" | "permissions";
 export function MobileComposerOptions(props: {
   composer: {
     models: ComposerModels;
-    permissions?: PermissionSettings;
+    permissions?: ComposerPermissions;
     serviceLevels?: ServiceLevelSettings;
     profiles: Template[];
     activeProfile?: Template | null;
@@ -56,7 +56,7 @@ export function MobileComposerOptions(props: {
       return;
     }
     const active = document.activeElement;
-    if (!(active instanceof HTMLTextAreaElement) || active.getAttribute("aria-label") !== "Message Pi") {
+    if (!(active instanceof HTMLTextAreaElement) || active.getAttribute("aria-label") !== "Message the agent") {
       composerFocusBeforeOpen = null;
       keyboardOpenBeforeOpen = false;
       return;

@@ -56,6 +56,22 @@ export function registerHarnessRoutes(app, { backends, preferences, projects, re
     return request;
   };
 
+  // Listing permission modes without a chat costs a throwaway harness process,
+  // so the answer is cached per folder and refreshed in the background exactly
+  // as the model catalogue is.
+  const permissionCatalogs = new Map();
+  const permissionCatalogRequests = new Map();
+  const refreshPermissionModes = (implementation, cwd, adapter) => {
+    const key = `${implementation}\0${cwd}`;
+    const existing = permissionCatalogRequests.get(key);
+    if (existing) return existing;
+    const request = adapter.listAvailablePermissionModes(cwd)
+      .then((modes) => { permissionCatalogs.set(key, modes); return modes; })
+      .finally(() => permissionCatalogRequests.delete(key));
+    permissionCatalogRequests.set(key, request);
+    return request;
+  };
+
   // `?refresh=1` re-probes, so installing a harness does not need a restart.
   app.get("/v0/harnesses", async (request, response) => {
     if (request.query.refresh) await backends.refreshDetection?.();
@@ -149,6 +165,31 @@ export function registerHarnessRoutes(app, { backends, preferences, projects, re
         warnings: [],
         source: "catalog",
       });
+    } catch (error) { next(error); }
+  });
+
+  // The same answer `/v0/chats/:chatId/permission-profiles` gives, for a chat
+  // that does not exist yet: the launch composer offers the choice up front so
+  // the first message starts under the mode somebody picked, rather than under
+  // whatever the harness defaults to.
+  app.get("/v0/harnesses/:implementation/permission-modes", async (request, response, next) => {
+    try {
+      const implementation = request.params.implementation;
+      if (!SUPPORTED.has(implementation) || !backends.adapters.has(implementation)) {
+        return response.status(404).json({ error: "harness_not_found" });
+      }
+      const adapter = backends.forImplementation(implementation);
+      if (!adapter.getCapabilities().permissionModes || typeof adapter.listAvailablePermissionModes !== "function") {
+        return response.json({ modes: [], selected: "" });
+      }
+      const requested = typeof request.query.path === "string" && request.query.path ? request.query.path : null;
+      const cwd = requested ? (await resolveFolder(requested)).workingRoot : (await computerContext()).workingRoot;
+      const key = `${implementation}\0${cwd}`;
+      let modes = permissionCatalogs.get(key);
+      if (modes) void refreshPermissionModes(implementation, cwd, adapter).catch(() => {});
+      else modes = await refreshPermissionModes(implementation, cwd, adapter);
+      const selected = (modes.some((mode) => mode.id === "custom") ? "custom" : modes[0]?.id) || "";
+      response.json({ modes, selected });
     } catch (error) { next(error); }
   });
 

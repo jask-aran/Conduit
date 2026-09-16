@@ -30,11 +30,16 @@ export function ModelSelector(props: {
   const selected = createMemo(() => props.models.find((item) => item.spec === props.model));
   const selectableModels = createMemo(() => props.models.filter((item) => !item.outsideScope));
   const levels = createMemo(() => selected()?.thinkingLevels || ["off"]);
+  const label = createMemo(() => selected()?.label || props.model);
+  // A catalogue we already hold is the answer while the next one loads: the
+  // agent's own spinner already says something is starting, so swapping this
+  // trigger for a second one just churns the composer.
+  const pending = createMemo(() => Boolean(props.loading) && !label());
 
   return <Menu>
-    <MenuTrigger class="model-trigger" aria-label={props.loading ? "Connecting to model" : `${selected()?.label || props.model || "Model"} ${props.thinkingLevel || "off"}`} disabled={props.disabled || props.loading}>
-      <Show when={!props.loading} fallback={<><Spinner /><span>Connecting…</span></>}>
-        <span>{selected()?.label || props.model || "Model"}</span>
+    <MenuTrigger class="model-trigger" aria-label={pending() ? "Connecting to model" : `${label() || "Model"} ${props.thinkingLevel || "off"}`} disabled={props.disabled || pending()}>
+      <Show when={!pending()} fallback={<><Spinner /><span>Connecting…</span></>}>
+        <span>{label() || "Model"}</span>
         <span class="text-muted-foreground">{props.thinkingLevel || "off"}</span>
         <ChevronDownIcon />
       </Show>

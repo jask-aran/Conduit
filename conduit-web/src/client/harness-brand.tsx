@@ -45,6 +45,23 @@ const HARNESS_LABELS: Record<string, string> = {
   opencode: "OpenCode",
 };
 
+/**
+ * What to call the backend behind a chat.
+ *
+ * Keyed by the implementation the chat reports, so a surface that shows the
+ * runtime names the harness that is actually running rather than assuming the
+ * built-in one.
+ */
+const IMPLEMENTATION_LABELS: Record<string, string> = {
+  conduit_pi: "Conduit Pi",
+  codex: "Codex",
+  "chatgpt-web": "ChatGPT Web",
+};
+
+export const harnessLabelFor = (implementation?: string | null) => implementation
+  ? IMPLEMENTATION_LABELS[implementation] || HARNESS_LABELS[implementation] || implementation
+  : null;
+
 export function ThreadHarnessMark(props: { id?: string }) {
   const id = () => props.id || "conduit";
   const label = () => HARNESS_LABELS[id()] || id();

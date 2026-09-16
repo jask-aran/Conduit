@@ -790,8 +790,32 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
   });
 }
 
-server.listen(config.port, config.host, () => console.log(
-  // The bound port, not the requested one: with CONDUIT_PORT=0 the kernel picks
-  // it, and announcing the request would announce a zero.
-  `Conduit ${config.release} listening on http://${config.host}:${server.address().port}`,
-));
+// When the server stalls, say so and by how much. Everything here shares one
+// thread, so a slow open is usually not the work somebody asked for -- it is
+// whatever else was holding the loop. Without this that shows up only as "it
+// randomly slows to a crawl", and the phase timings blame whoever was waiting.
+let loopCheckAt = Date.now();
+const loopLag = setInterval(() => {
+  const drift = Date.now() - loopCheckAt - 500;
+  loopCheckAt = Date.now();
+  if (drift > 250) console.warn("Event loop stalled", { ms: drift });
+}, 500);
+loopLag.unref?.();
+
+// Pay the model catalogue's cold start at boot, not on somebody's first click.
+// Building it costs seconds the first time, and starting an agent validates its
+// model against it before spawning -- so that cost used to sit in front of the
+// first chat anybody opened. One warm-up, in the background, for the catalogue
+// nearly every chat shares; the rest warm when they are first used.
+const warmModelCatalogue = () => catalogFor(runtimeFor({ runtimeKind: "conduit_profile", template: config.piTemplate }), config.piTemplate)
+  .list(process.cwd())
+  .catch((error) => console.warn("Model catalogue could not be warmed", error.message));
+
+server.listen(config.port, config.host, () => {
+  console.log(
+    // The bound port, not the requested one: with CONDUIT_PORT=0 the kernel picks
+    // it, and announcing the request would announce a zero.
+    `Conduit ${config.release} listening on http://${config.host}:${server.address().port}`,
+  );
+  void warmModelCatalogue();
+});

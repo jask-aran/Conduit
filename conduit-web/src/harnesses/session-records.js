@@ -24,6 +24,12 @@ export class SessionRecords {
 
   add(record) {
     record.adapterImplementation ||= this.backend.implementation;
+    // Every harness answers the same two questions about a process: is it
+    // alive, and can it answer yet. A record that never sets `ready` is taken
+    // at its word as ready; one that sets it false reads as starting until it
+    // says otherwise, exactly as a native process does.
+    record.createdAt ||= new Date().toISOString();
+    record.updatedAt ||= record.createdAt;
     this.records.set(record.id, record);
     this.byChatId.set(record.chatId, record.id);
     return record;
@@ -53,10 +59,19 @@ export class SessionRecords {
   rawRecords() { return [...this.records.values()].filter((record) => record.status !== "stopped"); }
 
   view(record) {
+    const ready = record.ready !== false;
     return {
-      id: record.id, chatId: record.chatId, status: record.status, activity: record.activity,
+      id: record.id, chatId: record.chatId, status: record.status,
+      ready,
+      // Somebody is waiting on an answer from it, so it is not free to reclaim.
+      waiting: (record.pending?.size || 0) > 0,
+      // Alive but unable to answer is starting, whoever is running it. Without
+      // this a harness that reports readiness would still show as idle while it
+      // came up, and two backends would tell the same story differently.
+      activity: ready ? record.activity : "starting",
       active: record.active, stopping: record.stopping, generation: record.generation,
       model: record.model, capabilities: this.capabilities, backend: this.backend,
+      createdAt: record.createdAt || null, updatedAt: record.updatedAt || record.createdAt || null,
       ...this.extras(record),
     };
   }
@@ -73,6 +88,7 @@ export class SessionRecords {
   }
 
   publish(record, event) {
+    record.updatedAt = new Date().toISOString();
     record.events.push(event);
     if (record.events.length > 500) record.events.splice(0, record.events.length - 500);
     this.onPublish?.(record, event);
