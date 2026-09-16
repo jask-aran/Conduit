@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { manifestForChat, resolveCapability } from "../src/client/chat-capabilities.ts";
+import { manifestForChat, resolveCapability, resolveHistory } from "../src/client/chat-capabilities.ts";
 
 const PI = { approvals: true, permissionModes: false, attachments: true, toolUse: true };
 const CODEX = { approvals: true, permissionModes: true, attachments: false, toolUse: true };
@@ -49,4 +49,21 @@ test("answering approvals and offering modes are asked separately", () => {
   assert.equal(resolveCapability(PI, null, "permissionModes"), false);
   assert.equal(resolveCapability(CODEX, null, "approvals"), true);
   assert.equal(resolveCapability(CODEX, null, "permissionModes"), true);
+});
+
+test("history comes from the manifest and a live record may only shallow it", () => {
+  const tree = { history: "tree" };
+  const linear = { history: "linear" };
+  // Known the moment the chat is selected, so the History tab does not wait
+  // for a process to appear and then pop in.
+  assert.equal(resolveHistory(tree, null), "tree");
+  assert.equal(resolveHistory(linear, null), "linear");
+  // A running process may report less history than the harness claims.
+  assert.equal(resolveHistory(tree, linear), "linear");
+  assert.equal(resolveHistory(tree, { history: "none" }), "none");
+  // It may not claim more, the same rule every other capability follows.
+  assert.equal(resolveHistory(linear, tree), "linear");
+  // Unknown harness: nothing to show rather than a tab that cannot load.
+  assert.equal(resolveHistory(null, null), "none");
+  assert.equal(resolveHistory(null, tree), "tree");
 });

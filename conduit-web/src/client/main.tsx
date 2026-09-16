@@ -16,7 +16,7 @@ import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, 
 import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/client";
 import { buildHttpUrl, clearServerOrigin, configuredServerOrigin, loginUrl, logoutUrl, normalizeServerOrigin, saveServerOrigin, transcriptUrl } from "./api/transport";
 import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
-import { manifestForChat, resolveCapability } from "./chat-capabilities";
+import { manifestForChat, resolveCapability, resolveHistory } from "./chat-capabilities";
 import type { BooleanCapability, ChatCapabilities, ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
@@ -604,6 +604,7 @@ function App() {
   const chatManifest = createMemo(() => manifestForChat(harnessCapabilities(), catalogue.selected()?.chat));
   const chatCapability = (name: BooleanCapability, fallback = false): boolean =>
     resolveCapability(chatManifest(), chat.capabilities(), name, fallback);
+  const chatHistory = createMemo(() => resolveHistory(chatManifest(), chat.capabilities()));
   const emptyChat = createMemo(() => chat.loadedId() === catalogue.selectedId() && !chat.messages().length && !chat.tools().length && !isChatContentActivity(chat.activity()));
   diagnosticContext = () => {
     const identity = chat.runtimeIdentity();
@@ -2078,7 +2079,7 @@ function App() {
       </Show>
     </main>
     <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} requestedTab={workspaceViewRequest} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
-    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => selectedProject()!.id} projectName={() => selectedProject()!.name} sourceControlEnabled={() => selectedProject()!.kind === "workspace"} workingRoot={() => selectedProject()!.workingRoot} chatId={() => workspacePanelScope()!} artifactChatId={() => routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => chat.loadedId()} historyAvailable={() => Boolean(chat.capabilities()?.history && chat.capabilities()?.history !== "none")} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} requestedTab={workspaceViewRequest} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
+    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => selectedProject()!.id} projectName={() => selectedProject()!.name} sourceControlEnabled={() => selectedProject()!.kind === "workspace"} workingRoot={() => selectedProject()!.workingRoot} chatId={() => workspacePanelScope()!} artifactChatId={() => routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => chat.loadedId()} historyAvailable={() => chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} requestedTab={workspaceViewRequest} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </div>
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>
