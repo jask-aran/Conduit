@@ -527,7 +527,7 @@ exit 0
     const freshLive = await fetch(`${origin}/v0/live-sessions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ chatId: chat.id, projectId: "project_chat" }),
+      body: JSON.stringify({ chatId: chat.id, projectId: "project_chat", intent: "prompt" }),
     });
     assert.equal(freshLive.status, 201, await freshLive.clone().text());
     const freshLiveBody = await freshLive.json();

@@ -133,6 +133,10 @@ export function createRuntimeStore() {
     connectivity,
     stale,
     getProcess: (chatId?: string | null) => chatId ? processes().get(chatId) || null : null,
+    // A stop the server has already accepted. Waiting for the stream to say so
+    // leaves a window where this catalogue still offers a process that is on
+    // its way out, and attaching to one of those yields no agent at all.
+    forget: (chatId: string) => remove(undefined, chatId),
     retry: connect,
   };
 }

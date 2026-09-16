@@ -21,7 +21,7 @@ test("health identifies the release and SIGTERM drains resident Pi", async () =>
     })}\n`);
     const launch = harness.request("/v0/live-sessions", {
       method: "POST",
-      body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId }),
+      body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId, intent: "prompt" }),
     });
     const state = await harness.pi.waitForCommand("get_state");
     await harness.pi.reply(state, { sessionFile, sessionId: `session-${chat.id}` });

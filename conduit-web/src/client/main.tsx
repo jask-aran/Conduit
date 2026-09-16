@@ -739,7 +739,7 @@ function App() {
         }
         return item;
       }));
-      void chat.ensureLive("open").catch((error) => {
+      void chat.ensureLive("select").catch((error) => {
         if (catalogue.selectedId() === created.id) showError(error);
       });
 
@@ -1333,9 +1333,10 @@ function App() {
   const runSidebar = (type: string, target: Omit<SidebarCommand, "type" | "nonce"> = {}) => setSidebarCommand({ type, nonce: Date.now(), ...target });
   const stopChatProcess = async (chatId = catalogue.selectedId()) => {
     const process = runtime.getProcess(chatId);
-    if (!process?.id) return;
+    if (!chatId || !process?.id) return;
     try {
       await api(`/v0/live-sessions/${encodeURIComponent(process.id)}/process`, { method: "DELETE" });
+      runtime.forget(chatId);
       toast.success("Process stopped");
     } catch (error) { showError(error); }
   };
@@ -1808,7 +1809,7 @@ function App() {
         setRouteBootstrap("ready");
         if (target.status === "active") {
           try {
-            await chat.openLive(target.id, project.id);
+            await chat.openLive(target.id, project.id, { intent: "select" });
           } catch (error) {
             showError(error);
           }

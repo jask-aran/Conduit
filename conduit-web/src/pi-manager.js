@@ -343,6 +343,22 @@ export class PiManager extends EventEmitter {
     record.updatedAt = new Date(record.lastActivityAt).toISOString();
   }
 
+  /**
+   * Mark the start of real conversation work.
+   *
+   * Distinct from touchActivity, which every published event moves -- an idle
+   * Pi emits often enough on its own to hold lastActivityAt permanently within
+   * a two-minute window, so nothing measured against it can ever time out.
+   * This clock moves only when a turn begins, which is what "this chat is still
+   * in use" actually means, and it is what the reaper judges an attached
+   * process by.
+   */
+  touchTurn(record) {
+    if (!record) return;
+    record.lastTurnAt = this.now();
+    this.touchActivity(record);
+  }
+
   reclaimCandidates({ excludeChatId = null } = {}) {
     return this.liveRecords()
       .filter((record) => record.chatId !== excludeChatId && this.isReclaimable(record))
@@ -389,9 +405,20 @@ export class PiManager extends EventEmitter {
   async reapIdleProcesses() {
     const cutoff = this.now() - this.idleProcessTtlMs;
     const victims = this.liveRecords().filter((record) => {
-      if (!this.isReclaimable(record)) return false;
-      const lastClient = record.lastClientAt ?? record.createdAtMs ?? 0;
-      return lastClient <= cutoff;
+      if (!this.isReclaimable(record, { ignoreClients: true })) return false;
+      // An attached client no longer keeps a process alive for ever, but the
+      // clock that decides its fate has to change with it. lastClientAt stops
+      // advancing the moment a client attaches, so judging an attached process
+      // by it would reap a chat for nothing worse than being open on screen --
+      // and lastActivityAt is no better in the other direction, because an idle
+      // Pi emits often enough to keep resetting it. An attached process is
+      // judged on when its last turn began; an unattached one is still measured
+      // from when its last client left. A generating process is never a
+      // candidate either way -- isReclaimable rejects anything isBusy.
+      const idleSince = record.clients.size > 0
+        ? record.lastTurnAt ?? record.createdAtMs ?? 0
+        : record.lastClientAt ?? record.createdAtMs ?? 0;
+      return idleSince <= cutoff;
     });
     for (const victim of victims) {
       await this.stopAndWait(victim.id);
@@ -500,12 +527,14 @@ export class PiManager extends EventEmitter {
       updatedAt: new Date(createdAtMs).toISOString(),
       lastActivityAt: createdAtMs,
       lastClientAt: createdAtMs,
+      lastTurnAt: createdAtMs,
       stdoutBuffer: "",
       activeGeneration: null,
       generationNormalizer: null,
       generationSequence: 0,
       generation: null,
       stopping: false,
+      terminating: false,
       pendingRequests: new Map(),
       pendingQueuedPrompts: [],
       statsTimer: null,
@@ -547,6 +576,10 @@ export class PiManager extends EventEmitter {
       this.publishState(record);
     });
     child.once("exit", (code, signal) => {
+      // Captured before the flags below reset it. A stop the server asked for
+      // must not reach clients looking like a process that fell over: one is a
+      // decision to honour, the other is a failure to recover from.
+      const deliberate = record.terminating === true;
       record.status = "stopped";
       record.active = false;
       record.stopping = false;
@@ -560,7 +593,7 @@ export class PiManager extends EventEmitter {
         type: "runtime_exit",
         message: `Pi process exited (${signal || code || "unknown"})`,
       });
-      this.publish(record, { type: "runtime_exit", code, signal });
+      this.publish(record, { type: "runtime_exit", code, signal, deliberate });
       for (const socket of [...record.clients]) {
         socket.close?.(1012, "Pi process exited");
       }
@@ -807,6 +840,9 @@ export class PiManager extends EventEmitter {
   }
 
   beginActiveGeneration(record, generationId, continuationBase) {
+    // The single chokepoint every turn passes through: a fresh prompt, a steer
+    // or follow-up, and a queued generation all begin here.
+    this.touchTurn(record);
     const previous = {
       activeGeneration: record.activeGeneration,
       generationNormalizer: record.generationNormalizer,
@@ -1451,6 +1487,15 @@ export class PiManager extends EventEmitter {
     const record = this.processes.get(id);
     if (!record || record.status === "stopped") return false;
     record.stopping = true;
+    // Distinct from record.stopping, which also means "interrupting the current
+    // turn". Only this one means the process itself is going away.
+    record.terminating = true;
+    // SIGTERM is the start of the exit, not the end of it: the record lives on
+    // until the child actually goes, which can take long enough for someone to
+    // click the chat in between. Until this announcement existed, everything in
+    // that window still advertised the process as running, so a client would
+    // attach to a corpse, get no process out of it, and have to ask twice.
+    this.emit("process_removed", { id: record.id, chatId: record.chatId });
     record.child.kill("SIGTERM");
     return true;
   }
@@ -1459,6 +1504,7 @@ export class PiManager extends EventEmitter {
     const record = this.processes.get(id);
     if (!record || !["starting", "running"].includes(record.status)) return false;
     record.stopping = true;
+    record.terminating = true;
     return new Promise((resolve) => {
       const timeout = setTimeout(() => record.child.kill("SIGKILL"), 3000);
       timeout.unref();
@@ -1484,7 +1530,7 @@ export class PiManager extends EventEmitter {
     const {
       child, clients, stdoutBuffer, events, stream, activeGeneration, generationNormalizer,
       pendingRequests, generation, statsTimer,
-      cwd, sessionDir, createdAtMs, lastActivityAt, lastClientAt, ...safe
+      cwd, sessionDir, createdAtMs, lastActivityAt, lastClientAt, lastTurnAt, ...safe
     } = record;
     return {
       id: safe.id,
@@ -1517,6 +1563,7 @@ export class PiManager extends EventEmitter {
       updatedAt: safe.updatedAt,
       lastClientAt: lastClientAt || null,
       lastActivityAt: lastActivityAt || null,
+      lastTurnAt: lastTurnAt || null,
       generation: generation
         ? { id: generation.id, closed: generation.closed, settled: Boolean(generation.settled) }
         : null,
@@ -1526,7 +1573,7 @@ export class PiManager extends EventEmitter {
 
   list() {
     return [...this.processes.values()]
-      .filter((record) => record.status !== "stopped")
+      .filter((record) => !record.terminating && record.status !== "stopped")
       .map((record) => this.view(record));
   }
 
@@ -1537,10 +1584,10 @@ export class PiManager extends EventEmitter {
   getByChatId(chatId) {
     const id = this.byChatId.get(chatId);
     const record = id ? this.processes.get(id) : null;
-    return record && ["starting", "running"].includes(record.status) ? record : null;
+    return record && !record.terminating && ["starting", "running"].includes(record.status) ? record : null;
   }
 
   rawRecords() {
-    return [...this.processes.values()].filter((record) => record.status !== "stopped");
+    return [...this.processes.values()].filter((record) => !record.terminating && record.status !== "stopped");
   }
 }

@@ -1,4 +1,4 @@
-import { createLiveSessionLauncher } from "../live-session-launcher.js";
+import { createLiveSessionLauncher, maySpawnProcess } from "../live-session-launcher.js";
 
 export function registerLiveSessionRoutes(app, {
   attachments,
@@ -48,12 +48,16 @@ export function registerLiveSessionRoutes(app, {
   app.post("/v0/live-sessions", async (request, response, next) => {
     try {
       const chatId = request.body?.chatId || request.body?.resumeSessionId;
+      const intent = request.body?.intent || "open";
       const { live, modelRecovery } = await launchLiveSession({
         chatId,
         requestedProject: request.body?.projectId || "",
         model: request.body?.model || "",
         thinkingLevel: request.body?.thinkingLevel || "",
-        forceModel: request.body?.intent === "prompt",
+        forceModel: intent === "prompt",
+        // Only real use starts a process. An "open" attaches to one that is
+        // already there and otherwise gets told there is none.
+        attachOnly: !maySpawnProcess(intent),
       });
       response.status(201).json({
         ...backends.view(live),
