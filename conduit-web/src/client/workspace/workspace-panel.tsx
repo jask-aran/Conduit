@@ -421,6 +421,19 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     historyLoad = { chatId, token, promise };
     return promise;
   };
+  // A tree belongs to one chat. The effect that reloads the panel watches the
+  // project and the tabs but not the chat, so stepping from a chat to its
+  // project's dashboard -- same project, no chat -- left the previous chat's
+  // history sitting on screen under a heading that no longer described it.
+  createEffect(on(() => props.artifactChatId?.() ?? null, (chatId, previous) => {
+    if (previous !== undefined && chatId === previous) return;
+    if (!chatId) {
+      historyChatId = null;
+      setHistoryTree(null);
+      return;
+    }
+    if (chatMode() === "history" && tabVisible("chat")) void loadHistory();
+  }));
   createEffect(on(historyTree, stickHistoryToBottom));
   const historyActivePath = createMemo(() => {
     const result = new Set<string>();
@@ -2173,7 +2186,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
             <WorkbenchButton class="workspace-history-toggle" aria-label={historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={historyWrap()} title={historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} onClick={toggleHistoryWrap}><WrapTextIcon /></WorkbenchButton>
           </div>
         </Show></div>
-      <Show when={chatMode() === "history"}><Show when={!historyLoading()} fallback={<div class="workspace-panel-empty">Loading history…</div>}><Show when={historyTree()?.tree.length} fallback={<div class="workspace-panel-empty"><div><HistoryIcon /><strong>No chat history</strong><p>Send a message to start this tree.</p></div></div>}><div class="workspace-chat-history" role="tree" aria-label="Chat history" data-wrap={historyWrap() ? "true" : "false"}
+      <Show when={chatMode() === "history"}><Show when={!historyLoading()} fallback={<div class="workspace-panel-empty">Loading history…</div>}><Show when={historyTree()?.tree.length} fallback={<div class="workspace-panel-empty"><div><HistoryIcon /><Show when={props.artifactChatId?.()} fallback={<><strong>No chat open</strong><p>Open a chat to see its history.</p></>}><strong>No chat history</strong><p>Send a message to start this tree.</p></Show></div></div>}><div class="workspace-chat-history" role="tree" aria-label="Chat history" data-wrap={historyWrap() ? "true" : "false"}
           ref={(element) => { historyScroller = element; stickHistoryToBottom(); }} onScroll={trackHistoryScroll}><HistoryNodes nodes={historyTree()!.tree} activePath={historyActivePath()} leafId={historyTree()!.leafId} collapseTools={collapseTools()} /></div></Show></Show></Show>
       <Show when={chatMode() === "changes"}><WorkspaceDiffView
         title="Changed files"
