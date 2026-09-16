@@ -16,6 +16,7 @@ import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, 
 import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/client";
 import { buildHttpUrl, clearServerOrigin, configuredServerOrigin, loginUrl, logoutUrl, normalizeServerOrigin, saveServerOrigin, transcriptUrl } from "./api/transport";
 import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
+import { manifestForChat, resolveCapability } from "./chat-capabilities";
 import type { BooleanCapability, ChatCapabilities, ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
@@ -596,19 +597,9 @@ function App() {
    * honour. Capability-gated UI asks here rather than reaching for either
    * source, so there is one place to be right as more of it appears.
    */
-  const chatCapability = (name: BooleanCapability, fallback = false): boolean => {
-    const manifest = activeProfile()?.capabilities?.[name];
-    const reported = chat.capabilities()?.[name];
-    // The manifest decides, and it is known the moment a chat is selected, so
-    // the UI is right before any process exists. A live record may only narrow
-    // it: a resident process can be older than the profile the chat now names
-    // -- profileRevision tracks exactly that skew -- so it can lack something
-    // the manifest promises. It may never add one. A control that appears only
-    // once a process is running is a control that flickers in, or worse, one
-    // still holding the answer for the session before this one.
-    if (manifest === undefined) return reported === undefined ? fallback : Boolean(reported);
-    return manifest === false ? false : reported !== false;
-  };
+  const chatManifest = createMemo(() => manifestForChat(profiles(), catalogue.selected()?.chat));
+  const chatCapability = (name: BooleanCapability, fallback = false): boolean =>
+    resolveCapability(chatManifest(), chat.capabilities(), name, fallback);
   const emptyChat = createMemo(() => chat.loadedId() === catalogue.selectedId() && !chat.messages().length && !chat.tools().length && !isChatContentActivity(chat.activity()));
   diagnosticContext = () => {
     const identity = chat.runtimeIdentity();
