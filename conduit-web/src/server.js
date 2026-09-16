@@ -791,5 +791,7 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
 }
 
 server.listen(config.port, config.host, () => console.log(
-  `Conduit ${config.release} listening on http://${config.host}:${config.port}`,
+  // The bound port, not the requested one: with CONDUIT_PORT=0 the kernel picks
+  // it, and announcing the request would announce a zero.
+  `Conduit ${config.release} listening on http://${config.host}:${server.address().port}`,
 ));
