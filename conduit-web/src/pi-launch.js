@@ -7,8 +7,6 @@ import {
 } from "../../scripts/pi-runtime.mjs";
 import { readSessionMetadata, validateSessionHeader } from "./session-store.js";
 import { resolveThinkingLevel } from "./pi-model-catalog.js";
-import { resolveModelProfile } from "./model-profiles.js";
-import { usesWebSearchOverlay } from "./model-profile-runtime.js";
 import { conduitPiSessionFile } from "./backend-session.js";
 
 const SENSITIVE_ENV = /^(?:CONDUIT_|COOKIE|SESSION|BROKER|EDGE_AUTH|AUTH_TOKEN|GITHUB_TOKEN|GH_TOKEN$)/i;
@@ -35,8 +33,6 @@ export function resolvePiLaunch({
   thinkingLevel = "",
   bridgeSystemPrompt,
   bridgeSkill,
-  runtimeAgentDir = "",
-  modelProfile = null,
   systemPrompt = null,
 }) {
   if (!installation?.available || !installation.command) {
@@ -63,14 +59,13 @@ export function resolvePiLaunch({
     ],
     cwd,
     env: projectEnvironment(project, cwd, {
-      ...buildPiEnvironment(runtimeAgentDir || installation.agentDir, filteredEnvironment(installation.environment || process.env)),
+      ...buildPiEnvironment(installation.agentDir, filteredEnvironment(installation.environment || process.env)),
       PI_CODING_AGENT_SESSION_DIR: project.sessionsDir,
     }),
     sessionFile: sessionFile ? path.resolve(sessionFile) : null,
     runtime,
     binaryVersion: installation.version,
     trustPosture: "ignore_project_resources",
-    modelProfile,
   };
 }
 
@@ -78,7 +73,7 @@ const cleanText = (value) => typeof value === "string" ? value.trim() : "";
 const launchError = (code, message, status = 400) => Object.assign(new Error(message), { code, status });
 
 export async function launchConduitPi(adapter, context, request, services) {
-  const { catalogFor, config, lifecycle, modelProfileRuntime, runtimeFor, templateForChat } = services;
+  const { catalogFor, config, lifecycle, runtimeFor, templateForChat } = services;
   // Where a slow start went: these phases run before the process exists, so
   // their cost is time somebody spends looking at a chat with no agent in it.
   const phases = [];
@@ -137,19 +132,11 @@ export async function launchConduitPi(adapter, context, request, services) {
   const processThinkingLevel = effectiveThinkingLevel || catalogView.defaultThinkingLevel || "";
   const repairedThinkingLevel = recoveringPersistedLevel && Boolean(processModel)
     && Boolean(effectiveThinkingLevel) && effectiveThinkingLevel !== seedThinkingLevel;
-  const modelProfile = usesWebSearchOverlay(template)
-    ? processModel
-      ? resolveModelProfile(config.modelProfiles, processModel)
-      : config.modelProfiles.profiles.find((profile) => profile.matches.some((match) => match.kind === "catch_all"))
-    : null;
-  const materialized = await modelProfileRuntime.materialize({ template, profile: modelProfile });
-  phase("profile materialize");
   const launchSpec = resolvePiLaunch({
     chat: context.chat, project: context.project, installation, template,
     models: runtimeCatalog.getLaunchModels(context.project.workingRoot),
     model: processModel, thinkingLevel: processThinkingLevel,
     bridgeSystemPrompt: config.bridgeSystemPrompt, bridgeSkill: config.bridgeSkill,
-    runtimeAgentDir: materialized.agentDir, modelProfile: materialized.modelProfile,
     systemPrompt: config.promptStore ? await config.promptStore.pathFor(template.id) : null,
   });
   phase("launch spec");

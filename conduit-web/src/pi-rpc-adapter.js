@@ -4,7 +4,6 @@ import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { assertChatBackendAdapter } from "./chat-backend-contract.js";
 import { detect } from "./harnesses/probe.js";
 import { launchConduitPi } from "./pi-launch.js";
-import { publicModelProfile } from "./model-profiles.js";
 
 export const PI_CAPABILITIES = Object.freeze({
   history: "tree", fork: true, regenerate: true,
@@ -249,8 +248,7 @@ export class PiRpcAdapter {
   compact(id) { return this.manager.compact(id); }
   publish(record, event) { return this.manager.publish(record, event); }
   view(record) {
-    const view = this.manager.view(record);
-    return { ...view, modelProfile: publicModelProfile(view.modelProfile), capabilities: PI_CAPABILITIES };
+    return { ...this.manager.view(record), capabilities: PI_CAPABILITIES };
   }
 }
 

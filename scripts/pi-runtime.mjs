@@ -28,14 +28,6 @@ function requireStrings(value, name) {
   return value;
 }
 
-function requireRuntimeOverlays(value) {
-  if (value === undefined) return [];
-  if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || !/^[a-z][a-z0-9-]{0,63}$/.test(item.trim()))) {
-    throw new Error("Pi template runtimeOverlays must contain safe overlay ids");
-  }
-  return value.map((item) => item.trim());
-}
-
 function formatPosture(tools = []) {
   const labels = tools.map((tool) => {
     if (tool === "bash") return "shell";
@@ -67,7 +59,6 @@ export function loadPiTemplate(file) {
     extensions: paths("extensions"),
     skills: paths("skills"),
     promptTemplates: paths("promptTemplates"),
-    runtimeOverlays: requireRuntimeOverlays(template.runtimeOverlays),
   };
 }
 
@@ -113,7 +104,6 @@ export function templatePublicView(template) {
     extensionCount: (template.extensions || []).length,
     skillCount: (template.skills || []).length,
     promptTemplateCount: (template.promptTemplates || []).length,
-    runtimeOverlays: [...(template.runtimeOverlays || [])],
   };
 }
 

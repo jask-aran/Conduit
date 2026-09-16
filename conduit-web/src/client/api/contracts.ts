@@ -289,15 +289,6 @@ export interface ModelOption {
   outsideScope?: boolean;
 }
 
-export interface ModelProfileView {
-  id: string;
-  label: string;
-  searchRouting: {
-    providers: string[];
-    fallbackOn: string[];
-  };
-}
-
 export interface ModelState {
   installationId?: string;
   runtimeKind?: RuntimeKind;
@@ -311,7 +302,12 @@ export interface ModelState {
   enabledModels?: string[];
   requiresAuthentication?: boolean;
   warnings?: string[];
-  modelProfile?: ModelProfileView | null;
+  /**
+   * Set when the model a profile remembered is no longer in its catalogue and
+   * something else is standing in, so the surface can say so instead of opening
+   * on a model nobody chose.
+   */
+  modelFallback?: { from: string; to: string };
   source?: string;
 }
 
@@ -322,7 +318,6 @@ export interface Template {
   posture?: string;
   defaultable?: boolean;
   tools?: string[];
-  runtimeOverlays?: string[];
   runtime?: RuntimeIdentity;
   disabled?: boolean;
   /** The harness this profile elects. Capabilities are declared there, not here. */
@@ -438,7 +433,6 @@ export interface RuntimeProcess {
   hostUiRequests?: HostUiRequest[];
   compacting?: boolean;
   retry?: RetryState | null;
-  modelProfile?: ModelProfileView | null;
   runtime?: RuntimeIdentity;
   capabilities?: ChatCapabilities;
 }
@@ -455,7 +449,6 @@ export interface LiveRecord {
   binaryVersion?: string;
   trustPosture?: string;
   sessionFile?: string;
-  modelProfile?: ModelProfileView | null;
   modelRecovery?: {
     from: string;
     to: string;

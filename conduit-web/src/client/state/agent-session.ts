@@ -129,7 +129,6 @@ export function createAgentSession(deps: {
       contextUsage: resident.contextUsage,
       sessionStats: resident.sessionStats,
       cacheStats: resident.cacheStats,
-      modelProfile: resident.modelProfile,
     };
   };
 

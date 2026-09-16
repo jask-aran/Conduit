@@ -50,7 +50,6 @@ Host Pi is also available as a synthetic override while detected; failure clears
 that override back to global inheritance.
 The composer uses one profile selector. Ordinary profiles launch the bundled
 Isolated Pi with the private `data/pi` home, with the selected profile's derived
-model-profile overlay selected when its web-search overlay is active; the synthetic **Host Pi**
 choice uses the host executable/home/resources plus the additive resources under
 `templates/conduit-workspace/`. Host Pi does not load an ordinary tracked
 profile, and its mandatory bridge remains hidden from profile selection. The
@@ -71,7 +70,6 @@ Paths resolve relative to the template directory:
 - `tools` — Pi `--tools` allowlist
 - `models` — fallback when Pi has no saved `enabledModels`
 - `extensions`, `skills`, `promptTemplates` — explicit resource paths
-- `runtimeOverlays` — optional server-owned runtime overlays
 
 Templates launch with `--no-approve` and ambient resources disabled. Treat tool
 lists and resources as trusted executable configuration.
@@ -82,7 +80,7 @@ directory instruction in `SYSTEM.md`; this profile does not provide an
 OS-level workspace sandbox. Conduit resolves a model profile for each
 web-search-enabled process: OpenAI and Codex models use OpenAI search followed
 by Brave, and other models use Brave. The derived routing file lives under
-`data/pi/model-profiles/`; Pi credentials, model state, and session files stay
+`data/pi/`; Pi credentials, model state, and session files stay
 in the canonical `data/pi` directory. Conduit sets the extension workflow to
 `none` so research does not open Pi's curator UI.
 

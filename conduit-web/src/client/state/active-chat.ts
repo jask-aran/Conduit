@@ -84,7 +84,7 @@ export interface ChatModels {
   effort: () => string;
   reloadChat: (chatId?: string) => Promise<void>;
   select: (projectId: string, chatId: string, selection?: { model?: string; thinkingLevel?: string },
-    options?: { reloadChat?: boolean; backend?: string }) => Promise<void>;
+    options?: { reloadChat?: boolean; profile?: string }) => Promise<void>;
 }
 
 export interface ChatAttachments {
@@ -725,7 +725,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     // still shows the right model while the agent starts.
     ({ chat, project, detail, launching }) => models.select(project.id, chat.id, detail, {
       reloadChat: !launching,
-      backend: detail?.backend?.implementation || chat.backend?.implementation || "",
+      profile: detail?.profileId || detail?.templateId || chat.profileId || chat.templateId || "",
     }),
     ({ chat }) => permissions?.select(chat.id),
     ({ chat }) => serviceLevels?.select(chat.id),

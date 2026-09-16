@@ -306,11 +306,11 @@ test("deletes a Pi fork family without touching unrelated session trees", async 
   await fs.rm(root, { recursive: true, force: true });
 });
 
-test("deletes profile-overlay sessions only under the installation root", async () => {
+test("deletes nested agent-dir sessions only under the installation root", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-profile-session-family-test-"));
   const projectPath = path.join(root, "project");
   const installationRoot = path.join(root, "pi");
-  const profileAgentDir = path.join(installationRoot, "model-profiles", "search");
+  const profileAgentDir = path.join(installationRoot, "nested", "agent");
   const sessionsDir = sessionDirectoryFor(projectPath, profileAgentDir);
   const project = { id: "project_profile", slug: "profile", path: projectPath, workingRoot: projectPath, sessionsDir };
   await fs.mkdir(sessionsDir, { recursive: true });

@@ -48,26 +48,6 @@ test("Conduit Pi launch uses the pinned installation and Conduit-owned agent hom
   assert.ok(launch.args.includes("--session"));
 });
 
-test("Conduit Pi launch can use a model-profile agent overlay", () => {
-  const launch = resolvePiLaunch({
-    chat: { runtime: { kind: "conduit_profile", installationId: "conduit-pinned" }, backend: { implementation: "conduit_pi", opaqueSession: null } },
-    project,
-    installation: {
-      available: true,
-      command: "/opt/conduit/pi/0.84.1/pi",
-      commandArgs: [],
-      agentDir: "/var/lib/conduit/pi",
-    },
-    template,
-    models: ["openai/gpt"],
-    model: "openai/gpt",
-    runtimeAgentDir: "/var/lib/conduit/pi/model-profiles/openai-search",
-    modelProfile: { id: "openai-search", label: "OpenAI search", searchRouting: { providers: ["openai", "brave"], fallbackOn: ["network"] } },
-  });
-  assert.equal(launch.env.PI_CODING_AGENT_DIR, path.resolve("/var/lib/conduit/pi/model-profiles/openai-search"));
-  assert.equal(launch.modelProfile.id, "openai-search");
-});
-
 test("Unavailable installations fail closed without substituting another Pi", () => {
   assert.throws(() => resolvePiLaunch({
     chat: { runtime: { kind: "conduit_profile" } },
