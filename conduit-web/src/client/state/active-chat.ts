@@ -863,6 +863,31 @@ export function createActiveChat(options: ActiveChatOptions) {
     applyLiveEvent(event);
   }
 
+  /**
+   * Everything that is scoped to one chat, in one list.
+   *
+   * These stores each hold one chat's answers and keep them until told to hold
+   * another's. Both ways into a chat -- the boot path and the chat-switch path
+   * -- used to call them by hand, so adding a store meant remembering it twice
+   * and leaving it out of one was invisible: nothing broke, the store simply
+   * went on answering for whichever chat it last heard about. That is how a
+   * codex chat's permission profiles came to be offered in Pi chats. Anything
+   * that belongs to a chat belongs in here, so there is one list to add to and
+   * no second place to forget.
+   */
+  const chatScopes: Array<(scope: { chat: ChatSummary; project: Project; detail?: TranscriptDetail }) => void> = [
+    ({ chat, project, detail }) => models.select(project.id, chat.id, detail, {
+      reloadChat: (detail?.status || chat.status) !== "active",
+    }),
+    ({ chat }) => void permissions?.select(chat.id),
+    ({ chat }) => void attachments.select(chat.id),
+    ({ chat }) => hydrateDraft(chat.id),
+  ];
+
+  const reconcileChatScope = (chat: ChatSummary, project: Project, detail?: TranscriptDetail) => {
+    for (const scope of chatScopes) scope({ chat, project, detail });
+  };
+
   const performSelect = async (
     chat: ChatSummary,
     project: Project,
@@ -882,14 +907,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       else if (historyMode === "replace") history.replaceState({}, "", `/chat/${chat.id}`);
       navigationOptions.onCommit?.();
     });
-    models.select(project.id, chat.id, detail, { reloadChat: detail.status !== "active" });
-    // Permission profiles belong to the chat's own harness, so they have to be
-    // refetched here like models and attachments are. Only initialize() asked
-    // for them, which meant every chat after the first one on screen kept
-    // whichever harness's profiles were loaded before it.
-    void permissions?.select(chat.id);
-    void attachments.select(chat.id);
-    hydrateDraft(chat.id);
+    reconcileChatScope(chat, project, detail);
     applyDetail(detail);
     // The connector comes up behind the transcript rather than in front of it.
     // Navigation used to wait for the socket, the model reload and a catalogue
@@ -934,10 +952,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     setTemplateId(chat.templateId || options.defaultTemplateId() || "assistant");
     setRuntimeIdentity(chat.runtime || null);
     setBackendImplementation(chat.backend?.implementation || null);
-    models.select(project.id, chat.id, detail, { reloadChat: (detail?.status || chat.status) !== "active" });
-    void permissions?.select(chat.id);
-    void attachments.select(chat.id);
-    hydrateDraft(chat.id);
+    reconcileChatScope(chat, project, detail);
     if (detail) applyDetail(detail);
     else { setMessages([]); setTools([]); setPageBefore(null); setLoadedId(chat.id); }
   };
