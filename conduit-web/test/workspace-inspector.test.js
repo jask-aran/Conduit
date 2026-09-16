@@ -302,8 +302,7 @@ test("workspace inspection shares active overview work and defers patch commands
   const runGit = async (_root, args) => {
     calls.push(args.join(" "));
     if (args[0] === "rev-parse" && args.includes("--is-inside-work-tree")) await overviewGate;
-    if (args[0] === "status") return { stdout: " M demo.txt\0" };
-    if (args[0] === "branch") return { stdout: "main\n" };
+    if (args[0] === "status") return { stdout: "## main...origin/main [ahead 2]\0 M demo.txt\0" };
     if (args[0] === "log") return { stdout: "*\x1fhash\x1fshort\x1fFixture\x1fConduit\x1f2026-01-01T00:00:00Z" };
     if (args[0] === "diff") return { stdout: args.includes("--cached") ? "staged\n" : "unstaged\n" };
     if (args.includes("@{upstream}")) throw new Error("no upstream");
@@ -360,4 +359,40 @@ test("bounded Git transfers each released slot without exceeding its process cap
   await Promise.all([...queued, ...later]);
   assert.equal(peak, MAX_CONCURRENT_GIT_PROCESSES);
   assert.equal(active, 0);
+});
+
+test("branch, upstream and divergence are read from the status header", async () => {
+  const { parseBranchHeader } = await import("../src/workspace-inspector.js");
+  const header = (line, rest = " M demo.txt\0") => `${line}\0${rest}`;
+
+  assert.deepEqual(parseBranchHeader(header("## main...origin/main [ahead 1, behind 2]")),
+    { branch: "main", upstream: "origin/main", ahead: 1, behind: 2 });
+  assert.deepEqual(parseBranchHeader(header("## main...origin/main [ahead 2]")),
+    { branch: "main", upstream: "origin/main", ahead: 2, behind: 0 });
+  assert.deepEqual(parseBranchHeader(header("## main...origin/main [behind 3]")),
+    { branch: "main", upstream: "origin/main", ahead: 0, behind: 3 });
+  assert.deepEqual(parseBranchHeader(header("## main...origin/main")),
+    { branch: "main", upstream: "origin/main", ahead: 0, behind: 0 });
+
+  // A branch with no upstream to compare against.
+  assert.deepEqual(parseBranchHeader(header("## main")),
+    { branch: "main", upstream: null, ahead: 0, behind: 0 });
+  // Detached HEAD names no branch; the caller renders its own label for this.
+  assert.deepEqual(parseBranchHeader(header("## HEAD (no branch)")),
+    { branch: "", upstream: null, ahead: 0, behind: 0 });
+  // A branch that exists but has no commits yet.
+  assert.deepEqual(parseBranchHeader(header("## No commits yet on main")),
+    { branch: "main", upstream: null, ahead: 0, behind: 0 });
+
+  // A branch name may contain the bracket text that marks divergence; only a
+  // trailing [...] counts.
+  assert.deepEqual(parseBranchHeader(header("## fix/[ahead 9]-thing")),
+    { branch: "fix/[ahead 9]-thing", upstream: null, ahead: 0, behind: 0 });
+  assert.deepEqual(parseBranchHeader(""),
+    { branch: "", upstream: null, ahead: 0, behind: 0 });
+});
+
+test("status output is parsed without mistaking the branch header for a file", async () => {
+  const { parseBranchHeader } = await import("../src/workspace-inspector.js");
+  assert.equal(parseBranchHeader("## main\0?? notes.md\0").branch, "main");
 });

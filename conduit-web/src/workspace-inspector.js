@@ -6,7 +6,11 @@ import path from "node:path";
 
 export const MAX_PREVIEW_BYTES = 25 * 1024 * 1024;
 export const GIT_COMMAND_TIMEOUT_MS = 10_000;
-export const MAX_CONCURRENT_GIT_PROCESSES = 4;
+// One cold inspection alone wants six git processes -- status, three numstat
+// diffs, a rev-parse -- so a cap of four made it queue against itself before
+// anything else on the machine had asked for a thing.
+export const MAX_CONCURRENT_GIT_PROCESSES = 8;
+const UNTRACKED_READ_BATCH = 8;
 const MAX_DIRECTORY_ENTRIES = 500;
 const MAX_FILE_SNIFF_BYTES = 4 * 1024;
 const INSPECTION_CACHE_MS = 2_000;
@@ -617,7 +621,44 @@ export async function runWorkspaceGitAction(root, { action, relativePath, messag
 }
 
 function parseStatus(output) {
-  return output.split("\0").filter(Boolean).map((record) => ({ status: record.slice(0, 2), path: record.slice(3) }));
+  return output.split("\0").filter(Boolean)
+    .filter((record) => !record.startsWith("## "))
+    .map((record) => ({ status: record.slice(0, 2), path: record.slice(3) }));
+}
+
+/**
+ * Branch, upstream and divergence, from the header `status -b` already prints.
+ *
+ * Asking git separately cost three more processes -- branch --show-current, a
+ * rev-parse for @{upstream} and a rev-list to count -- and the last two ran
+ * after everything else rather than alongside it. Git has already worked all of
+ * this out by the time it prints the header.
+ *
+ *   ## main...origin/main [ahead 1, behind 2]
+ *   ## main                     (no upstream)
+ *   ## HEAD (no branch)         (detached)
+ *   ## No commits yet on main   (unborn branch)
+ */
+export function parseBranchHeader(output) {
+  const header = output.split("\0").find((record) => record.startsWith("## "));
+  const empty = { branch: "", upstream: null, ahead: 0, behind: 0 };
+  if (!header) return empty;
+  const body = header.slice(3);
+  if (body === "HEAD (no branch)") return empty;
+  const unborn = body.match(/^No commits yet on (.+)$/);
+  if (unborn) return { ...empty, branch: unborn[1].trim() };
+  const divergence = body.match(/ \[(.+)\]$/);
+  const names = divergence ? body.slice(0, divergence.index) : body;
+  const [branch, upstream] = names.split("...");
+  const counts = divergence ? divergence[1] : "";
+  const ahead = counts.match(/ahead (\d+)/);
+  const behind = counts.match(/behind (\d+)/);
+  return {
+    branch: branch.trim(),
+    upstream: upstream ? upstream.trim() : null,
+    ahead: ahead ? Number(ahead[1]) : 0,
+    behind: behind ? Number(behind[1]) : 0,
+  };
 }
 
 function parseLog(output) {
@@ -659,54 +700,52 @@ async function inspectOverview(root, { signal, runGit }) {
   const headCountsRequest = runGit(root, ["rev-parse", "--verify", "HEAD"], { signal })
     .then(() => readCounts("head"))
     .catch((error) => { if (isAbort(error)) throw error; return new Map(); });
-  const [{ stdout: status }, { stdout: branch }, stagedCounts, workingCounts, headCounts] = await Promise.all([
-    runGit(root, ["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=normal"], { signal, maxBuffer: 2 * 1024 * 1024 }),
-    runGit(root, ["branch", "--show-current"], { signal }),
+  const [{ stdout: status }, stagedCounts, workingCounts, headCounts] = await Promise.all([
+    runGit(root, ["status", "--porcelain=v1", "-b", "-z", "--no-renames", "--untracked-files=normal"], { signal, maxBuffer: 2 * 1024 * 1024 }),
     readCounts("staged"),
     readCounts("changes"),
     headCountsRequest,
   ]);
+  const { branch, upstream, ahead, behind } = parseBranchHeader(status);
   const files = parseStatus(status).map((file) => ({ ...file, stagedCounts: stagedCounts.get(file.path) ?? null, workingCounts: workingCounts.get(file.path) ?? null, headCounts: headCounts.get(file.path) ?? null }));
   // Git numstat excludes untracked files. Bound their total read cost, and do
-  // not traverse grouped folders just to paint a count in the list.
+  // not traverse grouped folders just to paint a count in the list. These are
+  // read a batch at a time rather than one after another: a hundred round trips
+  // to the disk in series is the slowest part of inspecting a workspace that
+  // has just been cloned or has a large build directory, and none of them
+  // depends on the one before.
   let remainingBytes = 4 * 1024 * 1024;
-  let remainingFiles = 100;
-  for (const file of files) {
-    if (file.status !== "??" || file.path.endsWith("/") || remainingFiles-- <= 0 || remainingBytes <= 0) continue;
-    if (signal?.aborted) throw abortError();
+  const candidates = files.filter((file) => file.status === "??" && !file.path.endsWith("/")).slice(0, 100);
+  const countLines = async (file) => {
+    const budget = Math.min(1024 * 1024, remainingBytes);
+    if (budget <= 0) return;
+    const resolved = await resolveInspectorPath(root, file.path, { kind: "file" });
+    if (resolved.stat.size > budget) return;
+    const handle = await fs.open(resolved.path, "r");
     try {
-      const resolved = await resolveInspectorPath(root, file.path, { kind: "file" });
-      if (resolved.stat.size > Math.min(1024 * 1024, remainingBytes)) continue;
-      const handle = await fs.open(resolved.path, "r");
-      try {
-        const buffer = Buffer.alloc(Math.min(1024 * 1024, remainingBytes) + 1);
-        const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-        remainingBytes -= bytesRead;
-        if (bytesRead === buffer.length) continue;
-        const content = buffer.subarray(0, bytesRead);
-        if (content.includes(0)) continue;
-        new TextDecoder("utf-8", { fatal: true }).decode(content);
-        let added = 0;
-        for (const byte of content) if (byte === 10) added++;
-        if (content.length && content.at(-1) !== 10) added++;
-        file.workingCounts = { added, removed: 0 };
-        file.headCounts = { added, removed: 0 };
-      } finally { await handle.close(); }
-    } catch (error) { if (isAbort(error)) throw error; }
+      const buffer = Buffer.alloc(budget + 1);
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+      remainingBytes -= bytesRead;
+      if (bytesRead === buffer.length) return;
+      const content = buffer.subarray(0, bytesRead);
+      if (content.includes(0)) return;
+      new TextDecoder("utf-8", { fatal: true }).decode(content);
+      let added = 0;
+      for (const byte of content) if (byte === 10) added++;
+      if (content.length && content.at(-1) !== 10) added++;
+      file.workingCounts = { added, removed: 0 };
+      file.headCounts = { added, removed: 0 };
+    } finally { await handle.close(); }
+  };
+  for (let index = 0; index < candidates.length; index += UNTRACKED_READ_BATCH) {
+    if (signal?.aborted) throw abortError();
+    if (remainingBytes <= 0) break;
+    await Promise.all(candidates.slice(index, index + UNTRACKED_READ_BATCH).map((file) =>
+      countLines(file).catch((error) => { if (isAbort(error)) throw error; })));
   }
-  let upstream = null;
-  let ahead = 0;
-  let behind = 0;
-  try {
-    upstream = (await runGit(root, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], { signal })).stdout.trim() || null;
-    if (upstream) {
-      const counts = (await runGit(root, ["rev-list", "--left-right", "--count", `HEAD...${upstream}`], { signal })).stdout.trim().split(/\s+/).map(Number);
-      [ahead, behind] = counts;
-    }
-  } catch (error) { if (isAbort(error)) throw error; }
   return {
     repository: true,
-    branch: branch.trim() || "detached HEAD",
+    branch: branch || "detached HEAD",
     upstream,
     ahead,
     behind,
