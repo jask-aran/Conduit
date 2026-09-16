@@ -16,7 +16,7 @@ const refuse = (message) => () => {
  */
 export function unsupported(capabilities, { label, overrides = {} } = {}) {
   const stubs = {};
-  if (!capabilities.permissions) {
+  if (!capabilities.approvals) {
     stubs.respondHostUi = refuse(`${label} does not expose host UI requests`);
   }
   if (!capabilities.steer && !capabilities.followUpQueue) {

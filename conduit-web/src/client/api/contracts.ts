@@ -9,7 +9,11 @@ export interface ChatCapabilities {
   fork: boolean;
   regenerate: boolean;
   steer: boolean; followUpQueue: boolean; cancel: boolean; compaction: boolean;
-  thinkingLevels: boolean; modelSwitch: boolean; toolUse: boolean; permissions: boolean;
+  thinkingLevels: boolean; modelSwitch: boolean; toolUse: boolean;
+  /** Answers host-UI approval requests. Distinct from offering modes to pick. */
+  approvals: boolean;
+  /** Offers selectable permission profiles. Distinct from answering approvals. */
+  permissionModes: boolean;
   usage: boolean; replay: boolean;
   attachments: boolean;
 }
@@ -310,7 +314,8 @@ export interface Template {
   runtimeOverlays?: string[];
   runtime?: RuntimeIdentity;
   disabled?: boolean;
-  capabilities?: ChatCapabilities;
+  /** The harness this profile elects. Capabilities are declared there, not here. */
+  implementation?: string;
   drive?: boolean;
 }
 

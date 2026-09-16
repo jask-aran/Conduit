@@ -12,7 +12,8 @@ import { unsupported } from "./harnesses/unsupported.js";
 export const CODEX_CAPABILITIES = Object.freeze({
   history: "linear", fork: true, regenerate: true,
   steer: true, followUpQueue: true, cancel: true, compaction: true,
-  thinkingLevels: true, modelSwitch: true, toolUse: true, permissions: true,
+  thinkingLevels: true, modelSwitch: true, toolUse: true,
+  approvals: true, permissionModes: true,
   // `replay` means resuming a generation in progress, which Codex cannot do:
   // its `replay` returns the current runtime state, not a generation.
   usage: false, replay: false,

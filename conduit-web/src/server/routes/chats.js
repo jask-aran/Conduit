@@ -1,7 +1,7 @@
 import { resolveTemplate } from "../../config.js";
 import { chatView, isChatId } from "../../chat-store.js";
 import { stopSessionProcesses } from "../../session-operations.js";
-import { agentProfiles, conduitPiSessionFile, profileSelection } from "../../chat-backend.js";
+import { agentProfiles, conduitPiSessionFile, harnessCapabilities, profileSelection } from "../../chat-backend.js";
 import { manifestForImplementation } from "../../harnesses/index.js";
 import { resolveModelProfile } from "../../model-profiles.js";
 import { usesWebSearchOverlay } from "../../model-profile-runtime.js";
@@ -113,9 +113,11 @@ export function registerChatRoutes(app, {
     } catch (error) { next(error); }
   });
 
-  app.get("/v0/profiles", (_request, response) => response.json({ profiles: agentProfiles(config.piTemplates, {
-    available: new Set([...backends.adapters.keys()]),
-  }) }));
+  // Profiles say which harness they elect; harnesses say what they can do.
+  app.get("/v0/profiles", (_request, response) => response.json({
+    profiles: agentProfiles(config.piTemplates, { available: new Set([...backends.adapters.keys()]) }),
+    harnesses: harnessCapabilities(),
+  }));
   app.get("/v0/models", async (request, response, next) => {
     try {
       const project = await projects.get(request.query.projectId || "chat");
@@ -221,7 +223,7 @@ export function registerChatRoutes(app, {
       const context = await findChatContext(request.params.chatId);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
       const adapter = backends.forChat(context.chat);
-      if (!adapter.getCapabilities().permissions || typeof adapter.listPermissionModes !== "function"
+      if (!adapter.getCapabilities().permissionModes || typeof adapter.listPermissionModes !== "function"
         || typeof adapter.listAvailablePermissionModes !== "function") return response.json({ modes: [], selected: "" });
       const resident = backends.getByChatId(context.chat.id);
       const modes = resident
@@ -241,7 +243,7 @@ export function registerChatRoutes(app, {
         if (!context) return response.status(404).json({ error: "chat_not_found" });
         lifecycle.assertAvailable(context.chat.id, context.project.id);
         const adapter = backends.forChat(context.chat);
-        if (!adapter.getCapabilities().permissions || typeof adapter.listPermissionModes !== "function"
+        if (!adapter.getCapabilities().permissionModes || typeof adapter.listPermissionModes !== "function"
           || typeof adapter.listAvailablePermissionModes !== "function" || typeof adapter.setPermissionMode !== "function") {
           return response.status(409).json({ error: "permission_profiles_unavailable" });
         }

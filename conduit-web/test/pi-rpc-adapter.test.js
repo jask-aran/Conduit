@@ -40,7 +40,17 @@ test("Pi adapter maps required neutral events and retains Pi richness", () => {
   });
   const unknown = { type: "pi_extension_event", value: 4 };
   assert.deepEqual(normalizePiBackendEvent(unknown), { generationId: null, pi: unknown, type: "pi_event" });
-  assert.ok(Object.values(PI_CAPABILITIES).every(Boolean));
+  // Pi is the reference backend: it does everything Conduit asks of a harness
+  // except offer permission profiles to pick between, which is a Codex feature
+  // rather than a gap in Pi. Approving a request and choosing a mode to approve
+  // under are separate questions, and Pi only answers the first.
+  assert.equal(PI_CAPABILITIES.approvals, true);
+  assert.equal(PI_CAPABILITIES.permissionModes, false);
+  const optional = new Set(["permissionModes"]);
+  for (const [name, value] of Object.entries(PI_CAPABILITIES)) {
+    if (optional.has(name)) continue;
+    assert.ok(value, `Pi supports ${name}`);
+  }
 });
 
 test("Pi adapter delegates the neutral lifecycle to the existing manager", async () => {

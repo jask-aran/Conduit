@@ -12,7 +12,8 @@ import { unsupported } from "./harnesses/unsupported.js";
 export const CHATGPT_WEB_CAPABILITIES = Object.freeze({
   history: "linear", fork: false, regenerate: false,
   steer: false, followUpQueue: false, cancel: true, compaction: false,
-  thinkingLevels: true, modelSwitch: true, toolUse: false, permissions: false,
+  thinkingLevels: true, modelSwitch: true, toolUse: false,
+  approvals: false, permissionModes: false,
   usage: false, replay: false, attachments: false,
 });
 

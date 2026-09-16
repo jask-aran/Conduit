@@ -26,7 +26,7 @@ test("Codex adapter advertises only implemented capabilities", () => {
   assert.deepEqual(CODEX_CAPABILITIES, {
     history: "linear", fork: true, regenerate: true,
     steer: true, followUpQueue: true, cancel: true, compaction: true,
-    thinkingLevels: true, modelSwitch: true, toolUse: true, permissions: true,
+    thinkingLevels: true, modelSwitch: true, toolUse: true, approvals: true, permissionModes: true,
     usage: false, replay: false, attachments: true,
   });
 });
