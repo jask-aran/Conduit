@@ -189,3 +189,18 @@ test("the migrated adapters expose exactly the refusals their flags imply", asyn
   assert.equal(typeof codex.setModel, "function");
   assert.equal(await codex.refreshContext(), null);
 });
+
+test("every profile the client can choose carries its harness capabilities", async () => {
+  const { agentProfiles } = await import("../src/chat-backend.js");
+  const profiles = agentProfiles([{ id: "assistant", label: "Assistant" }]);
+  assert.ok(profiles.length > 1, "both Pi templates and harness manifests are listed");
+  // The client gates capability-dependent UI on this, and has to be able to do
+  // it before a process exists. A profile without capabilities forces it to
+  // wait for a live record to find out what the session can do.
+  for (const profile of profiles) {
+    assert.ok(profile.capabilities, `profile ${profile.id} declares capabilities`);
+    assert.equal(typeof profile.capabilities.permissions, "boolean", `${profile.id} permissions`);
+  }
+  const pi = profiles.find((profile) => profile.id === "assistant");
+  assert.equal(pi.capabilities.toolUse, true);
+});

@@ -883,10 +883,22 @@ export function createActiveChat(options: ActiveChatOptions) {
       navigationOptions.onCommit?.();
     });
     models.select(project.id, chat.id, detail, { reloadChat: detail.status !== "active" });
+    // Permission profiles belong to the chat's own harness, so they have to be
+    // refetched here like models and attachments are. Only initialize() asked
+    // for them, which meant every chat after the first one on screen kept
+    // whichever harness's profiles were loaded before it.
+    void permissions?.select(chat.id);
     void attachments.select(chat.id);
     hydrateDraft(chat.id);
     applyDetail(detail);
-    if (detail.status === "active") await openLive(chat.id, project.id, { intent: "select" }, selection);
+    // The connector comes up behind the transcript rather than in front of it.
+    // Navigation used to wait for the socket, the model reload and a catalogue
+    // refresh before it counted as finished, and for that whole stretch the
+    // sidebar showed the row as still opening instead of showing its live
+    // process -- so warming an agent looked like the chat itself was slow. What
+    // the UI needs to be correct is the harness manifest, which is known the
+    // moment the chat is selected; the live record only ever refines it.
+    if (detail.status === "active") void openLive(chat.id, project.id, { intent: "select" }, selection).catch(onError);
     else if (cached) {
       void fetchTranscript(chat).then((fresh) => {
         if (selection !== selectionToken || selectedId() !== chat.id) return;

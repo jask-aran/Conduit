@@ -1,4 +1,4 @@
-import { implementationsOf, MANIFESTS } from "./harnesses/index.js";
+import { implementationsOf, manifestForImplementation, MANIFESTS } from "./harnesses/index.js";
 export { conduitPiSessionFile, opaqueSessionFor } from "./backend-session.js";
 
 // Harness-backed profiles come from the manifests; Pi profiles come from the
@@ -55,11 +55,18 @@ export function withPiCompatibilityFields(item) {
 
 export function agentProfiles(templates, { available = null } = {}) {
   const usable = (manifest) => !available || implementationsOf(manifest).some((implementation) => available.has(implementation));
+  // A Pi profile is still served by a harness, so it carries that harness's
+  // capabilities like any other. Leaving them off meant the clients using these
+  // profiles -- most chats -- had no manifest to consult, and could only learn
+  // what the session could do once a process was running and said so. Deriving
+  // them from the implementation keeps the two from drifting apart.
+  const piCapabilities = manifestForImplementation("conduit_pi")?.capabilities;
   return [
     ...templates.map((template) => ({
       id: template.id,
       label: template.label,
       management: "conduit",
+      ...(piCapabilities ? { capabilities: piCapabilities } : {}),
       agent: { protocol: "pi_rpc", implementation: "conduit_pi", installationId: "conduit-pinned" },
     })),
     ...PROFILE_MANIFESTS.map((manifest) => ({

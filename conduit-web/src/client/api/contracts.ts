@@ -1,4 +1,9 @@
 export type RuntimeKind = "conduit_profile" | "codex";
+/** The capability flags that are a plain yes or no, so UI can be gated on one. */
+export type BooleanCapability = {
+  [K in keyof ChatCapabilities]: ChatCapabilities[K] extends boolean ? K : never
+}[keyof ChatCapabilities];
+
 export interface ChatCapabilities {
   history: "none" | "linear" | "tree";
   fork: boolean;
