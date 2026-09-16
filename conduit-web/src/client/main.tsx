@@ -1,7 +1,7 @@
 /// <reference types="vite-plugin-pwa/client" />
 import { isConduitManagedProject } from "./navigation/sidebar-preferences";
 import type { ComputerLocation, ComputerPrefetchPayload } from "./api/contracts";
-import { batch, createEffect, createMemo, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { render } from "solid-js/web";
 import { Capacitor } from "@capacitor/core";
 import {
@@ -36,6 +36,7 @@ import {
 } from "./chat/markdown-settings";
 import { loadVoiceDictationSettings, saveVoiceDictationSettings, VOICE_DICTATION_STORAGE_KEY } from "./chat/voice-dictation";
 import { Transcript } from "./chat/transcript";
+import { isChatContentActivity } from "./chat/transcript-source";
 import { COMMAND_IDS, commandRegistry } from "./commands/command-registry";
 import { CommandMenu } from "./navigation/command-menu";
 import { LeaderPalette } from "./navigation/leader-palette";
@@ -583,7 +584,7 @@ function App() {
   });
   const activeProfile = createMemo(() => profiles().find((item) => item.id === chat.templateId())
     || profiles().find((item) => item.id === defaultTemplateId()) || null);
-  const emptyChat = createMemo(() => chat.loadedId() === catalogue.selectedId() && !chat.messages().length && !chat.tools().length && !chat.activity()?.label);
+  const emptyChat = createMemo(() => chat.loadedId() === catalogue.selectedId() && !chat.messages().length && !chat.tools().length && !isChatContentActivity(chat.activity()));
   diagnosticContext = () => {
     const identity = chat.runtimeIdentity();
     return {
@@ -601,7 +602,13 @@ function App() {
     };
   };
 
-  createEffect(() => {
+  // A render effect, not an ordinary one: these settings come from
+  // localStorage, which is synchronous, but an effect runs after the DOM is
+  // committed. Reading them there meant the panel painted closed and the shell
+  // painted unexpanded, then both snapped into place on the next frame for
+  // anyone who had left the panel open. Resolving during render puts the stored
+  // geometry in the first paint instead.
+  createRenderEffect(() => {
     const scope = workspacePanelScope();
     if (!scope) return;
     const globalOpen = readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "open");
@@ -1587,9 +1594,21 @@ function App() {
     const overridden = (key: UiPreferenceKey) => overrideParams.has(key);
     const applyPreference = (key: UiPreferenceKey, value: UiPreferences[UiPreferenceKey]) => {
       const storageKey = storageKeys[key];
-      if (storageKey) localStorage.setItem(storageKey, key === "sidebarCollapsed"
+      const stored = key === "sidebarCollapsed"
         ? value ? "collapsed" : "expanded"
-        : Array.isArray(value) ? JSON.stringify(value) : String(value));
+        : Array.isArray(value) ? JSON.stringify(value) : String(value);
+      // Hydration replays every preference the server holds, and almost all of
+      // them are already on screen: localStorage seeded each signal, and the
+      // reading-surface presets were stamped, before the first paint. Replaying
+      // one is not free -- the transcript reads a width or collapse change as a
+      // reason to drop every cached block size and measure the whole thread
+      // again -- so a value that has not moved is not announced at all.
+      //
+      // Only keys with a storage key can be compared, and those are exactly the
+      // ones seeded from storage. The rest (pins, shortcut overrides, voice)
+      // fall through and are applied as before.
+      if (storageKey && localStorage.getItem(storageKey) === stored) return;
+      if (storageKey) localStorage.setItem(storageKey, stored);
       if (key === "sidebarChatLimit" && typeof value === "number") setSidebarChatLimit(clampSidebarChatLimit(value));
       else if (key === "sidebarPins" && Array.isArray(value)) setSidebarPins(value.filter((item): item is string => typeof item === "string"));
       else if (key === "markdownRenderer" && typeof value === "string" && !overridden(key)) setMarkdownRenderer(value as MarkdownRendererId);
