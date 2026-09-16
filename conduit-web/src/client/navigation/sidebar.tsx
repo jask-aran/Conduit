@@ -727,7 +727,17 @@ export function Sidebar(props: {
     applyBulkFailures(await props.onMoveChats(targets, destination));
   };
 
-  /** Long-press opens the menu then synthesizes a click; swallow that click. */
+  /**
+   * Long-press opens the menu then synthesizes a click; swallow that click.
+   *
+   * The synthesized one arrives while the menu is still open, so the guard only
+   * has to cover that window. Disarming it when the menu closes is the whole
+   * point: while the only thing that cleared the flag was the next click, every
+   * other way of leaving the menu -- picking an item, pressing Escape, clicking
+   * away -- left it armed, and the row then ignored the first real click it got
+   * afterwards. Clearing is deferred a turn so the click that dismissed the
+   * menu, which is dispatched after the close, is still swallowed.
+   */
   const menuOpenGuards = new WeakMap<object, { suppressClick: boolean }>();
   const guardFor = (key: object) => {
     let guard = menuOpenGuards.get(key);
@@ -745,7 +755,7 @@ export function Sidebar(props: {
     const previousTitle = renderedChatTitles.get(menuProps.chat.id);
     const animateTitle = previousTitle !== undefined && previousTitle !== title && Boolean(menuProps.chat.title);
     renderedChatTitles.set(menuProps.chat.id, title);
-    return <ContextMenu placement={phoneLayout() ? "bottom-start" : "right-start"} onOpenChange={(open) => { if (open) guard.suppressClick = true; }}>
+    return <ContextMenu placement={phoneLayout() ? "bottom-start" : "right-start"} onOpenChange={(open) => { if (open) guard.suppressClick = true; else setTimeout(() => { guard.suppressClick = false; }); }}>
     <ContextMenuTrigger
       as="button"
       class="sidebar-row sidebar-chat"
@@ -828,7 +838,7 @@ export function Sidebar(props: {
       : isWorkspace() ? "Delete workspace"
         : `Delete ${blockProps.workspace ? "workspace" : "folder"}`;
     return <div class="sidebar-project-block">
-      <ContextMenu placement={phoneLayout() ? "bottom-start" : "right-start"} onOpenChange={(openMenu) => { if (openMenu) guard.suppressClick = true; }}>
+      <ContextMenu placement={phoneLayout() ? "bottom-start" : "right-start"} onOpenChange={(openMenu) => { if (openMenu) guard.suppressClick = true; else setTimeout(() => { guard.suppressClick = false; }); }}>
         <ContextMenuTrigger as="div" class="sidebar-row sidebar-project" data-open={open()} aria-current={props.selectedId == null && props.projectId === blockProps.project.id ? "page" : undefined}>
           <button class="sidebar-project-link" onClick={() => {
             if (guard.suppressClick) { guard.suppressClick = false; return; }
