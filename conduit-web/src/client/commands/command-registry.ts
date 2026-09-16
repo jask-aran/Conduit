@@ -186,7 +186,7 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
   command({
     id: COMMAND_IDS.openRuntimeChat,
     label: "Open runtime chat",
-    description: "Admin chat for templates and Pi packages",
+    description: "Admin chat for templates and runtime packages",
     group: "commands",
     icon: "profile",
     keywords: ["admin", "template", "plugin", "install", "runtime"],

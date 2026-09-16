@@ -79,6 +79,12 @@ const launchError = (code, message, status = 400) => Object.assign(new Error(mes
 
 export async function launchConduitPi(adapter, context, request, services) {
   const { catalogFor, config, lifecycle, modelProfileRuntime, runtimeFor, templateForChat } = services;
+  // Where a slow start went: these phases run before the process exists, so
+  // their cost is time somebody spends looking at a chat with no agent in it.
+  const phases = [];
+  const startedAt = Date.now();
+  let phaseAt = startedAt;
+  const phase = (name) => { phases.push(`${name} ${Date.now() - phaseAt}ms`); phaseAt = Date.now(); };
   const { model = "", thinkingLevel = "", forceModel = false } = request;
   const template = templateForChat(context.chat, context.project);
   const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });
@@ -97,8 +103,10 @@ export async function launchConduitPi(adapter, context, request, services) {
     }
   }
 
+  phase("session file");
   const runtimeCatalog = catalogFor(runtime, template);
   const catalogView = await runtimeCatalog.list(context.project.workingRoot);
+  phase("model catalogue");
   const requestedModel = cleanText(model);
   const requestedThinkingLevel = cleanText(thinkingLevel);
   const persistedModel = sessionFile ? cleanText(persisted?.model) : "";
@@ -114,7 +122,7 @@ export async function launchConduitPi(adapter, context, request, services) {
   const seedThinkingLevel = forceModel ? requestedThinkingLevel
     : sessionFile ? cleanText(persisted?.thinkingLevel) : requestedThinkingLevel;
   if (seedModel && !catalogView.models.some((item) => item.spec === seedModel)) {
-    throw launchError("invalid_model", "The selected model is not available in this Pi profile");
+    throw launchError("invalid_model", "The selected model is not available in this profile");
   }
   const selected = catalogView.models.find((item) => item.spec === seedModel);
   const recoveringPersistedLevel = Boolean(persisted && !forceModel);
@@ -135,6 +143,7 @@ export async function launchConduitPi(adapter, context, request, services) {
       : config.modelProfiles.profiles.find((profile) => profile.matches.some((match) => match.kind === "catch_all"))
     : null;
   const materialized = await modelProfileRuntime.materialize({ template, profile: modelProfile });
+  phase("profile materialize");
   const launchSpec = resolvePiLaunch({
     chat: context.chat, project: context.project, installation, template,
     models: runtimeCatalog.getLaunchModels(context.project.workingRoot),
@@ -143,6 +152,7 @@ export async function launchConduitPi(adapter, context, request, services) {
     runtimeAgentDir: materialized.agentDir, modelProfile: materialized.modelProfile,
     systemPrompt: config.promptStore ? await config.promptStore.pathFor(template.id) : null,
   });
+  phase("launch spec");
   lifecycle.assertAvailable(context.chat.id, context.project.id);
   let live = null;
   try {
@@ -152,7 +162,10 @@ export async function launchConduitPi(adapter, context, request, services) {
     live = sessionFile
       ? await adapter.restore(sessionFile, options)
       : await adapter.create(options);
+    phase("spawn");
     await adapter.waitForSession(live.id);
+    phase("session ready");
+    if (Date.now() - startedAt > 500) console.warn("Slow agent start", { chatId: context.chat.id, ms: Date.now() - startedAt, phases });
     lifecycle.assertAvailable(context.chat.id, context.project.id);
     if (persistedOutsideScope) await adapter.setModel(live.id, processModel);
     if (!live.sessionFile) throw launchError("invalid_session_mapping", "Pi did not report a session file", 409);

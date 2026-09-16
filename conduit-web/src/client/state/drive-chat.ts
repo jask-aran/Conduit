@@ -1,9 +1,8 @@
 import { createSignal } from "solid-js";
 import { api } from "../api/client";
-import type { ChatSummary, LiveRecord, ModelOption, ModelState, Project, TranscriptDetail } from "../api/contracts";
-import type { CatalogueStore } from "./catalogue";
+import type { ChatSummary, LiveRecord, ModelOption, ModelState, TranscriptDetail } from "../api/contracts";
 import type { RuntimeStore } from "./runtime";
-import { createActiveChat } from "./active-chat";
+import { createActiveChat, HARNESS_OWNED_MODELS, NO_CHAT_ATTACHMENTS, type ChatCatalogue } from "./active-chat";
 
 /**
  * A chat store for an ephemeral harness thread.
@@ -67,29 +66,24 @@ export function createDriveChat(options: {
       setNotice("");
     } catch { setNotice("Model catalogue is unavailable for this thread"); }
   };
-  const catalogue = {
+  // The thread is deliberately not in the registry until somebody tracks it, so
+  // the store's "is this still the open chat?" guards answer from here instead.
+  const catalogue: ChatCatalogue = {
     selectedId: chatId,
     projectId: () => "",
-    projects: () => [] as Project[],
-    refresh: async () => [] as Project[],
-    patchChat: () => {},
+    refresh: async () => [],
     select: () => {},
-  } as unknown as CatalogueStore;
+  };
 
   const chat = createActiveChat({
     catalogue,
     runtime: options.runtime,
     // An ephemeral thread carries the harness's own model and has no Conduit
-    // model settings or attachment pipeline behind it.
-    models: { model: () => "", effort: () => "", reloadChat: async () => {}, select: async () => {} } as never,
-    attachments: {
-      pendingIds: () => [] as string[],
-      items: () => [] as never[],
-      markAnnounced: () => {},
-      restoreDraft: () => {},
-      restore: () => {},
-      select: () => {},
-    } as never,
+    // model settings or attachment pipeline behind it. These are the real
+    // no-op implementations of the slices the store uses, not casts: a cast
+    // here is how a missing method reached a surface and took it down.
+    models: HARNESS_OWNED_MODELS,
+    attachments: NO_CHAT_ATTACHMENTS,
     onError: options.onError,
     onModelRecovered: () => {},
     defaultTemplateId: () => "",
@@ -102,7 +96,7 @@ export function createDriveChat(options: {
     setChatId(record.chatId || record.id);
     setLiveId(record.id);
     chat.setTitle(title);
-    await chat.attachLive(record, await loadTranscript(record.id));
+    await chat.ensureAgent({ record, detail: await loadTranscript(record.id) });
     void loadModels(record.id);
   };
 

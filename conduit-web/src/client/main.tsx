@@ -65,6 +65,8 @@ import { dropScope, migrateWorkspacePanelStorage, readSetting, WORKSPACE_PANEL_G
 import { publishUiPreference, saveUiPreference, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
 import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
 import { INCREMARK_PACING_STORAGE_KEY } from "./chat/incremark-pacing";
+import { harnessLabelFor } from "./harness-brand";
+import { NO_ATTACHMENTS } from "./chat/composer-attachments";
 import {
   applyTranscriptAppearance,
   CODE_BLOCK_COLLAPSE_LINES_STORAGE_KEY,
@@ -238,11 +240,11 @@ function ChatHeader(props: {
 }) {
   const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
   const projectLabel = () => props.appDashboard ? "Conduit" : props.project?.slug === "chat" ? "Chats" : props.project?.slug || props.project?.name || "Chats";
-  const runtimeLabel = () => !props.runtime ? null : "Conduit Pi";
+  const runtimeLabel = () => props.runtime ? harnessLabelFor(props.chat?.backendImplementation() || "conduit_pi") : null;
   const profileLabel = () => props.profile?.label || props.profile?.id;
   const posture = () => props.profile?.posture || props.profile?.tools?.join(" / ");
-  const line = () => props.dashboard ? "" : [runtimeLabel(), props.live?.binaryVersion || props.runtime?.binaryVersion ? `Pi ${props.live?.binaryVersion || props.runtime?.binaryVersion}` : null, profileLabel(), projectLabel() !== "Chats" ? projectLabel() : null, posture()].filter(Boolean).join(" · ");
-  const menuLine = () => [projectLabel(), runtimeLabel(), props.live?.binaryVersion || props.runtime?.binaryVersion ? `Pi ${props.live?.binaryVersion || props.runtime?.binaryVersion}` : null, profileLabel(), posture()].filter(Boolean).join(" · ");
+  const line = () => props.dashboard ? "" : [runtimeLabel(), props.live?.binaryVersion || props.runtime?.binaryVersion ? `v${props.live?.binaryVersion || props.runtime?.binaryVersion}` : null, profileLabel(), projectLabel() !== "Chats" ? projectLabel() : null, posture()].filter(Boolean).join(" · ");
+  const menuLine = () => [projectLabel(), runtimeLabel(), props.live?.binaryVersion || props.runtime?.binaryVersion ? `v${props.live?.binaryVersion || props.runtime?.binaryVersion}` : null, profileLabel(), posture()].filter(Boolean).join(" · ");
   const activity = () => props.chat?.activity();
   const contextDetail = () => props.chat && props.contextMetrics
     ? formatContextMetrics({
@@ -533,7 +535,7 @@ function App() {
   const attachments = createAttachments(showError, maxAttachmentBytes);
   const drafts = createDrafts(showError);
   void drafts.load();
-  const driveAttachments = { items: () => [] as never[], addFiles: () => {}, remove: () => {} } as never;
+
 
   const saveWorkspaceDefault = async (workspaceId: string, templateId: string | null) => {
     const saved = await api<Project>(`/v0/projects/${encodeURIComponent(workspaceId)}`, { method: "PATCH", body: JSON.stringify({ defaultTemplateId: templateId }) });
@@ -729,8 +731,7 @@ function App() {
   });
 
   const activateCreatedChat = async (created: ChatSummary, project: Project, profileId: string) => {
-    await chat.initialize({ ...created, templateId: created.templateId || profileId || undefined }, project);
-    await chat.ensureLive("select");
+    await chat.initialize({ ...created, templateId: created.templateId || profileId || undefined }, project, undefined, { warm: true });
   };
 
   const createChat = async (target?: Project, launch: { templateId?: string; runtimeKind?: string } = {}, options: { reportFailure?: boolean } = {}) => {
@@ -967,7 +968,7 @@ function App() {
     await browseComputer(cwd);
     openComputerHarness(id, "push", cwd);
   };
-  const launchHarnessChat = async (harnessId: string, cwd: string, prompt?: string, selection?: { model: string; thinkingLevel: string }) => {
+  const launchHarnessChat = async (harnessId: string, cwd: string, prompt?: string, selection?: { model: string; thinkingLevel: string; permissionMode?: string }) => {
     let project = catalogue.projects().find((item) => !isConduitManagedProject(item) && item.workingRoot === cwd);
     if (!project) {
       const created = await api<Project>("/v0/projects", { method: "POST", body: JSON.stringify({ mode: "linked", path: cwd }) });
@@ -978,8 +979,16 @@ function App() {
     if (selection?.model) {
       await api(`/v0/chats/${encodeURIComponent(target.id)}/models`, {
         method: "PATCH",
-        body: JSON.stringify(selection),
+        body: JSON.stringify({ model: selection.model, thinkingLevel: selection.thinkingLevel }),
       });
+    }
+    // The mode was chosen before the chat existed, so it is applied here rather
+    // than left for the harness default to decide.
+    if (selection?.permissionMode) {
+      await api(`/v0/chats/${encodeURIComponent(target.id)}/permission-profiles`, {
+        method: "PATCH",
+        body: JSON.stringify({ permissionMode: selection.permissionMode }),
+      }).catch(showError);
     }
     await openChat(target, project);
     if (prompt) { chat.setDraft(prompt); await chat.send(); }
@@ -1121,8 +1130,7 @@ function App() {
     // it. Re-enter the normal selection lifecycle instead of maintaining a
     // second, incomplete list of stores to refresh here.
     catalogue.patchChat(chatId, payload);
-    await chat.initialize(payload, project);
-    await chat.ensureLive("select");
+    await chat.initialize(payload, project, undefined, { warm: true });
   };
 
   const refresh = async () => {
@@ -1844,13 +1852,6 @@ function App() {
         await chat.initialize(target, project, detail);
         setRouteKind("chat");
         setRouteBootstrap("ready");
-        if (target.status === "active") {
-          try {
-            await chat.openLive(target.id, project.id, { intent: "select" });
-          } catch (error) {
-            showError(error);
-          }
-        }
       } else if (initialProjectRouteId) {
         const project = projects.find((item) => item.id === initialProjectRouteId);
         if (!project) throw new Error("Project not found");
@@ -2023,8 +2024,8 @@ function App() {
           <Show when={!computerDriving()}><ChatHeader title="Computer" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard /></Show>
           <ComputerDashboard projects={catalogue.projects()} runtime={runtime} location={computerLocation()} loading={computerLoading()} error={computerError()} selectedHarness={computerHarness()} onHarnessDriveChange={setComputerDriving} renderHarnessDrive={({ current, harness, store, onBack, onTrack }) => <div class="harness-drive-shared">
             <ChatHeader project={catalogue.projects().find((project) => project.workingRoot === current.cwd)} title={current.title} runtime={store.chat.runtimeIdentity()} live={store.chat.live() as unknown as Record<string, unknown>} chat={store.chat} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => openComputerHarness(harness.id)} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} onBack={onBack} extraAction={<Button variant="ghost" size="sm" onClick={onTrack}>Track this thread</Button>} />
-            <div class="work-area"><section class="work-area-conversation" aria-label="Conversation"><Transcript chat={store.chat} partialContinue={false} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={harness.label} /><div class="composer-stack"><HostUiRequests requests={store.chat.hostUiRequests()} onRespond={store.chat.respondHostUi} /><Composer chat={store.chat} attachments={driveAttachments} attachmentsSupported={false} models={store.models} profiles={[]} activeProfile={null} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => {}} onStatusChange={setComposerStatus} /></div></section></div>
-          </div>} onOpenHarness={(id) => openComputerHarness(id)} onOpenHarnessHere={(id, cwd) => void openComputerHarnessHere(id, cwd)} harnessComposer={computerHarness() ? (cwd, harnessModels, modelsLoading) => <Composer chat={chat} attachments={attachments} attachmentsSupported={false} models={harnessModels} modelsLoading={modelsLoading} permissions={harnessCapabilities()[profiles().find((profile) => profile.id === computerHarness())?.implementation || ""]?.permissionModes ? permissions : undefined} profiles={profiles().filter((profile) => profile.id === computerHarness())} activeProfile={profiles().find((profile) => profile.id === computerHarness()) || null} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => {}} onSendDraft={(prompt) => launchHarnessChat(computerHarness()!, cwd, prompt, { model: harnessModels.model(), thinkingLevel: harnessModels.effort() })} /> : undefined} onOpenHarnessChat={(target, project, prompt) => { void openChat(target, project).then(() => { if (prompt) { chat.setDraft(prompt); void chat.send(); } }); }} onBrowse={(path) => void browseComputer(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => void designateComputerWorkspace()} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProject(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={(path) => { setComputerFile({ path }); openWorkspaceView("files"); }} />
+            <div class="work-area"><section class="work-area-conversation" aria-label="Conversation"><Transcript chat={store.chat} partialContinue={false} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={harness.label} /><div class="composer-stack"><HostUiRequests requests={store.chat.hostUiRequests()} onRespond={store.chat.respondHostUi} /><Composer chat={store.chat} attachments={NO_ATTACHMENTS} attachmentsSupported={false} models={store.models} profiles={[]} activeProfile={null} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => {}} onStatusChange={setComposerStatus} /></div></section></div>
+          </div>} onOpenHarness={(id) => openComputerHarness(id)} onOpenHarnessHere={(id, cwd) => void openComputerHarnessHere(id, cwd)} harnessComposer={computerHarness() ? (cwd, harnessModels, modelsLoading, harnessPermissions) => <Composer chat={chat} attachments={attachments} attachmentsSupported={false} models={harnessModels} modelsLoading={modelsLoading} permissions={harnessCapabilities()[profiles().find((profile) => profile.id === computerHarness())?.implementation || ""]?.permissionModes ? harnessPermissions : undefined} profiles={profiles().filter((profile) => profile.id === computerHarness())} activeProfile={profiles().find((profile) => profile.id === computerHarness()) || null} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => {}} onSendDraft={(prompt) => launchHarnessChat(computerHarness()!, cwd, prompt, { model: harnessModels.model(), thinkingLevel: harnessModels.effort(), permissionMode: harnessPermissions.selected() })} /> : undefined} onOpenHarnessChat={(target, project, prompt) => { void openChat(target, project).then(() => { if (prompt) { chat.setDraft(prompt); void chat.send(); } }); }} onBrowse={(path) => void browseComputer(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => void designateComputerWorkspace()} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProject(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={(path) => { setComputerFile({ path }); openWorkspaceView("files"); }} />
         </Show>
         <Show when={routeKind() !== "dashboard" && routeKind() !== "computer"}>
         <Show when={routeKind() === "chat" && meteorField()}>

@@ -20,6 +20,7 @@ export function createModelSettings(onError: ErrorHandler, onThinkingLevelRecove
   const [saving, setSaving] = createSignal(false);
   let activeProjectId = "";
   let activeChatId = "";
+  let activeBackend = "";
   let requestSequence = 0;
   let initialCatalogRefresh = true;
   const pendingThinkingLevels = new Map<string, string>();
@@ -37,7 +38,7 @@ export function createModelSettings(onError: ErrorHandler, onThinkingLevelRecove
     setAllModels(nextAll);
     setEnabledModels(enabled);
     setSettingsDefaultModel(fallback);
-    if (catalog) setNotice(catalog.requiresAuthentication ? "Authenticate with conduit-pi, then run /login." : "");
+    if (catalog) setNotice(catalog.requiresAuthentication ? "Authenticate this harness, then run /login." : "");
   };
 
   const reload = async (projectId = activeProjectId, refreshCatalog = false) => {
@@ -89,7 +90,7 @@ export function createModelSettings(onError: ErrorHandler, onThinkingLevelRecove
       }
       pendingThinkingLevels.delete(chatId);
       setNotice(catalog.requiresAuthentication
-        ? "Authenticate Conduit Pi to use models."
+        ? "Authenticate this harness to use models."
         : "");
     } catch (error) {
       if (activeChatId === chatId && requestId === requestSequence) onError(error);
@@ -102,20 +103,34 @@ export function createModelSettings(onError: ErrorHandler, onThinkingLevelRecove
     projectId: string,
     chatId: string,
     selection?: { model?: string; thinkingLevel?: string },
-    { reloadChat: shouldReloadChat = true }: { reloadChat?: boolean } = {},
+    { reloadChat: shouldReloadChat = true, backend = "" }: { reloadChat?: boolean; backend?: string } = {},
   ) => {
     const changedProject = activeProjectId !== projectId;
     const changedChat = activeChatId !== chatId;
+    // Switching a chat's profile keeps its id and changes everything a model
+    // means: the catalogue belongs to the harness, not to the chat. Holding the
+    // previous harness's models offered a Codex model in a Pi profile, and the
+    // launch that followed was refused for a model that profile has never had.
+    const changedBackend = Boolean(backend) && activeBackend !== backend;
     activeProjectId = projectId;
     activeChatId = chatId;
-    if (changedChat) {
+    activeBackend = backend || activeBackend;
+    if (changedBackend && !changedChat) {
+      setModels([]);
+      setModel("");
+      setEffort("");
+      setNotice("");
+    }
+    if (changedChat || changedBackend) {
       setModelThinkingLevels({});
       if (selection?.thinkingLevel) pendingThinkingLevels.set(chatId, selection.thinkingLevel);
       else pendingThinkingLevels.delete(chatId);
     }
     applyChatSelection(selection);
     if (changedProject) void reload(projectId);
-    return shouldReloadChat ? reloadChat(chatId) : Promise.resolve();
+    // A catalogue that just changed hands is fetched now rather than behind the
+    // launch: what the launch is allowed to ask for depends on it.
+    return shouldReloadChat || changedBackend ? reloadChat(chatId) : Promise.resolve();
   };
 
   const saveScope = async (nextEnabled: string[], defaultModel = settingsDefaultModel()) => {

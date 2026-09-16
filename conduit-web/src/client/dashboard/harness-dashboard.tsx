@@ -1,8 +1,9 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
 import { ArrowRightIcon, FolderIcon, HomeIcon, SearchIcon, XIcon } from "lucide-solid";
 import { api } from "../api/client";
-import type { ChatSummary, ComputerLocation, HarnessSummary, HarnessThread, HarnessThreadDiscovery, HarnessThreadGroup, ModelOption, ModelState, Project } from "../api/contracts";
+import type { ChatSummary, ComputerLocation, HarnessSummary, HarnessThread, HarnessThreadDiscovery, HarnessThreadGroup, ModelOption, ModelState, PermissionMode, PermissionModeState, Project } from "../api/contracts";
 import type { ComposerModels } from "../chat/composer-models";
+import type { ComposerPermissions } from "../chat/composer-permissions";
 import { saveChatSort, useChatSort } from "../preferences/chat-sort";
 import { HarnessMark, ThreadHarnessMark } from "../harness-brand";
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
@@ -15,13 +16,15 @@ import "./harness-dashboard.css";
 
 export function HarnessDashboard(props: {
   harness?: HarnessSummary;
+  /** False while the harness catalogue is still being fetched. */
+  catalogueLoaded?: boolean;
   projects: Project[];
   cwd: string;
   runtime?: RuntimeStore;
   scope: string | null;
   onScope: (path: string | null) => void;
   onOpenChat?: (chat: ChatSummary, project: Project, prompt?: string) => void;
-  composer?: (cwd: string, models: ComposerModels, loading: boolean) => JSX.Element;
+  composer?: (cwd: string, models: ComposerModels, loading: boolean, permissions: ComposerPermissions) => JSX.Element;
   onDriveChange?: (open: boolean) => void;
   renderDrive?: (input: { current: { cwd: string; title: string; nativeSessionId: string }; harness: HarnessSummary; store: DriveChatStore; onBack: () => void; onTrack: () => void }) => JSX.Element;
 }) {
@@ -51,6 +54,8 @@ export function HarnessDashboard(props: {
   const [catalogModel, setCatalogModel] = createSignal("");
   const [catalogEffort, setCatalogEffort] = createSignal("");
   const [catalogNotice, setCatalogNotice] = createSignal("");
+  const [permissionModes, setPermissionModes] = createSignal<PermissionMode[]>([]);
+  const [permissionMode, setPermissionMode] = createSignal("");
   const [picker, setPicker] = createSignal<ComputerLocation | null>(null);
   const [pickerBusy, setPickerBusy] = createSignal(false);
   const [drive, setDrive] = createSignal<{ cwd: string; title: string; nativeSessionId: string } | null>(null);
@@ -79,6 +84,32 @@ export function HarnessDashboard(props: {
       if (request === catalogRequest) setCatalogNotice(cause instanceof Error ? cause.message : "Models could not be loaded");
     } finally {
       if (request === catalogRequest) setCatalogLoading(false);
+    }
+  };
+  // No chat exists yet, so the choice is held here and applied to the chat the
+  // first message creates.
+  const permissions: ComposerPermissions = {
+    profiles: permissionModes,
+    selected: permissionMode,
+    choose: (id) => {
+      if (!permissionModes().some((mode) => mode.id === id && mode.allowed)) return false;
+      setPermissionMode(id);
+      return true;
+    },
+  };
+  let permissionRequest = 0;
+  const loadPermissionModes = async (implementation: string, cwd: string) => {
+    const request = ++permissionRequest;
+    setPermissionModes([]);
+    setPermissionMode("");
+    try {
+      const state = await api<PermissionModeState>(`/v0/harnesses/${encodeURIComponent(implementation)}/permission-modes?path=${encodeURIComponent(cwd)}`);
+      if (request !== permissionRequest) return;
+      setPermissionModes(state.modes);
+      setPermissionMode(state.selected || state.modes[0]?.id || "");
+    } catch {
+      // A harness that cannot say costs the selector, not the launch.
+      if (request === permissionRequest) setPermissionModes([]);
     }
   };
   const catalog: ComposerModels = {
@@ -195,7 +226,10 @@ export function HarnessDashboard(props: {
   createEffect(() => {
     const implementation = props.harness?.id;
     const cwd = launchCwd();
-    if (implementation && props.harness?.drive) void loadModels(implementation, cwd);
+    if (implementation && props.harness?.drive) {
+      void loadModels(implementation, cwd);
+      void loadPermissionModes(implementation, cwd);
+    }
   });
   const WorkingFolder = () => <DashboardQuickActions label="Workspace actions" columns={1}>
     <button type="button" title={launchCwd()} onClick={() => void browsePicker(launchCwd())}><FolderIcon /><strong>{recentFolders().find((folder) => folder.path === launchCwd())?.display || launchCwd().split("/").at(-1)}</strong><ArrowRightIcon /></button>
@@ -220,10 +254,10 @@ export function HarnessDashboard(props: {
     </DashboardSection>
   </Show>;
 
-  return <Show when={props.harness} fallback={<DashboardEmpty>Harness is unavailable.</DashboardEmpty>}>{(harness) => <>
+  return <Show when={props.harness} fallback={<DashboardEmpty>{props.catalogueLoaded === false ? "Loading harness…" : "Harness is unavailable."}</DashboardEmpty>}>{(harness) => <>
     <Show when={drive()} fallback={<DashboardShell class="harness-dashboard" label={`${harness().label} dashboard`}>
       <DashboardIdentity title={harness().label} kind={`${harness().label}-CLI Harness`} glyph={<HarnessMark id={harness().id} />} subtitle={<span title={launchCwd()}>{launchCwd()}</span>} />
-      <Show when={harness().drive}><DashboardLaunch primary={props.composer?.(launchCwd(), catalog, catalogLoading())} aside={<WorkingFolder />} /></Show>
+      <Show when={harness().drive}><DashboardLaunch primary={props.composer?.(launchCwd(), catalog, catalogLoading(), permissions)} aside={<WorkingFolder />} /></Show>
       <DashboardGrid primary={<Sessions />} rail={<><Show when={!harness().drive}><WorkingFolder /></Show><RecentFolders /></>} />
       <Show when={error()}><p class="harness-error" role="alert">{error()}</p></Show>
     </DashboardShell>}>

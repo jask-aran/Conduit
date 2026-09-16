@@ -11,6 +11,9 @@ export const manifest = {
   nameGeneration: "backend",
   // No thread history to enumerate: a ChatGPT account is not a machine store.
   discovery: "none",
+  // A proxied web session has no process to start: a chat is usable as soon as
+  // it is selected, and warming it would mean nothing.
+  warm: "none",
   drive: false,
   profile: true,
   probe: (config) => importProbe(config.chatgptWebPython, "curl_cffi")(),

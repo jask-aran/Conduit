@@ -424,8 +424,14 @@ export class CodexAppServerAdapter extends EventEmitter {
       steering: [], followUp: [],
       permissionMode: "", permissionProfile: "", approvalPolicy: "", approvalsReviewer: "", serviceLevel: "",
       sequence: 0, eventSequence: 0, messageIds: new Set(),
+      // Not able to answer until the app-server has finished its handshake.
+      ready: false,
     };
     this.sessions.add(record);
+    // Announce the process the moment it exists, as a native one does, so the
+    // chat can show that its agent is coming up instead of showing nothing
+    // until it is already there.
+    this.emit("changed", { record, reason: "created" });
     try {
       // The daemon socket carries one JSON-RPC message per WebSocket text
       // frame. Rust's websocket endpoint rejects extension negotiation, so do
@@ -457,6 +463,10 @@ export class CodexAppServerAdapter extends EventEmitter {
       this.write(record, { method: "initialized" });
       record.status = "running";
       record.activity = "idle";
+      record.ready = true;
+      // The handshake is done: this is the moment the agent is warm, and the
+      // one moment anyone can honestly say so.
+      this.emit("changed", { record, reason: "ready" });
       return record;
     } catch (cause) {
       record.status = "stopped";

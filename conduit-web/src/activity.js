@@ -47,6 +47,11 @@ export function deriveCoarseActivity(record) {
   if (record.compacting) return "compacting";
   if (record.retrying) return "retrying";
   if (isTurnInFlight(record)) return "working";
+  // A harness that reports readiness separately is still starting while it is
+  // alive but cannot answer -- Pi restoring a large session, for one. It ranks
+  // below real work, which is proof enough that the harness is answering, and
+  // harnesses that do not report readiness are unaffected.
+  if (record.spoke === false || record.ready === false) return "starting";
   return "idle";
 }
 

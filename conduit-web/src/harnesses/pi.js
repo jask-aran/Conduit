@@ -12,6 +12,10 @@ export const manifest = {
   installationId: "conduit-pinned",
   capabilities: PI_CAPABILITIES,
   discovery: "none",
+  // How a chat on this harness is made ready to take a message. "process" is a
+  // resident agent process Conduit starts and warms; "none" is a backend with
+  // nothing to start, where selecting a chat warms nothing.
+  warm: "process",
   nameGeneration: "conduit",
   drive: false,
   // Pi profiles come from the template catalogue rather than this manifest.

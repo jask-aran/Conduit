@@ -49,6 +49,10 @@ export function registerLiveSessionRoutes(app, {
     try {
       const chatId = request.body?.chatId || request.body?.resumeSessionId;
       const intent = request.body?.intent || "open";
+      // A launch that keeps somebody waiting says so, with the chat and intent
+      // that asked for it, so a slow open can be read from the log instead of
+      // reproduced.
+      const startedAt = Date.now();
       const { live, modelRecovery } = await launchLiveSession({
         chatId,
         requestedProject: request.body?.projectId || "",
@@ -59,6 +63,8 @@ export function registerLiveSessionRoutes(app, {
         // already there and otherwise gets told there is none.
         attachOnly: !maySpawnProcess(intent),
       });
+      const elapsed = Date.now() - startedAt;
+      if (elapsed > 500) console.warn("Slow live-session launch", { chatId, intent, ms: elapsed });
       response.status(201).json({
         ...backends.view(live),
         streamUrl: `/v0/live-sessions/${live.id}/stream`,
