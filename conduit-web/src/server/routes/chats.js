@@ -268,6 +268,44 @@ export function registerChatRoutes(app, {
     } catch (error) { next(error); }
   });
 
+  app.get("/v0/chats/:chatId/service-levels", async (request, response, next) => {
+    try {
+      const context = await findChatContext(request.params.chatId);
+      if (!context) return response.status(404).json({ error: "chat_not_found" });
+      const levels = manifestForImplementation(context.chat.backend?.implementation)?.serviceLevels || [];
+      const resident = backends.getByChatId(context.chat.id);
+      const selected = resident?.serviceLevel || context.chat.backend?.serviceLevel || levels[0]?.id || "";
+      response.json({ levels, selected });
+    } catch (error) { next(error); }
+  });
+
+  app.patch("/v0/chats/:chatId/service-levels", async (request, response, next) => {
+    try {
+      await lifecycle.run(request.params.chatId, async () => {
+        const context = await findChatContext(request.params.chatId);
+        if (!context) return response.status(404).json({ error: "chat_not_found" });
+        lifecycle.assertAvailable(context.chat.id, context.project.id);
+        const levels = manifestForImplementation(context.chat.backend?.implementation)?.serviceLevels || [];
+        const selected = String(request.body?.serviceLevel || "").trim();
+        if (!levels.some((level) => level.id === selected)) {
+          return response.status(400).json({ error: "invalid_service_level" });
+        }
+        const resident = backends.getByChatId(context.chat.id);
+        const adapter = backends.forChat(context.chat);
+        if (resident) {
+          if (typeof adapter.setServiceLevel !== "function") {
+            return response.status(409).json({ error: "service_levels_unavailable" });
+          }
+          await adapter.setServiceLevel(resident.id, selected);
+        }
+        await registry.update(context.chat.id, {
+          backend: { ...context.chat.backend, serviceLevel: selected },
+        });
+        response.json({ levels, selected });
+      });
+    } catch (error) { next(error); }
+  });
+
   app.patch("/v0/chats/:chatId", async (request, response, next) => {
     try {
       await lifecycle.run(request.params.chatId, async () => {
@@ -275,7 +313,7 @@ export function registerChatRoutes(app, {
       const context = await findChatContext(request.params.chatId);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
       lifecycle.assertAvailable(context.chat.id, context.project.id);
-      if (request.body?.profileId && (context.chat.status !== "draft" || context.chat.lastUserMessageAt)) {
+      if (request.body?.profileId && context.chat.lastUserMessageAt) {
         return response.status(409).json({
           error: "backend_locked",
           message: "Fork this chat to change its backend.",
@@ -291,16 +329,12 @@ export function registerChatRoutes(app, {
         const resident = backends.getByChatId(context.chat.id);
         if (resident) await backends.stop(resident.id);
         await registry.update(context.chat.id, {
+          status: "draft",
           templateId: null,
           templateVersion: null,
           runtime: null,
           backend: { profileId, profileRevision: null, management: selectedProfile.management,
             ...selectedProfile.agent, opaqueSession: null },
-        });
-        await launchLiveSession({
-          chatId: context.chat.id,
-          requestedProject: context.project.id,
-          alreadyLocked: true,
         });
         return response.json(chatView(registry.metadata(context.chat.id)));
       }
@@ -310,7 +344,7 @@ export function registerChatRoutes(app, {
         if (currentTemplate?.special === true) {
           return response.status(409).json({ error: "special_chat_locked" });
         }
-        if (context.chat.status !== "draft" || conduitPiSessionFile(context.chat)) {
+        if (context.chat.lastUserMessageAt) {
           return response.status(409).json({ error: "template_locked" });
         }
         const template = resolveTemplate(config, request.body.templateId);
@@ -320,14 +354,26 @@ export function registerChatRoutes(app, {
         if (template.defaultable === false) {
           return response.status(400).json({ error: "special_template", templateId: template.id });
         }
+        const resident = backends.getByChatId(context.chat.id);
+        if (resident) await backends.stop(resident.id);
         await registry.update(context.chat.id, {
+          status: "draft",
           templateId: template.id,
           templateVersion: template.version,
+          backend: {
+            profileId: template.id,
+            profileRevision: template.version,
+            management: "conduit",
+            protocol: "pi_rpc",
+            implementation: "conduit_pi",
+            installationId: "conduit-pinned",
+            opaqueSession: null,
+          },
         });
         selectedTemplate = template;
       }
       if (request.body?.runtimeKind != null) {
-        if (context.chat.status !== "draft" || conduitPiSessionFile(context.chat)) {
+        if (context.chat.lastUserMessageAt) {
           return response.status(409).json({ error: "runtime_locked" });
         }
         const runtimeKind = request.body.runtimeKind;

@@ -23,7 +23,7 @@ import type {
   ToolItem,
   TranscriptDetail,
 } from "../api/contracts";
-import { assignToolSeq, commitAssistantMessage, mergeTranscriptProjection, promotePendingUser, replaceTranscriptProjection, tagOptimisticGenerationOwner, truncateForRegenerate } from "../timeline-order";
+import { assignToolSeq, mergeTranscriptProjection, promotePendingUser, replaceTranscriptProjection, settleGenerationMessages, tagOptimisticGenerationOwner, truncateForRegenerate } from "../timeline-order";
 import { reconcileMessages } from "../reconcile-messages";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { canCoalesceTextDelta, enqueueOverflowLiveEvent, mergeTextDeltaEvents } from "./text-delta-batcher";
@@ -33,6 +33,7 @@ import type { CatalogueStore } from "./catalogue";
 import { freezeGeneration, settleGenerationTools, type ActiveGenerationView, type LiveGenerationChange } from "../turn-rows";
 import type { ModelSettings } from "./model-settings";
 import type { PermissionSettings } from "./permission-settings";
+import type { ServiceLevelSettings } from "./service-level-settings";
 import type { RuntimeStore } from "./runtime";
 import { createClientActiveGenerationStore } from "./active-generation-store.js";
 import { clearReviewComments, parseReviewComments, projectReviewComments, restoreReviewComments, reviewComments } from "../chat/review-comments";
@@ -72,6 +73,7 @@ interface ActiveChatOptions {
   runtime: RuntimeStore;
   models: ModelSettings;
   permissions?: PermissionSettings;
+  serviceLevels?: ServiceLevelSettings;
   attachments: AttachmentsStore;
   drafts?: DraftsStore;
   onError: ErrorHandler;
@@ -81,7 +83,7 @@ interface ActiveChatOptions {
 }
 
 export function createActiveChat(options: ActiveChatOptions) {
-  const { catalogue, models, permissions, attachments, onError } = options;
+  const { catalogue, models, permissions, serviceLevels, attachments, onError } = options;
   const [status, setStatus] = createSignal<ChatStatus>("draft");
   const [title, setTitle] = createSignal("");
   const [templateId, setTemplateId] = createSignal<string | null>(null);
@@ -244,7 +246,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     pendingTextDelta = null;
     if (pendingTextDeltaTimer) clearTimeout(pendingTextDeltaTimer);
     pendingTextDeltaTimer = null;
-    if (pending) applyStructuredGeneration(pending);
+    if (pending) applyGenerationEvent(pending);
   };
 
   const scheduleOverflowLiveEvents = () => {
@@ -355,10 +357,14 @@ export function createActiveChat(options: ActiveChatOptions) {
     stopPending = false;
   };
 
-  const applyStructuredGeneration = (event: StructuredGenerationEvent) => {
+  /** The only client owner of assistant generation state and terminal handoff. */
+  const applyGenerationEvent = (event: StructuredGenerationEvent) => {
     if (stopPending && !STOP_TERMINAL_EVENT_TYPES.has(event.type)) return;
     if (!live() || live()!.chatId !== selectedId()) return;
     const previous = activeGeneration();
+    // The Solid store mutates in place. Capture the status before apply;
+    // reading previous.status afterwards reads the new terminal status too.
+    const previousStatus = previous?.status;
     const recorder = getHarnessRecorder();
     const reduceStartedAt = recorder ? performance.now() : 0;
     let result: ReturnType<typeof generationStore.apply> | undefined;
@@ -378,19 +384,18 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (!result) return;
     const next = result.state as ActiveGenerationView | null;
     if (!next) return;
-    // A stopped turn is finished streaming, so it moves into the transcript at
-    // once rather than waiting for a sync that may be a whole response away.
-    // The live view is cleared with it: whatever it held is now in the
-    // transcript, and leaving both would render the turn twice.
-    // Freeze, but do not return: the status handling below is what clears
-    // stopPending, and skipping it made every later event -- the next turn's
-    // generation_started among them -- be dropped.
-    if (next.status === "stopped" && previous?.status !== "stopped") {
+    // A terminal turn moves into the transcript exactly once. Pi can already
+    // have committed its final message; Codex does not. Both copies carry the
+    // generation id, so this replacement handles either path and the later
+    // backend transcript sync replaces the same range instead of appending.
+    const terminal = ["stopped", "complete", "failed"].includes(next.status);
+    const wasTerminal = previousStatus ? ["stopped", "complete", "failed"].includes(previousStatus) : false;
+    if (terminal && !wasTerminal) {
       const frozen = freezeGeneration(next);
       batch(() => {
         if (frozen.length) {
           setTools((existing) => settleGenerationTools(existing, next));
-          setMessages((existing) => [...existing, ...frozen]);
+          setMessages((existing) => settleGenerationMessages(existing, next.id, frozen));
         }
         generationStore.clear();
         setActiveGenerationChange(null);
@@ -451,7 +456,6 @@ export function createActiveChat(options: ActiveChatOptions) {
       });
     }
     currentGeneration = next.id;
-    const terminal = ["stopped", "complete", "failed"].includes(next.status);
     if (terminal) {
       resetLiveFlags();
     } else {
@@ -721,7 +725,7 @@ export function createActiveChat(options: ActiveChatOptions) {
 
   function applyLiveEvent(event: LiveEvent) {
     if (isStructuredGenerationEvent(event)) {
-      applyStructuredGeneration(event);
+      applyGenerationEvent(event);
       return;
     }
     switch (event.type) {
@@ -756,46 +760,9 @@ export function createActiveChat(options: ActiveChatOptions) {
         setHostUiRequests((current) => current.filter((item) => item.id !== event.requestId));
         break;
       case "session_checkpoint":
-        if (event.title) {
-          if (event.chatId === selectedId()) setTitle(event.title);
-        }
+        if (event.title && event.chatId === selectedId()) setTitle(event.title);
         if (event.chatId === selectedId()) {
           if (event.artifacts) setTurnArtifacts({ chatId: event.chatId, items: event.artifacts });
-          const current = activeGeneration();
-          const terminal = current && ["stopped", "complete", "failed"].includes(current.status);
-          if (terminal && current.id === event.generationId
-            && (event.generationSeq == null || current.lastSeq >= event.generationSeq)) {
-            if (current.status === "complete") {
-              batch(() => {
-                setTools((existing) => settleGenerationTools(existing, current));
-                generationStore.clear();
-                setActiveGenerationChange(null);
-                setActiveGeneration(null);
-              });
-            } else {
-              const selection = selectionToken;
-              const checkpointGenerationId = event.generationId;
-              queueMicrotask(() => {
-                void api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(event.chatId)}`, { cache: "no-store" }).then((detail) => {
-                  if (selection !== selectionToken || event.chatId !== selectedId()) return;
-                  const matching = activeGeneration();
-                  if (!matching || matching.id !== checkpointGenerationId
-                    || !["stopped", "failed"].includes(matching.status)) return;
-                  const liveProviderError = matching.status === "failed"
-                    && matching.assistantMessages.some((message) => message.stopReason === "error");
-                  const persistedProviderError = asList<Message>(detail.messages)
-                    .some((message) => message.role === "assistant" && message.stopReason === "error");
-                  batch(() => {
-                    applyDetail(detail, true);
-                    if (liveProviderError && !persistedProviderError) return;
-                    generationStore.clear();
-                    setActiveGenerationChange(null);
-                    setActiveGeneration(null);
-                  });
-                }).catch((error) => onError(error));
-              });
-            }
-          }
         }
         break;
       case "transcript_sync":
@@ -809,12 +776,8 @@ export function createActiveChat(options: ActiveChatOptions) {
           setTools(projection.tools);
         });
         break;
-      case "message_end":
-        if (event.message.role === "user") {
-          setMessages((current) => promotePendingUser(current, event.message));
-        } else if (event.message.role === "assistant") {
-          setMessages((current) => commitAssistantMessage(current, event.message));
-        }
+      case "user_message_committed":
+        setMessages((current) => promotePendingUser(current, event.message));
         break;
       // A process the server deliberately stopped stays stopped. The socket
       // close that follows is otherwise indistinguishable from a dropped
@@ -875,18 +838,16 @@ export function createActiveChat(options: ActiveChatOptions) {
    * that belongs to a chat belongs in here, so there is one list to add to and
    * no second place to forget.
    */
-  const chatScopes: Array<(scope: { chat: ChatSummary; project: Project; detail?: TranscriptDetail }) => void> = [
-    ({ chat, project, detail }) => models.select(project.id, chat.id, detail, {
-      reloadChat: (detail?.status || chat.status) !== "active",
-    }),
-    ({ chat }) => void permissions?.select(chat.id),
-    ({ chat }) => void attachments.select(chat.id),
+  const chatScopes: Array<(scope: { chat: ChatSummary; project: Project; detail?: TranscriptDetail }) => void | Promise<void>> = [
+    ({ chat, project, detail }) => models.select(project.id, chat.id, detail),
+    ({ chat }) => permissions?.select(chat.id),
+    ({ chat }) => serviceLevels?.select(chat.id),
+    ({ chat }) => attachments.select(chat.id),
     ({ chat }) => hydrateDraft(chat.id),
   ];
 
-  const reconcileChatScope = (chat: ChatSummary, project: Project, detail?: TranscriptDetail) => {
-    for (const scope of chatScopes) scope({ chat, project, detail });
-  };
+  const reconcileChatScope = (chat: ChatSummary, project: Project, detail?: TranscriptDetail) =>
+    Promise.all(chatScopes.map((scope) => scope({ chat, project, detail }))).then(() => {});
 
   const performSelect = async (
     chat: ChatSummary,
@@ -907,8 +868,9 @@ export function createActiveChat(options: ActiveChatOptions) {
       else if (historyMode === "replace") history.replaceState({}, "", `/chat/${chat.id}`);
       navigationOptions.onCommit?.();
     });
-    reconcileChatScope(chat, project, detail);
+    const scopeReload = reconcileChatScope(chat, project, detail);
     applyDetail(detail);
+    await scopeReload;
     // The connector comes up behind the transcript rather than in front of it.
     // Navigation used to wait for the socket, the model reload and a catalogue
     // refresh before it counted as finished, and for that whole stretch the
@@ -941,7 +903,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     return request;
   };
 
-  const initialize = (chat: ChatSummary, project: Project, detail?: TranscriptDetail) => {
+  const initialize = async (chat: ChatSummary, project: Project, detail?: TranscriptDetail) => {
     // Drop any previous chat's live socket/record first: send() reuses an open
     // socket without re-checking ownership, so a stale stream would carry this
     // chat's prompts into the previous chat's Pi process.
@@ -949,12 +911,13 @@ export function createActiveChat(options: ActiveChatOptions) {
     catalogue.select(chat, project);
     setStatus(chat.status);
     setTitle(chat.title);
-    setTemplateId(chat.templateId || options.defaultTemplateId() || "assistant");
+    setTemplateId(chat.profileId || chat.templateId || options.defaultTemplateId() || "assistant");
     setRuntimeIdentity(chat.runtime || null);
     setBackendImplementation(chat.backend?.implementation || null);
-    reconcileChatScope(chat, project, detail);
+    const scopeReload = reconcileChatScope(chat, project, detail);
     if (detail) applyDetail(detail);
     else { setMessages([]); setTools([]); setPageBefore(null); setLoadedId(chat.id); }
+    await scopeReload;
   };
 
   const prepareOutboundMessage = () => {

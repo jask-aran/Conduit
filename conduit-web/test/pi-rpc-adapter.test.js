@@ -38,6 +38,14 @@ test("Pi adapter maps required neutral events and retains Pi richness", () => {
     generationId: null, pi: reset, type: "transcript_sync", replaceAll: true,
     messages: [{ id: "user-1", role: "user" }], tools: [],
   });
+  const user = { type: "message_end", generationId: "g1", message: { id: "u1", role: "user", content: "Hi" } };
+  assert.deepEqual(normalizePiBackendEvent(user), {
+    generationId: "g1", pi: user, type: "user_message_committed", message: user.message,
+  });
+  const assistant = { ...user, message: { role: "assistant", content: "No duplicate route" } };
+  assert.deepEqual(normalizePiBackendEvent(assistant), {
+    generationId: "g1", pi: assistant, type: "pi_event",
+  });
   const unknown = { type: "pi_extension_event", value: 4 };
   assert.deepEqual(normalizePiBackendEvent(unknown), { generationId: null, pi: unknown, type: "pi_event" });
   // Pi is the reference backend: it does everything Conduit asks of a harness

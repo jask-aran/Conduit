@@ -214,6 +214,7 @@ export async function startConduitHarness({ env = {} } = {}) {
     env: {
       ...process.env,
       HOME: root,
+      CODEX_HOME: path.join(root, ".codex"),
       CONDUIT_HOST: "127.0.0.1",
       // The server binds a free port and tells us which. Picking one here meant
       // probing for a free port, closing the probe, and handing the number to a

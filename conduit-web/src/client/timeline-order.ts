@@ -159,33 +159,15 @@ export function truncateForRegenerate(messages: Message[], entryId: string): Mes
   return index >= 0 ? messages.slice(0, index) : messages;
 }
 
-/**
- * Commit a completed assistant message into the transcript.
- *
- * The turn that owns the live generation renders that structure instead of its
- * settled assistants, so committing here does not duplicate the streaming view
- * - it gives the turn something to fall back to once it stops being live. A
- * turn that ended early used to have nothing, and went blank until a reload.
- */
-export function commitAssistantMessage(messages: Message[], eventMessage: ProtocolMessage): Message[] {
-  const id = eventMessage.id;
-  const blocks = Array.isArray(eventMessage.content) ? eventMessage.content as Message["blocks"] : undefined;
-  const next: Message = {
-    id: id || `assistant_${Date.now()}`,
-    role: "assistant",
-    content: messageText(eventMessage),
-    blocks,
-    stopReason: eventMessage.stopReason,
-    errorMessage: eventMessage.errorMessage ?? null,
-    timestamp: eventMessage.timestamp || new Date().toISOString(),
-  };
-  const index = id ? messages.findIndex((message) => message.id === id) : -1;
-  if (index >= 0) {
-    const copy = [...messages];
-    copy[index] = { ...messages[index]!, ...next };
-    return copy;
-  }
-  return [...messages, next];
+/** Replace the provisional assistant copy for one generation without touching its user prompt. */
+export function settleGenerationMessages(messages: Message[], generationId: string, settled: Message[]): Message[] {
+  const first = messages.findIndex((message) => message.role === "assistant" && message.generationId === generationId);
+  const retained = messages.filter((message) => message.role !== "assistant" || message.generationId !== generationId);
+  if (!settled.length) return retained;
+  if (first < 0) return [...retained, ...settled];
+  const insertion = messages.slice(0, first)
+    .filter((message) => message.role !== "assistant" || message.generationId !== generationId).length;
+  return [...retained.slice(0, insertion), ...settled, ...retained.slice(insertion)];
 }
 
 /**

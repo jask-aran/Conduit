@@ -20,6 +20,7 @@ import type { Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import type { ComposerModels } from "./composer-models";
 import type { PermissionSettings } from "../state/permission-settings";
+import type { ServiceLevelSettings } from "../state/service-level-settings";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
 type MobileOptionsPanel = "root" | "models" | "profiles" | "permissions";
@@ -28,6 +29,7 @@ export function MobileComposerOptions(props: {
   composer: {
     models: ComposerModels;
     permissions?: PermissionSettings;
+    serviceLevels?: ServiceLevelSettings;
     profiles: Template[];
     activeProfile?: Template | null;
     chat: ActiveChatStore;
@@ -195,6 +197,15 @@ export function MobileComposerOptions(props: {
                 <For each={composer.permissions?.profiles() || []}>{(profile) => <MenuRadioItem value={profile.id} disabled={!profile.allowed} closeOnSelect={false}><span>{profile.label}</span></MenuRadioItem>}</For>
               </MenuRadioGroup>
             </MenuGroup>
+            <Show when={composer.serviceLevels?.levels().length}>
+              <MenuSeparator />
+              <MenuGroup>
+                <MenuLabel class="composer-options-label">Service level</MenuLabel>
+                <MenuRadioGroup value={composer.serviceLevels?.selected() || ""} onChange={(value) => void composer.serviceLevels?.choose(value)}>
+                  <For each={composer.serviceLevels?.levels() || []}>{(level) => <MenuRadioItem value={level.id} closeOnSelect={false}>{level.label}</MenuRadioItem>}</For>
+                </MenuRadioGroup>
+              </MenuGroup>
+            </Show>
           </div>
         </Show>
       </MenuContent>

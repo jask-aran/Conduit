@@ -88,8 +88,9 @@ export function createLiveSessionStream({
 
   async function sendPrompt(record, prepared, options) {
     const { sourceCheckpointId = null, ...promptOptions } = options || {};
-    const backendNames = manifestForImplementation(record.adapterImplementation)?.nameGeneration === "backend";
-    const needsName = !backendNames && !prepared.context.chat.title && !namingChats.has(prepared.context.chat.id);
+    const namingOwner = manifestForImplementation(record.adapterImplementation)?.nameGeneration;
+    const needsName = namingOwner === "conduit" && !prepared.context.chat.title
+      && !namingChats.has(prepared.context.chat.id);
     const adapter = adapterFor(record);
     if (prepared.attachments.length && !adapter.getCapabilities().attachments) {
       throw Object.assign(new Error("This agent does not support attachments"), { code: "attachments_unsupported", status: 400 });
@@ -318,6 +319,10 @@ export function createLiveSessionStream({
   const handleUpgrade = (id, request, socket, head) => wss.handleUpgrade(request, socket, head, (ws) => {
     startWebSocketKeepalive(ws);
     const record = backends.get(id);
+    if (!record) {
+      ws.close(1011, "Live session unavailable");
+      return;
+    }
     const adapter = adapterFor(record);
     const generationResume = adapter.attach(id, ws);
     if (generationResume) ws.send(JSON.stringify(generationResume));

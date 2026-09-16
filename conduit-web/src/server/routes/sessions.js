@@ -59,9 +59,13 @@ export function registerSessionRoutes(app, {
         projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages);
         return response.json({ ...chatView(context.chat), ...projection, attachments: [], page: { before: null } });
       }
+      const sessionFile = conduitPiSessionFile(context.chat);
+      if (!sessionFile) return response.json({
+        ...chatView(context.chat), messages: [], tools: [], attachments: [], page: { before: null },
+      });
       let session;
       try {
-        session = await readSessionPage(conduitPiSessionFile(context.chat), context.project, { before: request.query.before });
+        session = await readSessionPage(sessionFile, context.project, { before: request.query.before });
       } catch (error) {
         if (error.code === "ENOENT") return response.json({
           ...chatView(context.chat), messages: [], tools: [], attachments: [], page: { before: null },
