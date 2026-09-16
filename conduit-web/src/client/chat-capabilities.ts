@@ -1,4 +1,4 @@
-import type { BooleanCapability, ChatCapabilities, ChatSummary } from "./api/contracts";
+import type { BooleanCapability, ChatCapabilities, ChatSummary, HarnessManifestView } from "./api/contracts";
 
 /**
  * What the harness running a chat can do.
@@ -18,9 +18,9 @@ import type { BooleanCapability, ChatCapabilities, ChatSummary } from "./api/con
  * before the transcript and long before any process.
  */
 export function manifestForChat(
-  harnesses: Record<string, ChatCapabilities>,
+  harnesses: Record<string, HarnessManifestView>,
   chat: ChatSummary | null | undefined,
-): ChatCapabilities | null {
+): HarnessManifestView | null {
   const implementation = chat?.backend?.implementation;
   if (!implementation) return null;
   return harnesses[implementation] || null;

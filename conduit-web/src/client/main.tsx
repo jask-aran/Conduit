@@ -17,7 +17,7 @@ import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/clien
 import { buildHttpUrl, clearServerOrigin, configuredServerOrigin, loginUrl, logoutUrl, normalizeServerOrigin, saveServerOrigin, transcriptUrl } from "./api/transport";
 import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
 import { manifestForChat, resolveCapability, resolveHistory } from "./chat-capabilities";
-import type { BooleanCapability, ChatCapabilities, ChatSummary, DashboardChat, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
+import type { BooleanCapability, ChatSummary, DashboardChat, HarnessManifestView, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
 import { AppDashboard } from "./dashboard/app-dashboard";
@@ -56,6 +56,7 @@ import { createDrafts } from "./state/drafts";
 import { createCatalogueStore } from "./state/catalogue";
 import { createModelSettings } from "./state/model-settings";
 import { createPermissionSettings } from "./state/permission-settings";
+import { createServiceLevelSettings } from "./state/service-level-settings";
 import { createRuntimeStore } from "./state/runtime";
 import { VoiceWaveform } from "./chat/voice-waveform";
 import { browserShortcutEnvironmentProvider } from "./shortcuts/shortcut-environment";
@@ -414,7 +415,7 @@ function App() {
   // Keyed by implementation, because that is what a manifest is registered
   // under and what every chat carries. A profile elects a harness; the harness
   // is what declares what it can do.
-  const [harnessCapabilities, setHarnessCapabilities] = createSignal<Record<string, ChatCapabilities>>({});
+  const [harnessCapabilities, setHarnessCapabilities] = createSignal<Record<string, HarnessManifestView>>({});
   const [templatesLoading, setTemplatesLoading] = createSignal(true);
   const [installations, setInstallations] = createSignal<Installation[]>([]);
   const [installationsLoading, setInstallationsLoading] = createSignal(true);
@@ -528,6 +529,7 @@ function App() {
     });
   });
   const permissions = createPermissionSettings(showError);
+  const serviceLevels = createServiceLevelSettings(showError);
   const attachments = createAttachments(showError, maxAttachmentBytes);
   const drafts = createDrafts(showError);
   void drafts.load();
@@ -572,6 +574,7 @@ function App() {
     runtime,
     models,
     permissions,
+    serviceLevels,
     attachments,
     drafts,
     onError: showError,
@@ -714,6 +717,22 @@ function App() {
     }
   };
 
+  const createProfileChat = (project: Project, profileId: string) => api<ChatSummary>("/v0/chats", {
+    method: "POST",
+    body: JSON.stringify({
+      projectId: project.id,
+      profileId,
+      start: true,
+      model: models.model(),
+      thinkingLevel: models.effort(),
+    }),
+  });
+
+  const activateCreatedChat = async (created: ChatSummary, project: Project, profileId: string) => {
+    await chat.initialize({ ...created, templateId: created.templateId || profileId || undefined }, project);
+    await chat.ensureLive("select");
+  };
+
   const createChat = async (target?: Project, launch: { templateId?: string; runtimeKind?: string } = {}, options: { reportFailure?: boolean } = {}) => {
     const reportFailure = options.reportFailure !== false;
     const project = target || selectedProject() || catalogue.projects().find((item) => item.slug === "chat") || catalogue.projects()[0];
@@ -722,16 +741,9 @@ function App() {
     const fromDashboard = routeKind() === "project" || routeKind() === "dashboard" || routeKind() === "computer";
     try {
       const profileId = launch.templateId || project.defaultTemplateId || defaultTemplateId() || "assistant";
-      const created = await api<ChatSummary>(profileId === "runtime" ? "/v0/runtime/chats" : "/v0/chats", {
-        method: "POST",
-        body: JSON.stringify(profileId === "runtime" ? {} : {
-          projectId: project.id,
-          profileId,
-          start: true,
-          model: models.model(),
-          thinkingLevel: models.effort(),
-        }),
-      });
+      const created = profileId === "runtime"
+        ? await api<ChatSummary>("/v0/runtime/chats", { method: "POST", body: JSON.stringify({}) })
+        : await createProfileChat(project, profileId);
       const ownerProject = profileId === "runtime"
         ? catalogue.projects().find((item) => item.id === created.projectId)
           || catalogue.projects().find((item) => item.slug === "chat")
@@ -741,8 +753,8 @@ function App() {
       // Commit the visible transition only after the durable replacement exists.
       // initialize() first: it resets the previous chat's live socket, and the
       // URL must not advertise the new chat while a send could still target the old one.
+      await activateCreatedChat(created, ownerProject, profileId);
       batch(() => {
-        chat.initialize({ ...created, templateId: created.templateId || profileId || undefined }, ownerProject);
         if (fromDashboard) history.pushState({}, "", `/chat/${created.id}`);
         else history.replaceState({}, "", `/chat/${created.id}`);
         setRouteKind("chat");
@@ -760,10 +772,6 @@ function App() {
         }
         return item;
       }));
-      void chat.ensureLive("select").catch((error) => {
-        if (catalogue.selectedId() === created.id) showError(error);
-      });
-
       if (replacedDraftId && replacedDraftId !== created.id) {
         try { await discardDraft(replacedDraftId); }
         catch (error) {
@@ -782,7 +790,8 @@ function App() {
   let dashboardDraftRequest: Promise<void> | null = null;
   const ensureDashboardDraft = () => {
     const route = routeKind();
-    if (dashboardDraftRequest || !["dashboard", "project"].includes(route) || chat.loadedId() || templatesLoading()) return;
+    if (dashboardDraftRequest || !["dashboard", "project"].includes(route)
+      || chat.loadedId() || catalogue.selectedId() || templatesLoading()) return;
     const project = route === "project"
       ? selectedProject()
       : catalogue.projects().find((item) => item.slug === "chat") || catalogue.projects()[0];
@@ -791,17 +800,14 @@ function App() {
     const expectedRoute = route;
     const expectedProjectId = project.id;
     let scopeChanged = false;
-    dashboardDraftRequest = api<ChatSummary>("/v0/chats", {
-      method: "POST",
-      body: JSON.stringify({ projectId: project.id, templateId, runtimeKind: "conduit_profile" }),
-    }).then(async (created) => {
+    dashboardDraftRequest = createProfileChat(project, templateId).then(async (created) => {
       if (routeKind() !== expectedRoute || (expectedRoute === "project" && selectedProject()?.id !== expectedProjectId)) {
         scopeChanged = true;
         await api(`/v0/chats/${encodeURIComponent(created.id)}?ifEmpty=true`, { method: "DELETE" });
         dropScope(created.id);
         return;
       }
-      chat.initialize({ ...created, templateId: created.templateId || templateId }, project);
+      await activateCreatedChat(created, project, templateId);
     }).catch((error) => { showError(error); }).finally(() => {
       dashboardDraftRequest = null;
       if (scopeChanged) ensureDashboardDraft();
@@ -1103,16 +1109,20 @@ function App() {
   };
 
   const switchProfile = async (id: string) => {
-    const selectedId = catalogue.selectedId();
-    if (!selectedId || chat.status() !== "draft") return;
-    const payload = await api<ChatSummary>(`/v0/chats/${encodeURIComponent(selectedId)}`, {
+    const chatId = chat.loadedId();
+    if (!chatId) return;
+    const payload = await api<ChatSummary>(`/v0/chats/${encodeURIComponent(chatId)}`, {
       method: "PATCH",
       body: JSON.stringify({ profileId: id }),
     });
-    chat.setTemplateId(payload.profileId || payload.templateId || id);
-    chat.setRuntimeIdentity(payload.runtime || null);
-    await models.reloadChat(selectedId);
-    await permissions.select(selectedId);
+    const project = catalogue.projects().find((item) => item.id === payload.projectId);
+    if (!project) throw new Error("The selected profile returned a chat outside the current catalogue");
+    // A profile changes the harness and every capability-scoped value below
+    // it. Re-enter the normal selection lifecycle instead of maintaining a
+    // second, incomplete list of stores to refresh here.
+    catalogue.patchChat(chatId, payload);
+    await chat.initialize(payload, project);
+    await chat.ensureLive("select");
   };
 
   const refresh = async () => {
@@ -1791,7 +1801,7 @@ function App() {
       });
     void api<{
       profiles: Array<{ id: string; label: string; description?: string; management: string; disabled?: boolean; drive?: boolean; agent: { protocol: string; implementation: string } }>;
-      harnesses?: Record<string, ChatCapabilities>;
+      harnesses?: Record<string, HarnessManifestView>;
     }>("/v0/profiles")
       .then((payload) => {
         setHarnessCapabilities(payload.harnesses || {});
@@ -1831,7 +1841,7 @@ function App() {
         const [target, detail] = selectedChat;
         const project = projects.find((item) => item.id === target.projectId) || projects[0];
         if (!project) throw new Error("Conduit has no chat project");
-        chat.initialize(target, project, detail);
+        await chat.initialize(target, project, detail);
         setRouteKind("chat");
         setRouteBootstrap("ready");
         if (target.status === "active") {
@@ -1862,7 +1872,7 @@ function App() {
         if (!project) throw new Error("Conduit has no chat project");
         const created = await api<ChatSummary>("/v0/chats", { method: "POST", body: JSON.stringify({ projectId: project.id, templateId: templatePayload.defaultTemplateId || "assistant" }) });
         history.replaceState({}, "", `/chat/${created.id}`);
-        chat.initialize(created, project);
+        await chat.initialize(created, project);
         setRouteKind("chat");
       }
     })().catch((error) => {
@@ -1945,6 +1955,7 @@ function App() {
               attachmentsSupported={chatCapability("attachments", true)}
               models={models}
               permissions={chatCapability("permissionModes") ? permissions : undefined}
+              serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined}
               profiles={profiles()}
               activeProfile={activeProfile()}
               serverOnline={runtime.connectivity() === "online"}
@@ -2029,7 +2040,7 @@ function App() {
             <section class="work-area-conversation" aria-label="Conversation">
               <Transcript chat={chat} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} projectId={selectedProject()?.id} />
               <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-                <Composer chat={chat} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
+                <Composer chat={chat} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
             </section>
           </div>
         </>}>
@@ -2041,6 +2052,7 @@ function App() {
               attachmentsSupported={chatCapability("attachments", true)}
               models={models}
               permissions={chatCapability("permissionModes") ? permissions : undefined}
+              serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined}
               profiles={profiles()}
               activeProfile={activeProfile()}
               serverOnline={runtime.connectivity() === "online"}

@@ -66,7 +66,10 @@ export function withPiCompatibilityFields(item) {
  */
 export function harnessCapabilities() {
   return Object.fromEntries(MANIFESTS.flatMap((manifest) =>
-    implementationsOf(manifest).map((implementation) => [implementation, manifest.capabilities])));
+    implementationsOf(manifest).map((implementation) => [implementation, {
+      ...manifest.capabilities,
+      ...(manifest.serviceLevels ? { serviceLevels: manifest.serviceLevels } : {}),
+    }])));
 }
 
 export function agentProfiles(templates, { available = null } = {}) {

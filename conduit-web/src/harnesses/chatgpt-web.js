@@ -8,6 +8,7 @@ export const manifest = {
   protocol: "native_api",
   installationId: "user-chatgpt-account",
   capabilities: CHATGPT_WEB_CAPABILITIES,
+  nameGeneration: "backend",
   // No thread history to enumerate: a ChatGPT account is not a machine store.
   discovery: "none",
   drive: false,

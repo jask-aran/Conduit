@@ -143,6 +143,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       permissionProfile: String(context.chat.backend.permissionProfile || "").trim(),
       approvalPolicy: String(context.chat.backend.approvalPolicy || "").trim(),
       approvalsReviewer: String(context.chat.backend.approvalsReviewer || "").trim(),
+      serviceLevel: String(context.chat.backend.serviceLevel || "").trim(),
     };
     const live = context.chat.backend.opaqueSession
       ? await this.restore(context.chat.backend.opaqueSession, options) : await this.create(options);
@@ -154,13 +155,14 @@ export class CodexAppServerAdapter extends EventEmitter {
     }, modelRecovery: null };
   }
 
-  async create({ chatId, project, model = "", thinkingLevel = "", permissionMode = "", permissionProfile = "", approvalPolicy = "", approvalsReviewer = "", sandbox = null }) {
+  async create({ chatId, project, model = "", thinkingLevel = "", permissionMode = "", permissionProfile = "", approvalPolicy = "", approvalsReviewer = "", serviceLevel = "", sandbox = null }) {
     const record = await this.start({ chatId, projectId: project.id, cwd: project.workingRoot });
     try {
       const result = await this.request(record, "thread/start", {
         cwd: project.workingRoot,
         ...(model ? { model } : {}),
         ...(thinkingLevel ? { effort: thinkingLevel } : {}),
+        ...(serviceLevel ? { serviceTier: serviceLevel } : {}),
         ...(permissionProfile ? { permissions: permissionProfile } : {}),
         ...CodexAppServerAdapter.policy(approvalPolicy, approvalsReviewer, sandbox),
       });
@@ -173,6 +175,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       record.permissionMode = permissionMode;
       record.approvalPolicy = approvalPolicy;
       record.approvalsReviewer = approvalsReviewer;
+      record.serviceLevel = serviceLevel;
       this.emit("changed", { record, reason: "created" });
       return record;
     } catch (cause) {
@@ -181,7 +184,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     }
   }
 
-  async restore(opaqueSession, { chatId, project, model = "", thinkingLevel = "", permissionMode = "", permissionProfile = "", approvalPolicy = "", approvalsReviewer = "", sandbox = null }) {
+  async restore(opaqueSession, { chatId, project, model = "", thinkingLevel = "", permissionMode = "", permissionProfile = "", approvalPolicy = "", approvalsReviewer = "", serviceLevel = "", sandbox = null }) {
     const record = await this.start({ chatId, projectId: project.id, cwd: project.workingRoot });
     const threadId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!threadId) throw error("Codex thread identity is missing");
@@ -190,6 +193,7 @@ export class CodexAppServerAdapter extends EventEmitter {
         threadId, cwd: project.workingRoot,
         ...(model ? { model } : {}),
         ...(thinkingLevel ? { effort: thinkingLevel } : {}),
+        ...(serviceLevel ? { serviceTier: serviceLevel } : {}),
         ...(permissionProfile ? { permissions: permissionProfile } : {}),
         ...CodexAppServerAdapter.policy(approvalPolicy, approvalsReviewer, sandbox),
       });
@@ -200,6 +204,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       record.permissionMode = permissionMode;
       record.approvalPolicy = approvalPolicy;
       record.approvalsReviewer = approvalsReviewer;
+      record.serviceLevel = serviceLevel;
       this.emit("changed", { record, reason: "restored" });
       return record;
     } catch (cause) {
@@ -399,11 +404,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     return { mode: "linear", leafId, tree: child ? [child] : [] };
   }
 
-  /**
-   * Codex user messages carry an array of content parts, agent messages a flat
-   * string. Flattening here keeps both out of the transcript as "[object
-   * Object]".
-   */
+  /** Codex messages can carry a flat string or an array of content parts. */
   static itemText(item) {
     if (typeof item?.text === "string") return item.text;
     if (typeof item?.content === "string") return item.content;
@@ -421,7 +422,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       active: false, stopping: false, sessionId: null, model: "", thinkingLevel: "", generation: null,
       clients: new Set(), events: [], pending: new Map(), approvals: new Map(),
       steering: [], followUp: [],
-      permissionMode: "", permissionProfile: "", approvalPolicy: "", approvalsReviewer: "",
+      permissionMode: "", permissionProfile: "", approvalPolicy: "", approvalsReviewer: "", serviceLevel: "",
       sequence: 0, eventSequence: 0, messageIds: new Set(),
     };
     this.sessions.add(record);
@@ -619,7 +620,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       const steeringCount = record.steering.length;
       record.steering = record.steering.filter((item) => item.id !== messageId);
       if (record.steering.length !== steeringCount) this.publishQueue(record);
-      this.publish(record, { type: "transcript_message", generationId: turnId,
+      this.publish(record, { type: "user_message_committed", generationId: turnId,
         message: { id: messageId, role: "user", content: CodexAppServerAdapter.itemText(params.item) } });
     } else if (method === "item/agentMessage/delta") {
       const messageId = params.itemId || `assistant-${turnId}`;
@@ -644,8 +645,9 @@ export class CodexAppServerAdapter extends EventEmitter {
       const messageId = params.item.id || `assistant-${turnId}`;
       if (!record.messageIds.has(params.item.id)) this.publish(record, { type: "assistant_content", generationId: turnId,
         phase: "start", sequence: ++record.eventSequence, messageId });
+      const text = CodexAppServerAdapter.itemText(params.item);
       record.turn = { id: turnId, messageId, phase: params.item.phase || null,
-        blocks: [{ kind: "text", contentIndex: 0, text: params.item.text || "" }] };
+        blocks: [{ kind: "text", contentIndex: 0, text }] };
       this.publish(record, { type: "assistant_content", generationId: turnId, phase: "final", sequence: ++record.eventSequence,
         messageId, stopReason: params.item.phase === "final_answer" ? "stop" : "toolUse",
         errorMessage: null, blocks: record.turn.blocks });
@@ -801,6 +803,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       input: CodexAppServerAdapter.inputItems(message, options?.attachments),
       ...(record.model ? { model: record.model } : {}),
       ...(record.thinkingLevel ? { effort: record.thinkingLevel } : {}),
+      ...(record.serviceLevel ? { serviceTier: record.serviceLevel } : {}),
       ...(record.permissionProfile ? { permissions: record.permissionProfile } : {}),
       ...CodexAppServerAdapter.policy(record.approvalPolicy, record.approvalsReviewer),
     });
@@ -860,6 +863,12 @@ export class CodexAppServerAdapter extends EventEmitter {
     if (!record) throw error("Codex app-server is unavailable");
     record.thinkingLevel = thinkingLevel;
     return thinkingLevel;
+  }
+  async setServiceLevel(id, serviceLevel) {
+    const record = this.get(id);
+    if (!record) throw error("Codex app-server is unavailable");
+    record.serviceLevel = serviceLevel;
+    return serviceLevel;
   }
   async compact(id) {
     const record = this.get(id);

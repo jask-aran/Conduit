@@ -37,7 +37,7 @@ export class ChatGptWebAdapter extends EventEmitter {
       // This backend has no server-side history to re-read, so its own journal
       // is the transcript: every published event is durable before broadcast.
       onPublish: (record, event) => {
-        if (event.type === "transcript_message" || (event.type === "assistant_content" && event.phase === "final")) {
+        if (event.type === "user_message_committed" || (event.type === "assistant_content" && event.phase === "final")) {
           this.appendJournal(record.chatId, event);
         }
       },
@@ -143,7 +143,7 @@ export class ChatGptWebAdapter extends EventEmitter {
     record.stopping = false;
     record.generation = { id: generationId, closed: false, settled: false };
     record.abortController = new AbortController();
-    this.publish(record, { type: "transcript_message", generationId,
+    this.publish(record, { type: "user_message_committed", generationId,
       message: { id: crypto.randomUUID(), role: "user", content: userMessage } });
     this.publish(record, { type: "status", generationId, sequence: ++record.eventSequence, status: "working", activity: "working", detail: null });
     this.publish(record, { type: "assistant_content", generationId, phase: "start", sequence: ++record.eventSequence, messageId });
@@ -268,7 +268,7 @@ export class ChatGptWebAdapter extends EventEmitter {
   transcript(chatId) {
     const messages = [];
     for (const event of this.readJournal(chatId)) {
-      if (event.type === "transcript_message" && event.message?.role === "user") messages.push({
+      if (["user_message_committed", "transcript_message"].includes(event.type) && event.message?.role === "user") messages.push({
         ...event.message, content: parseAttachmentEnvelope(event.message.content).message,
       });
       if (event.type === "assistant_content" && event.phase === "final") messages.push({

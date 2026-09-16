@@ -76,7 +76,7 @@ export type LiveEvent = EventBase & (
   | { type: "extension_ui_request"; request: HostUiRequest | null }
   | { type: "extension_ui_resolved"; requestId: string }
   | { type: "session_checkpoint"; chatId: string; title: string | null; generationSeq: number | null; artifacts: TurnArtifactSummary[] | null }
-  | { type: "message_end"; message: ProtocolMessage }
+  | { type: "user_message_committed"; message: ProtocolMessage }
   | { type: "transcript_sync"; messages: unknown[]; tools: unknown[]; replaceAll: boolean }
   | StructuredGenerationEvent
   | { type: "runtime_error" | "client_error"; code: string; message: string }
@@ -241,7 +241,9 @@ export function normalizeLiveEvent(value: unknown): LiveEvent {
     case "retry": return source.active
       ? { type: "auto_retry_start", generationId, retry: retry(source.retry) || {} }
       : { type: "auto_retry_end", generationId };
-    case "transcript_message": return { type: "message_end", generationId, message: protocolMessage(source.message) };
+    // Read compatibility for events retained by older ChatGPT Web journals.
+    case "transcript_message": return { type: "user_message_committed", generationId, message: protocolMessage(source.message) };
+    case "user_message_committed": return { type: "user_message_committed", generationId, message: protocolMessage(source.message) };
     case "transcript_sync": return { type: "transcript_sync", generationId, messages: list(source.messages), tools: list(source.tools), replaceAll: Boolean(source.replaceAll) };
     case "runtime_state": {
       if (!Object.keys(record(source.session)).length && source.lifecycle) {
@@ -279,7 +281,6 @@ export function normalizeLiveEvent(value: unknown): LiveEvent {
         }) : null,
       };
     }
-    case "message_end": return { type: "message_end", generationId, message: protocolMessage(source.message) };
     // The process is gone. `deliberate` separates a stop the server chose --
     // the reaper, or someone picking Stop process -- from a crash, because only
     // the second is worth reconnecting through.

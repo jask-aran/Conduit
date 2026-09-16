@@ -33,6 +33,17 @@ export interface PermissionModeState {
   modes: PermissionMode[];
   selected: string;
 }
+export interface ServiceLevel {
+  id: string;
+  label: string;
+}
+export interface ServiceLevelState {
+  levels: ServiceLevel[];
+  selected: string;
+}
+export interface HarnessManifestView extends ChatCapabilities {
+  serviceLevels?: ServiceLevel[];
+}
 export type ChatStatus = "draft" | "active";
 
 export interface RuntimeIdentity {
@@ -51,7 +62,7 @@ export interface ChatSummary {
   templateId?: string;
   runtime?: RuntimeIdentity;
   profileId?: string | null;
-  backend?: { protocol: string; implementation: string; installationId: string };
+  backend?: { protocol: string; implementation: string; installationId: string; serviceLevel?: string };
   createdAt?: string;
   updatedAt?: string;
   lastUserMessageAt?: string | null;

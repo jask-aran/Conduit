@@ -60,6 +60,26 @@ test("ChatGPT Web rebuilds its transcript from the native journal", () => {
   ]);
 });
 
+test("ChatGPT Web journals committed user messages with the dedicated event", async () => {
+  const adapter = new ChatGptWebAdapter({ dataDir: "." });
+  adapter.ensureSidecar = async () => { adapter.origin = "http://sidecar"; };
+  const journal = [];
+  adapter.appendJournal = (_chatId, event) => journal.push(event);
+  adapter.readJournal = () => [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => streamResponse([{ type: "done", conversationId: "c", parentMessageId: "p" }]);
+  try {
+    const record = await adapter.create({ chatId: "chat-user-event", model: "gpt-test" });
+    const settled = new Promise((resolve) => adapter.once("settled", resolve));
+    await adapter.prompt(record.id, "Hi");
+    await settled;
+    assert.equal(journal[0].type, "user_message_committed");
+    assert.equal(journal.some((event) => event.type === "transcript_message"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("ChatGPT Web changes model and effort on an existing chat", async () => {
   const originalFetch = globalThis.fetch;
   let sent;

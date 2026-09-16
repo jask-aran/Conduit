@@ -5,6 +5,7 @@ import {
   buildTimeline,
   mergeToolEvent,
   promotePendingUser,
+  settleGenerationMessages,
 } from "../src/client/timeline-order.ts";
 
 test("mergeToolEvent preserves first-seen timestamp and seq on reconnect replay", () => {
@@ -59,4 +60,25 @@ test("assignToolSeq fills missing seq values", () => {
   const tools = assignToolSeq([{ id: "a" }, { id: "b", seq: 7 }]);
   assert.equal(tools[0].seq, 0);
   assert.equal(tools[1].seq, 7);
+});
+
+test("a settled generation replaces its provisional assistant copy once", () => {
+  const committed = [
+    { id: "user_1", role: "user", content: "hello", generationId: "g1" },
+    { id: "live_g1", role: "assistant", content: "Hello", generationId: "g1" },
+  ];
+  const settled = settleGenerationMessages(committed, "g1", [{
+    id: "end_g1:m1", role: "assistant", content: "Hello", generationId: "g1", stopReason: "stop",
+  }]);
+  assert.deepEqual(settled.map((message) => [message.role, message.content]), [
+    ["user", "hello"],
+    ["assistant", "Hello"],
+  ]);
+});
+
+test("a settled generation preserves its answer when no transcript message arrived", () => {
+  const settled = settleGenerationMessages([
+    { id: "user_1", role: "user", content: "hello", generationId: "g1" },
+  ], "g1", [{ id: "end_g1:m1", role: "assistant", content: "Hello", generationId: "g1" }]);
+  assert.equal(settled.at(-1).content, "Hello");
 });

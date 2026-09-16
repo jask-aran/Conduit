@@ -197,7 +197,7 @@ test("Codex app-server profile creates, streams, and reconnects through neutral 
   }
 });
 
-test("changing a prewarmed draft to Codex replaces its Pi process", async () => {
+test("changing a prewarmed draft to Codex removes Pi before the standard launch path", async () => {
   const harness = await startConduitHarness();
   try {
     const chat = await harness.createChat();
@@ -212,10 +212,15 @@ test("changing a prewarmed draft to Codex replaces its Pi process", async () => 
     assert.equal(changed.status, 200);
     assert.equal((await changed.json()).backend.implementation, "codex");
 
-    const live = await harness.liveSessions();
-    assert.equal(live.length, 1);
-    assert.equal(live[0].chatId, chat.id);
-    assert.equal(live[0].backend.implementation, "codex");
+    assert.deepEqual(await harness.liveSessions(), [], "the old Pi process cannot survive the profile change");
+    const codexLaunch = await harness.request("/v0/live-sessions", {
+      method: "POST",
+      body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId, intent: "select" }),
+    });
+    assert.equal(codexLaunch.status, 201);
+    const live = await codexLaunch.json();
+    assert.equal(live.chatId, chat.id);
+    assert.equal(live.backend.implementation, "codex");
     const models = await (await harness.request(`/v0/chats/${chat.id}/models`)).json();
     assert.ok(models.models.length > 0);
     assert.ok(models.models.some((model) => model.spec === models.model));

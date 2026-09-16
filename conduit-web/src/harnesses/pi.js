@@ -12,6 +12,7 @@ export const manifest = {
   installationId: "conduit-pinned",
   capabilities: PI_CAPABILITIES,
   discovery: "none",
+  nameGeneration: "conduit",
   drive: false,
   // Pi profiles come from the template catalogue rather than this manifest.
   profile: false,

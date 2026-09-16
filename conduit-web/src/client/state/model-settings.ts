@@ -115,7 +115,7 @@ export function createModelSettings(onError: ErrorHandler, onThinkingLevelRecove
     }
     applyChatSelection(selection);
     if (changedProject) void reload(projectId);
-    if (changedChat && shouldReloadChat) void reloadChat(chatId);
+    return shouldReloadChat ? reloadChat(chatId) : Promise.resolve();
   };
 
   const saveScope = async (nextEnabled: string[], defaultModel = settingsDefaultModel()) => {

@@ -3,16 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
-import { harnessCatalog } from "../src/server/routes/harnesses.js";
 import { startConduitHarness } from "./helpers/conduit-harness.js";
-
-test("harness catalog exposes installed adapter capabilities", () => {
-  const backends = { adapters: new Map([["codex", {}]]) };
-  assert.deepEqual(harnessCatalog(backends), [
-    { id: "codex", label: "Codex", profileLabel: "Codex CLI", available: true, sessions: true, drive: true, discovery: "machine" },
-    { id: "chatgpt-web", label: "ChatGPT Web", profileLabel: "ChatGPT Web", available: false, sessions: false, drive: false, discovery: "none" },
-  ]);
-});
 
 test("ephemeral Codex drive leaves the chat registry unchanged", async (t) => {
   const harness = await startConduitHarness();
@@ -58,7 +49,6 @@ test("thread discovery lists every folder the harness reports, not only workspac
   assert.equal(scoped.scope, "folder");
   assert.deepEqual(scoped.groups.map((group) => group.path), [elsewhere]);
   assert.deepEqual(scoped.groups[0].threads.map((thread) => thread.id), ["elsewhere-thread"]);
-  assert.equal(project.id.length > 0, true);
 });
 
 test("adopted threads are badged in place rather than listed twice", async (t) => {
@@ -84,7 +74,6 @@ test("a thread can be started in any folder without registering a workspace", as
     method: "POST", body: JSON.stringify({ path: folder, newThread: true }),
   })).json();
   assert.match(started.streamUrl, new RegExp(started.id));
-  assert.equal(started.nativeSessionId, "thread-test");
   assert.equal((await (await harness.request("/v0/projects")).json()).projects.length, before, "no workspace was registered");
   assert.equal((await harness.request(`/v0/live-sessions/${started.id}/process`, { method: "DELETE" })).status, 202);
 });

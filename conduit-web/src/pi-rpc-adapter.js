@@ -170,9 +170,8 @@ export function normalizePiBackendEvent(event) {
       return { ...base, type: "retry", active: false };
     case "message_end": {
       const message = event.message;
-      return { ...base, type: "transcript_message", message: wasAborted(message)
-        ? { ...message, stopReason: "aborted", errorMessage: null }
-        : message };
+      if (message?.role === "user") return { ...base, type: "user_message_committed", message };
+      return { ...base, type: "pi_event" };
     }
     case "context_usage":
       return { ...base, type: "usage", contextUsage: event.contextUsage,

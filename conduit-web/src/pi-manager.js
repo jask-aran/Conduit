@@ -668,12 +668,9 @@ export class PiManager extends EventEmitter {
         if (event.type === "message_update" && event.assistantMessageEvent) continue;
         if (event.type === "message_end" && event.message?.role === "assistant") {
           this.captureLastRequestUsage(record, event.message);
-          // An assistant message is a transcript entry like the user's, and
-          // publishing it is what commits the turn's text. Without this the
-          // text existed only inside the live generation structure, so a turn
-          // that ended early lost it the moment the next turn replaced that
-          // structure - visible until a reload re-read the session file.
-          this.publishGeneration(record, event);
+          // ingestGenerationEvent already published the normalized
+          // assistant_message_completed event. Do not publish the raw Pi
+          // message too: assistant settlement has one client protocol.
           continue;
         }
         if (["tool_execution_start", "tool_execution_update", "tool_execution_end"].includes(event.type)) {

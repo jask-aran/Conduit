@@ -110,6 +110,29 @@ test("public profile selection and legacy chat creation keep the same Pi identit
     assert.equal(changed.status, 200);
     assert.equal((await changed.json()).profileId, "code-mode");
   }
+  const warmedResponse = await harness.request("/v0/chats", {
+    method: "POST", body: JSON.stringify({ profileId: "assistant" }),
+  });
+  const warmed = await warmedResponse.json();
+  const commandOffset = (await harness.pi.commands()).length;
+  const launchRequest = harness.request("/v0/live-sessions", {
+    method: "POST", body: JSON.stringify({ chatId: warmed.id, projectId: warmed.projectId, intent: "select" }),
+  });
+  const stateRequest = await harness.pi.waitForCommand("get_state", { after: commandOffset });
+  await harness.pi.reply(stateRequest, {
+    sessionFile: path.join(harness.root, "pi", "sessions", `${warmed.id}.jsonl`),
+    sessionId: `session-${warmed.id}`,
+  });
+  const launched = await launchRequest;
+  assert.equal(launched.status, 201, await launched.text());
+  const switched = await harness.request(`/v0/chats/${warmed.id}`, {
+    method: "PATCH", body: JSON.stringify({ profileId: "coding" }),
+  });
+  assert.equal(switched.status, 200);
+  assert.equal((await switched.json()).profileId, "coding");
+  const emptyTranscript = await harness.request(`/v0/sessions/${warmed.id}`);
+  assert.equal(emptyTranscript.status, 200);
+  assert.deepEqual((await emptyTranscript.json()).messages, []);
   const codexResponse = await harness.request("/v0/chats", {
     method: "POST", body: JSON.stringify({ profileId: "codex" }),
   });

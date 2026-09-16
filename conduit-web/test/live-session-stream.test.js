@@ -96,6 +96,53 @@ test("one socket delivers backend commands in browser order", async () => {
   assert.equal(delivered[1], "second");
 });
 
+test("a manifest-owned Codex prompt uses Conduit's naming service", async () => {
+  const record = {
+    id: "live-codex", chatId: "chat-codex", projectId: "project-1", status: "running",
+    adapterImplementation: "codex", hostUiRequests: [],
+  };
+  const adapter = {
+    attach: () => null,
+    view: () => record,
+    toClientEvent: (event) => event,
+    refreshContext: async () => {},
+    getCapabilities: () => ({ attachments: true }),
+    prompt: async () => ({ generationId: "generation-1", attachmentIdentity: { messageId: "user-1" } }),
+    publish: () => {},
+  };
+  const chat = { id: record.chatId, status: "draft", title: "", backend: { implementation: "codex" } };
+  const project = { id: record.projectId, kind: "workspace", workingRoot: "/tmp" };
+  const named = [];
+  const ws = new EventEmitter();
+  ws.readyState = 1;
+  ws.send = () => {};
+  const stream = createLiveSessionStream({
+    manager: {},
+    wss: { handleUpgrade: (_request, _socket, _head, accept) => accept(ws) },
+    attachments: {
+      resolveMany: async () => [],
+      pathFor: () => "",
+      recordMessage: async () => {},
+    },
+    registry: {
+      metadata: () => chat,
+      markUserMessage: async () => {},
+      update: async () => chat,
+    },
+    config: {},
+    findChatContext: async () => ({ chat, project }),
+    lifecycle,
+    backends: { get: () => record, forChat: () => adapter },
+    autoNameSession: async (_record, _context, message) => { named.push(message); },
+  });
+
+  stream.handleUpgrade(record.id, {}, {}, null);
+  ws.emit("message", JSON.stringify({ type: "prompt", message: "Name this through Conduit" }));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(named, ["Name this through Conduit"]);
+});
+
 test("a successful fork replaces the browser transcript before the new prompt", async () => {
   const operations = [];
   const record = {

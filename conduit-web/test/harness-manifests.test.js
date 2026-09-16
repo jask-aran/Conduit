@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { MANIFESTS, manifestForImplementation, implementationsOf } from "../src/harnesses/index.js";
+import { MANIFESTS, NAME_GENERATION_MODES, manifestForImplementation, implementationsOf } from "../src/harnesses/index.js";
 import { ChatBackendRegistry } from "../src/pi-rpc-adapter.js";
 import { assertChatBackendAdapter } from "../src/chat-backend-contract.js";
 import { harnessCatalog } from "../src/server/routes/harnesses.js";
@@ -21,6 +21,15 @@ test("every manifest declares the fields the server reads from it", () => {
     assert.equal(typeof manifest.probe, "function", `${manifest.id} probe`);
     assert.equal(typeof manifest.build, "function", `${manifest.id} build`);
     assert.ok(manifest.capabilities, `${manifest.id} capabilities`);
+    assert.ok(NAME_GENERATION_MODES.includes(manifest.nameGeneration), `${manifest.id} name generation`);
+    if (manifest.serviceLevels) {
+      assert.ok(manifest.serviceLevels.length, `${manifest.id} service levels`);
+      assert.equal(new Set(manifest.serviceLevels.map((level) => level.id)).size, manifest.serviceLevels.length,
+        `${manifest.id} duplicate service level`);
+      for (const level of manifest.serviceLevels) {
+        assert.ok(level.id && level.label, `${manifest.id} invalid service level`);
+      }
+    }
     // A harness that cannot enumerate threads cannot be driven from /computer.
     if (manifest.drive) assert.notEqual(manifest.discovery, "none", `${manifest.id} drives without discovery`);
   }
@@ -211,6 +220,7 @@ test("a profile elects a harness and the harness declares the capabilities", asy
   assert.equal(harnesses.conduit_pi.approvals, true);
   assert.equal(harnesses.conduit_pi.permissionModes, false);
   assert.equal(harnesses.codex.permissionModes, true);
+  assert.deepEqual(harnesses.codex.serviceLevels, manifestForImplementation("codex").serviceLevels);
   for (const capabilities of Object.values(harnesses)) {
     assert.equal(typeof capabilities.approvals, "boolean");
     assert.equal(typeof capabilities.permissionModes, "boolean");

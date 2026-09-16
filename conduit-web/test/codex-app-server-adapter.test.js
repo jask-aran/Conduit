@@ -22,6 +22,19 @@ test("Codex notifications map to neutral streaming events", () => {
   assert.equal(live.active, false);
 });
 
+test("Codex final agent items read their content parts", () => {
+  const adapter = new CodexAppServerAdapter();
+  const live = record();
+  adapter.notification(live, "turn/started", { turn: { id: "turn-1" } });
+  adapter.notification(live, "item/completed", { turnId: "turn-1", item: {
+    type: "agentMessage", id: "message-1", phase: "final_answer",
+    content: [{ type: "text", text: "Visible without a refresh." }],
+  } });
+  const final = live.events.find((event) => event.type === "assistant_content" && event.phase === "final");
+  assert.equal(final.blocks[0].text, "Visible without a refresh.");
+  assert.equal(final.stopReason, "stop");
+});
+
 test("Codex adapter advertises only implemented capabilities", () => {
   assert.deepEqual(CODEX_CAPABILITIES, {
     history: "linear", fork: true, regenerate: true,
@@ -64,6 +77,7 @@ test("Codex prompt writes the installed app-server turn/start shape", async () =
   adapter.records.set(live.id, live);
   await adapter.setModel(live.id, "codex-other");
   await adapter.setThinkingLevel(live.id, "high");
+  await adapter.setServiceLevel(live.id, "priority");
   const pending = adapter.prompt(live.id, "Test prompt");
   const { clientUserMessageId, ...params } = writes[0].params;
   assert.equal(typeof clientUserMessageId, "string");
@@ -71,6 +85,7 @@ test("Codex prompt writes the installed app-server turn/start shape", async () =
     threadId: "thread-1", input: [{ type: "text", text: "Test prompt" }],
     model: "codex-other",
     effort: "high",
+    serviceTier: "priority",
   } });
   adapter.receive(live, JSON.stringify({ id: 1, result: { turn: { id: "turn-1" } } }));
   assert.deepEqual(await pending, { generationId: "turn-1", attachmentIdentity: { messageId: clientUserMessageId } });
