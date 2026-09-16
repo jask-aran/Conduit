@@ -37,6 +37,29 @@ export function manifestForChat(
  * Conduit refuses to change a chat's harness once it has history, so today that
  * is a guard rather than a path anything travels.
  */
+/** How much history a harness keeps, worst answer winning. */
+const HISTORY_DEPTH: Record<string, number> = { none: 0, linear: 1, tree: 2 };
+
+/**
+ * The history model for a chat.
+ *
+ * Same rule as resolveCapability, but history is not a yes or no, so it cannot
+ * go through it -- which is exactly why this gate was the one left reading the
+ * live record after every other moved to the manifest. The manifest decides and
+ * a live record may only narrow, here meaning report a shallower history than
+ * the harness claims.
+ */
+export function resolveHistory(
+  manifest: ChatCapabilities | null | undefined,
+  reported: ChatCapabilities | null | undefined,
+): ChatCapabilities["history"] {
+  const declared = manifest?.history;
+  const observed = reported?.history;
+  if (declared === undefined) return observed ?? "none";
+  if (observed === undefined) return declared;
+  return (HISTORY_DEPTH[observed] ?? 0) < (HISTORY_DEPTH[declared] ?? 0) ? observed : declared;
+}
+
 export function resolveCapability(
   manifest: ChatCapabilities | null | undefined,
   reported: ChatCapabilities | null | undefined,
