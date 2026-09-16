@@ -74,7 +74,6 @@ interface PersistedTurn {
   userMessage: Message | null;
   assistants: Message[];
   leftoverTools: ToolItem[];
-  sourceTools: ToolItem[];
 }
 
 export interface PersistedTurnProjection {
@@ -82,6 +81,8 @@ export interface PersistedTurnProjection {
   userMessage: Message | null;
   assistants: Message[];
   leftoverTools: ToolItem[];
+  /** What the rows were built from, so an unchanged turn can keep them. */
+  sourceTools: ToolItem[];
   rows: TurnRow[];
 }
 
