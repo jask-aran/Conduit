@@ -21,7 +21,7 @@ import type { BooleanCapability, ChatSummary, DashboardChat, HarnessManifestView
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
 import { AppDashboard } from "./dashboard/app-dashboard";
-import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_STORAGE_KEY, selectedComposerSurface, type ComposerSurfaceMode } from "./chat/composer-surface";
+import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_STORAGE_KEY, selectedComposerSurface } from "./chat/composer-surface";
 import type { VoiceDictationSettings } from "./chat/voice-dictation-types";
 import { CONTEXT_METRIC_STORAGE_KEY, contextUsagePercent, formatContextMetrics, saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
 import { isOptimisticId } from "./reconcile-messages";
@@ -238,7 +238,6 @@ function ChatHeader(props: {
   dashboard?: boolean;
   appDashboard?: boolean;
 }) {
-  const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
   const projectLabel = () => props.appDashboard ? "Conduit" : props.project?.slug === "chat" ? "Chats" : props.project?.slug || props.project?.name || "Chats";
   const runtimeLabel = () => props.runtime ? harnessLabelFor(props.chat?.backendImplementation() || "conduit_pi") : null;
   const profileLabel = () => props.profile?.label || props.profile?.id;
@@ -291,11 +290,6 @@ function ChatHeader(props: {
   const waveformLevel = () => props.composerStatus?.waveform.level() || 0;
   const waveformPeak = () => props.composerStatus?.waveform.peak() || 0;
   const waveformState = () => props.composerStatus?.recorderMonitorState() || "stopped";
-  onMount(() => {
-    const syncComposerSurface = (event: Event) => setComposerSurface((event as CustomEvent<ComposerSurfaceMode>).detail);
-    window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface);
-    onCleanup(() => window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface));
-  });
   return <>
     <header class="chat-header">
       <Show when={props.onBack}><Button variant="ghost" size="icon-sm" aria-label="Back to sessions" onClick={props.onBack}><ArrowLeftIcon /></Button></Show>
@@ -313,7 +307,7 @@ function ChatHeader(props: {
           </Show>
         </span>
       </Show>
-      <HeaderActions composerSurface={composerSurface()}>
+      <HeaderActions>
         <Button variant="ghost" size="icon-sm" class="search-trigger" aria-label="Search chats" title="Search chats" onClick={props.onOpenSearch}><SearchIcon /></Button>
         <Button variant="ghost" size="icon-sm" class="palette-trigger" aria-label="Open command palette" title="Command palette" onClick={props.onOpenPalette}><TerminalIcon /></Button>
         {props.extraAction}
@@ -378,8 +372,8 @@ function ChatHeader(props: {
   </>;
 }
 
-function HeaderActions(props: { composerSurface: ComposerSurfaceMode; children: JSX.Element }) {
-  return <div class="chat-header-actions composer-surface-material" data-composer-surface={props.composerSurface}>
+function HeaderActions(props: { children: JSX.Element }) {
+  return <div class="chat-header-actions">
     {props.children}
   </div>;
 }

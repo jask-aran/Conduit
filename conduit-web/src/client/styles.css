@@ -109,7 +109,7 @@ svg { stroke-width: 1.5; }
 .model-trigger { display: flex; min-width: 0; align-items: center; gap: 6.4px; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
 .chat-header [data-slot="button"] svg { width: 12.8px; height: 12.8px; }
 .palette-trigger, .search-trigger { display: inline-flex; flex: none; }
-.chat-header-actions { display: flex; margin-left: auto; flex: none; align-items: center; gap: 1.6px; border-radius: 999px; padding: 3.2px 4px; }
+.chat-header-actions { display: flex; margin-left: auto; flex: none; align-items: center; gap: 1.6px; }
 .chat-context-trigger { position: relative; display: inline-flex; width: 25.6px; height: 25.6px; flex: none; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--foreground); outline: none; }
 .chat-context-trigger:hover { background: var(--accent); color: var(--foreground); }
 .chat-context-trigger:focus-visible { box-shadow: 0 0 0 2.4px color-mix(in oklch, var(--ring), transparent 50%); }
@@ -127,7 +127,10 @@ svg { stroke-width: 1.5; }
    border, so the absolutely-positioned meteor field still fills the panel
    exactly rather than being pushed in by a border box. */
 .chat-main { position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 8px 6.4px 1.6px; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 12.8px; background: var(--background); color: var(--foreground); box-shadow: inset 0 0 0 0.8px oklch(1 0 0 / 6%), inset 0 0.8px 0 0 oklch(1 0 0 / 7%); }
-.chat-header { position: relative; z-index: 2; display: flex; height: 44.8px; flex: none; align-items: center; gap: 6.4px; padding: 6.4px 11.2px; }
+/* The header floats over the transcript so scrolled text runs to the pane's
+   top edge instead of stopping at a hard cut. Its gradient fades what passes
+   underneath, the same trick the phone layout uses. */
+.chat-header { position: absolute; inset: 0 0 auto; z-index: 2; display: flex; height: 44.8px; flex: none; align-items: center; gap: 6.4px; padding: 6.4px 11.2px; background: linear-gradient(to bottom, var(--background) 0 50%, transparent 100%); }
 .chat-header-title { display: flex; min-width: 0; align-items: center; gap: 5.6px; overflow: hidden; font-size: 11.2px; line-height: 16px; }
 .chat-header-title span, .chat-header-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .breadcrumb-separator::before { content: "/"; }
@@ -172,9 +175,9 @@ svg { stroke-width: 1.5; }
 .composer-renderer-switch select { min-height: 20.8px; border: 0.8px solid var(--border); border-radius: 4px; background: color-mix(in oklch, var(--background), transparent 8%); padding: 1.6px 4px; color: var(--foreground); font: 8.8px ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: none; }
 .workspace-layout { display: flex; flex: 1; min-width: 0; }
 .transcript-motion-shell { position: relative; width: var(--workspace-transcript-width, 100%); height: 100%; contain: layout paint; container-name: chat-main; container-type: inline-size; transform: translate3d(0, 0, 0); }
-.message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; scrollbar-width: none; }
+.message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; scroll-padding-top: 44.8px; scrollbar-width: none; }
 .message-scroller-viewport::-webkit-scrollbar { display: none; }
-.thread { width: min(var(--transcript-column-width), calc(100% - var(--transcript-column-gutter))); min-height: 100%; margin-inline: auto; padding: 51.2px 35.2px 25.6px; }
+.thread { width: min(var(--transcript-column-width), calc(100% - var(--transcript-column-gutter))); min-height: 100%; margin-inline: auto; padding: 70.4px 35.2px 25.6px; }
 [data-slot="message-scroller-item"] { margin-block: 8px; content-visibility: visible; contain-intrinsic-size: none; }
 [data-transcript-visibility="hidden"] { content-visibility: hidden; }
 [data-slot="message"] { display: flex; width: 100%; }
@@ -275,16 +278,6 @@ svg { stroke-width: 1.5; }
     0 6.4px 25.6px rgb(0 0 0 / 10%),
     inset 0 0.8px 0 rgb(255 255 255 / 50%),
     inset 0 -1px 0 rgb(255 255 255 / 10%);
-}
-@media (--conduit-phone-layout) {
-  .chat-header-actions.composer-surface-material {
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-    backdrop-filter: none;
-    padding: 0;
-  }
 }
 .response-actions { display: flex; min-height: 22.4px; align-items: center; gap: 1.6px; opacity: 1; }
 .response-actions [data-slot="button"] { width: 19.2px; height: 19.2px; border-radius: 999px; }
@@ -444,7 +437,7 @@ svg { stroke-width: 1.5; }
 /* Decorative, deterministic meteor field for the entire chat main surface. */
 .chat-meteors { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
 
-.chat-main-empty .transcript { position: absolute; inset: 44.8px 0 0; }
+.chat-main-empty .transcript { position: absolute; inset: 0; }
 .chat-main-empty .message-scroller-viewport { overflow: hidden; overscroll-behavior-y: none; }
 .chat-main-empty .thread, .chat-main-empty .empty-thread, .chat-main-empty .welcome { width: 100%; min-height: 100%; padding: 0; }
 .chat-main-empty .welcome { padding-bottom: 140.8px; }
@@ -836,7 +829,7 @@ svg { stroke-width: 1.5; }
     min-height: 32px;
   }
   .mobile-header-leading, .chat-header-actions { gap: 0; }
-  .chat-header-actions { margin-left: auto; justify-content: flex-end; padding: 0; }
+  .chat-header-actions { margin-left: auto; justify-content: flex-end; }
   .chat-header-more { display: inline-flex; flex: none; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
   .chat-header-more:hover { background: var(--accent); }
   .chat-header-menu {
@@ -912,7 +905,7 @@ svg { stroke-width: 1.5; }
 .model-trigger { display: flex; min-width: 0; align-items: center; gap: 8px; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
 .chat-header [data-slot="button"] svg { width: 16px; height: 16px; }
 .palette-trigger, .search-trigger { display: inline-flex; flex: none; }
-.chat-header-actions { display: flex; margin-left: auto; flex: none; align-items: center; gap: 2px; border-radius: 999px; padding: 4px 5px; }
+.chat-header-actions { display: flex; margin-left: auto; flex: none; align-items: center; gap: 2px; }
 .chat-context-trigger { position: relative; display: inline-flex; width: 32px; height: 32px; flex: none; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--foreground); outline: none; }
 .chat-context-trigger:hover { background: var(--accent); color: var(--foreground); }
 .chat-context-trigger:focus-visible { box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring), transparent 50%); }
@@ -930,7 +923,7 @@ svg { stroke-width: 1.5; }
    border, so the absolutely-positioned meteor field still fills the panel
    exactly rather than being pushed in by a border box. */
 .chat-main { position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 16px); margin: 8px 10px 8px 2px; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 16px; background: var(--background); color: var(--foreground); box-shadow: inset 0 0 0 1px oklch(1 0 0 / 6%), inset 0 1px 0 0 oklch(1 0 0 / 7%); }
-.chat-header { position: relative; z-index: 2; display: flex; height: 56px; flex: none; align-items: center; gap: 8px; padding: 8px 14px; }
+.chat-header { position: absolute; inset: 0 0 auto; z-index: 2; display: flex; height: 56px; flex: none; align-items: center; gap: 8px; padding: 8px 14px; background: linear-gradient(to bottom, var(--background) 0 50%, transparent 100%); }
 .chat-header-title { display: flex; min-width: 0; align-items: center; gap: 7px; overflow: hidden; font-size: 14px; line-height: 20px; }
 .chat-header-title span, .chat-header-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .breadcrumb-separator::before { content: "/"; }
@@ -974,9 +967,9 @@ svg { stroke-width: 1.5; }
 .composer-renderer-switch label { display: flex; align-items: center; gap: 6px; color: var(--muted-foreground); font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .06em; }
 .composer-renderer-switch select { min-height: 26px; border: 1px solid var(--border); border-radius: 5px; background: color-mix(in oklch, var(--background), transparent 8%); padding: 2px 5px; color: var(--foreground); font: 11px ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: none; }
 .transcript-motion-shell { position: relative; width: var(--workspace-transcript-width, 100%); height: 100%; contain: layout paint; container-name: chat-main; container-type: inline-size; transform: translate3d(0, 0, 0); }
-.message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; scrollbar-width: none; }
+.message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; scroll-padding-top: 56px; scrollbar-width: none; }
 .message-scroller-viewport::-webkit-scrollbar { display: none; }
-.thread { width: min(var(--transcript-column-width), calc(100% - var(--transcript-column-gutter))); min-height: 100%; margin-inline: auto; padding: 64px 44px 32px; }
+.thread { width: min(var(--transcript-column-width), calc(100% - var(--transcript-column-gutter))); min-height: 100%; margin-inline: auto; padding: 88px 44px 32px; }
 [data-slot="message-scroller-item"] { margin-block: 10px; content-visibility: visible; contain-intrinsic-size: none; }
 [data-transcript-visibility="hidden"] { content-visibility: hidden; }
 [data-slot="message"] { display: flex; width: 100%; }
@@ -1069,16 +1062,6 @@ svg { stroke-width: 1.5; }
     0 8px 32px rgb(0 0 0 / 10%),
     inset 0 1px 0 rgb(255 255 255 / 50%),
     inset 0 -1px 0 rgb(255 255 255 / 10%);
-}
-@media (--conduit-phone-layout) {
-  .chat-header-actions.composer-surface-material {
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-    backdrop-filter: none;
-    padding: 0;
-  }
 }
 .response-actions { display: flex; min-height: 28px; align-items: center; gap: 2px; opacity: 1; }
 .response-actions [data-slot="button"] { width: 24px; height: 24px; border-radius: 999px; }
@@ -1219,7 +1202,7 @@ svg { stroke-width: 1.5; }
 /* Decorative, deterministic meteor field for the entire chat main surface. */
 .chat-meteors { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
 
-.chat-main-empty .transcript { position: absolute; inset: 56px 0 0; }
+.chat-main-empty .transcript { position: absolute; inset: 0; }
 .chat-main-empty .message-scroller-viewport { overflow: hidden; overscroll-behavior-y: none; }
 .chat-main-empty .thread, .chat-main-empty .empty-thread, .chat-main-empty .welcome { width: 100%; min-height: 100%; padding: 0; }
 .chat-main-empty .welcome { padding-bottom: 176px; }
@@ -1633,7 +1616,7 @@ svg { stroke-width: 1.5; }
     min-height: 40px;
   }
   .mobile-header-leading, .chat-header-actions { gap: 0; }
-  .chat-header-actions { margin-left: auto; justify-content: flex-end; padding: 0; }
+  .chat-header-actions { margin-left: auto; justify-content: flex-end; }
   .chat-header-more { display: inline-flex; flex: none; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
   .chat-header-more:hover { background: var(--accent); }
   .chat-header-menu {
