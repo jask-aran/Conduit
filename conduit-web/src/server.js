@@ -228,17 +228,17 @@ async function chatModelView(context) {
       const models = await harnessModels.list(implementation, context.project.workingRoot, adapter, {
         require: context.chat.backend.model || remembered?.model || "",
       });
-      const rememberedModel = models.some((item) => item.spec === remembered?.model) ? remembered.model : "";
-      const model = context.chat.backend.model || rememberedModel || models[0]?.spec || "";
+      const rememberedSpec = models.some((item) => item.spec === remembered?.model) ? remembered.model : "";
+      const model = context.chat.backend.model || rememberedSpec || models[0]?.spec || "";
       // The remembered model is gone and something else is standing in. Say so,
       // rather than quietly running the chat on a model nobody chose.
-      const modelFallback = !context.chat.backend.model && remembered?.model && !rememberedModel && model
+      const modelFallback = !context.chat.backend.model && remembered?.model && !rememberedSpec && model
         ? { from: remembered.model, to: model }
         : null;
       const selected = models.find((item) => item.spec === model);
       const defaultThinkingLevel = selected?.defaultThinkingLevel || selected?.thinkingLevels[0] || "";
       const savedThinkingLevel = context.chat.modelThinkingLevels?.[model]
-        || (rememberedModel ? remembered.thinkingLevel : "") || "";
+        || (rememberedSpec ? remembered.thinkingLevel : "") || "";
       const thinkingLevel = selected?.thinkingLevels.includes(savedThinkingLevel) ? savedThinkingLevel : defaultThinkingLevel;
       return {
         installationId: manifest?.installationId || context.chat.backend.installationId,
