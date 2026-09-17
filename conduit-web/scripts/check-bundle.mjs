@@ -94,7 +94,7 @@ if (frostedLiveFailures.length) {
   for (const failure of frostedLiveFailures) console.error(`CSS: ${failure}`);
   process.exitCode = 1;
 } else {
-  console.log("CSS: composer, follow button, and header pill share the frosted-live material.");
+  console.log("CSS: composer and follow button share the frosted-live material.");
 }
 
 if (pwaFailures.length) {
