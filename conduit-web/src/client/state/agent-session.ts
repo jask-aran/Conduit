@@ -1,3 +1,4 @@
+import { createSignal } from "solid-js";
 import { api } from "../api/client";
 import { webSocketUrl } from "../api/transport";
 import type { LiveRecord, TranscriptDetail } from "../api/contracts";
@@ -62,6 +63,19 @@ export function createAgentSession(deps: {
   // Abandoning it does not stop the launch -- the server finishes warming the
   // process and the runtime stream reports it -- it only frees the connection.
   let launchRequest: AbortController | null = null;
+  let launchToken = 0;
+  /**
+   * The chat a launch request is in flight for, and nothing else.
+   *
+   * This is deliberately narrower than the connecting flag that used to live
+   * in the chat store: it is set when the request goes out and cleared when it
+   * answers, so it says "we have asked" and cannot outlive the asking. It
+   * covers exactly the round trip between a click and the server publishing
+   * the process it spawned, which is the one stretch where the server has
+   * nothing to report yet and nothing on screen moves. The server's record is
+   * still the truth, and it takes over the moment it arrives.
+   */
+  const [launching, setLaunching] = createSignal<string | null>(null);
   /** The single in-flight attempt to give a chat an agent, shared by every caller. */
   let pending: { chatId: string; attempt: Promise<LiveRecord | null> } | null = null;
   /** Bumped whenever the session is pointed somewhere else; stale work checks it. */
@@ -136,6 +150,8 @@ export function createAgentSession(deps: {
   const launchRecord = (chatId: string, ownerProjectId: string, request: AgentRequest) => {
     launchRequest?.abort();
     const abortable = launchRequest = new AbortController();
+    const token = ++launchToken;
+    setLaunching(chatId);
     return api<LiveRecord>("/v0/live-sessions", {
       method: "POST",
       signal: abortable.signal,
@@ -146,7 +162,7 @@ export function createAgentSession(deps: {
         thinkingLevel: request.thinkingOverride ?? deps.thinkingLevel(),
         intent: request.intent || "open",
       }),
-    });
+    }).finally(() => { if (launchToken === token) setLaunching(null); });
   };
 
   const ensure = async (request: AgentRequest = {}): Promise<LiveRecord | null> => {
@@ -257,6 +273,8 @@ export function createAgentSession(deps: {
     cancelReconnect();
     launchRequest?.abort();
     launchRequest = null;
+    launchToken += 1;
+    setLaunching(null);
     pending = null;
     pendingRecord = null;
     socket?.close();
@@ -283,7 +301,7 @@ export function createAgentSession(deps: {
     window.removeEventListener("online", restore as unknown as EventListener);
   };
 
-  return { ensure, require, send, sendWhenReady, isOpen, detach, reset, dispose, cancelReconnect };
+  return { ensure, require, send, sendWhenReady, isOpen, launching, detach, reset, dispose, cancelReconnect };
 }
 
 type UnknownCommand = Record<string, unknown>;

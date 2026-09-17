@@ -193,12 +193,16 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
   const generationStore = createClientActiveGenerationStore();
   /*
-   * There is deliberately no "is this chat connecting?" signal here any more.
    * A chat's agent state is the server's to report: it publishes the process
    * when it spawns and again when the harness can answer, and both the sidebar
    * row and the composer read that one record through `activity`. A promise in
    * this client used to decide it instead, which is how "Starting agent…" came
    * to cover a catalogue fetch, outlast a warm attach, and mean nothing.
+   *
+   * The one thing the server cannot report is the stretch before it has heard
+   * from us at all. `session.launching()` covers exactly that -- a launch
+   * request in flight, nothing more -- and `activity` prefers anything the
+   * server does say over it.
    */
   const [navigatingId, setNavigatingId] = createSignal<string | null>(null);
   let navigationRequest: Promise<void> | null = null;
@@ -765,6 +769,34 @@ export function createActiveChat(options: ActiveChatOptions) {
       else if (entry.history === "replace") history.replaceState({}, "", `/chat/${chat.id}`);
       entry.onCommit?.();
     });
+    // The launch goes out before the scoped fetches below. They are concurrent
+    // either way, but they reach one single-threaded server in the order they
+    // were issued, and this is the only one anybody is waiting on. It takes its
+    // model from the transcript detail rather than from the model store, which
+    // has not been told about this chat yet -- reading the store here is how a
+    // Codex spec came to be offered to a Pi chat.
+    if (entry.warm) {
+      const draft = chat.status === "draft";
+      void ensureAgent({
+        chatId: chat.id,
+        projectId: project.id,
+        intent: "select",
+        modelOverride: detail?.model,
+        thinkingOverride: detail?.thinkingLevel,
+      })
+        .then(async () => {
+          if (selection !== selectionToken || selectedId() !== chat.id) return;
+          // Read from the harness, so asked for once the agent can answer
+          // rather than in front of it.
+          await models.reloadChat(chat.id);
+          if (draft) return;
+          const projects = await catalogue.refresh();
+          if (selection !== selectionToken || selectedId() !== chat.id) return;
+          const refreshed = projects.flatMap((item) => item.sessions).find((session) => session.id === chat.id);
+          if (refreshed) setTitle(refreshed.title);
+        })
+        .catch(onError);
+    }
     // Every store that holds one chat's answers is told which chat, in one
     // place, so adding one cannot mean remembering it in two.
     const scopeReload = reconcileChatScope(chat, project, detail, entry.warm);
@@ -784,22 +816,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     // agent is warm is a separate question, answered in the sidebar by the
     // process itself.
     entry.onShown?.();
-    if (entry.warm) {
-      const draft = chat.status === "draft";
-      void ensureAgent({ chatId: chat.id, projectId: project.id, intent: "select" })
-        .then(async () => {
-          if (selection !== selectionToken || selectedId() !== chat.id) return;
-          // Read from the harness, so asked for once the agent can answer
-          // rather than in front of it.
-          await models.reloadChat(chat.id);
-          if (draft) return;
-          const projects = await catalogue.refresh();
-          if (selection !== selectionToken || selectedId() !== chat.id) return;
-          const refreshed = projects.flatMap((item) => item.sessions).find((session) => session.id === chat.id);
-          if (refreshed) setTitle(refreshed.title);
-        })
-        .catch(onError);
-    }
     await scopeReload;
   };
 
@@ -1129,6 +1145,15 @@ export function createActiveChat(options: ActiveChatOptions) {
       retry: retry(),
     });
     if (hostUiRequests().length) return { kind: "waiting_for_user", label: "Waiting for your confirmation" };
+    // We have asked for a process and the server has not answered yet, so it
+    // has nothing to publish and the derived activity is idle by default. The
+    // asking is worth showing: it is the whole of the gap between clicking a
+    // chat and the spawn reaching the runtime stream, and the transcript has
+    // already painted from cache by then. Anything the server does report wins,
+    // because `derived` is consulted first.
+    if (derived.kind === "idle" && session.launching() === selectedId()) {
+      return { kind: "starting", label: "Starting agent…" };
+    }
     if (derived.kind === "idle") {
       const lastAssistant = messages().findLast((message) => message.role === "assistant");
       if (lastAssistant?.stopReason === "error") {
