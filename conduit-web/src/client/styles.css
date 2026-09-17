@@ -1212,6 +1212,12 @@ svg { stroke-width: 1.5; }
 .chat-main-empty .thread, .chat-main-empty .empty-thread, .chat-main-empty .welcome { width: 100%; min-height: 100%; padding: 0; }
 .chat-main-empty .welcome { padding-bottom: 176px; }
 .chat-main-empty .composer-stack { position: absolute; inset-inline: 0; top: 50%; z-index: 2; width: min(704px, calc(100% - 48px)); margin-inline: auto; padding: 0; transform: translateY(54px); background: transparent; }
+.chat-main-live-opening .transcript { visibility: hidden; }
+.chat-main-live-opening .composer-actions-left,
+.chat-main-live-opening .dictation-trigger,
+.chat-main-live-opening .composer-send-trigger,
+.chat-main-live-opening .composer-wrap > .attachment-tray,
+.chat-main-live-opening .composer-wrap > .review-comment-tray { visibility: hidden; }
 .chat-bootstrap { display: grid; min-height: 100%; place-items: center; color: var(--muted-foreground); font-size: 14px; }
 
 .conduit-modal, .settings-dialog, .command-dialog, .external-link-dialog { position: fixed; inset: 0; z-index: 80; display: grid; width: 100vw; height: 100dvh; place-items: center; padding: 16px; background: rgb(0 0 0 / 55%); opacity: 1; visibility: visible; transition: opacity 150ms ease, visibility 0s; }

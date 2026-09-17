@@ -565,7 +565,9 @@ function App() {
   const chatCapability = (name: BooleanCapability, fallback = false): boolean =>
     resolveCapability(chatManifest(), chat.capabilities(), name, fallback);
   const chatHistory = createMemo(() => resolveHistory(chatManifest(), chat.capabilities()));
-  const emptyChat = createMemo(() => chat.loadedId() === catalogue.selectedId() && !chat.messages().length && !chat.tools().length && !isChatContentActivity(chat.activity()));
+  const openingLiveChat = createMemo(() => chat.presentation().kind === "opening_live");
+  const withheldLiveChat = createMemo(() => chat.presentation().kind !== "ready");
+  const emptyChat = createMemo(() => !withheldLiveChat() && chat.loadedId() === catalogue.selectedId() && !chat.messages().length && !chat.tools().length && !isChatContentActivity(chat.activity()));
   diagnosticContext = () => {
     const identity = chat.runtimeIdentity();
     return {
@@ -962,7 +964,7 @@ function App() {
       catalogue.patchChat(target.id, { unread: false });
       void api<ChatSummary>(`/v0/sessions/${encodeURIComponent(target.id)}/read`, { method: "POST" }).catch(showError);
     }
-    if (target.id === catalogue.selectedId() && routeKind() === "chat") return;
+    if (target.id === catalogue.selectedId() && routeKind() === "chat" && chat.presentation().kind === "ready") return;
     const abandonedDraftId = currentDraftId();
     try {
       await chat.select(target, project, {
@@ -1875,7 +1877,7 @@ function App() {
       onChangeServer={nativeApp ? () => { void clearNativeBearerToken().finally(() => { clearServerOrigin(); location.reload(); }); } : undefined}
       onLogout={() => void logout()} />
     <div class="workspace-layout">
-    <main data-slot="sidebar-inset" data-shortcut-scope="chat" tabIndex={-1} onPointerDown={focusChatSurface} class={`chat-main${routeKind() === "chat" && emptyChat() ? " chat-main-empty" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
+    <main data-slot="sidebar-inset" data-shortcut-scope="chat" tabIndex={-1} onPointerDown={focusChatSurface} class={`chat-main${routeKind() === "chat" && emptyChat() ? " chat-main-empty" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
         : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : "Loading chat…"}</div>}>
@@ -1972,7 +1974,7 @@ function App() {
           <ChatHeader project={selectedProject()} title={chat.title() || (chat.status() === "active" ? "Untitled chat" : "New chat")} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} chat={chat} contextMetrics={contextMetrics} composerStatus={composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} />
           <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
           <div class="work-area">
-            <section class="work-area-conversation" aria-label="Conversation">
+            <section class="work-area-conversation" aria-label="Conversation" aria-busy={openingLiveChat()}>
               <Transcript chat={chat} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} projectId={selectedProject()?.id} />
               <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
                 <Composer chat={chat} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
