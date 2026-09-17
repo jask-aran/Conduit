@@ -28,6 +28,8 @@ import { composerSlashCommands } from "./composer-slash-commands";
 import { fileFromPastedText, insertTextAt, shouldAttachPastedText } from "./large-paste";
 import { COMPOSER_SURFACE_CHANGE_EVENT, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
 import { createVoiceDictationClient, type VoiceDictationState } from "./voice-dictation-client";
+import { ContextGauge } from "./context-gauge";
+import type { ContextMetricId } from "./context-metrics";
 import type { AudioSignalLevel } from "./voice-audio";
 import { toast } from "solid-sonner";
 import { audioTransferLost, beginDictatedRange, matchesShortcut, releasesShortcut, replaceDictatedRange, shouldAutoSend, shouldReportNoSignal } from "./voice-dictation";
@@ -62,6 +64,8 @@ export function Composer(props: {
   attachmentsSupported?: boolean;
   profiles: Template[];
   activeProfile?: Template | null;
+  /** Absent where no adaptor reports usage; the gauge then reads 0% and greys out. */
+  contextMetrics?: () => readonly ContextMetricId[];
   serverOnline: boolean;
   voiceSettings: VoiceDictationSettings;
   onChooseProfile: (id: string) => void;
@@ -503,6 +507,7 @@ export function Composer(props: {
           <div class="composer-actions" data-mobile-actions-stacked={mobileActionsStacked()}>
             <div class="composer-actions-left">
               <Show when={props.attachmentsSupported !== false}><Button class="composer-desktop-attachment" variant="ghost" size="icon-sm" aria-label={`Attach files${props.attachments.items().length ? ` (${props.attachments.items().length})` : ""}`} disabled={!props.serverOnline} onClick={attach}><PaperclipIcon /></Button></Show>
+              <div class="composer-desktop-setting"><ContextGauge chat={props.chat} metrics={props.contextMetrics} /></div>
               <Show when={props.profiles.length}><div class="composer-desktop-setting"><Menu><MenuTrigger class="model-trigger" aria-label={`Profile ${props.activeProfile?.label || "General"}`} disabled={!props.serverOnline || props.chat.status() !== "draft"}><span>{props.activeProfile?.label || "Profile"}</span><ChevronDownIcon /></MenuTrigger><MenuContent class="w-72"><MenuGroup><MenuLabel>Profile</MenuLabel><Show when={props.chat.status() !== "draft"}><div class="px-2 pb-2 text-xs text-muted-foreground">Locked for this chat after the first message.</div></Show><MenuRadioGroup value={props.activeProfile?.id || ""} onChange={props.onChooseProfile}><For each={props.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={props.chat.status() !== "draft" || item.disabled}>{item.label}</MenuRadioItem>}</For></MenuRadioGroup></MenuGroup><MenuSeparator /><MenuItem onSelect={() => props.onOpenSettings("profiles")}>Manage profiles…</MenuItem></MenuContent></Menu></div></Show>
               <div class="composer-desktop-setting">
                 <ModelSelector models={props.models.models()} model={props.models.model()} thinkingLevel={props.models.effort()} notice={props.models.notice()} loading={props.modelsLoading} disabled={!props.serverOnline || !supports("modelSwitch")} onModelChange={(value) => void props.models.chooseModel(value)} onThinkingLevelChange={(value) => void props.models.chooseEffort(value)} onManageModels={() => props.onOpenSettings("models")} />

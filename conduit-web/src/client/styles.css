@@ -110,12 +110,16 @@ svg { stroke-width: 1.5; }
 .chat-header [data-slot="button"] svg { width: 12.8px; height: 12.8px; }
 .palette-trigger, .search-trigger { display: inline-flex; flex: none; }
 .chat-header-actions { display: flex; margin-left: auto; flex: none; align-items: center; gap: 1.6px; }
-.chat-context-trigger { position: relative; display: inline-flex; width: 25.6px; height: 25.6px; flex: none; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--foreground); outline: none; }
+/* Sits in the composer's left cluster beside the attach button, at that
+   button's height, with the percentage reading as its label. */
+.chat-context-trigger { position: relative; display: inline-flex; height: 22.4px; flex: none; align-items: center; justify-content: center; gap: 3.2px; padding: 0 4.8px 0 3.2px; border: 0; border-radius: 8px; background: transparent; color: var(--foreground); outline: none; }
+.chat-context-percent { font-size: 10.4px; font-variant-numeric: tabular-nums; line-height: 1; }
 .chat-context-trigger:hover { background: var(--accent); color: var(--foreground); }
 .chat-context-trigger:focus-visible { box-shadow: 0 0 0 2.4px color-mix(in oklch, var(--ring), transparent 50%); }
+.chat-context-trigger[data-state="idle"] { color: var(--muted-foreground); }
 .chat-context-trigger[data-state="warning"] { color: var(--warning, #d99a22); }
 .chat-context-trigger[data-state="critical"] { color: var(--destructive); }
-.chat-context-gauge { width: 14.4px; height: 14.4px; transform: rotate(-90deg); }
+.chat-context-gauge { width: 12.8px; height: 12.8px; flex: none; transform: rotate(-90deg); }
 .chat-context-gauge-track, .chat-context-gauge-value { fill: none; stroke-width: 2.25; }
 .chat-context-gauge-track { stroke: color-mix(in oklch, currentColor, transparent 58%); }
 .chat-context-gauge-value { stroke: currentColor; stroke-linecap: round; transition: stroke-dasharray 260ms ease-out; }
@@ -742,7 +746,6 @@ svg { stroke-width: 1.5; }
   }
   .chat-header-title { display: none; }
   .chat-header-desktop-action { display: none !important; }
-  .chat-context-trigger { display: none !important; }
   .chat-status-line {
     display: inline-flex;
     min-width: 0;
@@ -906,12 +909,14 @@ svg { stroke-width: 1.5; }
 .chat-header [data-slot="button"] svg { width: 16px; height: 16px; }
 .palette-trigger, .search-trigger { display: inline-flex; flex: none; }
 .chat-header-actions { display: flex; margin-left: auto; flex: none; align-items: center; gap: 2px; }
-.chat-context-trigger { position: relative; display: inline-flex; width: 32px; height: 32px; flex: none; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--foreground); outline: none; }
+.chat-context-trigger { position: relative; display: inline-flex; height: 28px; flex: none; align-items: center; justify-content: center; gap: 4px; padding: 0 6px 0 4px; border: 0; border-radius: 10px; background: transparent; color: var(--foreground); outline: none; }
+.chat-context-percent { font-size: 13px; font-variant-numeric: tabular-nums; line-height: 1; }
 .chat-context-trigger:hover { background: var(--accent); color: var(--foreground); }
 .chat-context-trigger:focus-visible { box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring), transparent 50%); }
+.chat-context-trigger[data-state="idle"] { color: var(--muted-foreground); }
 .chat-context-trigger[data-state="warning"] { color: var(--warning, #d99a22); }
 .chat-context-trigger[data-state="critical"] { color: var(--destructive); }
-.chat-context-gauge { width: 18px; height: 18px; transform: rotate(-90deg); }
+.chat-context-gauge { width: 16px; height: 16px; flex: none; transform: rotate(-90deg); }
 .chat-context-gauge-track, .chat-context-gauge-value { fill: none; stroke-width: 2.25; }
 .chat-context-gauge-track { stroke: color-mix(in oklch, currentColor, transparent 58%); }
 .chat-context-gauge-value { stroke: currentColor; stroke-linecap: round; transition: stroke-dasharray 260ms ease-out; }
@@ -1529,7 +1534,6 @@ svg { stroke-width: 1.5; }
   }
   .chat-header-title { display: none; }
   .chat-header-desktop-action { display: none !important; }
-  .chat-context-trigger { display: none !important; }
   .chat-status-line {
     display: inline-flex;
     min-width: 0;

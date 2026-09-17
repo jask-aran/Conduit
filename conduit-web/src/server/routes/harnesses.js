@@ -134,15 +134,15 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
       const cwd = requested ? (await resolveFolder(requested)).workingRoot : (await computerContext()).workingRoot;
       const remembered = rememberedModel(preferences, implementation);
       const models = await harnessModels.list(implementation, cwd, adapter, { require: remembered?.model || "" });
-      const rememberedModel = models.some((item) => item.spec === remembered?.model) ? remembered.model : "";
-      const model = rememberedModel || models[0]?.spec || "";
+      const rememberedSpec = models.some((item) => item.spec === remembered?.model) ? remembered.model : "";
+      const model = rememberedSpec || models[0]?.spec || "";
       // The profile's model is gone and this is a stand-in, which the composer
       // says out loud rather than opening on a model nobody chose.
-      const modelFallback = remembered?.model && !rememberedModel && model
+      const modelFallback = remembered?.model && !rememberedSpec && model
         ? { from: remembered.model, to: model }
         : null;
       const selected = models.find((item) => item.spec === model);
-      const thinkingLevel = rememberedModel && selected?.thinkingLevels.includes(remembered?.thinkingLevel)
+      const thinkingLevel = rememberedSpec && selected?.thinkingLevels.includes(remembered?.thinkingLevel)
         ? remembered.thinkingLevel
         : selected?.defaultThinkingLevel || selected?.thinkingLevels[0] || "";
       response.json({
@@ -229,7 +229,25 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
       const adapter = backends.forImplementation(implementation);
       const chatId = `drive:${crypto.randomUUID()}`;
       if (request.body?.newThread) {
-        const started = await adapter.create({ chatId, project });
+        // The dashboard's pickers chose a model and a permission mode before
+        // any thread existed. They travel with the launch, because an untracked
+        // thread has no chat to PATCH them onto afterwards.
+        const requestedMode = String(request.body?.permissionMode || "").trim();
+        const mode = requestedMode && typeof adapter.listAvailablePermissionModes === "function"
+          ? (await adapter.listAvailablePermissionModes(project.workingRoot))
+            .find((candidate) => candidate.id === requestedMode && candidate.allowed)
+          : null;
+        const started = await adapter.create({
+          chatId, project,
+          model: String(request.body?.model || "").trim(),
+          thinkingLevel: String(request.body?.thinkingLevel || "").trim(),
+          ...(mode ? {
+            permissionMode: mode.id,
+            permissionProfile: mode.profile || "",
+            approvalPolicy: mode.approvalPolicy || "",
+            approvalsReviewer: mode.approvalsReviewer || "",
+          } : {}),
+        });
         started.ephemeral = true;
         return response.status(201).json({ ...adapter.view(started), nativeSessionId: started.sessionId,
           streamUrl: `/v0/live-sessions/${started.id}/stream` });

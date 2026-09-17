@@ -25,7 +25,7 @@ export function HarnessDashboard(props: {
   scope: string | null;
   onScope: (path: string | null) => void;
   onOpenChat?: (chat: ChatSummary, project: Project, prompt?: string) => void;
-  composer?: (cwd: string, models: ComposerModels, loading: boolean, permissions: ComposerPermissions) => JSX.Element;
+  composer?: (cwd: string, models: ComposerModels, loading: boolean, permissions: ComposerPermissions, launch: (prompt: string) => Promise<void>) => JSX.Element;
   onDriveChange?: (open: boolean) => void;
   renderDrive?: (input: { current: { cwd: string; title: string; nativeSessionId: string }; harness: HarnessSummary; store: DriveChatStore; onBack: () => void; onTrack: () => void }) => JSX.Element;
 }) {
@@ -176,6 +176,33 @@ export function HarnessDashboard(props: {
     catch (cause) { setDrive(null); props.onDriveChange?.(false); setError(cause instanceof Error ? cause.message : "Thread could not be opened"); }
   };
 
+  /**
+   * A thread started here is the harness's own, running in the folder on
+   * screen. Conduit drives it live and shows it; it owns nothing until you
+   * track it, which is why nothing is registered and no chat is created.
+   */
+  const startThread = async (prompt: string) => {
+    setError("");
+    const cwd = launchCwd();
+    const implementation = props.harness?.id;
+    if (!implementation || !cwd) return;
+    try {
+      const live = await api<{ id: string; nativeSessionId: string; streamUrl: string }>(`/v0/harnesses/${implementation}/drive`, {
+        method: "POST",
+        body: JSON.stringify({
+          path: cwd, newThread: true,
+          model: catalog.model(), thinkingLevel: catalog.effort(),
+          permissionMode: permissions.selected(),
+        }),
+      });
+      await attach(live, cwd, prompt.trim().split("\n")[0]?.slice(0, 80) || "New thread");
+      if (prompt.trim() && driveChat) {
+        driveChat.chat.setDraft(prompt);
+        await driveChat.chat.send();
+      }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Thread could not be started"); }
+  };
+
   const openThread = async (group: HarnessThreadGroup, thread: HarnessThread) => {
     setError("");
     if (thread.tracked && thread.chatId) {
@@ -206,8 +233,11 @@ export function HarnessDashboard(props: {
     if (!current) return;
     setError("");
     try {
-      let project = projectFor(current.cwd);
-      if (!project) project = await api<Project>("/v0/projects", { method: "POST", body: JSON.stringify({ mode: "linked", path: current.cwd }) });
+      const project = projectFor(current.cwd);
+      if (!project) {
+        setError("Tracking keeps a thread in a workspace. This folder is not one, so there is nowhere to keep it.");
+        return;
+      }
       const chat = await api<ChatSummary>(`/v0/projects/${project.id}/backend-sessions/${current.nativeSessionId}/adopt`, {
         method: "POST", body: JSON.stringify({ liveSessionId: liveId }),
       });
@@ -275,7 +305,7 @@ export function HarnessDashboard(props: {
   return <Show when={props.harness} fallback={<DashboardEmpty>{props.catalogueLoaded === false ? "Loading harness…" : "Harness is unavailable."}</DashboardEmpty>}>{(harness) => <>
     <Show when={drive()} fallback={<DashboardShell class="harness-dashboard" label={`${harness().label} dashboard`}>
       <DashboardIdentity title={harness().label} kind={`${harness().label}-CLI Harness`} glyph={<HarnessMark id={harness().id} />} subtitle={<span title={launchCwd()}>{launchCwd()}</span>} />
-      <Show when={harness().drive}><DashboardLaunch primary={props.composer?.(launchCwd(), catalog, catalogLoading(), permissions)} aside={<WorkingFolder />} /></Show>
+      <Show when={harness().drive}><DashboardLaunch primary={props.composer?.(launchCwd(), catalog, catalogLoading(), permissions, startThread)} aside={<WorkingFolder />} /></Show>
       <DashboardGrid primary={<Sessions />} rail={<><Show when={!harness().drive}><WorkingFolder /></Show><RecentFolders /></>} />
       <Show when={error()}><p class="harness-error" role="alert">{error()}</p></Show>
     </DashboardShell>}>

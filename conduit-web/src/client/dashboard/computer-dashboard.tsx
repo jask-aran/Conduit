@@ -66,7 +66,7 @@ export function ComputerDashboard(props: {
   onOpenHarness?: (id: string | null) => void;
   onOpenHarnessHere?: (id: string, cwd: string) => void;
   onOpenHarnessChat?: (chat: ChatSummary, project: Project, prompt?: string) => void;
-  harnessComposer?: (cwd: string, models: ComposerModels, loading: boolean, permissions: ComposerPermissions) => JSX.Element;
+  harnessComposer?: (cwd: string, models: ComposerModels, loading: boolean, permissions: ComposerPermissions, launch: (prompt: string) => Promise<void>) => JSX.Element;
   onHarnessDriveChange?: (open: boolean) => void;
   renderHarnessDrive?: (input: { current: { cwd: string; title: string; nativeSessionId: string }; harness: HarnessSummary; store: DriveChatStore; onBack: () => void; onTrack: () => void }) => JSX.Element;
   dialog?: boolean;
