@@ -38,7 +38,7 @@ export function createModelSettings(
   const [saving, setSaving] = createSignal(false);
   let activeProjectId = "";
   let activeChatId = "";
-  let activeProfile = "";
+  const [activeProfile, setActiveProfile] = createSignal("");
   let requestSequence = 0;
   let initialCatalogRefresh = true;
   const pendingThinkingLevels = new Map<string, string>();
@@ -134,11 +134,17 @@ export function createModelSettings(
     // not to the chat. Watching the harness instead missed every switch between
     // profiles that share one - Assistant to Coding kept whichever model was
     // last picked anywhere on Pi, because nothing below here was asked again.
-    const changedProfile = Boolean(profile) && activeProfile !== profile;
+    const changedProfile = Boolean(profile) && activeProfile() !== profile;
     activeProjectId = projectId;
     activeChatId = chatId;
-    activeProfile = profile || activeProfile;
-    if (changedProfile && !changedChat) {
+    if (profile) setActiveProfile(profile);
+    // A model belongs to the profile, not to the chat, so a profile change
+    // drops the old selection whether or not the chat changed with it. Keeping
+    // it meant the next launch asked for a model the new profile has never
+    // heard of -- a Codex spec sent to a Pi chat -- and the launch was refused
+    // outright. Anything genuinely still true is put back by the selection
+    // below or the catalogue fetch behind it.
+    if (changedProfile) {
       setModels([]);
       setModel("");
       setEffort("");
@@ -235,7 +241,7 @@ export function createModelSettings(
   };
 
   return {
-    allModels, enabledModels, models, settingsDefaultModel, model, effort, modelThinkingLevels, notice, settingsError, settingsLoading, chatLoading, saving,
+    allModels, enabledModels, models, settingsDefaultModel, model, effort, profile: activeProfile, modelThinkingLevels, notice, settingsError, settingsLoading, chatLoading, saving,
     select, reload, reloadChat, saveScope, chooseModel, chooseEffort,
   };
 }

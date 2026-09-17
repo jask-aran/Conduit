@@ -674,14 +674,18 @@ function App() {
     }
   };
 
+  // The store holds one profile's models at a time, and a new chat is often
+  // started from somewhere else entirely - a dashboard, or the chat you were
+  // just reading on another profile. Seeding the launch from it then asks the
+  // new profile for a model it has never heard of and the launch is refused,
+  // so the selection only travels when it is this profile's to give.
   const createProfileChat = (project: Project, profileId: string) => api<ChatSummary>("/v0/chats", {
     method: "POST",
     body: JSON.stringify({
       projectId: project.id,
       profileId,
       start: true,
-      model: models.model(),
-      thinkingLevel: models.effort(),
+      ...(models.profile() === profileId ? { model: models.model(), thinkingLevel: models.effort() } : {}),
     }),
   });
 
