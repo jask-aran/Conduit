@@ -43,6 +43,30 @@ import { clearReviewComments, parseReviewComments, projectReviewComments, restor
 type UnknownRecord = Record<string, unknown>;
 type ErrorHandler = (error: unknown) => void;
 
+type ChatPresentation =
+  | { kind: "ready"; chatId: string | null }
+  | { kind: "opening_live"; chatId: string }
+  | { kind: "live_error"; chatId: string };
+
+type RequestResult<T> =
+  | { kind: "value"; value: T }
+  | { kind: "error"; error: unknown };
+
+const settleRequest = async <T,>(request: Promise<T>): Promise<RequestResult<T>> => {
+  try { return { kind: "value", value: await request }; }
+  catch (error) { return { kind: "error", error }; }
+};
+
+interface LiveOpening {
+  chatId: string;
+  selection: number;
+  transcriptReady: boolean;
+  socketReady: boolean;
+  events: LiveEvent[];
+  onShown?: () => void;
+  resolve: () => void;
+}
+
 /** Mirrors the server's SPAWNING_INTENTS; see the note at its only use. */
 const SPAWNING_INTENTS = new Set(["select", "prompt", "continue", "compact", "regenerate", "steer"]);
 
@@ -144,6 +168,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   const [messages, setMessages] = createSignal<Message[]>([]);
   const [tools, setTools] = createSignal<ToolItem[]>([]);
   const [loadedId, setLoadedId] = createSignal<string | null>(null);
+  const [presentation, setPresentation] = createSignal<ChatPresentation>({ kind: "ready", chatId: null });
   const [pageBefore, setPageBefore] = createSignal<string | null>(null);
   const [loadingOlder, setLoadingOlder] = createSignal(false);
   const [draft, setDraftSignal] = createSignal("");
@@ -213,6 +238,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   let navigationToken = 0;
   let pendingTextDelta: StructuredGenerationEvent | null = null;
   let pendingTextDeltaTimer: ReturnType<typeof setTimeout> | null = null;
+  let liveOpening: LiveOpening | null = null;
   const transcriptPrefetches = new Map<string, {
     revision: string;
     expiresAt: number;
@@ -294,8 +320,19 @@ export function createActiveChat(options: ActiveChatOptions) {
       setLoadedId(chatId);
       setStatus("active");
     },
-    onEvent: (data) => {
-      try { consume(normalizeLiveEvent(JSON.parse(data))); }
+    onEvent: (data, chatId) => {
+      try {
+        const event = normalizeLiveEvent(JSON.parse(data));
+        const opening = liveOpening;
+        if (opening?.chatId === chatId && opening.selection === selectionToken) {
+          if (event.type === "runtime_state") opening.socketReady = true;
+          if (!opening.transcriptReady) opening.events.push(event);
+          else consume(event);
+          finishLiveOpening(opening);
+          return;
+        }
+        consume(event);
+      }
       catch (error) { onError(error); }
     },
     onLost: () => setLive(null),
@@ -414,6 +451,9 @@ export function createActiveChat(options: ActiveChatOptions) {
     navigationToken += 1;
     selectionToken += 1;
     setLoadedId(null);
+    setPresentation({ kind: "ready", chatId: null });
+    liveOpening?.resolve();
+    liveOpening = null;
     setBackendImplementation(null);
     session.reset();
     setLive(null);
@@ -707,6 +747,17 @@ export function createActiveChat(options: ActiveChatOptions) {
     applyLiveEvent(event);
   }
 
+  const finishLiveOpening = (opening: LiveOpening) => {
+    if (liveOpening !== opening || opening.selection !== selectionToken
+      || !opening.transcriptReady || !opening.socketReady) return;
+    batch(() => {
+      setPresentation({ kind: "ready", chatId: opening.chatId });
+      opening.onShown?.();
+    });
+    liveOpening = null;
+    opening.resolve();
+  };
+
   /**
    * Everything that is scoped to one chat, in one list.
    *
@@ -812,10 +863,93 @@ export function createActiveChat(options: ActiveChatOptions) {
       setRuntimeIdentity(chat.runtime || null);
       setBackendImplementation(chat.backend?.implementation || null);
     }
+    setPresentation({ kind: "ready", chatId: chat.id });
     // The chat somebody asked for is on screen: navigation is done. Whether its
     // agent is warm is a separate question, answered in the sidebar by the
     // process itself.
     entry.onShown?.();
+    await scopeReload;
+  };
+
+  /**
+   * Enter a resident chat immediately, but do not expose a partial projection.
+   *
+   * The transcript read and the live attach are independent network paths. They
+   * run together while the already-mounted transcript stays hidden. Live frames
+   * are buffered until the persisted transcript is installed, then replayed in
+   * order. The first runtime_state is the attach boundary: the server always
+   * sends it after the optional generation_resume snapshot.
+   */
+  const performLiveSelect = async (
+    chat: ChatSummary,
+    project: Project,
+    navigationOptions: { history?: "push" | "replace" | "none"; onCommit?: () => void; onShown?: () => void } = {},
+  ) => {
+    reset();
+    const selection = selectionToken;
+    let resolveShown = () => {};
+    const shown = new Promise<void>((resolve) => { resolveShown = resolve; });
+    const opening: LiveOpening = {
+      chatId: chat.id,
+      selection,
+      transcriptReady: false,
+      socketReady: false,
+      events: [],
+      onShown: navigationOptions.onShown,
+      resolve: resolveShown,
+    };
+    liveOpening = opening;
+    batch(() => {
+      catalogue.select(chat, project);
+      if (navigationOptions.history === "push") history.pushState({}, "", `/chat/${chat.id}`);
+      else if (navigationOptions.history === "replace") history.replaceState({}, "", `/chat/${chat.id}`);
+      navigationOptions.onCommit?.();
+      setMessages([]);
+      setTools([]);
+      setPageBefore(null);
+      setLoadedId(chat.id);
+      setStatus(chat.status);
+      setTitle(chat.title);
+      setTemplateId(chat.profileId || chat.templateId || options.defaultTemplateId() || "assistant");
+      setRuntimeIdentity(chat.runtime || null);
+      setBackendImplementation(chat.backend?.implementation || null);
+      setPresentation({ kind: "opening_live", chatId: chat.id });
+    });
+
+    const transcriptRequest = loadTranscript(chat);
+    const attachRequest = ensureAgent({ chatId: chat.id, projectId: project.id, intent: "select" });
+    const [transcriptResult, attachResult] = await Promise.all([
+      settleRequest(transcriptRequest),
+      settleRequest(attachRequest),
+    ]);
+    if (liveOpening !== opening || selection !== selectionToken || selectedId() !== chat.id) return;
+    if (transcriptResult.kind === "error") {
+      batch(() => {
+        setPresentation({ kind: "live_error", chatId: chat.id });
+        navigationOptions.onShown?.();
+      });
+      liveOpening = null;
+      opening.resolve();
+      throw transcriptResult.error;
+    }
+    let detail = transcriptResult.value;
+
+    // The process can settle between the runtime-list click and the attach. A
+    // second transcript read after that answer is the authoritative settled
+    // state; there is no socket snapshot to wait for in this branch.
+    if (attachResult.kind === "value" && !attachResult.value) detail = await fetchTranscript(chat);
+    if (liveOpening !== opening || selection !== selectionToken || selectedId() !== chat.id) return;
+    applyDetail(detail);
+    // Each scope selects the target synchronously before its request yields.
+    // Start it before reveal so no visible control belongs to the prior chat;
+    // its network completion does not delay the transcript.
+    const scopeReload = reconcileChatScope(chat, project, detail, true);
+    opening.transcriptReady = true;
+    for (const event of opening.events.splice(0)) consume(event);
+    if (attachResult.kind === "error") onError(attachResult.error);
+    else if (!attachResult.value) opening.socketReady = true;
+    finishLiveOpening(opening);
+    await shown;
     await scopeReload;
   };
 
@@ -824,6 +958,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     project: Project,
     navigationOptions: { history?: "push" | "replace" | "none"; onCommit?: () => void; onShown?: () => void } = {},
   ) => {
+    if (chatIsLive(chat)) return performLiveSelect(chat, project, navigationOptions);
     const navigation = ++navigationToken;
     const cached = cachedTranscript(chat);
     const detail = cached || await loadTranscript(chat);
@@ -1134,6 +1269,13 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   const activity = createMemo(() => {
+    const currentPresentation = presentation();
+    if (currentPresentation.kind === "opening_live" && currentPresentation.chatId === selectedId()) {
+      return { kind: "reconnecting", label: "Reconnecting…" };
+    }
+    if (currentPresentation.kind === "live_error" && currentPresentation.chatId === selectedId()) {
+      return { kind: "runtime_failed", label: "Could not load chat" };
+    }
     const process = options.runtime.getProcess(selectedId());
     const derived = deriveFineActivity({
       generation: generation(),
@@ -1175,7 +1317,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     status, setStatus, title, setTitle, templateId, setTemplateId, runtimeIdentity, setRuntimeIdentity, backendImplementation,
     live, messages, setMessages, tools, loadedId, pageBefore, loadingOlder, draft, setDraft,
     generation, editingEntryId, contextUsage, sessionStats, cacheStats, compacting, hostUiRequests, queue, pendingMessages, capabilities, harnessCommands, activeGeneration, activeGenerationChange, turnArtifacts,
-    navigatingId, streaming, stopping, activity,
+    navigatingId, presentation, interactionReady: () => presentation().kind === "ready", streaming, stopping, activity,
     initialize, select, prefetch, loadDetail, ensureAgent, reset, send, stop, regenerate,
     continueResponse, compact, loadHarnessCommands, loadOlder, edit, respondHostUi, clearQueue, interruptAndSend, editQueued, discardQueued,
   };
