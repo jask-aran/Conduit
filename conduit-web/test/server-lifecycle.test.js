@@ -130,22 +130,24 @@ test("opening a chat attaches to a live process but never starts one", async () 
   }
 });
 
-test("selecting a chat warms an agent so the first message is not a cold start", async () => {
+test("selecting a chat reads it without starting an agent", async () => {
   const harness = await startConduitHarness();
   try {
     const chat = await harness.createChat();
 
-    // A person opening the chat is not a retry timer, so it may start the
-    // process the next message would otherwise have waited for.
-    const { launch, stateRequest } = await pauseLaunch(harness, chat, "select");
+    const selected = await harness.request("/v0/live-sessions", {
+      method: "POST",
+      body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId, intent: "select" }),
+    });
+    assert.equal(selected.status, 409);
+    assert.equal((await selected.json()).error, "no_live_process");
+    assert.deepEqual((await (await harness.request("/v0/live-sessions")).json()).sessions, []);
+
+    // The first action that needs the agent starts it.
+    const { launch, stateRequest } = await pauseLaunch(harness, chat, "prompt");
     await completeState(harness, stateRequest, chat);
     const live = await (await launch).json();
     assert.ok(live.id);
-
-    const sessions = (await (await harness.request("/v0/live-sessions")).json()).sessions;
-    assert.deepEqual(sessions.map((session) => session.id), [live.id]);
-
-    // And the prompt that follows reuses it rather than starting a second.
     const prompt = await harness.request("/v0/live-sessions", {
       method: "POST",
       body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId, intent: "prompt" }),
@@ -215,7 +217,7 @@ test("changing a prewarmed draft to Codex removes Pi before the standard launch 
     assert.deepEqual(await harness.liveSessions(), [], "the old Pi process cannot survive the profile change");
     const codexLaunch = await harness.request("/v0/live-sessions", {
       method: "POST",
-      body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId, intent: "select" }),
+      body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId, intent: "prompt" }),
     });
     assert.equal(codexLaunch.status, 201);
     const live = await codexLaunch.json();

@@ -9,7 +9,7 @@ export const REQUIRED_CHAT_BACKEND_METHODS = Object.freeze([
   "launch", "create", "restore", "prompt", "cancel", "close", "respondHostUi", "replay",
   "waitForSession", "attach", "view", "toClientEvent", "publish", "queue",
   "clearQueue", "fork", "setModel", "setThinkingLevel", "refreshContext", "compact",
-  "readTranscript", "getCapabilities", "listModels", "listCommands", "getModelState", "get",
+  "readTranscript", "getCapabilities", "listModels", "listCommands", "listAvailableCommands", "getModelState", "get",
   "getByChatId", "list", "rawRecords", "readHistory",
 ]);
 

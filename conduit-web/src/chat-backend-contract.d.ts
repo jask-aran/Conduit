@@ -114,6 +114,7 @@ export interface ChatBackendAdapter<LiveSession = unknown, ModelCatalog = unknow
   getCapabilities(): ChatCapabilities;
   listModels(liveSessionId?: string): Promise<ModelCatalog> | ModelCatalog;
   listCommands(liveSessionId: string): Promise<Array<{ name: string; description?: string; source?: string }>>;
+  listAvailableCommands(options: { cwd: string; template?: unknown }): Promise<Array<{ name: string; description?: string; source?: string }>>;
   getModelState(liveSessionId: string): Promise<{ model: string; thinkingLevel: string }>;
 }
 

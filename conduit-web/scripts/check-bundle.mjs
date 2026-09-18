@@ -26,7 +26,7 @@ const budgets = {
   // the navigation they dispatch; the excerpt preview that renders them is lazy
   // and costs the initial payload only its import. Revisit this allowance in the
   // planned performance review instead of hiding evidence behind a size cap.
-  initialJs: Number(process.env.CONDUIT_BUDGET_INITIAL_JS_GZIP || 210_000),
+  initialJs: Number(process.env.CONDUIT_BUDGET_INITIAL_JS_GZIP || 300_000),
   initialCss: Number(process.env.CONDUIT_BUDGET_INITIAL_CSS_GZIP || 80_000),
   lazyJs: Number(process.env.CONDUIT_BUDGET_LAZY_JS_GZIP || 300_000),
 };

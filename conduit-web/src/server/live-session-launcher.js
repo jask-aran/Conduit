@@ -8,19 +8,14 @@ function launchError(code, message, status = 400) {
 /**
  * The intents that may start a process.
  *
- * "select" is a person opening a chat, and it warms an agent so the first
- * message they send does not pay a cold start. Everything else that is not real
- * use -- an "open", which is what a reconnect, a retry timer or a background
- * fetch sends -- may attach to a process that already exists but never creates
- * one. That split is the point: the reaper stops an idle process, and a socket
- * reconnecting a moment later must not be able to undo that just by asking
- * again, while a person who clicks into the chat plainly may. Leaving it to
- * clients to tell those apart meant one stale tab could resurrect everything
- * the reaper reclaimed, so the policy lives here, where every client meets it
- * whether or not it cooperates.
+ * Opening a chat is a document read, so "open" and "select" may attach to a
+ * process that already exists but never create one. Only an action that needs
+ * an agent may start one. That split lets the reaper stop an idle process
+ * without a reconnect, retry, background fetch, or ordinary navigation
+ * immediately bringing it back. The policy lives here so every client gets the
+ * same lifecycle even if it sends an obsolete intent.
  */
 export const SPAWNING_INTENTS = new Set([
-  "select",
   "prompt",
   "continue",
   "compact",

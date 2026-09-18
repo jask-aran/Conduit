@@ -109,9 +109,12 @@ system consumes before the page receives it. Overrides are local to the
 current browser profile and are not server-synced.
 
 The composer slash Popover combines Conduit's `/attach` and capability-gated
-`/compact` actions with runnable commands exposed by the active harness. Pi
-supplies extension commands, prompt templates, and skills through
-`get_commands`. A project-aware breadcrumb identifies where each chat belongs.
+`/compact` actions with runnable commands exposed by the selected harness.
+`GET /v0/chats/:chatId/commands` discovers Pi extension commands, prompt
+templates, and skills from the chat profile and Workspace without starting a
+process. When a process is already resident, the same route asks that process
+for its current command list. A project-aware breadcrumb identifies where each
+chat belongs.
 
 The chat header, Cmd/Ctrl+., and Workspace views… open a per-chat Workspace
 panel. Files owns file browsing, comparison, and editing. Its All files mode
