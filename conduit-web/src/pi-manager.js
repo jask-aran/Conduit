@@ -21,7 +21,7 @@ import { createPiEventNormalizer } from "./pi-event-normalizer.js";
 import { projectSessionEntries, readSessionPage } from "./session-store.js";
 import { PiCommandCatalog } from "./pi-command-catalog.js";
 import { ChatLogs, isLoggedEvent } from "./server/chat-log.js";
-import { messageIsInterim, textBlockClassifications } from "./active-generation.js";
+import { messageIsInterim } from "./active-generation.js";
 
 export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = "", models, template }) {
   const args = [
@@ -1731,7 +1731,6 @@ export class PiManager extends EventEmitter {
     record.generation?.openMessages?.delete(id);
     const generation = record.activeGeneration;
     const written = generation?.assistantMessages?.find((message) => message.id === id) || null;
-    const classifications = written ? textBlockClassifications(generation) : {};
     const blocks = written?.blocks || [];
     this.publish(record, {
       type: "transcript_op", op: "message.close", messageId: id, stopReason,
@@ -1739,9 +1738,11 @@ export class PiManager extends EventEmitter {
       // browser is told, rather than deciding it from the shape of the turn
       // around the message.
       interim: messageIsInterim(written),
-      content: blocks
-        .filter((block) => block.type === "text" && classifications[block.identity] === "answer")
-        .map((block) => block.text || "").join("\n"),
+      // What the message says, answer or not. Interim text is the turn talking
+      // as it works and the trace renders it, so a close that left it out took
+      // commentary off the screen the moment the turn settled. `interim` above
+      // is what says which of the two this is; the text is stated either way.
+      content: blocks.filter((block) => block.type === "text").map((block) => block.text || "").join("\n"),
       blocks: blocks.flatMap((block) => {
         if (block.type === "thinking") return [{ type: "thinking", thinking: block.text || "" }];
         if (block.type === "toolCall") {
