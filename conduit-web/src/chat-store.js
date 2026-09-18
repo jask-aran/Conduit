@@ -32,12 +32,23 @@ export function chatDirectory(project, chatId) {
   return path.join(path.resolve(project.workingRoot), ".conduit", "chats", chatId);
 }
 
+const at = (value) => Date.parse(value || "") || 0;
+
+/** The later of two timestamps; the completion clock only ever moves forward. */
+export const laterOf = (left, right) => (at(right) > at(left) ? right : left) || null;
+
+// Unread is a comparison, not a stored flag: has the assistant finished
+// something since this chat was last read. Nothing has to transition it, so a
+// duplicate, late or missing event cannot leave it wrong.
+export const chatIsUnread = (chat) => at(chat?.lastAssistantCompletedAt) > at(chat?.lastReadAt);
+
 export function chatView(chat) {
   if (!chat) return null;
   const { backend, ...view } = chat;
   const { opaqueSession, ...identity } = backend || piBackendFor(chat);
   return {
     ...view,
+    unread: chatIsUnread(chat),
     harnessId: harnessIdForImplementation(identity.implementation, identity.installationId),
     backend: identity,
     profileId: identity.profileId,
@@ -199,7 +210,12 @@ export class ChatStore {
         lastUserMessageAt: item.lastUserMessageAt || sessionMetadata?.lastUserMessageAt || null,
         lastAssistantCompletedAt: item.lastAssistantCompletedAt || sessionMetadata?.lastAssistantCompletedAt || null,
         lastMessageAt: item.lastMessageAt || sessionMetadata?.lastMessageAt || null,
-        unread: Boolean(item.unread),
+        // Rows written before the watermark carried an `unread` flag: a read
+        // chat has been read up to its stored completion, an unread one has
+        // not. Completions the session file gained while this was down are
+        // newer than the watermark either way, so they come back unread.
+        lastReadAt: item.lastReadAt
+          || (item.unread ? null : item.lastAssistantCompletedAt || null),
       };
       let hasAttachments = false;
       try {
@@ -253,7 +269,7 @@ export class ChatStore {
               lastUserMessageAt: session.lastUserMessageAt || null,
               lastAssistantCompletedAt: session.lastAssistantCompletedAt || null,
               lastMessageAt: session.lastMessageAt || null,
-              unread: false,
+              lastReadAt: session.lastAssistantCompletedAt || null,
             };
             await this.ensureDirectories(project, id);
             await this.removePartials(project, id);
@@ -378,7 +394,7 @@ export class ChatStore {
       lastUserMessageAt: null,
       lastAssistantCompletedAt: null,
       lastMessageAt: null,
-      unread: false,
+      lastReadAt: null,
     };
     await this.ensureDirectories(project, chat.id);
     this.chats.push(chat);
@@ -386,20 +402,17 @@ export class ChatStore {
     return chat;
   }
 
-  async commitSession(chatId, session, { markUnread = false } = {}) {
+  async commitSession(chatId, session) {
     const chat = this.metadata(chatId);
     if (!chat) return null;
-    const previousAssistantCompletedAt = chat.lastAssistantCompletedAt;
     Object.assign(chat, {
       status: "active",
       backend: { ...(chat.backend || piBackendFor(chat)), opaqueSession: path.resolve(session.file) },
       updatedAt: session.updatedAt || new Date(this.now()).toISOString(),
-      lastUserMessageAt: session.lastUserMessageAt || chat.lastUserMessageAt || null,
-      lastAssistantCompletedAt: session.lastAssistantCompletedAt || chat.lastAssistantCompletedAt || null,
-      lastMessageAt: session.lastMessageAt || chat.lastMessageAt || null,
+      lastUserMessageAt: laterOf(chat.lastUserMessageAt, session.lastUserMessageAt),
+      lastAssistantCompletedAt: laterOf(chat.lastAssistantCompletedAt, session.lastAssistantCompletedAt),
+      lastMessageAt: laterOf(chat.lastMessageAt, session.lastMessageAt),
     });
-    if (markUnread && session.lastAssistantCompletedAt
-      && session.lastAssistantCompletedAt !== previousAssistantCompletedAt) chat.unread = true;
     await this.flush();
     return chat;
   }
@@ -413,7 +426,7 @@ export class ChatStore {
     return true;
   }
 
-  async syncFile(chatId, file, project, { waitForFileMs = 0, markUnread = false } = {}) {
+  async syncFile(chatId, file, project, { waitForFileMs = 0 } = {}) {
     const deadline = Date.now() + waitForFileMs;
     let session;
     while (!session) {
@@ -425,7 +438,7 @@ export class ChatStore {
         await new Promise((resolve) => setTimeout(resolve, 20));
       }
     }
-    await this.commitSession(chatId, session, { markUnread });
+    await this.commitSession(chatId, session);
     return session;
   }
 
@@ -433,6 +446,7 @@ export class ChatStore {
     const chat = this.metadata(chatId);
     if (!chat) return null;
     const canSelectBackend = chat.status === "draft" && !conduitPiSessionFile(chat) && !chat.lastUserMessageAt;
+    const previousCompletedAt = chat.lastAssistantCompletedAt;
     const allowed = [
       "projectId",
       "title",
@@ -445,9 +459,15 @@ export class ChatStore {
       "lastUserMessageAt",
       "lastAssistantCompletedAt",
       "lastMessageAt",
-      "unread",
+      "lastReadAt",
     ];
     for (const key of allowed) if (Object.hasOwn(patch, key)) chat[key] = patch[key];
+    // The completion clock is the read watermark's other half, so it never
+    // regresses -- a re-read of an older session file must not resurrect or
+    // suppress unread.
+    if (Object.hasOwn(patch, "lastAssistantCompletedAt")) {
+      chat.lastAssistantCompletedAt = laterOf(previousCompletedAt, patch.lastAssistantCompletedAt);
+    }
     chat.modelThinkingLevels = modelThinkingLevelsFor(chat);
     if (chat.runtime?.kind === "conduit_profile" && (Object.hasOwn(patch, "templateId") || Object.hasOwn(patch, "templateVersion"))) {
       chat.runtime.profileId = chat.templateId;
@@ -466,13 +486,23 @@ export class ChatStore {
 
   async markUserMessage(chatId) {
     const timestamp = new Date(this.now()).toISOString();
-    return this.update(chatId, { lastUserMessageAt: timestamp, lastMessageAt: timestamp });
+    const chat = await this.update(chatId, { lastUserMessageAt: timestamp, lastMessageAt: timestamp });
+    // Replying is the strongest read signal there is.
+    return chat ? this.markRead(chatId) : chat;
   }
 
-  async markRead(chatId) {
+  /**
+   * Raise the read watermark. `upTo` is a completion timestamp this server
+   * issued and a client has rendered, never a browser clock, so skew cannot
+   * reach it and a receipt that arrives late, twice or from a second device
+   * can only re-assert ground already covered.
+   */
+  async markRead(chatId, upTo) {
     const chat = this.metadata(chatId);
-    if (!chat || !chat.unread) return chat;
-    chat.unread = false;
+    if (!chat) return null;
+    const watermark = laterOf(chat.lastReadAt, upTo || chat.lastAssistantCompletedAt);
+    if (at(watermark) <= at(chat.lastReadAt)) return chat;
+    chat.lastReadAt = watermark;
     await this.flush();
     return chat;
   }

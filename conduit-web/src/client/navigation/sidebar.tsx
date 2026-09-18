@@ -540,6 +540,15 @@ export function Sidebar(props: {
   // marked stale, which is the honest version of the same answer.
   const processFor = (chat: ChatSummary): RuntimeProcess | null => props.runtime.getProcess(chat.id);
 
+  // A fresh draft has no row of its own -- the chat lists hide it (see the
+  // `status !== "draft"` filters below), because the New chat row is its row.
+  // So that row carries the selection while the draft is the open chat.
+  const onNewChatPage = () => {
+    if (!props.selectedId || props.dashboard || props.computer || props.terminal) return false;
+    const chat = props.projects.flatMap((project) => project.sessions).find((item) => item.id === props.selectedId);
+    return !chat || (chat.status === "draft" && !chat.pinned && !props.runtime.getProcess(chat.id));
+  };
+
   const railChats = () => [...props.projects.flatMap((project) => project.sessions
     .filter((chat) => chat.status !== "draft" || chat.id !== props.selectedId || chat.pinned || Boolean(props.runtime.getProcess(chat.id)))
     .map((chat) => ({ chat, project })))]
@@ -1012,6 +1021,7 @@ export function Sidebar(props: {
             </Show>
             <div data-sidebar="rail-divider" aria-hidden="true" />
             <RailAction label="Conduit Dashboard" current={props.dashboard} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); }}><LayoutDashboardIcon /></RailAction>
+            <RailAction label="New chat" onClick={() => startNewChat()}><MessageSquarePlusIcon /></RailAction>
             <Show when={railFolders().length}>
               <div data-sidebar="rail-section" data-sidebar-section="projects" class="sidebar-rail-section">
                 <For each={railFolders()}>{(project) => <RailAction
@@ -1023,7 +1033,6 @@ export function Sidebar(props: {
               </div>
             </Show>
             <div data-sidebar="rail-section" data-sidebar-section="chats" class="sidebar-rail-section">
-              <RailAction label="New chat" onClick={() => startNewChat()}><MessageSquarePlusIcon /></RailAction>
               <For each={railChats()}>{(item) => <RailAction
                 label={`Chat: ${chatTitle(item.chat)}`}
                 current={props.selectedId === item.chat.id}
@@ -1061,6 +1070,10 @@ export function Sidebar(props: {
               <LayoutDashboardIcon />
               <span>Conduit Dashboard</span>
             </button>
+            <button type="button" class="sidebar-row sidebar-new-chat" aria-current={onNewChatPage() ? "page" : undefined} onClick={() => startNewChat()}>
+              <MessageSquarePlusIcon />
+              <span>New chat</span>
+            </button>
             <Show when={pinnedItems().length}>
               <section class="sidebar-group">
                 <div class="sidebar-group-header"><div data-sidebar="group-label">Pinned</div></div>
@@ -1068,7 +1081,7 @@ export function Sidebar(props: {
               </section>
             </Show>
             <Group label="Projects" projects={folders()} emptyLabel="No projects" addLabel="New folder" onAdd={() => openNewDialog("folder")} />
-            <Group label="Chats" projects={[]} chatRoot={chats()} addLabel="New chat" onAdd={() => startNewChat()} />
+            <Group label="Chats" projects={[]} chatRoot={chats()} />
           </Show>
         </div>
         <div data-sidebar="footer"><Menu><MenuTrigger class="sidebar-user" aria-label={`Conduit · ${connectionLabel()}`} title={connectionLabel()}><CableIcon /><span><strong>Conduit</strong><small>{connectionLabel()}</small></span><span class={`server-status-indicator runtime-indicator runtime-indicator-${connectionTone()}`} aria-hidden="true"><Show when={props.connectivity === "connecting" || props.connectivity === "reconnecting"} fallback={<span class="runtime-indicator-dot" />}><Spinner class="size-3" /></Show></span></MenuTrigger><MenuContent>

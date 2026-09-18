@@ -175,10 +175,12 @@ export function registerRuntimeRoutes(app, {
     response.flushHeaders?.();
     const client = { kind: "sse", response };
     const detach = runtimeHub.attach(client);
+    // A real frame, not an SSE comment: the client watches for silence to tell
+    // a live stream from one that died without ever firing an error.
     const heartbeat = setInterval(() => {
-      try { response.write(": ping\n\n"); }
+      try { response.write(`data: ${JSON.stringify({ type: "ping", at: new Date().toISOString() })}\n\n`); }
       catch { clearInterval(heartbeat); detach(); }
-    }, 25000);
+    }, 15000);
     heartbeat.unref?.();
     request.on("close", () => {
       clearInterval(heartbeat);
