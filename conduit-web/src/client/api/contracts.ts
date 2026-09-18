@@ -250,6 +250,12 @@ export interface Message {
   status?: string | null;
   continuing?: boolean;
   pending?: boolean;
+  /**
+   * An answer that is still arriving. It takes its place in the transcript the
+   * moment the harness names it, so everything sent afterwards lands after it,
+   * and the live overlay draws over this row rather than beside it.
+   */
+  streaming?: boolean;
   queueMode?: "steer" | "follow_up";
   attachments?: Attachment[];
   order?: number;

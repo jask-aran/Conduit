@@ -250,7 +250,9 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   const rendererUsesInertialTailFollow = () => rendererUsesTypewriter();
   const rendererMetric = () => markdownRenderer();
   // A queued message lives in the composer bubble until the model takes it, so
-  // the transcript does not also show it as a sent turn.
+  // the transcript does not also show it as a sent turn. An answer still
+  // arriving keeps its row here: the projection below skips drawing it, but
+  // needs to see where it sits to place the live overlay.
   const settledMessages = createMemo(() => props.chat.messages().filter((message) => !message.pending));
   const timeline = createTimelineStore(
     settledMessages,

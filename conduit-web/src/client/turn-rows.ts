@@ -16,13 +16,6 @@ type LiveBlock = {
 export interface ActiveGenerationView {
   id: string;
   status: string;
-  /**
-   * The prompt this generation is answering. Known whenever Conduit sent that
-   * prompt, and absent for a turn started outside it -- a CLI-driven thread,
-   * or history adopted from a session file -- which falls back to reading the
-   * last prompt in the transcript.
-   */
-  ownerMessageId?: string | null;
   lastSeq: number;
   continuation?: boolean;
   continuationBase?: string;
@@ -136,17 +129,25 @@ const lastPromptIndex = (messages: Message[]) => {
 /**
  * Which prompt the live turn is drawn under.
  *
- * The last prompt in the transcript is only the right answer while nothing
- * else is being sent. Interrupting adds a prompt before the turn it cut off
- * has finished, and the answer being interrupted would move down to sit under
- * the message that stopped it -- ending up below it, run together with the
- * reply to it. A generation Conduit started names its own prompt instead.
+ * An answer holds a row in the transcript from the moment the harness names
+ * it, so the prompt it answers is simply the one before that row. Reading the
+ * last prompt in the whole list instead was only right while nothing else was
+ * being sent: interrupting adds a prompt before the turn it cut off has
+ * finished, and the answer being interrupted moved down to sit under the
+ * message that stopped it. Until the first answer is named there is no row
+ * yet, and the last prompt is the one being answered.
  */
 const liveOwnerIndex = (messages: Message[], generation?: ActiveGenerationView | null) => {
-  const owned = generation?.ownerMessageId
-    ? messages.findIndex((message) => message.id === generation.ownerMessageId)
+  const answers = new Set((generation?.assistantMessages || []).map((message) => message.id));
+  const answerIndex = answers.size
+    ? messages.findIndex((message) => answers.has(message.id))
     : -1;
-  return owned >= 0 ? owned : lastPromptIndex(messages);
+  if (answerIndex < 0) return lastPromptIndex(messages);
+  for (let index = answerIndex - 1; index >= 0; index -= 1) {
+    const message = messages[index]!;
+    if (message.role === "user" && !message.pending) return index;
+  }
+  return -1;
 };
 const liveOwner = (messages: Message[], generation: ActiveGenerationView) => {
   const index = liveOwnerIndex(messages, generation);
@@ -540,7 +541,12 @@ export function projectPersistedTurns(
     if (message.role === "user") {
       turns.push(current);
       current = { userMessage: message, assistants: [], leftoverTools: [] };
-    } else if (message.role === "assistant") current.assistants.push(message);
+    } else if (message.role === "assistant") {
+      // An answer still arriving is drawn by the live overlay, not from here.
+      // Its row is in the list all the same, holding the place the overlay is
+      // drawn in, and settles into an ordinary answer when the turn ends.
+      if (!message.streaming) current.assistants.push(message);
+    }
   }
   turns.push(current);
 

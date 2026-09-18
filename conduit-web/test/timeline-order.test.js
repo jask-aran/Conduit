@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   assignToolSeq,
+  claimAnswerRows,
   mergeToolEvent,
   applyCommittedUser,
+  settleAnswerRows,
   upsertMessages,
 } from "../src/client/timeline-order.ts";
 
@@ -85,19 +87,40 @@ test("a re-sent prompt with a new id does not duplicate the one it replaced", ()
   assert.deepEqual(next.map((message) => message.id), ["m_first", "pi:a1", "m_second", "pi:a2"]);
 });
 
-test("an interrupted answer stays under the prompt it answers, not the one that stopped it", () => {
-  // The transcript while an interrupt is in flight: the prompt that started
-  // the turn, the answer still streaming, and the message that just cut it off.
-  const messages = [
-    { id: "m_ask", role: "user", content: "now a longer one" },
-    { id: "m_stop", role: "user", content: "stop" },
+test("an answer takes its place in the transcript as soon as it is named", () => {
+  const messages = [{ id: "m_ask", role: "user", content: "now a longer one" }];
+  const claimed = claimAnswerRows(messages, { id: "g1", assistantMessages: [{ id: "m_answer" }] });
+  assert.deepEqual(claimed.map((message) => message.id), ["m_ask", "m_answer"]);
+  assert.equal(claimed[1].streaming, true);
+  // An interrupt sent while that answer is still arriving lands after it, so
+  // the answer cannot end up below the message that stopped it.
+  const interrupted = [...claimed, { id: "m_stop", role: "user", content: "stop" }];
+  const settled = settleAnswerRows(interrupted, "g1", [
+    { id: "m_answer", role: "assistant", content: "The Cartographer", generationId: "g1" },
+  ]);
+  assert.deepEqual(settled.map((message) => message.id), ["m_ask", "m_answer", "m_stop"]);
+  assert.equal(settled[1].streaming, undefined);
+});
+
+test("claiming twice does not give an answer a second row", () => {
+  const first = claimAnswerRows([{ id: "m_ask", role: "user" }], { id: "g1", assistantMessages: [{ id: "m_a" }] });
+  const second = claimAnswerRows(first, { id: "g1", assistantMessages: [{ id: "m_a" }, { id: "m_b" }] });
+  assert.deepEqual(second.map((message) => message.id), ["m_ask", "m_a", "m_b"]);
+});
+
+test("a sync that names an answer still arriving does not draw it twice", () => {
+  // The sync an interrupt publishes carries the turn it just cancelled. The
+  // row stays the turn's own until the turn itself ends.
+  const synced = [
+    { id: "m_ask", role: "user" },
+    { id: "m_a", role: "assistant", content: "half an answer" },
   ];
-  const frozen = [{ id: "m_answer", role: "assistant", content: "The Cartographer", generationId: "g1" }];
-  const owner = messages.find((message) => message.id === "m_ask");
-  assert.deepEqual(upsertMessages(messages, [owner, ...frozen]).map((message) => message.id),
-    ["m_ask", "m_answer", "m_stop"]);
-  // Without the anchor it lands after the message that interrupted it, which
-  // is what ran the two answers together in one bubble.
-  assert.deepEqual(upsertMessages(messages, frozen).map((message) => message.id),
-    ["m_ask", "m_stop", "m_answer"]);
+  const held = claimAnswerRows(synced, { id: "g1", assistantMessages: [{ id: "m_a" }] });
+  assert.equal(held[1].streaming, true);
+  assert.equal(held.length, 2);
+});
+
+test("a turn that named an answer but never wrote one leaves no blank row", () => {
+  const claimed = claimAnswerRows([{ id: "m_ask", role: "user" }], { id: "g1", assistantMessages: [{ id: "m_a" }] });
+  assert.deepEqual(settleAnswerRows(claimed, "g1", []).map((message) => message.id), ["m_ask"]);
 });

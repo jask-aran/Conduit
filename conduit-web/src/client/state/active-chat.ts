@@ -25,7 +25,7 @@ import type {
   ToolItem,
   TranscriptDetail,
 } from "../api/contracts";
-import { applyCommittedUser, applyTranscriptProjection, assignToolSeq, replaceMessages, truncateAt, upsertMessages } from "../timeline-order";
+import { applyCommittedUser, applyTranscriptProjection, assignToolSeq, claimAnswerRows, replaceMessages, settleAnswerRows, truncateAt, upsertMessages } from "../timeline-order";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { canCoalesceTextDelta, enqueueOverflowLiveEvent, mergeTextDeltaEvents } from "./text-delta-batcher";
 import type { UploadAttachment } from "./attachments";
@@ -219,11 +219,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     setActiveGenerationRevision((revision) => revision + 1);
   };
   const generationStore = createClientActiveGenerationStore();
-  // Which prompt each generation is answering. The harness assigns the
-  // generation id, so the prompt is remembered when it is sent and paired up
-  // the first time an event for that generation arrives.
-  const generationOwners = new Map<string, string | null>();
-  let promptOwner: string | null = null;
   /*
    * A chat's agent state is the server's to report: it publishes the process
    * when it spawns and again when the harness can answer, and both the sidebar
@@ -486,8 +481,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     generationStore.clear();
     setActiveGenerationChange(null);
     setActiveGeneration(null);
-    generationOwners.clear();
-    promptOwner = null;
     currentGeneration = null;
     stopPending = false;
     if (draftProfileId) {
@@ -516,11 +509,12 @@ export function createActiveChat(options: ActiveChatOptions) {
       result = generationStore.apply(event);
       if (result.changed && result.state) {
         const state = result.state as ActiveGenerationView;
-        if (!generationOwners.has(state.id)) {
-          generationOwners.set(state.id, promptOwner);
-          promptOwner = null;
-        }
-        setActiveGeneration({ ...state, ownerMessageId: generationOwners.get(state.id) || null });
+        // An answer joins the transcript as soon as the harness names it, so
+        // its place is decided once, by arrival, rather than re-derived on
+        // every frame from whichever prompt happens to be last. Everything
+        // sent after it -- an interrupt, above all -- lands after it.
+        setMessages((existing) => claimAnswerRows(existing, state));
+        setActiveGeneration(state);
         setActiveGenerationChange(generationChangeFor(event));
       }
     });
@@ -535,19 +529,13 @@ export function createActiveChat(options: ActiveChatOptions) {
     const wasTerminal = previousStatus ? ["stopped", "complete", "failed"].includes(previousStatus) : false;
     if (terminal && !wasTerminal) {
       const frozen = freezeGeneration(next);
-      const ownerId = generationOwners.get(next.id) || null;
       batch(() => {
-        if (frozen.length) {
-          setTools((existing) => settleGenerationTools(existing, next));
-          // Placed against the prompt it answers rather than at the end. An
-          // interrupt puts its own message in the transcript before the turn
-          // it cut off has finished, so appending left that answer below the
-          // message that stopped it.
-          setMessages((existing) => {
-            const owner = ownerId ? existing.find((message) => message.id === ownerId) : null;
-            return upsertMessages(existing, owner ? [owner, ...frozen] : frozen);
-          });
-        }
+        if (frozen.length) setTools((existing) => settleGenerationTools(existing, next));
+        // The rows this turn has been holding are settled in place. A turn can
+        // finish having named an answer it never wrote anything into -- one
+        // cancelled before its first token -- and that row goes rather than
+        // sitting in the transcript as a blank answer forever.
+        setMessages((existing) => settleAnswerRows(existing, next.id, frozen));
         generationStore.clear();
         setActiveGenerationChange(null);
         setActiveGeneration(null);
@@ -747,6 +735,10 @@ export function createActiveChat(options: ActiveChatOptions) {
           setLive(null);
           resetLiveFlags();
           setGeneration("idle");
+          // A turn abandoned rather than finished still holds rows for answers
+          // it named. Nothing will settle them now, so they go.
+          const abandoned = activeGeneration();
+          if (abandoned) setMessages((current) => settleAnswerRows(current, abandoned.id, []));
           generationStore.clear();
           setActiveGeneration(null);
           setActiveGenerationChange(null);
@@ -1127,7 +1119,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     });
     setGeneration("submitting");
     try {
-      promptOwner = messageId;
       session.send(editId
         ? { type: "fork_and_prompt", entryId: editId, messageId, message: prepared.message, attachmentIds: prepared.attachmentIds, model: models.model(), thinkingLevel: models.effort() }
         : { type: "prompt", messageId, message: prepared.message, attachmentIds: prepared.attachmentIds });
@@ -1136,7 +1127,6 @@ export function createActiveChat(options: ActiveChatOptions) {
       setGeneration("active");
       setEditingEntryId(null);
     } catch (error) {
-      promptOwner = null;
       setMessages(previous);
       setEditingEntryId(editId);
       setDraft(prepared.text);
@@ -1293,7 +1283,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     setDraft("");
     setGeneration("submitting");
     try {
-      promptOwner = interruptId;
       session.send({ type: "interrupt_and_send", messageId: interruptId, message: prepared.message, attachmentIds: prepared.attachmentIds,
         model: models.model(), thinkingLevel: models.effort() });
       setMessages((current) => [...current, local]);
@@ -1301,7 +1290,6 @@ export function createActiveChat(options: ActiveChatOptions) {
       setStatus("active");
       setGeneration("active");
     } catch (error) {
-      promptOwner = null;
       setMessages(previous);
       setDraft(prepared.text);
       setGeneration("idle");
