@@ -132,6 +132,19 @@ export function upsertMessages(current: Message[], incoming: Message[]): Message
 }
 
 /**
+ * The whole transcript, as the server has it.
+ *
+ * A full load is the entire truth about a chat, so it replaces rather than
+ * merges: a message it does not contain is a message the chat no longer has.
+ * Merging one in made a load that landed after a fork put the abandoned
+ * branch back. Only the composer's own unsent rows, which the server has
+ * never seen, survive it.
+ */
+export function replaceMessages(current: Message[], incoming: Message[]): Message[] {
+  return [...incoming, ...current.filter((message) => message.pending)];
+}
+
+/**
  * Cut the transcript where the server says the history now ends.
  *
  * A fork abandons everything after its point and states where that is, so this
