@@ -13,7 +13,7 @@ import "solid-sonner/styles.css";
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
 import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/primitives";
-import { api, asList, pathChatId, pathProjectId, projectPath } from "./api/client";
+import { api, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./api/client";
 import { buildHttpUrl, clearServerOrigin, configuredServerOrigin, loginUrl, logoutUrl, normalizeServerOrigin, saveServerOrigin, transcriptUrl } from "./api/transport";
 import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
 import { manifestForChat, resolveCapability, resolveHistory } from "./chat-capabilities";
@@ -1715,8 +1715,8 @@ function App() {
         }
         const projectRouteId = pathProjectId();
         if (projectRouteId) {
-          let project = catalogue.projects().find((item) => item.id === projectRouteId);
-          if (!project) project = (await catalogue.refresh()).find((item) => item.id === projectRouteId);
+          let project = catalogue.projects().find((item) => projectMatchesPath(item, projectRouteId));
+          if (!project) project = (await catalogue.refresh()).find((item) => projectMatchesPath(item, projectRouteId));
           if (!project) throw new Error("Project not found");
           await openProject(project, "none");
           return;
@@ -1793,7 +1793,7 @@ function App() {
         setRouteKind("chat");
         setRouteBootstrap("ready");
       } else if (initialProjectRouteId) {
-        const project = projects.find((item) => item.id === initialProjectRouteId);
+        const project = projects.find((item) => projectMatchesPath(item, initialProjectRouteId));
         if (!project) throw new Error("Project not found");
         catalogue.selectProject(project);
         setRouteKind("project");
@@ -1846,7 +1846,7 @@ function App() {
       </DialogContent>
     </Dialog>
     <Show when={routeKind() !== "terminal"}>
-    <Sidebar projects={catalogue.projects()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard"} computer={routeKind() === "computer"} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
+    <Sidebar projects={catalogue.projects()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard"} project={routeKind() === "project"} computer={routeKind() === "computer"} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}

@@ -39,15 +39,4 @@ export async function api<T>(url: string, options: RequestInit = {}): Promise<T>
 
 export const asList = <T>(value: unknown): T[] => Array.isArray(value) ? value as T[] : [];
 
-export function pathChatId(pathname = location.pathname): string | null {
-  return pathname.match(/^\/chat\/([a-zA-Z0-9_-]{8,128})$/)?.[1] || null;
-}
-
-export function pathProjectId(pathname = location.pathname): string | null {
-  return pathname.match(/^\/(?:project|workspace)\/([a-zA-Z0-9_-]{8,128})$/)?.[1] || null;
-}
-
-export function projectPath(project: { id: string; kind?: string; origin?: string }): string {
-  const workspace = project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || "");
-  return `/${workspace ? "workspace" : "project"}/${encodeURIComponent(project.id)}`;
-}
+export { pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./routes.ts";
