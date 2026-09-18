@@ -156,6 +156,7 @@ export function Sidebar(props: {
   selectedId: string | null;
   navigatingId?: string | null;
   dashboard: boolean;
+  project: boolean;
   computer: boolean;
   terminal: boolean;
   runtime: RuntimeStore;
@@ -544,7 +545,7 @@ export function Sidebar(props: {
   // `status !== "draft"` filters below), because the New chat row is its row.
   // So that row carries the selection while the draft is the open chat.
   const onNewChatPage = () => {
-    if (!props.selectedId || props.dashboard || props.computer || props.terminal) return false;
+    if (!props.selectedId || props.dashboard || props.project || props.computer || props.terminal) return false;
     const chat = props.projects.flatMap((project) => project.sessions).find((item) => item.id === props.selectedId);
     return !chat || (chat.status === "draft" && !chat.pinned && !props.runtime.getProcess(chat.id));
   };
@@ -560,6 +561,10 @@ export function Sidebar(props: {
     .slice(0, 5);
   const railFolders = () => folders().slice(0, 5);
   const railWorkspaces = () => workspaces().slice(0, 5);
+  // A project page keeps a draft chat open behind its composer, so the
+  // selection alone cannot say which row the reader is on -- without the route,
+  // the project row went dark and New chat lit up in its place.
+  const onProjectPage = (project: Project) => props.projectId === project.id && (props.project || props.selectedId == null);
   const railProjectIsActive = (project: Project) => project.id === props.projectId || project.sessions.some((chat) => chat.id === props.selectedId);
   const railProjectIsLive = (project: Project) => project.sessions.some((chat) => Boolean(processFor(chat)));
   const RailAction = (railProps: { label: string; onClick: () => void; current?: boolean; live?: boolean; children: unknown }) => <Tooltip>
@@ -848,7 +853,7 @@ export function Sidebar(props: {
         : `Delete ${blockProps.workspace ? "workspace" : "folder"}`;
     return <div class="sidebar-project-block">
       <ContextMenu placement={phoneLayout() ? "bottom-start" : "right-start"} onOpenChange={(openMenu) => { if (openMenu) guard.suppressClick = true; else setTimeout(() => { guard.suppressClick = false; }); }}>
-        <ContextMenuTrigger as="div" class="sidebar-row sidebar-project" data-open={open()} aria-current={props.selectedId == null && props.projectId === blockProps.project.id ? "page" : undefined}>
+        <ContextMenuTrigger as="div" class="sidebar-row sidebar-project" data-open={open()} aria-current={onProjectPage(blockProps.project) ? "page" : undefined}>
           <button class="sidebar-project-link" onClick={() => {
             if (guard.suppressClick) { guard.suppressClick = false; return; }
             closeMobile();
@@ -914,7 +919,7 @@ export function Sidebar(props: {
       : item.type === "project" ? item.project.name
         : item.terminal.title || "Shell";
     const current = () => item.type === "chat" ? props.selectedId === item.chat.id
-      : item.type === "project" ? props.selectedId == null && props.projectId === item.project.id
+      : item.type === "project" ? onProjectPage(item.project)
         : false;
     return <ContextMenu placement={phoneLayout() ? "bottom-start" : "right-start"}>
       <ContextMenuTrigger as="button" type="button" class="sidebar-row sidebar-pinned" aria-current={current() ? "page" : undefined} onClick={open}>
