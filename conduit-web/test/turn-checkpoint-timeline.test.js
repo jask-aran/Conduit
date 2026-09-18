@@ -238,3 +238,31 @@ test("an anchored checkpoint belongs to the turn it was taken for", async () => 
     { added: 1, removed: 0, preferredPath: "note.txt" },
   ]);
 });
+
+/**
+ * The same, for a backend with no session file of its own.
+ *
+ * Codex keeps its transcript in the app-server, not on a path Conduit can
+ * read, so its checkpoints carry the message id the prompt was sent under and
+ * the timeline is built from those alone.
+ */
+test("a backend that keeps no session file still ties each turn to its own changes", async () => {
+  const { store, files } = await workspace();
+  const note = (text) => ({ "note.txt": { kind: "file", mode: 0o644, content: Buffer.from(text).toString("base64") } });
+  await writeCheckpoint(store, { id: "before-one", createdAt: "2026-01-01T00:00:00.000Z", messageId: "u1", workingRoot: files });
+  await writeCheckpoint(store, { id: "before-two", createdAt: "2026-01-01T00:02:00.000Z", messageId: "u2", workingRoot: files, entries: note("one\n") });
+  await writeCheckpoint(store, { id: "before-three", createdAt: "2026-01-01T00:04:00.000Z", messageId: "u3", workingRoot: files, entries: note("one\n") });
+  await fs.writeFile(path.join(files, "note.txt"), "one\ntwo\n");
+
+  const timeline = await new TurnCheckpointStore(store).timeline(CHAT, files);
+  // Turn 2 changed nothing, so it keeps no checkpoint; 1 and 3 keep theirs,
+  // each still named by the message its prompt was sent under.
+  assert.deepEqual(timeline.map(({ messageId, sequence }) => ({ messageId, sequence })), [
+    { messageId: "u3", sequence: 3 },
+    { messageId: "u1", sequence: 1 },
+  ]);
+  assert.deepEqual(timeline.map((item) => item.summary), [
+    { added: 1, removed: 0, preferredPath: "note.txt" },
+    { added: 1, removed: 0, preferredPath: "note.txt" },
+  ]);
+});

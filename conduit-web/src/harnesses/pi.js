@@ -21,6 +21,8 @@ export const manifest = {
   // and names nothing it streams. Conduit supplies message identity for it;
   // every other harness brings its own.
   suppliesMessageIds: false,
+  // And states the transcript those names belong to: order, content, lifetime.
+  statedTranscript: true,
   drive: false,
   // Pi profiles come from the template catalogue rather than this manifest.
   profile: false,

@@ -1,3 +1,5 @@
+import { isLoggedEvent } from "../server/chat-log.js";
+
 // The live-record store every non-Pi adapter needs: the id and chat indexes, the
 // attached browser sockets, and the replay buffer. Codex and ChatGPT Web wrote
 // this identically; adapters now compose it instead so a new harness inherits
@@ -12,8 +14,10 @@ export class SessionRecords {
    * @param backend the `{ protocol, implementation, installationId }` stamp for views
    * @param extras per-record view fields this backend adds (title, linkUrl, ...)
    * @param onPublish side effect before broadcast, e.g. the ChatGPT Web journal
+   * @param logs the per-chat order, for a backend whose transcript is stated
    */
-  constructor({ capabilities, backend, extras = () => ({}), onPublish = null }) {
+  constructor({ capabilities, backend, extras = () => ({}), onPublish = null, logs = null }) {
+    this.logs = logs;
     this.capabilities = capabilities;
     this.backend = backend;
     this.extras = extras;
@@ -87,12 +91,29 @@ export class SessionRecords {
     };
   }
 
+  /**
+   * The order this record's events belong to.
+   *
+   * It is the chat's, not the process's, so a restarted daemon goes on
+   * numbering where the last one stopped. A record with no chat -- a driven
+   * thread, an ephemeral probe -- has no transcript to keep an order for, and a
+   * backend that states no transcript was given no log to keep one in.
+   */
+  logFor(record) {
+    return record?.chatId && !record.ephemeral ? this.logs?.get(record.chatId) || null : null;
+  }
+
   publish(record, event) {
     record.updatedAt = new Date().toISOString();
-    record.events.push(event);
+    // Numbered before it is buffered or sent, so the replay a reconnecting
+    // browser reads carries the same sequence the live stream did.
+    const log = this.logFor(record);
+    const stamped = log && isLoggedEvent(event) ? log.stamp(event) : event;
+    record.events.push(stamped);
     if (record.events.length > 500) record.events.splice(0, record.events.length - 500);
-    this.onPublish?.(record, event);
-    for (const socket of record.clients) if (socket.readyState === 1) socket.send(JSON.stringify(event));
+    this.onPublish?.(record, stamped);
+    for (const socket of record.clients) if (socket.readyState === 1) socket.send(JSON.stringify(stamped));
+    return stamped;
   }
 
   // A reconnecting browser replays the whole buffer before it sees live events,

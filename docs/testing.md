@@ -138,6 +138,23 @@ rows and their order.
 CONDUIT_PI_TRACE=/tmp/pi-trace.jsonl bash .devcontainer/start-conduit.sh restart
 ```
 
+## What a transcript ends up looking like
+
+Two tests own this question, one per backend that states its own transcript.
+Both describe the rows a reader should see rather than what the code does, so a
+bug that makes a transcript wrong without making a unit test wrong fails here.
+
+- `test/transcript-pipeline.test.js` -- Pi, faked at its stdio, through the real
+  manager, command handling, normalizers and client projection. Conduit names
+  the messages.
+- `test/codex-transcript-pipeline.test.js` -- Codex, faked at its JSON-RPC wire,
+  through the real adapter, chat log, command handling and the same client
+  projection. Codex names the messages; Conduit still states where they go.
+- `test/codex-end-to-end.test.js` -- the same rows again, but with a real
+  Conduit process, a real chat and a real WebSocket, against the fake
+  app-server daemon in `test/helpers/conduit-harness.js`. Slower, and it cannot
+  hold a turn open mid-flight, which is why the pipeline test above exists too.
+
 ## Other tests
 
 ```bash

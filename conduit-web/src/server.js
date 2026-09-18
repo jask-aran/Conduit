@@ -150,6 +150,10 @@ const manager = new PiManager({
 // parallel so four three-second timeouts cost three seconds, not twelve.
 const harnessConfig = {
   manager,
+  // The same per-chat order the Pi manager stamps into, so a harness that
+  // states its transcript numbers its events in the chat's sequence rather
+  // than one of its own.
+  logs: chatLogs,
   codexCommand: process.env.CONDUIT_CODEX_COMMAND || "codex",
   chatgptWebPython: process.env.CONDUIT_CHATGPT_WEB_PYTHON
     || path.join(config.repositoryRoot, "working-files/.venv/bin/python"),

@@ -188,12 +188,15 @@ test("Codex app-server profile creates, streams, and reconnects through neutral 
     await stream.opened;
     await stream.next((event) => event.type === "runtime_state");
     stream.socket.send(JSON.stringify({ type: "prompt", message: "Test Codex" }));
-    assert.equal((await stream.next((event) => event.type === "assistant_content" && event.phase === "delta")).delta, "codex-test low works");
+    // The turn narrates before it answers, so this waits for the answer rather
+    // than the first thing the turn says.
+    const answerDelta = (event) => event.type === "assistant_content" && event.phase === "delta" && event.delta.includes("works");
+    assert.equal((await stream.next(answerDelta)).delta, "codex-test low works");
     await stream.next((event) => event.type === "status" && event.detail === "settled");
     stream.close();
     const reattached = harness.connectStream(live.id);
     await reattached.opened;
-    assert.equal((await reattached.next((event) => event.type === "assistant_content" && event.phase === "delta")).delta, "codex-test low works");
+    assert.equal((await reattached.next(answerDelta)).delta, "codex-test low works");
   } finally {
     await harness.stop();
   }

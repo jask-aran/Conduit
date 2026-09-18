@@ -16,6 +16,11 @@ export const manifest = {
   nameGeneration: "conduit",
   // Every item the app-server reports carries its own id.
   suppliesMessageIds: true,
+  // Naming its own items is not the same as stating where they go. A steer, a
+  // follow-up and an interrupt all reorder a turn, and the app-server reports
+  // the pieces without saying what the transcript now reads as -- so Conduit
+  // states it, using Codex's names rather than minting its own.
+  statedTranscript: true,
   serviceLevels: [
     { id: "default", label: "Normal" },
     { id: "priority", label: "Priority" },
@@ -26,5 +31,5 @@ export const manifest = {
   drive: true,
   profile: true,
   probe: (config) => commandProbe(config.codexCommand)(),
-  build: (config) => new CodexAppServerAdapter({ command: config.codexCommand }),
+  build: (config) => new CodexAppServerAdapter({ command: config.codexCommand, logs: config.logs }),
 };
