@@ -138,11 +138,17 @@ const lastPromptIndex = (messages: Message[]) => {
  * yet, and the last prompt is the one being answered.
  */
 const liveOwnerIndex = (messages: Message[], generation?: ActiveGenerationView | null) => {
-  const answers = new Set((generation?.assistantMessages || []).map((message) => message.id));
-  const answerIndex = answers.size
-    ? messages.findIndex((message) => answers.has(message.id))
+  const live = new Set((generation?.assistantMessages || []).map((message) => message.id));
+  const answerIndex = live.size
+    ? messages.findIndex((message) => live.has(message.id))
     : -1;
   if (answerIndex < 0) return lastPromptIndex(messages);
+  // The row the server placed for this answer says which prompt it answers.
+  const stated = messages[answerIndex]!.answers;
+  if (stated) {
+    const owner = messages.findIndex((message) => message.id === stated);
+    if (owner >= 0) return owner;
+  }
   for (let index = answerIndex - 1; index >= 0; index -= 1) {
     const message = messages[index]!;
     if (message.role === "user" && !message.pending) return index;
@@ -482,10 +488,17 @@ function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById
   const segments: TraceSegment[] = [];
   const claimed = new Set<string>();
   const finalAssistant = turn.assistants.at(-1) || null;
+  // A message that says what it is -- answer or the turn talking as it works --
+  // is taken at its word. Only a message from a backend that states nothing
+  // falls back to reading the turn's shape: anything before its last tool call
+  // is narration, which is right for a turn that ran to completion and wrong
+  // for one that was steered after it had already answered.
   const lastToolAssistantIndex = turn.assistants.findLastIndex((assistant) => toolCallIdsOf(assistant).length > 0);
-  const answerAssistants = turn.assistants.filter((assistant, assistantIndex) => assistant.stopReason !== "toolUse"
-    && assistantIndex > lastToolAssistantIndex
-    && !(assistant.stopReason === "error" && assistant !== finalAssistant));
+  const answerAssistants = turn.assistants.filter((assistant, assistantIndex) => {
+    if (assistant.stopReason === "error" && assistant !== finalAssistant) return false;
+    if (assistant.interim !== undefined) return !assistant.interim;
+    return assistant.stopReason !== "toolUse" && assistantIndex > lastToolAssistantIndex;
+  });
   for (const assistant of turn.assistants) {
     const thinking = thinkingOf(assistant);
     if (thinking) segments.push({ kind: "thinking", id: `thinking:${assistant.id}`, text: thinking });
@@ -535,34 +548,54 @@ export function projectPersistedTurns(
   tools: ToolItem[],
   previous: PersistedTurnProjection[] = [],
 ): { rows: TurnRow[]; turns: PersistedTurnProjection[] } {
+  // Prompts first, so an answer can be given to the prompt it names whether or
+  // not that prompt has been reached yet. Assigning as we go made grouping
+  // depend on the order the rows happen to be in, which is the thing being
+  // replaced.
   const turns: PersistedTurn[] = [];
+  const byPrompt = new Map<string, PersistedTurn>();
+  const turnAt = new Map<Message, PersistedTurn>();
   let current: PersistedTurn = { userMessage: null, assistants: [], leftoverTools: [] };
-  for (const message of messages) {
-    if (message.role === "user") {
-      turns.push(current);
-      current = { userMessage: message, assistants: [], leftoverTools: [] };
-    } else if (message.role === "assistant") {
-      // An answer still arriving is drawn by the live overlay, not from here.
-      // Its row is in the list all the same, holding the place the overlay is
-      // drawn in, and settles into an ordinary answer when the turn ends.
-      if (!message.streaming) current.assistants.push(message);
-    }
-  }
   turns.push(current);
+  for (const message of messages) {
+    if (message.role !== "user") { turnAt.set(message, current); continue; }
+    current = { userMessage: message, assistants: [], leftoverTools: [] };
+    turns.push(current);
+    if (message.id) byPrompt.set(message.id, current);
+  }
+  for (const message of messages) {
+    if (message.role !== "assistant") continue;
+    // An answer still arriving is drawn by the live overlay, not from here. Its
+    // row is in the list all the same, holding the place the overlay is drawn
+    // in, and settles into an ordinary answer when the turn ends.
+    if (message.streaming) continue;
+    // An answer belongs to the prompt it says it answers. Reading that off the
+    // transcript instead -- whichever prompt the row happens to sit under --
+    // is the guess that put one turn's work beneath another turn's prompt.
+    const stated = message.answers ? byPrompt.get(message.answers) : null;
+    (stated || turnAt.get(message) || current).assistants.push(message);
+  }
 
   const referenced = new Set<string>();
   for (const turn of turns) for (const assistant of turn.assistants) for (const id of toolCallIdsOf(assistant)) referenced.add(id);
+  // A message states the tools it called, so a tool has an owner or it has not
+  // run yet -- in which case the live overlay is drawing it and the transcript
+  // has nothing to say about it. Only a backend that states no ownership falls
+  // back to matching tools to turns by timestamp.
+  const statesOwnership = messages.some((message) => message.answers);
   const timedTurns = turns.filter((turn) => turn.userMessage);
-  for (const tool of tools) {
-    if (referenced.has(tool.id)) continue;
-    const timestamp = Date.parse(tool.timestamp || "") || 0;
-    let owner: PersistedTurn | null = null;
-    for (const turn of timedTurns) {
-      const userTimestamp = Date.parse(turn.userMessage!.timestamp || "") || 0;
-      if (userTimestamp <= timestamp) owner = turn;
+  if (!statesOwnership) {
+    for (const tool of tools) {
+      if (referenced.has(tool.id)) continue;
+      const timestamp = Date.parse(tool.timestamp || "") || 0;
+      let owner: PersistedTurn | null = null;
+      for (const turn of timedTurns) {
+        const userTimestamp = Date.parse(turn.userMessage!.timestamp || "") || 0;
+        if (userTimestamp <= timestamp) owner = turn;
+      }
+      const fallback = owner || turns[turns.length - 1];
+      if (fallback) fallback.leftoverTools.push(tool);
     }
-    const fallback = owner || turns[turns.length - 1];
-    if (fallback) fallback.leftoverTools.push(tool);
   }
 
   const previousByKey = new Map(previous.map((turn) => [turn.key, turn]));

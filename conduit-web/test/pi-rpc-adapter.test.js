@@ -33,9 +33,11 @@ test("Pi adapter maps required neutral events and retains Pi richness", () => {
     generationId: "g1", pi: sync, type: "transcript_sync",
     messages: [{ id: "user-1", role: "user" }], tools: [],
   });
-  const reset = { ...sync, generationId: null, replaceAll: true };
+  // The whole transcript, for a client that lost its place in the chat's order
+  // and has to take a fresh copy rather than fold this into what it holds.
+  const reset = { ...sync, generationId: null, replace: true };
   assert.deepEqual(normalizePiBackendEvent(reset), {
-    generationId: null, pi: reset, type: "transcript_sync", replaceAll: true,
+    generationId: null, pi: reset, type: "transcript_sync", replace: true,
     messages: [{ id: "user-1", role: "user" }], tools: [],
   });
   const user = { type: "message_end", generationId: "g1", message: { id: "u1", role: "user", content: "Hi" } };

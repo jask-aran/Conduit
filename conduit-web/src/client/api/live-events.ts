@@ -31,7 +31,16 @@ export interface SessionSnapshot {
   capabilities: ChatCapabilities | null;
 }
 
-interface EventBase { generationId: string | null }
+/**
+ * The place an event holds in its chat's order, when it holds one.
+ *
+ * Only events that change what the transcript says are numbered, so an
+ * unstamped event is not a hole -- it is a delta, or state, which the next
+ * numbered event restates anyway.
+ */
+export interface LogStamp { id: string; seq: number }
+
+interface EventBase { generationId: string | null; log?: LogStamp }
 export type StructuredGenerationType =
   | "generation_resume"
   | "generation_started"
@@ -78,7 +87,14 @@ export type LiveEvent = EventBase & (
   | { type: "history_truncated"; beforeMessageId: string | null }
   | { type: "session_checkpoint"; chatId: string; title: string | null; chat: ChatSummary | null; generationSeq: number | null; artifacts: TurnArtifactSummary[] | null }
   | { type: "user_message_committed"; message: ProtocolMessage }
-  | { type: "transcript_sync"; messages: unknown[]; tools: unknown[] }
+  | { type: "transcript_sync"; messages: unknown[]; tools: unknown[]; replace?: boolean }
+  | { type: "transcript_op"; op: "message.open"; message: ProtocolMessage; after: string | null;
+    answers: string | null }
+  | { type: "transcript_op"; op: "message.close"; messageId: string; stopReason: string | null;
+    content: string; blocks: unknown[]; interim: boolean }
+  | { type: "transcript_op"; op: "message.drop"; messageId: string; inclusive: boolean }
+  | { type: "log_state"; log: LogStamp }
+  | { type: "log_reset" }
   | StructuredGenerationEvent
   | { type: "runtime_error" | "client_error"; code: string; message: string }
   | { type: "runtime_exit"; deliberate: boolean }
@@ -186,7 +202,26 @@ function protocolMessage(value: unknown): ProtocolMessage {
   };
 }
 
+function logStamp(value: unknown): LogStamp | undefined {
+  const source = record(value);
+  const id = optionalText(source.id);
+  const seq = number(source.seq);
+  return id && seq !== undefined ? { id, seq } : undefined;
+}
+
+/**
+ * Keep the event's place in the order on whatever shape it normalizes into.
+ *
+ * Every case below builds its own object, so a stamp added to one of them
+ * would be dropped by all the others. It is put back here, once.
+ */
 export function normalizeLiveEvent(value: unknown): LiveEvent {
+  const stamp = logStamp(record(value).log);
+  const normalized = normalizeLiveEventBody(value);
+  return stamp ? { ...normalized, log: stamp } as LiveEvent : normalized;
+}
+
+function normalizeLiveEventBody(value: unknown): LiveEvent {
   const source = record(value);
   const sourceType = text(source.type);
   const generationId = optionalText(source.generationId);
@@ -245,7 +280,33 @@ export function normalizeLiveEvent(value: unknown): LiveEvent {
     // Read compatibility for events retained by older ChatGPT Web journals.
     case "transcript_message": return { type: "user_message_committed", generationId, message: protocolMessage(source.message) };
     case "user_message_committed": return { type: "user_message_committed", generationId, message: protocolMessage(source.message) };
-    case "transcript_sync": return { type: "transcript_sync", generationId, messages: list(source.messages), tools: list(source.tools) };
+    case "transcript_sync": return { type: "transcript_sync", generationId, messages: list(source.messages), tools: list(source.tools),
+      ...(source.replace ? { replace: true } : {}) };
+    // The server stating the transcript's shape. Nothing reads these yet: they
+    // are published so the order they describe can be checked against the
+    // transcript the client still builds for itself.
+    case "transcript_op": {
+      const op = text(source.op);
+      if (op === "message.open") {
+        return { type: "transcript_op", op, generationId, message: protocolMessage(source.message),
+          after: optionalText(source.after), answers: optionalText(source.answers) };
+      }
+      if (op === "message.close") {
+        return { type: "transcript_op", op, generationId, messageId: text(source.messageId),
+          stopReason: optionalText(source.stopReason), content: text(source.content), blocks: list(source.blocks),
+          interim: Boolean(source.interim) };
+      }
+      if (op === "message.drop") {
+        return { type: "transcript_op", op, generationId, messageId: text(source.messageId),
+          inclusive: Boolean(source.inclusive) };
+      }
+      return { type: "unknown", sourceType, generationId };
+    }
+    case "log_state": {
+      const stamp = logStamp(source.log);
+      return stamp ? { type: "log_state", generationId, log: stamp } : { type: "unknown", sourceType, generationId };
+    }
+    case "log_reset": return { type: "log_reset", generationId };
     case "runtime_state": {
       if (!Object.keys(record(source.session)).length && source.lifecycle) {
         const active = source.lifecycle === "working" || source.status === "working";

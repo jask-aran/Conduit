@@ -256,6 +256,18 @@ export interface Message {
    * and the live overlay draws over this row rather than beside it.
    */
   streaming?: boolean;
+  /**
+   * The prompt this answer answers, as the server stated it when it named the
+   * message. Turns are grouped by this rather than by reading the transcript
+   * and deciding which prompt a row appears to sit under.
+   */
+  answers?: string | null;
+  /**
+   * The turn talking as it works, rather than answering: stated by the server
+   * when it finished the message, so the split between the trace and the answer
+   * is not re-derived here from the shape of the turn around it.
+   */
+  interim?: boolean;
   queueMode?: "steer" | "follow_up";
   attachments?: Attachment[];
   order?: number;

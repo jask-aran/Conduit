@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
+import fsSync from "node:fs";
 import path from "node:path";
 import { projectEnvironment } from "./project-environment.js";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
@@ -19,6 +20,8 @@ import {
 import { createPiEventNormalizer } from "./pi-event-normalizer.js";
 import { projectSessionEntries, readSessionPage } from "./session-store.js";
 import { PiCommandCatalog } from "./pi-command-catalog.js";
+import { ChatLogs, isLoggedEvent } from "./server/chat-log.js";
+import { messageIsInterim, textBlockClassifications } from "./active-generation.js";
 
 export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = "", models, template }) {
   const args = [
@@ -207,6 +210,22 @@ function deliveryEventBytes(event) {
   return Buffer.byteLength(JSON.stringify(event));
 }
 
+/**
+ * Record the harness conversation verbatim, when asked.
+ *
+ * Off unless `CONDUIT_PI_TRACE` names a file. What the transcript ends up
+ * looking like depends on the order Pi says things in, so a test that guesses
+ * at that order proves nothing; this is how a real sequence is captured and
+ * turned into one.
+ */
+function traceHarness(direction, chatId, line) {
+  if (!process.env.CONDUIT_PI_TRACE) return;
+  try {
+    fsSync.appendFileSync(process.env.CONDUIT_PI_TRACE,
+      `${JSON.stringify({ at: Date.now(), direction, chatId, line })}\n`);
+  } catch { /* tracing never breaks a turn */ }
+}
+
 const ABORT_TERMINAL_EVENTS = new Set(["tool_execution_end", "message_end", "turn_end"]);
 /** An answer slower than this is worth a line in the log; it is what a slow chat feels like. */
 const SLOW_RPC_MS = 2_000;
@@ -230,6 +249,9 @@ export class PiManager extends EventEmitter {
     deliveryMaxNotificationBytes = 64 * 1024,
     now = () => Date.now(),
     serializeEvent = JSON.stringify,
+    // The chat-level event order. Shared with the rest of the server, so a
+    // client is caught up from the same numbers whoever published them.
+    logs = new ChatLogs(),
   } = {}) {
     super();
     if (!agentDir) throw new Error("PiManager requires an isolated agent directory");
@@ -239,6 +261,7 @@ export class PiManager extends EventEmitter {
     this.template = template;
     this.commandCatalog = new PiCommandCatalog(agentDir);
     this.processes = new Map();
+    this.logs = logs;
     this.byChatId = new Map();
     this.bySessionFile = new Map();
     this.requestSequence = 0;
@@ -552,6 +575,8 @@ export class PiManager extends EventEmitter {
       terminating: false,
       pendingRequests: new Map(),
       pendingQueuedPrompts: [],
+      // Names claimed for queued messages, spent in order as Pi writes them.
+      queuedMessageIds: [],
       statsTimer: null,
       // Pi is "running" the moment the OS spawns it, which is not the moment it
       // can answer. Restoring a large session takes it seconds, and an RPC sent
@@ -660,6 +685,7 @@ export class PiManager extends EventEmitter {
       const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
       if (!line.trim()) continue;
       try {
+        traceHarness("in", record.chatId, line);
         const event = JSON.parse(line);
         this.captureSession(record, event);
         if (event.type === "response" && event.id && record.pendingRequests.has(event.id)) {
@@ -893,9 +919,12 @@ export class PiManager extends EventEmitter {
     };
     record.generationNormalizer = createPiEventNormalizer(generationId, {
       claimMessageId: () => {
-        if (!claims?.assistant) return null;
-        if (!claims.assistantUsed) {
+        // Every answer says which prompt it answers, so nothing downstream has
+        // to work that out from where the row happens to sit.
+        const answers = claims?.answersAfter || claims?.user || record.lastQueuedMessageId || null;
+        if (claims?.assistant && !claims.assistantUsed) {
           claims.assistantUsed = true;
+          this.openMessage(record, claims.assistant, "assistant", { answers });
           return claims.assistant;
         }
         // A turn writes more than one message whenever it calls a tool, and
@@ -903,7 +932,15 @@ export class PiManager extends EventEmitter {
         // rest streaming under a name invented for the stream and settling
         // under one derived from the entry -- the same message, twice, until
         // the page was reloaded.
-        return claims.claimAnswer?.() || null;
+        // Every further message a turn writes is named as it starts -- by the
+        // turn's own claim function, or, for a turn Conduit never prompted, by
+        // the chat's. Only a chat whose harness names its own messages falls
+        // through to an id invented for this stream.
+        const named = claims?.claimAnswer?.(claims.answersAfter)
+          || record.claimMessage?.("assistant", claims?.answersAfter || null)
+          || null;
+        if (named) this.openMessage(record, named, "assistant", { answers });
+        return named;
       },
     });
     const [started] = record.generationNormalizer.normalize({
@@ -920,12 +957,25 @@ export class PiManager extends EventEmitter {
     record.generationNormalizer = previous.generationNormalizer;
   }
 
-  /** Open a generation for a turn Pi started itself, from its own queue. */
+  /**
+   * Open a generation for a turn Pi started itself, from its own queue.
+   *
+   * Conduit did not prompt this turn, so it has no pair of names ready for it.
+   * It can still name what the turn writes: the chat's ledger is reachable
+   * through the claim function the stream left on the record, and the message
+   * being answered is the queued one Pi has just taken. Without this the
+   * answers to a follow-up streamed under ids invented for the stream and
+   * settled under ids derived from Pi's entries -- the same message, twice.
+   */
   beginQueuedGeneration(record) {
     record.pendingQueuedPrompts.shift();
     const generationId = `g${++record.generationSequence}`;
-    const structured = this.beginActiveGeneration(record, generationId, "");
-    record.generation = { id: generationId, closed: false, settled: false, continuationBase: "" };
+    const claims = record.claimAnswer
+      ? { claimAnswer: record.claimAnswer, answersAfter: record.lastQueuedMessageId || null,
+        userUsed: true, assistantUsed: true }
+      : null;
+    const structured = this.beginActiveGeneration(record, generationId, "", claims);
+    record.generation = { id: generationId, closed: false, settled: false, continuationBase: "", claims };
     record.active = true;
     record.stopping = false;
     record.activity = "working";
@@ -948,6 +998,15 @@ export class PiManager extends EventEmitter {
     for (const event of events) {
       record.activeGeneration = reduceActiveGeneration(record.activeGeneration, event);
       this.publishTransient(record, event);
+      // The turn's own statements about the transcript, made from the state
+      // just reduced: what the message it finished says, and which of the rows
+      // it named it never wrote into.
+      if (event.type === "assistant_message_completed" && event.messageId) {
+        this.closeMessage(record, event.messageId, event.stopReason || null);
+      }
+      if (["generation_stopped", "generation_settled", "generation_failed"].includes(event.type)) {
+        this.dropUnwrittenMessages(record);
+      }
     }
     return events;
   }
@@ -979,6 +1038,7 @@ export class PiManager extends EventEmitter {
     const record = this.processes.get(id);
     if (!record || !["starting", "running"].includes(record.status)) throw new Error("Pi session process is not running");
     const line = typeof value === "string" ? value : JSON.stringify(value);
+    traceHarness("out", record.chatId, line);
     record.child.stdin.write(`${line}\n`);
     if (typeof value === "object" && value?.type === "prompt") {
       setTimeout(() => {
@@ -1174,7 +1234,7 @@ export class PiManager extends EventEmitter {
     return { generationId, attachmentIdentity: { afterMessageId } };
   }
 
-  async queueAccepted(id, type, message, { attachments = [] } = {}) {
+  async queueAccepted(id, type, message, { attachments = [], messageId = null } = {}) {
     if (!new Set(["steer", "follow_up"]).has(type)) throw new Error("Invalid queued prompt type");
     const record = this.processes.get(id);
     if (!record) throw new Error("Unknown live session");
@@ -1188,7 +1248,11 @@ export class PiManager extends EventEmitter {
     record.attachmentQueueAnchor = afterMessageId;
     record.attachmentQueueOrdinal = ordinal + 1;
     const attachmentIdentity = { afterMessageId, ordinal };
-    record.pendingQueuedPrompts.push({ type, message, attachmentIds: attachments.map((item) => item.id), attachmentIdentity });
+    record.pendingQueuedPrompts.push({ type, message, messageId, attachmentIds: attachments.map((item) => item.id), attachmentIdentity });
+    // Pi says nothing about which entry a queued message becomes; it simply
+    // writes one when it takes it. The names wait here in the order they were
+    // queued and are spent in that order as the user messages come back.
+    if (messageId) record.queuedMessageIds.push(messageId);
     return { attachmentIdentity };
   }
 
@@ -1209,10 +1273,13 @@ export class PiManager extends EventEmitter {
       const local = pending.filter((item) => item.type === type || (type === "follow_up" && item.type === "followUp"));
       return local.length ? local : fallback;
     };
+    const discardedMessageIds = pending.map((item) => item.messageId).filter(Boolean);
+    record.queuedMessageIds = record.queuedMessageIds.filter((id) => !discardedMessageIds.includes(id));
     return {
       steering: queued("steer", data.steering || []),
       followUp: queued("follow_up", data.followUp || []),
       discardedAttachmentIdentities: pending.map((item) => item.attachmentIdentity),
+      discardedMessageIds,
     };
   }
 
@@ -1417,10 +1484,57 @@ export class PiManager extends EventEmitter {
       if (claims?.user && !claims.userUsed) {
         claims.userUsed = true;
         event = { ...event, message: { ...event.message, id: claims.user } };
+      } else if (record?.queuedMessageIds?.length || record?.claimMessage) {
+        // A message off the queue, or one Conduit never sent at all -- typed
+        // into the CLI of a thread driven from here. Either way this is the
+        // first moment it has a place in the transcript, and the first moment
+        // the log can state one, after whatever was said before it.
+        const queued = record.queuedMessageIds?.length
+          ? record.queuedMessageIds.shift()
+          : record.claimMessage?.("user");
+        if (!queued) return this.publishRaw(record, event);
+        record.lastQueuedMessageId = queued;
+        event = { ...event, message: { ...event.message, id: queued } };
+        this.openMessage(record, queued, "user", {
+          content: event.message.content, timestamp: event.message.timestamp,
+        });
+        // An answer this turn goes on to write follows the queued message, not
+        // the prompt that opened the turn: that prompt has been answered, and
+        // this is what the model is replying to now.
+        if (claims) claims.answersAfter = queued;
       }
     }
-    this.publishInternal(record, event);
-    this.deliver(record, event);
+    return this.publishRaw(record, event);
+  }
+
+  /** Publish without asking whose message it is; `publish` has already asked. */
+  publishRaw(record, event) {
+    const stamped = this.stampForLog(record, event);
+    this.publishInternal(record, stamped);
+    this.deliver(record, stamped);
+  }
+
+  /**
+   * Give an event its place in the chat's order, if it has one to hold.
+   *
+   * Only events that change what the transcript says are numbered. A client can
+   * then tell a hole from a quiet moment, and ask for what it missed instead of
+   * reloading the page to find out.
+   */
+  stampForLog(record, event) {
+    const log = this.logFor(record);
+    return log && isLoggedEvent(event) ? log.stamp(event) : event;
+  }
+
+  /**
+   * The order this record's events belong to.
+   *
+   * It is the chat's, not the process's, so a restarted or recycled Pi goes on
+   * numbering where the last one stopped. A record with no chat -- a driven
+   * thread, an ephemeral probe -- has no transcript to keep an order for.
+   */
+  logFor(record) {
+    return record?.chatId ? this.logs.get(record.chatId) : null;
   }
 
   publishInternal(record, event) {
@@ -1432,8 +1546,9 @@ export class PiManager extends EventEmitter {
 
   publishTransient(record, event) {
     this.touchActivity(record);
-    this.deliver(record, event);
-    this.emit("event", { record, event });
+    const stamped = this.stampForLog(record, event);
+    this.deliver(record, stamped);
+    this.emit("event", { record, event: stamped });
   }
 
   deliver(record, event) {
@@ -1570,6 +1685,91 @@ export class PiManager extends EventEmitter {
       return this.pauseDelivery(record, socket, state);
     }
     this.sendClientEvent(socket, event);
+  }
+
+  /**
+   * Say that a message now exists, and where.
+   *
+   * This is the moment a message is named -- the prompt as it is accepted, an
+   * answer as the harness starts writing it -- and saying so here is what
+   * removes the guesswork from the other end. The log decides the position; the
+   * browser is told one, rather than working one out from ids and content.
+   */
+  openMessage(record, id, role, { answers = null, ...fields } = {}) {
+    if (!id || !this.logFor(record)) return null;
+    // A turn is answerable for every message it opens. One it names and never
+    // writes -- an answer cancelled before its first token -- is dropped when
+    // the turn ends, so no row is left holding a place for something that will
+    // never arrive.
+    if (role === "assistant" && record.generation) {
+      record.generation.openMessages = record.generation.openMessages || new Set();
+      record.generation.openMessages.add(id);
+    }
+    this.publish(record, { type: "transcript_op", op: "message.open",
+      // The turn that is writing it, so a row holding a place for an answer
+      // that never arrives can be cleared along with the turn that named it.
+      ...(record.generation ? { generationId: record.generation.id } : {}),
+      // The prompt this message answers, for an answer. A prompt answers
+      // nothing and says so.
+      answers,
+      message: { id, role, ...fields } });
+    return id;
+  }
+
+  /**
+   * And that it is finished -- with the reason it stopped, and what it says.
+   *
+   * The text comes from the turn this process is running, not from the session
+   * file, because the file is written on the harness's own schedule: a turn cut
+   * off mid-sentence is on screen long before its entry exists on disk. Stating
+   * it from here means the browser never has to assemble a final answer out of
+   * the deltas it drew, and never has to decide whether to keep a row while it
+   * waits to find out.
+   */
+  closeMessage(record, id, stopReason = null) {
+    if (!id || !this.logFor(record)) return null;
+    record.generation?.openMessages?.delete(id);
+    const generation = record.activeGeneration;
+    const written = generation?.assistantMessages?.find((message) => message.id === id) || null;
+    const classifications = written ? textBlockClassifications(generation) : {};
+    const blocks = written?.blocks || [];
+    this.publish(record, {
+      type: "transcript_op", op: "message.close", messageId: id, stopReason,
+      // Whether this message is an answer or the turn talking as it works. The
+      // browser is told, rather than deciding it from the shape of the turn
+      // around the message.
+      interim: messageIsInterim(written),
+      content: blocks
+        .filter((block) => block.type === "text" && classifications[block.identity] === "answer")
+        .map((block) => block.text || "").join("\n"),
+      blocks: blocks.flatMap((block) => {
+        if (block.type === "thinking") return [{ type: "thinking", thinking: block.text || "" }];
+        if (block.type === "toolCall") {
+          return [{ type: "toolCall", id: block.toolCallId || block.identity, name: block.name, arguments: block.arguments }];
+        }
+        return [];
+      }),
+    });
+    return id;
+  }
+
+  /**
+   * Settle the rows a finished turn still holds open.
+   *
+   * A row is given up only when nothing was ever written into it. One that was
+   * being written when the turn ended is closed with what it had: the harness
+   * may never report that message -- an abort can end a turn without one -- and
+   * dropping it would take away text the user watched arrive.
+   */
+  dropUnwrittenMessages(record) {
+    const open = record.generation?.openMessages;
+    if (!open?.size) return;
+    for (const id of [...open]) {
+      const written = record.activeGeneration?.assistantMessages?.find((message) => message.id === id);
+      if (written?.blocks?.length) this.closeMessage(record, id, written.stopReason || "aborted");
+      else this.publish(record, { type: "transcript_op", op: "message.drop", messageId: id, inclusive: false });
+      open.delete(id);
+    }
   }
 
   publishGeneration(record, event, generation = record.generation) {

@@ -43,12 +43,28 @@ export function createLiveSessionStream({
   findRegisteredSession,
   chatModelView,
   messageIds,
+  chatLogs,
   backends = new ChatBackendRegistry(manager),
   lifecycle,
   autoNameSession = async () => {},
 }) {
   if (!lifecycle) throw new TypeError("Live session stream requires a chat lifecycle");
   const namingChats = new Set();
+
+  /**
+   * The chat's order, if it has one.
+   *
+   * Only where Conduit names the messages. A harness that supplies its own ids
+   * also states its own order through them, and its events do not pass through
+   * this log -- so offering a client a number to count from would promise a
+   * completeness nothing here maintains. An ephemeral record -- a driven
+   * thread, a probe -- has no transcript to keep an order for at all.
+   */
+  const logFor = (record) => {
+    if (!record?.chatId || record.ephemeral) return null;
+    if (!messageIds.owns(registry.metadata(record.chatId))) return null;
+    return chatLogs?.get(record.chatId) || null;
+  };
 
   function adapterFor(record) {
     if (record.ephemeral) return backends.adapterForRecord(record);
@@ -63,9 +79,28 @@ export function createLiveSessionStream({
     return messageIds.entryIdFor(context.project, context.chat, messageId);
   }
 
+  /**
+   * Let the process name anything the chat writes, not just what Conduit sent.
+   *
+   * Pi writes messages nobody here asked for: the answers to a turn it started
+   * off its own queue, a message typed into the CLI of a thread driven from
+   * here, the second and third answers of a turn that only claimed one. Those
+   * used to reach the transcript unnamed, streaming under an id invented for
+   * the stream and settling under one derived from the entry -- the same
+   * message twice. The process cannot reach the ledger itself, so it is handed
+   * the one way in, and the ledger is warmed so a name can be taken from inside
+   * the event loop where there is nothing to await.
+   */
+  function bindNaming(record, context) {
+    if (!record || record.ephemeral || !context || !messageIds.owns(context.chat)) return;
+    void messageIds.load(context.project, context.chat.id).catch(() => {});
+    record.claimMessage = (role, after = null) => messageIds.claimNow(context.chat, role, after);
+  }
+
   async function promptForChat(record, command, message) {
     const context = await findChatContext(record.chatId);
     if (!context) throw new Error("Chat no longer exists");
+    bindNaming(record, context);
     const selectedAttachments = await attachments.resolveMany(context.project, context.chat.id, command.attachmentIds);
     const prompt = message;
     // The harness owns transcript text. Conduit sends native attachment inputs
@@ -87,7 +122,10 @@ export function createLiveSessionStream({
   // out of a live generation and carries the same id, which is the only handle
   // an unwritten turn has. Without it the client has to guess where the range
   // belongs.
-  async function syncTranscript(record, turns = 1, generationId = null) {
+  // `replace` says the window is the whole of what the client should hold: it
+  // is the answer to a client that has lost its place in the chat's order and
+  // cannot be replayed back into it.
+  async function syncTranscript(record, turns = 1, generationId = null, { replace = false } = {}) {
     const adapter = adapterFor(record);
     if (record.ephemeral) return;
     try {
@@ -106,7 +144,7 @@ export function createLiveSessionStream({
         projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages, { fromStart: !turns });
         projection.messages = applyMessageIds(projection.messages,
           await messageIds.resolver(context.project, context.chat));
-        adapter.publish(record, { type: "transcript_sync", generationId, ...projection });
+        adapter.publish(record, { type: "transcript_sync", generationId, ...(replace ? { replace: true } : {}), ...projection });
       }
     } catch (error) {
       // A sync is a repair, never the only path to correctness.
@@ -155,17 +193,30 @@ export function createLiveSessionStream({
         assistant: await messageIds.mint(prepared.context.project, prepared.context.chat, "assistant", user),
         // Every further message this turn writes is named as it starts, so no
         // message is ever streamed under one name and stored under another.
-        claimAnswer: () => messageIds.claimNow(prepared.context.chat, "assistant", user),
+        claimAnswer: (after) => messageIds.claimNow(prepared.context.chat, "assistant", after || user),
       }
       : null;
+    // Stated before it is sent, not after it is accepted. The harness can begin
+    // answering while the prompt's own acceptance is still in flight, and an
+    // answer placed before its prompt existed put the prompt underneath its own
+    // reply -- and, because an answer belongs to the prompt it names, took the
+    // whole turn with it into the turn above.
+    if (claimed?.user) {
+      adapter.publish(record, { type: "transcript_op", op: "message.open", answers: null,
+        message: { id: claimed.user, role: "user", content: prepared.message, timestamp: new Date().toISOString() } });
+    }
     let accepted;
     try {
       accepted = await adapter.prompt(record.id, prepared.prompt,
         { ...promptOptions, attachments: prepared.attachments, ...(claimed ? { messageIds: claimed } : {}) });
     } catch (error) {
       // A prompt the harness refused writes nothing, so its names go back
-      // rather than waiting for messages that will never be written.
+      // rather than waiting for messages that will never be written -- and the
+      // row stated for it goes with them.
       await messageIds.release(prepared.context.project, prepared.context.chat, claimed);
+      if (claimed?.user) {
+        adapter.publish(record, { type: "transcript_op", op: "message.drop", messageId: claimed.user, inclusive: false });
+      }
       throw error;
     }
     const generationId = typeof accepted === "string" ? accepted : accepted?.generationId;
@@ -223,7 +274,14 @@ export function createLiveSessionStream({
    */
   function announceTruncation(record, beforeMessageId) {
     if (!beforeMessageId) return;
-    adapterFor(record).publish(record, { type: "history_truncated", beforeMessageId });
+    const adapter = adapterFor(record);
+    adapter.publish(record, { type: "history_truncated", beforeMessageId });
+    // The same fact in the chat's order, so the cut has a place in the sequence
+    // a client rebuilds from rather than only a message of its own.
+    if (logFor(record)) {
+      adapter.publish(record, { type: "transcript_op", op: "message.drop",
+        messageId: beforeMessageId, inclusive: true });
+    }
   }
 
   /**
@@ -250,9 +308,17 @@ export function createLiveSessionStream({
 
   async function clearQueuedMessages(record, adapter) {
     const taken = await adapter.clearQueue(record.id);
-    if (!record.ephemeral && taken?.discardedAttachmentIdentities?.length) {
-      const context = await findChatContext(record.chatId);
-      if (context) await attachments.discardMessages(context.project, context.chat.id, taken.discardedAttachmentIdentities);
+    if (record.ephemeral) return taken;
+    const context = await findChatContext(record.chatId);
+    if (!context) return taken;
+    if (taken?.discardedAttachmentIdentities?.length) {
+      await attachments.discardMessages(context.project, context.chat.id, taken.discardedAttachmentIdentities);
+    }
+    // A queued message taken back is a message that will never be written, so
+    // its name goes back too. Left in the queue it would be handed to the next
+    // entry along and shift every binding after it by one.
+    for (const messageId of taken?.discardedMessageIds || []) {
+      await messageIds.release(context.project, context.chat, { user: messageId });
     }
     return taken;
   }
@@ -284,9 +350,24 @@ export function createLiveSessionStream({
           console.warn("Could not capture steering checkpoint", error.message);
         }
       }
-      const accepted = await adapter.queue(record.id, command.type, prepared.prompt, { attachments: prepared.attachments });
+      // A queued message is named before it goes, exactly like a prompt. Pi
+      // writes it as an ordinary user entry whenever it takes it off the queue,
+      // and this is the name that entry binds to -- so the message the browser
+      // drew and the message the transcript records are one thing, rather than
+      // two that have to be matched up afterwards.
+      const queuedMessageId = await messageIds.claim(prepared.context.project, prepared.context.chat,
+        "user", offeredMessageId(command.messageId));
+      // A turn Pi starts for itself, off its own queue, still writes messages
+      // that need names. It cannot reach the ledger, so it is given the one way
+      // in that it needs.
+      if (queuedMessageId) {
+        record.claimAnswer = (after) => messageIds.claimNow(prepared.context.chat, "assistant", after || queuedMessageId);
+      }
+      const accepted = await adapter.queue(record.id, command.type, prepared.prompt,
+        { attachments: prepared.attachments, messageId: queuedMessageId });
       await attachments.recordMessage(prepared.context.project, prepared.context.chat.id,
-        accepted?.attachmentIdentity || null, prepared.attachments);
+        queuedMessageId ? { ...(accepted?.attachmentIdentity || {}), messageId: queuedMessageId } : accepted?.attachmentIdentity || null,
+        prepared.attachments);
       return null;
     }
     if (command.type === "clear_queue") {
@@ -410,6 +491,14 @@ export function createLiveSessionStream({
       cacheStats: record.cacheStats || null,
     })));
     if (record.lastCheckpoint) ws.send(JSON.stringify(adapter.toClientEvent(record.lastCheckpoint)));
+    // Where this chat's order stands right now. A client that was here before
+    // answers with how far it got, and is either caught up or told to start
+    // again from a snapshot; one arriving fresh simply adopts the number.
+    const log = logFor(record);
+    if (log) ws.send(JSON.stringify(adapter.toClientEvent({ type: "log_state", log: log.state() })));
+    // A chat can be written to without anyone prompting from here, so naming is
+    // set up on attach rather than waiting for the first prompt.
+    if (record.chatId) void findChatContext(record.chatId).then((context) => bindNaming(record, context)).catch(() => {});
     // One browser connection is one ordered command stream. Native harness
     // operations can be asynchronous, but a later clear, steer, or prompt must
     // not overtake an earlier one while attachment paths or an abort resolve.
@@ -423,6 +512,21 @@ export function createLiveSessionStream({
       let command;
       try { command = JSON.parse(String(data)); }
       catch (error) { report(Object.assign(error, { code: "invalid_request" })); return; }
+      // Catching one client up is answered on its own socket and changes
+      // nothing, so it never joins the ordered command chain or the chat
+      // lifecycle. Either the log still holds what it missed, and it is sent
+      // exactly that, or it is told to take the transcript again from scratch.
+      if (command.type === "resume_log") {
+        const chatLog = logFor(record);
+        const missed = chatLog?.since(command.logId, Number(command.since));
+        if (missed) {
+          for (const event of missed) ws.send(JSON.stringify(adapter.toClientEvent(event)));
+          return;
+        }
+        ws.send(JSON.stringify(adapter.toClientEvent({ type: "log_reset", log: chatLog?.state() || null })));
+        void syncTranscript(record, 10, null, { replace: true });
+        return;
+      }
       const bypassLifecycle = record.ephemeral || command.type === "stop_generation" || command.type === "abort";
       const run = () => bypassLifecycle ? handleClientCommand(record, command) : lifecycle.run(record.chatId, async () => {
         const context = await findChatContext(record.chatId);

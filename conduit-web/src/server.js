@@ -10,6 +10,7 @@ import { TerminalPasteStore } from "./terminal-paste-store.js";
 import { PiModelCatalog, resolveThinkingLevel } from "./pi-model-catalog.js";
 import { ProjectStore } from "./project-store.js";
 import { pageSessionEntries, projectSessionEntries, readSessionMetadata, readSessionPage } from "./session-store.js";
+import { ChatLogs } from "./server/chat-log.js";
 import { MessageIds, applyArtifactMessageIds, applyMessageIds, entryMessageRows } from "./message-ids.js";
 import { PiManager } from "./pi-manager.js";
 import { manifestForImplementation } from "./harnesses/index.js";
@@ -131,8 +132,12 @@ if (startupViolation) {
   console.error(startupViolation.message);
   process.exit(1);
 }
+// One order per chat, shared by everything that publishes into a chat: the
+// harness process, and the command handlers above it.
+const chatLogs = new ChatLogs();
 const manager = new PiManager({
   serializeEvent: serializePiV0,
+  logs: chatLogs,
   command: config.piCommand,
   agentDir: config.piAgentDir,
   template: config.piTemplate,
@@ -743,6 +748,7 @@ const liveSessionStream = createLiveSessionStream({
   findRegisteredSession,
   chatModelView,
   messageIds,
+  chatLogs,
   lifecycle,
   async autoNameSession(record, context, message) {
     const task = sessionNames.run({

@@ -289,7 +289,9 @@ test("PiManager publishes structured generation state without flattened stream e
   assert.equal(record.activeGeneration.id, generationId);
   assert.equal(record.activeGeneration.status, "running");
   assert.deepEqual(record.activeGeneration.assistantMessages[0], {
-    id: "m1",
+    // Pi streams nothing with a name, so an unclaimed answer is named after the
+    // generation writing it.
+    id: "g1:m1",
     status: "complete",
     stopReason: "stop",
     errorMessage: null,
@@ -349,6 +351,32 @@ test("attach returns complete reduced Resume State independent of the capped eve
   assert.equal(resume.generationId, generationId);
   assert.equal(resume.seq, record.activeGeneration.lastSeq);
   assert.equal(resume.generation.assistantMessages[0].blocks[0].text.length, 520);
+});
+
+test("a message Conduit never sent is still named, and still given a place", () => {
+  const { manager, child, record } = rpcFixture();
+  const published = [];
+  manager.on("event", ({ event }) => published.push(event));
+  // What the stream leaves on the record so a turn nobody here prompted -- a
+  // follow-up Pi takes off its own queue, a message typed into the CLI of a
+  // driven thread -- can still be named from the chat's ledger.
+  let claimed = 0;
+  record.claimMessage = (role) => `m_${role}_${++claimed}`;
+
+  child.stdout.write(`${JSON.stringify({ type: "turn_start" })}\n`);
+  child.stdout.write(`${JSON.stringify({
+    type: "message_end", message: { role: "user", content: "typed into the CLI" },
+  })}\n`);
+  child.stdout.write(`${JSON.stringify({ type: "message_start", message: { role: "assistant", content: [] } })}\n`);
+
+  const opened = published.filter((event) => event.type === "transcript_op" && event.op === "message.open");
+  assert.deepEqual(opened.map((event) => [event.message.role, event.message.id]),
+    [["user", "m_user_1"], ["assistant", "m_assistant_2"]]);
+  // The answer is placed after the message it answers, not at the end of
+  // whatever the client happens to hold.
+  assert.equal(opened[1].after, "m_user_1");
+  assert.equal(published.find((event) => event.type === "message_end")?.message.id, "m_user_1");
+  assert.equal(record.activeGeneration.assistantMessages[0].id, "m_assistant_2");
 });
 
 test("coalesces adjacent block deltas for each connected client", async () => {
@@ -736,4 +764,49 @@ test("tool and compaction events update coarse activity and publish state", () =
     willRetry: false,
   })}\n`);
   assert.equal(record.compacting, false);
+});
+
+test("a turn states what each message says, and gives up a row it never wrote into", () => {
+  const { manager, child, record } = rpcFixture();
+  const published = [];
+  manager.on("event", ({ event }) => published.push(event));
+  let claimed = 0;
+  record.claimMessage = (role) => `m_${role}_${++claimed}`;
+  manager.prompt(record.id, "Hello");
+
+  child.stdout.write(`${JSON.stringify({ type: "agent_start" })}\n`);
+  child.stdout.write(`${JSON.stringify({ type: "message_start", message: { role: "assistant", content: [] } })}\n`);
+  const partial = { role: "assistant", content: [{ type: "text", text: "Half a sen" }], stopReason: "aborted" };
+  child.stdout.write(`${JSON.stringify({
+    type: "message_update",
+    assistantMessageEvent: { type: "text_start", contentIndex: 0, partial: { ...partial, content: [{ type: "text", text: "" }] } },
+  })}\n`);
+  child.stdout.write(`${JSON.stringify({
+    type: "message_update",
+    assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "Half a sen", partial },
+  })}\n`);
+  child.stdout.write(`${JSON.stringify({ type: "message_end", message: partial })}\n`);
+
+  // The text a cut-off answer holds is stated by the process running the turn,
+  // not read back from a session file the harness has not written yet.
+  const closed = published.find((event) => event.type === "transcript_op" && event.op === "message.close");
+  assert.equal(closed.content, "Half a sen");
+  assert.equal(closed.stopReason, "aborted");
+  assert.equal(published.some((event) => event.type === "transcript_op" && event.op === "message.drop"), false);
+});
+
+test("an answer named but never written is taken back when the turn ends", () => {
+  const { manager, child, record } = rpcFixture();
+  const published = [];
+  manager.on("event", ({ event }) => published.push(event));
+  record.claimMessage = () => "m_never_written";
+  manager.prompt(record.id, "Hello");
+
+  child.stdout.write(`${JSON.stringify({ type: "message_start", message: { role: "assistant", content: [] } })}\n`);
+  child.stdout.write(`${JSON.stringify({ type: "agent_settled" })}\n`);
+
+  const opened = published.filter((event) => event.type === "transcript_op" && event.op === "message.open");
+  const dropped = published.filter((event) => event.type === "transcript_op" && event.op === "message.drop");
+  assert.equal(opened.length, 1);
+  assert.deepEqual(dropped.map((event) => [event.messageId, event.inclusive]), [[opened[0].message.id, false]]);
 });
