@@ -85,6 +85,15 @@ const controlDirectory = path.join(process.env.CODEX_HOME || path.join(os.homedi
 const socketPath = path.join(controlDirectory, "app-server-control.sock");
 const pidFile = path.join(controlDirectory, "daemon.pid");
 
+let turnCount = 0;
+let steerCount = 0;
+
+/** The text of a turn's input items, which is what a userMessage echoes back. */
+function inputText(input) {
+  return (Array.isArray(input) ? input : []).filter((item) => item && item.type === "text")
+    .map((item) => item.text || "").join("\\n").trim();
+}
+
 function handle(message, send) {
   if (message.method === "initialize") return send({ id: message.id, result: { userAgent: "conduit-test" } });
   if (message.method === "initialized") return;
@@ -114,11 +123,36 @@ function handle(message, send) {
   ] } });
   if (message.method === "turn/start") {
     const answer = [message.params.model, message.params.effort, "works"].filter(Boolean).join(" ");
-    send({ method: "turn/started", params: { turn: { id: "turn-test" } } });
-    send({ id: message.id, result: { turn: { id: "turn-test" } } });
-    send({ method: "item/agentMessage/delta", params: { turnId: "turn-test", itemId: "message-test", delta: answer } });
-    send({ method: "item/completed", params: { turnId: "turn-test", item: { id: "message-test", type: "agentMessage", text: answer } } });
-    send({ method: "turn/completed", params: { turn: { id: "turn-test", status: "completed" } } });
+    const turnId = "turn-" + (++turnCount);
+    send({ method: "turn/started", params: { turn: { id: turnId } } });
+    send({ id: message.id, result: { turn: { id: turnId } } });
+    // The prompt Conduit named, echoed back the way the app-server echoes it.
+    send({ method: "item/started", params: { turnId, item: { id: "item-user-" + turnCount,
+      clientId: message.params.clientUserMessageId, type: "userMessage",
+      content: [{ type: "text", text: inputText(message.params.input) }] } } });
+    // A full turn: it says what it is about to do, runs a command, and answers.
+    // A prompt that asks for the short version gets only the answer, so a test
+    // can choose which shape it is driving.
+    if (!/^short/.test(inputText(message.params.input))) {
+      send({ method: "item/agentMessage/delta", params: { turnId, itemId: "commentary-" + turnCount, delta: "Looking now." } });
+      send({ method: "item/completed", params: { turnId, item: { id: "commentary-" + turnCount,
+        type: "agentMessage", text: "Looking now.", phase: "commentary" } } });
+      send({ method: "item/started", params: { turnId, item: { id: "command-" + turnCount, type: "commandExecution", command: "echo hello" } } });
+      send({ method: "item/completed", params: { turnId, item: { id: "command-" + turnCount,
+        type: "commandExecution", command: "echo hello", aggregatedOutput: "hello", status: "completed" } } });
+    }
+    send({ method: "item/agentMessage/delta", params: { turnId, itemId: "message-" + turnCount, delta: answer } });
+    send({ method: "item/completed", params: { turnId, item: { id: "message-" + turnCount,
+      type: "agentMessage", text: answer, phase: "final_answer" } } });
+    send({ method: "turn/completed", params: { turn: { id: turnId, status: "completed" } } });
+    return;
+  }
+  if (message.method === "turn/steer") {
+    const turnId = message.params.expectedTurnId;
+    send({ id: message.id, result: {} });
+    send({ method: "item/started", params: { turnId, item: { id: "item-steer-" + (++steerCount),
+      clientId: message.params.clientUserMessageId, type: "userMessage",
+      content: [{ type: "text", text: inputText(message.params.input) }] } } });
     return;
   }
   if (message.method === "turn/interrupt") return send({ id: message.id, result: {} });

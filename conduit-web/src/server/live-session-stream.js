@@ -3,7 +3,7 @@ import { messagesFromEntries } from "../session-store.js";
 import { chatView } from "../chat-store.js";
 import { parseAttachmentEnvelope } from "../attachment-envelope.js";
 import { ChatBackendRegistry } from "../pi-rpc-adapter.js";
-import { manifestForImplementation } from "../harnesses/index.js";
+import { manifestForImplementation, statesTranscript } from "../harnesses/index.js";
 import { startWebSocketKeepalive } from "./ws-keepalive.js";
 import { applyMessageIds } from "../message-ids.js";
 
@@ -54,15 +54,16 @@ export function createLiveSessionStream({
   /**
    * The chat's order, if it has one.
    *
-   * Only where Conduit names the messages. A harness that supplies its own ids
-   * also states its own order through them, and its events do not pass through
-   * this log -- so offering a client a number to count from would promise a
-   * completeness nothing here maintains. An ephemeral record -- a driven
-   * thread, a probe -- has no transcript to keep an order for at all.
+   * Only where the server states the transcript. A harness whose transcript the
+   * client still assembles does not publish through this log, so offering a
+   * client a number to count from would promise a completeness nothing here
+   * maintains. Whether the names in that transcript are Conduit's or the
+   * harness's own is a separate question, and not this one. An ephemeral record
+   * -- a driven thread, a probe -- has no transcript to keep an order for.
    */
   const logFor = (record) => {
     if (!record?.chatId || record.ephemeral) return null;
-    if (!messageIds.owns(registry.metadata(record.chatId))) return null;
+    if (!statesTranscript(registry.metadata(record.chatId))) return null;
     return chatLogs?.get(record.chatId) || null;
   };
 

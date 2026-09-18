@@ -32,3 +32,17 @@ export const conduitOwnsMessageIds = (chat) => {
   const manifest = manifestForImplementation(chat?.backend?.implementation);
   return Boolean(manifest) && manifest.suppliesMessageIds === false;
 };
+
+/**
+ * Whether the server states this chat's transcript, instead of the client
+ * working it out.
+ *
+ * Separate from `conduitOwnsMessageIds`, which the two used to be one flag for.
+ * Who names a message and who decides where it goes are different questions: a
+ * harness can name every item it writes and still say nothing about the order
+ * those items belong in once an interrupt, a steer and a queued message are in
+ * play. A harness that states its transcript publishes `transcript_op` through
+ * the chat's log, whether the names in those ops are Conduit's or its own.
+ */
+export const statesTranscript = (chat) => Boolean(
+  manifestForImplementation(chat?.backend?.implementation)?.statedTranscript);

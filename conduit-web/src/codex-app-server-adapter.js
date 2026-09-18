@@ -98,7 +98,8 @@ const truncate = (output) => {
 
 export class CodexAppServerAdapter extends EventEmitter {
   constructor({ command = "codex", socketPath = path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"),
-    "app-server-control", "app-server-control.sock"), requestTimeoutMs = 15_000, discoveryIdleMs = 60_000 } = {}) {
+    "app-server-control", "app-server-control.sock"), requestTimeoutMs = 15_000, discoveryIdleMs = 60_000,
+    logs = null } = {}) {
     super();
     this.command = command;
     this.socketPath = socketPath;
@@ -112,7 +113,9 @@ export class CodexAppServerAdapter extends EventEmitter {
       capabilities: CODEX_CAPABILITIES,
       backend: { protocol: "native_api", implementation: "codex", installationId: "host-codex" },
       extras: (record) => ({ sessionId: record.sessionId || null }),
+      logs,
     });
+    this.logs = logs;
     // `start` indexes records directly; these are the store's own maps.
     this.records = this.sessions.records;
     this.byChatId = this.sessions.byChatId;
@@ -578,6 +581,98 @@ export class CodexAppServerAdapter extends EventEmitter {
   }
 
   /**
+   * Whether this record's transcript is stated rather than inferred.
+   *
+   * It is the log that makes a statement worth anything: without one there is
+   * no order to state a position in, and the browser would be told a place it
+   * has no way to hold.
+   */
+  states(record) {
+    return Boolean(this.sessions.logFor(record));
+  }
+
+  /**
+   * Say that a message now exists, and where.
+   *
+   * Codex names its own items, so these ops carry Codex's names. What Codex
+   * does not say is where a name belongs once a turn has been steered, queued
+   * into or interrupted -- and that is what the browser was left working out
+   * from ids, timestamps and the shape of the turn around a message.
+   */
+  openMessage(record, id, role, { answers = null, generationId = null, ...fields } = {}) {
+    if (!id || !this.states(record)) return null;
+    record.openMessages = record.openMessages || new Set();
+    if (role === "assistant") record.openMessages.add(id);
+    this.publish(record, { type: "transcript_op", op: "message.open",
+      ...(generationId ? { generationId } : {}),
+      answers, message: { id, role, ...fields } });
+    return id;
+  }
+
+  /** And that it is finished -- with the reason it stopped, and what it says. */
+  closeMessage(record, id, stopReason = null, { blocks = [], interim = false } = {}) {
+    if (!id || !this.states(record)) return null;
+    record.openMessages?.delete(id);
+    this.publish(record, {
+      type: "transcript_op", op: "message.close", messageId: id, stopReason,
+      // Whether this message is the answer or the turn talking as it works.
+      // Codex says so itself, in the phase it gives the item; the browser is
+      // told, rather than deciding it from what a later message went on to do.
+      interim,
+      // What the message says, answer or not. Interim text is the turn talking
+      // as it works, and the trace renders it: stating the message without it
+      // would leave the reader watching commentary arrive and then vanish when
+      // the turn settled.
+      content: blocks.filter((block) => block.kind === "text").map((block) => block.text || "").join("\n"),
+      blocks: blocks.flatMap((block) => {
+        if (block.kind === "thinking") return [{ type: "thinking", thinking: block.text || "" }];
+        if (block.kind === "tool_call") return [{ type: "toolCall", id: block.toolCallId || block.id, name: block.name, arguments: block.input }];
+        return [];
+      }),
+    });
+    return id;
+  }
+
+  /**
+   * A carrier the turn has moved on from is finished with what it holds.
+   *
+   * Codex reports its commands beside the messages rather than inside them, so
+   * a turn's commentary and the commands it ran share one row. When the turn
+   * starts writing a different item, that row is done.
+   */
+  settleCarrier(record, nextMessageId) {
+    const previous = record.turn;
+    if (!previous || previous.messageId === nextMessageId) return;
+    if (!record.openMessages?.has(previous.messageId)) return;
+    this.closeMessage(record, previous.messageId, "toolUse", { blocks: previous.blocks || [], interim: true });
+  }
+
+  /**
+   * Settle the rows a finished turn still holds open.
+   *
+   * A row is given up only when nothing was ever written into it: an answer
+   * named and then cut off before its first token. One that was being written
+   * keeps what it had, because an interrupted turn may never report the item
+   * at all and dropping it would take away text the reader watched arrive.
+   */
+  dropUnwrittenMessages(record, stopReason = "aborted") {
+    const open = record.openMessages;
+    if (!open?.size) return;
+    for (const id of [...open]) {
+      const written = record.turn?.messageId === id ? record.turn : null;
+      if (written?.blocks?.length) {
+        const interim = written.phase !== "final_answer"
+          && (written.phase != null || written.blocks.some((block) => block.kind === "tool_call") || !written.blocks.some((block) => block.kind === "text"));
+        this.closeMessage(record, id, interim ? "toolUse" : stopReason, { blocks: written.blocks, interim });
+      } else {
+        this.publish(record, { type: "transcript_op", op: "message.drop", messageId: id, inclusive: false });
+        open.delete(id);
+      }
+    }
+    open.clear();
+  }
+
+  /**
    * Hang a running command off the turn's assistant message.
    *
    * Conduit decides what belongs in the reasoning rollup from the content
@@ -590,6 +685,8 @@ export class CodexAppServerAdapter extends EventEmitter {
   attachToolCall(record, turnId, toolCallId, activity) {
     if (!record.turn || record.turn.id !== turnId) {
       const messageId = `tools-${turnId}-${record.eventSequence}`;
+      this.settleCarrier(record, messageId);
+      this.openMessage(record, messageId, "assistant", { answers: record.answering || null, generationId: turnId });
       this.publish(record, { type: "assistant_content", generationId: turnId, phase: "start",
         sequence: ++record.eventSequence, messageId });
       record.turn = { id: turnId, messageId, blocks: [] };
@@ -630,12 +727,23 @@ export class CodexAppServerAdapter extends EventEmitter {
       const steeringCount = record.steering.length;
       record.steering = record.steering.filter((item) => item.id !== messageId);
       if (record.steering.length !== steeringCount) this.publishQueue(record);
-      this.publish(record, { type: "user_message_committed", generationId: turnId,
-        message: { id: messageId, role: "user", content: CodexAppServerAdapter.itemText(params.item) } });
+      // A steered or CLI-typed message reaches the transcript here, and an
+      // answer that follows answers it rather than the prompt that opened the
+      // turn: that prompt has been answered, and this is what Codex is
+      // replying to now.
+      record.answering = messageId;
+      const content = CodexAppServerAdapter.itemText(params.item);
+      if (this.states(record)) {
+        this.openMessage(record, messageId, "user", { content, timestamp: new Date().toISOString() });
+      } else {
+        this.publish(record, { type: "user_message_committed", generationId: turnId,
+          message: { id: messageId, role: "user", content } });
+      }
     } else if (method === "item/agentMessage/delta") {
       const messageId = params.itemId || `assistant-${turnId}`;
       if (!record.messageIds.has(messageId)) {
         record.messageIds.add(messageId);
+        this.openMessage(record, messageId, "assistant", { answers: record.answering || null, generationId: turnId });
         this.publish(record, { type: "assistant_content", generationId: turnId, phase: "start",
           sequence: ++record.eventSequence, messageId });
       }
@@ -645,6 +753,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       const messageId = params.itemId || `reasoning-${turnId}`;
       if (!record.messageIds.has(messageId)) {
         record.messageIds.add(messageId);
+        this.openMessage(record, messageId, "assistant", { answers: record.answering || null, generationId: turnId });
         this.publish(record, { type: "assistant_content", generationId: turnId, phase: "start",
           sequence: ++record.eventSequence, messageId });
       }
@@ -653,19 +762,30 @@ export class CodexAppServerAdapter extends EventEmitter {
         blockKind: "thinking", delta: params.delta || "" });
     } else if (method === "item/completed" && params.item?.type === "agentMessage") {
       const messageId = params.item.id || `assistant-${turnId}`;
-      if (!record.messageIds.has(params.item.id)) this.publish(record, { type: "assistant_content", generationId: turnId,
-        phase: "start", sequence: ++record.eventSequence, messageId });
+      if (!record.messageIds.has(params.item.id)) {
+        record.messageIds.add(messageId);
+        this.openMessage(record, messageId, "assistant", { answers: record.answering || null, generationId: turnId });
+        this.publish(record, { type: "assistant_content", generationId: turnId,
+          phase: "start", sequence: ++record.eventSequence, messageId });
+      }
       const text = CodexAppServerAdapter.itemText(params.item);
+      const interim = params.item.phase !== "final_answer";
+      this.settleCarrier(record, messageId);
       record.turn = { id: turnId, messageId, phase: params.item.phase || null,
         blocks: [{ kind: "text", contentIndex: 0, text }] };
       this.publish(record, { type: "assistant_content", generationId: turnId, phase: "final", sequence: ++record.eventSequence,
-        messageId, stopReason: params.item.phase === "final_answer" ? "stop" : "toolUse",
+        messageId, stopReason: interim ? "toolUse" : "stop",
         errorMessage: null, blocks: record.turn.blocks });
     } else if (method === "item/completed" && params.item?.type === "reasoning") {
       const messageId = params.item.id || `reasoning-${turnId}`;
       const text = itemPartsText(params.item.summary);
-      if (!record.messageIds.has(messageId)) this.publish(record, { type: "assistant_content", generationId: turnId,
-        phase: "start", sequence: ++record.eventSequence, messageId });
+      if (!record.messageIds.has(messageId)) {
+        record.messageIds.add(messageId);
+        this.openMessage(record, messageId, "assistant", { answers: record.answering || null, generationId: turnId });
+        this.publish(record, { type: "assistant_content", generationId: turnId,
+          phase: "start", sequence: ++record.eventSequence, messageId });
+      }
+      this.settleCarrier(record, messageId);
       record.turn = { id: turnId, messageId, blocks: text
         ? [{ kind: "thinking", contentIndex: 0, text, redacted: false }]
         : [] };
@@ -700,12 +820,19 @@ export class CodexAppServerAdapter extends EventEmitter {
       record.activity = failed ? "failed" : "idle";
       if (record.generation) Object.assign(record.generation, { closed: true, settled: true });
       for (const [requestId, pending] of record.approvals) this.settleApproval(record, requestId, pending.generationId);
-      if (!failed && record.turn?.phase == null && record.turn?.blocks?.some((block) => block.kind === "text")
-        && !record.turn.blocks.some((block) => block.kind === "tool_call")) {
+      const promoted = !failed && record.turn?.phase == null && record.turn?.blocks?.some((block) => block.kind === "text")
+        && !record.turn.blocks.some((block) => block.kind === "tool_call");
+      if (promoted) {
         this.publish(record, { type: "assistant_content", generationId: turnId, phase: "final",
           sequence: ++record.eventSequence, messageId: record.turn.messageId, stopReason: "stop",
           errorMessage: null, blocks: record.turn.blocks });
+        this.closeMessage(record, record.turn.messageId, "stop", { blocks: record.turn.blocks, interim: false });
       }
+      // Whatever the turn still holds is settled with what it wrote, or given
+      // up if it wrote nothing -- so an interrupt leaves no row waiting for a
+      // message that is never coming.
+      this.dropUnwrittenMessages(record, failed || stopped ? "aborted" : "stop");
+      record.answering = null;
       this.publish(record, failed
         ? { type: "error", generationId: turnId, error: { code: "backend_unavailable", message: params.turn?.error?.message || "Codex turn failed" } }
         : { type: "status", generationId: turnId, sequence: ++record.eventSequence, status: "idle", activity: "idle", detail: "settled" });
@@ -810,16 +937,38 @@ export class CodexAppServerAdapter extends EventEmitter {
     const record = this.get(id);
     if (!record?.sessionId) throw error("Codex thread is not ready");
     const clientUserMessageId = options?.clientUserMessageId || crypto.randomUUID();
-    const result = await this.request(record, "turn/start", {
-      threadId: record.sessionId,
-      clientUserMessageId,
-      input: CodexAppServerAdapter.inputItems(message, options?.attachments),
-      ...(record.model ? { model: record.model } : {}),
-      ...(record.thinkingLevel ? { effort: record.thinkingLevel } : {}),
-      ...(record.serviceLevel ? { serviceTier: record.serviceLevel } : {}),
-      ...(record.permissionProfile ? { permissions: record.permissionProfile } : {}),
-      ...CodexAppServerAdapter.policy(record.approvalPolicy, record.approvalsReviewer),
+    // Stated before it is sent, not after Codex echoes it back. The prompt is
+    // the thing the next answer answers, so it has to be in the transcript
+    // before the answer arrives -- otherwise the answer is placed against
+    // whatever came before it, which is the previous turn.
+    record.messageIds.add(clientUserMessageId);
+    record.answering = clientUserMessageId;
+    this.openMessage(record, clientUserMessageId, "user", {
+      content: parseAttachmentEnvelope(message).message,
+      timestamp: new Date().toISOString(),
     });
+    let result;
+    try {
+      result = await this.request(record, "turn/start", {
+        threadId: record.sessionId,
+        clientUserMessageId,
+        input: CodexAppServerAdapter.inputItems(message, options?.attachments),
+        ...(record.model ? { model: record.model } : {}),
+        ...(record.thinkingLevel ? { effort: record.thinkingLevel } : {}),
+        ...(record.serviceLevel ? { serviceTier: record.serviceLevel } : {}),
+        ...(record.permissionProfile ? { permissions: record.permissionProfile } : {}),
+        ...CodexAppServerAdapter.policy(record.approvalPolicy, record.approvalsReviewer),
+      });
+    } catch (cause) {
+      // A prompt Codex refused writes nothing, so the row stated for it goes
+      // back rather than waiting for a turn that will never start.
+      record.messageIds.delete(clientUserMessageId);
+      record.answering = null;
+      if (this.states(record)) {
+        this.publish(record, { type: "transcript_op", op: "message.drop", messageId: clientUserMessageId, inclusive: false });
+      }
+      throw cause;
+    }
     return {
       generationId: result.turn?.id || record.generation?.id || null,
       attachmentIdentity: { messageId: clientUserMessageId },
