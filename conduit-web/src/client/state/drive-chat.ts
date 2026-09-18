@@ -73,6 +73,7 @@ export function createDriveChat(options: {
     projectId: () => "",
     refresh: async () => [],
     select: () => {},
+    patchChat: () => {},
   };
 
   const chat = createActiveChat({

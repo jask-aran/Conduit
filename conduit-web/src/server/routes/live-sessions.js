@@ -1,8 +1,10 @@
 import { createLiveSessionLauncher, maySpawnProcess } from "../live-session-launcher.js";
+import { applyMessageIds } from "../../message-ids.js";
 import { rememberModel } from "../../profile-model-memory.js";
 
 export function registerLiveSessionRoutes(app, {
   attachments,
+  messageIds,
   backends,
   catalogFor,
   config,
@@ -87,7 +89,11 @@ export function registerLiveSessionRoutes(app, {
         opaqueSession: context?.chat?.backend?.opaqueSession,
         project: context?.project,
       });
-      if (context) projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages);
+      if (context) {
+        projection.messages = applyMessageIds(
+          await attachments.decorateMessages(context.project, context.chat.id, projection.messages),
+          await messageIds.resolver(context.project, context.chat.id));
+      }
       response.json({ live: backends.view(live), events: live.events, ...projection });
     } catch (error) { next(error); }
   });
@@ -128,7 +134,11 @@ export function registerLiveSessionRoutes(app, {
       const transcript = await adapter.readTranscript({ liveSessionId: live.id, chatId: live.chatId });
       if (live.chatId) {
         const context = await findChatContext(live.chatId);
-        if (context) transcript.messages = await attachments.decorateMessages(context.project, context.chat.id, transcript.messages);
+        if (context) {
+          transcript.messages = applyMessageIds(
+            await attachments.decorateMessages(context.project, context.chat.id, transcript.messages),
+            await messageIds.resolver(context.project, context.chat.id));
+        }
       }
       response.json({ id: live.chatId || live.id, status: "active", ...transcript, attachments: [], page: { before: null } });
     } catch (error) { next(error); }

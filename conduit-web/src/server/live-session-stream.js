@@ -5,6 +5,20 @@ import { parseAttachmentEnvelope } from "../attachment-envelope.js";
 import { ChatBackendRegistry } from "../pi-rpc-adapter.js";
 import { manifestForImplementation } from "../harnesses/index.js";
 import { startWebSocketKeepalive } from "./ws-keepalive.js";
+import { applyMessageIds } from "../message-ids.js";
+
+/** Only Pi needs Conduit to supply message identity; every other harness has its own. */
+const needsMessageIds = (chat) => chat?.backend?.protocol === "pi_rpc";
+
+/**
+ * An id a client chose for the message it is sending.
+ *
+ * Accepted only in Conduit's own shape, so a client cannot name a message
+ * something that already means something else -- an existing message, or an id
+ * derived from a session entry.
+ */
+const CLIENT_MESSAGE_ID = /^m_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const offeredMessageId = (value) => (typeof value === "string" && CLIENT_MESSAGE_ID.test(value) ? value : null);
 
 export function interruptedPromptInput(taken, message, attachmentIds = []) {
   const queued = [...(taken?.steering || []), ...(taken?.followUp || [])]
@@ -31,6 +45,7 @@ export function createLiveSessionStream({
   findChatContext,
   findRegisteredSession,
   chatModelView,
+  messageIds,
   backends = new ChatBackendRegistry(manager),
   lifecycle,
   autoNameSession = async () => {},
@@ -41,6 +56,14 @@ export function createLiveSessionStream({
   function adapterFor(record) {
     if (record.ephemeral) return backends.adapterForRecord(record);
     return backends.forChat(registry.metadata(record.chatId));
+  }
+
+  // A target the client names is a Conduit message id; the harness knows only
+  // its own entry. Unknown ids pass straight through, so Pi's own history tree
+  // and any client that predates this still work.
+  async function harnessEntryId(context, messageId) {
+    if (!needsMessageIds(context?.chat)) return messageId;
+    return messageIds.entryIdFor(context.project, context.chat.id, messageId);
   }
 
   async function promptForChat(record, command, message) {
@@ -77,7 +100,11 @@ export function createLiveSessionStream({
         liveSessionId: record.id, chatId: record.chatId, project: context.project, turns,
       });
       if (projection.messages?.length) {
-        projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages);
+        projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages, { fromStart: !turns });
+        if (needsMessageIds(context.chat)) {
+          projection.messages = applyMessageIds(projection.messages,
+            await messageIds.resolver(context.project, context.chat.id));
+        }
         adapter.publish(record, { type: "transcript_sync", generationId, ...projection });
       }
     } catch (error) {
@@ -87,7 +114,7 @@ export function createLiveSessionStream({
   }
 
   async function sendPrompt(record, prepared, options) {
-    const { sourceCheckpointId = null, ...promptOptions } = options || {};
+    const { sourceCheckpointId = null, messageId = null, ...promptOptions } = options || {};
     const namingOwner = manifestForImplementation(record.adapterImplementation)?.nameGeneration;
     const needsName = namingOwner === "conduit" && !prepared.context.chat.title
       && !namingChats.has(prepared.context.chat.id);
@@ -107,10 +134,33 @@ export function createLiveSessionStream({
     } catch (error) {
       console.warn("Could not capture turn checkpoint", error.message);
     }
-    const accepted = await adapter.prompt(record.id, prepared.prompt, { ...promptOptions, attachments: prepared.attachments });
+    // Claimed before the prompt goes out, so the commit event that comes back
+    // can carry the id the transcript will eventually agree on.
+    // Both halves of the turn are named before it starts: the prompt, and the
+    // answer it will produce. They are handed to the harness with the prompt so
+    // they belong to that generation and nothing else can consume them. A turn
+    // that produces more than one answer runs out of claims, and the extras
+    // derive their ids from their entries like any message Conduit did not send.
+    let claimed = null;
+    if (needsMessageIds(prepared.context.chat)) {
+      claimed = {
+        // The browser names the message it is sending, so the row already on
+        // screen is that message rather than a stand-in. A caller that offers
+        // no name gets one here.
+        user: await messageIds.claim(prepared.context.project, prepared.context.chat.id, "user", messageId),
+        assistant: await messageIds.mint(prepared.context.project, prepared.context.chat.id, "assistant"),
+      };
+    }
+    const accepted = await adapter.prompt(record.id, prepared.prompt,
+      { ...promptOptions, attachments: prepared.attachments, ...(claimed ? { messageIds: claimed } : {}) });
     const generationId = typeof accepted === "string" ? accepted : accepted?.generationId;
+    // With an id of its own, a Pi prompt's attachments are found by that id
+    // like every other harness's, instead of by counting from an anchor.
+    // `attachmentIdentity` itself stays as the harness gave it: the turn
+    // checkpoint below anchors on harness entries, not on Conduit ids.
     await attachments.recordMessage(prepared.context.project, prepared.context.chat.id,
-      accepted?.attachmentIdentity || null, prepared.attachments);
+      claimed ? { ...(accepted?.attachmentIdentity || {}), messageId: claimed.user } : accepted?.attachmentIdentity || null,
+      prepared.attachments);
     if (checkpoint && generationId) {
       const messageId = typeof accepted === "object" ? accepted?.attachmentIdentity?.messageId : null;
       try { await turnCheckpoints.assignTurn(checkpoint, generationId, messageId); }
@@ -147,6 +197,20 @@ export function createLiveSessionStream({
     if (thinkingLevel && thinkingLevel !== current.thinkingLevel) await adapter.setThinkingLevel(record.id, thinkingLevel);
   }
 
+  /**
+   * Say where the history now ends.
+   *
+   * A fork abandons the message it was pointed at and everything after it, and
+   * the client is told that directly rather than being left to work it out from
+   * a transcript that may not exist yet: when the retained branch has no
+   * assistant message, Pi names the fork's file before writing it, and the sync
+   * below has nothing to read.
+   */
+  function announceTruncation(record, beforeMessageId) {
+    if (!beforeMessageId) return;
+    adapterFor(record).publish(record, { type: "history_truncated", beforeMessageId });
+  }
+
   async function syncForkedChat(record, forked) {
     const context = await findChatContext(record.chatId);
     if (!context) throw new Error("Chat no longer exists");
@@ -175,6 +239,10 @@ export function createLiveSessionStream({
     }
     adapter.publish(record, { type: "history_forked", chat: chatView(registry.metadata(context.chat.id)) });
     projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages || []);
+    if (needsMessageIds(context.chat)) {
+      projection.messages = applyMessageIds(projection.messages,
+        await messageIds.resolver(context.project, context.chat.id));
+    }
     adapter.publish(record, { type: "transcript_sync", generationId: null, replaceAll: true, ...projection });
     return registry.metadata(context.chat.id);
   }
@@ -196,7 +264,7 @@ export function createLiveSessionStream({
       const streamingBehavior = command.streamingBehavior === "steer" || command.streamingBehavior === "followUp"
         ? command.streamingBehavior
         : null;
-      return sendPrompt(record, prepared, { streamingBehavior });
+      return sendPrompt(record, prepared, { streamingBehavior, messageId: offeredMessageId(command.messageId) });
     }
     if (command.type === "follow_up" || command.type === "steer") {
       const prepared = await promptForChat(record, command, String(command.message || ""));
@@ -260,7 +328,7 @@ export function createLiveSessionStream({
         ...command,
         attachmentIds: interrupted.attachmentIds,
       }, interrupted.message);
-      const generationId = await sendPrompt(record, prepared);
+      const generationId = await sendPrompt(record, prepared, { messageId: offeredMessageId(command.messageId) });
       // Pi can write the aborted tool result just after cancel resolves, and
       // the steered message has no id until Pi writes it, so a two-turn sync
       // once the replacement is accepted is what names both turns.
@@ -276,22 +344,26 @@ export function createLiveSessionStream({
     if (command.type === "fork_and_prompt") {
       if (!adapter.getCapabilities().fork) throw Object.assign(new Error("This agent does not support forks"), { code: "fork_unsupported", status: 409 });
       const context = await findChatContext(record.chatId);
+      const entryId = await harnessEntryId(context, command.entryId);
       const sourceCheckpointId = context ? await turnCheckpoints?.checkpointForMessage(
-        context.chat.id, context.project.workingRoot, command.entryId,
+        context.chat.id, context.project.workingRoot, entryId,
       ) : null;
-      const forked = await adapter.fork(record.id, { nodeId: command.entryId });
+      const forked = await adapter.fork(record.id, { nodeId: entryId });
+      announceTruncation(record, command.entryId);
       await syncForkedChat(record, forked);
       await applyComposerModel(record, command);
       const prepared = await promptForChat(record, command, String(command.message || ""));
-      return sendPrompt(record, prepared, { sourceCheckpointId });
+      return sendPrompt(record, prepared, { sourceCheckpointId, messageId: offeredMessageId(command.messageId) });
     }
     if (command.type === "regenerate") {
       if (!adapter.getCapabilities().regenerate) throw Object.assign(new Error("This agent does not support regeneration"), { code: "regenerate_unsupported", status: 409 });
       const context = await findChatContext(record.chatId);
+      const entryId = await harnessEntryId(context, command.entryId);
       const sourceCheckpointId = context ? await turnCheckpoints?.checkpointForMessage(
-        context.chat.id, context.project.workingRoot, command.entryId,
+        context.chat.id, context.project.workingRoot, entryId,
       ) : null;
-      const forked = await adapter.fork(record.id, { nodeId: command.entryId });
+      const forked = await adapter.fork(record.id, { nodeId: entryId });
+      announceTruncation(record, command.entryId);
       await syncForkedChat(record, forked);
       await applyComposerModel(record, command);
       const prepared = await promptForChat(record, command, forked.sourceMessage?.text || forked.text);

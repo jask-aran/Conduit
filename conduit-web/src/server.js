@@ -10,6 +10,7 @@ import { TerminalPasteStore } from "./terminal-paste-store.js";
 import { PiModelCatalog, resolveThinkingLevel } from "./pi-model-catalog.js";
 import { ProjectStore } from "./project-store.js";
 import { pageSessionEntries, projectSessionEntries, readSessionMetadata, readSessionPage } from "./session-store.js";
+import { MessageIds, applyArtifactMessageIds, applyMessageIds } from "./message-ids.js";
 import { PiManager } from "./pi-manager.js";
 import { manifestForImplementation } from "./harnesses/index.js";
 import { ChatStore, chatView, isChatId } from "./chat-store.js";
@@ -167,9 +168,20 @@ async function recycleIdleIsolatedPiProcesses() {
   }
   return { restartedIdleProcesses: candidates.length };
 }
+// Conduit's message identity for Pi, which has none to give until it writes.
+const messageIds = new MessageIds();
 const runtimeHub = new RuntimeHub({ listViews: () => backends.list() });
+// The snapshot hides records that are stopped or on their way out; so must
+// every incremental update, or a teardown emit re-advertises a process the
+// removal already retired and the pill comes back to life.
+const processIsLive = (record) => Boolean(record) && !record.terminating && record.status !== "stopped";
+const publishProcessChange = (view, record, reason) => {
+  if (!view) return;
+  if (processIsLive(record)) runtimeHub.publishProcess(view, reason || "update");
+  else runtimeHub.publishProcessRemoved(view.id, view.chatId);
+};
 manager.on("process_changed", ({ record, reason }) => {
-  runtimeHub.publishProcess(backends.view(record), reason || "update");
+  publishProcessChange(backends.view(record), record, reason);
 });
 manager.on("process_removed", ({ id, chatId }) => {
   runtimeHub.publishProcessRemoved(id, chatId);
@@ -261,18 +273,20 @@ async function chatModelView(context) {
   const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });
   const catalog = catalogFor(runtime, template);
   const catalogView = await catalog.list(context.project.workingRoot);
-  let model = catalogView.defaultModel;
-  let thinkingLevel = catalogView.defaultThinkingLevel;
-  let source = "runtime_default";
-  let chatOwnsModel = false;
+  let model = context.chat.backend?.model || catalogView.defaultModel;
+  let thinkingLevel = context.chat.modelThinkingLevels?.[model] || catalogView.defaultThinkingLevel;
+  let source = context.chat.backend?.model ? "chat_preference" : "runtime_default";
+  let chatOwnsModel = Boolean(context.chat.backend?.model);
   const sessionFile = conduitPiSessionFile(context.chat);
   if (sessionFile) {
     try {
       const persisted = await readSessionMetadata(sessionFile, context.project);
-      chatOwnsModel = Boolean(persisted.model);
-      model = persisted.model || model;
-      thinkingLevel = persisted.thinkingLevel || thinkingLevel;
-      source = "jsonl";
+      if (!chatOwnsModel) {
+        chatOwnsModel = Boolean(persisted.model);
+        model = persisted.model || model;
+        thinkingLevel = persisted.thinkingLevel || thinkingLevel;
+        source = "jsonl";
+      }
     } catch (error) { if (error.code !== "ENOENT") throw error; }
   }
   // A profile remembers the last model chosen on it, so picking one in the
@@ -454,7 +468,7 @@ manager.on("event", ({ record, event }) => {
     projects.get(record.projectId)
       .then((found) => {
         project = found;
-        return project && registry.syncFile(record.chatId, record.sessionFile, project, { waitForFileMs: 2000, markUnread: true });
+        return project && registry.syncFile(record.chatId, record.sessionFile, project, { waitForFileMs: 2000 });
       })
       .then(async (session) => {
         if (!session) return null;
@@ -462,16 +476,22 @@ manager.on("event", ({ record, event }) => {
         if (await registry.fallbackTitle(record.chatId, session.title)) {
           await sessionNames.recordFallback({ chatId: record.chatId, name: session.title });
         }
+        const artifacts = await turnCheckpoints.timeline(record.chatId, project.workingRoot, record.sessionFile)
+          .catch((error) => { console.error("Could not compute turn artifacts", error); return null; });
+        // The entries this turn wrote are now on disk, so the ids claimed for
+        // its prompts can finally be tied to them.
+        await messageIds.bind(project, record.chatId, session.entries);
+        const idFor = await messageIds.resolver(project, record.chatId);
         record.lastCheckpoint = {
           type: "session_checkpoint",
           generationId: checkpoint.id,
           generationSeq: checkpoint.seq,
           chat: chatView(registry.metadata(record.chatId)),
-          artifacts: await turnCheckpoints.timeline(record.chatId, project.workingRoot, record.sessionFile)
-            .catch((error) => { console.error("Could not compute turn artifacts", error); return null; }),
+          artifacts: applyArtifactMessageIds(artifacts, idFor),
         };
         const latest = projectSessionEntries(pageSessionEntries(session.entries, { turnLimit: 1 }).entries);
-        latest.messages = await attachments.decorateMessages(project, record.chatId, latest.messages);
+        latest.messages = applyMessageIds(
+          await attachments.decorateMessages(project, record.chatId, latest.messages, { fromStart: false }), idFor);
         manager.publish(record, { type: "transcript_sync", generationId: checkpoint.id, ...latest });
         manager.publish(record, record.lastCheckpoint);
         runtimeHub.publish({ type: "chat_changed", chat: record.lastCheckpoint.chat, at: new Date().toISOString() });
@@ -481,11 +501,14 @@ manager.on("event", ({ record, event }) => {
       .finally(() => pendingCheckpoints.delete(checkpointId));
   }, 50).unref();
 });
-function checkpointNativeAdapter(adapter, record) {
+function checkpointNativeAdapter(adapter, record, completed = true) {
   const completedAt = new Date().toISOString();
+  // A cancelled or failed turn is activity, so it moves the sort key -- but it
+  // completed nothing, so it leaves nothing to read.
   void registry.update(record.chatId, { backend: { ...registry.metadata(record.chatId)?.backend, opaqueSession: record.sessionId },
     ...(record.title ? { title: record.title } : {}),
-    lastAssistantCompletedAt: completedAt, lastMessageAt: completedAt, unread: true })
+    ...(completed ? { lastAssistantCompletedAt: completedAt } : {}),
+    lastMessageAt: completedAt })
     .then((chat) => {
       record.lastCheckpoint = { type: "session_checkpoint", generationId: record.generation?.id || null,
         sequence: record.eventSequence, chatId: chat.id, title: chat.title || null };
@@ -504,9 +527,9 @@ async function applyBackendName(adapter, record, name) {
 // Every native adapter checkpoints the same way. PiRpcAdapter is not an event
 // emitter and simply has no `on`, so this covers the backends that need it.
 for (const adapter of adapterInstances()) {
-  adapter.on?.("settled", ({ record }) => checkpointNativeAdapter(adapter, record));
+  adapter.on?.("settled", ({ record, completed }) => checkpointNativeAdapter(adapter, record, completed !== false));
   adapter.on?.("changed", ({ record, reason, name }) => {
-    runtimeHub.publishProcess(adapter.view(record), reason || "update");
+    publishProcessChange(adapter.view(record), record, reason);
     if (reason === "named" && name) void applyBackendName(adapter, record, name)
       .catch((cause) => console.error("Could not apply backend chat name", cause));
   });
@@ -544,6 +567,7 @@ registerPtyRoutes(app, { projects, terminals });
 registerTerminalPasteRoutes(app, { terminalPastes });
 
 registerProjectRoutes(app, {
+  messageIds,
   backends,
   buildProjectDashboard,
   config,
@@ -565,6 +589,7 @@ registerProjectRoutes(app, {
   turnCheckpoints,
 });
 const launchLiveSession = registerLiveSessionRoutes(app, {
+  messageIds,
   attachments,
   backends,
   catalogFor,
@@ -602,6 +627,7 @@ registerSessionRoutes(app, {
   findChatContext,
   findRegisteredSession,
   lifecycle,
+  messageIds,
   sessionNames,
   projects,
   readSessionPage,
@@ -716,6 +742,7 @@ const liveSessionStream = createLiveSessionStream({
   findChatContext,
   findRegisteredSession,
   chatModelView,
+  messageIds,
   lifecycle,
   async autoNameSession(record, context, message) {
     const task = sessionNames.run({

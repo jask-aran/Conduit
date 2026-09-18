@@ -198,7 +198,7 @@ export class ChatGptWebAdapter extends EventEmitter {
     Object.assign(record.generation, { closed: true, settled: true });
     this.publish(record, { type: "status", generationId: record.generation.id, sequence: ++record.eventSequence,
       status: "idle", activity: "idle", detail });
-    this.emit("settled", { record });
+    this.emit("settled", { record, completed: detail !== "stopped" });
   }
 
   failGeneration(record, cause) {
@@ -210,7 +210,7 @@ export class ChatGptWebAdapter extends EventEmitter {
     const code = ["auth_expired", "rate_limited", "backend_unavailable"].includes(cause.code) ? cause.code : "backend_unavailable";
     this.publish(record, { type: "error", generationId: record.generation?.id || null,
       error: { code, message: cause.message, ...(code === "rate_limited" ? { retryAfterMs: cause.retryAfterMs || 60_000 } : {}) } });
-    this.emit("settled", { record });
+    this.emit("settled", { record, completed: false });
   }
 
   async cancel(id) {
@@ -251,6 +251,7 @@ export class ChatGptWebAdapter extends EventEmitter {
   }
   listModels() { return this.listAvailableModels(); }
   listCommands() { return Promise.resolve([]); }
+  listAvailableCommands() { return Promise.resolve([]); }
   async setModel(id, model) { const record = this.get(id); if (record) record.model = model; return model; }
   async setThinkingLevel(id, thinkingLevel) { const record = this.get(id); if (record) record.thinkingLevel = thinkingLevel; return thinkingLevel; }
   getModelState(id) { const record = this.get(id); return Promise.resolve({ model: record?.model || "", thinkingLevel: record?.thinkingLevel || "" }); }

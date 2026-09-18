@@ -32,7 +32,7 @@ function normalizeBlock(block, contentIndex) {
   return null;
 }
 
-export function createPiEventNormalizer(generationId, { startingSequence = 0 } = {}) {
+export function createPiEventNormalizer(generationId, { startingSequence = 0, claimMessageId = null } = {}) {
   let sequence = startingSequence;
   let messageSequence = 0;
   let activeMessageId = null;
@@ -55,7 +55,10 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0 } =
         return [emit({ type: "generation_running" })];
       case "message_start":
         if (source.message?.role !== "assistant") return [];
-        activeMessageId = `m${++messageSequence}`;
+        // Pi names nothing it streams. An id claimed for this answer makes the
+        // live message and its eventual session entry one message; without one
+        // the fallback is unique within this generation and nothing more.
+        activeMessageId = claimMessageId?.() || `${generationId}:m${++messageSequence}`;
         return [emit({ type: "assistant_message_started", messageId: activeMessageId })];
       case "message_update": {
         if (!activeMessageId || !update.type || update.type === "start") return [];

@@ -18,6 +18,7 @@ import {
 } from "./active-generation.js";
 import { createPiEventNormalizer } from "./pi-event-normalizer.js";
 import { projectSessionEntries, readSessionPage } from "./session-store.js";
+import { PiCommandCatalog } from "./pi-command-catalog.js";
 
 export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = "", models, template }) {
   const args = [
@@ -198,7 +199,7 @@ const RECONSTRUCTIBLE_DELIVERY_TYPES = new Set([
 
 function deliveryNotificationKey(event) {
   if (deliveryDeltaKey(event) || event.seq != null || RECONSTRUCTIBLE_DELIVERY_TYPES.has(event.type)) return null;
-  if (["runtime_stdout", "runtime_stderr", "history_forked"].includes(event.type)) return event.type;
+  if (["runtime_stdout", "runtime_stderr", "history_forked", "history_truncated"].includes(event.type)) return event.type;
   return `unknown:${event.type}`;
 }
 
@@ -236,6 +237,7 @@ export class PiManager extends EventEmitter {
     this.spawnImpl = spawnImpl;
     this.agentDir = agentDir;
     this.template = template;
+    this.commandCatalog = new PiCommandCatalog(agentDir);
     this.processes = new Map();
     this.byChatId = new Map();
     this.bySessionFile = new Map();
@@ -259,6 +261,10 @@ export class PiManager extends EventEmitter {
       }, reaperIntervalMs);
       this.reaperTimer.unref?.();
     }
+  }
+
+  listAvailableCommands({ cwd, template = this.template }) {
+    return this.commandCatalog.list({ cwd, template });
   }
 
   /** Serialize capacity checks and creates so concurrent requests cannot overshoot the cap. */
@@ -624,10 +630,16 @@ export class PiManager extends EventEmitter {
       for (const pending of record.pendingRequests.values()) pending.reject(new Error("The agent process exited before replying"));
       record.pendingRequests.clear();
       if (record.statsTimer) clearTimeout(record.statsTimer);
-      this.ingestGenerationEvent(record, {
-        type: "runtime_exit",
-        message: `Pi process exited (${signal || code || "unknown"})`,
-      });
+      // A deliberate stop is process lifecycle, not a failed model request.
+      // Publishing a normalized generation failure first made the client
+      // freeze a synthetic error turn and show a crash toast before the
+      // deliberate runtime_exit arrived and detached it.
+      if (!deliberate) {
+        this.ingestGenerationEvent(record, {
+          type: "runtime_exit",
+          message: `Pi process exited (${signal || code || "unknown"})`,
+        });
+      }
       this.publish(record, { type: "runtime_exit", code, signal, deliberate });
       for (const socket of [...record.clients]) {
         socket.close?.(1012, "Pi process exited");
@@ -879,7 +891,14 @@ export class PiManager extends EventEmitter {
       activeGeneration: record.activeGeneration,
       generationNormalizer: record.generationNormalizer,
     };
-    record.generationNormalizer = createPiEventNormalizer(generationId);
+    record.generationNormalizer = createPiEventNormalizer(generationId, {
+      claimMessageId: () => {
+        const claim = record.messageClaims?.get(generationId);
+        if (!claim?.assistant || claim.assistantUsed) return null;
+        claim.assistantUsed = true;
+        return claim.assistant;
+      },
+    });
     const [started] = record.generationNormalizer.normalize({
       type: "generation_started",
       continuation: Boolean(continuationBase),
@@ -887,6 +906,15 @@ export class PiManager extends EventEmitter {
     });
     record.activeGeneration = reduceActiveGeneration(null, started);
     return { previous, started };
+  }
+
+  claimForGeneration(record, generationId, { user = null, assistant = null } = {}) {
+    record.messageClaims ||= new Map();
+    record.messageClaims.set(generationId, { user, assistant, userUsed: false, assistantUsed: false });
+    // Only the open turns can still need theirs.
+    while (record.messageClaims.size > 16) {
+      record.messageClaims.delete(record.messageClaims.keys().next().value);
+    }
   }
 
   restoreActiveGeneration(record, previous) {
@@ -1069,7 +1097,7 @@ export class PiManager extends EventEmitter {
     return { message: [message, ...files].filter(Boolean).join("\n\n"), images };
   }
 
-  prompt(id, message, { continuationBase = "", streamingBehavior = null } = {}) {
+  prompt(id, message, { continuationBase = "", streamingBehavior = null, messageIds = null } = {}) {
     const record = this.processes.get(id);
     if (!record) throw new Error("Unknown live session");
     if (record.stopping) throw Object.assign(new Error("Pi is still stopping the previous response"), { code: "generation_stopping" });
@@ -1078,6 +1106,11 @@ export class PiManager extends EventEmitter {
       this.assertCanStartGeneration(record);
     }
     const generationId = `g${++record.generationSequence}`;
+    // A turn's ids belong to the turn, not to the order its events happen to
+    // arrive in. Pi emits user messages Conduit never prompted -- a steer, a
+    // continuation, a queue it flushes itself -- and consuming claims as those
+    // went past handed the wrong id to the wrong message.
+    if (messageIds) this.claimForGeneration(record, generationId, messageIds);
     const previousGeneration = record.generation;
     const structured = this.beginActiveGeneration(record, generationId, continuationBase);
     const generation = { id: generationId, closed: false, settled: false, continuationBase };
@@ -1099,12 +1132,13 @@ export class PiManager extends EventEmitter {
     return generationId;
   }
 
-  async promptAccepted(id, message, { continuationBase = "", streamingBehavior = null, attachments = [] } = {}) {
+  async promptAccepted(id, message, { continuationBase = "", streamingBehavior = null, attachments = [], messageIds = null } = {}) {
     const record = this.processes.get(id);
     if (!record) throw new Error("Unknown live session");
     if (record.stopping) throw Object.assign(new Error("Pi is still stopping the previous response"), { code: "generation_stopping" });
     if (streamingBehavior !== "steer" && streamingBehavior !== "followUp") this.assertCanStartGeneration(record);
     const generationId = `g${++record.generationSequence}`;
+    if (messageIds) this.claimForGeneration(record, generationId, messageIds);
     const previousGeneration = record.generation;
     const structured = this.beginActiveGeneration(record, generationId, continuationBase);
     const generation = { id: generationId, closed: false, settled: false, continuationBase };
@@ -1376,6 +1410,17 @@ export class PiManager extends EventEmitter {
   }
 
   publish(record, event) {
+    // Pi streams a committed user message with no id of its own -- its ids live
+    // on session entries, which do not exist yet. The prompt claimed one before
+    // it was sent, so the browser learns the message's real identity here
+    // rather than minting a placeholder it has to reconcile away later.
+    if (event?.type === "message_end" && event.message?.role === "user") {
+      const claim = record?.messageClaims?.get(record.generation?.id);
+      if (claim?.user && !claim.userUsed) {
+        claim.userUsed = true;
+        event = { ...event, message: { ...event.message, id: claim.user } };
+      }
+    }
     this.publishInternal(record, event);
     this.deliver(record, event);
   }

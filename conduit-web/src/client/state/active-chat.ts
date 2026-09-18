@@ -25,8 +25,7 @@ import type {
   ToolItem,
   TranscriptDetail,
 } from "../api/contracts";
-import { assignToolSeq, mergeTranscriptProjection, promotePendingUser, replaceTranscriptProjection, settleGenerationMessages, tagOptimisticGenerationOwner, truncateForRegenerate } from "../timeline-order";
-import { reconcileMessages } from "../reconcile-messages";
+import { applyCommittedUser, applyTranscriptProjection, assignToolSeq, truncateAt, upsertMessages } from "../timeline-order";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { canCoalesceTextDelta, enqueueOverflowLiveEvent, mergeTextDeltaEvents } from "./text-delta-batcher";
 import type { UploadAttachment } from "./attachments";
@@ -38,6 +37,7 @@ import type { PermissionSettings } from "./permission-settings";
 import type { ServiceLevelSettings } from "./service-level-settings";
 import type { RuntimeStore } from "./runtime";
 import { createClientActiveGenerationStore } from "./active-generation-store.js";
+import { markChatRead } from "./read-receipts";
 import { clearReviewComments, parseReviewComments, projectReviewComments, restoreReviewComments, reviewComments } from "../chat/review-comments";
 
 type UnknownRecord = Record<string, unknown>;
@@ -68,7 +68,7 @@ interface LiveOpening {
 }
 
 /** Mirrors the server's SPAWNING_INTENTS; see the note at its only use. */
-const SPAWNING_INTENTS = new Set(["select", "prompt", "continue", "compact", "regenerate", "steer"]);
+const SPAWNING_INTENTS = new Set(["prompt", "continue", "compact", "regenerate", "steer"]);
 
 function generationChangeFor(event: StructuredGenerationEvent): LiveGenerationChange {
   const block = event.block && typeof event.block === "object" ? event.block as UnknownRecord : null;
@@ -141,6 +141,7 @@ export interface ChatCatalogue {
   projectId: () => string;
   select: (chat: ChatSummary, project: Project) => void;
   refresh: () => Promise<Project[]>;
+  patchChat: (chatId: string, patch: Partial<ChatSummary>) => unknown;
 }
 
 interface ActiveChatOptions {
@@ -197,6 +198,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   const [hostUiRequests, setHostUiRequests] = createSignal<HostUiRequest[]>([]);
   const [queue, setQueue] = createSignal<QueueState>({ steering: [], followUp: [] });
   const [capabilities, setCapabilities] = createSignal<ChatCapabilities | null>(null);
+  const supports = (capability: keyof ChatCapabilities) => capabilities()?.[capability] !== false;
   const [harnessCommands, setHarnessCommands] = createSignal<HarnessCommand[]>([]);
   let commandsLoadedFor: string | null = null;
   let commandsLoading: Promise<void> | null = null;
@@ -249,7 +251,9 @@ export function createActiveChat(options: ActiveChatOptions) {
     detail: TranscriptDetail;
   }>();
 
-  const chatIsLive = (chat: ChatSummary) => chat.liveActive || Boolean(options.runtime.getProcess(chat.id)?.active);
+  // The runtime stream is the live-process authority. The catalogue carries a
+  // point-in-time copy that can still say active after the process has settled.
+  const chatIsLive = (chat: ChatSummary) => Boolean(options.runtime.getProcess(chat.id)?.active);
   const transcriptRevision = (chat: ChatSummary) => chat.updatedAt || chat.createdAt || "";
   const rememberTranscript = (chat: ChatSummary, detail: TranscriptDetail) => {
     transcriptCache.delete(chat.id);
@@ -447,10 +451,12 @@ export function createActiveChat(options: ActiveChatOptions) {
     applyLiveEvent(event);
   };
 
-  const reset = () => {
+  const reset = (draftProfileId?: string) => {
     navigationToken += 1;
     selectionToken += 1;
     setLoadedId(null);
+    setMessages([]);
+    setTools([]);
     setPresentation({ kind: "ready", chatId: null });
     liveOpening?.resolve();
     liveOpening = null;
@@ -477,6 +483,12 @@ export function createActiveChat(options: ActiveChatOptions) {
     setActiveGeneration(null);
     currentGeneration = null;
     stopPending = false;
+    if (draftProfileId) {
+      setStatus("draft");
+      setTitle("");
+      setTemplateId(draftProfileId);
+      setRuntimeIdentity(null);
+    }
   };
 
   /** The only client owner of assistant generation state and terminal handoff. */
@@ -494,9 +506,6 @@ export function createActiveChat(options: ActiveChatOptions) {
       // The message that started this turn is the last one the client minted,
       // and until the harness writes it there is nothing else to call it. Tagging it
       // with the generation is what lets that turn's sync find it again.
-      if (event.type === "generation_started" || event.type === "generation_resume") {
-        setMessages((existing) => tagOptimisticGenerationOwner(existing, event.generationId));
-      }
       result = generationStore.apply(event);
       if (result.changed && result.state) {
         setActiveGeneration(result.state as ActiveGenerationView);
@@ -517,7 +526,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       batch(() => {
         if (frozen.length) {
           setTools((existing) => settleGenerationTools(existing, next));
-          setMessages((existing) => settleGenerationMessages(existing, next.id, frozen));
+          setMessages((existing) => upsertMessages(existing, frozen));
         }
         generationStore.clear();
         setActiveGenerationChange(null);
@@ -612,7 +621,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     const nextTools = assignToolSeq(asList<ToolItem>(detail.tools)) as ToolItem[];
     batch(() => {
       setLoadedId(detail.id);
-      setMessages((current) => reconcile ? reconcileMessages(current, incoming) as Message[] : incoming);
+      setMessages((current) => (reconcile ? upsertMessages(current, incoming) : incoming));
       setTools(nextTools);
       setPageBefore(detail.page?.before || null);
       setStatus(detail.status || "draft");
@@ -682,6 +691,10 @@ export function createActiveChat(options: ActiveChatOptions) {
         setHostUiRequests((current) => current.filter((item) => item.id !== event.requestId));
         break;
       case "session_checkpoint":
+        // The socket is the one channel the open chat is guaranteed to have,
+        // so the row it carries updates the catalogue exactly like the global
+        // stream's does. Both feed one reducer; duplicates are free.
+        if (event.chat) window.dispatchEvent(new CustomEvent("conduit:chat-changed", { detail: event.chat }));
         if (event.title && event.chatId === selectedId()) setTitle(event.title);
         if (event.chatId === selectedId()) {
           if (event.artifacts) setTurnArtifacts({ chatId: event.chatId, items: event.artifacts });
@@ -691,15 +704,19 @@ export function createActiveChat(options: ActiveChatOptions) {
         batch(() => {
           const incomingMessages = asList<Message>(event.messages);
           const incomingTools = assignToolSeq(event.tools as ToolItem[]);
-          const projection = event.replaceAll
-            ? replaceTranscriptProjection(messages(), incomingMessages, incomingTools)
-            : mergeTranscriptProjection(messages(), tools(), incomingMessages, incomingTools, event.generationId || null);
+          const projection = applyTranscriptProjection(messages(), tools(), incomingMessages, incomingTools,
+            { replaceAll: Boolean(event.replaceAll) });
           setMessages(projection.messages);
           setTools(projection.tools);
         });
         break;
+      case "history_truncated":
+        // The fork says where the history ends now; this client holds whatever
+        // of it it has loaded, and cuts to the same point.
+        if (event.beforeMessageId) setMessages((current) => truncateAt(current, event.beforeMessageId!, { inclusive: true }));
+        break;
       case "user_message_committed":
-        setMessages((current) => promotePendingUser(current, event.message));
+        setMessages((current) => applyCommittedUser(current, event.message));
         break;
       // A process the server deliberately stopped stays stopped. The socket
       // close that follows is otherwise indistinguishable from a dropped
@@ -711,6 +728,10 @@ export function createActiveChat(options: ActiveChatOptions) {
           setLive(null);
           resetLiveFlags();
           setGeneration("idle");
+          generationStore.clear();
+          setActiveGeneration(null);
+          setActiveGenerationChange(null);
+          currentGeneration = null;
           session.detach();
         }
         break;
@@ -820,18 +841,19 @@ export function createActiveChat(options: ActiveChatOptions) {
       else if (entry.history === "replace") history.replaceState({}, "", `/chat/${chat.id}`);
       entry.onCommit?.();
     });
-    // The launch goes out before the scoped fetches below. They are concurrent
-    // either way, but they reach one single-threaded server in the order they
-    // were issued, and this is the only one anybody is waiting on. It takes its
-    // model from the transcript detail rather than from the model store, which
-    // has not been told about this chat yet -- reading the store here is how a
-    // Codex spec came to be offered to a Pi chat.
+    // Opening is reading, however it was reached -- a click, a pasted URL, the
+    // back button, or re-entering after a profile switch.
+    markChatRead(catalogue, chat);
+    // An existing live process attaches before the scoped fetches below. Chat
+    // selection is a document read and this attach-only request must not start
+    // an agent. It takes its model from the transcript detail rather than from
+    // the model store, which has not been told about this chat yet.
     if (entry.warm) {
       const draft = chat.status === "draft";
       void ensureAgent({
         chatId: chat.id,
         projectId: project.id,
-        intent: "select",
+        intent: "open",
         modelOverride: detail?.model,
         thinkingOverride: detail?.thinkingLevel,
       })
@@ -917,7 +939,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     });
 
     const transcriptRequest = loadTranscript(chat);
-    const attachRequest = ensureAgent({ chatId: chat.id, projectId: project.id, intent: "select" });
+    const attachRequest = ensureAgent({ chatId: chat.id, projectId: project.id, intent: "open" });
     const [transcriptResult, attachResult] = await Promise.all([
       settleRequest(transcriptRequest),
       settleRequest(attachRequest),
@@ -967,7 +989,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     await enterChat(chat, project, {
       detail,
       history: navigationOptions.history || "replace",
-      warm: detail.status === "active",
+      warm: chatIsLive(chat),
       onCommit: navigationOptions.onCommit,
       onShown: navigationOptions.onShown,
     });
@@ -1004,20 +1026,15 @@ export function createActiveChat(options: ActiveChatOptions) {
    * Open a chat this client just created, restored from a URL, or re-entered
    * after switching its profile - the ways in that do not move history.
    *
-   * It warms on the same rule as a click: a chat with a session behind it gets
-   * its agent started, behind the transcript. Every caller used to decide that
-   * for itself and they disagreed, which is why opening the same chat from two
-   * places felt like two different products.
+   * It follows the same document rule as a click: show stored history without
+   * starting an agent, and attach only when the runtime stream already reports
+   * a live process.
    */
   const initialize = (chat: ChatSummary, project: Project, detail?: TranscriptDetail, entry: { warm?: boolean } = {}) =>
     enterChat(chat, project, {
       detail,
       history: "none",
-      // A chat with a session behind it warms on sight. A brand new one does
-      // not, unless the caller says it is about to be used -- a chat somebody
-      // just created, where the alternative is paying the cold start on their
-      // first message.
-      warm: entry.warm ?? (detail?.status || chat.status) === "active",
+      warm: entry.warm ?? chatIsLive(chat),
     });
 
   const prepareOutboundMessage = () => {
@@ -1038,6 +1055,16 @@ export function createActiveChat(options: ActiveChatOptions) {
     };
   };
 
+  /**
+   * Name a message this client is sending, before sending it.
+   *
+   * The id travels with the prompt, so the harness's commit event comes back
+   * carrying the same name and the row already on screen is that message
+   * rather than a stand-in for it. Nothing has to be promoted, matched or
+   * reconciled afterwards.
+   */
+  const newMessageId = () => `m_${crypto.randomUUID()}`;
+
   const acceptOutboundMessage = (prepared: ReturnType<typeof prepareOutboundMessage>) => {
     attachments.markAnnounced(prepared.attachmentIds);
     clearReviewComments(prepared.chatId);
@@ -1049,17 +1076,18 @@ export function createActiveChat(options: ActiveChatOptions) {
     const prepared = prepareOutboundMessage();
     if (!prepared.hasContent) return;
     const busy = streaming();
-    const local: Message = { id: `user_${Date.now()}`, role: "user", content: prepared.message, timestamp: new Date().toISOString(), attachments: prepared.sentAttachments };
+    const messageId = newMessageId();
+    const local: Message = { id: messageId, role: "user", content: prepared.message, timestamp: new Date().toISOString(), attachments: prepared.sentAttachments };
 
     if (busy) {
       // Sending while the agent works steers by default: the message reaches
       // the model as soon as the current tool call settles, rather than waiting
       // for the whole turn. Backends without steering fall back to the queue.
-      const queueMode = mode || (capabilities()?.steer === false ? "follow_up" : "steer");
+      const queueMode = mode || (supports("steer") ? "steer" : "follow_up");
       setDraft("");
       try {
         await requireAgent("steer");
-        session.send({ type: queueMode === "steer" ? "steer" : "follow_up", message: prepared.message, attachmentIds: prepared.attachmentIds });
+        session.send({ type: queueMode === "steer" ? "steer" : "follow_up", messageId, message: prepared.message, attachmentIds: prepared.attachmentIds });
         acceptOutboundMessage(prepared);
       } catch (error) { setDraft(prepared.text); onError(error); }
       return;
@@ -1081,8 +1109,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     setGeneration("submitting");
     try {
       session.send(editId
-        ? { type: "fork_and_prompt", entryId: editId, message: prepared.message, attachmentIds: prepared.attachmentIds, model: models.model(), thinkingLevel: models.effort() }
-        : { type: "prompt", message: prepared.message, attachmentIds: prepared.attachmentIds });
+        ? { type: "fork_and_prompt", entryId: editId, messageId, message: prepared.message, attachmentIds: prepared.attachmentIds, model: models.model(), thinkingLevel: models.effort() }
+        : { type: "prompt", messageId, message: prepared.message, attachmentIds: prepared.attachmentIds });
       acceptOutboundMessage(prepared);
       setStatus("active");
       setGeneration("active");
@@ -1105,13 +1133,19 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   const regenerate = async (entryId: string) => {
-    if (!entryId || !capabilities()?.regenerate || streaming() || stopping()) return;
+    if (!entryId || !supports("regenerate") || streaming() || stopping()) return;
+    const previous = messages();
+    if (!previous.some((message) => message.id === entryId)) return;
+    // Show the branch going before the round trip. The fork says where the
+    // history now ends when it lands, so this is a preview of that, not a
+    // guess the client has to defend.
+    setMessages(truncateAt(previous, entryId, { inclusive: true }));
     try {
       await requireAgent("regenerate");
-      setMessages((current) => truncateForRegenerate(current, entryId));
+      setMessages((current) => truncateAt(current, entryId, { inclusive: true }));
       setGeneration("active");
       session.send({ type: "regenerate", entryId, model: models.model(), thinkingLevel: models.effort() });
-    } catch (error) { setGeneration("idle"); onError(error); }
+    } catch (error) { setMessages(previous); setGeneration("idle"); onError(error); }
   };
 
   const continueResponse = async () => {
@@ -1121,7 +1155,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   const compact = async () => {
-    if (streaming() || compacting() || !capabilities()?.compaction) return;
+    if (streaming() || compacting() || !supports("compaction")) return;
     try { await requireAgent("compact"); session.send({ type: "compact" }); }
     catch (error) { onError(error); }
   };
@@ -1131,9 +1165,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (!chatId || commandsLoadedFor === chatId) return;
     if (commandsLoading) return commandsLoading;
     commandsLoading = (async () => {
-      const record = await requireAgent("open");
-      if (!record || selectedId() !== chatId) return;
-      const result = await api<{ commands: HarnessCommand[] }>(`/v0/live-sessions/${encodeURIComponent(record.id)}/commands`);
+      const result = await api<{ commands: HarnessCommand[] }>(`/v0/chats/${encodeURIComponent(chatId)}/commands`);
       if (selectedId() !== chatId) return;
       setHarnessCommands(Array.isArray(result.commands) ? result.commands : []);
       commandsLoadedFor = chatId;
@@ -1232,14 +1264,15 @@ export function createActiveChat(options: ActiveChatOptions) {
     // until the session file is read back. Without a bubble of its own the
     // message the interrupt sent is absent from the transcript until then --
     // for the whole of the response it asked for.
-    const local: Message = { id: `user_${Date.now()}`, role: "user", content: interrupting,
+    const interruptId = newMessageId();
+    const local: Message = { id: interruptId, role: "user", content: interrupting,
       timestamp: new Date().toISOString(), attachments: prepared.sentAttachments };
     const previous = messages();
     setQueue({ steering: [], followUp: [] });
     setDraft("");
     setGeneration("submitting");
     try {
-      session.send({ type: "interrupt_and_send", message: prepared.message, attachmentIds: prepared.attachmentIds,
+      session.send({ type: "interrupt_and_send", messageId: interruptId, message: prepared.message, attachmentIds: prepared.attachmentIds,
         model: models.model(), thinkingLevel: models.effort() });
       setMessages((current) => [...current, local]);
       acceptOutboundMessage(prepared);
@@ -1293,7 +1326,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     // chat and the spawn reaching the runtime stream, and the transcript has
     // already painted from cache by then. Anything the server does report wins,
     // because `derived` is consulted first.
-    if (derived.kind === "idle" && session.launching() === selectedId()) {
+    if (derived.kind === "idle" && !process && session.launching() === selectedId()) {
       return { kind: "starting", label: "Starting agent…" };
     }
     if (derived.kind === "idle") {
@@ -1317,7 +1350,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     status, setStatus, title, setTitle, templateId, setTemplateId, runtimeIdentity, setRuntimeIdentity, backendImplementation,
     live, messages, setMessages, tools, loadedId, pageBefore, loadingOlder, draft, setDraft,
     generation, editingEntryId, contextUsage, sessionStats, cacheStats, compacting, hostUiRequests, queue, pendingMessages, capabilities, harnessCommands, activeGeneration, activeGenerationChange, turnArtifacts,
-    navigatingId, presentation, interactionReady: () => presentation().kind === "ready", streaming, stopping, activity,
+    navigatingId, presentation, interactionReady: () => presentation().kind === "ready" && Boolean(loadedId()), streaming, stopping, activity,
     initialize, select, prefetch, loadDetail, ensureAgent, reset, send, stop, regenerate,
     continueResponse, compact, loadHarnessCommands, loadOlder, edit, respondHostUi, clearQueue, interruptAndSend, editQueued, discardQueued,
   };

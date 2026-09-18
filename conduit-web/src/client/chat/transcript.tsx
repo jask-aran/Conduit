@@ -1,14 +1,13 @@
 import { createEffect, createMemo, createRenderEffect, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense } from "solid-js";
 import { ArrowDownIcon, CheckIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, TriangleAlertIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
-import type { Message } from "../api/contracts";
+import type { BooleanCapability, Message } from "../api/contracts";
 import { isChatContentActivity, type TranscriptSource } from "./transcript-source";
 import type { TurnArtifactSummary } from "../api/live-events";
 import { AttachmentCards } from "./attachments";
 import { ReviewCommentCards } from "./review-comment-cards";
 import { parseReviewComments } from "./review-comments";
 import { TurnTrace } from "./turn-trace";
-import { isOptimisticId } from "../reconcile-messages";
 import { createTimelineStore } from "../state/timeline-store";
 import type { MarkdownRendererId } from "./markdown-settings";
 import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_OPTIONS, saveComposerSurface, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
@@ -141,14 +140,14 @@ function TurnArtifactButton(props: { artifact: TurnArtifactSummary; chatId: stri
   return <button type="button" class="turn-change-summary" title={range()} aria-label={`Open ${range()} in Agent changes: ${props.artifact.summary!.added} additions and ${props.artifact.summary!.removed} removals`} onClick={() => requestTurnArtifactNavigation({ chatId: props.chatId, checkpointId: props.artifact.id, path: props.artifact.summary!.preferredPath })}><span data-change="added">+{props.artifact.summary!.added}</span><span data-change="removed">−{props.artifact.summary!.removed}</span></button>;
 }
 
-function Actions(props: { message: Message; precedingUserId?: string; chat: TranscriptSource; partialContinue: boolean; artifact?: TurnArtifactSummary }) {
+function Actions(props: { message: Message; precedingUserId?: string; chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; partialContinue: boolean; artifact?: TurnArtifactSummary }) {
   const [copied, setCopied] = createSignal(false);
   let copyButton: HTMLButtonElement | undefined;
   const assistant = () => props.message.role !== "user";
   return <div class="response-actions">
-    <Show when={!assistant() && !isOptimisticId(props.message.id) && props.chat.capabilities()?.fork}>
+    <Show when={!assistant() && !props.message.pending && props.supports("fork")}>
       <Button variant="ghost" size="icon-sm" aria-label={props.chat.editingEntryId() === props.message.id ? "Cancel editing" : "Edit from here"} onClick={() => props.chat.edit(props.message)}><PencilIcon /></Button>
-      <Show when={props.chat.capabilities()?.regenerate}><Button variant="ghost" size="icon-sm" aria-label="Regenerate from here" onClick={() => void props.chat.regenerate(props.message.id)}><RefreshCwIcon /></Button></Show>
+      <Show when={props.supports("regenerate")}><Button variant="ghost" size="icon-sm" aria-label="Regenerate from here" onClick={() => void props.chat.regenerate(props.message.id)}><RefreshCwIcon /></Button></Show>
     </Show>
     <Show when={assistant()}>
       <Button
@@ -165,14 +164,14 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Tran
           setTimeout(() => setCopied(false), 1600);
         }}
       >{copied() ? <CheckIcon /> : <CopyIcon />}</Button>
-      <Show when={props.chat.capabilities()?.regenerate && props.precedingUserId && !isOptimisticId(props.precedingUserId)}><Button variant="ghost" size="icon-sm" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(props.precedingUserId!)}><RefreshCwIcon /></Button></Show>
+      <Show when={props.supports("regenerate") && props.precedingUserId}><Button variant="ghost" size="icon-sm" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(props.precedingUserId!)}><RefreshCwIcon /></Button></Show>
       <Show when={props.partialContinue && props.message.stopped}><Button variant="ghost" size="icon-sm" aria-label="Continue stopped response" onClick={() => void props.chat.continueResponse()}><PlayIcon /></Button></Show>
       <Show when={props.artifact}>{(entry) => <TurnArtifactButton artifact={entry()} chatId={props.chat.loadedId()!} />}</Show>
     </Show>
   </div>;
 }
 
-export function Transcript(props: { chat: TranscriptSource; partialContinue: boolean; markdownRenderer: MarkdownRendererId; rendererControlsVisible: boolean; profileLabel?: string; projectId?: string }) {
+export function Transcript(props: { chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; partialContinue: boolean; markdownRenderer: MarkdownRendererId; rendererControlsVisible: boolean; profileLabel?: string; projectId?: string }) {
   let transcriptRoot!: HTMLDivElement;
   let motionShell!: HTMLDivElement;
   let viewport!: HTMLDivElement;
@@ -968,7 +967,7 @@ export function Transcript(props: { chat: TranscriptSource; partialContinue: boo
                 <Show when={user() && message().attachments?.length}><AttachmentCards items={message().attachments!} chatId={props.chat.loadedId()} label="Message attachments" /></Show>
                 <Show when={user() && review().comments.length}><ReviewCommentCards items={review().comments} chatId={props.chat.loadedId() ?? ""} label="Code references" /></Show>
                 <Show when={message().stopped}><div class="marker">{message().status === "stopping" ? "Stopping…" : "Stopped"}</div></Show>
-                <Actions message={message()} precedingUserId={precedingUserId()} chat={props.chat} partialContinue={props.partialContinue} artifact={artifact()} />
+                <Actions message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} partialContinue={props.partialContinue} artifact={artifact()} />
               </div>
             </article>
           </div>;
