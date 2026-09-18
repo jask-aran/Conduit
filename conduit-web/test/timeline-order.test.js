@@ -84,3 +84,20 @@ test("a re-sent prompt with a new id does not duplicate the one it replaced", ()
   ]);
   assert.deepEqual(next.map((message) => message.id), ["m_first", "pi:a1", "m_second", "pi:a2"]);
 });
+
+test("an interrupted answer stays under the prompt it answers, not the one that stopped it", () => {
+  // The transcript while an interrupt is in flight: the prompt that started
+  // the turn, the answer still streaming, and the message that just cut it off.
+  const messages = [
+    { id: "m_ask", role: "user", content: "now a longer one" },
+    { id: "m_stop", role: "user", content: "stop" },
+  ];
+  const frozen = [{ id: "m_answer", role: "assistant", content: "The Cartographer", generationId: "g1" }];
+  const owner = messages.find((message) => message.id === "m_ask");
+  assert.deepEqual(upsertMessages(messages, [owner, ...frozen]).map((message) => message.id),
+    ["m_ask", "m_answer", "m_stop"]);
+  // Without the anchor it lands after the message that interrupted it, which
+  // is what ran the two answers together in one bubble.
+  assert.deepEqual(upsertMessages(messages, frozen).map((message) => message.id),
+    ["m_ask", "m_stop", "m_answer"]);
+});

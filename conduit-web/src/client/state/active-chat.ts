@@ -219,6 +219,11 @@ export function createActiveChat(options: ActiveChatOptions) {
     setActiveGenerationRevision((revision) => revision + 1);
   };
   const generationStore = createClientActiveGenerationStore();
+  // Which prompt each generation is answering. The harness assigns the
+  // generation id, so the prompt is remembered when it is sent and paired up
+  // the first time an event for that generation arrives.
+  const generationOwners = new Map<string, string | null>();
+  let promptOwner: string | null = null;
   /*
    * A chat's agent state is the server's to report: it publishes the process
    * when it spawns and again when the harness can answer, and both the sidebar
@@ -481,6 +486,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     generationStore.clear();
     setActiveGenerationChange(null);
     setActiveGeneration(null);
+    generationOwners.clear();
+    promptOwner = null;
     currentGeneration = null;
     stopPending = false;
     if (draftProfileId) {
@@ -508,7 +515,12 @@ export function createActiveChat(options: ActiveChatOptions) {
       // with the generation is what lets that turn's sync find it again.
       result = generationStore.apply(event);
       if (result.changed && result.state) {
-        setActiveGeneration(result.state as ActiveGenerationView);
+        const state = result.state as ActiveGenerationView;
+        if (!generationOwners.has(state.id)) {
+          generationOwners.set(state.id, promptOwner);
+          promptOwner = null;
+        }
+        setActiveGeneration({ ...state, ownerMessageId: generationOwners.get(state.id) || null });
         setActiveGenerationChange(generationChangeFor(event));
       }
     });
@@ -523,10 +535,18 @@ export function createActiveChat(options: ActiveChatOptions) {
     const wasTerminal = previousStatus ? ["stopped", "complete", "failed"].includes(previousStatus) : false;
     if (terminal && !wasTerminal) {
       const frozen = freezeGeneration(next);
+      const ownerId = generationOwners.get(next.id) || null;
       batch(() => {
         if (frozen.length) {
           setTools((existing) => settleGenerationTools(existing, next));
-          setMessages((existing) => upsertMessages(existing, frozen));
+          // Placed against the prompt it answers rather than at the end. An
+          // interrupt puts its own message in the transcript before the turn
+          // it cut off has finished, so appending left that answer below the
+          // message that stopped it.
+          setMessages((existing) => {
+            const owner = ownerId ? existing.find((message) => message.id === ownerId) : null;
+            return upsertMessages(existing, owner ? [owner, ...frozen] : frozen);
+          });
         }
         generationStore.clear();
         setActiveGenerationChange(null);
@@ -1107,6 +1127,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     });
     setGeneration("submitting");
     try {
+      promptOwner = messageId;
       session.send(editId
         ? { type: "fork_and_prompt", entryId: editId, messageId, message: prepared.message, attachmentIds: prepared.attachmentIds, model: models.model(), thinkingLevel: models.effort() }
         : { type: "prompt", messageId, message: prepared.message, attachmentIds: prepared.attachmentIds });
@@ -1115,6 +1136,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       setGeneration("active");
       setEditingEntryId(null);
     } catch (error) {
+      promptOwner = null;
       setMessages(previous);
       setEditingEntryId(editId);
       setDraft(prepared.text);
@@ -1271,6 +1293,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     setDraft("");
     setGeneration("submitting");
     try {
+      promptOwner = interruptId;
       session.send({ type: "interrupt_and_send", messageId: interruptId, message: prepared.message, attachmentIds: prepared.attachmentIds,
         model: models.model(), thinkingLevel: models.effort() });
       setMessages((current) => [...current, local]);
@@ -1278,6 +1301,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       setStatus("active");
       setGeneration("active");
     } catch (error) {
+      promptOwner = null;
       setMessages(previous);
       setDraft(prepared.text);
       setGeneration("idle");
