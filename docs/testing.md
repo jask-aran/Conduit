@@ -124,6 +124,20 @@ npm run test:harness:renderer -- --fixtures rich-markdown,table-cell-display-mat
 - Browser renderers: `marked-stable`, `marked`, `incremark`, `incremark-typewriter`, `incremark-synthetic`, `incremark-advanced`
 - Browser controls: `--fixture`, `--profile`, `--pacing`, `--instrumentation`, `--paired-instrumentation`, `--chunk-size`, `--interval-ms`, `--seed`
 
+## Capturing a real harness exchange
+
+`CONDUIT_PI_TRACE=<file>` makes the server append every line it writes to Pi and
+every line Pi writes back, with the chat id. What a transcript ends up looking
+like depends on the order the harness says things in, so a test that guesses at
+that order proves nothing: capture the real sequence, then encode it in
+`test/transcript-pipeline.test.js`, which drives a faked Pi through the real
+manager, command handling, normalizers and client projection and asserts the
+rows and their order.
+
+```bash
+CONDUIT_PI_TRACE=/tmp/pi-trace.jsonl bash .devcontainer/start-conduit.sh restart
+```
+
 ## Other tests
 
 ```bash
