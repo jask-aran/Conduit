@@ -112,22 +112,29 @@ export function applyCommittedUser(messages: Message[], eventMessage: ProtocolMe
 export function upsertMessages(current: Message[], incoming: Message[]): Message[] {
   if (!incoming.length) return current;
   const next = [...current];
-  // Where the sync has placed messages so far. A message this client has not
-  // seen goes after the one the server put before it, not at the end -- the
-  // order is the server's statement, and only the position of a message nobody
-  // has seen before is open to question.
+  // The server's order is the statement; only a message nobody has seen before
+  // has an open position, and it goes between the messages the server put it
+  // between. So an unseen message waits for the next one this client knows and
+  // is placed in front of it, and falls to the end only when the rest of the
+  // sync is unseen too. Placing it immediately, relative to the last known
+  // message, sent a run that opened with unseen messages to the end of the
+  // transcript -- which is how a prompt could end up below a later one.
   let cursor = -1;
+  let held: Message[] = [];
+  const place = (at: number) => {
+    next.splice(at, 0, ...held);
+    cursor = at + held.length - 1;
+    held = [];
+  };
   for (const message of incoming) {
     const index = message.id ? next.findIndex((item) => item.id === message.id) : -1;
-    if (index >= 0) {
-      next[index] = message;
-      cursor = index;
-      continue;
-    }
-    const at = cursor >= 0 ? cursor + 1 : next.length;
-    next.splice(at, 0, message);
-    cursor = at;
+    if (index < 0) { held.push(message); continue; }
+    if (held.length) place(index);
+    const settled = next.findIndex((item) => item.id === message.id);
+    next[settled] = message;
+    cursor = settled;
   }
+  if (held.length) place(cursor >= 0 ? cursor + 1 : next.length);
   return next;
 }
 
