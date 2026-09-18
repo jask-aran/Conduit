@@ -704,8 +704,7 @@ export function createActiveChat(options: ActiveChatOptions) {
         batch(() => {
           const incomingMessages = asList<Message>(event.messages);
           const incomingTools = assignToolSeq(event.tools as ToolItem[]);
-          const projection = applyTranscriptProjection(messages(), tools(), incomingMessages, incomingTools,
-            { replaceAll: Boolean(event.replaceAll) });
+          const projection = applyTranscriptProjection(messages(), tools(), incomingMessages, incomingTools);
           setMessages(projection.messages);
           setTools(projection.tools);
         });

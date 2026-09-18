@@ -96,9 +96,8 @@ const toolCallIdsOf = (message: Message): string[] => (message.blocks || [])
   .filter((block) => block.type === "toolCall" && typeof block.id === "string")
   .map((block) => block.id as string);
 
-const messageKey = (message: Message) => message.key || message.id;
 const answerDisplayKey = (owner: Message | null, answerIndex: number, fallback: string) =>
-  `answer:${owner ? messageKey(owner) : fallback}:${answerIndex}`;
+  `answer:${owner ? owner.id : fallback}:${answerIndex}`;
 const active = (generation: ActiveGenerationView) => !["stopped", "complete", "failed"].includes(generation.status);
 
 export type LiveBlockLocation =
@@ -140,7 +139,7 @@ export function buildLiveProjectionIndex(
   const ownerIndex = liveOwnerIndex(messages);
   const owner = ownerIndex < 0 ? null : messages[ownerIndex]!;
   const messageIndex = ownerIndex < 0 ? messages.length : ownerIndex;
-  const traceRowKey = `trace:${owner ? messageKey(owner) : `live:${generation.id}`}`;
+  const traceRowKey = `trace:${owner ? owner.id : `live:${generation.id}`}`;
   const blockLocations = new Map<string, LiveBlockLocation>();
   const toolLocations = new Map<string, { rowKey: string; segmentIndex: number }>();
   const answerBlockIdentities = new Map<string, Set<string>>();
@@ -219,7 +218,6 @@ export function buildLiveAnswerRow(
     precedingUserId,
     value: {
       id: `live:${generation.id}:${assistantId}`,
-      key: `live:${generation.id}:${assistantId}`,
       role: "assistant",
       content,
       stopReason: assistant.stopReason || undefined,
@@ -254,7 +252,6 @@ function buildLiveErrorSegment(
     id: `error:${assistant.id}`,
     message: {
       id: assistant.id,
-      key: assistant.id,
       role: "assistant",
       content: "",
       stopReason: "error",
@@ -387,7 +384,6 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null): Turn
         precedingUserId: owner?.id,
         value: {
           id: `live:${generation.id}:${assistant.id}`,
-          key: `live:${generation.id}:${assistant.id}`,
           role: "assistant",
           content,
           stopReason: assistant.stopReason || undefined,
@@ -411,7 +407,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null): Turn
       : generation.status === "failed" ? "failed"
       : generation.status === "complete" ? "complete"
       : executingTool ? "executing_tool" : "thinking";
-    rows.push({ key: `trace:${owner ? messageKey(owner) : `live:${generation.id}`}`, type: "trace", value: { active: running, status, segments }, precedingUserId: owner?.id, answerless: answers.length === 0 });
+    rows.push({ key: `trace:${owner ? owner.id : `live:${generation.id}`}`, type: "trace", value: { active: running, status, segments }, precedingUserId: owner?.id, answerless: answers.length === 0 });
   }
   rows.push(...answers);
   return rows;
@@ -425,7 +421,7 @@ export function projectLiveTurn(
 ): TurnRow[] {
   const owner = liveOwner(messages, generation);
   if (!owner) return [...persistedRows, ...liveRows(generation, null)];
-  const ownerRow = persistedRows.findIndex((row) => row.key === `message:${messageKey(owner)}`);
+  const ownerRow = persistedRows.findIndex((row) => row.key === `message:${owner.id}`);
   if (ownerRow < 0) return [...persistedRows, ...liveRows(generation, owner)];
   let nextTurn = ownerRow + 1;
   while (nextTurn < persistedRows.length) {
@@ -457,7 +453,7 @@ function sameSources(
 function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById: Map<string, ToolItem>): TurnRow[] {
   const rows: TurnRow[] = [];
   if (turn.userMessage) {
-    rows.push({ key: `message:${messageKey(turn.userMessage)}`, type: "message", value: turn.userMessage });
+    rows.push({ key: `message:${turn.userMessage.id}`, type: "message", value: turn.userMessage });
   }
   if (!turn.assistants.length) return rows;
   const segments: TraceSegment[] = [];
@@ -491,7 +487,7 @@ function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById
     const interrupted = turn.assistants.some((assistant) => assistant.stopped || assistant.stopReason === "aborted");
     const failed = finalAssistant?.stopReason === "error" && !interrupted;
     rows.push({
-      key: `trace:${turn.userMessage ? messageKey(turn.userMessage) : messageKey(turn.assistants[0]!)}`,
+      key: `trace:${turn.userMessage ? turn.userMessage.id : turn.assistants[0]!.id}`,
       type: "trace",
       value: { active: false, status: interrupted ? "interrupted" : failed ? "failed" : "complete", segments },
       precedingUserId: turn.userMessage?.id,
@@ -499,7 +495,7 @@ function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById
     });
   }
   if (hasAnswerRow && answer) {
-    const displayKey = answerDisplayKey(turn.userMessage, 0, `message:${messageKey(answer)}`);
+    const displayKey = answerDisplayKey(turn.userMessage, 0, `message:${answer.id}`);
     rows.push({
       key: displayKey,
       displayKey,
@@ -544,7 +540,7 @@ export function projectPersistedTurns(
   const previousByKey = new Map(previous.map((turn) => [turn.key, turn]));
   const toolById = new Map(tools.map((tool) => [tool.id, tool]));
   const projected = turns.map((turn) => {
-    const key = turn.userMessage ? `user:${messageKey(turn.userMessage)}` : "preamble";
+    const key = turn.userMessage ? `user:${turn.userMessage.id}` : "preamble";
     const sourceTools = [
       ...turn.assistants.flatMap((assistant) => toolCallIdsOf(assistant).map((id) => toolById.get(id)).filter((tool): tool is ToolItem => Boolean(tool))),
       ...turn.leftoverTools,

@@ -211,40 +211,26 @@ export function createLiveSessionStream({
     adapterFor(record).publish(record, { type: "history_truncated", beforeMessageId });
   }
 
+  /**
+   * Repoint the chat at the branch the fork created.
+   *
+   * It used to read the whole forked transcript back and republish it, which
+   * was the only statement the client got about what the fork removed -- and
+   * the one it never got when the retained branch has no assistant message,
+   * because Pi names the fork's file before writing it and there was nothing
+   * to read. The truncation above says that directly, and a fork keeps the
+   * entry ids of everything it retains, so there is nothing left to re-sync.
+   */
   async function syncForkedChat(record, forked) {
     const context = await findChatContext(record.chatId);
     if (!context) throw new Error("Chat no longer exists");
-    const adapter = adapterFor(record);
     await registry.update(context.chat.id, { backend: {
       ...context.chat.backend,
       opaqueSession: forked?.opaqueSession,
     } });
-    let projection;
-    try {
-      projection = await adapter.readTranscript({
-        liveSessionId: record.id,
-        chatId: record.chatId,
-        project: context.project,
-        turns: Number.MAX_SAFE_INTEGER,
-        characterLimit: Number.MAX_SAFE_INTEGER,
-      });
-    } catch (error) {
-      // Pi assigns a fork path before it creates the JSONL when the retained
-      // branch has no assistant message. Keep the last durable registry pointer;
-      // the turn-end checkpoint commits this child after the prompt writes it.
-      if (error.code !== "ENOENT") throw error;
-      const updated = registry.metadata(context.chat.id);
-      adapter.publish(record, { type: "history_forked", chat: chatView(updated) });
-      return updated;
-    }
-    adapter.publish(record, { type: "history_forked", chat: chatView(registry.metadata(context.chat.id)) });
-    projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages || []);
-    if (needsMessageIds(context.chat)) {
-      projection.messages = applyMessageIds(projection.messages,
-        await messageIds.resolver(context.project, context.chat.id));
-    }
-    adapter.publish(record, { type: "transcript_sync", generationId: null, replaceAll: true, ...projection });
-    return registry.metadata(context.chat.id);
+    const updated = registry.metadata(context.chat.id);
+    adapterFor(record).publish(record, { type: "history_forked", chat: chatView(updated) });
+    return updated;
   }
 
   async function clearQueuedMessages(record, adapter) {

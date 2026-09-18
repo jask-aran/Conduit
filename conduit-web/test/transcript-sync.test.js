@@ -95,16 +95,15 @@ test("a cut naming a message this client never loaded leaves it alone", () => {
   assert.equal(truncateAt(current, "pi:somewhere-else", { inclusive: true }), current);
 });
 
-test("an authoritative fork transcript removes every abandoned message", () => {
+test("the cut a fork states removes every abandoned message, and keeps what is unsent", () => {
   const current = [
     message("m_u1", "user", "hi"), message("pi:a1", "assistant", "hello"),
     message("m_u2", "user", "abandoned"), message("pi:a2", "assistant", "abandoned answer"),
     message("user_3", "user", "unsent", { pending: true }),
   ];
-  const { messages } = applyTranscriptProjection(current, [], [
-    message("m_u1", "user", "hi"), message("pi:a1", "assistant", "hello"),
-  ], [], { replaceAll: true });
-  assert.deepEqual(messages.map((item) => item.id), ["m_u1", "pi:a1", "user_3"]);
+  const cut = truncateAt(current, "m_u2", { inclusive: true });
+  assert.deepEqual(cut.map((item) => item.id), ["m_u1", "pi:a1"]);
+  assert.equal(current.at(-1).pending, true);
 });
 
 test("a synced turn replaces its tools and retains tools from older turns", () => {

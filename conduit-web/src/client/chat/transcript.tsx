@@ -587,7 +587,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     props.chat.tools();
     const messages = props.chat.messages();
     const trailingUser = messages.at(-1)?.role === "user" ? messages.at(-1)! : null;
-    const trailingUserId = trailingUser ? trailingUser.key || trailingUser.id : null;
+    const trailingUserId = trailingUser?.id || null;
     if (loaded !== previousLoaded) {
       if (previousLoaded) rememberScrollPosition(previousLoaded);
       previousLoaded = loaded;
@@ -930,7 +930,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
           const live = createMemo(() => {
             if (item.live != null) return item.live;
             const last = props.chat.messages().at(-1);
-            return props.chat.streaming() && !user() && Boolean(last && (message().key || message().id) === (last.key || last.id));
+            return props.chat.streaming() && !user() && Boolean(last && message().id === last.id);
           });
           const precedingUserId = () => user() ? undefined : item.precedingUserId;
           const artifact = createMemo(() => {
