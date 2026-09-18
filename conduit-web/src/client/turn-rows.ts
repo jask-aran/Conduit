@@ -16,6 +16,13 @@ type LiveBlock = {
 export interface ActiveGenerationView {
   id: string;
   status: string;
+  /**
+   * The prompt this generation is answering. Known whenever Conduit sent that
+   * prompt, and absent for a turn started outside it -- a CLI-driven thread,
+   * or history adopted from a session file -- which falls back to reading the
+   * last prompt in the transcript.
+   */
+  ownerMessageId?: string | null;
   lastSeq: number;
   continuation?: boolean;
   continuationBase?: string;
@@ -119,15 +126,30 @@ export interface LiveProjectionIndex {
 // Returns the index as well as the message: the caller needs both, and asking
 // for the index separately meant a second full pass over the list. Scanning
 // backwards in place also avoids copying the whole list to read one element.
-const liveOwnerIndex = (messages: Message[]) => {
+const lastPromptIndex = (messages: Message[]) => {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]!;
     if (message.role === "user" && !message.pending) return index;
   }
   return -1;
 };
+/**
+ * Which prompt the live turn is drawn under.
+ *
+ * The last prompt in the transcript is only the right answer while nothing
+ * else is being sent. Interrupting adds a prompt before the turn it cut off
+ * has finished, and the answer being interrupted would move down to sit under
+ * the message that stopped it -- ending up below it, run together with the
+ * reply to it. A generation Conduit started names its own prompt instead.
+ */
+const liveOwnerIndex = (messages: Message[], generation?: ActiveGenerationView | null) => {
+  const owned = generation?.ownerMessageId
+    ? messages.findIndex((message) => message.id === generation.ownerMessageId)
+    : -1;
+  return owned >= 0 ? owned : lastPromptIndex(messages);
+};
 const liveOwner = (messages: Message[], generation: ActiveGenerationView) => {
-  const index = liveOwnerIndex(messages);
+  const index = liveOwnerIndex(messages, generation);
   return index < 0 ? null : messages[index]!;
 };
 
@@ -136,7 +158,7 @@ export function buildLiveProjectionIndex(
   messages: Message[],
 ): LiveProjectionIndex {
   const classifications = textBlockClassifications(generation) as Record<string, "interim" | "answer">;
-  const ownerIndex = liveOwnerIndex(messages);
+  const ownerIndex = liveOwnerIndex(messages, generation);
   const owner = ownerIndex < 0 ? null : messages[ownerIndex]!;
   const messageIndex = ownerIndex < 0 ? messages.length : ownerIndex;
   const traceRowKey = `trace:${owner ? owner.id : `live:${generation.id}`}`;
