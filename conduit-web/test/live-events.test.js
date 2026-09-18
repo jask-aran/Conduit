@@ -2,19 +2,41 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { isStructuredGenerationEvent, normalizeLiveEvent } from "../src/client/api/live-events.ts";
 
-test("preserves an authoritative fork transcript marker", () => {
+test("preserves a sync that replaces the whole transcript", () => {
   assert.deepEqual(normalizeLiveEvent({
     type: "transcript_sync",
     generationId: null,
-    replaceAll: true,
+    replace: true,
     messages: [{ id: "user-kept", role: "user" }],
     tools: [],
   }), {
     type: "transcript_sync",
     generationId: null,
-    replaceAll: true,
+    replace: true,
     messages: [{ id: "user-kept", role: "user" }],
     tools: [],
+  });
+});
+
+test("a message's place in the chat's order survives normalization", () => {
+  assert.deepEqual(normalizeLiveEvent({
+    type: "transcript_op",
+    op: "message.open",
+    generationId: "g1",
+    after: "m_prompt",
+    answers: "m_prompt",
+    message: { id: "m_answer", role: "assistant" },
+    log: { id: "log-1", seq: 7 },
+  }), {
+    type: "transcript_op",
+    op: "message.open",
+    generationId: "g1",
+    after: "m_prompt",
+    // The prompt being answered, stated rather than read off the transcript.
+    answers: "m_prompt",
+    message: { id: "m_answer", role: "assistant", content: undefined, timestamp: undefined,
+      stopReason: undefined, errorMessage: null },
+    log: { id: "log-1", seq: 7 },
   });
 });
 
@@ -82,6 +104,9 @@ test("preserves a checkpoint's durable chat title", () => {
     generationSeq: 18,
     chatId: "chat_1",
     title: "Tell me a long story",
+    // The whole row travels with the checkpoint: the open chat's unread state
+    // stops depending on the global stream being alive.
+    chat: { id: "chat_1", title: "Tell me a long story" },
     artifacts: null,
   });
 });

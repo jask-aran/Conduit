@@ -15,7 +15,9 @@ test("Pi normalizer fixtures keep generation-local sequence and identity", () =>
     assert.deepEqual(events.map((event) => event.seq), events.map((_, index) => index + 1), name);
     assert.ok(events.every((event) => event.generationId === generationId), name);
     for (const event of events.filter((candidate) => candidate.type === "content_block_delta")) {
-      assert.match(event.messageId, /^m\d+$/, name);
+      // A message Pi did not name is named for the generation writing it, so
+      // the name cannot be mistaken for one from another turn.
+      assert.match(event.messageId, new RegExp(`^${generationId}:m\\d+$`), name);
       assert.ok(Number.isInteger(event.contentIndex), name);
       assert.ok(["text", "thinking", "toolCall"].includes(event.blockType), name);
     }

@@ -25,7 +25,7 @@ import type {
   ToolItem,
   TranscriptDetail,
 } from "../api/contracts";
-import { applyCommittedUser, applyTranscriptProjection, assignToolSeq, claimAnswerRows, replaceMessages, settleAnswerRows, truncateAt, upsertMessages } from "../timeline-order";
+import { applyCommittedUser, applyTranscriptOp, applyTranscriptProjection, assignToolSeq, claimAnswerRows, replaceMessages, settleAnswerRows, truncateAt, upsertMessages } from "../timeline-order";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { canCoalesceTextDelta, enqueueOverflowLiveEvent, mergeTextDeltaEvents } from "./text-delta-batcher";
 import type { UploadAttachment } from "./attachments";
@@ -327,6 +327,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     onEvent: (data, chatId) => {
       try {
         const event = normalizeLiveEvent(JSON.parse(data));
+        if (!acceptInOrder(event)) return;
         const opening = liveOpening;
         if (opening?.chatId === chatId && opening.selection === selectionToken) {
           if (event.type === "runtime_state") opening.socketReady = true;
@@ -451,8 +452,48 @@ export function createActiveChat(options: ActiveChatOptions) {
     applyLiveEvent(event);
   };
 
+  /**
+   * Where this client is in the chat's order, and which order that is.
+   *
+   * The server numbers every event that changes what the transcript says, so a
+   * hole in the numbers is a fact rather than something to be inferred from
+   * messages that look duplicated or out of place. Seeing one, this asks to be
+   * caught up from the last number it did see, and drops what arrived out of
+   * order: the replay carries it again, in its place.
+   */
+  let logId: string | null = null;
+  let logSeq = 0;
+
+  const requestLogResume = () => {
+    if (!logId || !session.isOpen()) return;
+    // A failed send is not worth reporting: the socket is already closing, and
+    // the reconnect asks the same question again.
+    try { session.send({ type: "resume_log", logId, since: logSeq }); } catch { /* asked again on reconnect */ }
+  };
+
+  /**
+   * Take the event's place in the order, and say whether to apply it.
+   *
+   * An unnumbered event -- a delta, runtime state, the queue -- is always
+   * applied: it carries no position and losing one costs nothing the next
+   * numbered event does not restate.
+   */
+  const acceptInOrder = (event: LiveEvent): boolean => {
+    const stamp = (event as { log?: { id?: string; seq?: number } }).log;
+    if (!stamp?.id || typeof stamp.seq !== "number") return true;
+    if (stamp.id !== logId) { logId = stamp.id; logSeq = stamp.seq; return true; }
+    // Already applied. The replay that answers a hole ends with events this
+    // client had seen, and applying them twice is what it is being spared.
+    if (stamp.seq <= logSeq) return false;
+    if (stamp.seq > logSeq + 1) { requestLogResume(); return false; }
+    logSeq = stamp.seq;
+    return true;
+  };
+
   const reset = (draftProfileId?: string) => {
     navigationToken += 1;
+    logId = null;
+    logSeq = 0;
     selectionToken += 1;
     setLoadedId(null);
     setMessages([]);
@@ -513,7 +554,11 @@ export function createActiveChat(options: ActiveChatOptions) {
         // its place is decided once, by arrival, rather than re-derived on
         // every frame from whichever prompt happens to be last. Everything
         // sent after it -- an interrupt, above all -- lands after it.
-        setMessages((existing) => claimAnswerRows(existing, state));
+        // Where the server states its own order, an answer already has a row
+        // by the time this runs: it was put in place when the harness named it,
+        // at the position the server gave. Guessing at the end is only for a
+        // backend that says nothing about order.
+        if (!logId) setMessages((existing) => claimAnswerRows(existing, state));
         setActiveGeneration(state);
         setActiveGenerationChange(generationChangeFor(event));
       }
@@ -528,14 +573,21 @@ export function createActiveChat(options: ActiveChatOptions) {
     const terminal = ["stopped", "complete", "failed"].includes(next.status);
     const wasTerminal = previousStatus ? ["stopped", "complete", "failed"].includes(previousStatus) : false;
     if (terminal && !wasTerminal) {
-      const frozen = freezeGeneration(next);
+      // Where the server states the transcript, it has already said what every
+      // message of this turn says and which rows to give up. Freezing the live
+      // view into the transcript as well would be a second answer to that,
+      // assembled here out of deltas -- and the one that raced the harness's
+      // own writes.
+      const frozen = logId ? [] : freezeGeneration(next);
       batch(() => {
-        if (frozen.length) setTools((existing) => settleGenerationTools(existing, next));
+        // Tools are not stated as ops yet, so their final records still come
+        // from the turn that ran them.
+        setTools((existing) => settleGenerationTools(existing, next));
         // The rows this turn has been holding are settled in place. A turn can
         // finish having named an answer it never wrote anything into -- one
         // cancelled before its first token -- and that row goes rather than
         // sitting in the transcript as a blank answer forever.
-        setMessages((existing) => settleAnswerRows(existing, next.id, frozen));
+        if (!logId) setMessages((existing) => settleAnswerRows(existing, next.id, frozen));
         generationStore.clear();
         setActiveGenerationChange(null);
         setActiveGeneration(null);
@@ -712,10 +764,47 @@ export function createActiveChat(options: ActiveChatOptions) {
         batch(() => {
           const incomingMessages = asList<Message>(event.messages);
           const incomingTools = assignToolSeq(event.tools as ToolItem[]);
-          const projection = applyTranscriptProjection(messages(), tools(), incomingMessages, incomingTools);
+          // A replacing sync is the whole of what this chat should hold: it
+          // answers a client that lost its place, so folding it into what is
+          // already there would keep exactly the rows it was sent to correct.
+          if (event.replace) {
+            setMessages((current) => replaceMessages(current, incomingMessages));
+            setTools(incomingTools);
+            return;
+          }
+          // With a log, every message has already been stated -- opened where
+          // the server put it, closed with what it says. So a window sync is a
+          // restatement of rows this client holds, never the first news of a
+          // row: anything it does not recognise would be placed by guesswork,
+          // and a message genuinely missed is a hole in the order, which the
+          // log repairs by replay or by a replacing sync.
+          const known = logId
+            ? incomingMessages.filter((message) => messages().some((held) => held.id === message.id))
+            : incomingMessages;
+          const projection = applyTranscriptProjection(messages(), tools(), known, incomingTools);
           setMessages(projection.messages);
           setTools(projection.tools);
         });
+        break;
+      // The server saying what the transcript is: a message exists and where,
+      // a message is finished, a message is gone. This is the whole of how a
+      // row gets its place -- nothing below works one out.
+      case "transcript_op":
+        setMessages((current) => applyTranscriptOp(current, event));
+        break;
+      // Where the chat's order stands. A client that was already here says how
+      // far it got; one arriving fresh has just loaded the transcript and takes
+      // the number as its own.
+      case "log_state":
+        if (!event.log?.id) break;
+        if (!logId) { logId = event.log.id; logSeq = event.log.seq; break; }
+        if (logId !== event.log.id || logSeq < event.log.seq) requestLogResume();
+        break;
+      // The log cannot reach back to where this client is. Its place is given
+      // up here, and the replacing sync that follows sets it again.
+      case "log_reset":
+        logId = null;
+        logSeq = 0;
         break;
       case "history_truncated":
         // The fork says where the history ends now; this client holds whatever
@@ -1091,9 +1180,14 @@ export function createActiveChat(options: ActiveChatOptions) {
     const local: Message = { id: messageId, role: "user", content: prepared.message, timestamp: new Date().toISOString(), attachments: prepared.sentAttachments };
 
     if (busy) {
-      // Sending while the agent works steers by default: the message reaches
-      // the model as soon as the current tool call settles, rather than waiting
-      // for the whole turn. Backends without steering fall back to the queue.
+      // Sending while the agent works queues: the message reaches the model as
+      // soon as the current tool call settles, rather than cutting the turn off
+      // mid-thought. Cutting it off is the other button -- the one on the queued
+      // bubble -- which takes these messages back and interrupts with them.
+      // The id goes with it either way. A queued message the browser had not
+      // named arrived in the transcript only when the session file was read
+      // back, under an id derived from the entry, beside the copy the live turn
+      // had already drawn: the same message, twice, until a reload.
       const queueMode = mode || (supports("steer") ? "steer" : "follow_up");
       setDraft("");
       try {

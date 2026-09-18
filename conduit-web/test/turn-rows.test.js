@@ -314,3 +314,48 @@ test("keeps a recovered live error in the trace while it is still generating", (
   assert.equal(trace?.type === "trace" && trace.value.segments.map((segment) => segment.kind).join(), "error");
   assert.equal(rows[2]?.type === "message" && rows[2].value.content, "Recovered answer");
 });
+
+test("an answer is grouped under the prompt it says it answers", () => {
+  // The transcript order here is deliberately not the grouping: the second
+  // answer sits after a later prompt, and says it answers the earlier one.
+  const messages = [
+    { id: "u1", role: "user", content: "first" },
+    { id: "a1", role: "assistant", content: "first answer", answers: "u1" },
+    { id: "u2", role: "user", content: "second" },
+    { id: "a2", role: "assistant", content: "late answer to the first", answers: "u1" },
+  ];
+  const rows = buildTurnRows(messages, []);
+  const answers = rows.filter((row) => row.type === "message" && row.value.role === "assistant");
+  assert.equal(answers.length, 1, "both answers belong to one turn, so they render as one answer row");
+  assert.equal(answers[0].precedingUserId, "u1");
+  assert.match(answers[0].value.content, /first answer/);
+  assert.match(answers[0].value.content, /late answer to the first/);
+});
+
+test("a tool nothing claims is not handed to a turn by its timestamp", () => {
+  const messages = [
+    { id: "u1", role: "user", content: "run it", timestamp: "2026-01-01T00:00:00.000Z" },
+    { id: "a1", role: "assistant", content: "done", answers: "u1", timestamp: "2026-01-01T00:00:02.000Z" },
+  ];
+  const orphan = { id: "call_1", name: "bash", done: true, timestamp: "2026-01-01T00:00:01.000Z" };
+  const rows = buildTurnRows(messages, [orphan]);
+  const traces = rows.filter((row) => row.type === "trace");
+  assert.deepEqual(traces, [], "the message claimed no tools, so the turn shows none");
+});
+
+test("an answer stays an answer when a later message calls a tool", () => {
+  // The turn answered, was steered, and the follow-on ran a tool. Reading the
+  // turn's shape would call the first answer narration and fold it into the
+  // trace, which is how a finished story disappeared from the transcript.
+  const messages = [
+    { id: "u1", role: "user", content: "tell me a long story" },
+    { id: "a1", role: "assistant", content: "Once upon a time…", answers: "u1", interim: false },
+    { id: "a2", role: "assistant", content: "", answers: "u1", interim: true,
+      blocks: [{ type: "toolCall", id: "call_1", name: "bash" }] },
+  ];
+  const rows = buildTurnRows(messages, [{ id: "call_1", name: "bash", done: true }]);
+  const answers = rows.filter((row) => row.type === "message" && row.value.role === "assistant");
+  assert.equal(answers.length, 1);
+  assert.equal(answers[0].value.content, "Once upon a time…");
+  assert.equal(rows.some((row) => row.type === "trace"), true, "the tool still shows in the trace");
+});

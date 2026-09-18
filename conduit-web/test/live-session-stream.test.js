@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 import test from "node:test";
 import { serializeAttachmentEnvelope } from "../src/attachment-envelope.js";
 import { createLiveSessionStream, interruptedPromptInput } from "../src/server/live-session-stream.js";
+import { ChatLogs } from "../src/server/chat-log.js";
 
 const queuedAttachment = {
   id: "13dd7444-3bc5-4e9f-880d-2d83b6554862",
@@ -12,6 +13,19 @@ const queuedAttachment = {
 const lifecycle = {
   run: (_chatId, operation) => operation(),
   assertAvailable: () => {},
+};
+// The stream names every message it sends. These tests are about what it does
+// with commands, not about identity, so the ledger answers plainly.
+const messageIds = {
+  owns: () => true,
+  load: async () => ({}),
+  claim: async (_project, _chat, _role, offered) => offered || "m_claimed",
+  mint: async () => "m_minted",
+  claimNow: () => "m_answer",
+  bind: async () => null,
+  release: async () => {},
+  resolver: async () => (id) => id,
+  entryIdFor: async (_project, _chat, id) => id,
 };
 
 test("interrupt and send preserves queued and composer attachments", () => {
@@ -75,6 +89,7 @@ test("one socket delivers backend commands in browser order", async () => {
         return [];
       },
       pathFor: () => "",
+      recordMessage: async () => {},
     },
     registry: { metadata: () => ({ backend: { implementation: "conduit_pi" } }) },
     config: {},
@@ -83,6 +98,8 @@ test("one socket delivers backend commands in browser order", async () => {
       project: { id: "project-1" },
     }),
     lifecycle,
+    messageIds,
+    chatLogs: new ChatLogs(),
     backends,
   });
 
@@ -132,6 +149,8 @@ test("a manifest-owned Codex prompt uses Conduit's naming service", async () => 
     config: {},
     findChatContext: async () => ({ chat, project }),
     lifecycle,
+    messageIds,
+    chatLogs: new ChatLogs(),
     backends: { get: () => record, forChat: () => adapter },
     autoNameSession: async (_record, _context, message) => { named.push(message); },
   });
@@ -183,6 +202,8 @@ test("a successful fork replaces the browser transcript before the new prompt", 
     config: {},
     findChatContext: async () => ({ chat, project }),
     lifecycle,
+    messageIds,
+    chatLogs: new ChatLogs(),
     backends: { get: () => record, forChat: () => adapter },
   });
 
@@ -190,15 +211,15 @@ test("a successful fork replaces the browser transcript before the new prompt", 
   ws.emit("message", JSON.stringify({ type: "fork_and_prompt", entryId: "user-old", message: "replacement" }));
   await new Promise((resolve) => setImmediate(resolve));
 
+  // A fork states where the history now ends and repoints the chat. It no
+  // longer reads the forked transcript back: the branch keeps the entry ids of
+  // everything it retains, so there is nothing for a re-read to correct.
   assert.equal(operations[0], "fork");
-  assert.deepEqual(operations[2], {
-    type: "transcript_sync",
-    generationId: null,
-    replaceAll: true,
-    messages: [{ id: "user-kept", role: "user", content: "keep" }],
-    tools: [],
-  });
-  assert.equal(operations[3], "prompt");
+  assert.deepEqual(operations.filter((item) => typeof item === "string"), ["fork", "prompt"]);
+  assert.deepEqual(operations.filter((item) => item?.type).map((item) => item.type),
+    ["history_truncated", "transcript_op", "history_forked", "transcript_op"]);
+  assert.deepEqual(operations.find((item) => item?.type === "history_truncated"),
+    { type: "history_truncated", beforeMessageId: "user-old" });
 });
 
 test("a fork submits its prompt before Pi creates the child session file", async () => {
@@ -246,6 +267,8 @@ test("a fork submits its prompt before Pi creates the child session file", async
     config: {},
     findChatContext: async () => ({ chat, project }),
     lifecycle,
+    messageIds,
+    chatLogs: new ChatLogs(),
     backends: { get: () => record, forChat: () => adapter },
   });
 
@@ -253,7 +276,10 @@ test("a fork submits its prompt before Pi creates the child session file", async
   ws.emit("message", JSON.stringify({ type: "fork_and_prompt", entryId: "user-old", message: "replacement" }));
   await new Promise((resolve) => setImmediate(resolve));
 
-  assert.deepEqual(operations, ["fork", "read", "history_forked", "prompt"]);
+  // The prompt's own message is stated before it is sent: the harness can start
+  // answering while its acceptance is still in flight, and an answer must not
+  // be placed before the prompt it answers exists.
+  assert.deepEqual(operations, ["fork", "history_truncated", "transcript_op", "history_forked", "transcript_op", "prompt"]);
   assert.deepEqual(updates, [{ backend: { implementation: "conduit_pi", opaqueSession: "/tmp/provisional-fork.jsonl" } }]);
   assert.equal(chat.backend.opaqueSession, "/tmp/durable-session.jsonl");
   assert.equal(sent.some((event) => event.type === "client_error"), false);
@@ -282,6 +308,8 @@ test("an unknown browser command cannot reach a backend escape hatch", async () 
       project: { id: "project-1" },
     }),
     lifecycle,
+    messageIds,
+    chatLogs: new ChatLogs(),
     backends: { get: () => record, forChat: () => adapter },
   });
 

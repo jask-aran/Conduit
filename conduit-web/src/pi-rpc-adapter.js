@@ -82,7 +82,11 @@ const historyTreeView = (tree) => {
 };
 
 export function normalizePiBackendEvent(event) {
-  const base = { generationId: event.generationId || null, pi: event };
+  // The number the chat's log gave this event travels with it, whatever shape
+  // the event takes on the way out. It is how the browser knows its copy of the
+  // transcript is complete, and what it asks to be caught up from.
+  const base = { generationId: event.generationId || null, pi: event,
+    ...(event.log ? { log: event.log } : {}) };
   switch (event.type) {
     case "content_block_delta":
       return { ...base, type: "assistant_content", phase: "delta", sequence: event.seq,
@@ -148,7 +152,23 @@ export function normalizePiBackendEvent(event) {
     case "history_truncated":
       return { ...base, type: "history_truncated", beforeMessageId: event.beforeMessageId || null };
     case "transcript_sync":
-      return { ...base, type: "transcript_sync", messages: event.messages || [], tools: event.tools || [] };
+      // `replace` marks the whole transcript, not a window of it: the client
+      // takes it as the entire truth rather than folding it into what it holds.
+      return { ...base, type: "transcript_sync", messages: event.messages || [], tools: event.tools || [],
+        ...(event.replace ? { replace: true } : {}) };
+    // What the server has decided about the transcript: a message exists, is
+    // finished, or is gone, and where it sits. Passed through whole -- the op
+    // is already the neutral statement, not a Pi shape needing translation.
+    case "transcript_op": {
+      const { type: _type, pi: _raw, log: _log, generationId: _generation, ...op } = event;
+      return { ...base, type: "transcript_op", ...op };
+    }
+    // Where the chat's order stands, and where a client has to give up its own
+    // copy and take a fresh one.
+    case "log_state":
+      return { ...base, type: "log_state", log: event.log };
+    case "log_reset":
+      return { ...base, type: "log_reset", log: event.log };
     case "session_checkpoint":
       return { ...base, type: "session_checkpoint", sequence: event.generationSeq ?? null,
         artifacts: event.artifacts ?? null,

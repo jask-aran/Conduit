@@ -14,8 +14,16 @@ export function createActiveGeneration(id, { status = "submitting", continuation
   };
 }
 
-export function contentBlockIdentity(generationId, messageId, contentIndex) {
-  return `${generationId}:${messageId}:${contentIndex}`;
+/**
+ * What names a block, for as long as it is being written.
+ *
+ * The message id carries the generation already -- a claimed one is unique
+ * outright, and the fallback the normalizer invents is prefixed with the
+ * generation that invented it -- so naming the generation again here only made
+ * every identity say it twice.
+ */
+export function contentBlockIdentity(messageId, contentIndex) {
+  return `${messageId}:${contentIndex}`;
 }
 
 function cloneGeneration(state) {
@@ -115,7 +123,7 @@ export function reduceActiveGeneration(current, event) {
       if (message) upsertBlock(message, {
         ...event.block,
         status: "streaming",
-        identity: contentBlockIdentity(next.id, event.messageId, event.block.contentIndex),
+        identity: contentBlockIdentity(event.messageId, event.block.contentIndex),
       });
       break;
     }
@@ -127,7 +135,7 @@ export function reduceActiveGeneration(current, event) {
         type: event.blockType,
         contentIndex: event.contentIndex,
         status: "streaming",
-        identity: contentBlockIdentity(next.id, event.messageId, event.contentIndex),
+        identity: contentBlockIdentity(event.messageId, event.contentIndex),
       });
       if (event.blockType === "toolCall") block.argumentsText = `${existing?.argumentsText || ""}${event.delta}`;
       else block.text = `${existing?.text || ""}${event.delta}`;
@@ -138,7 +146,7 @@ export function reduceActiveGeneration(current, event) {
       if (message) upsertBlock(message, {
         ...event.block,
         status: "complete",
-        identity: contentBlockIdentity(next.id, event.messageId, event.block.contentIndex),
+        identity: contentBlockIdentity(event.messageId, event.block.contentIndex),
       });
       break;
     }
@@ -150,7 +158,7 @@ export function reduceActiveGeneration(current, event) {
         ...existingByIndex.get(block.contentIndex),
         ...block,
         status: "complete",
-        identity: contentBlockIdentity(next.id, event.messageId, block.contentIndex),
+        identity: contentBlockIdentity(event.messageId, block.contentIndex),
       }));
       message.status = event.stopReason === "error" || event.stopReason === "aborted" ? "error" : "complete";
       message.stopReason = event.stopReason;
@@ -230,49 +238,68 @@ export function reduceGenerationEvents(events, initial = null) {
   return events.reduce(reduceActiveGeneration, initial);
 }
 
+/**
+ * Which of a turn's text is an answer, and which is it talking as it works.
+ *
+ * Decided per message, from that message alone: its text is narration when the
+ * message is itself a step towards an answer -- it called a tool, or stopped to
+ * call one -- and an answer otherwise.
+ *
+ * It used to be decided across the whole turn: any text with a tool call
+ * anywhere after it was narration. That made a finished answer stop being one
+ * retroactively. Steer a turn that has already answered, and the follow-on
+ * message calls a tool -- so the answer already on screen was reclassified as
+ * narration, folded into the collapsed trace, and to anyone watching it had
+ * simply vanished. What a later message does cannot change what an earlier one
+ * said.
+ */
 export function textBlockClassifications(state) {
   const result = {};
-  const ordered = state.assistantMessages.flatMap((message, messageIndex) =>
-    message.blocks.map((block) => ({ block, message, messageIndex })));
-  const laterToolCall = new Array(ordered.length).fill(false);
-  let seenToolCall = false;
-  for (let index = ordered.length - 1; index >= 0; index -= 1) {
-    laterToolCall[index] = seenToolCall;
-    if (ordered[index].block.type === "toolCall") seenToolCall = true;
+  for (const message of state.assistantMessages || []) {
+    const interim = message.stopReason === "toolUse"
+      || (message.blocks || []).some((block) => block.type === "toolCall");
+    for (const block of message.blocks || []) {
+      if (block.type === "text") result[block.identity] = interim ? "interim" : "answer";
+    }
   }
-  ordered.forEach(({ block, message }, index) => {
-    if (block.type !== "text") return;
-    result[block.identity] = message.stopReason === "toolUse" || laterToolCall[index]
-      ? "interim"
-      : "answer";
-  });
   return result;
+}
+
+/** The same question, for a message the server is about to state as finished. */
+export function messageIsInterim(message) {
+  return Boolean(message && (message.stopReason === "toolUse"
+    || (message.blocks || []).some((block) => block.type === "toolCall")));
 }
 
 export function activeGenerationFromPersistedMessages(generationId, messages, { toolExecutions = {} } = {}) {
   const state = createActiveGeneration(generationId, { status: "complete" });
+  // Named exactly as the normalizer names an answer it was given no id for:
+  // the generation, then its position in the turn. The live view and the view
+  // rebuilt from what was persisted are compared block by block, so a message
+  // that is the same message has to be called the same thing on both sides.
+  const fallbackId = (index) => `${generationId}:m${index + 1}`;
   state.assistantMessages = messages
     .filter((message) => message?.role === "assistant")
     .map((message, messageIndex) => ({
-      id: `m${messageIndex + 1}`,
+      id: fallbackId(messageIndex),
       status: message.stopReason === "error" || message.stopReason === "aborted" ? "error" : "complete",
       stopReason: message.stopReason || "stop",
       errorMessage: message.errorMessage || null,
-      blocks: normalizePersistedBlocks(generationId, `m${messageIndex + 1}`, message.content),
+      blocks: normalizePersistedBlocks(fallbackId(messageIndex), message.content),
     }));
   state.toolExecutions = structuredClone(toolExecutions);
   state.status = terminalStatus(state);
   return state;
 }
 
-function normalizePersistedBlocks(generationId, messageId, content) {
+function normalizePersistedBlocks(messageId, content) {
   if (!Array.isArray(content)) {
     return content == null || content === "" ? [] : [{
       type: "text",
       contentIndex: 0,
       text: String(content),
       status: "complete",
-      identity: contentBlockIdentity(generationId, messageId, 0),
+      identity: contentBlockIdentity(messageId, 0),
     }];
   }
   return content.flatMap((block, contentIndex) => {
@@ -281,7 +308,7 @@ function normalizePersistedBlocks(generationId, messageId, content) {
       contentIndex,
       text: String(block.text || ""),
       status: "complete",
-      identity: contentBlockIdentity(generationId, messageId, contentIndex),
+      identity: contentBlockIdentity(messageId, contentIndex),
     }];
     if (block?.type === "thinking") return [{
       type: "thinking",
@@ -289,7 +316,7 @@ function normalizePersistedBlocks(generationId, messageId, content) {
       text: String(block.thinking || ""),
       redacted: Boolean(block.redacted),
       status: "complete",
-      identity: contentBlockIdentity(generationId, messageId, contentIndex),
+      identity: contentBlockIdentity(messageId, contentIndex),
     }];
     if (block?.type === "toolCall") return [{
       type: "toolCall",
@@ -298,7 +325,7 @@ function normalizePersistedBlocks(generationId, messageId, content) {
       name: String(block.name || ""),
       arguments: block.arguments,
       status: "complete",
-      identity: contentBlockIdentity(generationId, messageId, contentIndex),
+      identity: contentBlockIdentity(messageId, contentIndex),
     }];
     return [];
   });

@@ -201,7 +201,7 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
           upsertBlock(event.messageId, block.contentIndex, {
             ...block,
             status: "streaming",
-            identity: contentBlockIdentity(state.id, event.messageId, block.contentIndex),
+            identity: contentBlockIdentity(event.messageId, block.contentIndex),
           });
           break;
         }
@@ -215,7 +215,7 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
             type: event.blockType,
             contentIndex: event.contentIndex,
             status: "streaming",
-            identity: contentBlockIdentity(state.id, event.messageId, event.contentIndex),
+            identity: contentBlockIdentity(event.messageId, event.contentIndex),
           });
           if (!block) break;
           const field = event.blockType === "toolCall" ? "argumentsText" : "text";
@@ -228,7 +228,7 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
           upsertBlock(event.messageId, block.contentIndex, {
             ...block,
             status: "complete",
-            identity: contentBlockIdentity(state.id, event.messageId, block.contentIndex),
+            identity: contentBlockIdentity(event.messageId, block.contentIndex),
           });
           break;
         }
@@ -242,7 +242,7 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
             ...existingByIndex.get(block.contentIndex),
             ...block,
             status: "complete",
-            identity: contentBlockIdentity(state.id, event.messageId, block.contentIndex),
+            identity: contentBlockIdentity(event.messageId, block.contentIndex),
           }));
           setPath(["assistantMessages", messageIndex], {
             ...message,

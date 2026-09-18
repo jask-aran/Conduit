@@ -115,7 +115,7 @@ test("normalizes Pi block structure with stable generation-local identities", ()
 
   assert.deepEqual(tree(state), [
     {
-      id: "m1",
+      id: "g_tools:m1",
       status: "complete",
       stopReason: "toolUse",
       blocks: [
@@ -124,7 +124,7 @@ test("normalizes Pi block structure with stable generation-local identities", ()
       ],
     },
     {
-      id: "m2",
+      id: "g_tools:m2",
       status: "complete",
       stopReason: "toolUse",
       blocks: [
@@ -132,7 +132,7 @@ test("normalizes Pi block structure with stable generation-local identities", ()
       ],
     },
     {
-      id: "m3",
+      id: "g_tools:m3",
       status: "complete",
       stopReason: "stop",
       blocks: [
@@ -272,13 +272,17 @@ test("client live state remains equivalent to the shared reducer after every fix
 
 test("ordinary block deltas preserve structural and unrelated block identities", () => {
   const events = normalizedFixture("multipleToolTurns", "g_identity");
+  // Pi names nothing it streams, so the normalizer names the turn's answers
+  // after the generation that is writing them. The id is read from the events
+  // rather than assumed, because it is the normalizer's to choose.
+  const firstMessageId = events.find((event) => event.type === "assistant_message_started")?.messageId;
   const client = createClientActiveGenerationStore({ collectMetrics: true });
   let targetDelta = null;
   for (const event of events) {
     client.apply(event);
-    if (event.type === "content_block_started" && event.messageId === "m1" && event.block.contentIndex === 1) {
+    if (event.type === "content_block_started" && event.messageId === firstMessageId && event.block.contentIndex === 1) {
       targetDelta = events.find((candidate) => candidate.type === "content_block_delta"
-        && candidate.messageId === "m1" && candidate.contentIndex === 1);
+        && candidate.messageId === firstMessageId && candidate.contentIndex === 1);
       break;
     }
   }

@@ -195,11 +195,102 @@ export function applyTranscriptProjection(
 }
 
 /**
+ * Put a message where the server said it goes.
+ *
+ * This is the whole of placement. The server decided the position when it
+ * decided the message existed, and states both together, so there is nothing
+ * here to work out from content, timestamps, or which prompt happens to be
+ * last. A message already held keeps its place and takes the new fields: the
+ * sender's own row settles into the message it was always going to be, rather
+ * than being replaced by a second copy of itself.
+ *
+ * An anchor this client does not hold means the position is somewhere it has
+ * not loaded, and the end is the only honest answer.
+ */
+export function openMessage(messages: Message[], incoming: Message, after: string | null): Message[] {
+  const held = messages.findIndex((message) => message.id === incoming.id);
+  if (held >= 0) {
+    const next = [...messages];
+    next[held] = { ...next[held]!, ...incoming };
+    return next;
+  }
+  const anchor = after ? messages.findIndex((message) => message.id === after) : -1;
+  const at = anchor >= 0 ? anchor + 1 : messages.length;
+  return [...messages.slice(0, at), incoming, ...messages.slice(at)];
+}
+
+export interface TranscriptOp {
+  op?: string;
+  message?: ProtocolMessage;
+  after?: string | null;
+  answers?: string | null;
+  messageId?: string;
+  stopReason?: string | null;
+  content?: string;
+  blocks?: unknown[];
+  interim?: boolean;
+  inclusive?: boolean;
+  generationId?: string | null;
+}
+
+/**
+ * Apply one of the server's statements about the transcript.
+ *
+ * The whole of what a transcript op does, in one place, so the browser and the
+ * tests that check what a chat ends up looking like are running the same code
+ * rather than two descriptions of it.
+ */
+export function applyTranscriptOp(messages: Message[], event: TranscriptOp): Message[] {
+  if (event.op === "message.open") {
+    const incoming = event.message;
+    if (!incoming?.id) return messages;
+    return openMessage(messages, incoming.role === "assistant"
+      ? {
+        id: incoming.id, role: "assistant", content: "", streaming: true,
+        answers: event.answers ?? null,
+        ...(event.generationId ? { generationId: event.generationId } : {}),
+      }
+      : {
+        id: incoming.id, role: "user", content: displayUserText(incoming),
+        timestamp: incoming.timestamp || new Date().toISOString(),
+      },
+    event.after ?? null);
+  }
+  if (event.op === "message.close") {
+    // What the message says, as the server has it. The deltas drew a preview of
+    // this; they are not what the transcript keeps.
+    return messages.map((message) => (message.id === event.messageId
+      ? {
+        ...message,
+        content: event.content ?? message.content,
+        blocks: (event.blocks as Message["blocks"]) ?? message.blocks,
+        interim: event.interim,
+        stopReason: event.stopReason || message.stopReason,
+        stopped: event.stopReason === "aborted" || message.stopped,
+        streaming: false,
+      }
+      : message));
+  }
+  if (event.op === "message.drop" && event.messageId) {
+    // A cut says where the history ends; a turn giving up a row it never wrote
+    // into takes back that row alone.
+    return event.inclusive
+      ? truncateAt(messages, event.messageId, { inclusive: true })
+      : messages.filter((message) => message.id !== event.messageId);
+  }
+  return messages;
+}
+
+/**
  * Give every answer this generation has named a row, in order, at the end.
  *
  * The row is a placeholder: the live overlay draws the tokens as they arrive,
  * and the transcript projection skips it until it settles. What it holds is a
  * position, claimed when the id first exists rather than when the turn ends.
+ *
+ * Only for a backend that does not state its own order. Where the server sends
+ * transcript ops, `openMessage` has already put the row where it belongs, and
+ * guessing at the end would be a second, worse answer to the same question.
  */
 export function claimAnswerRows(
   messages: Message[],
