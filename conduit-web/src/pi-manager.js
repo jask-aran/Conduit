@@ -883,7 +883,7 @@ export class PiManager extends EventEmitter {
     return this.request(id, { type: "compact" }, { timeout: 120_000 });
   }
 
-  beginActiveGeneration(record, generationId, continuationBase) {
+  beginActiveGeneration(record, generationId, continuationBase, claims = null) {
     // The single chokepoint every turn passes through: a fresh prompt, a steer
     // or follow-up, and a queued generation all begin here.
     this.touchTurn(record);
@@ -893,10 +893,9 @@ export class PiManager extends EventEmitter {
     };
     record.generationNormalizer = createPiEventNormalizer(generationId, {
       claimMessageId: () => {
-        const claim = record.messageClaims?.get(generationId);
-        if (!claim?.assistant || claim.assistantUsed) return null;
-        claim.assistantUsed = true;
-        return claim.assistant;
+        if (!claims?.assistant || claims.assistantUsed) return null;
+        claims.assistantUsed = true;
+        return claims.assistant;
       },
     });
     const [started] = record.generationNormalizer.normalize({
@@ -906,15 +905,6 @@ export class PiManager extends EventEmitter {
     });
     record.activeGeneration = reduceActiveGeneration(null, started);
     return { previous, started };
-  }
-
-  claimForGeneration(record, generationId, { user = null, assistant = null } = {}) {
-    record.messageClaims ||= new Map();
-    record.messageClaims.set(generationId, { user, assistant, userUsed: false, assistantUsed: false });
-    // Only the open turns can still need theirs.
-    while (record.messageClaims.size > 16) {
-      record.messageClaims.delete(record.messageClaims.keys().next().value);
-    }
   }
 
   restoreActiveGeneration(record, previous) {
@@ -1106,14 +1096,10 @@ export class PiManager extends EventEmitter {
       this.assertCanStartGeneration(record);
     }
     const generationId = `g${++record.generationSequence}`;
-    // A turn's ids belong to the turn, not to the order its events happen to
-    // arrive in. Pi emits user messages Conduit never prompted -- a steer, a
-    // continuation, a queue it flushes itself -- and consuming claims as those
-    // went past handed the wrong id to the wrong message.
-    if (messageIds) this.claimForGeneration(record, generationId, messageIds);
+    const claims = messageIds ? { ...messageIds, userUsed: false, assistantUsed: false } : null;
     const previousGeneration = record.generation;
-    const structured = this.beginActiveGeneration(record, generationId, continuationBase);
-    const generation = { id: generationId, closed: false, settled: false, continuationBase };
+    const structured = this.beginActiveGeneration(record, generationId, continuationBase, claims);
+    const generation = { id: generationId, closed: false, settled: false, continuationBase, claims };
     record.generation = generation;
     record.activity = "working";
     try {
@@ -1138,10 +1124,14 @@ export class PiManager extends EventEmitter {
     if (record.stopping) throw Object.assign(new Error("Pi is still stopping the previous response"), { code: "generation_stopping" });
     if (streamingBehavior !== "steer" && streamingBehavior !== "followUp") this.assertCanStartGeneration(record);
     const generationId = `g${++record.generationSequence}`;
-    if (messageIds) this.claimForGeneration(record, generationId, messageIds);
+    // A turn's ids belong to the turn: they live and die with the generation,
+    // so nothing else can consume them. Pi emits user messages Conduit never
+    // prompted -- a steer, a continuation, a queue it flushes itself -- and
+    // taking claims as those went past handed the wrong id to the wrong message.
+    const claims = messageIds ? { ...messageIds, userUsed: false, assistantUsed: false } : null;
     const previousGeneration = record.generation;
-    const structured = this.beginActiveGeneration(record, generationId, continuationBase);
-    const generation = { id: generationId, closed: false, settled: false, continuationBase };
+    const structured = this.beginActiveGeneration(record, generationId, continuationBase, claims);
+    const generation = { id: generationId, closed: false, settled: false, continuationBase, claims };
     record.generation = generation;
     record.activity = "working";
     const afterMessageId = record.transcriptLeafId || null;
@@ -1415,10 +1405,10 @@ export class PiManager extends EventEmitter {
     // it was sent, so the browser learns the message's real identity here
     // rather than minting a placeholder it has to reconcile away later.
     if (event?.type === "message_end" && event.message?.role === "user") {
-      const claim = record?.messageClaims?.get(record.generation?.id);
-      if (claim?.user && !claim.userUsed) {
-        claim.userUsed = true;
-        event = { ...event, message: { ...event.message, id: claim.user } };
+      const claims = record?.generation?.claims;
+      if (claims?.user && !claims.userUsed) {
+        claims.userUsed = true;
+        event = { ...event, message: { ...event.message, id: claims.user } };
       }
     }
     this.publishInternal(record, event);

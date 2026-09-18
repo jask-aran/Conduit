@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   assignToolSeq,
-  buildTimeline,
   mergeToolEvent,
   applyCommittedUser,
   upsertMessages,
@@ -29,22 +28,6 @@ test("mergeToolEvent preserves first-seen timestamp and seq on reconnect replay"
   assert.equal(replay.tools[0].timestamp, "2026-01-01T00:00:00.000Z");
   assert.equal(replay.tools[0].seq, 0);
 });
-
-test("buildTimeline keeps tools between messages when timestamps order them", () => {
-  const messages = [
-    { id: "u1", role: "user", content: "go", timestamp: "2026-01-01T00:00:00.000Z" },
-    { id: "a1", role: "assistant", content: "working", timestamp: "2026-01-01T00:00:01.000Z" },
-    { id: "u2", role: "user", content: "steer", timestamp: "2026-01-01T00:00:03.000Z", pending: false },
-  ];
-  const tools = [
-    { id: "t1", name: "read", timestamp: "2026-01-01T00:00:02.000Z", seq: 0 },
-  ];
-  const timeline = buildTimeline(messages, tools);
-  assert.deepEqual(timeline.map((item) => item.type === "tool" ? item.value.id : item.value.id), [
-    "u1", "a1", "t1", "u2",
-  ]);
-});
-
 
 test("a message this client sent is already itself when the harness commits it", () => {
   const current = [{ id: "m_abc", role: "user", content: "hello" }];

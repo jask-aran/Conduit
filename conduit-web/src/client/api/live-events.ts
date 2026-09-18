@@ -78,7 +78,7 @@ export type LiveEvent = EventBase & (
   | { type: "history_truncated"; beforeMessageId: string | null }
   | { type: "session_checkpoint"; chatId: string; title: string | null; chat: ChatSummary | null; generationSeq: number | null; artifacts: TurnArtifactSummary[] | null }
   | { type: "user_message_committed"; message: ProtocolMessage }
-  | { type: "transcript_sync"; messages: unknown[]; tools: unknown[]; replaceAll: boolean }
+  | { type: "transcript_sync"; messages: unknown[]; tools: unknown[] }
   | StructuredGenerationEvent
   | { type: "runtime_error" | "client_error"; code: string; message: string }
   | { type: "runtime_exit"; deliberate: boolean }
@@ -245,7 +245,7 @@ export function normalizeLiveEvent(value: unknown): LiveEvent {
     // Read compatibility for events retained by older ChatGPT Web journals.
     case "transcript_message": return { type: "user_message_committed", generationId, message: protocolMessage(source.message) };
     case "user_message_committed": return { type: "user_message_committed", generationId, message: protocolMessage(source.message) };
-    case "transcript_sync": return { type: "transcript_sync", generationId, messages: list(source.messages), tools: list(source.tools), replaceAll: Boolean(source.replaceAll) };
+    case "transcript_sync": return { type: "transcript_sync", generationId, messages: list(source.messages), tools: list(source.tools) };
     case "runtime_state": {
       if (!Object.keys(record(source.session)).length && source.lifecycle) {
         const active = source.lifecycle === "working" || source.status === "working";

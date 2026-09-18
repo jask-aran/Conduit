@@ -235,7 +235,6 @@ export interface ContentBlock {
 
 export interface Message {
   id: string;
-  key?: string;
   /** The live generation this message was frozen out of, until a sync names it. */
   generationId?: string | null;
   role: "user" | "assistant" | "system" | "tool";

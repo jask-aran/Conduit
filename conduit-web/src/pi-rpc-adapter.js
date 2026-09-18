@@ -148,7 +148,7 @@ export function normalizePiBackendEvent(event) {
     case "history_truncated":
       return { ...base, type: "history_truncated", beforeMessageId: event.beforeMessageId || null };
     case "transcript_sync":
-      return { ...base, type: "transcript_sync", messages: event.messages || [], tools: event.tools || [], ...(event.replaceAll ? { replaceAll: true } : {}) };
+      return { ...base, type: "transcript_sync", messages: event.messages || [], tools: event.tools || [] };
     case "session_checkpoint":
       return { ...base, type: "session_checkpoint", sequence: event.generationSeq ?? null,
         artifacts: event.artifacts ?? null,
