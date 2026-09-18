@@ -14,6 +14,8 @@ export const manifest = {
   // App-server stores names but does not start the first-party client's hidden
   // naming turn for third-party threads.
   nameGeneration: "conduit",
+  // Every item the app-server reports carries its own id.
+  suppliesMessageIds: true,
   serviceLevels: [
     { id: "default", label: "Normal" },
     { id: "priority", label: "Priority" },

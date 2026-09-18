@@ -9,6 +9,8 @@ export const manifest = {
   installationId: "user-chatgpt-account",
   capabilities: CHATGPT_WEB_CAPABILITIES,
   nameGeneration: "backend",
+  // This adapter keeps its own journal and names every message it records.
+  suppliesMessageIds: true,
   // No thread history to enumerate: a ChatGPT account is not a machine store.
   discovery: "none",
   // A proxied web session has no process to start: a chat is usable as soon as

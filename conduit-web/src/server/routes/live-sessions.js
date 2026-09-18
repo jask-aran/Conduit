@@ -92,7 +92,7 @@ export function registerLiveSessionRoutes(app, {
       if (context) {
         projection.messages = applyMessageIds(
           await attachments.decorateMessages(context.project, context.chat.id, projection.messages),
-          await messageIds.resolver(context.project, context.chat.id));
+          await messageIds.resolver(context.project, context.chat));
       }
       response.json({ live: backends.view(live), events: live.events, ...projection });
     } catch (error) { next(error); }
@@ -137,7 +137,7 @@ export function registerLiveSessionRoutes(app, {
         if (context) {
           transcript.messages = applyMessageIds(
             await attachments.decorateMessages(context.project, context.chat.id, transcript.messages),
-            await messageIds.resolver(context.project, context.chat.id));
+            await messageIds.resolver(context.project, context.chat));
         }
       }
       response.json({ id: live.chatId || live.id, status: "active", ...transcript, attachments: [], page: { before: null } });

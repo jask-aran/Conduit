@@ -480,8 +480,8 @@ manager.on("event", ({ record, event }) => {
           .catch((error) => { console.error("Could not compute turn artifacts", error); return null; });
         // The entries this turn wrote are now on disk, so the ids claimed for
         // its prompts can finally be tied to them.
-        await messageIds.bind(project, record.chatId, session.entries);
-        const idFor = await messageIds.resolver(project, record.chatId);
+        await messageIds.bind(project, registry.metadata(record.chatId), session.entries);
+        const idFor = await messageIds.resolver(project, registry.metadata(record.chatId));
         record.lastCheckpoint = {
           type: "session_checkpoint",
           generationId: checkpoint.id,

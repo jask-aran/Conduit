@@ -7,9 +7,6 @@ import { manifestForImplementation } from "../harnesses/index.js";
 import { startWebSocketKeepalive } from "./ws-keepalive.js";
 import { applyMessageIds } from "../message-ids.js";
 
-/** Only Pi needs Conduit to supply message identity; every other harness has its own. */
-const needsMessageIds = (chat) => chat?.backend?.protocol === "pi_rpc";
-
 /**
  * An id a client chose for the message it is sending.
  *
@@ -62,8 +59,8 @@ export function createLiveSessionStream({
   // its own entry. Unknown ids pass straight through, so Pi's own history tree
   // and any client that predates this still work.
   async function harnessEntryId(context, messageId) {
-    if (!needsMessageIds(context?.chat)) return messageId;
-    return messageIds.entryIdFor(context.project, context.chat.id, messageId);
+    if (!context) return messageId;
+    return messageIds.entryIdFor(context.project, context.chat, messageId);
   }
 
   async function promptForChat(record, command, message) {
@@ -101,10 +98,8 @@ export function createLiveSessionStream({
       });
       if (projection.messages?.length) {
         projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages, { fromStart: !turns });
-        if (needsMessageIds(context.chat)) {
-          projection.messages = applyMessageIds(projection.messages,
-            await messageIds.resolver(context.project, context.chat.id));
-        }
+        projection.messages = applyMessageIds(projection.messages,
+          await messageIds.resolver(context.project, context.chat));
         adapter.publish(record, { type: "transcript_sync", generationId, ...projection });
       }
     } catch (error) {
@@ -141,16 +136,14 @@ export function createLiveSessionStream({
     // they belong to that generation and nothing else can consume them. A turn
     // that produces more than one answer runs out of claims, and the extras
     // derive their ids from their entries like any message Conduit did not send.
-    let claimed = null;
-    if (needsMessageIds(prepared.context.chat)) {
-      claimed = {
-        // The browser names the message it is sending, so the row already on
-        // screen is that message rather than a stand-in. A caller that offers
-        // no name gets one here.
-        user: await messageIds.claim(prepared.context.project, prepared.context.chat.id, "user", messageId),
-        assistant: await messageIds.mint(prepared.context.project, prepared.context.chat.id, "assistant"),
-      };
-    }
+    // The browser names the message it is sending, so the row already on
+    // screen is that message rather than a stand-in; a caller that offers no
+    // name gets one here. A harness that names its own messages claims
+    // nothing and this stays null.
+    const user = await messageIds.claim(prepared.context.project, prepared.context.chat, "user", messageId);
+    const claimed = user
+      ? { user, assistant: await messageIds.mint(prepared.context.project, prepared.context.chat, "assistant") }
+      : null;
     const accepted = await adapter.prompt(record.id, prepared.prompt,
       { ...promptOptions, attachments: prepared.attachments, ...(claimed ? { messageIds: claimed } : {}) });
     const generationId = typeof accepted === "string" ? accepted : accepted?.generationId;
