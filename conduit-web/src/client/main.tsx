@@ -1910,8 +1910,13 @@ function App() {
                 const project = catalogue.projects().find((item) => item.slug === "chat");
                 const id = chat.loadedId();
                 if (!project || !id) return;
+                // Sending is what ends a draft -- the server flips the status
+                // on the prompt itself -- so the row goes in active. Listing it
+                // as a draft hid it behind the New chat row until the first
+                // turn checkpointed, which on a long or interrupted answer left
+                // the sidebar saying "No chats" over an open conversation.
                 catalogue.setProjects((current) => current.map((item) => item.id === project.id
-                  ? { ...item, sessions: [{ id, projectId: project.id, status: "draft", title: chat.title() || "New chat", templateId: chat.templateId() || undefined }, ...item.sessions.filter((session) => session.id !== id)] }
+                  ? { ...item, sessions: [{ id, projectId: project.id, status: "active", title: chat.title() || "New chat", templateId: chat.templateId() || undefined }, ...item.sessions.filter((session) => session.id !== id)] }
                   : item));
                 history.pushState({}, "", `/chat/${id}`);
                 setRouteKind("chat");
@@ -2008,8 +2013,13 @@ function App() {
                 const project = selectedProject();
                 const id = chat.loadedId();
                 if (!project || !id) return;
+                // Sending is what ends a draft -- the server flips the status
+                // on the prompt itself -- so the row goes in active. Listing it
+                // as a draft hid it behind the New chat row until the first
+                // turn checkpointed, which on a long or interrupted answer left
+                // the sidebar saying "No chats" over an open conversation.
                 catalogue.setProjects((current) => current.map((item) => item.id === project.id
-                  ? { ...item, sessions: [{ id, projectId: project.id, status: "draft", title: chat.title() || "New chat", templateId: chat.templateId() || undefined }, ...item.sessions.filter((session) => session.id !== id)] }
+                  ? { ...item, sessions: [{ id, projectId: project.id, status: "active", title: chat.title() || "New chat", templateId: chat.templateId() || undefined }, ...item.sessions.filter((session) => session.id !== id)] }
                   : item));
                 history.pushState({}, "", `/chat/${id}`);
                 setRouteKind("chat");

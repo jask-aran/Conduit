@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyTranscriptProjection, truncateAt, upsertMessages } from "../src/client/timeline-order.ts";
+import { applyTranscriptProjection, replaceMessages, truncateAt, upsertMessages } from "../src/client/timeline-order.ts";
 
 const message = (id, role, content, extra = {}) => ({ id, role, content, ...extra });
 
@@ -116,4 +116,20 @@ test("a synced turn replaces its tools and retains tools from older turns", () =
     message("m_a1", "assistant", "newer", { blocks: [{ type: "toolCall", id: "t_new" }] }),
   ], [{ id: "t_new", name: "write", seq: 1 }]);
   assert.deepEqual(merged.map((tool) => [tool.id, tool.name]), [["t_old", "read"], ["t_new", "write"]]);
+});
+
+test("a full load replaces, so one landing after a fork cannot restore the abandoned branch", () => {
+  const afterFork = [
+    message("m_u1", "user", "hi"), message("pi:a1", "assistant", "hello"),
+    message("m_u3", "user", "regenerated"), message("pi:a3", "assistant", "new answer"),
+    message("user_4", "user", "unsent", { pending: true }),
+  ];
+  // The server's whole truth, fetched before the fork and arriving after it.
+  const stale = [
+    message("m_u1", "user", "hi"), message("pi:a1", "assistant", "hello"),
+    message("m_u2", "user", "abandoned"), message("pi:a2", "assistant", "abandoned answer"),
+  ];
+  assert.deepEqual(replaceMessages(afterFork, stale).map((item) => item.id),
+    ["m_u1", "pi:a1", "m_u2", "pi:a2", "user_4"]);
+  assert.equal(replaceMessages(afterFork, stale).some((item) => item.id === "m_u3"), false);
 });

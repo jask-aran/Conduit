@@ -25,7 +25,7 @@ import type {
   ToolItem,
   TranscriptDetail,
 } from "../api/contracts";
-import { applyCommittedUser, applyTranscriptProjection, assignToolSeq, truncateAt, upsertMessages } from "../timeline-order";
+import { applyCommittedUser, applyTranscriptProjection, assignToolSeq, replaceMessages, truncateAt, upsertMessages } from "../timeline-order";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { canCoalesceTextDelta, enqueueOverflowLiveEvent, mergeTextDeltaEvents } from "./text-delta-batcher";
 import type { UploadAttachment } from "./attachments";
@@ -621,7 +621,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     const nextTools = assignToolSeq(asList<ToolItem>(detail.tools)) as ToolItem[];
     batch(() => {
       setLoadedId(detail.id);
-      setMessages((current) => (reconcile ? upsertMessages(current, incoming) : incoming));
+      setMessages((current) => (reconcile ? replaceMessages(current, incoming) : incoming));
       setTools(nextTools);
       setPageBefore(detail.page?.before || null);
       setStatus(detail.status || "draft");
