@@ -338,23 +338,32 @@ export class TurnCheckpointStore {
     const userNumbers = new Map(lineage
       .filter((entry) => entry.type === "message" && entry.message?.role === "user")
       .map((entry, index) => [entry.id, index + 1]));
+    // A checkpoint is taken just before a prompt goes out, so the turn it
+    // describes is the first one that follows it -- and a turn already spoken
+    // for belongs to the checkpoint that claimed it, so the walk only ever
+    // moves forward. Without that, checkpoints that carry no anchor all reach
+    // the same way down the lineage and land on the newest turn together, and
+    // every turn but the last loses the changes it made.
+    let claimed = 0;
     for (const [index, checkpoint] of checkpoints.entries()) {
       if (typeof checkpoint.messageId === "string" && positions.has(checkpoint.messageId)) {
         result.set(checkpoint.id, { messageId: checkpoint.messageId, sequence: userNumbers.get(checkpoint.messageId) });
+        claimed = positions.get(checkpoint.messageId) + 1;
         continue;
       }
       // An anchor the lineage does not contain was recorded on a branch the
       // session has since left: a fork keeps what came before its point and
       // abandons the rest, and a checkpoint captured just after one anchors on
-      // the leaf of the branch it forked from. Searching the whole lineage
-      // instead of dropping the checkpoint is what lets a regenerated turn
-      // carry its changes; the session-file guard below is what stops a
-      // checkpoint from the abandoned branch claiming a turn that is not its.
+      // the leaf of the branch it forked from. Searching from where the last
+      // turn was claimed instead of dropping the checkpoint is what lets a
+      // regenerated turn carry its changes; the session-file guard below is
+      // what stops a checkpoint from the abandoned branch claiming a turn that
+      // is not its.
       const anchored = checkpoint.anchorEntryId == null ? -1 : (positions.get(checkpoint.anchorEntryId) ?? -1);
       const nextAnchor = checkpoints[index + 1]?.anchorEntryId;
       const end = typeof nextAnchor === "string" ? positions.get(nextAnchor) : undefined;
-      const candidates = lineage.slice(anchored + 1, end === undefined ? undefined : end + 1);
-      const user = candidates.findLast((entry) => entry.type === "message" && entry.message?.role === "user");
+      const candidates = lineage.slice(Math.max(anchored + 1, claimed), end === undefined ? undefined : end + 1);
+      const user = candidates.find((entry) => entry.type === "message" && entry.message?.role === "user");
       if (!user) continue;
       if (anchored === -1) {
         const checkpointSession = typeof checkpoint.sessionFile === "string" ? path.resolve(checkpoint.sessionFile) : null;
@@ -363,6 +372,7 @@ export class TurnCheckpointStore {
         if (checkpointSession ? checkpointSession !== userSession : !Number.isFinite(elapsed) || elapsed < 0 || elapsed > 60_000) continue;
       }
       result.set(checkpoint.id, { messageId: user.id, sequence: userNumbers.get(user.id) });
+      claimed = positions.get(user.id) + 1;
     }
     return result;
   }

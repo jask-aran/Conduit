@@ -138,3 +138,103 @@ test("a fork does not report its workspace restore as an edit by a retained turn
   assert.deepEqual(timeline.map((item) => item.messageId), ["user-4"]);
   assert.deepEqual(timeline[0].summary, { added: 3, removed: 0, preferredPath: "note.txt" });
 });
+
+/**
+ * Every turn that changed a file wears a change badge, not only the newest one.
+ *
+ * A checkpoint is taken before the prompt goes out, so the turn it describes is
+ * the one that follows it. When the checkpoints carry no anchor of their own,
+ * each one has to be matched to its own user message -- otherwise they all pick
+ * the same one, only the last survives, and every earlier turn's badge vanishes
+ * the moment a follow-up is sent.
+ */
+test("a turn keeps its change badge once it is no longer the latest one", async () => {
+  const { store, files, sessions } = await workspace();
+  const sessionFile = path.join(sessions, "session.jsonl");
+  // Five turns, of which only the first, fourth and fifth touch a file.
+  await fs.writeFile(sessionFile, [
+    JSON.stringify({ type: "session", id: "session", cwd: files }),
+    message("user-1", null, "user", "write a line", "2026-01-01T00:00:10.000Z"),
+    message("assistant-1", "user-1", "assistant", "Done", "2026-01-01T00:00:20.000Z"),
+    message("user-2", "assistant-1", "user", "what does it say?", "2026-01-01T00:02:10.000Z"),
+    message("assistant-2", "user-2", "assistant", "One line", "2026-01-01T00:02:20.000Z"),
+    message("user-3", "assistant-2", "user", "and who wrote it?", "2026-01-01T00:04:10.000Z"),
+    message("assistant-3", "user-3", "assistant", "You did", "2026-01-01T00:04:20.000Z"),
+    message("user-4", "assistant-3", "user", "write another", "2026-01-01T00:06:10.000Z"),
+    message("assistant-4", "user-4", "assistant", "Done", "2026-01-01T00:06:20.000Z"),
+    message("user-5", "assistant-4", "user", "and one more", "2026-01-01T00:08:10.000Z"),
+  ].join("\n") + "\n");
+
+  const note = (text) => ({ "note.txt": { kind: "file", mode: 0o644, content: Buffer.from(text).toString("base64") } });
+  // Written the way a live prompt writes them: one before each turn, carrying
+  // no anchor and no message id of its own.
+  await writeCheckpoint(store, { id: "before-one", createdAt: "2026-01-01T00:00:00.000Z", workingRoot: files });
+  await writeCheckpoint(store, { id: "before-two", createdAt: "2026-01-01T00:02:00.000Z", workingRoot: files, entries: note("one\n") });
+  await writeCheckpoint(store, { id: "before-three", createdAt: "2026-01-01T00:04:00.000Z", workingRoot: files, entries: note("one\n") });
+  await writeCheckpoint(store, { id: "before-four", createdAt: "2026-01-01T00:06:00.000Z", workingRoot: files, entries: note("one\n") });
+  await writeCheckpoint(store, { id: "before-five", createdAt: "2026-01-01T00:08:00.000Z", workingRoot: files, entries: note("one\ntwo\n") });
+  await fs.writeFile(path.join(files, "note.txt"), "one\ntwo\nthree\n");
+
+  const timeline = await new TurnCheckpointStore(store).timeline(CHAT, files, sessionFile);
+  // The turns that changed nothing keep no checkpoint, and the ones that did
+  // are numbered by where they sit in the chat -- turns 1, 4 and 5, not a
+  // resequenced 1, 2, 3.
+  assert.deepEqual(timeline.map(({ messageId, sequence }) => ({ messageId, sequence })), [
+    { messageId: "user-5", sequence: 5 },
+    { messageId: "user-4", sequence: 4 },
+    { messageId: "user-1", sequence: 1 },
+  ]);
+  assert.deepEqual(timeline.map((item) => item.summary), [
+    { added: 1, removed: 0, preferredPath: "note.txt" },
+    { added: 1, removed: 0, preferredPath: "note.txt" },
+    { added: 1, removed: 0, preferredPath: "note.txt" },
+  ]);
+});
+
+/**
+ * The same, for the checkpoints a live prompt now writes: each one anchored on
+ * the transcript entry the turn it precedes hangs under.
+ */
+test("an anchored checkpoint belongs to the turn it was taken for", async () => {
+  const { store, files, sessions } = await workspace();
+  const sessionFile = path.join(sessions, "session.jsonl");
+  await fs.writeFile(sessionFile, [
+    JSON.stringify({ type: "session", id: "session", cwd: files }),
+    message("user-1", null, "user", "write a line", "2026-01-01T00:00:10.000Z"),
+    message("assistant-1", "user-1", "assistant", "Done", "2026-01-01T00:00:20.000Z"),
+    message("user-2", "assistant-1", "user", "what does it say?", "2026-01-01T00:02:10.000Z"),
+    message("assistant-2", "user-2", "assistant", "One line", "2026-01-01T00:02:20.000Z"),
+    message("user-3", "assistant-2", "user", "and who wrote it?", "2026-01-01T00:04:10.000Z"),
+    message("assistant-3", "user-3", "assistant", "You did", "2026-01-01T00:04:20.000Z"),
+    message("user-4", "assistant-3", "user", "write another", "2026-01-01T00:06:10.000Z"),
+    message("assistant-4", "user-4", "assistant", "Done", "2026-01-01T00:06:20.000Z"),
+    message("user-5", "assistant-4", "user", "and one more", "2026-01-01T00:08:10.000Z"),
+  ].join("\n") + "\n");
+
+  const note = (text) => ({ "note.txt": { kind: "file", mode: 0o644, content: Buffer.from(text).toString("base64") } });
+  const anchors = [null, "assistant-1", "assistant-2", "assistant-3", "assistant-4"];
+  const contents = [null, "one\n", "one\n", "one\n", "one\ntwo\n"];
+  for (const [index, anchorEntryId] of anchors.entries()) {
+    await writeCheckpoint(store, {
+      id: `before-${index + 1}`,
+      createdAt: `2026-01-01T00:0${index * 2}:00.000Z`,
+      anchorEntryId,
+      sessionFile,
+      workingRoot: files,
+      entries: contents[index] ? note(contents[index]) : {},
+    });
+  }
+  await fs.writeFile(path.join(files, "note.txt"), "one\ntwo\nthree\n");
+
+  const timeline = await new TurnCheckpointStore(store).timeline(CHAT, files, sessionFile);
+  assert.deepEqual(timeline.map(({ id, messageId, sequence }) => ({ id, messageId, sequence })), [
+    { id: "before-5", messageId: "user-5", sequence: 5 },
+    { id: "before-4", messageId: "user-4", sequence: 4 },
+    { id: "before-1", messageId: "user-1", sequence: 1 },
+  ]);
+  assert.deepEqual(timeline.map((item) => item.summary), [
+    { added: 1, removed: 0, preferredPath: "note.txt" },
+    { added: 1, removed: 0, preferredPath: "note.txt" },
+    { added: 1, removed: 0, preferredPath: "note.txt" },
+  ]);
+});

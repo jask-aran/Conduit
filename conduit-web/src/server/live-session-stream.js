@@ -168,6 +168,10 @@ export function createLiveSessionStream({
         projectId: prepared.context.project.id,
         projectKind: prepared.context.project.kind,
         workingRoot: prepared.context.project.workingRoot,
+        // The transcript as it stands, so the checkpoint anchors on the entry
+        // the turn about to start will hang under. Without it nothing ties a
+        // checkpoint to its own turn, and they all reach for the newest one.
+        sessionFile: record.sessionFile,
         sourceCheckpointId,
       });
     } catch (error) {
@@ -345,6 +349,7 @@ export function createLiveSessionStream({
             projectId: prepared.context.project.id,
             projectKind: prepared.context.project.kind,
             workingRoot: prepared.context.project.workingRoot,
+            sessionFile: record.sessionFile,
           });
         } catch (error) {
           console.warn("Could not capture steering checkpoint", error.message);
