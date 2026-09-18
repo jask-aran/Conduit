@@ -54,6 +54,12 @@ export class MessageIds {
       if (error.code === "ENOENT") return "";
       throw error;
     });
+    // The file is append-only, so a claim is still in it after it has been
+    // bound or released. What is still waiting is read at the end, from what
+    // the later rows did not settle -- not from the claim rows alone, which on
+    // a reload would put every id ever claimed back in the queue.
+    const claims = [];
+    const released = new Set();
     for (const line of raw.split("\n").filter(Boolean)) {
       let row;
       try { row = JSON.parse(line); } catch { continue; }
@@ -63,7 +69,14 @@ export class MessageIds {
         state.byMessage.set(row.messageId, row.entryId);
         continue;
       }
-      if (state.unbound[row.role || "user"]) state.unbound[row.role || "user"].push(row.messageId);
+      if (row.released) { released.add(row.messageId); continue; }
+      if (state.unbound[row.role || "user"]) {
+        claims.push({ messageId: row.messageId, role: row.role || "user", after: row.after || null });
+      }
+    }
+    for (const claim of claims) {
+      if (state.byMessage.has(claim.messageId) || released.has(claim.messageId)) continue;
+      state.unbound[claim.role].push({ messageId: claim.messageId, after: claim.after });
     }
     this.chats.set(chatId, state);
     return state;
@@ -78,8 +91,8 @@ export class MessageIds {
   }
 
   /** Claim an id for a message about to exist, before any entry does. */
-  async mint(project, chat, role = "user") {
-    return this.claim(project, chat, role, null);
+  async mint(project, chat, role = "user", after = null) {
+    return this.claim(project, chat, role, null, after);
   }
 
   /**
@@ -89,42 +102,92 @@ export class MessageIds {
    * only it has; the id is still recorded here, bound here, and translated
    * here, so nothing downstream can tell the difference.
    */
-  async claim(project, chat, role = "user", offered = null) {
+  async claim(project, chat, role = "user", offered = null, after = null) {
     if (!this.owns(chat)) return null;
     const state = await this.load(project, chat.id);
     const messageId = offered && !state.byMessage.has(offered) ? offered : `m_${crypto.randomUUID()}`;
-    state.unbound[role].push(messageId);
-    await this.append(state, { messageId, role });
+    state.unbound[role].push({ messageId, after });
+    await this.append(state, { messageId, role, ...(after ? { after } : {}) });
     return messageId;
   }
 
   /**
-   * Pair the user entries a turn wrote with the prompts that produced them.
+   * Pair the entries a turn wrote with the prompts that produced them.
    *
-   * Mints are consumed oldest first, which is the order the prompts were sent
-   * and the order Pi writes them. A mint left over never landed -- a prompt
-   * that failed before it was written -- and is dropped rather than left to
-   * attach itself to some later message it has nothing to do with.
+   * `rows` is `{ id, role }` per written message, oldest first -- either from
+   * session entries (`entryMessageRows`) or from a projection, whose messages
+   * already carry the entry id as their own.
+   *
+   * Prompts go first and in order: they are the only thing a turn boundary can
+   * be read from, and the client named them, so they are the fixed points.
+   * An answer is then placed after the prompt it was claimed for, never before
+   * it and never past the next one. A turn that writes more than one entry --
+   * an interrupted tool call leaves both the call and an "aborted" message --
+   * has one claim and one answer, and the leftovers derive `pi:<entryId>`
+   * instead of consuming the next turn's name, which is what made every answer
+   * after an interrupt appear twice under two ids.
+   *
+   * Nothing here decides a claim has expired, so a cancelled turn whose answer
+   * Pi writes seconds later, after the turn has checkpointed, still gets it. A
+   * prompt that genuinely never lands releases its own claims.
    */
-  async bind(project, chat, entries) {
+  async bind(project, chat, rows) {
     if (!this.owns(chat)) return null;
     const state = await this.load(project, chat.id);
-    for (const role of ["user", "assistant"]) {
-      if (!state.unbound[role].length) continue;
-      const fresh = (entries || [])
-        .filter((entry) => entry?.type === "message" && entry.message?.role === role && typeof entry.id === "string")
-        .map((entry) => entry.id)
-        .filter((entryId) => !state.byEntry.has(entryId));
-      for (const entryId of fresh) {
-        const messageId = state.unbound[role].shift();
-        if (!messageId) break;
-        state.byEntry.set(entryId, messageId);
-        state.byMessage.set(messageId, entryId);
-        await this.append(state, { messageId, entryId, role });
-      }
-      state.unbound[role] = [];
+    const list = (rows || []).filter((row) => row && typeof row.id === "string" && state.unbound[row.role]);
+    const freeAfter = (role, from) => list.findIndex((row, index) =>
+      index > from && row.role === role && !state.byEntry.has(row.id));
+    const take = async (messageId, role, index) => {
+      const { id } = list[index];
+      state.byEntry.set(id, messageId);
+      state.byMessage.set(messageId, id);
+      await this.append(state, { messageId, entryId: id, role });
+    };
+
+    let cursor = -1;
+    const waiting = [];
+    for (const claim of state.unbound.user) {
+      const index = waiting.length ? -1 : freeAfter("user", cursor);
+      if (index < 0) { waiting.push(claim); continue; }
+      cursor = index;
+      await take(claim.messageId, "user", index);
     }
+    state.unbound.user = waiting;
+
+    const pending = [];
+    for (const claim of state.unbound.assistant) {
+      // An older claim that has not found its entry holds the queue: letting a
+      // newer one past would name two answers in the wrong order.
+      if (pending.length) { pending.push(claim); continue; }
+      // A claim from before answers were anchored to prompts, or one whose
+      // prompt this window does not reach back to.
+      const promptEntry = claim.after ? state.byMessage.get(claim.after) : null;
+      const from = claim.after ? list.findIndex((row) => row.id === promptEntry) : -1;
+      if (claim.after && from < 0) { pending.push(claim); continue; }
+      const index = freeAfter("assistant", from);
+      if (index < 0) { pending.push(claim); continue; }
+      await take(claim.messageId, "assistant", index);
+    }
+    state.unbound.assistant = pending;
     return state;
+  }
+
+  /**
+   * Give back claims for a message that will never exist.
+   *
+   * A prompt rejected by the harness has already taken its ids out of the
+   * queue, and leaving them there would hand them to the next turn and shift
+   * every binding after it by one.
+   */
+  async release(project, chat, claimed) {
+    if (!this.owns(chat) || !claimed) return;
+    const state = await this.load(project, chat.id);
+    for (const role of ["user", "assistant"]) {
+      const messageId = claimed[role];
+      if (!messageId || state.byMessage.has(messageId)) continue;
+      state.unbound[role] = state.unbound[role].filter((item) => item.messageId !== messageId);
+      await this.append(state, { messageId, role, released: true });
+    }
   }
 
   /** Entry id -> the id everything above the adapter uses. */
@@ -149,6 +212,14 @@ export class MessageIds {
   forget(chatId) {
     this.chats.delete(chatId);
   }
+}
+
+/** The user and assistant messages a run of session entries wrote, in order. */
+export function entryMessageRows(entries) {
+  return (entries || [])
+    .filter((entry) => entry?.type === "message" && typeof entry.id === "string"
+      && ["user", "assistant"].includes(entry.message?.role))
+    .map((entry) => ({ id: entry.id, role: entry.message.role }));
 }
 
 /**

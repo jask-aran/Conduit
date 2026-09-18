@@ -10,7 +10,7 @@ import { TerminalPasteStore } from "./terminal-paste-store.js";
 import { PiModelCatalog, resolveThinkingLevel } from "./pi-model-catalog.js";
 import { ProjectStore } from "./project-store.js";
 import { pageSessionEntries, projectSessionEntries, readSessionMetadata, readSessionPage } from "./session-store.js";
-import { MessageIds, applyArtifactMessageIds, applyMessageIds } from "./message-ids.js";
+import { MessageIds, applyArtifactMessageIds, applyMessageIds, entryMessageRows } from "./message-ids.js";
 import { PiManager } from "./pi-manager.js";
 import { manifestForImplementation } from "./harnesses/index.js";
 import { ChatStore, chatView, isChatId } from "./chat-store.js";
@@ -480,7 +480,7 @@ manager.on("event", ({ record, event }) => {
           .catch((error) => { console.error("Could not compute turn artifacts", error); return null; });
         // The entries this turn wrote are now on disk, so the ids claimed for
         // its prompts can finally be tied to them.
-        await messageIds.bind(project, registry.metadata(record.chatId), session.entries);
+        await messageIds.bind(project, registry.metadata(record.chatId), entryMessageRows(session.entries));
         const idFor = await messageIds.resolver(project, registry.metadata(record.chatId));
         record.lastCheckpoint = {
           type: "session_checkpoint",

@@ -97,6 +97,12 @@ export function createLiveSessionStream({
         liveSessionId: record.id, chatId: record.chatId, project: context.project, turns,
       });
       if (projection.messages?.length) {
+        // A window is often the first sight of entries Pi has only just
+        // written, so the ids claimed for them are bound here rather than left
+        // until the turn checkpoints. Without this the sync an interrupt
+        // publishes names the prompt `pi:<entryId>` while the client holds the
+        // id it was handed, and the same message arrives a second time.
+        await messageIds.bind(context.project, context.chat, projection.messages);
         projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages, { fromStart: !turns });
         projection.messages = applyMessageIds(projection.messages,
           await messageIds.resolver(context.project, context.chat));
@@ -133,19 +139,29 @@ export function createLiveSessionStream({
     // can carry the id the transcript will eventually agree on.
     // Both halves of the turn are named before it starts: the prompt, and the
     // answer it will produce. They are handed to the harness with the prompt so
-    // they belong to that generation and nothing else can consume them. A turn
-    // that produces more than one answer runs out of claims, and the extras
-    // derive their ids from their entries like any message Conduit did not send.
+    // they belong to that generation and nothing else can consume them. The
+    // answer is claimed against the prompt, so it can only ever name an entry
+    // this turn wrote: a turn that produces more than one answer runs out of
+    // claims, and the extras derive their ids from their entries like any
+    // message Conduit did not send.
     // The browser names the message it is sending, so the row already on
     // screen is that message rather than a stand-in; a caller that offers no
     // name gets one here. A harness that names its own messages claims
     // nothing and this stays null.
     const user = await messageIds.claim(prepared.context.project, prepared.context.chat, "user", messageId);
     const claimed = user
-      ? { user, assistant: await messageIds.mint(prepared.context.project, prepared.context.chat, "assistant") }
+      ? { user, assistant: await messageIds.mint(prepared.context.project, prepared.context.chat, "assistant", user) }
       : null;
-    const accepted = await adapter.prompt(record.id, prepared.prompt,
-      { ...promptOptions, attachments: prepared.attachments, ...(claimed ? { messageIds: claimed } : {}) });
+    let accepted;
+    try {
+      accepted = await adapter.prompt(record.id, prepared.prompt,
+        { ...promptOptions, attachments: prepared.attachments, ...(claimed ? { messageIds: claimed } : {}) });
+    } catch (error) {
+      // A prompt the harness refused writes nothing, so its names go back
+      // rather than waiting for messages that will never be written.
+      await messageIds.release(prepared.context.project, prepared.context.chat, claimed);
+      throw error;
+    }
     const generationId = typeof accepted === "string" ? accepted : accepted?.generationId;
     // With an id of its own, a Pi prompt's attachments are found by that id
     // like every other harness's, instead of by counting from an anchor.
