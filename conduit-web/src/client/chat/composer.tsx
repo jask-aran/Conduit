@@ -13,7 +13,7 @@ import {
   MenuTrigger,
   Spinner,
 } from "@/components/primitives";
-import type { ChatCapabilities, Template } from "../api/contracts";
+import type { BooleanCapability, Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import { filesFromDataTransfer } from "../state/attachments";
 import type { ComposerAttachments } from "./composer-attachments";
@@ -73,6 +73,7 @@ export function Composer(props: {
   onOpenAttachments: () => void;
   onStatusChange?: (status: ComposerStatus | null) => void;
   onSendDraft?: (text: string) => Promise<void>;
+  supports?: (capability: BooleanCapability) => boolean;
 }) {
   let input!: HTMLTextAreaElement;
   let mobileActions!: HTMLDivElement;
@@ -95,7 +96,8 @@ export function Composer(props: {
 
   const busy = createMemo(() => props.chat.streaming());
   const interactive = () => props.chat.interactionReady();
-  const supports = (capability: keyof ChatCapabilities) => props.chat.capabilities()?.[capability] !== false;
+  const supports = (capability: BooleanCapability) => props.supports?.(capability)
+    ?? props.chat.capabilities()?.[capability] !== false;
   const comments = createMemo(() => reviewComments(props.chat.loadedId() ?? ""));
   const hasText = createMemo(() => Boolean(props.chat.draft().trim()));
   const hasPayload = createMemo(() => hasText() || comments().length > 0 || props.attachments.pendingIds().length > 0);
@@ -111,7 +113,7 @@ export function Composer(props: {
     .filter(Boolean));
   const slashCommandOptions = () => ({
     attachments: props.attachmentsSupported !== false,
-    compaction: Boolean(props.chat.capabilities()?.compaction) && !busy() && !props.chat.compacting(),
+    compaction: supports("compaction") && !busy() && !props.chat.compacting(),
     harnessCommands: props.chat.harnessCommands(),
   });
   const dictationLabel = createMemo(() => {
@@ -502,7 +504,7 @@ export function Composer(props: {
         <div class="composer-content">
           <MobileComposerOptions composer={props} />
           <div class="composer-input-shell">
-            <textarea ref={input} rows={1} aria-label="Message the agent" data-has-text={hasText() ? "true" : "false"} data-dictated-range={dictationSelectionOwned() && dictatedRange() ? "true" : undefined} placeholder={!props.serverOnline ? "Server unavailable" : interactive() ? "Send a message..." : "Reconnecting..."} value={props.chat.draft()} disabled={!props.serverOnline || !interactive()} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} />
+            <textarea ref={input} rows={1} aria-label="Message the agent" data-has-text={hasText() ? "true" : "false"} data-dictated-range={dictationSelectionOwned() && dictatedRange() ? "true" : undefined} placeholder={!props.serverOnline ? "Server unavailable" : !props.chat.loadedId() ? "New chat" : interactive() ? "Send a message..." : "Reconnecting..."} value={props.chat.draft()} disabled={!props.serverOnline || !interactive()} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} />
             <Show when={slashOpen() && slashCommand()}>{(item) => <div class="slash-completion" aria-hidden="true"><span>{props.chat.draft()}</span>{item().command.slice(props.chat.draft().length)} <small>{item().description}</small></div>}</Show>
           </div>
           <div class="composer-actions" data-mobile-actions-stacked={mobileActionsStacked()}>

@@ -6,11 +6,6 @@
 - `conduit-web/README.md` — runtime model, HTTP API, auth mechanism, process
   residency and caps, and the live-session WebSocket protocol.
 - `DESIGN.md` — in-app visual language for user-facing UI, read this before building or modifying any UI.
-- `docs/references/distillations.md` — concise project-specific invariants and
-  heuristics. ALWAYS read it once before starting a sprint or series of planned
-  commits/ work, and reread it when repeatedly stuck on an issue; update it
-  only through `$tacit-knowledge` after approval or validated repeated
-  feedback.
 
 ## Contribution guidance
 
@@ -25,3 +20,5 @@ Before testing or reviewing the server, web UI, local server, candidate build,
 release artifact or VPS deployment, read `docs/testing.md`. It is
 the single reference for approach selection, commands, safety boundaries and
 evidence, what tools are available and how to use them.
+
+Do not waste tokens on broad test sweeps, writing new tests, or waiting around for fixtures. Pick only the single most surgical, token-efficient validation seam in docs/testing.md for the touched code. Make concise code changes and defer to me to confirm behaviour. If its reasonably low blast radius, skip testing and provide direct to me. Dont reload/ re-read skills constantly, and run bash .devcontainer/start-conduit.sh restart to get the server ready for me to test, after each bounded change set. Do not start backgrounded long running test tasks.

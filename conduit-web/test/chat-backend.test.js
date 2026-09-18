@@ -116,7 +116,7 @@ test("public profile selection and legacy chat creation keep the same Pi identit
   const warmed = await warmedResponse.json();
   const commandOffset = (await harness.pi.commands()).length;
   const launchRequest = harness.request("/v0/live-sessions", {
-    method: "POST", body: JSON.stringify({ chatId: warmed.id, projectId: warmed.projectId, intent: "select" }),
+    method: "POST", body: JSON.stringify({ chatId: warmed.id, projectId: warmed.projectId, intent: "prompt" }),
   });
   const stateRequest = await harness.pi.waitForCommand("get_state", { after: commandOffset });
   await harness.pi.reply(stateRequest, {
