@@ -143,6 +143,10 @@ export function normalizePiBackendEvent(event) {
     // the opaque `pi_event`, so the browser kept its optimistic message ids -
     // and anything keyed by a persisted id (turn artifacts, fork, regenerate)
     // only worked after a reload.
+    // A fork states where the history now ends. The browser cuts to it rather
+    // than working out which of its messages the fork abandoned.
+    case "history_truncated":
+      return { ...base, type: "history_truncated", beforeMessageId: event.beforeMessageId || null };
     case "transcript_sync":
       return { ...base, type: "transcript_sync", messages: event.messages || [], tools: event.tools || [], ...(event.replaceAll ? { replaceAll: true } : {}) };
     case "session_checkpoint":
@@ -214,6 +218,7 @@ export class PiRpcAdapter {
   toClientEvent(event) { const { pi: _pi, ...neutral } = normalizePiBackendEvent(event); return neutral; }
   listModels(id) { return this.manager.getAvailableModels(id); }
   listCommands(id) { return this.manager.getCommands(id); }
+  listAvailableCommands({ cwd, template }) { return this.manager.listAvailableCommands({ cwd, template }); }
   getModelState(id) { return this.manager.getModelState(id); }
   get(id) { return this.manager.get(id); }
   getByChatId(chatId) { return this.manager.getByChatId(chatId); }

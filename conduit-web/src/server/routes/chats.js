@@ -101,8 +101,11 @@ export function registerChatRoutes(app, {
           implementation, installationId: manifest.installationId, opaqueSession: { threadId: session.id },
         } });
         const timestamp = new Date().toISOString();
+        // Adopted history is not new to anyone: seed the read watermark past it
+        // so the thread does not arrive unread.
         await registry.update(chat.id, { status: "active", title: session.title,
-          lastMessageAt: session.updatedAt || timestamp, updatedAt: timestamp });
+          lastMessageAt: session.updatedAt || timestamp, updatedAt: timestamp,
+          lastReadAt: session.updatedAt || timestamp });
         if (live) {
           adapter.track(live.id, chat.id);
           live.ephemeral = false;
@@ -214,6 +217,22 @@ export function registerChatRoutes(app, {
         opaqueSession: context.chat.backend?.opaqueSession,
         project: context.project,
       }));
+    } catch (error) { next(error); }
+  });
+
+  app.get("/v0/chats/:chatId/commands", async (request, response, next) => {
+    try {
+      const context = await findChatContext(request.params.chatId);
+      if (!context) return response.status(404).json({ error: "chat_not_found" });
+      const adapter = backends.forChat(context.chat);
+      const resident = backends.getByChatId(context.chat.id);
+      const commands = resident
+        ? await adapter.listCommands(resident.id)
+        : await adapter.listAvailableCommands({
+          cwd: context.project.workingRoot,
+          template: templateForChat(context.chat, context.project),
+        });
+      response.json({ commands });
     } catch (error) { next(error); }
   });
 
@@ -433,9 +452,12 @@ export function registerChatRoutes(app, {
         return response.json({ ...current, model, thinkingLevel: effort, modelThinkingLevels });
       }
       const saveThinkingPreference = async () => {
-        if (!targetModel || !thinkingLevel) return context.chat;
+        const modelThinkingLevels = targetModel && thinkingLevel
+          ? { ...(context.chat.modelThinkingLevels || {}), [targetModel]: thinkingLevel }
+          : context.chat.modelThinkingLevels || {};
         return registry.update(context.chat.id, {
-          modelThinkingLevels: { ...(context.chat.modelThinkingLevels || {}), [targetModel]: thinkingLevel },
+          backend: targetModel ? { ...context.chat.backend, model: targetModel } : context.chat.backend,
+          modelThinkingLevels,
         });
       };
       const resident = backends.getByChatId(context.chat.id);
@@ -448,13 +470,6 @@ export function registerChatRoutes(app, {
         // to rebuild and nothing to restart.
         if (spec && spec !== current.model) await adapter.setModel(resident.id, spec);
         if (thinkingLevel) await adapter.setThinkingLevel(resident.id, thinkingLevel);
-      } else {
-        if (context.chat.status !== "draft" || conduitPiSessionFile(context.chat)) {
-          return response.status(409).json({ error: "live_session_required" });
-        }
-        const template = templateForChat(context.chat, context.project);
-        const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });
-        if (spec) await catalogFor(runtime, template).updateDefault(context.project.workingRoot, spec, thinkingLevel);
       }
       await saveThinkingPreference();
       await rememberModel(preferences, templateForChat(context.chat, context.project)?.id, targetModel,

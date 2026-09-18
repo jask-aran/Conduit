@@ -135,7 +135,17 @@ export class AttachmentStore {
     await fsp.appendFile(messages, identities.map((identity) => JSON.stringify({ discardedIdentity: identity })).join("\n") + "\n", "utf8");
   }
 
-  async decorateMessages(project, chatId, transcript) {
+  /**
+   * Attach stored files to the user messages that own them.
+   *
+   * `fromStart` says whether `transcript` begins at the chat's first message.
+   * Only an id can find a message inside a window; the anchor/ordinal and
+   * content fallbacks below count from the beginning of what they are given,
+   * so against a one-turn sync or a later page they resolve "the first user
+   * message of the chat" to whatever happens to lead the window -- which is
+   * how a regenerated turn came back wearing the opening message's image.
+   */
+  async decorateMessages(project, chatId, transcript, { fromStart = true } = {}) {
     const { messages } = this.directories(project, chatId);
     const rows = (await fsp.readFile(messages, "utf8").catch((error) => error.code === "ENOENT" ? "" : Promise.reject(error)))
       .split("\n").filter(Boolean).flatMap((line) => { try { return [JSON.parse(line)]; } catch { return []; } });
@@ -144,8 +154,15 @@ export class AttachmentStore {
     const activeRows = rows.filter((row) => !row.identity || !discarded.has(identityKey(row.identity)));
     const used = new Set();
     const byId = new Map(activeRows.flatMap((row) => row.identity?.messageId ? [[row.identity.messageId, row]] : []));
-    const positions = new Map((transcript || []).map((item, index) => [item.id, index]));
-    for (const row of activeRows) {
+    // Rows written before Conduit owned Pi's message ids anchor on raw session
+    // entry ids, so a derived `pi:<entryId>` message answers to both.
+    const positions = new Map();
+    (transcript || []).forEach((item, index) => {
+      if (!item?.id) return;
+      positions.set(item.id, index);
+      if (typeof item.id === "string" && item.id.startsWith("pi:")) positions.set(item.id.slice(3), index);
+    });
+    for (const row of fromStart ? activeRows : []) {
       const anchor = row.identity?.afterMessageId;
       if (!row.identity || !("afterMessageId" in row.identity)) continue;
       if (anchor && !positions.has(anchor)) continue;
@@ -158,6 +175,7 @@ export class AttachmentStore {
       if (item.role !== "user" || item.attachments?.length) return item;
       const native = byId.get(item.id);
       if (native) return { ...item, attachments: native.attachments || [] };
+      if (!fromStart) return item;
       // Read compatibility for attachment records written before harness IDs
       // became authoritative. New records never store message text.
       const index = activeRows.findIndex((row, candidate) => !used.has(candidate) && row.message === item.content);

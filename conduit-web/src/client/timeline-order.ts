@@ -1,6 +1,5 @@
 import { parseAttachmentEnvelope } from "../attachment-envelope.js";
 import type { Message, ToolItem } from "./api/contracts";
-import { isOptimisticId, reconcileMessages } from "./reconcile-messages.ts";
 
 export interface ProtocolMessage {
   id?: string;
@@ -111,92 +110,85 @@ export function buildTimeline(messages: Message[] = [], tools: ToolItem[] = [], 
   });
 }
 
-export function promotePendingUser(messages: Message[], eventMessage: ProtocolMessage): Message[] {
+/**
+ * Take the harness's word for the prompt that starts a turn.
+ *
+ * Pi puts ids on session entries, not on the messages it streams, so the only
+ * handle an unwritten turn has is its generation -- which is what that turn's
+ * sync matches on. Stamping it here, where the prompt is committed, covers
+ * every way one arrives: the composer's own optimistic copy, a prompt the
+ * harness sends back after a regenerate forked the original away, and either
+ * order the started/committed events happen to land in.
+ */
+/**
+ * A prompt the harness has committed.
+ *
+ * A message this client sent is already on screen under the id it chose and
+ * sent with the prompt, so this has nothing to do for it. What it is for is a
+ * prompt this client did not compose: one the harness re-sent for a
+ * regenerate, or a message typed into the CLI of a thread driven from here.
+ */
+export function applyCommittedUser(messages: Message[], eventMessage: ProtocolMessage): Message[] {
   const content = displayUserText(eventMessage);
-  const pendingIndex = (() => {
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const message = messages[index]!;
-      if (message.role !== "user" || !message.pending) continue;
-      if (!content || message.content === content || content.includes(message.content || "")) return index;
-    }
-    return -1;
-  })();
-  if (pendingIndex >= 0) {
-    const copy = [...messages];
-    const previous = copy[pendingIndex]!;
-    copy[pendingIndex] = {
-      ...previous,
-      pending: false,
-      queueMode: undefined,
-      content: previous.content || content,
-      timestamp: eventMessage.timestamp || previous.timestamp,
-      id: eventMessage.id || previous.id,
-    };
-    return copy;
-  }
-  if (!content) return messages;
-  if (messages.some((message) => message.role === "user" && !message.pending && message.content === content)) return messages;
+  if (!content || !eventMessage.id) return messages;
+  if (messages.some((message) => message.id === eventMessage.id)) return messages;
   return [...messages, {
-    id: eventMessage.id || `user_${Date.now()}`,
+    id: eventMessage.id,
     role: "user",
     content,
     timestamp: eventMessage.timestamp || new Date().toISOString(),
   }];
 }
 
-export function tagOptimisticGenerationOwner(messages: Message[], generationId: string | null): Message[] {
-  if (!generationId) return messages;
-  const index = messages.findLastIndex((message) => message.role === "user"
-    && !message.pending && isOptimisticId(message.id) && message.generationId == null);
-  if (index < 0) return messages;
-  return messages.map((message, messageIndex) => messageIndex === index
-    ? { ...message, generationId }
-    : message);
+/**
+ * Fold a projection into the transcript.
+ *
+ * Every message carries an id assigned before anyone saw it -- Codex's item
+ * ids, the ChatGPT-web journal's, and for Pi the ids Conduit claims for a turn
+ * and binds to the entries it writes. So a sync is an upsert: a known id
+ * updates in place, an unknown one is new and belongs at the end, and nothing
+ * is matched by content, by position, or by the generation that produced it.
+ */
+export function upsertMessages(current: Message[], incoming: Message[]): Message[] {
+  if (!incoming.length) return current;
+  const next = [...current];
+  // Where the sync has placed messages so far. A message this client has not
+  // seen goes after the one the server put before it, not at the end -- the
+  // order is the server's statement, and only the position of a message nobody
+  // has seen before is open to question.
+  let cursor = -1;
+  for (const message of incoming) {
+    const index = message.id ? next.findIndex((item) => item.id === message.id) : -1;
+    if (index >= 0) {
+      next[index] = { ...message, key: next[index]!.key ?? next[index]!.id };
+      cursor = index;
+      continue;
+    }
+    const at = cursor >= 0 ? cursor + 1 : next.length;
+    next.splice(at, 0, message);
+    cursor = at;
+  }
+  return next;
 }
 
-export function truncateForRegenerate(messages: Message[], entryId: string): Message[] {
-  const index = messages.findIndex((message) => message.id === entryId);
-  return index >= 0 ? messages.slice(0, index) : messages;
-}
-
-/** Replace the provisional assistant copy for one generation without touching its user prompt. */
-export function settleGenerationMessages(messages: Message[], generationId: string, settled: Message[]): Message[] {
-  const first = messages.findIndex((message) => message.role === "assistant" && message.generationId === generationId);
-  const retained = messages.filter((message) => message.role !== "assistant" || message.generationId !== generationId);
-  if (!settled.length) return retained;
-  if (first < 0) return [...retained, ...settled];
-  const insertion = messages.slice(0, first)
-    .filter((message) => message.role !== "assistant" || message.generationId !== generationId).length;
-  return [...retained.slice(0, insertion), ...settled, ...retained.slice(insertion)];
+/** The whole transcript as the server has it; only the composer's unsent rows survive. */
+export function replaceMessages(current: Message[], incoming: Message[]): Message[] {
+  const keys = new Map(current.map((message) => [message.id, message.key ?? message.id]));
+  const pending = current.filter((message) => message.pending);
+  return [...incoming.map((message) => ({ ...message, key: keys.get(message.id) ?? message.id })), ...pending];
 }
 
 /**
- * Merge the backend's own record of recent turns into the transcript.
+ * Cut the transcript where the server says the history now ends.
  *
- * The incoming messages are authoritative for the turns they cover: they came
- * from the backend's transcript through the same projection the initial load
- * uses. Anything older is left alone, so a one-turn sync costs one turn.
- *
- * Ids cannot be relied on to find where the synced range begins. Pi puts ids on
- * session entries, not on the messages it streams, so the client's copy of a
- * turn has locally minted ids that match nothing. The sync always covers a
- * whole number of turns, so the fallback anchor is the same number of user
- * messages counted back from the end.
+ * A fork abandons everything after its point and states where that is, so this
+ * never has to work it out. An id this client does not hold means the cut is
+ * somewhere it has not loaded, and there is nothing here to remove.
  */
-export function mergeTranscript(messages: Message[], incoming: Message[], generationId?: string | null): Message[] {
-  if (!incoming.length) return messages;
-  const replaced = replacedRange(messages, incoming, generationId);
-  // Nothing of the client's is recognisably part of this sync: it is a turn the
-  // client has not seen, and it belongs after what it holds. Appending can at
-  // worst leave a duplicate, which the next sync resolves; guessing at a
-  // position can destroy a turn the sync never carried.
-  if (replaced.at == null) return [...messages, ...incoming];
-  // A pending message is the composer's, not the transcript's, so it survives.
-  const pending = messages.slice(replaced.at).filter((message) => message.pending);
-  const kept = messages.filter((message, index) => index < replaced.at! && !replaced.ids.has(message.id));
-  const tail = messages.slice(replaced.at)
-    .filter((message) => !message.pending && !replaced.ids.has(message.id));
-  return [...kept, ...incoming, ...tail, ...pending];
+export function truncateAt(messages: Message[], messageId: string, { inclusive = false } = {}): Message[] {
+  const index = messages.findIndex((message) => message.id === messageId);
+  if (index < 0) return messages;
+  return messages.slice(0, inclusive ? index : index + 1);
 }
 
 function toolIds(messages: Message[]): Set<string> {
@@ -209,59 +201,22 @@ function toolIds(messages: Message[]): Set<string> {
   return ids;
 }
 
-/** Replace one committed transcript range, including the tools owned by it. */
-export function mergeTranscriptProjection(
+/** A sync carries messages and the tools those messages own. */
+export function applyTranscriptProjection(
   messages: Message[],
   tools: ToolItem[],
   incomingMessages: Message[],
   incomingTools: ToolItem[],
-  generationId?: string | null,
+  { replaceAll = false }: { replaceAll?: boolean } = {},
 ): { messages: Message[]; tools: ToolItem[] } {
-  if (!incomingMessages.length) return { messages, tools };
-  const merged = mergeTranscript(messages, incomingMessages, generationId);
+  if (!incomingMessages.length && !replaceAll) return { messages, tools };
+  if (replaceAll) return { messages: replaceMessages(messages, incomingMessages), tools: incomingTools };
+  const nextMessages = upsertMessages(messages, incomingMessages);
   const incomingIds = new Set(incomingTools.map((tool) => tool.id));
-  // The turns the sync did not replace keep the tools they own.
-  const retainedIds = toolIds(merged.filter((message) => !incomingMessages.includes(message)));
+  // Turns the sync did not carry keep the tools they own.
+  const retained = toolIds(nextMessages);
   return {
-    messages: merged,
-    tools: [...tools.filter((tool) => retainedIds.has(tool.id) && !incomingIds.has(tool.id)), ...incomingTools],
+    messages: nextMessages,
+    tools: [...tools.filter((tool) => retained.has(tool.id) && !incomingIds.has(tool.id)), ...incomingTools],
   };
-}
-
-export function replaceTranscriptProjection(
-  messages: Message[],
-  incomingMessages: Message[],
-  incomingTools: ToolItem[],
-): { messages: Message[]; tools: ToolItem[] } {
-  return { messages: reconcileMessages(messages, incomingMessages), tools: incomingTools };
-}
-
-/**
- * Which of the client's messages this sync is the persisted copy of.
- *
- * Two keys, both stated rather than inferred. A message the sync names by id is
- * plainly the same message. A message the client froze out of a live generation
- * carries the generation that produced it, and the sync says which generation
- * it closes -- which is the only handle a turn has before Pi has written it,
- * because Pi puts ids on session entries, not on the messages it streams.
- *
- * What this deliberately does not do is guess by position. Counting the sync's
- * turns back from the end of the transcript is right only when the two lists
- * agree about how many turns there are, and a sync is sent at exactly the
- * moments they do not: it doubled a turn when it counted short, and destroyed
- * one when it counted long.
- */
-function replacedRange(messages: Message[], incoming: Message[], generationId?: string | null):
-{ at: number | null; ids: Set<string> } {
-  const incomingIds = new Set(incoming.map((message) => message.id).filter(Boolean));
-  const ids = new Set<string>();
-  let at: number | null = null;
-  messages.forEach((message, index) => {
-    const matched = (message.id && incomingIds.has(message.id))
-      || (generationId != null && message.generationId === generationId);
-    if (!matched || message.pending) return;
-    ids.add(message.id);
-    if (at == null) at = index;
-  });
-  return { at, ids };
 }

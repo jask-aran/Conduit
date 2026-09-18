@@ -4,8 +4,8 @@ import {
   assignToolSeq,
   buildTimeline,
   mergeToolEvent,
-  promotePendingUser,
-  settleGenerationMessages,
+  applyCommittedUser,
+  upsertMessages,
 } from "../src/client/timeline-order.ts";
 
 test("mergeToolEvent preserves first-seen timestamp and seq on reconnect replay", () => {
@@ -46,14 +46,19 @@ test("buildTimeline keeps tools between messages when timestamps order them", ()
 });
 
 
-test("an ordinary pending message is promoted on delivery", () => {
-  const current = [{ id: "user_1", role: "user", content: "hello", pending: true }];
-  const next = promotePendingUser(current, {
-    role: "user", content: "hello", id: "entry_user", timestamp: "2026-01-01T00:00:05.000Z",
+test("a message this client sent is already itself when the harness commits it", () => {
+  const current = [{ id: "m_abc", role: "user", content: "hello" }];
+  const next = applyCommittedUser(current, {
+    role: "user", content: "hello", id: "m_abc", timestamp: "2026-01-01T00:00:05.000Z",
   });
-  assert.equal(next.length, 1);
-  assert.equal(next[0].pending, false);
-  assert.equal(next[0].id, "entry_user");
+  assert.equal(next, current);
+});
+
+test("a prompt this client did not compose is added", () => {
+  const next = applyCommittedUser([{ id: "m_abc", role: "user", content: "hello" }], {
+    role: "user", content: "typed in the CLI", id: "pi:e1", timestamp: "2026-01-01T00:00:05.000Z",
+  });
+  assert.deepEqual(next.map((message) => message.id), ["m_abc", "pi:e1"]);
 });
 
 test("assignToolSeq fills missing seq values", () => {
@@ -62,13 +67,13 @@ test("assignToolSeq fills missing seq values", () => {
   assert.equal(tools[1].seq, 7);
 });
 
-test("a settled generation replaces its provisional assistant copy once", () => {
+test("a settled answer replaces the streaming copy it was frozen from", () => {
   const committed = [
-    { id: "user_1", role: "user", content: "hello", generationId: "g1" },
-    { id: "live_g1", role: "assistant", content: "Hello", generationId: "g1" },
+    { id: "m_user", role: "user", content: "hello" },
+    { id: "m_answer", role: "assistant", content: "Hel", generationId: "g1" },
   ];
-  const settled = settleGenerationMessages(committed, "g1", [{
-    id: "end_g1:m1", role: "assistant", content: "Hello", generationId: "g1", stopReason: "stop",
+  const settled = upsertMessages(committed, [{
+    id: "m_answer", role: "assistant", content: "Hello", generationId: "g1", stopReason: "stop",
   }]);
   assert.deepEqual(settled.map((message) => [message.role, message.content]), [
     ["user", "hello"],
@@ -76,9 +81,23 @@ test("a settled generation replaces its provisional assistant copy once", () => 
   ]);
 });
 
-test("a settled generation preserves its answer when no transcript message arrived", () => {
-  const settled = settleGenerationMessages([
-    { id: "user_1", role: "user", content: "hello", generationId: "g1" },
-  ], "g1", [{ id: "end_g1:m1", role: "assistant", content: "Hello", generationId: "g1" }]);
-  assert.equal(settled.at(-1).content, "Hello");
+test("a persisted turn the client has not seen is appended, not merged into one it has", () => {
+  const current = [{ id: "m_user", role: "user", content: "hello" }];
+  const next = upsertMessages(current, [
+    { id: "m_user", role: "user", content: "hello" },
+    { id: "pi:abc", role: "assistant", content: "Hello" },
+  ]);
+  assert.deepEqual(next.map((message) => message.id), ["m_user", "pi:abc"]);
+});
+
+test("a re-sent prompt with a new id does not duplicate the one it replaced", () => {
+  // What a regenerate does: the harness forks the old prompt away and sends a
+  // new one. The client is cut to the fork point first, so the only prompt left
+  // is the new one and it arrives once.
+  const afterFork = [{ id: "m_first", role: "user", content: "hi" }, { id: "pi:a1", role: "assistant", content: "Hi" }];
+  const next = upsertMessages(afterFork, [
+    { id: "m_second", role: "user", content: "hi again" },
+    { id: "pi:a2", role: "assistant", content: "Hi again" },
+  ]);
+  assert.deepEqual(next.map((message) => message.id), ["m_first", "pi:a1", "m_second", "pi:a2"]);
 });

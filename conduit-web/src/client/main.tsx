@@ -24,7 +24,6 @@ import { AppDashboard } from "./dashboard/app-dashboard";
 import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_STORAGE_KEY, selectedComposerSurface } from "./chat/composer-surface";
 import type { VoiceDictationSettings } from "./chat/voice-dictation-types";
 import { CONTEXT_METRIC_STORAGE_KEY, formatContextMetrics, saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
-import { isOptimisticId } from "./reconcile-messages";
 import { HostUiRequests } from "./chat/host-ui-card";
 import {
   MARKDOWN_RENDERER_STORAGE_KEY,
@@ -54,6 +53,7 @@ import { createActiveChat, type ActiveChatStore } from "./state/active-chat";
 import { createAttachments, DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
 import { createDrafts } from "./state/drafts";
 import { createCatalogueStore } from "./state/catalogue";
+import { markChatRead } from "./state/read-receipts";
 import { createModelSettings, notifyModelFallback } from "./state/model-settings";
 import { createPermissionSettings } from "./state/permission-settings";
 import { createServiceLevelSettings } from "./state/service-level-settings";
@@ -676,6 +676,27 @@ function App() {
     }
   };
 
+  // Remove an abandoned draft from the local UI and begin stopping its process
+  // in the same event turn. The server remains responsible for serialized
+  // process teardown and durable deletion.
+  const discardDraftImmediately = (id: string | null) => {
+    if (!id) return;
+    catalogue.setProjects((current) => current.map((project) => ({
+      ...project,
+      sessions: project.sessions.filter((session) => session.id !== id),
+    })));
+    void discardDraft(id).catch(showError);
+  };
+
+  const abandonCurrentDraft = () => discardDraftImmediately(currentDraftId());
+
+  let newChatRequestEpoch = 0;
+  const abandonPendingNewChat = () => { newChatRequestEpoch += 1; };
+  const leaveChat = (preserveDraft: boolean) => {
+    abandonPendingNewChat();
+    if (!preserveDraft) abandonCurrentDraft();
+  };
+
   // The store holds one profile's models at a time, and a new chat is often
   // started from somewhere else entirely - a dashboard, or the chat you were
   // just reading on another profile. Seeding the launch from it then asks the
@@ -686,61 +707,54 @@ function App() {
     body: JSON.stringify({
       projectId: project.id,
       profileId,
-      start: true,
       ...(models.profile() === profileId ? { model: models.model(), thinkingLevel: models.effort() } : {}),
     }),
   });
 
   const activateCreatedChat = async (created: ChatSummary, project: Project, profileId: string) => {
-    await chat.initialize({ ...created, templateId: created.templateId || profileId || undefined }, project, undefined, { warm: true });
+    await chat.initialize({ ...created, templateId: created.templateId || profileId || undefined }, project);
   };
 
   const createChat = async (target?: Project, launch: { templateId?: string; runtimeKind?: string } = {}, options: { reportFailure?: boolean } = {}) => {
     const reportFailure = options.reportFailure !== false;
     const project = target || selectedProject() || catalogue.projects().find((item) => item.slug === "chat") || catalogue.projects()[0];
     if (!project) return null;
+    const requestEpoch = ++newChatRequestEpoch;
     const replacedDraftId = currentDraftId();
     const fromDashboard = routeKind() === "project" || routeKind() === "dashboard" || routeKind() === "computer";
+    const profileId = launch.templateId || project.defaultTemplateId || defaultTemplateId() || "assistant";
+    discardDraftImmediately(replacedDraftId);
+    chat.reset(profileId);
+    attachments.clear({ discard: false });
+    catalogue.selectProject(project);
+    setRouteKind("chat");
     try {
-      const profileId = launch.templateId || project.defaultTemplateId || defaultTemplateId() || "assistant";
       const created = profileId === "runtime"
         ? await api<ChatSummary>("/v0/runtime/chats", { method: "POST", body: JSON.stringify({}) })
         : await createProfileChat(project, profileId);
+      if (requestEpoch !== newChatRequestEpoch) {
+        discardDraftImmediately(created.id);
+        return null;
+      }
       const ownerProject = profileId === "runtime"
         ? catalogue.projects().find((item) => item.id === created.projectId)
           || catalogue.projects().find((item) => item.slug === "chat")
         : project;
       if (!ownerProject) throw new Error("The Runtime chat project is not available");
 
-      // Commit the visible transition only after the durable replacement exists.
-      // initialize() first: it resets the previous chat's live socket, and the
-      // URL must not advertise the new chat while a send could still target the old one.
-      await activateCreatedChat(created, ownerProject, profileId);
+      const activation = activateCreatedChat(created, ownerProject, profileId);
       batch(() => {
         if (fromDashboard) history.pushState({}, "", `/chat/${created.id}`);
         else history.replaceState({}, "", `/chat/${created.id}`);
-        setRouteKind("chat");
-        setRouteBootstrapError("");
-        setRouteBootstrap("ready");
       });
-      // Show the new chat in the sidebar immediately instead of waiting for the
-      // first server checkpoint refresh; drop the empty draft it replaced.
+      // Show the durable draft without waiting for its scoped controls to load.
       catalogue.setProjects((current) => current.map((item) => {
         if (item.id === ownerProject.id) {
-          return { ...item, sessions: [{ ...created, pinned: true }, ...item.sessions.filter((session) => session.id !== created.id && session.id !== replacedDraftId)] };
-        }
-        if (item.id === project.id && item.id !== ownerProject.id && replacedDraftId) {
-          return { ...item, sessions: item.sessions.filter((session) => session.id !== replacedDraftId) };
+          return { ...item, sessions: [created, ...item.sessions.filter((session) => session.id !== created.id)] };
         }
         return item;
       }));
-      if (replacedDraftId && replacedDraftId !== created.id) {
-        try { await discardDraft(replacedDraftId); }
-        catch (error) {
-          const detail = error as Error & { error?: string };
-          if (detail.error !== "chat_not_found") (reportFailure ? showError : showPlainError)(`The new chat was created, but the old empty draft could not be removed: ${detail.message}`);
-        }
-      }
+      await activation;
       return created;
     } catch (error) {
       if (reportFailure) showError(error);
@@ -785,6 +799,7 @@ function App() {
   });
 
   const openDashboard = (historyMode: "push" | "replace" | "none" = "push") => {
+    leaveChat(historyMode === "none");
     chat.reset();
     const chatRoot = catalogue.projects().find((project) => project.slug === "chat");
     if (chatRoot) catalogue.selectProject(chatRoot);
@@ -898,6 +913,7 @@ function App() {
   };
 
   const openComputer = (historyMode: "push" | "none" = "push") => {
+    leaveChat(historyMode === "none");
     setComputerDriving(false);
     chat.reset();
     const chatRoot = catalogue.projects().find((project) => project.slug === "chat");
@@ -913,6 +929,7 @@ function App() {
   };
   const openComputerHarness = (id: string | null, historyMode: "push" | "none" = "push", cwd?: string) => {
     if (!id) return openComputer(historyMode);
+    leaveChat(historyMode === "none");
     chat.reset();
     setComputerDriving(false);
     setMobileSidebarOpen(false);
@@ -930,6 +947,7 @@ function App() {
     openComputerHarness(id, "push", cwd);
   };
   const openTerminalRoute = (historyMode: "push" | "replace" | "none" = "push", terminalId?: string) => {
+    leaveChat(historyMode === "none");
     if (historyMode !== "none" && routeKind() !== "terminal") setTerminalCanReturn(true);
     setMobileSidebarOpen(false);
     setRouteKind("terminal");
@@ -960,12 +978,13 @@ function App() {
   };
 
   const openChat = async (target: ChatSummary, project: Project) => {
-    if (target.unread) {
-      catalogue.patchChat(target.id, { unread: false });
-      void api<ChatSummary>(`/v0/sessions/${encodeURIComponent(target.id)}/read`, { method: "POST" }).catch(showError);
-    }
+    abandonPendingNewChat();
+    // Clicking a chat already open short-circuits below, so the receipt goes
+    // first; every other way in is covered inside chat.select.
+    markChatRead(catalogue, target);
     if (target.id === catalogue.selectedId() && routeKind() === "chat" && chat.presentation().kind === "ready") return;
     const abandonedDraftId = currentDraftId();
+    if (abandonedDraftId !== target.id) discardDraftImmediately(abandonedDraftId);
     try {
       await chat.select(target, project, {
         history: "push",
@@ -977,23 +996,13 @@ function App() {
       });
     }
     catch (error) { showError(error); return; }
-    if (!abandonedDraftId || abandonedDraftId === target.id) return;
-    try {
-      await discardDraft(abandonedDraftId);
-      catalogue.setProjects((current) => current.map((item) => ({ ...item, sessions: item.sessions.filter((session) => session.id !== abandonedDraftId) })));
-    } catch (error) {
-      const detail = error as Error & { error?: string };
-      if (detail.error === "chat_not_found") {
-        // Already discarded server-side: finish the local cleanup instead of
-        // rolling back a successful target navigation.
-        catalogue.setProjects((current) => current.map((item) => ({ ...item, sessions: item.sessions.filter((session) => session.id !== abandonedDraftId) })));
-      } else showError(`Opened ${target.title || "chat"}, but the abandoned draft could not be removed: ${detail.message}`);
-    }
   };
 
   const openProject = async (target: Project, historyMode: "push" | "replace" | "none" = "push") => {
+    abandonPendingNewChat();
     if (routeKind() === "project" && catalogue.projectId() === target.id) return;
     const abandonedDraftId = currentDraftId();
+    if (historyMode !== "none") discardDraftImmediately(abandonedDraftId);
     chat.reset();
     catalogue.selectProject(target);
     setRouteKind("project");
@@ -1001,19 +1010,6 @@ function App() {
     setRouteBootstrap("ready");
     if (historyMode === "push") history.pushState({}, "", projectPath(target));
     else if (historyMode === "replace") history.replaceState({}, "", projectPath(target));
-    // A history traversal may return to this draft with Forward. Keep it in
-    // the catalogue and on disk until an explicit navigation abandons it.
-    if (!abandonedDraftId || historyMode === "none") return;
-    try {
-      await discardDraft(abandonedDraftId);
-      catalogue.setProjects((current) => current.map((project) => ({
-        ...project,
-        sessions: project.sessions.filter((session) => session.id !== abandonedDraftId),
-      })));
-    } catch (error) {
-      const detail = error as Error & { error?: string };
-      if (detail.error !== "chat_not_found") showError(`Opened ${target.name}, but the abandoned draft could not be removed: ${detail.message}`);
-    }
   };
   const openProjectWithMaximizedWorkspace = (target: Project) => {
     void openProject(target);
@@ -1361,7 +1357,7 @@ function App() {
     // An optimistic id is one the backend never persisted - a message sent and
     // then interrupted before it was written. Forking one fails, so it cannot
     // be the target of regenerate or edit.
-    for (let index = list.length - 1; index >= 0; index -= 1) { const message = list[index]!; if (message.role === "user" && !message.pending && !isOptimisticId(message.id)) return message.id; }
+    for (let index = list.length - 1; index >= 0; index -= 1) { const message = list[index]!; if (message.role === "user" && !message.pending) return message.id; }
     return null;
   });
   const thinkingLevels = createMemo(() => models.models().find((item) => item.spec === models.model())?.thinkingLevels ?? []);
@@ -1379,9 +1375,9 @@ function App() {
     connectivity: runtime.connectivity(),
     effort: models.effort(),
     thinkingLevels: thinkingLevels(),
-    canRegenerate: Boolean(chat.capabilities()?.regenerate && lastUserEntryId()) && !chat.streaming() && !chat.stopping(),
+    canRegenerate: chatCapability("regenerate") && Boolean(lastUserEntryId()) && !chat.streaming() && !chat.stopping(),
     canContinue: partialContinue() && Boolean(lastAssistant()?.stopped) && !chat.streaming(),
-    canCompact: Boolean(chat.capabilities()?.compaction) && !chat.streaming() && !chat.compacting() && chat.messages().length > 0,
+    canCompact: chatCapability("compaction") && !chat.streaming() && !chat.compacting() && chat.messages().length > 0,
     canCopy: Boolean(lastAssistant()?.content),
     chatSort: chatSort(),
   }));
@@ -1487,22 +1483,31 @@ function App() {
         .catch((error) => { showError(error); });
     };
     window.addEventListener(UI_PREFERENCE_CHANGE_EVENT, persistUiPreference);
+    // One reducer for every channel that hands over a chat row: the global
+    // stream, and the open chat's own socket.
+    const watching = (chatId: string) => chatId === catalogue.selectedId()
+      && routeKind() === "chat" && document.visibilityState === "visible";
     const applyChangedChat = (event: Event) => {
       const changed = (event as CustomEvent<ChatSummary>).detail;
       if (!changed?.id) return;
-      const markRead = changed.unread && changed.id === catalogue.selectedId()
-        && routeKind() === "chat" && document.visibilityState === "visible";
-      catalogue.patchChat(changed.id, markRead ? { ...changed, unread: false } : changed);
-      if (markRead) {
-        void api<ChatSummary>(`/v0/sessions/${encodeURIComponent(changed.id)}/read`, { method: "POST" })
-          .then((read) => catalogue.patchChat(read.id, read))
-          .catch(showError);
-      }
+      const read = watching(changed.id);
+      catalogue.patchChat(changed.id, read ? { ...changed, unread: false } : changed);
+      if (read) markChatRead(catalogue, changed);
+    };
+    // Coming back to a tab is reading it too: the completion that landed while
+    // this was in the background has nothing else left to clear it.
+    const readOnFocus = () => {
+      if (document.visibilityState !== "visible" || routeKind() !== "chat") return;
+      markChatRead(catalogue, catalogue.selected()?.chat);
     };
     window.addEventListener("conduit:chat-changed", applyChangedChat);
+    document.addEventListener("visibilitychange", readOnFocus);
+    window.addEventListener("focus", readOnFocus);
     onCleanup(() => {
       window.removeEventListener(UI_PREFERENCE_CHANGE_EVENT, persistUiPreference);
       window.removeEventListener("conduit:chat-changed", applyChangedChat);
+      document.removeEventListener("visibilitychange", readOnFocus);
+      window.removeEventListener("focus", readOnFocus);
     });
 
     const localVoice = loadVoiceDictationSettings();
@@ -1906,7 +1911,7 @@ function App() {
                 const id = chat.loadedId();
                 if (!project || !id) return;
                 catalogue.setProjects((current) => current.map((item) => item.id === project.id
-                  ? { ...item, sessions: [{ id, projectId: project.id, status: "draft", title: chat.title() || "New chat", templateId: chat.templateId() || undefined, pinned: true }, ...item.sessions.filter((session) => session.id !== id)] }
+                  ? { ...item, sessions: [{ id, projectId: project.id, status: "draft", title: chat.title() || "New chat", templateId: chat.templateId() || undefined }, ...item.sessions.filter((session) => session.id !== id)] }
                   : item));
                 history.pushState({}, "", `/chat/${id}`);
                 setRouteKind("chat");
@@ -1960,7 +1965,7 @@ function App() {
           <Show when={!computerDriving()}><ChatHeader title="Computer" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard /></Show>
           <ComputerDashboard projects={catalogue.projects()} runtime={runtime} location={computerLocation()} loading={computerLoading()} error={computerError()} selectedHarness={computerHarness()} onHarnessDriveChange={setComputerDriving} renderHarnessDrive={({ current, harness, store, onBack, onTrack }) => <div class="harness-drive-shared">
             <ChatHeader project={catalogue.projects().find((project) => project.workingRoot === current.cwd)} title={current.title} runtime={store.chat.runtimeIdentity()} live={store.chat.live() as unknown as Record<string, unknown>} chat={store.chat} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => openComputerHarness(harness.id)} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} onBack={onBack} extraAction={<Button variant="ghost" size="sm" onClick={onTrack}>Track this thread</Button>} />
-            <div class="work-area"><section class="work-area-conversation" aria-label="Conversation"><Transcript chat={store.chat} partialContinue={false} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={harness.label} /><div class="composer-stack"><HostUiRequests requests={store.chat.hostUiRequests()} onRespond={store.chat.respondHostUi} /><Composer chat={store.chat} attachments={NO_ATTACHMENTS} attachmentsSupported={false} models={store.models} profiles={[]} activeProfile={null} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => {}} onStatusChange={setComposerStatus} /></div></section></div>
+            <div class="work-area"><section class="work-area-conversation" aria-label="Conversation"><Transcript chat={store.chat} supports={(name) => store.chat.capabilities()?.[name] === true} partialContinue={false} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={harness.label} /><div class="composer-stack"><HostUiRequests requests={store.chat.hostUiRequests()} onRespond={store.chat.respondHostUi} /><Composer chat={store.chat} attachments={NO_ATTACHMENTS} attachmentsSupported={false} models={store.models} profiles={[]} activeProfile={null} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => {}} onStatusChange={setComposerStatus} /></div></section></div>
           </div>} onOpenHarness={(id) => openComputerHarness(id)} onOpenHarnessHere={(id, cwd) => void openComputerHarnessHere(id, cwd)} harnessComposer={computerHarness() ? (cwd, harnessModels, modelsLoading, harnessPermissions, launch) => <Composer chat={chat} attachments={NO_ATTACHMENTS} attachmentsSupported={false} models={harnessModels} modelsLoading={modelsLoading} permissions={harnessCapabilities()[profiles().find((profile) => profile.id === computerHarness())?.implementation || ""]?.permissionModes ? harnessPermissions : undefined} profiles={profiles().filter((profile) => profile.id === computerHarness())} activeProfile={profiles().find((profile) => profile.id === computerHarness()) || null} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => {}} onSendDraft={(prompt) => launch(prompt)} /> : undefined} onOpenHarnessChat={(target, project, prompt) => { void openChat(target, project).then(() => { if (prompt) { chat.setDraft(prompt); void chat.send(); } }); }} onBrowse={(path) => void browseComputer(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => void designateComputerWorkspace()} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProject(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={(path) => { setComputerFile({ path }); openWorkspaceView("files"); }} />
         </Show>
         <Show when={routeKind() !== "dashboard" && routeKind() !== "computer"}>
@@ -1975,9 +1980,9 @@ function App() {
           <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
           <div class="work-area">
             <section class="work-area-conversation" aria-label="Conversation" aria-busy={openingLiveChat()}>
-              <Transcript chat={chat} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} projectId={selectedProject()?.id} />
+              <Transcript chat={chat} supports={chatCapability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} projectId={selectedProject()?.id} />
               <div class="composer-stack"><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-                <Composer chat={chat} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
+                <Composer chat={chat} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
             </section>
           </div>
         </>}>
@@ -2004,7 +2009,7 @@ function App() {
                 const id = chat.loadedId();
                 if (!project || !id) return;
                 catalogue.setProjects((current) => current.map((item) => item.id === project.id
-                  ? { ...item, sessions: [{ id, projectId: project.id, status: "draft", title: chat.title() || "New chat", templateId: chat.templateId() || undefined, pinned: true }, ...item.sessions.filter((session) => session.id !== id)] }
+                  ? { ...item, sessions: [{ id, projectId: project.id, status: "draft", title: chat.title() || "New chat", templateId: chat.templateId() || undefined }, ...item.sessions.filter((session) => session.id !== id)] }
                   : item));
                 history.pushState({}, "", `/chat/${id}`);
                 setRouteKind("chat");

@@ -1,4 +1,4 @@
-import type { CacheStats, ChatCapabilities, ContextUsage, HostUiRequest, QueueState, RetryState, SessionStats } from "./contracts";
+import type { CacheStats, ChatCapabilities, ChatSummary, ContextUsage, HostUiRequest, QueueState, RetryState, SessionStats } from "./contracts";
 import type { ProtocolMessage } from "../timeline-order";
 
 type UnknownRecord = Record<string, unknown>;
@@ -75,7 +75,8 @@ export type LiveEvent = EventBase & (
   | { type: "queue_update"; queue: QueueState }
   | { type: "extension_ui_request"; request: HostUiRequest | null }
   | { type: "extension_ui_resolved"; requestId: string }
-  | { type: "session_checkpoint"; chatId: string; title: string | null; generationSeq: number | null; artifacts: TurnArtifactSummary[] | null }
+  | { type: "history_truncated"; beforeMessageId: string | null }
+  | { type: "session_checkpoint"; chatId: string; title: string | null; chat: ChatSummary | null; generationSeq: number | null; artifacts: TurnArtifactSummary[] | null }
   | { type: "user_message_committed"; message: ProtocolMessage }
   | { type: "transcript_sync"; messages: unknown[]; tools: unknown[]; replaceAll: boolean }
   | StructuredGenerationEvent
@@ -262,6 +263,8 @@ export function normalizeLiveEvent(value: unknown): LiveEvent {
     case "queue_update": return { type: "queue_update", generationId, queue: queue(source) || { steering: [], followUp: [] } };
     case "extension_ui_request": return { type: "extension_ui_request", generationId, request: normalizeHostUiRequest(source) };
     case "extension_ui_resolved": return { type: "extension_ui_resolved", generationId, requestId: text(source.requestId || source.id) };
+    case "history_truncated":
+      return { type: "history_truncated", generationId, beforeMessageId: optionalText(source.beforeMessageId) };
     case "session_checkpoint": {
       const chat = record(source.chat);
       return {
@@ -270,6 +273,9 @@ export function normalizeLiveEvent(value: unknown): LiveEvent {
         generationSeq: number(source.generationSeq ?? source.sequence) ?? null,
         chatId: text(chat.id || source.chatId),
         title: optionalText(chat.title || source.title),
+        // The socket carries the whole chat row. Dropping it made the open
+        // chat's unread state depend on the global SSE stream being alive.
+        chat: typeof chat.id === "string" ? chat as unknown as ChatSummary : null,
         artifacts: Array.isArray(source.artifacts) ? source.artifacts.flatMap((value) => {
           const item = record(value);
           const summary = record(item.summary);

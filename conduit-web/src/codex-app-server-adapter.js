@@ -691,6 +691,9 @@ export class CodexAppServerAdapter extends EventEmitter {
       }
     } else if (method === "turn/completed") {
       const failed = params.turn?.status === "failed";
+      // Captured before the flag resets below: a turn the user stopped settles
+      // the same way a finished one does, and only one of them is readable.
+      const stopped = Boolean(record.stopping);
       record.active = false;
       record.stopping = false;
       record.compacting = false;
@@ -706,7 +709,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       this.publish(record, failed
         ? { type: "error", generationId: turnId, error: { code: "backend_unavailable", message: params.turn?.error?.message || "Codex turn failed" } }
         : { type: "status", generationId: turnId, sequence: ++record.eventSequence, status: "idle", activity: "idle", detail: "settled" });
-      this.emit("settled", { record });
+      this.emit("settled", { record, completed: !failed && !stopped });
       if (record.followUp.length) void this.flushFollowUp(record);
     }
   }
@@ -1002,6 +1005,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     });
   }
   listCommands() { return Promise.resolve([]); }
+  listAvailableCommands() { return Promise.resolve([]); }
   async listAvailableModels(cwd) {
     const chatId = `catalog-${crypto.randomUUID()}`;
     let record = null;

@@ -327,7 +327,10 @@ export function freezeGeneration(generation: ActiveGenerationView): Message[] {
     });
     if (!content.trim() && !blocks.length) continue;
     frozen.push({
-      id: `end_${generation.id}:${assistant.id}`,
+      // The harness named this message when it started streaming, so the row
+      // frozen out of it keeps that name and the persisted copy replaces it by
+      // id rather than by guesswork.
+      id: assistant.id,
       generationId: generation.id,
       role: "assistant",
       content,
