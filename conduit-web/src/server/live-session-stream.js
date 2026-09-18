@@ -150,7 +150,13 @@ export function createLiveSessionStream({
     // nothing and this stays null.
     const user = await messageIds.claim(prepared.context.project, prepared.context.chat, "user", messageId);
     const claimed = user
-      ? { user, assistant: await messageIds.mint(prepared.context.project, prepared.context.chat, "assistant", user) }
+      ? {
+        user,
+        assistant: await messageIds.mint(prepared.context.project, prepared.context.chat, "assistant", user),
+        // Every further message this turn writes is named as it starts, so no
+        // message is ever streamed under one name and stored under another.
+        claimAnswer: () => messageIds.claimNow(prepared.context.chat, "assistant", user),
+      }
       : null;
     let accepted;
     try {

@@ -112,6 +112,28 @@ export class MessageIds {
   }
 
   /**
+   * Claim an id for an answer a turn is writing right now.
+   *
+   * A turn writes as many messages as it likes -- a tool call and the answer
+   * after it are two, and a long turn is several -- and each one is named as
+   * the harness starts it, mid-stream. That is inside the event loop, where
+   * there is nothing to await, so this records the claim in memory at once and
+   * lets the file catch up: a binding that ran before the write landed would
+   * hand the entry to the next claim in the queue. The chat must already be
+   * loaded, which it is, because the prompt that started this turn claimed
+   * through it.
+   */
+  claimNow(chat, role, after = null) {
+    if (!this.owns(chat)) return null;
+    const state = this.chats.get(chat.id);
+    if (!state) return null;
+    const messageId = `m_${crypto.randomUUID()}`;
+    state.unbound[role].push({ messageId, after });
+    void this.append(state, { messageId, role, ...(after ? { after } : {}) });
+    return messageId;
+  }
+
+  /**
    * Pair the entries a turn wrote with the prompts that produced them.
    *
    * `rows` is `{ id, role }` per written message, oldest first -- either from

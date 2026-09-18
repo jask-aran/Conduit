@@ -124,3 +124,28 @@ test("a turn that named an answer but never wrote one leaves no blank row", () =
   const claimed = claimAnswerRows([{ id: "m_ask", role: "user" }], { id: "g1", assistantMessages: [{ id: "m_a" }] });
   assert.deepEqual(settleAnswerRows(claimed, "g1", []).map((message) => message.id), ["m_ask"]);
 });
+
+test("a sync opening with messages this client has not seen keeps the server's order", () => {
+  // What a two-turn sync looks like to a client that joined late: the turn it
+  // missed comes first. Dropping it at the end put an older prompt below a
+  // newer one.
+  const current = [
+    { id: "m_ask", role: "user", content: "short story" },
+    { id: "m_stop", role: "user", content: "stop" },
+  ];
+  const next = upsertMessages(current, [
+    { id: "pi:tool1", role: "assistant", content: "" },
+    { id: "pi:tool2", role: "assistant", content: "" },
+    { id: "m_stop", role: "user", content: "stop" },
+    { id: "m_reply", role: "assistant", content: "Got it" },
+  ]);
+  assert.deepEqual(next.map((message) => message.id),
+    ["m_ask", "pi:tool1", "pi:tool2", "m_stop", "m_reply"]);
+});
+
+test("a sync of nothing this client has seen still arrives in order", () => {
+  const next = upsertMessages([{ id: "m_old", role: "user" }], [
+    { id: "a", role: "assistant" }, { id: "b", role: "user" }, { id: "c", role: "assistant" },
+  ]);
+  assert.deepEqual(next.map((message) => message.id), ["m_old", "a", "b", "c"]);
+});

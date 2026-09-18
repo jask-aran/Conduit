@@ -893,9 +893,17 @@ export class PiManager extends EventEmitter {
     };
     record.generationNormalizer = createPiEventNormalizer(generationId, {
       claimMessageId: () => {
-        if (!claims?.assistant || claims.assistantUsed) return null;
-        claims.assistantUsed = true;
-        return claims.assistant;
+        if (!claims?.assistant) return null;
+        if (!claims.assistantUsed) {
+          claims.assistantUsed = true;
+          return claims.assistant;
+        }
+        // A turn writes more than one message whenever it calls a tool, and
+        // each of those is an entry of its own. Naming only the first left the
+        // rest streaming under a name invented for the stream and settling
+        // under one derived from the entry -- the same message, twice, until
+        // the page was reloaded.
+        return claims.claimAnswer?.() || null;
       },
     });
     const [started] = record.generationNormalizer.normalize({
