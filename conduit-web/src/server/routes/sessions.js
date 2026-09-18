@@ -1,6 +1,7 @@
 import path from "node:path";
 import { conduitPiSessionFile } from "../../backend-session.js";
 import { chatView, isChatId } from "../../chat-store.js";
+import { applyMessageIds } from "../../message-ids.js";
 import {
   projectSessionEntries,
   removeSessionFamily,
@@ -19,6 +20,7 @@ import {
 } from "../../session-operations.js";
 
 export function registerSessionRoutes(app, {
+  messageIds,
   attachments,
   backends,
   config,
@@ -73,7 +75,10 @@ export function registerSessionRoutes(app, {
         throw error;
       }
       const projection = projectSessionEntries(session.entries);
-      projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages);
+      projection.messages = applyMessageIds(
+        await attachments.decorateMessages(context.project, context.chat.id, projection.messages,
+          { fromStart: !session.page?.before }),
+        await messageIds.resolver(context.project, context.chat.id));
       response.json({
         ...chatView(context.chat),
         model: session.model,
@@ -97,7 +102,10 @@ export function registerSessionRoutes(app, {
     try {
       const context = await findChatContext(request.params.id);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
-      await registry.markRead(context.chat.id);
+      // The body echoes a completion timestamp this server issued, so the
+      // watermark never depends on the browser's clock.
+      const upTo = typeof request.body?.upTo === "string" ? request.body.upTo : null;
+      await registry.markRead(context.chat.id, upTo);
       response.json(chatView(registry.metadata(context.chat.id)));
     } catch (error) { next(error); }
   });

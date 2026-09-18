@@ -42,7 +42,13 @@ export function RuntimeIndicator(props: { process?: RuntimeProcess | null; stale
   const activity = () => activityOf(props.process) || "idle";
   const label = () => activityLabel(activity(), activityDetail(props.process));
   const tone = () => TONES[activity()] || "muted";
-  return <Show when={props.unread} fallback={<Show when={visible()} fallback={props.fallback}><Tooltip>
+  // Live and unread are independent facts, so the slot goes to whichever is
+  // still happening. A process that is working, starting or waiting on the
+  // user owns it; an idle one does not, because a warm process outlives every
+  // turn and would hide the answer it just finished. Idle and read falls back
+  // to the resident pill.
+  const busy = () => visible() && activity() !== "idle";
+  return <Show when={!busy() && props.unread} fallback={<Show when={visible()} fallback={props.fallback}><Tooltip>
       <TooltipTrigger as="span"
         class={cn("runtime-indicator", `runtime-indicator-${tone()}`, props.stale && "runtime-indicator-stale", props.class)}
         role="status"

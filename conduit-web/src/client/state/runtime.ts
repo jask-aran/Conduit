@@ -12,7 +12,14 @@ export function createRuntimeStore() {
   const [stale, setStale] = createSignal(false);
   let source: { close: () => void } | undefined;
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  let watchdog: ReturnType<typeof setInterval> | undefined;
+  let lastFrameAt = 0;
   let attempts = 0;
+  // The server pings every 15s. A stream that dies without firing an error --
+  // sleep, mobile background, an idle proxy -- goes silent instead, and every
+  // pill would sit there frozen and looking authoritative. Silence is the
+  // signal; `onerror` is only the fast path.
+  const SILENCE_MS = 45_000;
 
   const replaceAll = (items: RuntimeProcess[]) => {
     const next = new Map<string, RuntimeProcess>();
@@ -40,12 +47,26 @@ export function createRuntimeStore() {
     reconnectTimer = undefined;
     source?.close();
     source = undefined;
+    lastFrameAt = Date.now();
+    if (!watchdog) {
+      watchdog = setInterval(() => {
+        if (!source || Date.now() - lastFrameAt < SILENCE_MS) return;
+        setStale(true);
+        attempts += 1;
+        connect();
+      }, 5000);
+      (watchdog as unknown as { unref?: () => void }).unref?.();
+    }
     setConnectivity(attempts ? "reconnecting" : "connecting");
     setStale(attempts > 0);
     const onMessage = (data: string) => {
+      lastFrameAt = Date.now();
       try {
         const event = JSON.parse(data) as Record<string, unknown>;
-        if (event.type === "runtime_global_snapshot") {
+        if (event.type === "ping") {
+          if (connectivity() !== "online") { attempts = 0; setConnectivity("online"); }
+          setStale(false);
+        } else if (event.type === "runtime_global_snapshot") {
           replaceAll((event.processes || []) as RuntimeProcess[]);
           attempts = 0;
           setConnectivity("online");
@@ -108,7 +129,10 @@ export function createRuntimeStore() {
   };
 
   const resume = () => {
-    if (document.visibilityState !== "hidden" && !source) connect();
+    if (document.visibilityState === "hidden") return;
+    // Waking up is exactly when a stream is most likely to be dead without
+    // having said so, so a quiet one is replaced rather than trusted.
+    if (!source || Date.now() - lastFrameAt >= SILENCE_MS) connect();
   };
   const restore = (event: PageTransitionEvent) => {
     if (event.persisted) resume();
@@ -122,6 +146,8 @@ export function createRuntimeStore() {
   });
   onCleanup(() => {
     if (reconnectTimer) clearTimeout(reconnectTimer);
+    if (watchdog) clearInterval(watchdog);
+    watchdog = undefined;
     source?.close();
     document.removeEventListener("visibilitychange", resume);
     window.removeEventListener("pageshow", restore);

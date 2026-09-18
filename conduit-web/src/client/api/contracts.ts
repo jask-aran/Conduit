@@ -68,7 +68,9 @@ export interface ChatSummary {
   lastUserMessageAt?: string | null;
   lastAssistantCompletedAt?: string | null;
   lastMessageAt?: string | null;
+  /** Server-derived: lastAssistantCompletedAt > lastReadAt. */
   unread?: boolean;
+  lastReadAt?: string | null;
   /** Server-side live snapshot for offline indicator fallback (SSE owns truth while online). */
   liveStatus?: string | null;
   liveActivity?: string | null;
