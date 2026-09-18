@@ -78,7 +78,7 @@ export function registerSessionRoutes(app, {
       projection.messages = applyMessageIds(
         await attachments.decorateMessages(context.project, context.chat.id, projection.messages,
           { fromStart: !session.page?.before }),
-        await messageIds.resolver(context.project, context.chat.id));
+        await messageIds.resolver(context.project, context.chat));
       response.json({
         ...chatView(context.chat),
         model: session.model,

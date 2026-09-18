@@ -433,7 +433,7 @@ export function registerProjectRoutes(app, {
       if (!chat || chat.projectId !== project.id) return response.json(null);
       if (request.query.timeline === "1") {
         return response.json(applyArtifactMessageIds(await turnCheckpoints.timeline(chatId, project.workingRoot),
-          await messageIds.resolver(project, chatId)));
+          await messageIds.resolver(project, chat)));
       }
       const baseline = request.query.baseline === "turn" ? "turn" : "chat";
       const checkpointId = typeof request.query.checkpointId === "string" ? request.query.checkpointId : null;

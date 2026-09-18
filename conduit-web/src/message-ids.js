@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { chatDirectory } from "./chat-store.js";
+import { conduitOwnsMessageIds } from "./harnesses/index.js";
 
 /**
  * Conduit's own message identity for harnesses that cannot supply one.
@@ -32,6 +33,16 @@ export class MessageIds {
 
   fileFor(project, chatId) {
     return path.join(chatDirectory(project, chatId), "message-ids.jsonl");
+  }
+
+  /**
+   * The ledger only speaks for harnesses that cannot name their own messages.
+   * Asking it about any other chat is answered here rather than guarded at
+   * every call site, so a projection can be run through it unconditionally
+   * and a harness with its own ids keeps them untouched.
+   */
+  owns(chat) {
+    return conduitOwnsMessageIds(chat);
   }
 
   async load(project, chatId) {
@@ -67,8 +78,8 @@ export class MessageIds {
   }
 
   /** Claim an id for a message about to exist, before any entry does. */
-  async mint(project, chatId, role = "user") {
-    return this.claim(project, chatId, role, null);
+  async mint(project, chat, role = "user") {
+    return this.claim(project, chat, role, null);
   }
 
   /**
@@ -78,8 +89,9 @@ export class MessageIds {
    * only it has; the id is still recorded here, bound here, and translated
    * here, so nothing downstream can tell the difference.
    */
-  async claim(project, chatId, role = "user", offered = null) {
-    const state = await this.load(project, chatId);
+  async claim(project, chat, role = "user", offered = null) {
+    if (!this.owns(chat)) return null;
+    const state = await this.load(project, chat.id);
     const messageId = offered && !state.byMessage.has(offered) ? offered : `m_${crypto.randomUUID()}`;
     state.unbound[role].push(messageId);
     await this.append(state, { messageId, role });
@@ -94,8 +106,9 @@ export class MessageIds {
    * that failed before it was written -- and is dropped rather than left to
    * attach itself to some later message it has nothing to do with.
    */
-  async bind(project, chatId, entries) {
-    const state = await this.load(project, chatId);
+  async bind(project, chat, entries) {
+    if (!this.owns(chat)) return null;
+    const state = await this.load(project, chat.id);
     for (const role of ["user", "assistant"]) {
       if (!state.unbound[role].length) continue;
       const fresh = (entries || [])
@@ -115,8 +128,9 @@ export class MessageIds {
   }
 
   /** Entry id -> the id everything above the adapter uses. */
-  async resolver(project, chatId) {
-    const state = await this.load(project, chatId);
+  async resolver(project, chat) {
+    if (!this.owns(chat)) return (id) => id;
+    const state = await this.load(project, chat.id);
     return (entryId) => (entryId ? state.byEntry.get(entryId) || `pi:${entryId}` : entryId);
   }
 
@@ -126,9 +140,9 @@ export class MessageIds {
    * so a raw entry id -- from Pi's own history tree, or from a client that
    * loaded before any of this existed -- still works.
    */
-  async entryIdFor(project, chatId, messageId) {
-    if (typeof messageId !== "string" || !messageId) return messageId;
-    const state = await this.load(project, chatId);
+  async entryIdFor(project, chat, messageId) {
+    if (typeof messageId !== "string" || !messageId || !this.owns(chat)) return messageId;
+    const state = await this.load(project, chat.id);
     return state.byMessage.get(messageId) || (messageId.startsWith("pi:") ? messageId.slice(3) : messageId);
   }
 

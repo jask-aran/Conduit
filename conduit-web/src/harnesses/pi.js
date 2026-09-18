@@ -17,6 +17,10 @@ export const manifest = {
   // nothing to start, where selecting a chat warms nothing.
   warm: "process",
   nameGeneration: "conduit",
+  // Pi puts ids on session entries, which exist only once a turn is written,
+  // and names nothing it streams. Conduit supplies message identity for it;
+  // every other harness brings its own.
+  suppliesMessageIds: false,
   drive: false,
   // Pi profiles come from the template catalogue rather than this manifest.
   profile: false,
