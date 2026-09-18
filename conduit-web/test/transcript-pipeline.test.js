@@ -289,7 +289,9 @@ test("an interrupted story keeps its text, and the next turn is its own", async 
     "user:Tell me a long s",
     "assistant:The rain fell up",
     "user:now stop, start ",
-    "assistant:",
+    // The narration is held as what that message said, not blanked out: the
+    // trace draws it, and `interim` is what keeps it out of the answer.
+    "assistant:Planning the tim",
     "assistant:Story stopped. T",
   ], "the replacement turn is held after the prompt that asked for it");
 });
@@ -390,4 +392,37 @@ test("interrupting with what was queued sends it once", async () => {
     "user: now stop",
     "assistant: Got it — stopping.",
   ]);
+});
+
+/**
+ * A turn's commentary is part of what it said, and stating the message has to
+ * carry it. The trace renders narration from the message's own content, so a
+ * close that states the message without its text takes it off the screen the
+ * moment the turn settles -- text the reader watched arrive, gone, until a
+ * later window from the session file happens to put it back.
+ */
+test("what the turn said while it worked survives the turn settling", async () => {
+  const chat = harness();
+  await chat.send({ type: "prompt", message: "start a 90s bash timer" });
+  chat.pi({ type: "agent_start" });
+  chat.pi({ type: "message_end", message: { role: "user", content: "start a 90s bash timer" } });
+  const narration = {
+    role: "assistant",
+    content: [{ type: "text", text: "Planning the timer." }, { type: "toolCall", id: "call_1", name: "bash", arguments: { command: "sleep 90" } }],
+    stopReason: "toolUse",
+  };
+  chat.pi({ type: "message_start", message: { role: "assistant", content: [] } });
+  chat.pi({ type: "message_update", assistantMessageEvent: { type: "text_start", contentIndex: 0, partial: { ...narration, content: [{ type: "text", text: "" }] } } });
+  chat.pi({ type: "message_update", assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "Planning the timer.", partial: narration } });
+  chat.pi({ type: "message_update", assistantMessageEvent: { type: "toolcall_end", contentIndex: 1, partial: narration, toolCall: { id: "call_1", name: "bash", arguments: { command: "sleep 90" } } } });
+  chat.pi({ type: "message_end", message: narration });
+  chat.pi({ type: "tool_execution_start", toolCallId: "call_1", toolName: "bash", args: { command: "sleep 90" } });
+  chat.pi({ type: "tool_execution_end", toolCallId: "call_1", toolName: "bash", result: "started", isError: false });
+  assistantText(chat.pi, "Timer started.");
+  chat.pi({ type: "agent_settled" });
+  await chat.settle();
+
+  const trace = chat.rows().find((row) => row.type === "trace");
+  assert.deepEqual(trace.value.segments.map((segment) => segment.kind), ["narration", "tool"]);
+  assert.equal(trace.value.segments[0].text, "Planning the timer.");
 });
