@@ -137,11 +137,13 @@ export function upsertMessages(current: Message[], incoming: Message[]): Message
  * A full load is the entire truth about a chat, so it replaces rather than
  * merges: a message it does not contain is a message the chat no longer has.
  * Merging one in made a load that landed after a fork put the abandoned
- * branch back. Only the composer's own unsent rows, which the server has
- * never seen, survive it.
+ * branch back. Only rows the server has never seen survive it: the composer's
+ * own unsent messages, and an answer still arriving over the socket.
  */
 export function replaceMessages(current: Message[], incoming: Message[]): Message[] {
-  return [...incoming, ...current.filter((message) => message.pending)];
+  const kept = current.filter((message) => (message.pending || message.streaming)
+    && !incoming.some((item) => item.id === message.id));
+  return [...incoming, ...kept];
 }
 
 /**
@@ -183,4 +185,41 @@ export function applyTranscriptProjection(
     messages: nextMessages,
     tools: [...tools.filter((tool) => retained.has(tool.id) && !incomingIds.has(tool.id)), ...incomingTools],
   };
+}
+
+/**
+ * Give every answer this generation has named a row, in order, at the end.
+ *
+ * The row is a placeholder: the live overlay draws the tokens as they arrive,
+ * and the transcript projection skips it until it settles. What it holds is a
+ * position, claimed when the id first exists rather than when the turn ends.
+ */
+export function claimAnswerRows(
+  messages: Message[],
+  generation: { id: string; assistantMessages?: Array<{ id: string }> },
+): Message[] {
+  const live = new Set((generation.assistantMessages || []).map((answer) => answer.id).filter(Boolean));
+  if (!live.size) return messages;
+  // A sync can name an answer this turn is still writing -- the one an
+  // interrupt publishes does exactly that. Holding the row as the turn's own
+  // keeps it from being drawn twice, once settled and once live, until the
+  // turn ends and settles it for real.
+  const held = messages.some((message) => live.has(message.id) && !message.streaming)
+    ? messages.map((message) => (live.has(message.id) && !message.streaming
+      ? { ...message, streaming: true, generationId: generation.id }
+      : message))
+    : messages;
+  const missing = [...live]
+    .filter((id) => !held.some((message) => message.id === id))
+    .map((id) => ({ id, role: "assistant" as const, content: "",
+      generationId: generation.id, streaming: true }));
+  return missing.length ? [...held, ...missing] : held;
+}
+
+/** Replace a finished turn's placeholders with what it wrote, in place. */
+export function settleAnswerRows(messages: Message[], generationId: string, frozen: Message[]): Message[] {
+  const written = new Set(frozen.map((message) => message.id));
+  const kept = messages.filter((message) =>
+    !(message.streaming && message.generationId === generationId && !written.has(message.id)));
+  return upsertMessages(kept, frozen);
 }
