@@ -1,19 +1,13 @@
-import { wasAborted } from "./abort-signature.js";
+import { wasAborted, wasDiscarded } from "./abort-signature.js";
 import { normalizeHostUiRequest } from "./activity.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { assertChatBackendAdapter } from "./chat-backend-contract.js";
 import { detect } from "./harnesses/probe.js";
+import { PI_CAPABILITIES } from "./pi-capabilities.js";
 import { launchConduitPi } from "./pi-launch.js";
 
-export const PI_CAPABILITIES = Object.freeze({
-  history: "tree", fork: true, regenerate: true,
-  steer: true, followUpQueue: true, cancel: true, compaction: true,
-  thinkingLevels: true, modelSwitch: true, toolUse: true,
-  // Pi answers approval requests but has no profiles to pick between.
-  approvals: true, permissionModes: false,
-  usage: true, replay: true,
-  attachments: true,
-});
+export { PI_CAPABILITIES };
+
 
 // Keep the complete Pi payload until the v0 client no longer needs it. No event
 // is discarded to fit a thinner backend, including unknown extension events.
@@ -58,6 +52,17 @@ const historyTreeView = (tree) => {
       : node.entry.type === "compaction" ? "[compaction]"
       : node.entry.type === "branch_summary" ? `[branch summary]: ${text}` : text;
     const settings = ["label", "custom", "model_change", "thinking_level_change", "session_info"].includes(node.entry.type);
+    // Pi keeps an interrupted message in its session tree and then builds every
+    // later request without it, so the node is real but the conversation does
+    // not contain it. The pane is told, rather than showing it as an ordinary
+    // step somebody could reason about or navigate to.
+    // The same question the transcript asks, asked the same way. This used to
+    // read `stopReason === "aborted"` on its own, which misses the form a stop
+    // actually takes on the wire -- a provider error saying the operation was
+    // aborted -- so the pane and the transcript could disagree about one
+    // message.
+    const discarded = wasDiscarded({ ...message, content: text },
+      { keepsPartial: PI_CAPABILITIES.interruptKeepsPartial });
     const toolOnlyAssistant = message?.role === "assistant" && !text && !message.errorMessage;
     const kind = message?.role === "user" ? "user"
       : message?.role === "assistant" ? "assistant"
@@ -71,6 +76,7 @@ const historyTreeView = (tree) => {
     display,
     kind,
     hidden: settings || toolOnlyAssistant,
+    ...(discarded ? { discarded: true } : {}),
     forkable: kind === "user",
     regeneratable: kind === "user",
   },
@@ -191,11 +197,13 @@ export function normalizePiBackendEvent(event) {
     case "auto_retry_end":
     case "generation_retry_ended":
       return { ...base, type: "retry", active: false };
-    case "message_end": {
-      const message = event.message;
-      if (message?.role === "user") return { ...base, type: "user_message_committed", message };
+    // A user message Pi has committed was already stated as a `message.open`
+    // -- by the prompt that sent it, or, for one off the queue or typed into a
+    // driven thread's CLI, at the moment Pi first reported it. Announcing it a
+    // second time under its own event type was the older way of saying the same
+    // thing, and the two could disagree about where it went.
+    case "message_end":
       return { ...base, type: "pi_event" };
-    }
     case "context_usage":
       return { ...base, type: "usage", contextUsage: event.contextUsage,
         sessionStats: event.sessionStats, cacheStats: event.cacheStats };

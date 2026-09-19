@@ -91,8 +91,11 @@ export type LiveEvent = EventBase & (
   | { type: "transcript_op"; op: "message.open"; message: ProtocolMessage; after: string | null;
     answers: string | null }
   | { type: "transcript_op"; op: "message.close"; messageId: string; stopReason: string | null;
-    content: string; blocks: unknown[]; interim: boolean }
+    content: string; blocks: unknown[]; interim: boolean; discarded: boolean }
   | { type: "transcript_op"; op: "message.drop"; messageId: string; inclusive: boolean }
+  | { type: "transcript_op"; op: "tool.open"; toolCallId: string; name: string; input: unknown;
+    messageId: string | null }
+  | { type: "transcript_op"; op: "tool.close"; toolCallId: string; output: unknown; isError: boolean }
   | { type: "log_state"; log: LogStamp }
   | { type: "log_reset" }
   | StructuredGenerationEvent
@@ -282,9 +285,9 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
     case "user_message_committed": return { type: "user_message_committed", generationId, message: protocolMessage(source.message) };
     case "transcript_sync": return { type: "transcript_sync", generationId, messages: list(source.messages), tools: list(source.tools),
       ...(source.replace ? { replace: true } : {}) };
-    // The server stating the transcript's shape. Nothing reads these yet: they
-    // are published so the order they describe can be checked against the
-    // transcript the client still builds for itself.
+    // The server stating the transcript: which messages there are and where,
+    // what each one says, and which tools ran. This is the whole of how a row
+    // gets its place -- nothing downstream works one out.
     case "transcript_op": {
       const op = text(source.op);
       if (op === "message.open") {
@@ -294,11 +297,19 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
       if (op === "message.close") {
         return { type: "transcript_op", op, generationId, messageId: text(source.messageId),
           stopReason: optionalText(source.stopReason), content: text(source.content), blocks: list(source.blocks),
-          interim: Boolean(source.interim) };
+          interim: Boolean(source.interim), discarded: Boolean(source.discarded) };
       }
       if (op === "message.drop") {
         return { type: "transcript_op", op, generationId, messageId: text(source.messageId),
           inclusive: Boolean(source.inclusive) };
+      }
+      if (op === "tool.open") {
+        return { type: "transcript_op", op, generationId, toolCallId: text(source.toolCallId),
+          name: text(source.name), input: source.input, messageId: optionalText(source.messageId) };
+      }
+      if (op === "tool.close") {
+        return { type: "transcript_op", op, generationId, toolCallId: text(source.toolCallId),
+          output: source.output, isError: Boolean(source.isError) };
       }
       return { type: "unknown", sourceType, generationId };
     }

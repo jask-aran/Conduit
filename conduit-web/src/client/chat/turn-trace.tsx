@@ -65,9 +65,18 @@ function TraceSegmentRow(props: {
     const segment = props.segment();
     return segment.kind === "thinking" || segment.kind === "narration" ? Boolean(segment.live) : false;
   };
+  // Text the model was cut off mid-way through and is not being given back to
+  // it. Struck through where it sits rather than collapsed: it is already
+  // behind the trace rollup, and folding it away a second time would just lose
+  // work the reader watched happen.
+  const discarded = () => {
+    const segment = props.segment();
+    return (segment.kind === "thinking" || segment.kind === "narration") && segment.discarded === true;
+  };
   return <Show when={tool()} fallback={
     <Show when={error()} fallback={
-      <div class="turn-trace-text" data-kind={props.segment().kind}>
+      <div class="turn-trace-text" data-kind={props.segment().kind} data-discarded={discarded() ? "true" : undefined}
+        title={discarded() ? "Interrupted — the agent has no record of this" : undefined}>
         <Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()} renderer={props.renderer} pacing={props.pacing} onRendered={props.onRendered}>{text()}</ChatMarkdown></Suspense>
       </div>
     }>

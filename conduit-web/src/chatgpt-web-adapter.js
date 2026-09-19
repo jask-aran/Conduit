@@ -5,23 +5,31 @@ import readline from "node:readline";
 import { Readable } from "node:stream";
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
+import { wasDiscarded } from "./abort-signature.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { SessionRecords } from "./harnesses/session-records.js";
+import { applyTranscriptOp } from "./transcript-fold.js";
+import { messageClose, messageDrop, messageOpen } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 export const CHATGPT_WEB_CAPABILITIES = Object.freeze({
   history: "linear", fork: false, regenerate: false,
   steer: false, followUpQueue: false, cancel: true, compaction: false,
+  // The conversation lives in somebody else's account and Conduit follows it by
+  // cursor. `conversationId`/`parentMessageId` advance only on the sidecar's
+  // `done` event, which an interrupt never reaches, so the next prompt is sent
+  // from the message before the interrupted one and the partial is orphaned.
   thinkingLevels: true, modelSwitch: true, toolUse: false,
   approvals: false, permissionModes: false,
   usage: false, replay: false, attachments: false,
+  interruptKeepsPartial: false,
 });
 
 const adapterError = (message, code = "backend_unavailable", status = 409, extra = {}) =>
   Object.assign(new Error(message), { code, status, ...extra });
 
 export class ChatGptWebAdapter extends EventEmitter {
-  constructor({ python, script, dataDir, requestTimeoutMs = 20_000 } = {}) {
+  constructor({ python, script, dataDir, requestTimeoutMs = 20_000, logs = null } = {}) {
     super();
     this.python = python;
     this.script = script;
@@ -34,14 +42,16 @@ export class ChatGptWebAdapter extends EventEmitter {
         thinkingLevel: record.thinkingLevel, title: record.title || null,
         linkUrl: record.sessionId.conversationId ? `https://chatgpt.com/c/${record.sessionId.conversationId}` : null,
       }),
-      // This backend has no server-side history to re-read, so its own journal
-      // is the transcript: every published event is durable before broadcast.
+      // Unlike every other harness there is nothing to read back: no session
+      // file, no thread API, nothing but an account somebody else owns. So the
+      // statements themselves are the transcript, and each one is durable
+      // before it is broadcast. Replaying them is what `transcript` does.
       onPublish: (record, event) => {
-        if (event.type === "user_message_committed" || (event.type === "assistant_content" && event.phase === "final")) {
-          this.appendJournal(record.chatId, event);
-        }
+        if (event.type === "transcript_op") this.appendJournal(record.chatId, event);
       },
+      logs,
     });
+    this.logs = logs;
     this.records = this.sessions.records;
     this.byChatId = this.sessions.byChatId;
     Object.assign(this, unsupported(CHATGPT_WEB_CAPABILITIES, { label: "ChatGPT Web" }));
@@ -138,13 +148,20 @@ export class ChatGptWebAdapter extends EventEmitter {
     const userMessage = parseAttachmentEnvelope(message).message;
     const generationId = crypto.randomUUID();
     const messageId = `assistant-${generationId}`;
+    const userMessageId = crypto.randomUUID();
     record.active = true;
     record.activity = "working";
     record.stopping = false;
     record.generation = { id: generationId, closed: false, settled: false };
     record.abortController = new AbortController();
-    this.publish(record, { type: "user_message_committed", generationId,
-      message: { id: crypto.randomUUID(), role: "user", content: userMessage } });
+    // The prompt and the answer it will produce are both named before the
+    // request goes out, so nothing arrives needing a place to be worked out.
+    this.publish(record, messageOpen({ id: userMessageId, role: "user", generationId,
+      content: userMessage, timestamp: new Date().toISOString() }));
+    this.publish(record, messageOpen({ id: messageId, role: "assistant", generationId, answers: userMessageId }));
+    // What the turn has written so far, so an answer that fails or is stopped
+    // can still be settled with the text the reader watched arrive.
+    record.turn = { messageId, blocks: [] };
     this.publish(record, { type: "status", generationId, sequence: ++record.eventSequence, status: "working", activity: "working", detail: null });
     this.publish(record, { type: "assistant_content", generationId, phase: "start", sequence: ++record.eventSequence, messageId });
     void this.runPrompt(record, { generationId, messageId, message: userMessage });
@@ -180,14 +197,43 @@ export class ChatGptWebAdapter extends EventEmitter {
       this.publish(record, { type: "assistant_content", generationId, phase: "final", sequence: ++record.eventSequence,
         messageId, stopReason: record.stopping ? "aborted" : "stop", errorMessage: null,
         blocks: [{ kind: "text", contentIndex: 0, text: fullText }] });
+      this.closeTurn(record, record.stopping ? "aborted" : "stop", fullText);
       this.settle(record, record.stopping ? "stopped" : "settled");
     } catch (cause) {
       if (cause.name === "AbortError") {
         this.publish(record, { type: "assistant_content", generationId, phase: "final", sequence: ++record.eventSequence,
           messageId, stopReason: "aborted", errorMessage: null, blocks: [{ kind: "text", contentIndex: 0, text: fullText }] });
+        this.closeTurn(record, "aborted", fullText);
         this.settle(record, "stopped");
-      } else this.failGeneration(record, cause);
+      } else this.failGeneration(record, cause, fullText);
     }
+  }
+
+  /**
+   * Settle the row this turn is holding.
+   *
+   * A row that was being written keeps what it had -- a stopped answer is text
+   * the reader watched arrive, and taking it away on settle is the flicker
+   * this whole mechanism exists to remove. One that was never written into is
+   * given back, so no blank answer is left waiting for something that is not
+   * coming.
+   */
+  closeTurn(record, stopReason, text = "") {
+    const turn = record.turn;
+    if (!turn) return;
+    record.turn = null;
+    if (!text) {
+      this.publish(record, messageDrop({ messageId: turn.messageId, generationId: record.generation?.id || null }));
+      return;
+    }
+    this.publish(record, messageClose({ messageId: turn.messageId, stopReason, interim: false,
+      generationId: record.generation?.id || null,
+      // The cursor only advances on `done`, which an interrupt never reaches,
+      // so the next prompt is sent from the message before this one and the
+      // account keeps no record of what was written here.
+      discarded: wasDiscarded({ role: "assistant", stopReason, content: text },
+        { keepsPartial: CHATGPT_WEB_CAPABILITIES.interruptKeepsPartial }),
+      blocks: [{ kind: "text", contentIndex: 0, text }] }));
   }
 
   settle(record, detail) {
@@ -201,7 +247,8 @@ export class ChatGptWebAdapter extends EventEmitter {
     this.emit("settled", { record, completed: detail !== "stopped" });
   }
 
-  failGeneration(record, cause) {
+  failGeneration(record, cause, text = "") {
+    this.closeTurn(record, "error", text);
     record.active = false;
     record.stopping = false;
     record.activity = "failed";
@@ -264,11 +311,37 @@ export class ChatGptWebAdapter extends EventEmitter {
   runtimeState(record) { return this.sessions.runtimeState(record); }
   publish(record, event) { return this.sessions.publish(record, event); }
   journalPath(chatId) { return path.join(this.dataDir, "journals", `${chatId}.jsonl`); }
-  appendJournal(chatId, event) { const file = this.journalPath(chatId); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.appendFileSync(file, JSON.stringify(event) + "\n", { mode: 0o600 }); }
+  /**
+   * Keep a statement, without the number this process gave it.
+   *
+   * The sequence belongs to a log that dies with the process. Replaying a
+   * stamped event into a later one would hand a client a position in an order
+   * that no longer exists, and it would ask to be caught up from a number that
+   * means nothing. Unnumbered, it is applied as what it is: a statement about
+   * the transcript, made earlier.
+   */
+  appendJournal(chatId, event) {
+    const { log: _log, ...durable } = event;
+    const file = this.journalPath(chatId);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.appendFileSync(file, JSON.stringify(durable) + "\n", { mode: 0o600 });
+  }
   readJournal(chatId) { try { return fs.readFileSync(this.journalPath(chatId), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)); } catch { return []; } }
+  /**
+   * The transcript, folded out of the statements that made it.
+   *
+   * There is nothing else to read: no session file, no thread API. So this
+   * replays the ops in the order they were stated, which is the same fold the
+   * browser runs on the live stream -- one description of what a transcript is,
+   * applied to the same statements at both ends.
+   *
+   * Journals written before this backend stated anything are still read, so a
+   * conversation that predates the change is not lost.
+   */
   transcript(chatId) {
-    const messages = [];
+    let messages = [];
     for (const event of this.readJournal(chatId)) {
+      if (event.type === "transcript_op") { messages = applyTranscriptOp(messages, event); continue; }
       if (["user_message_committed", "transcript_message"].includes(event.type) && event.message?.role === "user") messages.push({
         ...event.message, content: parseAttachmentEnvelope(event.message.content).message,
       });
@@ -278,7 +351,9 @@ export class ChatGptWebAdapter extends EventEmitter {
         stopped: event.stopReason === "aborted", stopReason: event.stopReason || null,
       });
     }
-    return messages;
+    // A row still marked as arriving is one the process died holding; nothing
+    // is going to finish it now.
+    return messages.filter((message) => !message.streaming);
   }
   async readTranscript({ liveSessionId, chatId }) {
     const record = liveSessionId ? this.get(liveSessionId) : null;

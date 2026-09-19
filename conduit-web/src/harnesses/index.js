@@ -33,16 +33,15 @@ export const conduitOwnsMessageIds = (chat) => {
   return Boolean(manifest) && manifest.suppliesMessageIds === false;
 };
 
-/**
- * Whether the server states this chat's transcript, instead of the client
- * working it out.
+/*
+ * `statesTranscript` was here.
  *
- * Separate from `conduitOwnsMessageIds`, which the two used to be one flag for.
- * Who names a message and who decides where it goes are different questions: a
- * harness can name every item it writes and still say nothing about the order
- * those items belong in once an interrupt, a steer and a queued message are in
- * play. A harness that states its transcript publishes `transcript_op` through
- * the chat's log, whether the names in those ops are Conduit's or its own.
+ * It asked whether a harness stated its own transcript or left the browser to
+ * work one out, because for a while only some of them did. Every adapter does
+ * now: an adapter is the thing publishing the events, so it is always the one
+ * in a position to say what the transcript holds, and a harness that declined
+ * to only meant the client went back to guessing. So it is not a capability a
+ * manifest declares -- it is what an adapter is for. What remains is
+ * `conduitOwnsMessageIds`, which is a real difference between harnesses: who
+ * names a message and who says where it goes are still separate questions.
  */
-export const statesTranscript = (chat) => Boolean(
-  manifestForImplementation(chat?.backend?.implementation)?.statedTranscript);

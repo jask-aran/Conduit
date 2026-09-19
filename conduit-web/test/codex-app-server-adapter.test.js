@@ -16,9 +16,18 @@ test("Codex notifications map to neutral streaming events", () => {
   adapter.notification(live, "turn/started", { turn: { id: "turn-1" } });
   adapter.notification(live, "item/agentMessage/delta", { turnId: "turn-1", itemId: "message-1", delta: "Hello" });
   adapter.notification(live, "turn/completed", { turn: { id: "turn-1", status: "completed" } });
-  assert.deepEqual(live.events.map(({ type }) => type), ["status", "assistant_content", "assistant_content", "status"]);
+  // The turn ends without Codex ever reporting the item it streamed, which is
+  // ordinary: the deltas are the whole of what it said. So the turn settles
+  // that text as its answer rather than giving up the row -- which is what it
+  // used to do, taking the text off the screen when the turn ended.
+  assert.deepEqual(live.events.map(({ type }) => type),
+    ["status", "assistant_content", "assistant_content", "assistant_content", "status"]);
   assert.equal(live.events[2].delta, "Hello");
-  assert.equal(live.events[3].detail, "settled");
+  const settled = live.events[3];
+  assert.equal(settled.phase, "final");
+  assert.equal(settled.stopReason, "stop");
+  assert.equal(settled.blocks[0].text, "Hello");
+  assert.equal(live.events[4].detail, "settled");
   assert.equal(live.active, false);
 });
 
@@ -41,6 +50,11 @@ test("Codex adapter advertises only implemented capabilities", () => {
     steer: true, followUpQueue: true, cancel: true, compaction: true,
     thinkingLevels: true, modelSwitch: true, toolUse: true, approvals: true, permissionModes: true,
     usage: false, replay: false, attachments: true,
+    // Measured against the installed app-server: a turn interrupted 300
+    // characters into its answer reports as `status: "interrupted"` holding the
+    // prompt and an empty reasoning stub. The partial is not persisted, so it
+    // cannot be the answer a following user message argues with.
+    interruptKeepsPartial: false,
   });
 });
 

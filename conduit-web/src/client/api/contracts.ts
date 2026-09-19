@@ -268,6 +268,16 @@ export interface Message {
    * is not re-derived here from the shape of the turn around it.
    */
   interim?: boolean;
+  /**
+   * Text the reader watched arrive that the harness is not carrying forward.
+   *
+   * An interrupted answer on a backend whose `interruptKeepsPartial` is false:
+   * it was really written and really seen, and the model has no record of it.
+   * It stays in the transcript because removing it would take away something
+   * the reader saw, and it is marked because the conversation does not contain
+   * it -- asking a follow-up about it would reach a model that never wrote it.
+   */
+  discarded?: boolean;
   queueMode?: "steer" | "follow_up";
   attachments?: Attachment[];
   order?: number;

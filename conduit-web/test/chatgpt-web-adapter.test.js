@@ -60,7 +60,7 @@ test("ChatGPT Web rebuilds its transcript from the native journal", () => {
   ]);
 });
 
-test("ChatGPT Web journals committed user messages with the dedicated event", async () => {
+test("ChatGPT Web journals the statements that make up its transcript", async () => {
   const adapter = new ChatGptWebAdapter({ dataDir: "." });
   adapter.ensureSidecar = async () => { adapter.origin = "http://sidecar"; };
   const journal = [];
@@ -73,8 +73,17 @@ test("ChatGPT Web journals committed user messages with the dedicated event", as
     const settled = new Promise((resolve) => adapter.once("settled", resolve));
     await adapter.prompt(record.id, "Hi");
     await settled;
-    assert.equal(journal[0].type, "user_message_committed");
-    assert.equal(journal.some((event) => event.type === "transcript_message"), false);
+    // This backend has nothing to read back, so the ops are the record: the
+    // prompt, the answer it opened, and what that answer turned out to say.
+    assert.deepEqual(journal.map((event) => `${event.type}:${event.op}`),
+      ["transcript_op:message.open", "transcript_op:message.open", "transcript_op:message.drop"]);
+    assert.equal(journal[0].message.role, "user");
+    assert.equal(journal[0].message.content, "Hi");
+    assert.equal(journal[1].message.role, "assistant");
+    assert.equal(journal[1].answers, journal[0].message.id);
+    // The model answered with nothing at all, so the row it opened goes back
+    // rather than sitting in the transcript as a blank answer.
+    assert.equal(journal[2].messageId, journal[1].message.id);
   } finally {
     globalThis.fetch = originalFetch;
   }

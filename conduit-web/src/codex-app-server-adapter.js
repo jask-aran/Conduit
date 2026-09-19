@@ -5,19 +5,29 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import WebSocket from "ws";
+import { wasDiscarded } from "./abort-signature.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { SessionRecords } from "./harnesses/session-records.js";
+import { toolClose, toolOpen } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 export const CODEX_CAPABILITIES = Object.freeze({
   history: "linear", fork: true, regenerate: true,
   steer: true, followUpQueue: true, cancel: true, compaction: true,
+  // Codex does not persist a partial assistant message at all. Interrupting a
+  // turn 300 characters into its answer leaves `thread/read` and
+  // `thread/items/list` reporting that turn as `status: "interrupted"` holding
+  // the prompt and an empty `reasoning` stub -- the text is gone. Codex does
+  // keep the turn's completed items and injects a `<turn_aborted>` user marker
+  // after them, so interrupting during tool use carries its work forward; it is
+  // only the answer being written at that moment that is lost.
   thinkingLevels: true, modelSwitch: true, toolUse: true,
   approvals: true, permissionModes: true,
   // `replay` means resuming a generation in progress, which Codex cannot do:
   // its `replay` returns the current runtime state, not a generation.
   usage: false, replay: false,
   attachments: true,
+  interruptKeepsPartial: false,
 });
 
 // Codex asks for approval with a JSON-RPC *request* - it carries an id and
@@ -314,7 +324,15 @@ export class CodexAppServerAdapter extends EventEmitter {
       const turn = messages.slice(turnStart);
       if (turnStatus === "interrupted") {
         const interrupted = turn.findLast((message) => message.role === "assistant");
-        if (interrupted) interrupted.stopReason = "aborted";
+        if (interrupted) {
+          interrupted.stopReason = "aborted";
+          // Whatever of an interrupted turn the thread did keep is still not
+          // something Codex will send again, so a transcript read back from it
+          // says so exactly as the live stream did.
+          if (wasDiscarded(interrupted, { keepsPartial: CODEX_CAPABILITIES.interruptKeepsPartial })) {
+            interrupted.discarded = true;
+          }
+        }
       } else if (!turn.some((message) => message.role === "assistant" && message.stopReason === "stop")) {
         const answer = turn.findLast((message) => message.role === "assistant"
           && !message.blocks.some((block) => block.type === "toolCall"));
@@ -615,6 +633,13 @@ export class CodexAppServerAdapter extends EventEmitter {
     record.openMessages?.delete(id);
     this.publish(record, {
       type: "transcript_op", op: "message.close", messageId: id, stopReason,
+      // Codex does not persist the answer it was writing when a turn was
+      // interrupted: the thread reports that turn holding the prompt and an
+      // empty reasoning stub. What the reader watched arrive is kept here and
+      // marked, because the model has no record of it.
+      ...(wasDiscarded({ role: "assistant", stopReason,
+        content: blocks.filter((block) => block.kind === "text").map((block) => block.text || "").join("") },
+      { keepsPartial: CODEX_CAPABILITIES.interruptKeepsPartial }) ? { discarded: true } : {}),
       // Whether this message is the answer or the turn talking as it works.
       // Codex says so itself, in the phase it gives the item; the browser is
       // told, rather than deciding it from what a later message went on to do.
@@ -698,6 +723,23 @@ export class CodexAppServerAdapter extends EventEmitter {
       errorMessage: null, blocks: record.turn.blocks });
   }
 
+  /**
+   * Make the turn's carrier the message now being streamed, ready to take text.
+   *
+   * `item/completed` replaces this with what Codex says the message finally
+   * held. Until then it is what the reader has seen, which is all an interrupt
+   * leaves behind.
+   */
+  streamInto(record, turnId, messageId, kind) {
+    if (record.turn?.messageId === messageId) return record.turn;
+    this.settleCarrier(record, messageId);
+    record.turn = { id: turnId, messageId, phase: null,
+      blocks: [kind === "thinking"
+        ? { kind: "thinking", contentIndex: 0, text: "", redacted: false }
+        : { kind: "text", contentIndex: 0, text: "" }] };
+    return record.turn;
+  }
+
   notification(record, method, params) {
     const turnId = params.turn?.id || params.turnId || record.generation?.id || null;
     if (method === "thread/name/updated") {
@@ -732,13 +774,9 @@ export class CodexAppServerAdapter extends EventEmitter {
       // turn: that prompt has been answered, and this is what Codex is
       // replying to now.
       record.answering = messageId;
-      const content = CodexAppServerAdapter.itemText(params.item);
-      if (this.states(record)) {
-        this.openMessage(record, messageId, "user", { content, timestamp: new Date().toISOString() });
-      } else {
-        this.publish(record, { type: "user_message_committed", generationId: turnId,
-          message: { id: messageId, role: "user", content } });
-      }
+      this.openMessage(record, messageId, "user", {
+        content: CodexAppServerAdapter.itemText(params.item), timestamp: new Date().toISOString(),
+      });
     } else if (method === "item/agentMessage/delta") {
       const messageId = params.itemId || `assistant-${turnId}`;
       if (!record.messageIds.has(messageId)) {
@@ -749,6 +787,13 @@ export class CodexAppServerAdapter extends EventEmitter {
       }
       this.publish(record, { type: "assistant_content", generationId: turnId, phase: "delta", sequence: ++record.eventSequence,
         messageId, contentIndex: 0, blockKind: "text", delta: params.delta || "" });
+      // Hold what has been streamed so far. An interrupted answer is the one
+      // case where Codex never reports the item at all -- the thread keeps the
+      // prompt and an empty reasoning stub and nothing else -- so without this
+      // the only copy of the text is the deltas, and the row was given up as
+      // one that had never been written into. The reader watched it arrive.
+      this.streamInto(record, turnId, messageId, "text");
+      record.turn.blocks[0].text += params.delta || "";
     } else if (method === "item/reasoning/summaryTextDelta") {
       const messageId = params.itemId || `reasoning-${turnId}`;
       if (!record.messageIds.has(messageId)) {
@@ -760,6 +805,8 @@ export class CodexAppServerAdapter extends EventEmitter {
       this.publish(record, { type: "assistant_content", generationId: turnId, phase: "delta",
         sequence: ++record.eventSequence, messageId, contentIndex: params.summaryIndex || 0,
         blockKind: "thinking", delta: params.delta || "" });
+      this.streamInto(record, turnId, messageId, "thinking");
+      record.turn.blocks[0].text += params.delta || "";
     } else if (method === "item/completed" && params.item?.type === "agentMessage") {
       const messageId = params.item.id || `assistant-${turnId}`;
       if (!record.messageIds.has(params.item.id)) {
@@ -798,9 +845,17 @@ export class CodexAppServerAdapter extends EventEmitter {
         this.publish(record, { type: "tool_activity", generationId: turnId, phase: "start", sequence: ++record.eventSequence,
           toolCallId: params.item.id, name: activity.name, input: activity.input });
         this.attachToolCall(record, turnId, params.item.id, activity);
+        if (this.states(record)) {
+          this.publish(record, toolOpen({ toolCallId: params.item.id, name: activity.name,
+            input: activity.input, messageId: record.turn?.messageId || null, generationId: turnId }));
+        }
       } else {
         this.publish(record, { type: "tool_activity", generationId: turnId, phase: "end", sequence: ++record.eventSequence,
           toolCallId: params.item.id, name: activity.name, output: truncate(activity.output), isError: activity.isError });
+        if (this.states(record)) {
+          this.publish(record, toolClose({ toolCallId: params.item.id, output: truncate(activity.output),
+            isError: activity.isError, generationId: turnId }));
+        }
       }
     } else if (method === "serverRequest/resolved") {
       // The prompt was answered somewhere else - the Codex TUI, or another
@@ -820,7 +875,14 @@ export class CodexAppServerAdapter extends EventEmitter {
       record.activity = failed ? "failed" : "idle";
       if (record.generation) Object.assign(record.generation, { closed: true, settled: true });
       for (const [requestId, pending] of record.approvals) this.settleApproval(record, requestId, pending.generationId);
-      const promoted = !failed && record.turn?.phase == null && record.turn?.blocks?.some((block) => block.kind === "text")
+      // A turn nobody stopped, whose last message Codex never labelled, ends by
+      // saying that message was the answer. A turn that was interrupted says no
+      // such thing: what it had written is where it got to, not what it meant
+      // to say, and calling it the answer would hide that it was cut off.
+      // Codex reports an interrupt it was told about elsewhere -- its own TUI,
+      // another client -- as the turn's status rather than through our stop.
+      const interrupted = stopped || params.turn?.status === "interrupted";
+      const promoted = !failed && !interrupted && record.turn?.phase == null && record.turn?.blocks?.some((block) => block.kind === "text")
         && !record.turn.blocks.some((block) => block.kind === "tool_call");
       if (promoted) {
         this.publish(record, { type: "assistant_content", generationId: turnId, phase: "final",
@@ -831,7 +893,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       // Whatever the turn still holds is settled with what it wrote, or given
       // up if it wrote nothing -- so an interrupt leaves no row waiting for a
       // message that is never coming.
-      this.dropUnwrittenMessages(record, failed || stopped ? "aborted" : "stop");
+      this.dropUnwrittenMessages(record, failed || interrupted ? "aborted" : "stop");
       record.answering = null;
       this.publish(record, failed
         ? { type: "error", generationId: turnId, error: { code: "backend_unavailable", message: params.turn?.error?.message || "Codex turn failed" } }

@@ -11,8 +11,6 @@ export const manifest = {
   nameGeneration: "backend",
   // This adapter keeps its own journal and names every message it records.
   suppliesMessageIds: true,
-  // The client still assembles this one's transcript from what it is streamed.
-  statedTranscript: false,
   // No thread history to enumerate: a ChatGPT account is not a machine store.
   discovery: "none",
   // A proxied web session has no process to start: a chat is usable as soon as
@@ -23,5 +21,6 @@ export const manifest = {
   probe: (config) => importProbe(config.chatgptWebPython, "curl_cffi")(),
   build: (config) => new ChatGptWebAdapter({
     python: config.chatgptWebPython, script: config.chatgptWebScript, dataDir: config.chatgptWebDataDir,
+    logs: config.logs,
   }),
 };

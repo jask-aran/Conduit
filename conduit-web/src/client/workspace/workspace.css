@@ -415,6 +415,10 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-history-row[data-kind="user"], .workspace-history-row[data-kind="assistant"] { color: var(--foreground); }
 .workspace-history-row[data-kind="user"] strong { color: color-mix(in oklch, var(--primary), white 18%); }
 .workspace-history-row[data-kind="assistant"] strong { color: var(--workspace-git-added); }
+/* A step the harness keeps in its tree but leaves out of every later request:
+   an answer it was interrupted writing. Struck through and dimmed, so the
+   history reads as the conversation the agent actually has. */
+.workspace-history-row[data-discarded="true"] .workspace-history-text { text-decoration: line-through; opacity: 0.55; }
 .workspace-history-row strong { font-weight: 650; }
 .workspace-history-row[data-kind="user"] code { color: color-mix(in oklch, var(--primary), white 18%); }
 .workspace-history-row[data-kind="assistant"] code { color: var(--workspace-git-added); }

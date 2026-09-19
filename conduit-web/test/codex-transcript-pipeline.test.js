@@ -20,7 +20,7 @@ import { CodexAppServerAdapter } from "../src/codex-app-server-adapter.js";
 import { ChatLogs } from "../src/server/chat-log.js";
 import { createLiveSessionStream } from "../src/server/live-session-stream.js";
 import { normalizeLiveEvent } from "../src/client/api/live-events.ts";
-import { applyTranscriptOp, mergeToolEvent } from "../src/client/timeline-order.ts";
+import { applyToolOp, applyTranscriptOp, isToolOp, mergeToolEvent } from "../src/client/timeline-order.ts";
 import { buildTurnRows } from "../src/client/turn-rows.ts";
 
 const lifecycle = { run: (_chatId, operation) => operation(), assertAvailable: () => {} };
@@ -69,12 +69,18 @@ function harness() {
     const raw = JSON.parse(frame);
     if (raw.type === "client_error" || raw.type === "error") { errors.push(raw); return; }
     const wire = normalizeLiveEvent(raw);
-    if (wire.type === "transcript_op") messages = applyTranscriptOp(messages, wire);
-    if (wire.type.startsWith("tool_execution_")) {
+    // Exactly what the browser does with these: the statements decide what the
+    // transcript holds, and live activity only paints output arriving while a
+    // tool is still running.
+    if (wire.type === "transcript_op") {
+      if (isToolOp(wire)) tools = applyToolOp(tools, wire);
+      else messages = applyTranscriptOp(messages, wire);
+    }
+    if (wire.type === "tool_execution_updated") {
       tools = mergeToolEvent(tools, {
-        type: wire.type === "tool_execution_started" ? "tool_execution_start"
-          : wire.type === "tool_execution_updated" ? "tool_execution_update" : "tool_execution_end",
-        toolCallId: wire.toolCallId, toolName: wire.name, args: wire.arguments, result: wire.result,
+        type: "tool_execution_update",
+        toolCallId: wire.toolCallId, toolName: wire.name, args: wire.arguments,
+        partialResult: wire.partialResult,
       }).tools;
     }
   };
@@ -129,6 +135,19 @@ function harness() {
   return {
     codex, codex_reject, request, send, begin, dispatch, read, accept, settle, sent, errors, record,
     turnId: () => turnId,
+    // Everything the chat's log kept, which is what a browser that lost the
+    // socket is replayed when it asks to be caught up.
+    replay: () => {
+      let replayed = [];
+      let replayedTools = [];
+      for (const entry of chatLogs.get("chat-1").entries) {
+        const wire = normalizeLiveEvent(JSON.parse(JSON.stringify(entry)));
+        if (wire.type !== "transcript_op") continue;
+        if (isToolOp(wire)) replayedTools = applyToolOp(replayedTools, wire);
+        else replayed = applyTranscriptOp(replayed, wire);
+      }
+      return buildTurnRows(replayed, replayedTools);
+    },
     rows: () => {
       assert.deepEqual(errors, [], "the server reported an error");
       return buildTurnRows(messages, tools);
@@ -391,6 +410,73 @@ test("a turn Codex reports as failed leaves what it wrote in place", async () =>
   await chat.settle();
 
   assert.deepEqual(chat.errors.map((event) => event.error?.message), ["upstream refused"]);
-  // Nothing was written into the row it named, so no blank answer is left.
-  assert.deepEqual(buildTurnRows(chat.messages(), []).map((row) => row.type), ["message"]);
+  // The half-answer the reader watched arrive is still there. It used to be
+  // given up, because only a completed item counted as having been written --
+  // so a turn that failed mid-sentence took its text off the screen.
+  assert.deepEqual(buildTurnRows(chat.messages(), []).map((row) => row.type), ["message", "message"]);
+  assert.equal(chat.messages().at(-1).content, "Half an ans");
+});
+
+/**
+ * The regression this whole step exists for.
+ *
+ * Codex's tool activity never travelled in the chat's order, so a browser that
+ * dropped the socket and asked to be caught up was replayed the messages of
+ * every turn and none of the commands underneath them: the trace came back
+ * empty, and the work the turn had done was gone until a full reload. Stated as
+ * ops, the commands are in the order with everything else.
+ */
+test("a browser replayed from the chat's order gets the commands back, not just the messages", async () => {
+  const chat = harness();
+  await chat.send({ type: "prompt", message: "Fix the build" });
+  const turn = chat.turnId();
+  chat.codex("turn/started", { turn: { id: turn } });
+  chat.codex("item/agentMessage/delta", { turnId: turn, itemId: "a1", delta: "Looking now." });
+  chat.codex("item/completed", { turnId: turn, item: { id: "a1", type: "agentMessage", text: "Looking now.", phase: "commentary" } });
+  chat.codex("item/started", { turnId: turn, item: { id: "e1", type: "commandExecution", command: "npm run build" } });
+  chat.codex("item/completed", { turnId: turn, item: { id: "e1", type: "commandExecution", command: "npm run build", aggregatedOutput: "ok", status: "completed" } });
+  agentMessage(chat.codex, turn, "a2", "Built.");
+  chat.codex("turn/completed", { turn: { id: turn, status: "completed" } });
+  await chat.settle();
+
+  // What the browser that stayed connected has, and what a reconnecting one is
+  // caught up to, are the same transcript.
+  assert.deepEqual(shape(chat.replay()), shape(chat.rows()));
+  const trace = chat.replay().find((row) => row.type === "trace");
+  assert.deepEqual(trace.value.segments.map((segment) => segment.kind), ["narration", "tool"]);
+  assert.equal(trace.value.segments[1].tool.name, "command");
+  assert.equal(trace.value.segments[1].tool.result, "ok");
+});
+
+/**
+ * Codex does not persist the answer it was writing when a turn is interrupted:
+ * the thread reports that turn holding the prompt and an empty reasoning stub.
+ * So the text on screen is the only copy, and the transcript says as much.
+ */
+test("an answer interrupted mid-sentence is marked as something Codex did not keep", async () => {
+  const chat = harness();
+  await chat.send({ type: "prompt", message: "Tell me a long story" });
+  const turn = chat.turnId();
+  chat.codex("turn/started", { turn: { id: turn } });
+  chat.codex("item/agentMessage/delta", { turnId: turn, itemId: "a1", delta: "The rain fell upward." });
+  await chat.settle();
+  chat.dispatch({ type: "stop_generation" });
+  await chat.settle();
+  // The turn ends without Codex ever reporting the item it was writing, which
+  // is exactly what it does when the answer is cut off mid-sentence.
+  chat.codex("turn/completed", { turn: { id: turn, status: "interrupted" } });
+  await chat.settle();
+
+  const answer = chat.messages().find((message) => message.role === "assistant");
+  assert.equal(answer.content, "The rain fell upward.", "the text the reader watched arrive is kept");
+  assert.equal(answer.discarded, true, "and marked as absent from the thread");
+
+  // A turn that finished normally is not marked.
+  await chat.send({ type: "prompt", message: "again" });
+  const second = chat.turnId();
+  chat.codex("turn/started", { turn: { id: second } });
+  agentMessage(chat.codex, second, "a2", "Once more.");
+  chat.codex("turn/completed", { turn: { id: second, status: "completed" } });
+  await chat.settle();
+  assert.equal(chat.messages().at(-1).discarded, false);
 });
