@@ -209,3 +209,44 @@ test("live session launcher recovers an out-of-scope persisted model", async () 
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test("a backend that pre-warms nothing still starts when a message is sent", async () => {
+  // `warm` answers what selecting a chat does, not whether the chat can ever be
+  // live. Reading it as the second left a harness with no record for its
+  // adapter to publish into, and a sent message came back as "chat switched
+  // before the agent was ready". Nothing covered it because the mocks here
+  // declared no `warm` at all, so the refusal never fired in a test.
+  const chatId = "w".repeat(24);
+  const project = { id: "project_warmless", slug: "warmless", workingRoot: "/tmp/warmless" };
+  const chat = {
+    id: chatId, status: "draft", modelThinkingLevels: {},
+    backend: { protocol: "native_api", implementation: "test-stream", opaqueSession: null, model: "fast-250" },
+  };
+  const live = { id: "live-warmless" };
+  let launched = 0;
+  const adapter = {
+    async launch(context) {
+      launched += 1;
+      return { live, mapping: { backend: context.chat.backend }, modelRecovery: null };
+    },
+  };
+  const launcher = createLiveSessionLauncher({
+    backends: {
+      forChat: () => adapter,
+      getByChatId: () => null,
+      manifestFor: () => ({ warm: "none", profile: true }),
+    },
+    findChatContext: async () => ({ chat, project }),
+    lifecycle: { assertAvailable: () => {}, runLaunch: (_id, work) => work(), withProjects: (_ids, work) => work() },
+    registry: { update: async () => {} },
+  });
+
+  // Opening the chat starts nothing, because there is nothing to warm.
+  await assert.rejects(() => launcher({ chatId, attachOnly: true }), (error) => error.code === "no_live_process");
+  assert.equal(launched, 0);
+
+  // Sending does, because the adapter needs somewhere to put the answer.
+  const result = await launcher({ chatId });
+  assert.equal(result.live, live);
+  assert.equal(launched, 1);
+});
