@@ -156,7 +156,9 @@ export function normalizePiBackendEvent(event) {
     // A fork states where the history now ends. The browser cuts to it rather
     // than working out which of its messages the fork abandoned.
     case "history_truncated":
-      return { ...base, type: "history_truncated", beforeMessageId: event.beforeMessageId || null };
+      return { ...base, type: "history_truncated",
+        beforeMessageId: event.beforeMessageId || null,
+        afterMessageId: event.afterMessageId || null };
     case "transcript_sync":
       // `replace` marks the whole transcript, not a window of it: the client
       // takes it as the entire truth rather than folding it into what it holds.

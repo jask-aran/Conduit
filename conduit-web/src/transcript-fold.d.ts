@@ -21,6 +21,7 @@ export interface TranscriptOp {
   interim?: boolean;
   discarded?: boolean;
   inclusive?: boolean;
+  keep?: boolean;
   generationId?: string | null;
   toolCallId?: string;
   name?: string;

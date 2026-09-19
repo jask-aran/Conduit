@@ -272,15 +272,19 @@ export function createLiveSessionStream({
    * assistant message, Pi names the fork's file before writing it, and the sync
    * below has nothing to read.
    */
-  function announceTruncation(record, beforeMessageId) {
-    if (!beforeMessageId) return;
+  function announceTruncation(record, messageId, { keep = false } = {}) {
+    if (!messageId) return;
     const adapter = adapterFor(record);
-    adapter.publish(record, { type: "history_truncated", beforeMessageId });
+    // A regenerate ends the history *after* the prompt it is re-asking, not
+    // before it: the prompt stands, and only what it produced is abandoned.
+    adapter.publish(record, keep
+      ? { type: "history_truncated", afterMessageId: messageId }
+      : { type: "history_truncated", beforeMessageId: messageId });
     // The same fact in the chat's order, so the cut has a place in the sequence
     // a client rebuilds from rather than only a message of its own.
     if (logFor(record)) {
       adapter.publish(record, { type: "transcript_op", op: "message.drop",
-        messageId: beforeMessageId, inclusive: true });
+        messageId, ...(keep ? { keep: true } : { inclusive: true }) });
     }
   }
 
@@ -446,11 +450,18 @@ export function createLiveSessionStream({
         context.chat.id, context.project.workingRoot, entryId,
       ) : null;
       const forked = await adapter.fork(record.id, { nodeId: entryId });
-      announceTruncation(record, command.entryId);
+      announceTruncation(record, command.entryId, { keep: true });
       await syncForkedChat(record, forked);
       await applyComposerModel(record, command);
       const prepared = await promptForChat(record, command, forked.sourceMessage?.text || forked.text);
-      return sendPrompt(record, prepared, { sourceCheckpointId });
+      // The prompt keeps the name the row on screen already has, so the harness
+      // writing a new entry for it is invisible: the message is restated where
+      // it already sits instead of being taken away and sent back as a copy.
+      // A prompt adopted from history has no Conduit name to keep, and gets a
+      // fresh one as before.
+      const messageId = context
+        ? await messageIds.reclaim(context.project, context.chat, command.entryId) : null;
+      return sendPrompt(record, prepared, { sourceCheckpointId, messageId });
     }
     if (command.type === "continue") {
       if (!config.enablePartialContinue) throw Object.assign(new Error("Partial continuation is disabled"), { code: "partial_continue_disabled" });

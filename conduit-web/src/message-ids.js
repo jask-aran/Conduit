@@ -25,6 +25,9 @@ import { conduitOwnsMessageIds } from "./harnesses/index.js";
  * Fork keeps entry ids for retained history (verified against Pi's own
  * output), so a binding outlives every fork of the branch it sits on.
  */
+/** A name Conduit minted, as opposed to one derived from a harness entry. */
+const CONDUIT_MESSAGE_ID = /^m_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export class MessageIds {
   constructor() {
     this.chats = new Map();
@@ -69,6 +72,13 @@ export class MessageIds {
         state.byMessage.set(row.messageId, row.entryId);
         continue;
       }
+      // A fork abandoned the entry this name was bound to. The name is free
+      // again, and the row that follows in the file claims it back.
+      if (row.unbound) {
+        const bound = state.byMessage.get(row.messageId);
+        if (bound !== undefined) { state.byEntry.delete(bound); state.byMessage.delete(row.messageId); }
+        continue;
+      }
       if (row.released) { released.add(row.messageId); continue; }
       if (state.unbound[row.role || "user"]) {
         claims.push({ messageId: row.messageId, role: row.role || "user", after: row.after || null });
@@ -108,6 +118,28 @@ export class MessageIds {
     const messageId = offered && !state.byMessage.has(offered) ? offered : `m_${crypto.randomUUID()}`;
     state.unbound[role].push({ messageId, after });
     await this.append(state, { messageId, role, ...(after ? { after } : {}) });
+    return messageId;
+  }
+
+  /**
+   * Free a name whose entry has been abandoned, so the same name can be claimed
+   * for the entry that replaces it.
+   *
+   * Regenerate asks the same prompt again. The harness abandons the entry and
+   * writes a new one, but nothing about the message the reader is looking at has
+   * changed -- same words, same place -- so it keeps its name and the row on
+   * screen is never taken away and put back. Only a name Conduit minted can be
+   * reused: a prompt adopted from history is called `pi:<entryId>` after the
+   * entry itself, and that entry is exactly what the fork is abandoning.
+   */
+  async reclaim(project, chat, messageId) {
+    if (!this.owns(chat) || !CONDUIT_MESSAGE_ID.test(String(messageId || ""))) return null;
+    const state = await this.load(project, chat.id);
+    const entryId = state.byMessage.get(messageId);
+    if (entryId === undefined) return state.unbound.user.some((item) => item.messageId === messageId) ? null : messageId;
+    state.byMessage.delete(messageId);
+    state.byEntry.delete(entryId);
+    await this.append(state, { messageId, unbound: true });
     return messageId;
   }
 

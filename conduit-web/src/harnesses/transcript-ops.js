@@ -54,14 +54,23 @@ export const messageClose = ({ messageId, stopReason = null, blocks = [], interi
 });
 
 /**
- * A message is gone.
+ * Something is gone, and this says exactly what.
  *
- * `inclusive` separates the two reasons that happens: a fork or an edit cuts
- * the history from this message on, while a turn giving up a row it never
- * wrote into takes back that row alone.
+ * Three statements, because there are three things that happen and they used to
+ * be told apart by one flag:
+ *
+ * - `inclusive` -- a fork or an edit: the history now ends *before* this
+ *   message, so it goes and so does everything after it.
+ * - `keep` -- a regenerate: the history now ends *after* this message. The
+ *   prompt stands, and the answers it produced go. The row on screen is the
+ *   same row, which is why regenerating no longer takes the prompt away and
+ *   puts an identical one back.
+ * - neither -- a turn giving up a row it named and never wrote into. That row
+ *   alone, and nothing around it.
  */
-export const messageDrop = ({ messageId, inclusive = false, generationId = null }) => ({
-  type: "transcript_op", op: "message.drop", messageId, inclusive,
+export const messageDrop = ({ messageId, inclusive = false, keep = false, generationId = null }) => ({
+  type: "transcript_op", op: "message.drop", messageId,
+  ...(keep ? { keep: true } : { inclusive }),
   ...(generationId ? { generationId } : {}),
 });
 
