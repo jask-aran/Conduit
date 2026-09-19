@@ -780,8 +780,10 @@ export function createActiveChat(options: ActiveChatOptions) {
         break;
       case "history_truncated":
         // The fork says where the history ends now; this client holds whatever
-        // of it it has loaded, and cuts to the same point.
+        // of it it has loaded, and cuts to the same point. A regenerate ends it
+        // after the prompt it is re-asking, which stays exactly where it is.
         if (event.beforeMessageId) setMessages((current) => truncateAt(current, event.beforeMessageId!, { inclusive: true }));
+        else if (event.afterMessageId) setMessages((current) => truncateAt(current, event.afterMessageId!, { inclusive: false }));
         break;
       // A process the server deliberately stopped stays stopped. The socket
       // close that follows is otherwise indistinguishable from a dropped
@@ -1213,13 +1215,13 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (!entryId || !supports("regenerate") || streaming() || stopping()) return;
     const previous = messages();
     if (!previous.some((message) => message.id === entryId)) return;
-    // Show the branch going before the round trip. The fork says where the
-    // history now ends when it lands, so this is a preview of that, not a
-    // guess the client has to defend.
-    setMessages(truncateAt(previous, entryId, { inclusive: true }));
+    // Show the answers going before the round trip. The prompt itself stays:
+    // regenerate re-asks it, and the server restates it under the name this row
+    // already has, so there is nothing here to take away and put back.
+    setMessages(truncateAt(previous, entryId, { inclusive: false }));
     try {
       await requireAgent("regenerate");
-      setMessages((current) => truncateAt(current, entryId, { inclusive: true }));
+      setMessages((current) => truncateAt(current, entryId, { inclusive: false }));
       setGeneration("active");
       session.send({ type: "regenerate", entryId, model: models.model(), thinkingLevel: models.effort() });
     } catch (error) { setMessages(previous); setGeneration("idle"); onError(error); }

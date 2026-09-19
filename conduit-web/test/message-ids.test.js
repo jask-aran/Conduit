@@ -76,3 +76,35 @@ test("entryMessageRows keeps only what a message wrote, in order", () => {
     { type: "message", id: "e3", message: { role: "assistant" } },
   ]), [{ id: "e1", role: "user" }, { id: "e3", role: "assistant" }]);
 });
+
+/**
+ * Regenerate re-asks a prompt, and the row on screen is the same row.
+ *
+ * The harness abandons the entry and writes another, so the name has to survive
+ * that. Without it the replacement was minted a fresh name and the browser drew
+ * a second, identical message where the first had just been removed.
+ */
+test("a name whose entry a fork abandoned can be claimed again", async () => {
+  const workspace = await project();
+  const ledger = new MessageIds();
+
+  const first = await ledger.claim(workspace, chat, "user", "m_11111111-1111-1111-1111-111111111111");
+  await ledger.bind(workspace, chat, rows(["entry-1", "user"]));
+  assert.equal(await ledger.entryIdFor(workspace, chat, first), "entry-1");
+
+  // The fork abandons entry-1. The name goes back, and the prompt re-sent in
+  // its place claims it rather than minting a new one.
+  assert.equal(await ledger.reclaim(workspace, chat, first), first);
+  assert.equal(await ledger.claim(workspace, chat, "user", first), first);
+  await ledger.bind(workspace, chat, rows(["entry-2", "user"]));
+  assert.equal(await ledger.entryIdFor(workspace, chat, first), "entry-2");
+
+  // And it survives a reload: the file has to replay to the same answer, or a
+  // restart would resurrect the binding the fork threw away.
+  const reloaded = new MessageIds();
+  assert.equal(await reloaded.entryIdFor(workspace, chat, first), "entry-2");
+
+  // A name Conduit never minted is the entry's own, and that entry is what the
+  // fork abandoned, so there is nothing to keep.
+  assert.equal(await ledger.reclaim(workspace, chat, "pi:entry-2"), null);
+});

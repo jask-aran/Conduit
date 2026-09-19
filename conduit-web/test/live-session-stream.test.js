@@ -24,6 +24,10 @@ const messageIds = {
   claimNow: () => "m_answer",
   bind: async () => null,
   release: async () => {},
+  // The real ledger frees a name whose entry a fork abandoned, and refuses one
+  // it never minted. Both matter here: the first is what keeps the row, the
+  // second is what makes a prompt adopted from history fall back to a new name.
+  reclaim: async (_project, _chat, messageId) => (String(messageId).startsWith("m_") ? messageId : null),
   resolver: async () => (id) => id,
   entryIdFor: async (_project, _chat, id) => id,
 };
@@ -322,4 +326,112 @@ test("an unknown browser command cannot reach a backend escape hatch", async () 
     code: "invalid_request",
     message: "Unknown live-session command: backend_native_command",
   });
+});
+
+/**
+ * Regenerating re-asks a prompt; it does not replace it.
+ *
+ * The row on screen was taken away and an identical one sent back, because the
+ * fork cut through the prompt and the replacement was minted a new name. For
+ * the reader that is the bubble disappearing for a round trip and returning
+ * unchanged -- a flicker with nothing behind it, since the words cannot differ.
+ */
+test("regenerate keeps the prompt it re-asks, under the name it already had", async () => {
+  const published = [];
+  const sent = [];
+  const record = { id: "live-1", chatId: "chat-1", projectId: "project-1", status: "running", hostUiRequests: [] };
+  const adapter = {
+    getCapabilities: () => ({ fork: true, regenerate: true }),
+    attach: () => null,
+    view: () => record,
+    toClientEvent: (event) => event,
+    refreshContext: async () => {},
+    fork: async () => ({ opaqueSession: "/tmp/fork.jsonl", sourceMessage: { id: "m_held", text: "a longer story" } }),
+    publish: (_record, event) => { published.push(event); },
+    readTranscript: async () => ({ messages: [], tools: [] }),
+    prompt: async () => "generation-2",
+  };
+  const chat = {
+    id: "chat-1", status: "active", title: "Chat",
+    backend: { implementation: "conduit_pi", opaqueSession: "/tmp/session.jsonl" },
+  };
+  const project = { id: "project-1", kind: "workspace", workingRoot: "/tmp" };
+  const ws = new EventEmitter();
+  ws.readyState = 1;
+  ws.send = (message) => { sent.push(JSON.parse(message)); };
+  const stream = createLiveSessionStream({
+    manager: {},
+    wss: { handleUpgrade: (_request, _socket, _head, accept) => accept(ws) },
+    attachments: { resolveMany: async () => [], recordMessage: async () => {} },
+    registry: { metadata: () => chat, update: async () => chat, markUserMessage: async () => chat },
+    config: {},
+    findChatContext: async () => ({ chat, project }),
+    lifecycle,
+    messageIds,
+    chatLogs: new ChatLogs(),
+    backends: { get: () => record, forChat: () => adapter },
+  });
+  stream.handleUpgrade(record.id, {}, {}, null);
+  ws.emit("message", JSON.stringify({ type: "regenerate", entryId: "m_held" }));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  // The history now ends *after* the prompt, not before it.
+  assert.deepEqual(published.find((event) => event.type === "history_truncated"),
+    { type: "history_truncated", afterMessageId: "m_held" });
+  const cut = published.find((event) => event.op === "message.drop");
+  assert.equal(cut.messageId, "m_held");
+  assert.equal(cut.keep, true, "the prompt stands; only what it produced goes");
+  assert.equal(cut.inclusive, undefined);
+
+  // And the prompt is restated under the name the row already has, so the
+  // client folds it into the row it is holding instead of drawing a second one.
+  const opened = published.filter((event) => event.op === "message.open");
+  assert.deepEqual(opened.map((event) => event.message.id), ["m_held"]);
+  assert.equal(opened[0].message.content, "a longer story");
+  assert.equal(sent.some((event) => event.type === "client_error"), false);
+});
+
+test("a prompt adopted from history has no name to keep, and is re-sent under a new one", async () => {
+  const published = [];
+  const record = { id: "live-1", chatId: "chat-1", projectId: "project-1", status: "running", hostUiRequests: [] };
+  const adapter = {
+    getCapabilities: () => ({ fork: true, regenerate: true }),
+    attach: () => null,
+    view: () => record,
+    toClientEvent: (event) => event,
+    refreshContext: async () => {},
+    fork: async () => ({ opaqueSession: "/tmp/fork.jsonl", sourceMessage: { id: "pi:entry-9", text: "typed in the CLI" } }),
+    publish: (_record, event) => { published.push(event); },
+    readTranscript: async () => ({ messages: [], tools: [] }),
+    prompt: async () => "generation-2",
+  };
+  const chat = {
+    id: "chat-1", status: "active", title: "Chat",
+    backend: { implementation: "conduit_pi", opaqueSession: "/tmp/session.jsonl" },
+  };
+  const project = { id: "project-1", kind: "workspace", workingRoot: "/tmp" };
+  const ws = new EventEmitter();
+  ws.readyState = 1;
+  ws.send = () => {};
+  const stream = createLiveSessionStream({
+    manager: {},
+    wss: { handleUpgrade: (_request, _socket, _head, accept) => accept(ws) },
+    attachments: { resolveMany: async () => [], recordMessage: async () => {} },
+    registry: { metadata: () => chat, update: async () => chat, markUserMessage: async () => chat },
+    config: {},
+    findChatContext: async () => ({ chat, project }),
+    lifecycle,
+    messageIds,
+    chatLogs: new ChatLogs(),
+    backends: { get: () => record, forChat: () => adapter },
+  });
+  stream.handleUpgrade(record.id, {}, {}, null);
+  ws.emit("message", JSON.stringify({ type: "regenerate", entryId: "pi:entry-9" }));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  // `pi:<entryId>` is the entry's own name, and the entry is what the fork just
+  // abandoned, so there is nothing to keep. The cut still keeps the row, and the
+  // replacement simply arrives under a name of its own.
+  assert.deepEqual(published.filter((event) => event.op === "message.open").map((event) => event.message.id),
+    ["m_claimed"]);
 });

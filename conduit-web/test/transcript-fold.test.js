@@ -56,6 +56,23 @@ test("a dropped row goes alone; a cut takes everything after it too", () => {
   assert.deepEqual(
     applyTranscriptOp(held, { type: "transcript_op", op: "message.drop", messageId: "m2", inclusive: true })
       .map((message) => message.id), ["m1"]);
+  // And what a regenerate states: it ends after it. The prompt stands.
+  assert.deepEqual(
+    applyTranscriptOp(held, { type: "transcript_op", op: "message.drop", messageId: "m1", keep: true })
+      .map((message) => message.id), ["m1"]);
+});
+
+test("a regenerated prompt settles into the row already holding it", () => {
+  let messages = applyTranscriptOp([], open("m_held", "user", { content: "a longer story" }));
+  messages = applyTranscriptOp(messages, open("m_answer", "assistant"));
+  // The cut keeps the prompt and takes the answer it produced.
+  messages = applyTranscriptOp(messages, { type: "transcript_op", op: "message.drop", messageId: "m_held", keep: true });
+  assert.deepEqual(messages.map((message) => message.id), ["m_held"]);
+  // Restating it under the same name updates the row rather than adding one, so
+  // nothing on screen is removed and put back.
+  messages = applyTranscriptOp(messages, open("m_held", "user", { content: "a longer story" }));
+  assert.deepEqual(messages.map((message) => message.id), ["m_held"]);
+  assert.equal(messages.length, 1);
 });
 
 test("a tool is a record of its own, opened and closed by the server", () => {

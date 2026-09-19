@@ -95,8 +95,10 @@ export function applyTranscriptOp(messages, event) {
       : message));
   }
   if (event.op === "message.drop" && event.messageId) {
-    // A cut says where the history ends; a turn giving up a row it never wrote
-    // into takes back that row alone.
+    // Where the history now ends, or one row taken back. `keep` is a regenerate:
+    // the prompt stands and its answers go, so the row the reader is looking at
+    // is never removed and re-added under a new name.
+    if (event.keep) return truncateAt(messages, event.messageId, { inclusive: false });
     return event.inclusive
       ? truncateAt(messages, event.messageId, { inclusive: true })
       : messages.filter((message) => message.id !== event.messageId);

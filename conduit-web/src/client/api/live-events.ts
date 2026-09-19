@@ -84,7 +84,7 @@ export type LiveEvent = EventBase & (
   | { type: "queue_update"; queue: QueueState }
   | { type: "extension_ui_request"; request: HostUiRequest | null }
   | { type: "extension_ui_resolved"; requestId: string }
-  | { type: "history_truncated"; beforeMessageId: string | null }
+  | { type: "history_truncated"; beforeMessageId: string | null; afterMessageId: string | null }
   | { type: "session_checkpoint"; chatId: string; title: string | null; chat: ChatSummary | null; generationSeq: number | null; artifacts: TurnArtifactSummary[] | null }
   | { type: "user_message_committed"; message: ProtocolMessage }
   | { type: "transcript_sync"; messages: unknown[]; tools: unknown[]; replace?: boolean }
@@ -92,7 +92,7 @@ export type LiveEvent = EventBase & (
     answers: string | null }
   | { type: "transcript_op"; op: "message.close"; messageId: string; stopReason: string | null;
     content: string; blocks: unknown[]; interim: boolean; discarded: boolean }
-  | { type: "transcript_op"; op: "message.drop"; messageId: string; inclusive: boolean }
+  | { type: "transcript_op"; op: "message.drop"; messageId: string; inclusive: boolean; keep: boolean }
   | { type: "transcript_op"; op: "tool.open"; toolCallId: string; name: string; input: unknown;
     messageId: string | null }
   | { type: "transcript_op"; op: "tool.close"; toolCallId: string; output: unknown; isError: boolean }
@@ -301,7 +301,7 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
       }
       if (op === "message.drop") {
         return { type: "transcript_op", op, generationId, messageId: text(source.messageId),
-          inclusive: Boolean(source.inclusive) };
+          inclusive: Boolean(source.inclusive), keep: Boolean(source.keep) };
       }
       if (op === "tool.open") {
         return { type: "transcript_op", op, generationId, toolCallId: text(source.toolCallId),
@@ -336,7 +336,9 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
     case "extension_ui_request": return { type: "extension_ui_request", generationId, request: normalizeHostUiRequest(source) };
     case "extension_ui_resolved": return { type: "extension_ui_resolved", generationId, requestId: text(source.requestId || source.id) };
     case "history_truncated":
-      return { type: "history_truncated", generationId, beforeMessageId: optionalText(source.beforeMessageId) };
+      return { type: "history_truncated", generationId,
+        beforeMessageId: optionalText(source.beforeMessageId),
+        afterMessageId: optionalText(source.afterMessageId) };
     case "session_checkpoint": {
       const chat = record(source.chat);
       return {

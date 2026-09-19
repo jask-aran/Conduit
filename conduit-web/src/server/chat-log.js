@@ -87,9 +87,12 @@ export class ChatLog {
         }
         return placed;
       }
-      // A cut leaves the log unable to name the end, so the next message goes
-      // after whatever the client has. It is told the cut directly either way.
-      if (event.op === "message.drop") this.tail = null;
+      // A cut that keeps the message it names ends there, and the next message
+      // is placed against it -- which is what lets a regenerated prompt keep
+      // the row it already has. Any other cut leaves the log unable to name the
+      // end, so the next message goes after whatever the client has. It is told
+      // the cut directly either way.
+      if (event.op === "message.drop") this.tail = event.keep ? event.messageId || null : null;
       return event;
     }
     // A sync of the whole transcript says where it ends. A window of it does
