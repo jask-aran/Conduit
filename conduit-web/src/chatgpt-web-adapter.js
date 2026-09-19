@@ -355,7 +355,11 @@ export class ChatGptWebAdapter extends EventEmitter {
   }
   async readTranscript({ liveSessionId, chatId }) {
     const record = liveSessionId ? this.get(liveSessionId) : null;
-    return { messages: this.transcript(chatId || record?.chatId), tools: [] };
+    // The journal is the whole of what Conduit ever knew about this chat -- the
+    // account exposes nothing to page back through -- so there is never an
+    // earlier page, and the transcript says so rather than leaving the browser
+    // to decide from an absent field.
+    return { messages: this.transcript(chatId || record?.chatId), tools: [], page: { before: null } };
   }
   async readHistory(options) {
     const { messages } = await this.readTranscript(options);
