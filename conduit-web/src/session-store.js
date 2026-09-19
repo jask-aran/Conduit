@@ -3,7 +3,6 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { wasAborted } from "./abort-signature.js";
-import { messageIsInterim } from "./active-generation.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { CONTINUE_PROMPT, mergeContinuation } from "./continuation.js";
 import { wasDiscarded } from "./abort-signature.js";
@@ -535,6 +534,26 @@ export async function removeProjectSessions(project) {
   }
 }
 
+/**
+ * A Pi session file's block spelling, in Conduit's.
+ *
+ * The same translation the live adapter does, on the other way into the same
+ * transcript. Reading the file used to hand its blocks to the browser untouched
+ * and the rows were written to Pi's spelling to suit them, which is how a
+ * harness that stores its transcript differently -- Codex reads its thread back
+ * over the wire -- ended up with its thinking traces silently dropped on the
+ * floor: nothing was wrong except that two producers of the same field had
+ * spelled it differently and only one of them matched the reader.
+ */
+export function neutralBlock(block) {
+  if (block?.type === "text") return { kind: "text", text: block.text || "" };
+  if (block?.type === "thinking") return { kind: "thinking", text: block.thinking ?? block.text ?? "" };
+  if (block?.type === "toolCall") {
+    return { kind: "tool_call", toolCallId: block.id || block.toolCallId, name: block.name, input: block.arguments };
+  }
+  return { kind: block?.type || "text", ...(block?.text ? { text: block.text } : {}) };
+}
+
 export function messagesFromEntries(entries) {
   const messages = [];
   let continuation = false;
@@ -554,7 +573,7 @@ export function messagesFromEntries(entries) {
       id: entry.id || `entry_${index}`,
       role,
       content: envelope?.message ?? rawContent,
-      blocks: Array.isArray(entry.message.content) ? entry.message.content : [],
+      blocks: Array.isArray(entry.message.content) ? entry.message.content.map(neutralBlock) : [],
       usage: entry.message.usage || null,
       timestamp: entry.timestamp || null,
       stopReason: aborted ? "aborted" : (entry.message.stopReason || null),
@@ -580,7 +599,8 @@ export function messagesFromEntries(entries) {
     // than inferred -- the prompt an answer answers is the prompt above it, and
     // a message is the turn talking as it works when it called a tool.
     if (role === "assistant") {
-      message.interim = messageIsInterim(message);
+      message.interim = message.stopReason === "toolUse"
+        || message.blocks.some((block) => block.kind === "tool_call");
       message.answers = answers;
     }
     if (role === "assistant" && continuation) {

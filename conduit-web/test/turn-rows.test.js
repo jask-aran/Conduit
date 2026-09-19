@@ -63,7 +63,7 @@ test("does not project persisted partials beside their resumed active generation
       role: "assistant",
       content: "",
       stopReason: "toolUse",
-      blocks: [{ type: "thinking", thinking: "Older plan" }],
+      blocks: [{ kind: "thinking", text: "Older plan" }],
     },
   ], [], { activeGeneration: generation });
 
@@ -90,7 +90,7 @@ test("reports an executing tool and a persisted interrupted trace", () => {
     { id: "u1", role: "user", content: "Wait" },
     {
       id: "a1", role: "assistant", content: "", stopReason: "toolUse",
-      blocks: [{ type: "toolCall", id: "call_1", name: "bash", arguments: {} }],
+      blocks: [{ kind: "tool_call", toolCallId: "call_1", name: "bash", input: {} }],
     },
     { id: "a2", role: "assistant", content: "", stopReason: "aborted", stopped: true },
   ], [{ id: "call_1", name: "bash", done: true, result: "Command aborted" }]);
@@ -154,8 +154,8 @@ test("keeps consecutive final assistant messages in the answer area", () => {
       content: "I will check the sources first.",
       stopReason: "toolUse",
       blocks: [
-        { type: "thinking", thinking: "Checking sources" },
-        { type: "toolCall", id: "call_1", name: "web_search", arguments: {} },
+        { kind: "thinking", text: "Checking sources" },
+        { kind: "tool_call", toolCallId: "call_1", name: "web_search", input: {} },
       ],
     },
     { id: "a2", role: "assistant", content: "The main answer.", stopReason: "stop", blocks: [{ type: "text", text: "The main answer." }] },
@@ -215,7 +215,7 @@ test("keeps a recovered assistant error inside the turn trace", () => {
       id: "m_error",
       role: "assistant",
       content: "",
-      blocks: [{ type: "thinking", thinking: "Retrying the provider request" }],
+      blocks: [{ kind: "thinking", text: "Retrying the provider request" }],
       stopReason: "error",
       errorMessage: "Temporary provider failure",
       provider: "example-provider",
@@ -351,7 +351,7 @@ test("an answer stays an answer when a later message calls a tool", () => {
     { id: "u1", role: "user", content: "tell me a long story" },
     { id: "a1", role: "assistant", content: "Once upon a time…", answers: "u1", interim: false },
     { id: "a2", role: "assistant", content: "", answers: "u1", interim: true,
-      blocks: [{ type: "toolCall", id: "call_1", name: "bash" }] },
+      blocks: [{ kind: "tool_call", toolCallId: "call_1", name: "bash" }] },
   ];
   const rows = buildTurnRows(messages, [{ id: "call_1", name: "bash", done: true }]);
   const answers = rows.filter((row) => row.type === "message" && row.value.role === "assistant");

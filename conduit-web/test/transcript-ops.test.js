@@ -65,9 +65,10 @@ test("a close states its text once, whichever blocks it was given", () => {
   });
   assert.equal(op.content, "Let me look.");
   assert.equal(op.interim, true);
-  // Blocks still leave in the spelling the renderer reads, which is Pi's.
+  // Blocks leave exactly as the adapter stated them. The text is in `content`,
+  // so what is left is what it sat among.
   assert.deepEqual(op.blocks, [
-    { type: "thinking", thinking: "Planning" },
-    { type: "toolCall", id: "t1", name: "read", arguments: { path: "a" } },
+    { kind: "thinking", text: "Planning" },
+    { kind: "tool_call", toolCallId: "t1", name: "read", input: { path: "a" } },
   ]);
 });

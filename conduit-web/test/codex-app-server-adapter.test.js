@@ -228,8 +228,12 @@ test("a Codex turn maps onto Conduit's rollup: commentary and commands, then the
     ["user", undefined], ["assistant", "toolUse"], ["assistant", "stop"],
     ["user", undefined], ["assistant", "stop"],
   ]);
+  assert.deepEqual(messages.filter((message) => message.role === "assistant")
+    .map(({ interim, answers }) => ({ interim, answers })),
+  [{ interim: true, answers: "u1" }, { interim: false, answers: "u1" }, { interim: false, answers: "u2" }],
+  "read back, a thread says what the socket said");
   assert.equal(messages[1].content, "Looking now.");
-  assert.deepEqual(messages[1].blocks.map((block) => block.type), ["text", "toolCall"], "commands hang off the message that ran them");
+  assert.deepEqual(messages[1].blocks.map((block) => block.kind), ["text", "tool_call"], "commands hang off the message that ran them");
   assert.equal(messages[2].content, "Built.");
   assert.deepEqual(tools, [{ id: "e1", name: "command", args: "npm run build", done: true, result: "ok", isError: false }]);
 });
@@ -250,7 +254,7 @@ test("a turn that only runs commands carries them without inventing an answer", 
     { turnId: "t1", item: { type: "commandExecution", id: "e1", command: "ls", status: "completed" } },
   ]);
   assert.deepEqual(messages.map((message) => [message.role, message.stopReason]), [["user", undefined], ["assistant", "toolUse"]]);
-  assert.deepEqual(messages[1].blocks.map((block) => block.type), ["toolCall"]);
+  assert.deepEqual(messages[1].blocks.map((block) => block.kind), ["tool_call"]);
 });
 
 test("a thread with no stored history yields an empty transcript", async () => {

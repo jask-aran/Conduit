@@ -224,13 +224,19 @@ export interface Attachment {
   error?: string;
 }
 
+/**
+ * A block of a message the server has stated, in Conduit's spelling.
+ *
+ * Not the live generation's block, which is still modelled in Pi's -- `type`,
+ * `toolCall`, `arguments` -- and converted into it as the delta channel
+ * arrives. A stated transcript is read as stated.
+ */
 export interface ContentBlock {
-  type: string;
-  id?: string;
+  kind: string;
+  toolCallId?: string;
   text?: string;
-  thinking?: string;
   name?: string;
-  arguments?: unknown;
+  input?: unknown;
 }
 
 export interface Message {

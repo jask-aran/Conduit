@@ -318,6 +318,12 @@ export class CodexAppServerAdapter extends EventEmitter {
     let turnStatus;
     let turnStart = 0;
     let interim = null;
+    // Read back, a thread says the same two things the socket said: which
+    // prompt an answer answers, and whether a message is the answer or the turn
+    // talking as it works. Without them the browser falls back to reading both
+    // off the shape of the turn, which is the guessing a stated transcript
+    // exists to remove.
+    let answering = null;
     const closeTurn = () => {
       // Older threads carry no `phase`, so nothing would read as the answer.
       // The turn's last message without commands is the closest thing to one.
@@ -335,8 +341,8 @@ export class CodexAppServerAdapter extends EventEmitter {
         }
       } else if (!turn.some((message) => message.role === "assistant" && message.stopReason === "stop")) {
         const answer = turn.findLast((message) => message.role === "assistant"
-          && !message.blocks.some((block) => block.type === "toolCall"));
-        if (answer) answer.stopReason = "stop";
+          && !message.blocks.some((block) => block.kind === "tool_call"));
+        if (answer) { answer.stopReason = "stop"; answer.interim = false; }
       }
       turnStart = messages.length;
       interim = null;
@@ -351,6 +357,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       if (item.type === "userMessage") {
         closeTurn();
         messages.push({ id: item.clientId || item.id, role: "user", content: CodexAppServerAdapter.itemText(item) });
+        answering = messages.at(-1).id;
         turnStart = messages.length;
         continue;
       }
@@ -358,7 +365,8 @@ export class CodexAppServerAdapter extends EventEmitter {
         const text = CodexAppServerAdapter.itemText(item);
         const answer = item.phase === "final_answer";
         messages.push({ id: item.id || `assistant-${turnId}`, role: "assistant", content: text,
-          blocks: [{ type: "text", text }], stopReason: answer ? "stop" : "toolUse" });
+          blocks: [{ kind: "text", text }], stopReason: answer ? "stop" : "toolUse",
+          interim: !answer, answers: answering });
         interim = answer ? null : messages.at(-1);
         continue;
       }
@@ -366,17 +374,18 @@ export class CodexAppServerAdapter extends EventEmitter {
         const text = itemPartsText(item.summary);
         if (!text) continue;
         messages.push({ id: item.id || `reasoning-${turnId}`, role: "assistant", content: text,
-          blocks: [{ type: "thinking", text }], stopReason: "toolUse" });
+          blocks: [{ kind: "thinking", text }], stopReason: "toolUse", interim: true, answers: answering });
         interim = messages.at(-1);
         continue;
       }
       const activity = CodexAppServerAdapter.toolActivity(item);
       if (!activity) continue;
       if (!interim) {
-        messages.push({ id: `assistant-${item.id}`, role: "assistant", content: "", blocks: [], stopReason: "toolUse" });
+        messages.push({ id: `assistant-${item.id}`, role: "assistant", content: "", blocks: [],
+          stopReason: "toolUse", interim: true, answers: answering });
         interim = messages.at(-1);
       }
-      interim.blocks.push({ type: "toolCall", id: item.id, name: activity.name, arguments: activity.input });
+      interim.blocks.push({ kind: "tool_call", toolCallId: item.id, name: activity.name, input: activity.input });
       tools.push({ id: item.id, name: activity.name, args: activity.input, done: true,
         result: textResult(truncate(activity.output)), isError: activity.isError });
     }
