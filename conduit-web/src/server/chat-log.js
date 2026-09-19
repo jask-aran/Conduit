@@ -32,7 +32,6 @@ export const LOGGED_EVENT_TYPES = new Set([
   "generation_stopped",
   "generation_settled",
   "generation_failed",
-  "message_end",
   "transcript_sync",
   "history_truncated",
   "history_forked",
