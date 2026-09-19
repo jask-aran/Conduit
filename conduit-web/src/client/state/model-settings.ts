@@ -2,6 +2,7 @@ import { createSignal } from "solid-js";
 import { toast } from "solid-sonner";
 import { api, asList } from "../api/client";
 import type { ModelOption, ModelState } from "../api/contracts";
+import { preferredThinkingLevel } from "./thinking-levels";
 
 type ErrorHandler = (error: unknown) => void;
 type ThinkingLevelRecoveryHandler = (details: { from: string; to: string }) => void;
@@ -95,9 +96,7 @@ export function createModelSettings(
       const pendingThinkingLevel = pendingThinkingLevels.get(chatId);
       const rememberedLevels = catalog.modelThinkingLevels && typeof catalog.modelThinkingLevels === "object"
         ? catalog.modelThinkingLevels : {};
-      const nextEffort = levels.includes(catalog.thinkingLevel) ? catalog.thinkingLevel
-        : levels.includes(catalog.defaultThinkingLevel || "") ? catalog.defaultThinkingLevel!
-          : levels.includes("medium") ? "medium" : levels[0] || "off";
+      const nextEffort = preferredThinkingLevel(levels, catalog.thinkingLevel, catalog.defaultThinkingLevel);
       setModels(nextModels);
       setModelThinkingLevels(rememberedLevels);
       setModel(catalog.model || nextModels[0]?.spec || "");
@@ -196,10 +195,7 @@ export function createModelSettings(
     try {
       const selected = models().find((item) => item.spec === spec);
       const levels = asList<string>(selected?.thinkingLevels);
-      const remembered = previousLevels[spec];
-      const nextEffort = remembered && levels.includes(remembered) ? remembered
-        : levels.includes(selected?.defaultThinkingLevel || "") ? selected!.defaultThinkingLevel!
-        : levels.includes("medium") ? "medium" : levels[0] || "off";
+      const nextEffort = preferredThinkingLevel(levels, previousLevels[spec], selected?.defaultThinkingLevel);
       setEffort(nextEffort);
       const payload = await api<ModelState>(`/v0/chats/${encodeURIComponent(activeChatId)}/models`, {
         method: "PATCH",

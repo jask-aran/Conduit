@@ -64,14 +64,12 @@ export function createLiveSessionLauncher({
     }
     const resident = backends.getByChatId(context.chat.id);
     if (resident) return { live: resident, modelRecovery: null };
-    // The harness says whether there is anything to start. A backend that warms
-    // nothing is not "failing to launch" -- it has no process by design, and
-    // saying so here keeps that knowledge in the manifest rather than in a
-    // client that would have to learn each backend's habits.
-    const manifest = backends.manifestFor?.(context.chat.backend?.implementation || "");
-    if (manifest && manifest.warm === "none") {
-      throw launchError("no_live_process", "This chat has no live agent process", 409);
-    }
+    // Selecting a chat may not start anything; sending a message must. That is
+    // the whole of what `warm` says, and `attachOnly` already carries it here:
+    // an "open" does not spawn, a prompt does. Refusing every launch on a
+    // `warm: "none"` harness read the flag as "this chat can never be live",
+    // which left its adapter with no record to publish into and answered a sent
+    // message with "chat switched before the agent was ready".
     if (attachOnly) throw launchError("no_live_process", "This chat has no live agent process", 409);
 
     await reclaimForNewProcess(context.chat.id);
