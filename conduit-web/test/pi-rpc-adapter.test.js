@@ -103,3 +103,32 @@ test("backend registry resolves persisted Pi identity without compatibility shim
   assert.throws(() => registry.forChat({ backend: { protocol: "pi_rpc", implementation: "native_pi" } }), { code: "backend_unavailable" });
   assert.throws(() => registry.forChat({ backend: { protocol: "acp", implementation: "codex" } }), { code: "backend_unavailable" });
 });
+
+test("what leaves for the browser is the contract, on every path out", () => {
+  // Two ways out, and only one of them was mapping. These assert the wire, not
+  // the manager's event bus: the bus was already right both times, which is how
+  // the suite stayed green while Stop process reconnected and a reconnect
+  // shipped native Pi.
+  //
+  // A deliberate exit is the difference between "the session is over" and "the
+  // connection dropped, start another one". It fell through to `pi_event`, so
+  // the browser's handler for it could never run.
+  const exit = { type: "runtime_exit", code: 0, signal: null, deliberate: true };
+  assert.deepEqual(JSON.parse(serializePiV0(exit)),
+    { generationId: null, type: "runtime_exit", deliberate: true });
+  assert.equal(JSON.parse(serializePiV0({ ...exit, deliberate: false })).deliberate, false);
+
+  // The replay a reconnecting browser is sent goes out without `toClientEvent`,
+  // so it has to leave the adapter already neutral. It used to carry `pi`,
+  // which on this event is a second copy of the entire generation snapshot.
+  const generation = { id: "g1", lastSeq: 5, assistantMessages: [{ id: "m1", blocks: [] }] };
+  const adapter = new PiRpcAdapter({
+    attach: () => ({ type: "generation_resume", generationId: "g1", seq: 5, generation }),
+  });
+  const replay = adapter.attach("live", {});
+  assert.equal(Object.hasOwn(replay, "pi"), false, "no native payload reaches the browser");
+  assert.equal(replay.type, "generation_replay");
+  assert.equal(replay.seq, 5);
+  assert.deepEqual(replay.generation, generation);
+  assert.equal(adapter.attach("live", {}) && new PiRpcAdapter({ attach: () => null }).attach("live", {}), null);
+});
