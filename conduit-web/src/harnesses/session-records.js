@@ -1,5 +1,5 @@
 import { isLoggedEvent } from "../server/chat-log.js";
-import { SocketDelivery } from "./socket-delivery.js";
+import { SocketDelivery, deliveryKey, mergeDelivery } from "./socket-delivery.js";
 
 // The live-record store every non-Pi adapter needs: the id and chat indexes, the
 // attached browser sockets, and the replay buffer. Codex and ChatGPT Web wrote
@@ -17,8 +17,9 @@ export class SessionRecords {
    * @param onPublish side effect before broadcast, e.g. the ChatGPT Web journal
    * @param logs the per-chat order, for a backend whose transcript is stated
    */
-  constructor({ capabilities, backend, extras = () => ({}), onPublish = null, logs = null, delivery = null }) {
+  constructor({ capabilities, backend, extras = () => ({}), onPublish = null, logs = null, delivery = null, replayLimit = 500 }) {
     this.logs = logs;
+    this.replayLimit = replayLimit;
     // Every harness gets the delivery discipline Pi had to itself: a frame's
     // deltas merged into one send, and a socket that has stopped keeping up
     // given paint to drop rather than a longer queue to work through.
@@ -31,8 +32,51 @@ export class SessionRecords {
     this.byChatId = new Map();
   }
 
+  /**
+   * Keep what a reconnecting browser will need, and only one copy of the paint.
+   *
+   * The buffer used to take every event, which meant a busy turn filled all 500
+   * slots with deltas and evicted the ops that place the rows those deltas are
+   * painting into. A browser arriving mid-answer was then sent hundreds of
+   * deltas and no structure -- and, because the window is the *last* 500, the
+   * text it got started in the middle of the answer.
+   *
+   * Paint is merged here by the same key the wire merges on, so a block holds
+   * one entry carrying everything written into it so far. Structure is never
+   * pushed out by volume, the replay is the whole answer rather than its tail,
+   * and a turn costs a slot per block instead of one per token.
+   */
+  remember(record, event) {
+    const key = deliveryKey(event);
+    if (key) {
+      record.paint ||= new Map();
+      const held = record.paint.get(key);
+      // Merged into a copy of our own: the object handed to the sockets is
+      // serialized once and cached against its identity, so it must not change
+      // after it has gone out.
+      if (held) { Object.assign(held, mergeDelivery(held, event)); return; }
+      const copy = { ...event };
+      record.paint.set(key, copy);
+      record.events.push(copy);
+    } else {
+      record.events.push(event);
+    }
+    if (record.events.length <= this.replayLimit) return;
+    const dropped = record.events.splice(0, record.events.length - this.replayLimit);
+    if (!record.paint?.size) return;
+    for (const stale of dropped) {
+      const staleKey = deliveryKey(stale);
+      if (staleKey && record.paint.get(staleKey) === stale) record.paint.delete(staleKey);
+    }
+  }
+
   add(record) {
     record.adapterImplementation ||= this.backend.implementation;
+    // An adapter may seed the buffer before handing the record over -- ChatGPT
+    // Web fills it from its journal. The merge keys point at objects in that
+    // array, so they start empty alongside it rather than at whatever a reused
+    // record was holding.
+    record.paint = new Map();
     // Every harness answers the same two questions about a process: is it
     // alive, and can it answer yet. A record that never sets `ready` is taken
     // at its word as ready; one that sets it false reads as starting until it
@@ -114,8 +158,7 @@ export class SessionRecords {
     // browser reads carries the same sequence the live stream did.
     const log = this.logFor(record);
     const stamped = log && isLoggedEvent(event) ? log.stamp(event) : event;
-    record.events.push(stamped);
-    if (record.events.length > 500) record.events.splice(0, record.events.length - 500);
+    this.remember(record, stamped);
     this.onPublish?.(record, stamped);
     for (const socket of record.clients) this.delivery.send(socket, stamped);
     return stamped;

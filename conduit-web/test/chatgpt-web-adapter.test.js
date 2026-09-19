@@ -30,7 +30,10 @@ test("ChatGPT Web maps a streamed turn to neutral events and retains its cursor"
     assert.deepEqual(record.sessionId, { conversationId: "conversation-1", parentMessageId: "message-1",
       model: "gpt-test", thinkingLevel: "high" });
     assert.equal(record.title, "Greeting exchange");
-    assert.deepEqual(record.events.filter((event) => event.phase === "delta").map((event) => event.delta), ["Hello", " world"]);
+    // One entry for the block, holding everything written into it. The buffer
+    // is what a reconnecting browser is replayed, and it keeps a block rather
+    // than every delta that built it -- the sockets still saw both.
+    assert.deepEqual(record.events.filter((event) => event.phase === "delta").map((event) => event.delta), ["Hello world"]);
     assert.equal(record.events.at(-1).detail, "settled");
     assert.equal(CHATGPT_WEB_CAPABILITIES.modelSwitch, true);
   } finally {
