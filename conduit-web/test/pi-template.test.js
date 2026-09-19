@@ -296,7 +296,7 @@ test("PiManager publishes structured generation state without flattened stream e
     stopReason: "stop",
     errorMessage: null,
     blocks: [{
-      type: "text",
+      kind: "text",
       contentIndex: 0,
       text: "Hello",
       status: "complete",
