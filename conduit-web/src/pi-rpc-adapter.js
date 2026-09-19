@@ -148,6 +148,14 @@ export function normalizePiBackendEvent(event) {
     case "generation_resume":
       return { ...base, type: "generation_replay", generationId: event.generationId,
         seq: event.seq, generation: event.generation };
+    // The process is gone, and whether that was asked for is the whole of what
+    // the browser needs to know: a deliberate exit settles the session, a crash
+    // reconnects. Without a case here it fell through to `pi_event`, taking
+    // `deliberate` with it, so "Stop process" read as a dropped connection and
+    // the reconnect timer started a replacement within the second. The client
+    // has had the handler for this all along; nothing ever reached it.
+    case "runtime_exit":
+      return { ...base, type: "runtime_exit", deliberate: event.deliberate === true };
     // The server reads Pi's own session file after a turn and republishes it as
     // the authority on what was said. Without a case here it fell through to
     // the opaque `pi_event`, so the browser kept its optimistic message ids -
@@ -257,7 +265,12 @@ export class PiRpcAdapter {
   waitForSession(id) { return this.manager.waitForSession(id); }
   attach(id, socket) {
     const replay = this.manager.attach(id, socket);
-    return replay ? normalizePiBackendEvent(replay) : null;
+    // Through the same serializer every other event leaves by. Normalizing
+    // without stripping left `pi` on the replay, and the stream sends this one
+    // straight out -- so a reconnect was the single path that put native Pi in
+    // front of the browser, carrying a second copy of the whole generation
+    // snapshot with it.
+    return replay ? this.toClientEvent(replay) : null;
   }
   queue(id, type, message, options) { return this.manager.queueAccepted(id, type, message, options); }
   clearQueue(id) { return this.manager.clearQueue(id); }
