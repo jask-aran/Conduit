@@ -20,13 +20,13 @@ test("projects a live generation directly from ordered Pi blocks", () => {
       assistantMessages: [{
         id: "m1",
         blocks: [
-          { type: "thinking", identity: "g1:m1:0", contentIndex: 0, text: "Planning", status: "complete" },
-          { type: "text", identity: "g1:m1:1", contentIndex: 1, text: "Inspecting files", status: "complete" },
-          { type: "toolCall", identity: "g1:m1:2", contentIndex: 2, toolCallId: "call_1", name: "read", status: "complete" },
+          { kind: "thinking", identity: "g1:m1:0", contentIndex: 0, text: "Planning", status: "complete" },
+          { kind: "text", identity: "g1:m1:1", contentIndex: 1, text: "Inspecting files", status: "complete" },
+          { kind: "tool_call", identity: "g1:m1:2", contentIndex: 2, toolCallId: "call_1", name: "read", status: "complete" },
         ],
       }, {
         id: "m2",
-        blocks: [{ type: "text", identity: "g1:m2:0", contentIndex: 0, text: "Here is the answer", status: "streaming" }],
+        blocks: [{ kind: "text", identity: "g1:m2:0", contentIndex: 0, text: "Here is the answer", status: "streaming" }],
       }],
     },
   });
@@ -53,7 +53,7 @@ test("does not project persisted partials beside their resumed active generation
     toolExecutions: {},
     assistantMessages: [{
       id: "m1",
-      blocks: [{ type: "thinking", identity: "g1:m1:0", contentIndex: 0, text: "Current plan", status: "streaming" }],
+      blocks: [{ kind: "thinking", identity: "g1:m1:0", contentIndex: 0, text: "Current plan", status: "streaming" }],
     }],
   };
   const rows = buildTurnRows([
@@ -79,7 +79,7 @@ test("reports an executing tool and a persisted interrupted trace", () => {
       toolExecutions: { call_1: { toolCallId: "call_1", name: "bash", status: "running" } },
       assistantMessages: [{
         id: "a1",
-        blocks: [{ type: "toolCall", identity: "g1:a1:0", contentIndex: 0, toolCallId: "call_1", name: "bash", status: "complete" }],
+        blocks: [{ kind: "tool_call", identity: "g1:a1:0", contentIndex: 0, toolCallId: "call_1", name: "bash", status: "complete" }],
       }],
     },
   });
@@ -112,7 +112,7 @@ test("projects partial continuation through Active Generation without a flattene
       toolExecutions: {},
       assistantMessages: [{
         id: "m1",
-        blocks: [{ type: "text", identity: "g_continue:m1:0", contentIndex: 0, text: " continues here.", status: "streaming" }],
+        blocks: [{ kind: "text", identity: "g_continue:m1:0", contentIndex: 0, text: " continues here.", status: "streaming" }],
       }],
     },
   });
@@ -131,7 +131,7 @@ test("keeps the answer display key across live and persisted projections", () =>
       toolExecutions: {},
       assistantMessages: [{
         id: "m_live",
-        blocks: [{ type: "text", identity: "g_live:m_live:0", contentIndex: 0, text: "Partial answer", status: "streaming" }],
+        blocks: [{ kind: "text", identity: "g_live:m_live:0", contentIndex: 0, text: "Partial answer", status: "streaming" }],
       }],
     },
   });
@@ -158,8 +158,8 @@ test("keeps consecutive final assistant messages in the answer area", () => {
         { kind: "tool_call", toolCallId: "call_1", name: "web_search", input: {} },
       ],
     },
-    { id: "a2", role: "assistant", content: "The main answer.", stopReason: "stop", blocks: [{ type: "text", text: "The main answer." }] },
-    { id: "a3", role: "assistant", content: "A short follow-up.", stopReason: "stop", blocks: [{ type: "text", text: "A short follow-up." }] },
+    { id: "a2", role: "assistant", content: "The main answer.", stopReason: "stop", blocks: [{ kind: "text", text: "The main answer." }] },
+    { id: "a3", role: "assistant", content: "A short follow-up.", stopReason: "stop", blocks: [{ kind: "text", text: "A short follow-up." }] },
   ], [{ id: "call_1", name: "web_search", done: true }]);
 
   const answers = rows.filter((row) => row.type === "message" && row.value.role === "assistant");
@@ -196,7 +196,7 @@ test("projects empty and partial assistant errors as highlighted message rows", 
         provider: "example-provider",
         model: "example-model",
         timestamp: "2026-08-12T09:48:47.341Z",
-        blocks: [{ type: "text", identity: "g_error:m_error:0", contentIndex: 0, text: "Partial response", status: "complete" }],
+        blocks: [{ kind: "text", identity: "g_error:m_error:0", contentIndex: 0, text: "Partial response", status: "complete" }],
       }],
     },
   });
@@ -269,13 +269,13 @@ test("indexes live blocks to one trace or answer row", () => {
     assistantMessages: [{
       id: "m1",
       blocks: [
-        { type: "thinking", identity: "g_index:m1:0", contentIndex: 0, text: "Plan", status: "complete" },
-        { type: "text", identity: "g_index:m1:1", contentIndex: 1, text: "Narration", status: "complete" },
-        { type: "toolCall", identity: "g_index:m1:2", contentIndex: 2, toolCallId: "call_1", name: "read", status: "streaming" },
+        { kind: "thinking", identity: "g_index:m1:0", contentIndex: 0, text: "Plan", status: "complete" },
+        { kind: "text", identity: "g_index:m1:1", contentIndex: 1, text: "Narration", status: "complete" },
+        { kind: "tool_call", identity: "g_index:m1:2", contentIndex: 2, toolCallId: "call_1", name: "read", status: "streaming" },
       ],
     }, {
       id: "m2",
-      blocks: [{ type: "text", identity: "g_index:m2:0", contentIndex: 0, text: "Answer", status: "streaming" }],
+      blocks: [{ kind: "text", identity: "g_index:m2:0", contentIndex: 0, text: "Answer", status: "streaming" }],
     }],
   };
   const messages = [{ id: "u1", role: "user", content: "Inspect this" }];
@@ -303,7 +303,7 @@ test("keeps a recovered live error in the trace while it is still generating", (
       toolExecutions: {},
       assistantMessages: [
         { id: "m_error", stopReason: "error", errorMessage: "Temporary provider failure", blocks: [] },
-        { id: "m_retry", stopReason: null, blocks: [{ type: "text", identity: "g_recovered:m_retry:0", contentIndex: 0, text: "Recovered answer", status: "complete" }] },
+        { id: "m_retry", stopReason: null, blocks: [{ kind: "text", identity: "g_recovered:m_retry:0", contentIndex: 0, text: "Recovered answer", status: "complete" }] },
       ],
     },
   });

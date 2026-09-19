@@ -145,13 +145,13 @@ test("live harness measures visible text deltas without counting thinking blocks
       socket.send(JSON.stringify({
         type: "content_block_delta",
         generationId: "generation-1",
-        blockType: "thinking",
+        blockKind: "thinking",
         delta: "Hidden reasoning",
       }));
       socket.send(JSON.stringify({
         type: "content_block_delta",
         generationId: "generation-1",
-        blockType: "text",
+        blockKind: "text",
         delta: visibleText,
       }));
       socket.send(JSON.stringify({ type: "generation_settled", generationId: "generation-1" }));

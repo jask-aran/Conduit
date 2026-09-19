@@ -132,12 +132,12 @@ export function reduceActiveGeneration(current, event) {
       if (!message) break;
       const existing = message.blocks.find((block) => block.contentIndex === event.contentIndex);
       const block = upsertBlock(message, {
-        type: event.blockType,
+        kind: event.blockKind,
         contentIndex: event.contentIndex,
         status: "streaming",
         identity: contentBlockIdentity(event.messageId, event.contentIndex),
       });
-      if (event.blockType === "toolCall") block.argumentsText = `${existing?.argumentsText || ""}${event.delta}`;
+      if (event.blockKind === "tool_call") block.argumentsText = `${existing?.argumentsText || ""}${event.delta}`;
       else block.text = `${existing?.text || ""}${event.delta}`;
       break;
     }
@@ -257,9 +257,9 @@ export function textBlockClassifications(state) {
   const result = {};
   for (const message of state.assistantMessages || []) {
     const interim = message.stopReason === "toolUse"
-      || (message.blocks || []).some((block) => block.type === "toolCall");
+      || (message.blocks || []).some((block) => block.kind === "tool_call");
     for (const block of message.blocks || []) {
-      if (block.type === "text") result[block.identity] = interim ? "interim" : "answer";
+      if (block.kind === "text") result[block.identity] = interim ? "interim" : "answer";
     }
   }
   return result;
@@ -268,7 +268,7 @@ export function textBlockClassifications(state) {
 /** The same question, for a message the server is about to state as finished. */
 export function messageIsInterim(message) {
   return Boolean(message && (message.stopReason === "toolUse"
-    || (message.blocks || []).some((block) => block.type === "toolCall")));
+    || (message.blocks || []).some((block) => block.kind === "tool_call")));
 }
 
 export function activeGenerationFromPersistedMessages(generationId, messages, { toolExecutions = {} } = {}) {
@@ -292,10 +292,19 @@ export function activeGenerationFromPersistedMessages(generationId, messages, { 
   return state;
 }
 
+/**
+ * A message Pi has already written, rebuilt as a generation view of it.
+ *
+ * The reads are Pi's, because this is reading Pi's stored content. What it
+ * builds is Conduit's, and it has to be identical to what the live reducer
+ * builds from the same turn arriving as deltas -- that equivalence is asserted
+ * directly, and it is what lets a reconnecting browser be given the view it
+ * would have had if it had never dropped the socket.
+ */
 function normalizePersistedBlocks(messageId, content) {
   if (!Array.isArray(content)) {
     return content == null || content === "" ? [] : [{
-      type: "text",
+      kind: "text",
       contentIndex: 0,
       text: String(content),
       status: "complete",
@@ -304,14 +313,14 @@ function normalizePersistedBlocks(messageId, content) {
   }
   return content.flatMap((block, contentIndex) => {
     if (block?.type === "text") return [{
-      type: "text",
+      kind: "text",
       contentIndex,
       text: String(block.text || ""),
       status: "complete",
       identity: contentBlockIdentity(messageId, contentIndex),
     }];
     if (block?.type === "thinking") return [{
-      type: "thinking",
+      kind: "thinking",
       contentIndex,
       text: String(block.thinking || ""),
       redacted: Boolean(block.redacted),
@@ -319,11 +328,11 @@ function normalizePersistedBlocks(messageId, content) {
       identity: contentBlockIdentity(messageId, contentIndex),
     }];
     if (block?.type === "toolCall") return [{
-      type: "toolCall",
+      kind: "tool_call",
       contentIndex,
       toolCallId: String(block.id || ""),
       name: String(block.name || ""),
-      arguments: block.arguments,
+      input: block.arguments,
       status: "complete",
       identity: contentBlockIdentity(messageId, contentIndex),
     }];

@@ -212,13 +212,13 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
             ? state.assistantMessages[messageIndex]?.blocks[existingIndex]
             : null;
           const block = upsertBlock(event.messageId, event.contentIndex, {
-            type: event.blockType,
+            kind: event.blockKind,
             contentIndex: event.contentIndex,
             status: "streaming",
             identity: contentBlockIdentity(event.messageId, event.contentIndex),
           });
           if (!block) break;
-          const field = event.blockType === "toolCall" ? "argumentsText" : "text";
+          const field = event.blockKind === "tool_call" ? "argumentsText" : "text";
           const value = `${existing?.[field] || ""}${event.delta}`;
           setPath([...blockPath(block.messageIndex, block.blockIndex), field], value);
           break;

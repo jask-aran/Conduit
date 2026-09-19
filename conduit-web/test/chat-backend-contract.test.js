@@ -19,7 +19,7 @@ test("Pi normalizer fixtures keep generation-local sequence and identity", () =>
       // the name cannot be mistaken for one from another turn.
       assert.match(event.messageId, new RegExp(`^${generationId}:m\\d+$`), name);
       assert.ok(Number.isInteger(event.contentIndex), name);
-      assert.ok(["text", "thinking", "toolCall"].includes(event.blockType), name);
+      assert.ok(["text", "thinking", "tool_call"].includes(event.blockKind), name);
     }
   }
 });
@@ -30,7 +30,7 @@ test("delivery coalescing keeps the current Pi block key and complete text", () 
     generationId: "g1",
     seq: 4,
     messageId: "m2",
-    blockType: "text",
+    blockKind: "text",
     contentIndex: 3,
     delta: "Hello",
   };

@@ -171,10 +171,10 @@ export function createTimelineStore(
     }
 
     if (current.type !== "trace") return null;
-    const nextSegment = block.type === "toolCall"
+    const nextSegment = block.kind === "tool_call"
       ? buildLiveToolSegment(inputGeneration, block)
       : {
-        kind: block.type === "thinking" ? "thinking" : "narration",
+        kind: block.kind === "thinking" ? "thinking" : "narration",
         id: block.identity,
         text: block.text || "",
         live: block.status === "streaming",

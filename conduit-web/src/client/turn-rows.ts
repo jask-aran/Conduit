@@ -2,14 +2,23 @@ import { textBlockClassifications } from "../active-generation.js";
 import { mergeContinuation } from "../continuation.js";
 import type { ContentBlock, Message, ToolItem } from "./api/contracts";
 
+/**
+ * A block of a message still arriving.
+ *
+ * The same block a settled message states, called the same things, with what
+ * streaming needs on top: `contentIndex` is how a delta finds the block it
+ * belongs to, `identity` is what a row is keyed on while it is being written,
+ * and `status` is whether it is still coming. Not a second vocabulary -- this
+ * one, before the turn finished.
+ */
 type LiveBlock = {
-  type: "thinking" | "text" | "toolCall";
+  kind: "thinking" | "text" | "tool_call";
   identity: string;
   contentIndex: number;
   text?: string;
   toolCallId?: string;
   name?: string;
-  arguments?: unknown;
+  input?: unknown;
   status?: string;
 };
 
@@ -186,15 +195,15 @@ export function buildLiveProjectionIndex(
     const answerBlocks = new Set<string>();
     for (const block of assistant.blocks) {
       activeBlockCount += 1;
-      if (block.type === "thinking" || (block.type === "text" && classifications[block.identity] === "interim")) {
+      if (block.kind === "thinking" || (block.kind === "text" && classifications[block.identity] === "interim")) {
         blockLocations.set(block.identity, { kind: "trace", rowKey: traceRowKey, segmentIndex });
         segmentIndex += 1;
-      } else if (block.type === "toolCall") {
+      } else if (block.kind === "tool_call") {
         blockLocations.set(block.identity, { kind: "trace", rowKey: traceRowKey, segmentIndex });
         const toolCallId = block.toolCallId || block.identity;
         toolLocations.set(toolCallId, { rowKey: traceRowKey, segmentIndex });
         segmentIndex += 1;
-      } else if (block.type === "text") {
+      } else if (block.kind === "text") {
         answerBlocks.add(block.identity);
       }
     }
@@ -232,7 +241,7 @@ export function buildLiveAnswerRow(
   const answerIdentities = index.answerBlockIdentities.get(assistantId);
   if (!assistant || !answerIdentities) return null;
   const answer = assistant.blocks
-    .filter((block) => block.type === "text" && answerIdentities.has(block.identity))
+    .filter((block) => block.kind === "text" && answerIdentities.has(block.identity))
     .map((block) => block.text || "")
     .join("\n");
   const terminalError = generation.status === "failed"
@@ -273,7 +282,7 @@ export function buildLiveToolSegment(
   return {
     kind: "tool",
     id: `tool:${toolCallId}`,
-    tool: buildLiveToolItem(toolCallId, execution, { name: block.name, args: block.arguments }),
+    tool: buildLiveToolItem(toolCallId, execution, { name: block.name, args: block.input }),
   };
 }
 
@@ -332,15 +341,15 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null): Turn
   let answerIndex = 0;
   for (const assistant of generation.assistantMessages) {
     const answer = assistant.blocks
-      .filter((block) => block.type === "text" && classifications[block.identity] === "answer")
+      .filter((block) => block.kind === "text" && classifications[block.identity] === "answer")
       .map((block) => block.text || "")
       .join("\n");
     for (const block of assistant.blocks) {
-      if (block.type === "thinking") {
+      if (block.kind === "thinking") {
         segments.push({ kind: "thinking", id: block.identity, text: block.text || "", live: block.status === "streaming" });
-      } else if (block.type === "text" && classifications[block.identity] === "interim") {
+      } else if (block.kind === "text" && classifications[block.identity] === "interim") {
         segments.push({ kind: "narration", id: block.identity, text: block.text || "", live: block.status === "streaming" });
-      } else if (block.type === "toolCall") {
+      } else if (block.kind === "tool_call") {
         segments.push(buildLiveToolSegment(generation, block));
       }
     }

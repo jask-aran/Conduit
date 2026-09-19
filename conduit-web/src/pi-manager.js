@@ -181,7 +181,7 @@ function socketBufferedAmount(socket) {
 
 export function deliveryDeltaKey(event) {
   if (event.type === "content_block_delta") {
-    return `structured:${event.generationId}:${event.messageId}:${event.blockType}:${event.contentIndex}`;
+    return `structured:${event.generationId}:${event.messageId}:${event.blockKind}:${event.contentIndex}`;
   }
   return null;
 }
@@ -233,24 +233,6 @@ const ABORT_TERMINAL_EVENTS = new Set(["tool_execution_end", "message_end", "tur
 const SLOW_RPC_MS = 2_000;
 /** How long a request will wait for a freshly spawned Pi to say anything at all. */
 const BOOT_WAIT_MS = 20_000;
-
-/**
- * Pi's block spelling, in Conduit's.
- *
- * This is the whole of what an adapter owes the transcript vocabulary: its own
- * names for the parts of a message, turned into the names the ops are written
- * in. Doing it here rather than inside each op is what stops the two spellings
- * travelling side by side, which is how one of them ended up being read for
- * text and the other for tool calls in the same close.
- */
-const neutralBlock = (block) => {
-  if (block.type === "text") return { kind: "text", text: block.text || "" };
-  if (block.type === "thinking") return { kind: "thinking", text: block.text || "" };
-  if (block.type === "toolCall") {
-    return { kind: "tool_call", toolCallId: block.toolCallId || block.identity, name: block.name, input: block.arguments };
-  }
-  return { kind: block.type };
-};
 
 export class PiManager extends EventEmitter {
   constructor({
@@ -1773,7 +1755,9 @@ export class PiManager extends EventEmitter {
       // it arrive -- but the model will never see it again. Saying so is the
       // op's job; what is said here is only that Pi cannot keep a partial.
       keepsPartial: PI_CAPABILITIES.interruptKeepsPartial,
-      blocks: blocks.map(neutralBlock),
+      // The generation already holds Conduit's blocks -- Pi's names were turned
+      // into them as the deltas arrived -- so a close states what it has.
+      blocks,
     }));
     return id;
   }

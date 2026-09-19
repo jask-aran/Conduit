@@ -420,7 +420,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       && pendingTextDelta.generationId === event.generationId
       && pendingTextDelta.messageId === event.messageId
       && pendingTextDelta.contentIndex === event.contentIndex
-      && pendingTextDelta.blockType === event.blockType) {
+      && pendingTextDelta.blockKind === event.blockKind) {
       // The current same-block batch is full. Move it behind an animation
       // frame so the renderer can commit before the next batch is reduced.
       const previous = pendingTextDelta;
@@ -638,8 +638,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     } else {
       const blocks = next.assistantMessages.flatMap((message) => message.blocks);
       const latest = blocks.at(-1);
-      setThinking(latest?.type === "thinking" && latest.status === "streaming");
-      setResponding(latest?.type === "text" && latest.status === "streaming");
+      setThinking(latest?.kind === "thinking" && latest.status === "streaming");
+      setResponding(latest?.kind === "text" && latest.status === "streaming");
       const runningTool = Object.values(next.toolExecutions).find((tool) => tool.status === "running");
       setActiveToolName(runningTool?.name || null);
       setRetry((next as { retry?: RetryState | null }).retry || null);

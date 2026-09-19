@@ -15,7 +15,7 @@ export function sameTextDeltaBlock(left: StructuredGenerationEvent | null, right
     && left.generationId === right.generationId
     && left.messageId === right.messageId
     && left.contentIndex === right.contentIndex
-    && left.blockType === right.blockType);
+    && left.blockKind === right.blockKind);
 }
 
 export function canCoalesceTextDelta(

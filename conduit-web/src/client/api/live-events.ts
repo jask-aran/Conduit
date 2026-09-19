@@ -205,24 +205,6 @@ function protocolMessage(value: unknown): ProtocolMessage {
   };
 }
 
-/**
- * The live delta channel's blocks, in the shape the live view reads.
- *
- * This is the last of the round trip: the generation view is still modelled in
- * Pi's dialect, so a completed message coming from any other harness is
- * translated into it here. A stated transcript no longer goes through this --
- * `message.close` carries Conduit's own spelling and the rows read it directly
- * -- which leaves the conversion where the dialect actually still lives.
- */
-function protocolBlocks(value: unknown): unknown[] {
-  return list(value).map((block) => {
-    const item = record(block);
-    return item.kind === "tool_call"
-      ? { ...item, type: "toolCall", arguments: item.input }
-      : { ...item, type: item.kind };
-  });
-}
-
 function logStamp(value: unknown): LogStamp | undefined {
   const source = record(value);
   const id = optionalText(source.id);
@@ -258,10 +240,10 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
       if (phase === "delta") return {
         type: "content_block_delta", generationId, seq: seq ?? 0,
         messageId: text(source.messageId), contentIndex: number(source.contentIndex) ?? 0,
-        blockType: text(source.blockKind), delta: text(source.delta),
+        blockKind: text(source.blockKind), delta: text(source.delta),
       };
       return { type: "assistant_message_completed", generationId, seq: seq ?? 0,
-        messageId: text(source.messageId), blocks: protocolBlocks(source.blocks),
+        messageId: text(source.messageId), blocks: list(source.blocks),
         stopReason: text(source.stopReason || "stop"), errorMessage: optionalText(source.errorMessage) };
     }
     case "tool_activity": return {

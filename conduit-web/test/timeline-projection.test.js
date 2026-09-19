@@ -35,9 +35,9 @@ function makeProjectionCase({ persistedRowCount, activeMessageCount, activeBlock
     for (let blockIndex = 0; blockIndex < activeBlockCount; blockIndex += 1) {
       const identity = `g_projection:m${messageIndex}:${blockIndex}`;
       if (messageIndex === 0 && blockIndex === activeBlockCount - 1) {
-        blocks.push({ type: "text", identity, contentIndex: blockIndex, text: "Answer", status: "streaming" });
+        blocks.push({ kind: "text", identity, contentIndex: blockIndex, text: "Answer", status: "streaming" });
       } else {
-        blocks.push({ type: "thinking", identity, contentIndex: blockIndex, text: "Plan", status: "complete" });
+        blocks.push({ kind: "thinking", identity, contentIndex: blockIndex, text: "Plan", status: "complete" });
       }
     }
     assistantMessages.push({ id: `m${messageIndex}`, blocks });
