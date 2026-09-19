@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { wasAborted } from "./abort-signature.js";
+import { messageIsInterim } from "./active-generation.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { CONTINUE_PROMPT, mergeContinuation } from "./continuation.js";
 import { wasDiscarded } from "./abort-signature.js";
@@ -537,6 +538,7 @@ export async function removeProjectSessions(project) {
 export function messagesFromEntries(entries) {
   const messages = [];
   let continuation = false;
+  let answers = null;
   entries.forEach((entry, index) => {
     if (entry.type !== "message" || !entry.message?.role) return [];
     const role = entry.message.role;
@@ -569,6 +571,18 @@ export function messagesFromEntries(entries) {
         { keepsPartial: PI_CAPABILITIES.interruptKeepsPartial }) ? { discarded: true } : {}),
       attachments: envelope?.attachments || [],
     };
+    // The same two things the live stream states, stated by the file as well.
+    //
+    // Reading a session back used to say neither, so a reload put the browser
+    // straight back to the guessing the socket path had already stopped doing:
+    // answer-or-narration read off the shape of the turn, and tools matched to
+    // turns by timestamp. The file is ordered, so both are read off it rather
+    // than inferred -- the prompt an answer answers is the prompt above it, and
+    // a message is the turn talking as it works when it called a tool.
+    if (role === "assistant") {
+      message.interim = messageIsInterim(message);
+      message.answers = answers;
+    }
     if (role === "assistant" && continuation) {
       if (!message.content) return;
       const previous = messages.findLast((item) => item.role === "assistant");
@@ -583,6 +597,7 @@ export function messagesFromEntries(entries) {
         // partial that has been written past is no longer the thing the agent
         // has no record of.
         previous.discarded = message.discarded === true;
+        previous.interim = message.interim;
         previous.continued = true;
         previous.timestamp = message.timestamp || previous.timestamp;
         continuation = false;
@@ -590,6 +605,7 @@ export function messagesFromEntries(entries) {
       }
     }
     if (role !== "toolResult") continuation = false;
+    if (role === "user") answers = message.id;
     messages.push(message);
   });
   return messages;

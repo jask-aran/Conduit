@@ -359,3 +359,79 @@ test("an answer stays an answer when a later message calls a tool", () => {
   assert.equal(answers[0].value.content, "Once upon a time…");
   assert.equal(rows.some((row) => row.type === "trace"), true, "the tool still shows in the trace");
 });
+
+/**
+ * A reload draws the same rows the socket drew, for the same reason.
+ *
+ * The live stream states whether a message is the turn's answer or the turn
+ * talking as it works, and which prompt each answer answers. Reading a session
+ * file back stated neither, so a refresh quietly fell through to the two
+ * fallbacks underneath: answer-or-narration read off the shape of the turn, and
+ * tools matched to turns by timestamp. Those are the guesses that put one
+ * turn's work beneath another turn's prompt, and a reload is exactly when they
+ * had no supervision. The file is ordered, so both are read off it instead.
+ */
+test("a session read back from disk states its own rows", async () => {
+  const { projectSessionEntries } = await import("../src/session-store.js");
+  const entry = (id, message) => ({ type: "message", id, timestamp: "2026-01-01T00:00:00.000Z", message });
+  const { messages, tools } = projectSessionEntries([
+    entry("u1", { role: "user", content: "fix the bug" }),
+    entry("a1", {
+      role: "assistant", stopReason: "toolUse",
+      content: [{ type: "text", text: "Let me look." }, { type: "toolCall", id: "t1", name: "read", arguments: {} }],
+    }),
+    entry("r1", { role: "toolResult", toolCallId: "t1", toolName: "read", content: "ok" }),
+    entry("a2", { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Fixed it." }] }),
+  ]);
+
+  // Stated, not inferred: the narration says it is narration and the answer
+  // says which prompt it answers.
+  assert.deepEqual(messages.filter((message) => message.role === "assistant")
+    .map(({ interim, answers }) => ({ interim, answers })),
+  [{ interim: true, answers: "u1" }, { interim: false, answers: "u1" }]);
+
+  const rows = buildTurnRows(messages, tools);
+  assert.deepEqual(rows.map((row) => row.type), ["message", "trace", "message"]);
+  assert.equal(rows[0].value.content, "fix the bug");
+  assert.equal(rows[2].value.content, "Fixed it.");
+  // The tool sits in the trace because its message said it called it, not
+  // because its timestamp fell inside the turn.
+  assert.deepEqual(rows[1].value.segments.map((segment) => segment.kind), ["narration", "tool"]);
+});
+
+/**
+ * The case the shape-reading fallback gets wrong.
+ *
+ * "Anything before the turn's last tool call is narration" is right for a turn
+ * that ran straight through and wrong for one that answered and then kept
+ * working -- a steer, above all, where the model finishes what it was saying
+ * and then goes off in the new direction. The message itself knows: it called
+ * no tool and it did not stop to use one, so it is an answer wherever it sits.
+ */
+test("an answer that is followed by more tool work is still an answer", async () => {
+  const { projectSessionEntries } = await import("../src/session-store.js");
+  const entry = (id, message) => ({ type: "message", id, timestamp: "2026-01-01T00:00:00.000Z", message });
+  const { messages, tools } = projectSessionEntries([
+    entry("u1", { role: "user", content: "what did you find?" }),
+    entry("a1", { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Two failing tests." }] }),
+    entry("a2", {
+      role: "assistant", stopReason: "toolUse",
+      content: [{ type: "toolCall", id: "t1", name: "read", arguments: {} }],
+    }),
+    entry("r1", { role: "toolResult", toolCallId: "t1", toolName: "read", content: "ok" }),
+    entry("a3", { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "And now three." }] }),
+  ]);
+
+  const said = (rows) => rows.map((row) => (row.type === "message" ? row.value.content : "trace"));
+  // A turn draws its working above its answer, so the two answers meet in one
+  // bubble -- but both of them are in it.
+  assert.deepEqual(said(buildTurnRows(messages, tools)),
+    ["what did you find?", "trace", "Two failing tests.\n\nAnd now three."]);
+
+  // Without the statement there is only the shape to go on, and the shape says
+  // the first answer came before a tool call, so it is filed as narration and
+  // the reader finds it inside a collapsed trace.
+  const unstated = messages.map(({ interim, ...message }) => message);
+  assert.deepEqual(said(buildTurnRows(unstated, tools)),
+    ["what did you find?", "trace", "And now three."]);
+});
