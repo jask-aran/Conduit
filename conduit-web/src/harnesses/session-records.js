@@ -1,4 +1,5 @@
 import { isLoggedEvent } from "../server/chat-log.js";
+import { SocketDelivery } from "./socket-delivery.js";
 
 // The live-record store every non-Pi adapter needs: the id and chat indexes, the
 // attached browser sockets, and the replay buffer. Codex and ChatGPT Web wrote
@@ -16,8 +17,12 @@ export class SessionRecords {
    * @param onPublish side effect before broadcast, e.g. the ChatGPT Web journal
    * @param logs the per-chat order, for a backend whose transcript is stated
    */
-  constructor({ capabilities, backend, extras = () => ({}), onPublish = null, logs = null }) {
+  constructor({ capabilities, backend, extras = () => ({}), onPublish = null, logs = null, delivery = null }) {
     this.logs = logs;
+    // Every harness gets the delivery discipline Pi had to itself: a frame's
+    // deltas merged into one send, and a socket that has stopped keeping up
+    // given paint to drop rather than a longer queue to work through.
+    this.delivery = delivery || new SocketDelivery();
     this.capabilities = capabilities;
     this.backend = backend;
     this.extras = extras;
@@ -112,7 +117,7 @@ export class SessionRecords {
     record.events.push(stamped);
     if (record.events.length > 500) record.events.splice(0, record.events.length - 500);
     this.onPublish?.(record, stamped);
-    for (const socket of record.clients) if (socket.readyState === 1) socket.send(JSON.stringify(stamped));
+    for (const socket of record.clients) this.delivery.send(socket, stamped);
     return stamped;
   }
 
@@ -122,8 +127,11 @@ export class SessionRecords {
     const record = this.get(id);
     if (!record) return null;
     record.clients.add(socket);
-    socket.once("close", () => record.clients.delete(socket));
-    for (const event of record.events) if (socket.readyState === 1) socket.send(JSON.stringify(event));
+    socket.once("close", () => { record.clients.delete(socket); this.delivery.detach(socket); });
+    // The replay is the catch-up, so it goes out whole and in order rather than
+    // through the merge: a browser that has just arrived has nothing to merge
+    // into, and the buffer is already bounded.
+    for (const event of record.events) if (socket.readyState === 1) socket.send(this.delivery.serialize(event));
     return this.runtimeState(record);
   }
 }
