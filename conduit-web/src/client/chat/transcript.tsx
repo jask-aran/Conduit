@@ -145,9 +145,11 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Tran
   let copyButton: HTMLButtonElement | undefined;
   const assistant = () => props.message.role !== "user";
   return <div class="response-actions">
+    {/* A prompt offers editing. Regenerating it is the same act as regenerating
+        the answer below, which already has a button, so there is one way to ask
+        for it rather than two that look like different things. */}
     <Show when={!assistant() && !props.message.pending && props.supports("fork")}>
       <Button variant="ghost" size="icon-sm" aria-label={props.chat.editingEntryId() === props.message.id ? "Cancel editing" : "Edit from here"} onClick={() => props.chat.edit(props.message)}><PencilIcon /></Button>
-      <Show when={props.supports("regenerate")}><Button variant="ghost" size="icon-sm" aria-label="Regenerate from here" onClick={() => void props.chat.regenerate(props.message.id)}><RefreshCwIcon /></Button></Show>
     </Show>
     <Show when={assistant()}>
       <Button

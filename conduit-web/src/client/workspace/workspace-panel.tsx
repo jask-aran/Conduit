@@ -93,17 +93,33 @@ function historyToolRun(node: HistoryNode): HistoryNode[] {
   return run;
 }
 
-function HistoryToolRun(props: { run: HistoryNode[]; activePath: Set<string>; leafId: string | null; connected: boolean }) {
+/**
+ * A run of tool calls, folded into one line the reader can open.
+ *
+ * The button in the header is the blunt instrument: it flips every run at once
+ * and forgets whatever was opened by hand, which is what makes it read as
+ * "collapse all" rather than as a setting arguing with each row. This is the
+ * fine one -- open this run, leave the rest alone.
+ */
+function HistoryToolRun(props: {
+  run: HistoryNode[]; activePath: Set<string>; leafId: string | null; connected: boolean;
+  open: boolean; onToggle: () => void;
+}) {
   // The run stands for a span of time, so it carries the last stamp in it.
   const last = () => props.run[props.run.length - 1]!;
   const active = () => props.run.some((node) => props.activePath.has(node.entry.id));
   const leaf = () => props.run.some((node) => props.leafId === node.entry.id);
   const detail = () => props.run.map((node) => historyEntryLabel(node)).join("\n");
-  return <div class="workspace-history-row" data-kind="tool" data-collapsed="true" data-active={active()} data-leaf={leaf()} title={detail()}>
+  return <button type="button" class="workspace-history-row workspace-history-run" data-kind="tool"
+    data-collapsed={props.open ? undefined : "true"} data-active={active()} data-leaf={leaf()}
+    aria-expanded={props.open} title={detail()} onClick={props.onToggle}>
       <Show when={props.connected}><span class="workspace-history-branch-tick" aria-hidden="true" /></Show>
       <Show when={historyEntryTime(last().entry)}>{(time) => <time class="workspace-history-time" datetime={last().entry.timestamp}>{time()}</time>}</Show>
-      <span class="workspace-history-text">{`${props.run.length} tool calls`}</span>
-    </div>;
+      <span class="workspace-history-text">
+        <ChevronDownIcon class="workspace-history-run-chevron" data-open={props.open ? "true" : "false"} aria-hidden="true" />
+        {`${props.run.length} tool calls`}
+      </span>
+    </button>;
 }
 
 function HistoryNodeRow(props: { node: HistoryNode; activePath: Set<string>; leafId: string | null; connected: boolean }) {
@@ -116,18 +132,30 @@ function HistoryNodeRow(props: { node: HistoryNode; activePath: Set<string>; lea
     </div>;
 }
 
-function HistoryNodes(props: { nodes: HistoryNode[]; activePath: Set<string>; leafId: string | null; connected?: boolean; depth?: number; collapseTools?: boolean }) {
+function HistoryNodes(props: { nodes: HistoryNode[]; activePath: Set<string>; leafId: string | null; connected?: boolean; depth?: number; collapseTools?: boolean; openRuns?: Set<string>; onToggleRun?: (id: string) => void }) {
   const primary = () => primaryHistoryIndex(props.nodes, props.activePath);
   const depth = () => props.depth ?? 0;
   const content = (node: HistoryNode, connected: boolean, level: number) => {
     const run = props.collapseTools ? historyToolRun(node) : [];
-    if (run.length > 1) return <>
-      <HistoryToolRun run={run} activePath={props.activePath} leafId={props.leafId} connected={connected} />
-      <HistoryNodes nodes={run[run.length - 1]!.children} activePath={props.activePath} leafId={props.leafId} connected={connected} depth={level} collapseTools={props.collapseTools} />
-    </>;
+    if (run.length > 1) {
+      // The run is named after the entry it starts at, so opening one survives
+      // the tree being reprojected around it.
+      const runId = run[0]!.entry.id;
+      const open = () => Boolean(props.openRuns?.has(runId));
+      return <>
+        <HistoryToolRun run={run} activePath={props.activePath} leafId={props.leafId} connected={connected}
+          open={open()} onToggle={() => props.onToggleRun?.(runId)} />
+        <Show when={open()}>
+          <For each={run}>{(step) =>
+            <HistoryNodeRow node={step} activePath={props.activePath} leafId={props.leafId} connected={connected} />
+          }</For>
+        </Show>
+        <HistoryNodes nodes={run[run.length - 1]!.children} activePath={props.activePath} leafId={props.leafId} connected={connected} depth={level} collapseTools={props.collapseTools} openRuns={props.openRuns} onToggleRun={props.onToggleRun} />
+      </>;
+    }
     return <>
       <Show when={!node.entry.hidden}><HistoryNodeRow node={node} activePath={props.activePath} leafId={props.leafId} connected={connected} /></Show>
-      <HistoryNodes nodes={node.children} activePath={props.activePath} leafId={props.leafId} connected={connected} depth={level} collapseTools={props.collapseTools} />
+      <HistoryNodes nodes={node.children} activePath={props.activePath} leafId={props.leafId} connected={connected} depth={level} collapseTools={props.collapseTools} openRuns={props.openRuns} onToggleRun={props.onToggleRun} />
     </>;
   };
   // Nesting is published as a depth rather than as padding on the wrapper: the
@@ -324,9 +352,26 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     stickHistoryToBottom();
   };
   const [collapseTools, setCollapseTools] = createSignal(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "history-collapse-tools") === "true");
+  // Runs the reader has opened by hand. Not persisted: it is a way of looking
+  // at the chat in front of you, not a preference about every chat.
+  const [openRuns, setOpenRuns] = createSignal<Set<string>>(new Set());
+  const toggleRun = (id: string) => setOpenRuns((current) => {
+    const next = new Set(current);
+    if (!next.delete(id)) next.add(id);
+    return next;
+  });
+  /**
+   * Collapse all, or expand all.
+   *
+   * It takes everything with it rather than reading what the reader has opened
+   * one run at a time: a button that had to work out whether "collapse all"
+   * meant anything from the current mix would sometimes do nothing when
+   * pressed, which is worse than blunt.
+   */
   const toggleCollapseTools = () => {
     const next = !collapseTools();
     setCollapseTools(next);
+    setOpenRuns(new Set<string>());
     writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "history-collapse-tools", String(next));
     stickHistoryToBottom();
   };
@@ -2190,7 +2235,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
           </div>
         </Show></div>
       <Show when={chatMode() === "history"}><Show when={!historyLoading()} fallback={<div class="workspace-panel-empty">Loading history…</div>}><Show when={historyTree()?.tree.length} fallback={<div class="workspace-panel-empty"><div><HistoryIcon /><Show when={props.artifactChatId?.()} fallback={<><strong>No chat open</strong><p>Open a chat to see its history.</p></>}><strong>No chat history</strong><p>Send a message to start this tree.</p></Show></div></div>}><div class="workspace-chat-history" role="tree" aria-label="Chat history" data-wrap={historyWrap() ? "true" : "false"}
-          ref={(element) => { historyScroller = element; stickHistoryToBottom(); }} onScroll={trackHistoryScroll}><HistoryNodes nodes={historyTree()!.tree} activePath={historyActivePath()} leafId={historyTree()!.leafId} collapseTools={collapseTools()} /></div></Show></Show></Show>
+          ref={(element) => { historyScroller = element; stickHistoryToBottom(); }} onScroll={trackHistoryScroll}><HistoryNodes nodes={historyTree()!.tree} activePath={historyActivePath()} leafId={historyTree()!.leafId} collapseTools={collapseTools()} openRuns={openRuns()} onToggleRun={toggleRun} /></div></Show></Show></Show>
       <Show when={chatMode() === "changes"}><WorkspaceDiffView
         title="Changed files"
         files={chatReview.files()}
