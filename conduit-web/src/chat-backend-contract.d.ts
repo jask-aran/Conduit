@@ -261,14 +261,66 @@ export interface RuntimeStateEvent extends EventBase {
   capabilities: ChatCapabilities;
 }
 
+/**
+ * What the transcript holds, stated by the adapter.
+ *
+ * These are the settled record, and the reason the browser does not have to
+ * work out what a turn meant from the paint it watched arrive. Paint --
+ * `assistant_content`, `tool_activity` -- may be merged or dropped under
+ * backpressure; an op may not. A `message.close` restates the message in full,
+ * so a dropped delta costs a repaint and nothing else.
+ *
+ * Every field is stated rather than inferred, including the two the browser
+ * used to guess: `answers`, the prompt a message answers, and `interim`,
+ * whether it is the turn's answer or the turn talking as it works. A harness
+ * that leaves them out is refused rather than guessed at.
+ *
+ * `after` is filled in by the chat's log, not by the adapter: where a message
+ * sits is the log's answer, because it is the thing that knows what the
+ * transcript's last word was.
+ */
+export type TranscriptOpEvent = EventBase & { type: "transcript_op" } & (
+  | { op: "message.open"; message: { id: string; role: "user" | "assistant"; [field: string]: unknown };
+      answers: string | null; after?: string | null }
+  | { op: "message.close"; messageId: string; stopReason: string | null; interim: boolean;
+      content: string; blocks: unknown[]; discarded?: true }
+  /** One row taken back (`keep`), the history cut after it, or cut through it. */
+  | { op: "message.drop"; messageId: string; keep?: boolean; inclusive?: boolean }
+  | { op: "tool.open"; toolCallId: string; name: string; input: unknown }
+  | { op: "tool.close"; toolCallId: string; output: unknown; isError: boolean }
+);
+
+/**
+ * Where this chat's order stands.
+ *
+ * The server numbers every event that changes what the transcript says, so a
+ * hole in the numbers is a fact rather than something inferred from messages
+ * that look duplicated. `log_state` tells a browser where the sequence is;
+ * `log_reset` tells one holding a number from a previous log to take a
+ * snapshot instead of being replayed into a sequence that no longer means the
+ * same thing.
+ */
+export type ChatLogEvent = EventBase & (
+  | { type: "log_state"; log: { id: string; seq: number } }
+  | { type: "log_reset"; log: { id: string; seq: number } }
+);
+
 export type OptionalCapabilityEvent = EventBase & (
   | { type: "queue_state"; queue: { steering: unknown[]; followUp: unknown[] } }
   | { type: "compaction"; active: boolean }
   | { type: "retry"; active: boolean; retry?: unknown }
   | { type: "user_message_committed"; message: unknown }
   /** The backend's own record of recent turns, published to repair live drift. */
-  | { type: "transcript_sync"; messages: unknown[]; tools: unknown[] }
+  | { type: "transcript_sync"; messages: unknown[]; tools: unknown[]; replace?: true }
   | { type: "generation_replay"; seq: number; generation: unknown }
+  /** Where the history now ends, so the browser cuts to it rather than deducing it. */
+  | { type: "history_truncated"; beforeMessageId: string | null; afterMessageId: string | null }
+  | { type: "history_forked"; beforeMessageId?: string | null; afterMessageId?: string | null }
+  /**
+   * The process is gone, and whether that was asked for. A deliberate exit
+   * settles the session; anything else is a drop the browser reconnects from.
+   */
+  | { type: "runtime_exit"; deliberate: boolean }
 );
 
 export type ChatBackendEvent =
@@ -281,4 +333,6 @@ export type ChatBackendEvent =
   | UsageEvent
   | SessionCheckpointEvent
   | RuntimeStateEvent
+  | TranscriptOpEvent
+  | ChatLogEvent
   | OptionalCapabilityEvent;

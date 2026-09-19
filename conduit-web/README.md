@@ -681,7 +681,8 @@ vocabulary are additive and must update this section in the same change.
 The future backend-neutral vocabulary and lifecycle state machine are defined
 in `../docs/chat-backend-contract.md` and
 `src/chat-backend-contract.d.ts`. They are additive contract artifacts only;
-the current Pi transport does not emit them yet.
+the Pi transport emits them through `serializePiV0`, which is the
+Pi-to-contract mapping; every other adapter constructs them directly.
 
 The rendering migration's structured protocol lives in
 `src/pi-event-normalizer.js` and `src/active-generation.js`. It assigns
