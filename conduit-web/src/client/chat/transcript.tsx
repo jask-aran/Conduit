@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createRenderEffect, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense } from "solid-js";
-import { ArrowDownIcon, CheckIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, TriangleAlertIcon } from "lucide-solid";
+import { ArrowDownIcon, CheckIcon, ChevronDownIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, ScissorsIcon, TriangleAlertIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { BooleanCapability, Message } from "../api/contracts";
 import { isChatContentActivity, type TranscriptSource } from "./transcript-source";
@@ -167,6 +167,39 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Tran
       <Show when={props.supports("regenerate") && props.precedingUserId}><Button variant="ghost" size="icon-sm" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(props.precedingUserId!)}><RefreshCwIcon /></Button></Show>
       <Show when={props.partialContinue && props.message.stopped}><Button variant="ghost" size="icon-sm" aria-label="Continue stopped response" onClick={() => void props.chat.continueResponse()}><PlayIcon /></Button></Show>
       <Show when={props.artifact}>{(entry) => <TurnArtifactButton artifact={entry()} chatId={props.chat.loadedId()!} />}</Show>
+    </Show>
+  </div>;
+}
+
+/**
+ * An answer the agent was interrupted writing, which it is not being given back.
+ *
+ * The text is real and the reader watched it arrive, so it is not taken away.
+ * But the conversation does not contain it -- ask a follow-up about it and the
+ * model has no idea what you mean -- so it is folded down to a line and says
+ * why. Opening it is for reading what was lost, not for carrying on from it.
+ */
+function DiscardedAnswer(props: { message: Message; renderer?: MarkdownRendererId; pacing?: IncremarkPacingMode }) {
+  const [open, setOpen] = createSignal(false);
+  const preview = () => {
+    const text = String(props.message.content || "").replace(/\s+/g, " ").trim();
+    return text.length > 110 ? `${text.slice(0, 110)}…` : text;
+  };
+  return <div class="discarded-answer" data-open={open() ? "true" : "false"}>
+    <button type="button" class="discarded-answer-header" aria-expanded={open()}
+      title="Interrupted before it finished. The agent kept no record of this, so it cannot be referred to."
+      onClick={() => setOpen(!open())}>
+      <ScissorsIcon aria-hidden="true" />
+      <span class="discarded-answer-preview">{preview()}</span>
+      <span class="discarded-answer-status"> · Interrupted, not kept</span>
+      <ChevronDownIcon class="discarded-answer-chevron" data-open={open() ? "true" : "false"} />
+    </button>
+    <Show when={open()}>
+      <div class="discarded-answer-body">
+        <Suspense fallback={<div class="markdown-skeleton" />}>
+          <ChatMarkdown renderer={props.renderer} pacing={props.pacing}>{props.message.content || ""}</ChatMarkdown>
+        </Suspense>
+      </div>
     </Show>
   </div>;
 }
@@ -947,9 +980,13 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
                 <Show when={!user() || review().text}><div data-slot="bubble" data-align={user() ? "end" : "start"} data-error={failed() ? "true" : undefined} data-editing={props.chat.editingEntryId() === message().id ? "true" : "false"} data-composer-surface={user() ? composerSurface() : undefined} class={user() ? "bubble bubble-user composer-surface-material" : "bubble bubble-assistant"}>
                   <div data-slot="bubble-content">
                     <Show when={user()} fallback={<>
-                      <Show when={message().content}><Suspense fallback={<div class="markdown-skeleton" />}>
-                        <ChatMarkdown renderer={markdownRenderer()} pacing={incremarkPacing()} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={() => settleAfterMarkdown(row)}>{message().content || ""}</ChatMarkdown>
-                      </Suspense></Show>
+                      <Show when={message().content}>
+                        <Show when={message().discarded} fallback={<Suspense fallback={<div class="markdown-skeleton" />}>
+                          <ChatMarkdown renderer={markdownRenderer()} pacing={incremarkPacing()} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={() => settleAfterMarkdown(row)}>{message().content || ""}</ChatMarkdown>
+                        </Suspense>}>
+                          <DiscardedAnswer message={message()} renderer={markdownRenderer()} pacing={incremarkPacing()} />
+                        </Show>
+                      </Show>
                       <Show when={failed()}>
                         <details class="assistant-error" open role="alert">
                           <summary><TriangleAlertIcon aria-hidden="true" /><strong>Request failed</strong></summary>

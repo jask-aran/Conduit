@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { startConduitHarness, waitFor } from "./helpers/conduit-harness.js";
 import { normalizeLiveEvent } from "../src/client/api/live-events.ts";
-import { applyTranscriptOp, mergeToolEvent } from "../src/client/timeline-order.ts";
+import { applyToolOp, applyTranscriptOp, isToolOp, mergeToolEvent } from "../src/client/timeline-order.ts";
 import { buildTurnRows } from "../src/client/turn-rows.ts";
 
 /** The browser, as far as the transcript is concerned. */
@@ -20,12 +20,18 @@ function project(frames) {
   let tools = [];
   for (const frame of frames) {
     const wire = normalizeLiveEvent(frame);
-    if (wire.type === "transcript_op") messages = applyTranscriptOp(messages, wire);
-    if (wire.type.startsWith("tool_execution_")) {
+    // Exactly what the browser does with these: the statements decide what the
+    // transcript holds, and live activity only paints output arriving while a
+    // tool is still running.
+    if (wire.type === "transcript_op") {
+      if (isToolOp(wire)) tools = applyToolOp(tools, wire);
+      else messages = applyTranscriptOp(messages, wire);
+    }
+    if (wire.type === "tool_execution_updated") {
       tools = mergeToolEvent(tools, {
-        type: wire.type === "tool_execution_started" ? "tool_execution_start"
-          : wire.type === "tool_execution_updated" ? "tool_execution_update" : "tool_execution_end",
-        toolCallId: wire.toolCallId, toolName: wire.name, args: wire.arguments, result: wire.result,
+        type: "tool_execution_update",
+        toolCallId: wire.toolCallId, toolName: wire.name, args: wire.arguments,
+        partialResult: wire.partialResult,
       }).tools;
     }
   }

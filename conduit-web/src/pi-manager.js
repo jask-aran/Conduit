@@ -19,6 +19,9 @@ import {
 } from "./active-generation.js";
 import { createPiEventNormalizer } from "./pi-event-normalizer.js";
 import { projectSessionEntries, readSessionPage } from "./session-store.js";
+import { toolClose, toolOpen } from "./harnesses/transcript-ops.js";
+import { wasDiscarded } from "./abort-signature.js";
+import { PI_CAPABILITIES } from "./pi-capabilities.js";
 import { PiCommandCatalog } from "./pi-command-catalog.js";
 import { ChatLogs, isLoggedEvent } from "./server/chat-log.js";
 import { messageIsInterim } from "./active-generation.js";
@@ -1004,6 +1007,17 @@ export class PiManager extends EventEmitter {
       if (event.type === "assistant_message_completed" && event.messageId) {
         this.closeMessage(record, event.messageId, event.stopReason || null);
       }
+      // And what it ran. A tool used to reach the browser only as live
+      // activity, which meant a reconnecting client replayed the chat's order
+      // and got the messages back without the commands underneath them.
+      if (event.type === "tool_execution_started" && this.logFor(record)) {
+        this.publish(record, toolOpen({ toolCallId: event.toolCallId, name: event.name,
+          input: event.arguments, generationId: record.generation?.id || null }));
+      }
+      if (event.type === "tool_execution_completed" && this.logFor(record)) {
+        this.publish(record, toolClose({ toolCallId: event.toolCallId, output: event.result,
+          isError: event.isError, generationId: record.generation?.id || null }));
+      }
       if (["generation_stopped", "generation_settled", "generation_failed"].includes(event.type)) {
         this.dropUnwrittenMessages(record);
       }
@@ -1738,6 +1752,13 @@ export class PiManager extends EventEmitter {
       // browser is told, rather than deciding it from the shape of the turn
       // around the message.
       interim: messageIsInterim(written),
+      // Pi writes an interrupted message to its session file and then builds
+      // the next request without it. The text is real -- the reader watched it
+      // arrive -- but the model will never see it again, so the transcript is
+      // told that outright rather than showing it as ordinary conversation.
+      ...(wasDiscarded({ role: "assistant", stopReason,
+        content: blocks.filter((block) => block.type === "text").map((block) => block.text || "").join("") },
+      { keepsPartial: PI_CAPABILITIES.interruptKeepsPartial }) ? { discarded: true } : {}),
       // What the message says, answer or not. Interim text is the turn talking
       // as it works and the trace renders it, so a close that left it out took
       // commentary off the screen the moment the turn settled. `interim` above

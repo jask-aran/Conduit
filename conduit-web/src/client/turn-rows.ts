@@ -51,8 +51,12 @@ export interface LiveGenerationChange {
 }
 
 export type TraceSegment =
-  | { kind: "thinking"; id: string; text: string; live?: boolean }
-  | { kind: "narration"; id: string; text: string; live?: boolean }
+  // `discarded` is the server saying the harness is not carrying this text into
+  // the next request -- an interrupted turn on a backend that cannot keep a
+  // partial. Inside the trace it is struck through rather than collapsed: it is
+  // already behind the rollup, and hiding it twice would just lose it.
+  | { kind: "thinking"; id: string; text: string; live?: boolean; discarded?: boolean }
+  | { kind: "narration"; id: string; text: string; live?: boolean; discarded?: boolean }
   | { kind: "error"; id: string; message: Message }
   | { kind: "tool"; id: string; tool: ToolItem };
 
@@ -309,67 +313,17 @@ export function buildLiveToolItem(
   };
 }
 
-/** Commit final live tool records without assigning them to transcript turns. */
-export function settleGenerationTools(current: ToolItem[], generation: ActiveGenerationView): ToolItem[] {
-  const blocks = generation.assistantMessages.flatMap((message) => message.blocks)
-    .filter((block) => block.type === "toolCall");
-  if (!blocks.length) return current;
-  const settled = new Map(blocks.map((block) => {
-    const id = block.toolCallId || block.identity;
-    return [id, buildLiveToolItem(id, generation.toolExecutions[id], { name: block.name, args: block.arguments })];
-  }));
-  const next = current.map((tool) => settled.has(tool.id) ? { ...tool, ...settled.get(tool.id)! } : tool);
-  const known = new Set(current.map((tool) => tool.id));
-  for (const block of blocks) {
-    const id = block.toolCallId || block.identity;
-    if (!known.has(id)) next.push(settled.get(id)!);
-  }
-  return next;
-}
-
-/**
- * The turn as transcript messages, so it survives the live view.
+/*
+ * `settleGenerationTools` and `freezeGeneration` were here.
  *
- * A live generation is the only place a streaming turn exists, and the store
- * installs a fresh one the moment the next turn starts. Freezing the turn the
- * instant it stops puts it in the transcript, where nothing can take it away;
- * the sync that closes the same generation replaces it, matched by the
- * generationId each frozen message carries.
+ * Both existed to turn a finished live generation into transcript rows: the
+ * tools it ran, and the messages it wrote, assembled out of the deltas this
+ * client had drawn. The server states all of that now -- every message opened
+ * where it belongs and closed with what it says, every tool opened and closed
+ * with what it returned -- so assembling a second version here could only ever
+ * disagree with the first, which is what the reader saw as an answer changing
+ * shape after it had settled.
  */
-export function freezeGeneration(generation: ActiveGenerationView): Message[] {
-  const classifications = textBlockClassifications(generation) as Record<string, "interim" | "answer">;
-  const frozen: Message[] = [];
-  for (const assistant of generation.assistantMessages) {
-    const content = assistant.blocks
-      .filter((block) => block.type === "text" && classifications[block.identity] === "answer")
-      .map((block) => block.text || "")
-      .join("\n");
-    const blocks: ContentBlock[] = assistant.blocks.flatMap((block) => {
-      if (block.type === "thinking") return [{ type: "thinking", thinking: block.text || "" } as ContentBlock];
-      if (block.type === "toolCall") {
-        return [{ type: "toolCall", id: block.toolCallId || block.identity, name: block.name, arguments: block.arguments } as ContentBlock];
-      }
-      return [] as ContentBlock[];
-    });
-    if (!content.trim() && !blocks.length) continue;
-    frozen.push({
-      // The harness named this message when it started streaming, so the row
-      // frozen out of it keeps that name and the persisted copy replaces it by
-      // id rather than by guesswork.
-      id: assistant.id,
-      generationId: generation.id,
-      role: "assistant",
-      content,
-      blocks,
-      stopped: generation.status === "stopped",
-      stopReason: assistant.stopReason || (generation.status === "stopped" ? "aborted" : "stop"),
-      provider: assistant.provider || null,
-      model: assistant.model || null,
-      timestamp: assistant.timestamp || new Date().toISOString(),
-    });
-  }
-  return frozen;
-}
 
 function liveRows(generation: ActiveGenerationView, owner: Message | null): TurnRow[] {
   const classifications = textBlockClassifications(generation) as Record<string, "interim" | "answer">;
@@ -500,10 +454,11 @@ function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById
     return assistant.stopReason !== "toolUse" && assistantIndex > lastToolAssistantIndex;
   });
   for (const assistant of turn.assistants) {
+    const discarded = assistant.discarded === true;
     const thinking = thinkingOf(assistant);
-    if (thinking) segments.push({ kind: "thinking", id: `thinking:${assistant.id}`, text: thinking });
+    if (thinking) segments.push({ kind: "thinking", id: `thinking:${assistant.id}`, text: thinking, ...(discarded ? { discarded } : {}) });
     if (!answerAssistants.includes(assistant) && String(assistant.content || "").trim()) {
-      segments.push({ kind: "narration", id: `narration:${assistant.id}`, text: String(assistant.content) });
+      segments.push({ kind: "narration", id: `narration:${assistant.id}`, text: String(assistant.content), ...(discarded ? { discarded } : {}) });
     }
     for (const id of toolCallIdsOf(assistant)) {
       const tool = toolById.get(id);

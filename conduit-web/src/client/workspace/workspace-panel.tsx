@@ -37,7 +37,10 @@ interface DiffPayload { repository: boolean; branch?: string; upstream?: string 
 interface GitCommitDetail { hash: string; content: string; }
 type PanelTab = "files" | "diff" | "chat" | "terminal";
 type ChatMode = "history" | "changes";
-interface HistoryEntry { id: string; parentId: string | null; timestamp: string; type: string; display: string; kind: "user" | "assistant" | "tool" | "summary" | "system"; hidden: boolean; forkable: boolean; regeneratable: boolean; }
+// `discarded`: the harness kept this step in its tree but builds every later
+// request without it -- an answer it was interrupted writing. The row is shown
+// struck through so the history reads as what the agent actually has.
+interface HistoryEntry { id: string; parentId: string | null; timestamp: string; type: string; display: string; kind: "user" | "assistant" | "tool" | "summary" | "system"; hidden: boolean; discarded?: boolean; forkable: boolean; regeneratable: boolean; }
 interface HistoryNode { entry: HistoryEntry; children: HistoryNode[]; label?: string; }
 interface HistoryTree { mode: "linear" | "tree"; tree: HistoryNode[]; leafId: string | null; }
 type SourceControlMode = "changes" | "review" | "graph" | "patch";
@@ -106,7 +109,7 @@ function HistoryToolRun(props: { run: HistoryNode[]; activePath: Set<string>; le
 function HistoryNodeRow(props: { node: HistoryNode; activePath: Set<string>; leafId: string | null; connected: boolean }) {
   const node = () => props.node;
   const time = () => historyEntryTime(node().entry);
-  return <div class="workspace-history-row" data-kind={node().entry.kind} data-active={props.activePath.has(node().entry.id)} data-leaf={props.leafId === node().entry.id} title={`${time() ? `${new Date(node().entry.timestamp).toLocaleString()} · ` : ""}${historyEntryLabel(node())}`}>
+  return <div class="workspace-history-row" data-kind={node().entry.kind} data-discarded={node().entry.discarded ? "true" : undefined} data-active={props.activePath.has(node().entry.id)} data-leaf={props.leafId === node().entry.id} title={`${node().entry.discarded ? "Interrupted, not kept · " : ""}${time() ? `${new Date(node().entry.timestamp).toLocaleString()} · ` : ""}${historyEntryLabel(node())}`}>
       <Show when={props.connected}><span class="workspace-history-branch-tick" aria-hidden="true" /></Show>
       <Show when={time()}><time class="workspace-history-time" datetime={node().entry.timestamp}>{time()}</time></Show>
       <span class="workspace-history-text"><Show when={node().entry.kind === "user" || node().entry.kind === "assistant"} fallback={historyEntryLabel(node())}><strong>{node().entry.kind}:</strong>{` ${historyEntryLabel(node()).replace(/^\w+:\s*/, "")}`}</Show></span>

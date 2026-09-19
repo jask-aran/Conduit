@@ -437,3 +437,53 @@ test("a turn the user stopped reads back as stopped, not as a provider failure",
   assert.equal(ok.stopped, false);
   assert.equal(ok.stopReason, "stop");
 });
+
+/**
+ * Reading the file back has to say the same thing the live stream did.
+ *
+ * The socket marks an interrupted answer as something Pi is not carrying into
+ * the next request. A reload does not replay that socket -- it reads the
+ * session file -- so without this the mark survived until you refreshed, and
+ * the page came back showing a discarded answer as an ordinary one.
+ */
+test("an interrupted answer still reads as discarded after a reload", () => {
+  const entry = (id, message) => ({ type: "message", id, timestamp: "2026-01-01T00:00:00.000Z", message });
+  const messages = messagesFromEntries([
+    entry("u1", { role: "user", content: "a longer story" }),
+    entry("a1", { role: "assistant", content: "Alright — settle in.", stopReason: "aborted" }),
+    entry("u2", { role: "user", content: "make it about australia" }),
+    entry("a2", { role: "assistant", content: "Okay, a longer one.", stopReason: "stop" }),
+  ]);
+  assert.deepEqual(messages.map((message) => message.discarded), [undefined, true, undefined, undefined]);
+  // And a provider-reported cancellation reads the same way, since that is what
+  // stopping actually looks like on the wire.
+  const [cancelled] = messagesFromEntries([entry("a3", {
+    role: "assistant", content: "half", stopReason: "error", errorMessage: "This operation was aborted",
+  })]);
+  assert.equal(cancelled.discarded, true);
+});
+
+/**
+ * What the aborted-tool turn in a real chat looks like.
+ *
+ * Interrupting a running tool leaves Pi an empty assistant entry whose request
+ * was cancelled, sitting beside a tool result that Pi *does* carry forward. The
+ * turn is not discarded -- the model can see the command and that it was
+ * aborted -- and the empty entry has no text to lose, so nothing here is marked.
+ */
+test("an interrupted tool call is not a discarded answer", () => {
+  const entry = (id, message) => ({ type: "message", id, timestamp: "2026-01-01T00:00:00.000Z", message });
+  const messages = messagesFromEntries([
+    entry("u1", { role: "user", content: "run a 90s bash sleep foregrounded" }),
+    entry("a1", { role: "assistant", content: "", stopReason: "error", errorMessage: "This operation was aborted" }),
+    entry("u2", { role: "user", content: "Im now testing interrupting running tool calls" }),
+    entry("a2", { role: "assistant", content: "Got it — interruption works.", stopReason: "stop" }),
+  ]);
+  assert.deepEqual(messages.map((message) => message.discarded), [undefined, undefined, undefined, undefined]);
+  // The same cancellation with words in it is a different thing: that text was
+  // read, and the agent no longer has it.
+  const [written] = messagesFromEntries([entry("a3", {
+    role: "assistant", content: "Alright — settle in.", stopReason: "error", errorMessage: "This operation was aborted",
+  })]);
+  assert.equal(written.discarded, true);
+});

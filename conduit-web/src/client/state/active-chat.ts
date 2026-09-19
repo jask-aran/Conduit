@@ -25,13 +25,13 @@ import type {
   ToolItem,
   TranscriptDetail,
 } from "../api/contracts";
-import { applyCommittedUser, applyTranscriptOp, applyTranscriptProjection, assignToolSeq, claimAnswerRows, replaceMessages, settleAnswerRows, truncateAt, upsertMessages } from "../timeline-order";
+import { applyToolOp, applyTranscriptOp, assignToolSeq, isToolOp, replaceMessages, truncateAt } from "../timeline-order";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { canCoalesceTextDelta, enqueueOverflowLiveEvent, mergeTextDeltaEvents } from "./text-delta-batcher";
 import type { UploadAttachment } from "./attachments";
 import type { DraftsStore } from "./drafts";
 import type { CatalogueStore } from "./catalogue";
-import { freezeGeneration, settleGenerationTools, type ActiveGenerationView, type LiveGenerationChange } from "../turn-rows";
+import { type ActiveGenerationView, type LiveGenerationChange } from "../turn-rows";
 import type { ModelSettings } from "./model-settings";
 import type { PermissionSettings } from "./permission-settings";
 import type { ServiceLevelSettings } from "./service-level-settings";
@@ -550,15 +550,9 @@ export function createActiveChat(options: ActiveChatOptions) {
       result = generationStore.apply(event);
       if (result.changed && result.state) {
         const state = result.state as ActiveGenerationView;
-        // An answer joins the transcript as soon as the harness names it, so
-        // its place is decided once, by arrival, rather than re-derived on
-        // every frame from whichever prompt happens to be last. Everything
-        // sent after it -- an interrupt, above all -- lands after it.
-        // Where the server states its own order, an answer already has a row
-        // by the time this runs: it was put in place when the harness named it,
-        // at the position the server gave. Guessing at the end is only for a
-        // backend that says nothing about order.
-        if (!logId) setMessages((existing) => claimAnswerRows(existing, state));
+        // The row this answer goes in already exists: the server opened it,
+        // where it belongs, the moment the harness named the message. Nothing
+        // here has a position to work out.
         setActiveGeneration(state);
         setActiveGenerationChange(generationChangeFor(event));
       }
@@ -573,21 +567,13 @@ export function createActiveChat(options: ActiveChatOptions) {
     const terminal = ["stopped", "complete", "failed"].includes(next.status);
     const wasTerminal = previousStatus ? ["stopped", "complete", "failed"].includes(previousStatus) : false;
     if (terminal && !wasTerminal) {
-      // Where the server states the transcript, it has already said what every
-      // message of this turn says and which rows to give up. Freezing the live
-      // view into the transcript as well would be a second answer to that,
-      // assembled here out of deltas -- and the one that raced the harness's
-      // own writes.
-      const frozen = logId ? [] : freezeGeneration(next);
+      // Nothing is folded into the transcript here. The server has already said
+      // what every message of this turn says, which rows to give up, and what
+      // every tool it ran returned. Assembling a second answer to that out of
+      // the deltas drawn on the way past is what used to race the harness's own
+      // writes -- and what the reader saw as an answer changing after it
+      // settled.
       batch(() => {
-        // Tools are not stated as ops yet, so their final records still come
-        // from the turn that ran them.
-        setTools((existing) => settleGenerationTools(existing, next));
-        // The rows this turn has been holding are settled in place. A turn can
-        // finish having named an answer it never wrote anything into -- one
-        // cancelled before its first token -- and that row goes rather than
-        // sitting in the transcript as a blank answer forever.
-        if (!logId) setMessages((existing) => settleAnswerRows(existing, next.id, frozen));
         generationStore.clear();
         setActiveGenerationChange(null);
         setActiveGeneration(null);
@@ -760,37 +746,23 @@ export function createActiveChat(options: ActiveChatOptions) {
           if (event.artifacts) setTurnArtifacts({ chatId: event.chatId, items: event.artifacts });
         }
         break;
+      // The only sync left is the whole of what this chat should hold, sent to
+      // a client that lost its place in the order and cannot be replayed back
+      // into it. A window of the transcript says nothing this client was not
+      // already told, message by message, as it happened.
       case "transcript_sync":
+        if (!event.replace) break;
         batch(() => {
-          const incomingMessages = asList<Message>(event.messages);
-          const incomingTools = assignToolSeq(event.tools as ToolItem[]);
-          // A replacing sync is the whole of what this chat should hold: it
-          // answers a client that lost its place, so folding it into what is
-          // already there would keep exactly the rows it was sent to correct.
-          if (event.replace) {
-            setMessages((current) => replaceMessages(current, incomingMessages));
-            setTools(incomingTools);
-            return;
-          }
-          // With a log, every message has already been stated -- opened where
-          // the server put it, closed with what it says. So a window sync is a
-          // restatement of rows this client holds, never the first news of a
-          // row: anything it does not recognise would be placed by guesswork,
-          // and a message genuinely missed is a hole in the order, which the
-          // log repairs by replay or by a replacing sync.
-          const known = logId
-            ? incomingMessages.filter((message) => messages().some((held) => held.id === message.id))
-            : incomingMessages;
-          const projection = applyTranscriptProjection(messages(), tools(), known, incomingTools);
-          setMessages(projection.messages);
-          setTools(projection.tools);
+          setMessages((current) => replaceMessages(current, asList<Message>(event.messages)));
+          setTools(assignToolSeq(event.tools as ToolItem[]));
         });
         break;
       // The server saying what the transcript is: a message exists and where,
       // a message is finished, a message is gone. This is the whole of how a
       // row gets its place -- nothing below works one out.
       case "transcript_op":
-        setMessages((current) => applyTranscriptOp(current, event));
+        if (isToolOp(event)) setTools((current) => applyToolOp(current, event));
+        else setMessages((current) => applyTranscriptOp(current, event));
         break;
       // Where the chat's order stands. A client that was already here says how
       // far it got; one arriving fresh has just loaded the transcript and takes
@@ -811,9 +783,6 @@ export function createActiveChat(options: ActiveChatOptions) {
         // of it it has loaded, and cuts to the same point.
         if (event.beforeMessageId) setMessages((current) => truncateAt(current, event.beforeMessageId!, { inclusive: true }));
         break;
-      case "user_message_committed":
-        setMessages((current) => applyCommittedUser(current, event.message));
-        break;
       // A process the server deliberately stopped stays stopped. The socket
       // close that follows is otherwise indistinguishable from a dropped
       // connection, so the reconnect timer used to start a replacement process
@@ -824,10 +793,13 @@ export function createActiveChat(options: ActiveChatOptions) {
           setLive(null);
           resetLiveFlags();
           setGeneration("idle");
-          // A turn abandoned rather than finished still holds rows for answers
-          // it named. Nothing will settle them now, so they go.
-          const abandoned = activeGeneration();
-          if (abandoned) setMessages((current) => settleAnswerRows(current, abandoned.id, []));
+          // The process is gone, so nothing is going to close the rows it left
+          // open. A row with text keeps it -- it is what the reader watched
+          // arrive -- and an empty one goes rather than sitting there as an
+          // answer that never comes.
+          setMessages((current) => current
+            .filter((message) => !(message.streaming && !message.content))
+            .map((message) => (message.streaming ? { ...message, streaming: false } : message)));
           generationStore.clear();
           setActiveGeneration(null);
           setActiveGenerationChange(null);

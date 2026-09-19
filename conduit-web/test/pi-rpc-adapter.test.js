@@ -40,9 +40,12 @@ test("Pi adapter maps required neutral events and retains Pi richness", () => {
     generationId: null, pi: reset, type: "transcript_sync", replace: true,
     messages: [{ id: "user-1", role: "user" }], tools: [],
   });
+  // A committed user message says nothing the `message.open` that placed it
+  // has not already said, so it no longer travels as a transcript event of its
+  // own -- the two could disagree about where the message went.
   const user = { type: "message_end", generationId: "g1", message: { id: "u1", role: "user", content: "Hi" } };
   assert.deepEqual(normalizePiBackendEvent(user), {
-    generationId: "g1", pi: user, type: "user_message_committed", message: user.message,
+    generationId: "g1", pi: user, type: "pi_event",
   });
   const assistant = { ...user, message: { role: "assistant", content: "No duplicate route" } };
   assert.deepEqual(normalizePiBackendEvent(assistant), {
@@ -56,7 +59,11 @@ test("Pi adapter maps required neutral events and retains Pi richness", () => {
   // under are separate questions, and Pi only answers the first.
   assert.equal(PI_CAPABILITIES.approvals, true);
   assert.equal(PI_CAPABILITIES.permissionModes, false);
-  const optional = new Set(["permissionModes"]);
+  // And except keeping a partial answer when a turn is interrupted. Pi writes
+  // the interrupted message to its session file but builds the next request
+  // without it, so what the reader is shown and what the model was given differ.
+  assert.equal(PI_CAPABILITIES.interruptKeepsPartial, false);
+  const optional = new Set(["permissionModes", "interruptKeepsPartial"]);
   for (const [name, value] of Object.entries(PI_CAPABILITIES)) {
     if (optional.has(name)) continue;
     assert.ok(value, `Pi supports ${name}`);

@@ -5,6 +5,8 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { wasAborted } from "./abort-signature.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { CONTINUE_PROMPT, mergeContinuation } from "./continuation.js";
+import { wasDiscarded } from "./abort-signature.js";
+import { PI_CAPABILITIES } from "./pi-capabilities.js";
 import { isPathInside } from "./workspace-paths.js";
 
 
@@ -558,6 +560,13 @@ export function messagesFromEntries(entries) {
       provider: entry.message.provider || null,
       model: entry.message.model || null,
       stopped: aborted,
+      // Pi keeps an interrupted answer in the session file and then builds every
+      // later request without it. Reading the file back has to say so too, or a
+      // reload would quietly restore it as an ordinary part of the conversation
+      // -- which is the one place the transcript could still mislead, because
+      // the live stream marks it and the file is what survives a refresh.
+      ...(aborted && wasDiscarded({ role, content: envelope?.message ?? rawContent, stopReason: "aborted" },
+        { keepsPartial: PI_CAPABILITIES.interruptKeepsPartial }) ? { discarded: true } : {}),
       attachments: envelope?.attachments || [],
     };
     if (role === "assistant" && continuation) {
@@ -570,6 +579,10 @@ export function messagesFromEntries(entries) {
         previous.provider = message.provider;
         previous.model = message.model;
         previous.stopped = message.stopped;
+        // The continuation carries the standing of the message it completes: a
+        // partial that has been written past is no longer the thing the agent
+        // has no record of.
+        previous.discarded = message.discarded === true;
         previous.continued = true;
         previous.timestamp = message.timestamp || previous.timestamp;
         continuation = false;

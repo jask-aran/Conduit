@@ -36,6 +36,23 @@ export interface ChatCapabilities {
   steer: boolean;
   followUpQueue: boolean;
   cancel: boolean;
+  /**
+   * An interrupted turn's partial assistant message survives as content the
+   * next turn can see.
+   *
+   * Interrupting is not continuing. It means: what the model had written when
+   * it was stopped stands as its answer, and a user message follows it saying
+   * that was not what was wanted. For that to mean anything the partial has to
+   * still be there when the next request is built.
+   *
+   * No harness integrated so far does this for text. Pi writes the partial to
+   * its session file but marks it aborted with zeroed usage and leaves it out
+   * of context; Codex does not persist it at all; ChatGPT Web never advances
+   * its cursor past an interrupted exchange. Where this is false, interrupting
+   * a text completion discards what was written, and the UI has to say so
+   * rather than implying the model was redirected mid-thought.
+   */
+  interruptKeepsPartial: boolean;
   compaction: boolean;
   thinkingLevels: boolean;
   modelSwitch: boolean;

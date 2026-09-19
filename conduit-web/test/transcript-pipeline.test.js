@@ -19,7 +19,7 @@ import { PiRpcAdapter, normalizePiBackendEvent } from "../src/pi-rpc-adapter.js"
 import { ChatLogs } from "../src/server/chat-log.js";
 import { createLiveSessionStream } from "../src/server/live-session-stream.js";
 import { normalizeLiveEvent } from "../src/client/api/live-events.ts";
-import { applyTranscriptOp, mergeToolEvent } from "../src/client/timeline-order.ts";
+import { applyToolOp, applyTranscriptOp, isToolOp, mergeToolEvent } from "../src/client/timeline-order.ts";
 import { buildTurnRows } from "../src/client/turn-rows.ts";
 
 const lifecycle = { run: (_chatId, operation) => operation(), assertAvailable: () => {} };
@@ -88,12 +88,18 @@ function harness() {
   let tools = [];
   manager.on("event", ({ event }) => {
     const wire = normalizeLiveEvent(JSON.parse(JSON.stringify(normalizePiBackendEvent(event))));
-    if (wire.type === "transcript_op") messages = applyTranscriptOp(messages, wire);
-    if (wire.type.startsWith("tool_execution_")) {
+    // Exactly what the browser does with these: the statements decide what the
+    // transcript holds, and live activity only paints output arriving while a
+    // tool is still running.
+    if (wire.type === "transcript_op") {
+      if (isToolOp(wire)) tools = applyToolOp(tools, wire);
+      else messages = applyTranscriptOp(messages, wire);
+    }
+    if (wire.type === "tool_execution_updated") {
       tools = mergeToolEvent(tools, {
-        type: wire.type === "tool_execution_started" ? "tool_execution_start"
-          : wire.type === "tool_execution_updated" ? "tool_execution_update" : "tool_execution_end",
-        toolCallId: wire.toolCallId, toolName: wire.name, args: wire.arguments, result: wire.result,
+        type: "tool_execution_update",
+        toolCallId: wire.toolCallId, toolName: wire.name, args: wire.arguments,
+        partialResult: wire.partialResult,
       }).tools;
     }
   });
@@ -425,4 +431,38 @@ test("what the turn said while it worked survives the turn settling", async () =
   const trace = chat.rows().find((row) => row.type === "trace");
   assert.deepEqual(trace.value.segments.map((segment) => segment.kind), ["narration", "tool"]);
   assert.equal(trace.value.segments[0].text, "Planning the timer.");
+});
+
+/**
+ * Pi keeps an interrupted answer in its session file and then builds every
+ * later request without it. The reader watched that text arrive, so it stays on
+ * screen -- but the conversation does not contain it, and the transcript has to
+ * say so rather than showing it as an ordinary answer somebody can follow up on.
+ */
+test("an interrupted answer is kept, and marked as something the agent no longer has", async () => {
+  const chat = harness();
+  await chat.send({ type: "prompt", message: "Tell me a long story" });
+  chat.pi({ type: "agent_start" });
+  chat.pi({ type: "message_end", message: { role: "user", content: "Tell me a long story" } });
+  const story = { role: "assistant", content: [{ type: "text", text: "The rain fell upward." }], stopReason: "aborted" };
+  chat.pi({ type: "message_start", message: { role: "assistant", content: [] } });
+  chat.pi({ type: "message_update", assistantMessageEvent: { type: "text_start", contentIndex: 0, partial: { ...story, content: [{ type: "text", text: "" }] } } });
+  chat.pi({ type: "message_update", assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "The rain fell upward.", partial: story } });
+  chat.dispatch({ type: "stop_generation" });
+  await chat.read("abort");
+  chat.pi({ type: "message_end", message: story });
+  await chat.accept("abort");
+  await chat.settle();
+
+  const answer = chat.messages().find((message) => message.role === "assistant");
+  assert.equal(answer.content, "The rain fell upward.", "the text the reader watched arrive is kept");
+  assert.equal(answer.discarded, true, "and marked as absent from the conversation");
+  // An answer that ran to completion is not marked, or the mark would mean
+  // nothing: it is the difference between the two that the reader is being told.
+  await chat.send({ type: "prompt", message: "again" });
+  chat.pi({ type: "agent_start" });
+  assistantText(chat.pi, "Once more.");
+  chat.pi({ type: "agent_settled" });
+  await chat.settle();
+  assert.equal(chat.messages().at(-1).discarded, false);
 });
