@@ -209,7 +209,13 @@ export function createLiveSessionStream({
     let accepted;
     try {
       accepted = await adapter.prompt(record.id, prepared.prompt,
-        { ...promptOptions, attachments: prepared.attachments, ...(claimed ? { messageIds: claimed } : {}) });
+        { ...promptOptions, attachments: prepared.attachments,
+          // A harness that names its own messages still has to name this one
+          // what the browser already calls it. The row is on screen before the
+          // prompt is sent, so an adapter that invents an id here states a
+          // second row for a message that is already drawn -- the same prompt,
+          // twice, which is what claiming an id prevents for everyone else.
+          ...(claimed ? { messageIds: claimed } : messageId ? { clientUserMessageId: messageId } : {}) });
     } catch (error) {
       // A prompt the harness refused writes nothing, so its names go back
       // rather than waiting for messages that will never be written -- and the
