@@ -1,13 +1,14 @@
 import { manifest as codex } from "./codex.js";
 import { manifest as chatgptWeb } from "./chatgpt-web.js";
 import { manifest as pi } from "./pi.js";
+import { manifest as testStream } from "./test-stream.js";
 
 export const NAME_GENERATION_MODES = Object.freeze(["conduit", "backend"]);
 
 // One entry per backend. Registration, the harness catalogue, profile
 // selection, thread discovery and detection all read from here, so adding a
 // harness is this array plus its module - not seven edits across the server.
-export const MANIFESTS = [pi, codex, chatgptWeb];
+export const MANIFESTS = [pi, codex, chatgptWeb, testStream];
 
 export const manifestFor = (id) => MANIFESTS.find((manifest) => manifest.id === id) || null;
 
