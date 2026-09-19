@@ -82,7 +82,7 @@ function benchmarkStore({ messageCount, blockCount, toolCount, textLength }) {
       type: "tool_execution_started",
       toolCallId: `call_${toolIndex}`,
       name: "read",
-      arguments: { path: `file-${toolIndex}.txt` },
+      input: { path: `file-${toolIndex}.txt` },
     });
   }
   apply({
@@ -190,7 +190,7 @@ test("parallel tool executions join independently by toolCallId", () => {
   assert.deepEqual(state.toolExecutions.call_one, {
     toolCallId: "call_one",
     name: "read",
-    arguments: { path: "one" },
+    input: { path: "one" },
     status: "complete",
     output: "one",
     isError: false,

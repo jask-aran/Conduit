@@ -87,14 +87,12 @@ export type TurnRow =
 interface PersistedTurn {
   userMessage: Message | null;
   assistants: Message[];
-  leftoverTools: ToolItem[];
 }
 
 export interface PersistedTurnProjection {
   key: string;
   userMessage: Message | null;
   assistants: Message[];
-  leftoverTools: ToolItem[];
   /** What the rows were built from, so an unchanged turn can keep them. */
   sourceTools: ToolItem[];
   rows: TurnRow[];
@@ -141,6 +139,29 @@ const lastPromptIndex = (messages: Message[]) => {
   return -1;
 };
 /**
+ * What the server said about a message, or a loud stop.
+ *
+ * Two questions used to be answered by reading the shape of a turn: whether a
+ * message is the turn's answer or the turn talking as it works, and which
+ * prompt an answer answers. Every backend now states both -- `answers` when it
+ * opens a message, `interim` when it closes one -- so the readings are deleted
+ * rather than kept underneath as a fallback.
+ *
+ * A fallback here would be silent. A new harness that stated neither would draw
+ * a transcript that looked right until the first turn that answered and was
+ * then steered, and that turn's answer would be folded into a collapsed trace
+ * with nothing failing and nothing logged. A harness that does not state these
+ * is not one Conduit can draw, and it finds that out on its first turn.
+ */
+const stateless = (message: Message, field: string): never => {
+  throw new Error(`transcript contract: assistant message ${message.id} did not state \`${field}\`. A backend must state \`answers\` when it opens a message and \`interim\` when it closes one.`);
+};
+const statedInterim = (message: Message): boolean =>
+  (typeof message.interim === "boolean" ? message.interim : stateless(message, "interim"));
+const statedAnswers = (message: Message): string | null =>
+  (message.answers !== undefined ? message.answers : stateless(message, "answers"));
+
+/**
  * Which prompt the live turn is drawn under.
  *
  * An answer holds a row in the transcript from the moment the harness names
@@ -158,16 +179,8 @@ const liveOwnerIndex = (messages: Message[], generation?: ActiveGenerationView |
     : -1;
   if (answerIndex < 0) return lastPromptIndex(messages);
   // The row the server placed for this answer says which prompt it answers.
-  const stated = messages[answerIndex]!.answers;
-  if (stated) {
-    const owner = messages.findIndex((message) => message.id === stated);
-    if (owner >= 0) return owner;
-  }
-  for (let index = answerIndex - 1; index >= 0; index -= 1) {
-    const message = messages[index]!;
-    if (message.role === "user" && !message.pending) return index;
-  }
-  return -1;
+  const stated = statedAnswers(messages[answerIndex]!);
+  return stated ? messages.findIndex((message) => message.id === stated) : -1;
 };
 const liveOwner = (messages: Message[], generation: ActiveGenerationView) => {
   const index = liveOwnerIndex(messages, generation);
@@ -436,8 +449,6 @@ function sameSources(
   return left.userMessage === right.userMessage
     && left.assistants.length === right.assistants.length
     && left.assistants.every((message, index) => message === right.assistants[index])
-    && left.leftoverTools.length === right.leftoverTools.length
-    && left.leftoverTools.every((tool, index) => tool === right.leftoverTools[index])
     && left.sourceTools.length === sourceTools.length
     && left.sourceTools.every((tool, index) => tool === sourceTools[index]);
 }
@@ -451,16 +462,10 @@ function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById
   const segments: TraceSegment[] = [];
   const claimed = new Set<string>();
   const finalAssistant = turn.assistants.at(-1) || null;
-  // A message that says what it is -- answer or the turn talking as it works --
-  // is taken at its word. Only a message from a backend that states nothing
-  // falls back to reading the turn's shape: anything before its last tool call
-  // is narration, which is right for a turn that ran to completion and wrong
-  // for one that was steered after it had already answered.
-  const lastToolAssistantIndex = turn.assistants.findLastIndex((assistant) => toolCallIdsOf(assistant).length > 0);
-  const answerAssistants = turn.assistants.filter((assistant, assistantIndex) => {
+  // A message says what it is, and is taken at its word.
+  const answerAssistants = turn.assistants.filter((assistant) => {
     if (assistant.stopReason === "error" && assistant !== finalAssistant) return false;
-    if (assistant.interim !== undefined) return !assistant.interim;
-    return assistant.stopReason !== "toolUse" && assistantIndex > lastToolAssistantIndex;
+    return !statedInterim(assistant);
   });
   for (const assistant of turn.assistants) {
     const discarded = assistant.discarded === true;
@@ -476,9 +481,6 @@ function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById
     if (assistant.stopReason === "error" && assistant !== finalAssistant) {
       segments.push({ kind: "error", id: `error:${assistant.id}`, message: assistant });
     }
-  }
-  for (const tool of turn.leftoverTools) {
-    if (!claimed.has(tool.toolCallId)) { claimed.add(tool.toolCallId); segments.push({ kind: "tool", id: `tool:${tool.toolCallId}`, tool }); }
   }
   const answer = answerAssistants.at(-1) || null;
   const answerText = answerAssistants.map((assistant) => String(assistant.content || "").trim()).filter(Boolean).join("\n\n");
@@ -519,11 +521,11 @@ export function projectPersistedTurns(
   const turns: PersistedTurn[] = [];
   const byPrompt = new Map<string, PersistedTurn>();
   const turnAt = new Map<Message, PersistedTurn>();
-  let current: PersistedTurn = { userMessage: null, assistants: [], leftoverTools: [] };
+  let current: PersistedTurn = { userMessage: null, assistants: [] };
   turns.push(current);
   for (const message of messages) {
     if (message.role !== "user") { turnAt.set(message, current); continue; }
-    current = { userMessage: message, assistants: [], leftoverTools: [] };
+    current = { userMessage: message, assistants: [] };
     turns.push(current);
     if (message.id) byPrompt.set(message.id, current);
   }
@@ -536,31 +538,15 @@ export function projectPersistedTurns(
     // An answer belongs to the prompt it says it answers. Reading that off the
     // transcript instead -- whichever prompt the row happens to sit under --
     // is the guess that put one turn's work beneath another turn's prompt.
-    const stated = message.answers ? byPrompt.get(message.answers) : null;
+    const answers = statedAnswers(message);
+    const stated = answers ? byPrompt.get(answers) : null;
     (stated || turnAt.get(message) || current).assistants.push(message);
   }
 
-  const referenced = new Set<string>();
-  for (const turn of turns) for (const assistant of turn.assistants) for (const id of toolCallIdsOf(assistant)) referenced.add(id);
   // A message states the tools it called, so a tool has an owner or it has not
   // run yet -- in which case the live overlay is drawing it and the transcript
-  // has nothing to say about it. Only a backend that states no ownership falls
-  // back to matching tools to turns by timestamp.
-  const statesOwnership = messages.some((message) => message.answers);
-  const timedTurns = turns.filter((turn) => turn.userMessage);
-  if (!statesOwnership) {
-    for (const tool of tools) {
-      if (referenced.has(tool.toolCallId)) continue;
-      const timestamp = Date.parse(tool.timestamp || "") || 0;
-      let owner: PersistedTurn | null = null;
-      for (const turn of timedTurns) {
-        const userTimestamp = Date.parse(turn.userMessage!.timestamp || "") || 0;
-        if (userTimestamp <= timestamp) owner = turn;
-      }
-      const fallback = owner || turns[turns.length - 1];
-      if (fallback) fallback.leftoverTools.push(tool);
-    }
-  }
+  // has nothing to say about it yet. Matching the leftovers to turns by
+  // timestamp is what used to put one turn's work under another turn's prompt.
 
   const previousByKey = new Map(previous.map((turn) => [turn.key, turn]));
   const toolById = new Map(tools.map((tool) => [tool.toolCallId, tool]));
@@ -568,7 +554,6 @@ export function projectPersistedTurns(
     const key = turn.userMessage ? `user:${turn.userMessage.id}` : "preamble";
     const sourceTools = [
       ...turn.assistants.flatMap((assistant) => toolCallIdsOf(assistant).map((id) => toolById.get(id)).filter((tool): tool is ToolItem => Boolean(tool))),
-      ...turn.leftoverTools,
     ];
     const cached = previousByKey.get(key);
     if (cached && sameSources(cached, turn, sourceTools)) return cached;
@@ -576,7 +561,6 @@ export function projectPersistedTurns(
       key,
       userMessage: turn.userMessage,
       assistants: turn.assistants,
-      leftoverTools: turn.leftoverTools,
       sourceTools,
       rows: persistedRowsForTurn(turn, messages, toolById),
     };

@@ -83,7 +83,7 @@ test("a tool is a record of its own, opened and closed by the server", () => {
   tools = applyToolOp(tools, { type: "transcript_op", op: "tool.close", toolCallId: "call_1", output: "a.txt", isError: false });
   assert.equal(tools[0].done, true);
   assert.equal(tools[0].output, "a.txt");
-  assert.equal(tools[0].error, false);
+  assert.equal(tools[0].isError, false);
   // Re-stated rather than duplicated, and it keeps the place it already had.
   assert.equal(applyToolOp(tools, openOp).length, 1);
   assert.equal(applyToolOp(tools, openOp)[0].seq, 0);

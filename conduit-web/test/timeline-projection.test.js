@@ -25,7 +25,8 @@ function makeProjectionCase({ persistedRowCount, activeMessageCount, activeBlock
   const messages = [];
   for (let index = 0; index < persistedRowCount; index += 1) {
     messages.push({ id: `history-user-${index}`, role: "user", content: `History ${index}` });
-    messages.push({ id: `history-assistant-${index}`, role: "assistant", content: `Reply ${index}`, blocks: [] });
+    messages.push({ id: `history-assistant-${index}`, role: "assistant", content: `Reply ${index}`, blocks: [],
+      answers: `history-user-${index}`, interim: false });
   }
   messages.push({ id: "live-user", role: "user", content: "Inspect this", pending: false });
 
@@ -89,7 +90,7 @@ test("narrow projection work stays on the changed live answer row", () => {
       const { generation, messages, tools } = makeProjectionCase(dimensions);
       const index = buildLiveProjectionIndex(generation, messages);
       const target = generation.assistantMessages[0].blocks.at(-1);
-      assert.equal(target.type, "text");
+      assert.equal(target.kind, "text");
       assert.equal(index.activeBlockCount, dimensions.activeMessageCount * dimensions.activeBlockCount);
       assert.equal(index.blockLocations.get(target.identity)?.kind, "answer");
 
