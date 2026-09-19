@@ -63,6 +63,8 @@ test("does not project persisted partials beside their resumed active generation
       role: "assistant",
       content: "",
       stopReason: "toolUse",
+      answers: "u1",
+      interim: true,
       blocks: [{ kind: "thinking", text: "Older plan" }],
     },
   ], [], { activeGeneration: generation });
@@ -90,9 +92,10 @@ test("reports an executing tool and a persisted interrupted trace", () => {
     { id: "u1", role: "user", content: "Wait" },
     {
       id: "a1", role: "assistant", content: "", stopReason: "toolUse",
+      answers: "u1", interim: true,
       blocks: [{ kind: "tool_call", toolCallId: "call_1", name: "bash", input: {} }],
     },
-    { id: "a2", role: "assistant", content: "", stopReason: "aborted", stopped: true },
+    { id: "a2", role: "assistant", content: "", stopReason: "aborted", stopped: true, answers: "u1", interim: true },
   ], [{ toolCallId: "call_1", name: "bash", done: true, output: "Command aborted" }]);
   const persistedTrace = persisted.find((row) => row.type === "trace");
   assert.equal(persistedTrace?.type === "trace" && persistedTrace.value.status, "interrupted");
@@ -101,7 +104,7 @@ test("reports an executing tool and a persisted interrupted trace", () => {
 test("projects partial continuation through Active Generation without a flattened stream", () => {
   const rows = buildTurnRows([
     { id: "u1", role: "user", content: "Write a long answer" },
-    { id: "partial", role: "assistant", content: "The answer continues", stopped: true },
+    { id: "partial", role: "assistant", content: "The answer continues", stopped: true, answers: "u1", interim: false },
   ], [], {
     activeGeneration: {
       id: "g_continue",
@@ -137,7 +140,7 @@ test("keeps the answer display key across live and persisted projections", () =>
   });
   const persistedRows = buildTurnRows([
     user,
-    { id: "m_persisted", role: "assistant", content: "Partial answer", stopReason: "stop" },
+    { id: "m_persisted", role: "assistant", content: "Partial answer", stopReason: "stop", answers: "u1", interim: false },
   ], []);
   const liveAnswer = liveRows.find((row) => row.type === "message" && row.value.role === "assistant");
   const persistedAnswer = persistedRows.find((row) => row.type === "message" && row.value.role === "assistant");
@@ -153,14 +156,16 @@ test("keeps consecutive final assistant messages in the answer area", () => {
       role: "assistant",
       content: "I will check the sources first.",
       stopReason: "toolUse",
+      answers: "u1",
+      interim: true,
       blocks: [
         { kind: "thinking", text: "Checking sources" },
         { kind: "tool_call", toolCallId: "call_1", name: "web_search", input: {} },
       ],
     },
-    { id: "a2", role: "assistant", content: "The main answer.", stopReason: "stop", blocks: [{ kind: "text", text: "The main answer." }] },
-    { id: "a3", role: "assistant", content: "A short follow-up.", stopReason: "stop", blocks: [{ kind: "text", text: "A short follow-up." }] },
-  ], [{ id: "call_1", name: "web_search", done: true }]);
+    { id: "a2", role: "assistant", content: "The main answer.", stopReason: "stop", answers: "u1", interim: false, blocks: [{ kind: "text", text: "The main answer." }] },
+    { id: "a3", role: "assistant", content: "A short follow-up.", stopReason: "stop", answers: "u1", interim: false, blocks: [{ kind: "text", text: "A short follow-up." }] },
+  ], [{ toolCallId: "call_1", name: "web_search", done: true }]);
 
   const answers = rows.filter((row) => row.type === "message" && row.value.role === "assistant");
   assert.deepEqual(answers.map((row) => row.type === "message" && row.value.content), ["The main answer.\n\nA short follow-up."]);
@@ -177,6 +182,8 @@ test("projects empty and partial assistant errors as highlighted message rows", 
       role: "assistant",
       content: "",
       stopReason: "error",
+      answers: "u1",
+      interim: false,
       errorMessage: "Provider rejected the request",
     },
   ], []);
@@ -215,6 +222,8 @@ test("keeps a recovered assistant error inside the turn trace", () => {
       id: "m_error",
       role: "assistant",
       content: "",
+      answers: "u1",
+      interim: true,
       blocks: [{ kind: "thinking", text: "Retrying the provider request" }],
       stopReason: "error",
       errorMessage: "Temporary provider failure",
@@ -222,7 +231,7 @@ test("keeps a recovered assistant error inside the turn trace", () => {
       model: "example-model",
       timestamp: "2026-08-12T09:48:47.341Z",
     },
-    { id: "m_recovered", role: "assistant", content: "Recovered answer", stopReason: "stop" },
+    { id: "m_recovered", role: "assistant", content: "Recovered answer", stopReason: "stop", answers: "u1", interim: false },
   ], []);
 
   assert.deepEqual(rows.map((row) => row.type), ["message", "trace", "message"]);
@@ -320,9 +329,9 @@ test("an answer is grouped under the prompt it says it answers", () => {
   // answer sits after a later prompt, and says it answers the earlier one.
   const messages = [
     { id: "u1", role: "user", content: "first" },
-    { id: "a1", role: "assistant", content: "first answer", answers: "u1" },
+    { id: "a1", role: "assistant", content: "first answer", answers: "u1", interim: false },
     { id: "u2", role: "user", content: "second" },
-    { id: "a2", role: "assistant", content: "late answer to the first", answers: "u1" },
+    { id: "a2", role: "assistant", content: "late answer to the first", answers: "u1", interim: false },
   ];
   const rows = buildTurnRows(messages, []);
   const answers = rows.filter((row) => row.type === "message" && row.value.role === "assistant");
@@ -335,9 +344,9 @@ test("an answer is grouped under the prompt it says it answers", () => {
 test("a tool nothing claims is not handed to a turn by its timestamp", () => {
   const messages = [
     { id: "u1", role: "user", content: "run it", timestamp: "2026-01-01T00:00:00.000Z" },
-    { id: "a1", role: "assistant", content: "done", answers: "u1", timestamp: "2026-01-01T00:00:02.000Z" },
+    { id: "a1", role: "assistant", content: "done", answers: "u1", interim: false, timestamp: "2026-01-01T00:00:02.000Z" },
   ];
-  const orphan = { id: "call_1", name: "bash", done: true, timestamp: "2026-01-01T00:00:01.000Z" };
+  const orphan = { toolCallId: "call_1", name: "bash", done: true, timestamp: "2026-01-01T00:00:01.000Z" };
   const rows = buildTurnRows(messages, [orphan]);
   const traces = rows.filter((row) => row.type === "trace");
   assert.deepEqual(traces, [], "the message claimed no tools, so the turn shows none");
@@ -353,7 +362,7 @@ test("an answer stays an answer when a later message calls a tool", () => {
     { id: "a2", role: "assistant", content: "", answers: "u1", interim: true,
       blocks: [{ kind: "tool_call", toolCallId: "call_1", name: "bash" }] },
   ];
-  const rows = buildTurnRows(messages, [{ id: "call_1", name: "bash", done: true }]);
+  const rows = buildTurnRows(messages, [{ toolCallId: "call_1", name: "bash", done: true }]);
   const answers = rows.filter((row) => row.type === "message" && row.value.role === "assistant");
   assert.equal(answers.length, 1);
   assert.equal(answers[0].value.content, "Once upon a time…");
@@ -428,10 +437,13 @@ test("an answer that is followed by more tool work is still an answer", async ()
   assert.deepEqual(said(buildTurnRows(messages, tools)),
     ["what did you find?", "trace", "Two failing tests.\n\nAnd now three."]);
 
-  // Without the statement there is only the shape to go on, and the shape says
-  // the first answer came before a tool call, so it is filed as narration and
-  // the reader finds it inside a collapsed trace.
-  const unstated = messages.map(({ interim, ...message }) => message);
-  assert.deepEqual(said(buildTurnRows(unstated, tools)),
-    ["what did you find?", "trace", "And now three."]);
+  // There is no shape-reading left underneath. Reading this turn's shape would
+  // say the first answer came before a tool call and file it as narration,
+  // burying it in a collapsed trace -- which is what used to happen, quietly,
+  // to any backend that did not state `interim`. A backend that does not state
+  // it now gets stopped on its first turn instead of a worse transcript.
+  assert.throws(() => buildTurnRows(messages.map(({ interim, ...rest }) => rest), tools),
+    /did not state `interim`/);
+  assert.throws(() => buildTurnRows(messages.map(({ answers, ...rest }) => rest), tools),
+    /did not state `answers`/);
 });
