@@ -138,7 +138,7 @@ test("preserves reduced-generation events and their sequence at the client bound
 
 test("maps neutral adapter events into the existing generation reducer", () => {
   const delta = normalizeLiveEvent({
-    type: "assistant_content", phase: "delta", generationId: "g1", sequence: 2,
+    type: "assistant_content", phase: "delta", generationId: "g1", seq: 2,
     messageId: "m1", contentIndex: 0, blockKind: "text", delta: "hello",
   });
   assert.equal(delta.type, "content_block_delta");

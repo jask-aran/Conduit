@@ -117,10 +117,10 @@ export function applyTranscriptOp(messages, event) {
 export function applyToolOp(tools, event) {
   if (event.op === "tool.open") {
     if (!event.toolCallId) return tools;
-    const held = tools.findIndex((tool) => tool.id === event.toolCallId);
+    const held = tools.findIndex((tool) => tool.toolCallId === event.toolCallId);
     const incoming = {
-      id: event.toolCallId, name: event.name || "tool", args: event.input,
-      done: false, error: false, timestamp: event.timestamp || new Date().toISOString(),
+      toolCallId: event.toolCallId, name: event.name || "tool", input: event.input,
+      done: false, isError: false, timestamp: event.timestamp || new Date().toISOString(),
       seq: held >= 0 ? tools[held].seq : tools.length,
     };
     if (held < 0) return [...tools, incoming];
@@ -130,8 +130,8 @@ export function applyToolOp(tools, event) {
   }
   if (event.op === "tool.close") {
     if (!event.toolCallId) return tools;
-    return tools.map((tool) => (tool.id === event.toolCallId
-      ? { ...tool, result: event.output, error: Boolean(event.isError), done: true }
+    return tools.map((tool) => (tool.toolCallId === event.toolCallId
+      ? { ...tool, output: event.output, isError: Boolean(event.isError), done: true }
       : tool));
   }
   return tools;

@@ -1011,7 +1011,7 @@ export class PiManager extends EventEmitter {
       // and got the messages back without the commands underneath them.
       if (event.type === "tool_execution_started" && this.logFor(record)) {
         this.publish(record, toolOpen({ toolCallId: event.toolCallId, name: event.name,
-          input: event.arguments, generationId: record.generation?.id || null }));
+          input: event.input, generationId: record.generation?.id || null }));
       }
       if (event.type === "tool_execution_completed" && this.logFor(record)) {
         this.publish(record, toolClose({ toolCallId: event.toolCallId, output: event.result,

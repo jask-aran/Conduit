@@ -83,7 +83,7 @@ function TraceSegmentRow(props: {
       {(message) => <TraceError message={message()} profileLabel={props.profileLabel} />}
     </Show>
   }>
-    {(item) => <ToolCard tool={item()} sessionId={props.sessionId} initialOpen={props.toolOpen?.(item().id)} onOpenChange={(open) => props.onToolOpenChange?.(item().id, open)} />}
+    {(item) => <ToolCard tool={item()} sessionId={props.sessionId} initialOpen={props.toolOpen?.(item().toolCallId)} onOpenChange={(open) => props.onToolOpenChange?.(item().toolCallId, open)} />}
   </Show>;
 }
 

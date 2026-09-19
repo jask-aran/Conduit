@@ -218,7 +218,7 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
             identity: contentBlockIdentity(event.messageId, event.contentIndex),
           });
           if (!block) break;
-          const field = event.blockKind === "tool_call" ? "argumentsText" : "text";
+          const field = event.blockKind === "tool_call" ? "inputText" : "text";
           const value = `${existing?.[field] || ""}${event.delta}`;
           setPath([...blockPath(block.messageIndex, block.blockIndex), field], value);
           break;
@@ -261,10 +261,9 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
           setPath(["toolExecutions", event.toolCallId], {
             toolCallId: event.toolCallId,
             name: event.name,
-            arguments: event.arguments,
+            input: event.input,
             status: "running",
-            partialResult: null,
-            result: null,
+            output: null,
             isError: false,
           });
           break;
@@ -273,9 +272,9 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
           setPath(["toolExecutions", event.toolCallId], {
             ...existing,
             name: event.name || existing.name,
-            arguments: event.arguments ?? existing.arguments,
+            input: event.input ?? existing.input,
             status: "running",
-            partialResult: event.partialResult,
+            output: event.output ?? existing.output,
           });
           break;
         }
@@ -285,7 +284,7 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
             ...existing,
             name: event.name || existing.name,
             status: event.isError ? "error" : "complete",
-            result: event.result,
+            output: event.output,
             isError: Boolean(event.isError),
           });
           break;

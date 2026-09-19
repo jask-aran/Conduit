@@ -19,6 +19,26 @@
 
 import { wasDiscarded } from "../abort-signature.js";
 
+/**
+ * Conduit's names, in one list, because there is only one set of them.
+ *
+ * A message: `id`, `role`, `content`, `blocks`, `stopReason`, `interim`,
+ * `answers`, `discarded`, `after`.
+ * A block: `kind` (`text` | `thinking` | `tool_call`), `text`, `toolCallId`,
+ * `name`, `input` -- plus `contentIndex`, `identity` and `status` while it is
+ * still arriving, which are additions to these names and not alternatives.
+ * A tool: `toolCallId`, `name`, `input`, `output`, `isError`, `done`.
+ * An event: `seq`.
+ *
+ * A harness's own names -- Pi's `type`/`toolCall`/`arguments`/`thinking`/
+ * `toolName`/`partialResult`, Codex's item shapes, ChatGPT Web's stream -- may
+ * appear only where that harness's own bytes are being read: its normalizer,
+ * its session file reader, its thread reader. Past that boundary they do not
+ * exist. Every time a second spelling has been allowed to travel one layer
+ * further, the two have drifted and the drift has shown up as a transcript that
+ * rendered wrong while every test passed.
+ */
+
 const ROLES = new Set(["user", "assistant"]);
 const text = (value) => typeof value === "string" && value.length > 0;
 

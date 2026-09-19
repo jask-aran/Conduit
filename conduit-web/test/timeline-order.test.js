@@ -14,7 +14,7 @@ test("mergeToolEvent preserves first-seen timestamp and seq on reconnect replay"
   const first = mergeToolEvent([], {
     type: "tool_execution_start",
     toolCallId: "t1",
-    toolName: "read",
+    name: "read",
     timestamp: "2026-01-01T00:00:00.000Z",
   }, { nextSeq: () => seq++ });
   assert.equal(first.tools[0].seq, 0);
@@ -23,7 +23,7 @@ test("mergeToolEvent preserves first-seen timestamp and seq on reconnect replay"
   const replay = mergeToolEvent(first.tools, {
     type: "tool_execution_start",
     toolCallId: "t1",
-    toolName: "read",
+    name: "read",
     timestamp: "2026-07-17T12:00:00.000Z",
   }, { nextSeq: () => seq++ });
   assert.equal(replay.tools.length, 1);

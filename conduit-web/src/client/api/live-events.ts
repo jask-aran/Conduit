@@ -228,7 +228,10 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
   const source = record(value);
   const sourceType = text(source.type);
   const generationId = optionalText(source.generationId);
-  const seq = number(source.seq ?? source.sequence);
+  // One number, one name. The adapters used to publish it as `sequence` while
+  // the log, the reducer and every event type here called it `seq`, and this
+  // line was the bridge between the two.
+  const seq = number(source.seq);
   if (STRUCTURED_GENERATION_TYPES.has(sourceType as StructuredGenerationType) && seq !== undefined) {
     return { ...source, type: sourceType as StructuredGenerationType, generationId, seq } as StructuredGenerationEvent;
   }
@@ -249,8 +252,7 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
     case "tool_activity": return {
       type: source.phase === "start" ? "tool_execution_started" : source.phase === "update" ? "tool_execution_updated" : "tool_execution_completed",
       generationId, seq: seq ?? 0, toolCallId: text(source.toolCallId), name: text(source.name),
-      arguments: source.input, partialResult: source.phase === "update" ? source.output : undefined,
-      result: source.phase === "end" ? source.output : undefined, isError: Boolean(source.isError),
+      input: source.input, output: source.output, isError: Boolean(source.isError),
     };
     case "status": {
       const detail = text(source.detail);
@@ -340,7 +342,7 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
       return {
         type: "session_checkpoint",
         generationId,
-        generationSeq: number(source.generationSeq ?? source.sequence) ?? null,
+        generationSeq: number(source.generationSeq ?? source.seq) ?? null,
         chatId: text(chat.id || source.chatId),
         title: optionalText(chat.title || source.title),
         // The socket carries the whole chat row. Dropping it made the open

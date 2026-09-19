@@ -44,11 +44,11 @@ function makeProjectionCase({ persistedRowCount, activeMessageCount, activeBlock
   }
 
   const tools = Array.from({ length: activeToolCount }, (_, index) => ({
-    id: `tool-${index}`,
+    toolCallId: `tool-${index}`,
     name: "read",
-    args: { path: `file-${index}.txt` },
+    input: { path: `file-${index}.txt` },
     done: true,
-    result: "ok",
+    output: "ok",
     timestamp: new Date(1_000 + index).toISOString(),
   }));
   const generation = {

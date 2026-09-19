@@ -204,7 +204,7 @@ export function createTimelineStore(
     const nextSegment: TraceSegment = {
       kind: "tool",
       id: segment.id,
-      tool: buildLiveToolItem(change.toolCallId, execution, { name: segment.tool.name, args: segment.tool.args }),
+      tool: buildLiveToolItem(change.toolCallId, execution, { name: segment.tool.name, input: segment.tool.input }),
     };
     const nextValue = updateTraceSegment(current, location.segmentIndex, nextSegment);
     if (!nextValue) return null;

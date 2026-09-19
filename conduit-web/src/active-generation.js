@@ -137,7 +137,7 @@ export function reduceActiveGeneration(current, event) {
         status: "streaming",
         identity: contentBlockIdentity(event.messageId, event.contentIndex),
       });
-      if (event.blockKind === "tool_call") block.argumentsText = `${existing?.argumentsText || ""}${event.delta}`;
+      if (event.blockKind === "tool_call") block.inputText = `${existing?.inputText || ""}${event.delta}`;
       else block.text = `${existing?.text || ""}${event.delta}`;
       break;
     }
@@ -172,10 +172,12 @@ export function reduceActiveGeneration(current, event) {
       next.toolExecutions[event.toolCallId] = {
         toolCallId: event.toolCallId,
         name: event.name,
-        arguments: event.arguments,
+        input: event.input,
         status: "running",
-        partialResult: null,
-        result: null,
+        // What the tool has returned so far. `status` says whether that is all
+        // of it, so there is one field to read rather than two to choose
+        // between.
+        output: null,
         isError: false,
       };
       break;
@@ -184,9 +186,9 @@ export function reduceActiveGeneration(current, event) {
       next.toolExecutions[event.toolCallId] = {
         ...existing,
         name: event.name || existing.name,
-        arguments: event.arguments ?? existing.arguments,
+        input: event.input ?? existing.input,
         status: "running",
-        partialResult: event.partialResult,
+        output: event.output ?? existing.output,
       };
       break;
     }
@@ -196,7 +198,7 @@ export function reduceActiveGeneration(current, event) {
         ...existing,
         name: event.name || existing.name,
         status: event.isError ? "error" : "complete",
-        result: event.result,
+        output: event.output,
         isError: Boolean(event.isError),
       };
       break;

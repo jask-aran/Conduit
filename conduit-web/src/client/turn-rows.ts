@@ -40,10 +40,11 @@ export interface ActiveGenerationView {
   toolExecutions: Record<string, {
     toolCallId?: string;
     name?: string;
-    arguments?: unknown;
+    input?: unknown;
+    // What the tool has returned. `status` says whether that is all of it, the
+    // same way a block in flight carries its own text and says it is streaming.
+    output?: unknown;
     status?: string;
-    partialResult?: unknown;
-    result?: unknown;
     isError?: boolean;
   }>;
 }
@@ -282,7 +283,7 @@ export function buildLiveToolSegment(
   return {
     kind: "tool",
     id: `tool:${toolCallId}`,
-    tool: buildLiveToolItem(toolCallId, execution, { name: block.name, args: block.input }),
+    tool: buildLiveToolItem(toolCallId, execution, { name: block.name, input: block.input }),
   };
 }
 
@@ -308,16 +309,15 @@ function buildLiveErrorSegment(
 export function buildLiveToolItem(
   toolCallId: string,
   execution: ActiveGenerationView["toolExecutions"][string] = {},
-  fallback: { name?: string; args?: unknown } = {},
+  fallback: { name?: string; input?: unknown } = {},
 ): ToolItem {
   return {
-    id: toolCallId,
+    toolCallId,
     name: execution.name || fallback.name || "tool",
-    args: execution.arguments ?? fallback.args,
-    partialResult: execution.partialResult,
-    result: execution.result,
+    input: execution.input ?? fallback.input,
+    output: execution.output,
     done: execution.status === "complete" || execution.status === "error" || execution.status === "cancelled",
-    error: Boolean(execution.isError || execution.status === "error"),
+    isError: Boolean(execution.isError || execution.status === "error"),
     cancelled: execution.status === "cancelled",
   };
 }
@@ -478,7 +478,7 @@ function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById
     }
   }
   for (const tool of turn.leftoverTools) {
-    if (!claimed.has(tool.id)) { claimed.add(tool.id); segments.push({ kind: "tool", id: `tool:${tool.id}`, tool }); }
+    if (!claimed.has(tool.toolCallId)) { claimed.add(tool.toolCallId); segments.push({ kind: "tool", id: `tool:${tool.toolCallId}`, tool }); }
   }
   const answer = answerAssistants.at(-1) || null;
   const answerText = answerAssistants.map((assistant) => String(assistant.content || "").trim()).filter(Boolean).join("\n\n");
@@ -550,7 +550,7 @@ export function projectPersistedTurns(
   const timedTurns = turns.filter((turn) => turn.userMessage);
   if (!statesOwnership) {
     for (const tool of tools) {
-      if (referenced.has(tool.id)) continue;
+      if (referenced.has(tool.toolCallId)) continue;
       const timestamp = Date.parse(tool.timestamp || "") || 0;
       let owner: PersistedTurn | null = null;
       for (const turn of timedTurns) {
@@ -563,7 +563,7 @@ export function projectPersistedTurns(
   }
 
   const previousByKey = new Map(previous.map((turn) => [turn.key, turn]));
-  const toolById = new Map(tools.map((tool) => [tool.id, tool]));
+  const toolById = new Map(tools.map((tool) => [tool.toolCallId, tool]));
   const projected = turns.map((turn) => {
     const key = turn.userMessage ? `user:${turn.userMessage.id}` : "preamble";
     const sourceTools = [
