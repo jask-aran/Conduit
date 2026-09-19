@@ -92,17 +92,13 @@ export const messageClose = ({ messageId, stopReason = null, blocks = [], interi
     ...(wasDiscarded({ role: "assistant", stopReason, content }, { keepsPartial }) ? { discarded: true } : {}),
     ...(generationId ? { generationId } : {}),
     content,
-    // Blocks still travel in the spelling the renderer reads, which is Pi's.
-    // Collapsing that into the neutral one is a change to `turn-rows`, not to
-    // what is being stated here, so it is left for when the delta channel goes
-    // the same way.
-    blocks: blocks.flatMap((block) => {
-      if (block.kind === "thinking") return [{ type: "thinking", thinking: block.text || "" }];
-      if (block.kind === "tool_call") {
-        return [{ type: "toolCall", id: block.toolCallId || block.id, name: block.name, arguments: block.input }];
-      }
-      return [];
-    }),
+    // Blocks leave exactly as the adapter stated them. They used to be rewritten
+    // here into Pi's spelling so the browser would not have to convert them,
+    // which meant the server built the renderer's dialect on behalf of two
+    // harnesses that do not speak it -- and the same rewrite in reverse sat a
+    // few lines from where the client read the result. The text is already in
+    // `content`; what is left is what it sat among.
+    blocks: blocks.filter((block) => block.kind !== "text"),
   });
 };
 

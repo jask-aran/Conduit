@@ -91,14 +91,14 @@ export interface PersistedTurnProjection {
 }
 
 const thinkingOf = (message: Message): string => (message.blocks || [])
-  .filter((block) => block.type === "thinking")
-  .map((block) => block.thinking || "")
+  .filter((block) => block.kind === "thinking")
+  .map((block) => block.text || "")
   .join("\n")
   .trim();
 
 const toolCallIdsOf = (message: Message): string[] => (message.blocks || [])
-  .filter((block) => block.type === "toolCall" && typeof block.id === "string")
-  .map((block) => block.id as string);
+  .filter((block) => block.kind === "tool_call" && typeof block.toolCallId === "string")
+  .map((block) => block.toolCallId as string);
 
 const answerDisplayKey = (owner: Message | null, answerIndex: number, fallback: string) =>
   `answer:${owner ? owner.id : fallback}:${answerIndex}`;
