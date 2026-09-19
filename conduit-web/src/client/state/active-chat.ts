@@ -27,7 +27,6 @@ import type {
 } from "../api/contracts";
 import { applyToolOp, applyTranscriptOp, assignToolSeq, isToolOp, replaceMessages, truncateAt } from "../timeline-order";
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
-import { canCoalesceTextDelta, enqueueOverflowLiveEvent, mergeTextDeltaEvents } from "./text-delta-batcher";
 import type { UploadAttachment } from "./attachments";
 import type { DraftsStore } from "./drafts";
 import type { CatalogueStore } from "./catalogue";
@@ -238,8 +237,6 @@ export function createActiveChat(options: ActiveChatOptions) {
   let stopPending = false;
   let selectionToken = 0;
   let navigationToken = 0;
-  let pendingTextDelta: StructuredGenerationEvent | null = null;
-  let pendingTextDeltaTimer: ReturnType<typeof setTimeout> | null = null;
   let liveOpening: LiveOpening | null = null;
   const transcriptPrefetches = new Map<string, {
     revision: string;
@@ -288,12 +285,6 @@ export function createActiveChat(options: ActiveChatOptions) {
   const prefetch = (chat: ChatSummary) => {
     if (!chatIsLive(chat)) void loadTranscript(chat).catch(() => {});
   };
-  let overflowLiveEvents: LiveEvent[] = [];
-  let overflowLiveEventFrame: number | null = null;
-  let overflowLiveEventTimer: ReturnType<typeof setTimeout> | null = null;
-  let overflowMode = false;
-  const OVERFLOW_FRAME_BUDGET_MS = 6;
-  const OVERFLOW_MAX_EVENTS_PER_FRAME = 32;
   const STOP_TERMINAL_EVENT_TYPES = new Set(["generation_stopping", "generation_stopped", "generation_settled", "generation_failed"]);
 
   const selectedId = catalogue.selectedId;
@@ -355,101 +346,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     setActiveToolName(null);
     setRetry(null);
     setCompacting(false);
-  };
-
-  const clearPendingLiveEvents = () => {
-    if (pendingTextDeltaTimer) clearTimeout(pendingTextDeltaTimer);
-    if (overflowLiveEventFrame != null) cancelAnimationFrame(overflowLiveEventFrame);
-    if (overflowLiveEventTimer != null) clearTimeout(overflowLiveEventTimer);
-    pendingTextDeltaTimer = null;
-    overflowLiveEventFrame = null;
-    overflowLiveEventTimer = null;
-    pendingTextDelta = null;
-    overflowLiveEvents = [];
-    overflowMode = false;
-  };
-
-  const flushPendingTextDelta = () => {
-    const pending = pendingTextDelta;
-    pendingTextDelta = null;
-    if (pendingTextDeltaTimer) clearTimeout(pendingTextDeltaTimer);
-    pendingTextDeltaTimer = null;
-    if (pending) applyGenerationEvent(pending);
-  };
-
-  const scheduleOverflowLiveEvents = () => {
-    if (overflowLiveEventFrame != null || overflowLiveEventTimer != null || !overflowLiveEvents.length) return;
-    const drain = () => {
-      overflowLiveEventFrame = null;
-      overflowLiveEventTimer = null;
-      const startedAt = performance.now();
-      let processed = 0;
-      while (overflowLiveEvents.length && processed < OVERFLOW_MAX_EVENTS_PER_FRAME) {
-        const pending = overflowLiveEvents.shift();
-        if (pending) applyLiveEvent(pending);
-        processed += 1;
-        if (processed > 1 && performance.now() - startedAt >= OVERFLOW_FRAME_BUDGET_MS) break;
-      }
-      if (overflowLiveEvents.length) scheduleOverflowLiveEvents();
-      else overflowMode = false;
-    };
-    if (document.visibilityState === "hidden") overflowLiveEventTimer = setTimeout(drain, 16);
-    else overflowLiveEventFrame = requestAnimationFrame(drain);
-  };
-
-  const queueTextDelta = (event: StructuredGenerationEvent) => {
-    if (overflowMode) {
-      const previous = overflowLiveEvents.at(-1);
-      if (previous && isStructuredGenerationEvent(previous)
-        && previous.type === "content_block_delta"
-        && canCoalesceTextDelta(previous, event)) {
-        overflowLiveEvents[overflowLiveEvents.length - 1] = mergeTextDeltaEvents(previous, event)!;
-      } else {
-        enqueueOverflowLiveEvent(overflowLiveEvents, event);
-      }
-      scheduleOverflowLiveEvents();
-      return;
-    }
-    if (canCoalesceTextDelta(pendingTextDelta, event)) {
-      pendingTextDelta = {
-        ...pendingTextDelta,
-        seq: event.seq,
-        delta: `${String(pendingTextDelta!.delta || "")}${String(event.delta || "")}`,
-      } as StructuredGenerationEvent;
-    } else if (pendingTextDelta
-      && pendingTextDelta.generationId === event.generationId
-      && pendingTextDelta.messageId === event.messageId
-      && pendingTextDelta.contentIndex === event.contentIndex
-      && pendingTextDelta.blockKind === event.blockKind) {
-      // The current same-block batch is full. Move it behind an animation
-      // frame so the renderer can commit before the next batch is reduced.
-      const previous = pendingTextDelta;
-      pendingTextDelta = null;
-      if (pendingTextDeltaTimer) clearTimeout(pendingTextDeltaTimer);
-      pendingTextDeltaTimer = null;
-      overflowMode = true;
-      enqueueOverflowLiveEvent(overflowLiveEvents, previous);
-      enqueueOverflowLiveEvent(overflowLiveEvents, event);
-      scheduleOverflowLiveEvents();
-    } else {
-      flushPendingTextDelta();
-      pendingTextDelta = event;
-    }
-    if (pendingTextDelta && !pendingTextDeltaTimer) pendingTextDeltaTimer = setTimeout(flushPendingTextDelta, 0);
-  };
-
-  const queueLiveEvent = (event: LiveEvent) => {
-    if (event.type === "content_block_delta") {
-      queueTextDelta(event);
-      return;
-    }
-    if (overflowMode) {
-      enqueueOverflowLiveEvent(overflowLiveEvents, event);
-      scheduleOverflowLiveEvents();
-      return;
-    }
-    flushPendingTextDelta();
-    applyLiveEvent(event);
   };
 
   /**
@@ -518,7 +414,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     commandsLoadedFor = null;
     commandsLoading = null;
     resetLiveFlags();
-    clearPendingLiveEvents();
     generationStore.clear();
     setActiveGenerationChange(null);
     setActiveGeneration(null);
@@ -832,13 +727,9 @@ export function createActiveChat(options: ActiveChatOptions) {
   }
 
   function consume(event: LiveEvent) {
-    // Normal deltas retain the existing zero-delay coalescing path. Only an
-    // oversized same-block burst enters the RAF queue, which gives Solid and
-    // the browser a paint boundary between bounded batches.
-    if (overflowMode || pendingTextDelta || isStructuredGenerationEvent(event)) {
-      queueLiveEvent(event);
-      return;
-    }
+    // The server coalesces paint on its own timer and never merges across
+    // blocks, so what arrives is already the batch. Applying it in arrival
+    // order is the whole of the client's job.
     applyLiveEvent(event);
   }
 
@@ -1205,7 +1096,6 @@ export function createActiveChat(options: ActiveChatOptions) {
 
   const stop = () => {
     if (!streaming()) return;
-    flushPendingTextDelta();
     stopPending = true;
     setGeneration("stopping");
     session.sendWhenReady({ type: "stop_generation", generationId: currentGeneration });
