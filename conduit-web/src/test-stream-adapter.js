@@ -48,22 +48,37 @@ export const TEST_STREAM_CAPABILITIES = Object.freeze({
 });
 
 /**
- * The speeds, as models.
+ * How fast, and how much: every speed at both lengths.
  *
- * `paced-60` is roughly what a fast provider does, and is the control: if a
- * frame is dropped at 60 tokens/s the problem is not the stream. The rest climb
- * until something gives.
+ * The two are independent questions. A short run says whether a turn starts
+ * and settles cleanly; a long one says whether it still paints after a few
+ * thousand tokens have gone by, which is where a leak or a growing reconcile
+ * shows up and a short run never would. `paced-60` is the control at either
+ * length: a frame dropped at 60 tokens/s is not the stream's fault.
  */
-export const TEST_STREAM_RATES = Object.freeze([
+const SPEEDS = [
   { id: "paced-60", label: "60 tokens/s · about a real model", tokensPerSecond: 60 },
   { id: "fast-250", label: "250 tokens/s", tokensPerSecond: 250 },
   { id: "fast-1000", label: "1000 tokens/s", tokensPerSecond: 1000 },
   { id: "flood-4000", label: "4000 tokens/s · past any real provider", tokensPerSecond: 4000 },
-]);
+];
 
-export const DEFAULT_RATE_ID = "fast-250";
-const DEFAULT_DURATION_SECONDS = 15;
-const MAX_DURATION_SECONDS = 120;
+const AMOUNTS = [
+  { id: "short", label: "short", tokens: 400 },
+  { id: "long", label: "long", tokens: 4000 },
+];
+
+// The label carries the arithmetic because the useful number is how long the
+// run takes, and that is the two chosen values divided.
+export const TEST_STREAM_RATES = Object.freeze(SPEEDS.flatMap((speed) => AMOUNTS.map((amount) => Object.freeze({
+  id: `${speed.id}-${amount.id}`,
+  tokensPerSecond: speed.tokensPerSecond,
+  tokens: amount.tokens,
+  label: `${speed.label} · ${amount.label}, ${amount.tokens} tokens (~${Math.max(1, Math.round(amount.tokens / speed.tokensPerSecond))}s)`,
+}))));
+
+export const DEFAULT_RATE_ID = "fast-250-long";
+const MAX_TOKENS = 100_000;
 // setTimeout cannot be trusted below a couple of milliseconds, so past roughly
 // 500 tokens/s a tick emits several tokens rather than pretending to fire more
 // often than it can. The rate stays honest; only the deltas-per-tick changes.
@@ -79,16 +94,17 @@ const adapterError = (message, code = "backend_unavailable", status = 409) =>
 export const rateFor = (id) => TEST_STREAM_RATES.find((rate) => rate.id === id) || TEST_STREAM_RATES.find((rate) => rate.id === DEFAULT_RATE_ID);
 
 /**
- * A run's length, taken from the prompt when it names one.
+ * A one-off amount, taken from the prompt when it names one.
  *
- * Typing "45s" runs for 45 seconds. Anything else uses the default, because
+ * Typing "1200t" streams 1200 tokens whatever the model says, for the case the
+ * two presets do not cover. Anything else uses the model's own amount, because
  * the prompt is not a question here and refusing it would only mean the tester
  * has to remember the syntax.
  */
-export function durationFromPrompt(message) {
-  const match = /(\d+)\s*s\b/i.exec(String(message || ""));
-  if (!match) return DEFAULT_DURATION_SECONDS;
-  return Math.min(MAX_DURATION_SECONDS, Math.max(1, Number(match[1])));
+export function amountFromPrompt(message, fallback) {
+  const match = /(\d+)\s*t\b/i.exec(String(message || ""));
+  if (!match) return fallback;
+  return Math.min(MAX_TOKENS, Math.max(1, Number(match[1])));
 }
 
 /** The nth token of the stream, including the paragraph breaks. */
@@ -104,7 +120,7 @@ export class TestStreamAdapter extends EventEmitter {
     this.sessions = new SessionRecords({
       capabilities: TEST_STREAM_CAPABILITIES,
       backend: { protocol: "native_api", implementation: "test-stream", installationId: "conduit-test-stream" },
-      extras: (record) => ({ rate: rateFor(record.model).label, durationSeconds: record.durationSeconds }),
+      extras: (record) => ({ rate: rateFor(record.model).label, tokens: record.tokens }),
       // Nothing outside this process knows anything about these chats, so the
       // statements are the transcript, exactly as they are for ChatGPT Web. The
       // journal is memory only: this backend exists for the length of a
@@ -149,7 +165,7 @@ export class TestStreamAdapter extends EventEmitter {
       active: false,
       stopping: false,
       model: rateFor(model).id,
-      durationSeconds: DEFAULT_DURATION_SECONDS,
+      tokens: rateFor(model).tokens,
       generation: null,
       clients: new Set(),
       events: [],
@@ -158,14 +174,17 @@ export class TestStreamAdapter extends EventEmitter {
     });
   }
 
-  async prompt(id, message) {
+  async prompt(id, message, options) {
     const record = this.get(id);
     if (!record) throw adapterError("No test stream session", "backend_unavailable", 404);
     if (record.active) throw adapterError("Test stream session is busy", "generation_limit", 409);
     const generationId = crypto.randomUUID();
-    const userMessageId = crypto.randomUUID();
+    // The browser drew this row before it sent the prompt, so it already has a
+    // name. Inventing one here would state a second row for a message that is
+    // on screen: the same prompt twice, until a reload agreed with neither.
+    const userMessageId = options?.clientUserMessageId || crypto.randomUUID();
     const messageId = `assistant-${generationId}`;
-    record.durationSeconds = durationFromPrompt(message);
+    record.tokens = amountFromPrompt(message, rateFor(record.model).tokens);
     record.active = true;
     record.activity = "working";
     record.stopping = false;
@@ -195,7 +214,7 @@ export class TestStreamAdapter extends EventEmitter {
    */
   runStream(record) {
     const rate = rateFor(record.model);
-    const total = Math.max(1, Math.round(rate.tokensPerSecond * record.durationSeconds));
+    const total = Math.max(1, record.tokens || rate.tokens);
     const intervalMs = Math.max(TICK_FLOOR_MS, Math.floor(1000 / rate.tokensPerSecond));
     const startedAt = Date.now();
     const { messageId, generationId } = record.turn;
@@ -269,7 +288,13 @@ export class TestStreamAdapter extends EventEmitter {
 
   async setModel(id, model) {
     const record = this.get(id);
-    if (record) record.model = rateFor(model).id;
+    if (record) {
+      const rate = rateFor(model);
+      record.model = rate.id;
+      // The amount belongs to the model, so switching model switches both. A
+      // one-off amount named in a prompt applies to that prompt only.
+      record.tokens = rate.tokens;
+    }
     return record?.model || DEFAULT_RATE_ID;
   }
 

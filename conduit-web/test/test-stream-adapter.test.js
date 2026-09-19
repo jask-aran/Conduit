@@ -8,19 +8,19 @@ import {
   TEST_STREAM_CAPABILITIES,
   TEST_STREAM_RATES,
   TestStreamAdapter,
-  durationFromPrompt,
+  amountFromPrompt,
   rateFor,
   tokenAt,
 } from "../src/test-stream-adapter.js";
 
 const settle = (adapter) => new Promise((resolve) => adapter.once("settled", resolve));
 
-async function streamed(adapter, { model, prompt }) {
+async function streamed(adapter, { model, prompt, clientUserMessageId }) {
   const record = await adapter.create({ chatId: `chat-${model}`, model });
   const socket = { readyState: 1, sent: [], send(payload) { this.sent.push(JSON.parse(payload)); }, once() {} };
   adapter.attach(record.id, socket);
   const startedAt = Date.now();
-  await adapter.prompt(record.id, prompt);
+  await adapter.prompt(record.id, prompt, { clientUserMessageId });
   await settle(adapter);
   return { record, socket, elapsedMs: Date.now() - startedAt };
 }
@@ -43,8 +43,9 @@ test("the test profile is offered like any other harness-backed profile", () => 
 
 test("a run holds the rate it was asked for against the clock", async () => {
   const adapter = new TestStreamAdapter();
-  const rate = rateFor("fast-250");
-  const { socket, elapsedMs } = await streamed(adapter, { model: "fast-250", prompt: "1s" });
+  const rate = rateFor("fast-250-short");
+  // 250 tokens at 250/s is a second, whatever the model's own amount is.
+  const { socket, elapsedMs } = await streamed(adapter, { model: "fast-250-short", prompt: "250t" });
   const deltas = socket.sent.filter((event) => event.type === "assistant_content" && event.phase === "delta");
   const text = deltas.map((event) => event.delta).join("");
   const tokens = text.trim().split(/\s+/).length;
@@ -66,10 +67,10 @@ test("a run holds the rate it was asked for against the clock", async () => {
 
 test("a stopped run keeps the text the reader watched arrive", async () => {
   const adapter = new TestStreamAdapter();
-  const record = await adapter.create({ chatId: "chat-cancel", model: "fast-1000" });
+  const record = await adapter.create({ chatId: "chat-cancel", model: "fast-1000-long" });
   const socket = { readyState: 1, sent: [], send(payload) { this.sent.push(JSON.parse(payload)); }, once() {} };
   adapter.attach(record.id, socket);
-  await adapter.prompt(record.id, "60s");
+  await adapter.prompt(record.id, "20000t");
   await new Promise((resolve) => setTimeout(resolve, 120));
   const settled = settle(adapter);
   await adapter.cancel(record.id);
@@ -90,7 +91,7 @@ test("a stopped run keeps the text the reader watched arrive", async () => {
 
 test("a chat reads back the transcript it streamed", async () => {
   const adapter = new TestStreamAdapter();
-  const { record } = await streamed(adapter, { model: "paced-60", prompt: "1s" });
+  const { record } = await streamed(adapter, { model: "paced-60-short", prompt: "60t" });
   const { messages, page } = await adapter.readTranscript({ liveSessionId: record.id });
 
   assert.deepEqual(messages.map((message) => message.role), ["user", "assistant"]);
@@ -102,15 +103,46 @@ test("a chat reads back the transcript it streamed", async () => {
   assert.deepEqual(page, { before: null });
 });
 
-test("the prompt names the run length, and the model names the rate", () => {
-  assert.equal(durationFromPrompt("45s"), 45);
-  assert.equal(durationFromPrompt("hold it for 90 s please"), 90);
-  assert.equal(durationFromPrompt("anything else"), 15);
-  // A run long enough to wedge the profiling session is not a useful default.
-  assert.equal(durationFromPrompt("9999s"), 120);
-  assert.equal(rateFor("flood-4000").tokensPerSecond, 4000);
+test("every speed is offered at both amounts, and a prompt can override the amount", () => {
+  // Speed and amount are independent questions, so the models are the grid:
+  // a short run says a turn settles cleanly, a long one says it still paints
+  // after a few thousand tokens.
+  assert.equal(TEST_STREAM_RATES.length, 8);
+  assert.deepEqual(TEST_STREAM_RATES.map((rate) => rate.id), [
+    "paced-60-short", "paced-60-long",
+    "fast-250-short", "fast-250-long",
+    "fast-1000-short", "fast-1000-long",
+    "flood-4000-short", "flood-4000-long",
+  ]);
+  assert.equal(rateFor("flood-4000-long").tokensPerSecond, 4000);
+  assert.equal(rateFor("flood-4000-long").tokens, 4000);
+  assert.equal(rateFor("flood-4000-short").tokens, 400);
   assert.equal(rateFor("nonsense").id, DEFAULT_RATE_ID);
-  assert.equal(TEST_STREAM_RATES.length, 4);
+  // The label carries the arithmetic, because the number worth knowing before
+  // pressing send is how long it will take.
+  assert.match(rateFor("paced-60-long").label, /4000 tokens \(~67s\)/);
+
+  assert.equal(amountFromPrompt("1200t", 400), 1200);
+  assert.equal(amountFromPrompt("give me 900 t of it", 400), 900);
+  assert.equal(amountFromPrompt("anything else", 400), 400);
+  // An amount large enough to wedge the profiling session is not useful.
+  assert.equal(amountFromPrompt("9999999t", 400), 100_000);
+});
+
+test("the prompt is named what the browser already calls it", async () => {
+  // The row is drawn before the prompt is sent. A harness that names its own
+  // messages still has to name this one what the browser did, or it states a
+  // second row for a message that is already on screen -- the same prompt
+  // twice, which is exactly what claiming an id prevents for Pi.
+  const adapter = new TestStreamAdapter();
+  const { socket } = await streamed(adapter,
+    { model: "paced-60-short", prompt: "10t", clientUserMessageId: "m_from-the-browser" });
+  const opens = socket.sent.filter((event) => event.op === "message.open");
+  const users = opens.filter((event) => event.message.role === "user");
+  assert.equal(users.length, 1, "one row for one prompt");
+  assert.equal(users[0].message.id, "m_from-the-browser");
+  // And the answer says it answers that row, not some other name for it.
+  assert.equal(opens.find((event) => event.message.role === "assistant").answers, "m_from-the-browser");
 });
 
 test("the stream is deterministic and broken into paragraphs", () => {

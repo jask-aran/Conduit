@@ -435,3 +435,54 @@ test("a prompt adopted from history has no name to keep, and is re-sent under a 
   assert.deepEqual(published.filter((event) => event.op === "message.open").map((event) => event.message.id),
     ["m_claimed"]);
 });
+
+test("a harness that names its own messages is told what the browser named this one", async () => {
+  // The browser draws the prompt row before it sends it, then the server tells
+  // the harness to state that row. For Pi the name comes from the ledger; for a
+  // harness that names its own messages the ledger stands aside, and the
+  // browser's name has to reach the adapter some other way or the adapter
+  // invents one -- stating a second row for a message already on screen.
+  const record = {
+    id: "live-own-ids", chatId: "chat-own-ids", projectId: "project-1", status: "running",
+    adapterImplementation: "test-stream", hostUiRequests: [],
+  };
+  const prompts = [];
+  const published = [];
+  const adapter = {
+    attach: () => null,
+    view: () => record,
+    toClientEvent: (event) => event,
+    refreshContext: async () => {},
+    getCapabilities: () => ({ attachments: false }),
+    prompt: async (_id, _message, options) => { prompts.push(options); return "generation-1"; },
+    publish: (_record, event) => { published.push(event); },
+  };
+  const chat = { id: record.chatId, status: "draft", title: "t", backend: { implementation: "test-stream" } };
+  const project = { id: record.projectId, kind: "workspace", workingRoot: "/tmp" };
+  const ws = new EventEmitter();
+  ws.readyState = 1;
+  ws.send = () => {};
+  const stream = createLiveSessionStream({
+    manager: {},
+    wss: { handleUpgrade: (_request, _socket, _head, accept) => accept(ws) },
+    attachments: { resolveMany: async () => [], pathFor: () => "", recordMessage: async () => {} },
+    registry: { metadata: () => chat, markUserMessage: async () => {}, update: async () => chat },
+    config: {},
+    findChatContext: async () => ({ chat, project }),
+    lifecycle,
+    // This harness names its own messages, so the ledger claims nothing.
+    messageIds: { ...messageIds, owns: () => false, claim: async () => null },
+    chatLogs: new ChatLogs(),
+    backends: { get: () => record, forChat: () => adapter },
+    autoNameSession: async () => {},
+  });
+
+  stream.handleUpgrade(record.id, {}, {}, null);
+  ws.emit("message", JSON.stringify({ type: "prompt", messageId: "m_11111111-2222-3333-4444-555555555555", message: "hello" }));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(prompts[0].clientUserMessageId, "m_11111111-2222-3333-4444-555555555555");
+  // And Conduit states nothing itself: naming the row is the adapter's job here,
+  // so two statements for one prompt would be the same duplicate from the server.
+  assert.equal(published.filter((event) => event.op === "message.open").length, 0);
+});
