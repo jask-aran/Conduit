@@ -194,7 +194,7 @@ test("tool noise is trimmed to the recent end without dropping older messages", 
     }
     rows.push({ turnId: `t${turn}`, item: { type: "agentMessage", id: `a${turn}`, text: `answer ${turn}` } });
   }
-  const kept = CodexAppServerAdapter.recent(rows);
+  const { rows: kept } = CodexAppServerAdapter.recent(rows);
   const messages = kept.filter((row) => row.item.type === "userMessage" || row.item.type === "agentMessage");
   const tools = kept.filter((row) => row.item.type === "commandExecution");
   assert.equal(messages.length, 240, "every message in a 120-turn thread survives");
@@ -204,11 +204,38 @@ test("tool noise is trimmed to the recent end without dropping older messages", 
   assert.deepEqual(kept.map((row) => rows.indexOf(row)), [...kept.map((row) => rows.indexOf(row))].sort((a, b) => a - b), "and order is preserved");
 });
 
+/**
+ * A long thread says where the rest of it is, like a long session file does.
+ *
+ * Every backend but Pi answered `page: { before: null }` from the route, hard
+ * coded -- so a Codex thread that had been trimmed to its recent end told the
+ * browser that what it had been given was the whole conversation, and there was
+ * no way to ask for the rest.
+ */
+test("a thread trimmed to its recent end says where the rest of it starts", () => {
+  const rows = [];
+  for (let turn = 0; turn < 300; turn += 1) {
+    rows.push({ turnId: `t${turn}`, item: { type: "userMessage", id: `u${turn}`, content: [{ type: "text", text: `ask ${turn}` }] } });
+    rows.push({ turnId: `t${turn}`, item: { type: "agentMessage", id: `a${turn}`, text: `answer ${turn}` } });
+  }
+  const first = CodexAppServerAdapter.recent(rows);
+  assert.ok(first.page.before, "a thread longer than the window has an earlier page");
+  assert.equal(first.rows.at(-1).item.id, "a299", "the window is the recent end");
+
+  // And that cursor reads the thread as it stood before it, with no overlap and
+  // no gap.
+  const older = CodexAppServerAdapter.recent(rows, { before: first.page.before });
+  assert.equal(rows.indexOf(older.rows.at(-1)) + 1, rows.indexOf(first.rows[0]));
+
+  // A thread that fits says so, and the browser stops asking.
+  assert.equal(CodexAppServerAdapter.recent(rows.slice(-4)).page.before, null);
+});
+
 test("reasoning summaries stay in the message budget and never spend the tool budget", () => {
   const rows = [];
   for (let index = 0; index < 400; index += 1) rows.push({ turnId: "t1", item: { type: "reasoning", id: `r${index}`, summary: [], content: [] } });
   rows.push({ turnId: "t1", item: { type: "commandExecution", id: "e1", command: "ls", status: "completed" } });
-  assert.deepEqual(CodexAppServerAdapter.recent(rows).map((row) => row.item.id), [
+  assert.deepEqual(CodexAppServerAdapter.recent(rows).rows.map((row) => row.item.id), [
     ...Array.from({ length: 400 }, (_, index) => `r${index}`), "e1",
   ]);
 });
@@ -259,7 +286,8 @@ test("a turn that only runs commands carries them without inventing an answer", 
 
 test("a thread with no stored history yields an empty transcript", async () => {
   assert.deepEqual(CodexAppServerAdapter.threadTranscript(undefined), { messages: [], tools: [] });
-  assert.deepEqual(await new CodexAppServerAdapter().readTranscript({ chatId: "missing" }), { messages: [], tools: [] });
+  assert.deepEqual(await new CodexAppServerAdapter().readTranscript({ chatId: "missing" }),
+    { messages: [], tools: [], page: { before: null } });
 });
 
 test("a one-turn transcript sync reads one paginated history page", async () => {

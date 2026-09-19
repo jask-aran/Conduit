@@ -57,9 +57,14 @@ export function registerSessionRoutes(app, {
           chatId: context.chat.id,
           opaqueSession: context.chat.backend?.opaqueSession,
           project: context.project,
+          before: request.query.before,
         });
         projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages);
-        return response.json({ ...chatView(context.chat), ...projection, attachments: [], page: { before: null } });
+        // Where the rest of the history starts is the adapter's to say, the same
+        // as the transcript itself. This used to answer `null` for every backend
+        // but Pi, which told the browser a long thread was all of it.
+        return response.json({ ...chatView(context.chat), ...projection, attachments: [],
+          page: projection.page || { before: null } });
       }
       const sessionFile = conduitPiSessionFile(context.chat);
       if (!sessionFile) return response.json({

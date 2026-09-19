@@ -282,11 +282,22 @@ export class CodexAppServerAdapter extends EventEmitter {
    * The rows worth keeping, in order: the most recent messages up to the
    * message budget, and the most recent tool items up to the smaller tool one.
    */
-  static recent(rows) {
+  /**
+   * The window of a thread worth drawing, and where the rest of it starts.
+   *
+   * `before` is the cursor from a previous window: read the thread as it stood
+   * up to there. It is an index into the rows this read fetched, which is stable
+   * because a thread only grows at the end -- the same property that makes Pi's
+   * offset cursor work on a session file.
+   */
+  static recent(rows, { before = null } = {}) {
+    const requested = Number.parseInt(before, 10);
+    const end = Number.isInteger(requested) ? Math.max(0, Math.min(requested, rows.length)) : rows.length;
     let messages = 0;
     let tools = 0;
     const keep = new Set();
-    for (let index = rows.length - 1; index >= 0; index -= 1) {
+    let first = end;
+    for (let index = end - 1; index >= 0; index -= 1) {
       const item = rows[index]?.item;
       if (isMessage(item)) {
         if (messages >= REPLAY_MESSAGE_LIMIT) continue;
@@ -296,8 +307,13 @@ export class CodexAppServerAdapter extends EventEmitter {
         tools += 1;
       }
       keep.add(index);
+      first = index;
     }
-    return rows.filter((_row, index) => keep.has(index));
+    // Only rows that would draw something count as more to fetch, or the browser
+    // would be offered a page that turns out to be empty.
+    const hasMore = rows.slice(0, first).some((row) => isMessage(row?.item)
+      || CodexAppServerAdapter.toolActivity(row?.item));
+    return { rows: rows.filter((_row, index) => keep.has(index)), page: { before: hasMore ? String(first) : null } };
   }
 
   /**
@@ -393,11 +409,11 @@ export class CodexAppServerAdapter extends EventEmitter {
     return { messages, tools };
   }
 
-  async readTranscript({ liveSessionId, chatId, opaqueSession, project, turns: turnLimit }) {
+  async readTranscript({ liveSessionId, chatId, opaqueSession, project, turns: turnLimit, before = null }) {
     const live = (liveSessionId ? this.get(liveSessionId) : null) || this.getByChatId(chatId);
     const threadId = live?.sessionId
       || (typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId);
-    if (!threadId) return { messages: [], tools: [] };
+    if (!threadId) return { messages: [], tools: [], page: { before: null } };
     const transport = live || await this.discovery(project?.workingRoot);
     const result = await this.request(transport, "thread/read", { threadId, includeTurns: true });
     const allTurns = result?.thread?.turns || [];
@@ -408,7 +424,8 @@ export class CodexAppServerAdapter extends EventEmitter {
       ? rows
       : await this.items(transport, threadId,
         Number.isSafeInteger(turnLimit) && turnLimit > 0 ? Math.min(turnLimit, REPLAY_PAGE_LIMIT) : REPLAY_PAGE_LIMIT);
-    return CodexAppServerAdapter.threadTranscript(CodexAppServerAdapter.recent(transcriptRows));
+    const window = CodexAppServerAdapter.recent(transcriptRows, { before });
+    return { ...CodexAppServerAdapter.threadTranscript(window.rows), page: window.page };
   }
   async readHistory(options) {
     const { messages } = await this.readTranscript(options);
