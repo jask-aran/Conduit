@@ -1,4 +1,5 @@
 import { CONTINUE_PROMPT } from "../continuation.js";
+import { messageDrop, messageOpen } from "../harnesses/transcript-ops.js";
 import { messagesFromEntries } from "../session-store.js";
 import { chatView } from "../chat-store.js";
 import { parseAttachmentEnvelope } from "../attachment-envelope.js";
@@ -202,8 +203,8 @@ export function createLiveSessionStream({
     // reply -- and, because an answer belongs to the prompt it names, took the
     // whole turn with it into the turn above.
     if (claimed?.user) {
-      adapter.publish(record, { type: "transcript_op", op: "message.open", answers: null,
-        message: { id: claimed.user, role: "user", content: prepared.message, timestamp: new Date().toISOString() } });
+      adapter.publish(record, messageOpen({ id: claimed.user, role: "user",
+        content: prepared.message, timestamp: new Date().toISOString() }));
     }
     let accepted;
     try {
@@ -215,7 +216,7 @@ export function createLiveSessionStream({
       // row stated for it goes with them.
       await messageIds.release(prepared.context.project, prepared.context.chat, claimed);
       if (claimed?.user) {
-        adapter.publish(record, { type: "transcript_op", op: "message.drop", messageId: claimed.user, inclusive: false });
+        adapter.publish(record, messageDrop({ messageId: claimed.user }));
       }
       throw error;
     }
@@ -283,8 +284,7 @@ export function createLiveSessionStream({
     // The same fact in the chat's order, so the cut has a place in the sequence
     // a client rebuilds from rather than only a message of its own.
     if (logFor(record)) {
-      adapter.publish(record, { type: "transcript_op", op: "message.drop",
-        messageId, ...(keep ? { keep: true } : { inclusive: true }) });
+      adapter.publish(record, messageDrop({ messageId, keep, inclusive: !keep }));
     }
   }
 

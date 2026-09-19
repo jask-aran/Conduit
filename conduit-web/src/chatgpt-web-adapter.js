@@ -5,7 +5,6 @@ import readline from "node:readline";
 import { Readable } from "node:stream";
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { wasDiscarded } from "./abort-signature.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { applyTranscriptOp } from "./transcript-fold.js";
@@ -231,8 +230,7 @@ export class ChatGptWebAdapter extends EventEmitter {
       // The cursor only advances on `done`, which an interrupt never reaches,
       // so the next prompt is sent from the message before this one and the
       // account keeps no record of what was written here.
-      discarded: wasDiscarded({ role: "assistant", stopReason, content: text },
-        { keepsPartial: CHATGPT_WEB_CAPABILITIES.interruptKeepsPartial }),
+      keepsPartial: CHATGPT_WEB_CAPABILITIES.interruptKeepsPartial,
       blocks: [{ kind: "text", contentIndex: 0, text }] }));
   }
 

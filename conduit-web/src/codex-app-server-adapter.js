@@ -8,7 +8,7 @@ import WebSocket from "ws";
 import { wasDiscarded } from "./abort-signature.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { toolClose, toolOpen } from "./harnesses/transcript-ops.js";
+import { messageClose, messageDrop, messageOpen, toolClose, toolOpen } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 export const CODEX_CAPABILITIES = Object.freeze({
@@ -621,9 +621,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     if (!id || !this.states(record)) return null;
     record.openMessages = record.openMessages || new Set();
     if (role === "assistant") record.openMessages.add(id);
-    this.publish(record, { type: "transcript_op", op: "message.open",
-      ...(generationId ? { generationId } : {}),
-      answers, message: { id, role, ...fields } });
+    this.publish(record, messageOpen({ id, role, ...fields, generationId, answers }));
     return id;
   }
 
@@ -631,30 +629,19 @@ export class CodexAppServerAdapter extends EventEmitter {
   closeMessage(record, id, stopReason = null, { blocks = [], interim = false } = {}) {
     if (!id || !this.states(record)) return null;
     record.openMessages?.delete(id);
-    this.publish(record, {
-      type: "transcript_op", op: "message.close", messageId: id, stopReason,
+    this.publish(record, messageClose({
+      messageId: id, stopReason,
       // Codex does not persist the answer it was writing when a turn was
       // interrupted: the thread reports that turn holding the prompt and an
-      // empty reasoning stub. What the reader watched arrive is kept here and
-      // marked, because the model has no record of it.
-      ...(wasDiscarded({ role: "assistant", stopReason,
-        content: blocks.filter((block) => block.kind === "text").map((block) => block.text || "").join("") },
-      { keepsPartial: CODEX_CAPABILITIES.interruptKeepsPartial }) ? { discarded: true } : {}),
+      // empty reasoning stub. What the reader watched arrive is kept and
+      // marked, which the op does from this one fact about the harness.
+      keepsPartial: CODEX_CAPABILITIES.interruptKeepsPartial,
       // Whether this message is the answer or the turn talking as it works.
       // Codex says so itself, in the phase it gives the item; the browser is
       // told, rather than deciding it from what a later message went on to do.
       interim,
-      // What the message says, answer or not. Interim text is the turn talking
-      // as it works, and the trace renders it: stating the message without it
-      // would leave the reader watching commentary arrive and then vanish when
-      // the turn settled.
-      content: blocks.filter((block) => block.kind === "text").map((block) => block.text || "").join("\n"),
-      blocks: blocks.flatMap((block) => {
-        if (block.kind === "thinking") return [{ type: "thinking", thinking: block.text || "" }];
-        if (block.kind === "tool_call") return [{ type: "toolCall", id: block.toolCallId || block.id, name: block.name, arguments: block.input }];
-        return [];
-      }),
-    });
+      blocks,
+    }));
     return id;
   }
 
@@ -690,7 +677,7 @@ export class CodexAppServerAdapter extends EventEmitter {
           && (written.phase != null || written.blocks.some((block) => block.kind === "tool_call") || !written.blocks.some((block) => block.kind === "text"));
         this.closeMessage(record, id, interim ? "toolUse" : stopReason, { blocks: written.blocks, interim });
       } else {
-        this.publish(record, { type: "transcript_op", op: "message.drop", messageId: id, inclusive: false });
+        this.publish(record, messageDrop({ messageId: id }));
         open.delete(id);
       }
     }
@@ -1027,7 +1014,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       record.messageIds.delete(clientUserMessageId);
       record.answering = null;
       if (this.states(record)) {
-        this.publish(record, { type: "transcript_op", op: "message.drop", messageId: clientUserMessageId, inclusive: false });
+        this.publish(record, messageDrop({ messageId: clientUserMessageId }));
       }
       throw cause;
     }
