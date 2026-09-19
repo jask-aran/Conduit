@@ -412,6 +412,13 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-history-branch-rail { position: absolute; top: 0; bottom: calc(var(--history-row-height, 23px) / 2); left: calc(var(--history-gutter) + var(--history-depth, 1) * var(--history-step) - var(--history-tick)); width: 1px; background: var(--muted-foreground); opacity: .55; }
 .workspace-history-branch-tick { position: absolute; top: calc(2px + var(--history-line-height) / 2); left: calc(var(--history-gutter) + var(--history-depth, 1) * var(--history-step) - var(--history-tick)); width: var(--history-tick); height: 1px; background: var(--muted-foreground); opacity: .55; }
 .workspace-history-row:hover { background: color-mix(in oklch, var(--accent), transparent 24%); }
+/* A folded run of tool calls is a control, not a line of text: it opens just
+   that run, and the button in the header stays the blunt all-or-nothing one. */
+.workspace-history-run { width: 100%; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
+.workspace-history-run .workspace-history-text { display: flex; align-items: center; gap: 3.2px; }
+.workspace-history-run-chevron { width: 9.6px; height: 9.6px; flex: none; opacity: .7; transition: transform 0.15s ease; }
+.workspace-history-run-chevron[data-open="true"] { transform: rotate(180deg); }
+.workspace-history-run:hover .workspace-history-run-chevron { opacity: 1; }
 .workspace-history-row[data-kind="user"], .workspace-history-row[data-kind="assistant"] { color: var(--foreground); }
 .workspace-history-row[data-kind="user"] strong { color: color-mix(in oklch, var(--primary), white 18%); }
 .workspace-history-row[data-kind="assistant"] strong { color: var(--workspace-git-added); }
