@@ -336,9 +336,9 @@ export class CodexAppServerAdapter extends EventEmitter {
     let interim = null;
     // Read back, a thread says the same two things the socket said: which
     // prompt an answer answers, and whether a message is the answer or the turn
-    // talking as it works. Without them the browser falls back to reading both
-    // off the shape of the turn, which is the guessing a stated transcript
-    // exists to remove.
+    // talking as it works. There is no reading of the turn's shape underneath
+    // any more, so a thread that does not state both is refused rather than
+    // guessed at.
     let answering = null;
     const closeTurn = () => {
       // Older threads carry no `phase`, so nothing would read as the answer.
