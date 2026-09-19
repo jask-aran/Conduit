@@ -19,8 +19,7 @@ import {
 } from "./active-generation.js";
 import { createPiEventNormalizer } from "./pi-event-normalizer.js";
 import { projectSessionEntries, readSessionPage } from "./session-store.js";
-import { toolClose, toolOpen } from "./harnesses/transcript-ops.js";
-import { wasDiscarded } from "./abort-signature.js";
+import { messageClose, messageDrop, messageOpen, toolClose, toolOpen } from "./harnesses/transcript-ops.js";
 import { PI_CAPABILITIES } from "./pi-capabilities.js";
 import { PiCommandCatalog } from "./pi-command-catalog.js";
 import { ChatLogs, isLoggedEvent } from "./server/chat-log.js";
@@ -234,6 +233,24 @@ const ABORT_TERMINAL_EVENTS = new Set(["tool_execution_end", "message_end", "tur
 const SLOW_RPC_MS = 2_000;
 /** How long a request will wait for a freshly spawned Pi to say anything at all. */
 const BOOT_WAIT_MS = 20_000;
+
+/**
+ * Pi's block spelling, in Conduit's.
+ *
+ * This is the whole of what an adapter owes the transcript vocabulary: its own
+ * names for the parts of a message, turned into the names the ops are written
+ * in. Doing it here rather than inside each op is what stops the two spellings
+ * travelling side by side, which is how one of them ended up being read for
+ * text and the other for tool calls in the same close.
+ */
+const neutralBlock = (block) => {
+  if (block.type === "text") return { kind: "text", text: block.text || "" };
+  if (block.type === "thinking") return { kind: "thinking", text: block.text || "" };
+  if (block.type === "toolCall") {
+    return { kind: "tool_call", toolCallId: block.toolCallId || block.identity, name: block.name, input: block.arguments };
+  }
+  return { kind: block.type };
+};
 
 export class PiManager extends EventEmitter {
   constructor({
@@ -1719,14 +1736,13 @@ export class PiManager extends EventEmitter {
       record.generation.openMessages = record.generation.openMessages || new Set();
       record.generation.openMessages.add(id);
     }
-    this.publish(record, { type: "transcript_op", op: "message.open",
+    this.publish(record, messageOpen({ id, role, ...fields,
       // The turn that is writing it, so a row holding a place for an answer
       // that never arrives can be cleared along with the turn that named it.
-      ...(record.generation ? { generationId: record.generation.id } : {}),
+      generationId: record.generation?.id || null,
       // The prompt this message answers, for an answer. A prompt answers
       // nothing and says so.
-      answers,
-      message: { id, role, ...fields } });
+      answers }));
     return id;
   }
 
@@ -1746,32 +1762,19 @@ export class PiManager extends EventEmitter {
     const generation = record.activeGeneration;
     const written = generation?.assistantMessages?.find((message) => message.id === id) || null;
     const blocks = written?.blocks || [];
-    this.publish(record, {
-      type: "transcript_op", op: "message.close", messageId: id, stopReason,
+    this.publish(record, messageClose({
+      messageId: id, stopReason,
       // Whether this message is an answer or the turn talking as it works. The
       // browser is told, rather than deciding it from the shape of the turn
       // around the message.
       interim: messageIsInterim(written),
       // Pi writes an interrupted message to its session file and then builds
-      // the next request without it. The text is real -- the reader watched it
-      // arrive -- but the model will never see it again, so the transcript is
-      // told that outright rather than showing it as ordinary conversation.
-      ...(wasDiscarded({ role: "assistant", stopReason,
-        content: blocks.filter((block) => block.type === "text").map((block) => block.text || "").join("") },
-      { keepsPartial: PI_CAPABILITIES.interruptKeepsPartial }) ? { discarded: true } : {}),
-      // What the message says, answer or not. Interim text is the turn talking
-      // as it works and the trace renders it, so a close that left it out took
-      // commentary off the screen the moment the turn settled. `interim` above
-      // is what says which of the two this is; the text is stated either way.
-      content: blocks.filter((block) => block.type === "text").map((block) => block.text || "").join("\n"),
-      blocks: blocks.flatMap((block) => {
-        if (block.type === "thinking") return [{ type: "thinking", thinking: block.text || "" }];
-        if (block.type === "toolCall") {
-          return [{ type: "toolCall", id: block.toolCallId || block.identity, name: block.name, arguments: block.arguments }];
-        }
-        return [];
-      }),
-    });
+      // the next request without it, so the text is real -- the reader watched
+      // it arrive -- but the model will never see it again. Saying so is the
+      // op's job; what is said here is only that Pi cannot keep a partial.
+      keepsPartial: PI_CAPABILITIES.interruptKeepsPartial,
+      blocks: blocks.map(neutralBlock),
+    }));
     return id;
   }
 
@@ -1789,7 +1792,7 @@ export class PiManager extends EventEmitter {
     for (const id of [...open]) {
       const written = record.activeGeneration?.assistantMessages?.find((message) => message.id === id);
       if (written?.blocks?.length) this.closeMessage(record, id, written.stopReason || "aborted");
-      else this.publish(record, { type: "transcript_op", op: "message.drop", messageId: id, inclusive: false });
+      else this.publish(record, messageDrop({ messageId: id }));
       open.delete(id);
     }
   }
