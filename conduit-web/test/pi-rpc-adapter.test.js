@@ -21,7 +21,7 @@ test("Pi adapter normalization retains every native payload in its privileged en
 });
 
 test("Pi adapter maps required neutral events and retains Pi richness", () => {
-  const delta = { type: "content_block_delta", generationId: "g1", seq: 2, messageId: "m1", contentIndex: 0, blockType: "text", delta: "hi" };
+  const delta = { type: "content_block_delta", generationId: "g1", seq: 2, messageId: "m1", contentIndex: 0, blockKind: "text", delta: "hi" };
   assert.deepEqual(normalizePiBackendEvent(delta), {
     generationId: "g1", pi: delta, type: "assistant_content", phase: "delta",
     sequence: 2, messageId: "m1", contentIndex: 0, blockKind: "text", delta: "hi",

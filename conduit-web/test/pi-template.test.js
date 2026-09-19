@@ -384,11 +384,11 @@ test("coalesces adjacent block deltas for each connected client", async () => {
   const socket = deliverySocket();
   manager.attach(record.id, socket);
 
-  manager.deliver(record, { type: "content_block_delta", generationId: "g1", seq: 3, messageId: "m1", blockType: "text", contentIndex: 0, delta: "Hel" });
-  manager.deliver(record, { type: "content_block_delta", generationId: "g1", seq: 4, messageId: "m1", blockType: "text", contentIndex: 0, delta: "lo" });
+  manager.deliver(record, { type: "content_block_delta", generationId: "g1", seq: 3, messageId: "m1", blockKind: "text", contentIndex: 0, delta: "Hel" });
+  manager.deliver(record, { type: "content_block_delta", generationId: "g1", seq: 4, messageId: "m1", blockKind: "text", contentIndex: 0, delta: "lo" });
   assert.equal(socket.events.length, 0);
   await wait(30);
-  assert.deepEqual(socket.events, [{ type: "content_block_delta", generationId: "g1", seq: 4, messageId: "m1", blockType: "text", contentIndex: 0, delta: "Hello" }]);
+  assert.deepEqual(socket.events, [{ type: "content_block_delta", generationId: "g1", seq: 4, messageId: "m1", blockKind: "text", contentIndex: 0, delta: "Hello" }]);
 });
 
 test("slow clients discard superseded deltas and recover from Resume State", async () => {

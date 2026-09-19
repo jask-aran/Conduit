@@ -97,7 +97,7 @@ export function normalizePiBackendEvent(event) {
     case "content_block_delta":
       return { ...base, type: "assistant_content", phase: "delta", sequence: event.seq,
         messageId: event.messageId, contentIndex: event.contentIndex,
-        blockKind: event.blockType === "toolCall" ? "tool_call" : event.blockType, delta: event.delta };
+        blockKind: event.blockKind, delta: event.delta };
     case "assistant_message_started":
       return { ...base, type: "assistant_content", phase: "start", sequence: event.seq, messageId: event.messageId };
     case "assistant_message_completed": {
@@ -108,9 +108,9 @@ export function normalizePiBackendEvent(event) {
         messageId: event.messageId,
         stopReason: aborted ? "aborted" : event.stopReason,
         errorMessage: aborted ? null : event.errorMessage,
-        blocks: event.blocks.map(({ type, ...block }) => type === "toolCall"
-          ? { kind: "tool_call", contentIndex: block.contentIndex, toolCallId: block.toolCallId, name: block.name, input: block.arguments }
-          : { kind: type, ...block }) };
+        // Already Conduit's blocks: the normalizer turns Pi's names into them
+        // where it reads Pi's wire, which is the only place they belong.
+        blocks: event.blocks };
     }
     case "generation_started":
     case "generation_running":

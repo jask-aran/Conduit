@@ -8,25 +8,34 @@ function normalizeTimestamp(value) {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
+/**
+ * Pi's block, in Conduit's spelling.
+ *
+ * The reads are Pi's -- `type`, `toolCall`, `arguments`, `thinking` -- because
+ * that is what comes off Pi's wire. What leaves is Conduit's, the same names a
+ * settled message is stated in. A block in flight carries more than a settled
+ * one does, because `contentIndex` is how a delta finds the block it belongs
+ * to, but it is the same block and it is called the same things.
+ */
 function normalizeBlock(block, contentIndex) {
   if (block?.type === "thinking") {
     return {
-      type: "thinking",
+      kind: "thinking",
       contentIndex,
       text: String(block.thinking || ""),
       redacted: Boolean(block.redacted),
     };
   }
   if (block?.type === "text") {
-    return { type: "text", contentIndex, text: String(block.text || "") };
+    return { kind: "text", contentIndex, text: String(block.text || "") };
   }
   if (block?.type === "toolCall") {
     return {
-      type: "toolCall",
+      kind: "tool_call",
       contentIndex,
       toolCallId: String(block.id || ""),
       name: String(block.name || ""),
-      arguments: block.arguments,
+      input: block.arguments,
     };
   }
   return null;
@@ -64,18 +73,18 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0, cl
         if (!activeMessageId || !update.type || update.type === "start") return [];
         const contentIndex = Number(update.contentIndex);
         if (!Number.isInteger(contentIndex) || contentIndex < 0) return [];
-        const blockType = update.type.startsWith("thinking_")
+        const blockKind = update.type.startsWith("thinking_")
           ? "thinking"
           : update.type.startsWith("text_") ? "text"
-            : update.type.startsWith("toolcall_") ? "toolCall" : null;
-        if (!blockType) return [];
+            : update.type.startsWith("toolcall_") ? "tool_call" : null;
+        if (!blockKind) return [];
         if (update.type.endsWith("_start")) {
           const normalized = normalizeBlock(content[contentIndex], contentIndex)
-            || { type: blockType, contentIndex };
+            || { kind: blockKind, contentIndex };
           // Some providers include their first token in the partial block at
           // *_start and emit that same token again as the first delta. Starts
           // establish block identity; deltas own streaming text.
-          if (normalized.type === "thinking" || normalized.type === "text") delete normalized.text;
+          if (normalized.kind === "thinking" || normalized.kind === "text") delete normalized.text;
           return [emit({
             type: "content_block_started",
             messageId: activeMessageId,
@@ -86,7 +95,7 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0, cl
           return [emit({
             type: "content_block_delta",
             messageId: activeMessageId,
-            blockType,
+            blockKind,
             contentIndex,
             delta: String(update.delta || ""),
           })];
@@ -99,9 +108,9 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0, cl
             block: normalized,
           })] : [];
         }
-        const normalized = blockType === "thinking"
-          ? { type: "thinking", contentIndex, text: String(update.content || ""), redacted: Boolean(content[contentIndex]?.redacted) }
-          : { type: "text", contentIndex, text: String(update.content || "") };
+        const normalized = blockKind === "thinking"
+          ? { kind: "thinking", contentIndex, text: String(update.content || ""), redacted: Boolean(content[contentIndex]?.redacted) }
+          : { kind: "text", contentIndex, text: String(update.content || "") };
         return [emit({
           type: "content_block_completed",
           messageId: activeMessageId,

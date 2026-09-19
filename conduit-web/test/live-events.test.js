@@ -125,7 +125,7 @@ test("preserves reduced-generation events and their sequence at the client bound
     generationId: "g1",
     seq: 7,
     messageId: "m1",
-    blockType: "text",
+    blockKind: "text",
     contentIndex: 2,
     delta: "hello",
   });

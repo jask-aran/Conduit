@@ -13,7 +13,7 @@ const delta = (value, overrides = {}) => ({
   generationId: "g1",
   seq: 1,
   messageId: "m1",
-  blockType: "text",
+  blockKind: "text",
   contentIndex: 0,
   delta: value,
   ...overrides,
@@ -28,7 +28,7 @@ test("same-block text deltas coalesce below the bounded batch size", () => {
 
 test("different blocks never coalesce even when the batch has room", () => {
   assert.equal(canCoalesceTextDelta(delta("a"), delta("b", { contentIndex: 1 })), false);
-  assert.equal(canCoalesceTextDelta(delta("a"), delta("b", { blockType: "thinking" })), false);
+  assert.equal(canCoalesceTextDelta(delta("a"), delta("b", { blockKind: "thinking" })), false);
 });
 
 test("overflow merging bounds same-block burst entries without losing text", () => {

@@ -26,13 +26,13 @@ function tree(state) {
     status: message.status,
     stopReason: message.stopReason,
     blocks: message.blocks.map((block) => ({
-      type: block.type,
+      kind: block.kind,
       contentIndex: block.contentIndex,
       identity: block.identity,
       text: block.text,
       toolCallId: block.toolCallId,
       name: block.name,
-      arguments: block.arguments,
+      input: block.input,
       status: block.status,
     })),
   }));
@@ -73,7 +73,7 @@ function benchmarkStore({ messageCount, blockCount, toolCount, textLength }) {
       apply({
         type: "content_block_started",
         messageId,
-        block: { type: "text", contentIndex },
+        block: { kind: "text", contentIndex },
       });
     }
   }
@@ -89,7 +89,7 @@ function benchmarkStore({ messageCount, blockCount, toolCount, textLength }) {
     type: "content_block_delta",
     messageId: "m1",
     contentIndex: 0,
-    blockType: "text",
+    blockKind: "text",
     delta: "x".repeat(textLength),
   });
   return { client, apply };
@@ -119,8 +119,8 @@ test("normalizes Pi block structure with stable generation-local identities", ()
       status: "complete",
       stopReason: "toolUse",
       blocks: [
-        { type: "thinking", contentIndex: 0, identity: "g_tools:m1:0", text: "Read first", toolCallId: undefined, name: undefined, arguments: undefined, status: "complete" },
-        { type: "toolCall", contentIndex: 1, identity: "g_tools:m1:1", text: undefined, toolCallId: "call_read", name: "read", arguments: { path: "README.md" }, status: "complete" },
+        { kind: "thinking", contentIndex: 0, identity: "g_tools:m1:0", text: "Read first", toolCallId: undefined, name: undefined, input: undefined, status: "complete" },
+        { kind: "tool_call", contentIndex: 1, identity: "g_tools:m1:1", text: undefined, toolCallId: "call_read", name: "read", input: { path: "README.md" }, status: "complete" },
       ],
     },
     {
@@ -128,7 +128,7 @@ test("normalizes Pi block structure with stable generation-local identities", ()
       status: "complete",
       stopReason: "toolUse",
       blocks: [
-        { type: "toolCall", contentIndex: 0, identity: "g_tools:m2:0", text: undefined, toolCallId: "call_shell", name: "bash", arguments: { command: "git status --short" }, status: "complete" },
+        { kind: "tool_call", contentIndex: 0, identity: "g_tools:m2:0", text: undefined, toolCallId: "call_shell", name: "bash", input: { command: "git status --short" }, status: "complete" },
       ],
     },
     {
@@ -136,7 +136,7 @@ test("normalizes Pi block structure with stable generation-local identities", ()
       status: "complete",
       stopReason: "stop",
       blocks: [
-        { type: "text", contentIndex: 0, identity: "g_tools:m3:0", text: "Repository is clean.", toolCallId: undefined, name: undefined, arguments: undefined, status: "complete" },
+        { kind: "text", contentIndex: 0, identity: "g_tools:m3:0", text: "Repository is clean.", toolCallId: undefined, name: undefined, input: undefined, status: "complete" },
       ],
     },
   ]);
@@ -240,15 +240,15 @@ test("provider error settles as a failed generation", () => {
 test("multiple native text and thinking blocks retain their separate positions", () => {
   const state = reduceGenerationEvents(normalizedFixture("multipleTextThinkingBlocks", "g_blocks"));
 
-  assert.deepEqual(state.assistantMessages[0].blocks.map(({ type, contentIndex, text }) => ({
-    type,
+  assert.deepEqual(state.assistantMessages[0].blocks.map(({ kind, contentIndex, text }) => ({
+    kind,
     contentIndex,
     text,
   })), [
-    { type: "thinking", contentIndex: 0, text: "First thought" },
-    { type: "text", contentIndex: 1, text: "First text" },
-    { type: "thinking", contentIndex: 2, text: "Second thought" },
-    { type: "text", contentIndex: 3, text: "Second text" },
+    { kind: "thinking", contentIndex: 0, text: "First thought" },
+    { kind: "text", contentIndex: 1, text: "First text" },
+    { kind: "thinking", contentIndex: 2, text: "Second thought" },
+    { kind: "text", contentIndex: 3, text: "Second text" },
   ]);
 });
 
@@ -364,7 +364,7 @@ test("client block update benchmark keeps work and references independent of unr
           type: "content_block_delta",
           messageId: "m1",
           contentIndex: 0,
-          blockType: "text",
+          blockKind: "text",
           delta: "x",
         });
         const durationMs = performance.now() - startedAt;
