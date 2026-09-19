@@ -98,8 +98,7 @@ function harness() {
     if (wire.type === "tool_execution_updated") {
       tools = mergeToolEvent(tools, {
         type: "tool_execution_update",
-        toolCallId: wire.toolCallId, toolName: wire.name, args: wire.arguments,
-        partialResult: wire.partialResult,
+        toolCallId: wire.toolCallId, name: wire.name, input: wire.input, output: wire.output,
       }).tools;
     }
   });

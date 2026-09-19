@@ -119,9 +119,9 @@ export function registerSessionRoutes(app, {
     try {
       const session = await findRegisteredSession(request.params.id);
       if (!session) return response.status(404).json({ error: "session_not_found" });
-      const tool = toolsFromEntries(session.entries).find((item) => item.id === request.params.toolId);
+      const tool = toolsFromEntries(session.entries).find((item) => item.toolCallId === request.params.toolId);
       if (!tool) return response.status(404).json({ error: "tool_not_found" });
-      response.json({ id: tool.id, result: tool.result ?? null });
+      response.json({ toolCallId: tool.toolCallId, output: tool.output ?? null });
     } catch (error) { next(error); }
   });
 

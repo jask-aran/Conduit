@@ -9,16 +9,12 @@ export type { ProtocolMessage, TranscriptOp } from "../transcript-fold";
 
 export interface ToolLifecycleEvent {
   type: "tool_execution_start" | "tool_execution_update" | "tool_execution_end";
-  toolCallId?: string;
-  id?: string;
-  toolName?: string;
+  toolCallId: string;
   name?: string;
-  args?: unknown;
-  partialResult?: unknown;
-  result?: unknown;
+  input?: unknown;
+  output?: unknown;
   done?: boolean;
   isError?: boolean;
-  error?: boolean;
   timestamp?: string;
   seq?: number;
 }
@@ -32,20 +28,24 @@ export interface ToolLifecycleEvent {
  * activity is all there is.
  */
 export function mergeToolEvent(tools: ToolItem[], event: ToolLifecycleEvent, options: { nextSeq?: () => number } = {}) {
-  const id = event.toolCallId || event.id;
+  const id = event.toolCallId;
   if (!id) return { tools, created: false };
-  const existing = tools.find((item) => item.id === id);
+  const existing = tools.find((item) => item.toolCallId === id);
   if (existing) {
     return {
-      tools: tools.map((item) => (item.id === id
+      tools: tools.map((item) => (item.toolCallId === id
         ? {
           ...item,
-          name: event.toolName || item.name,
-          args: event.args !== undefined ? event.args : item.args,
-          partialResult: event.partialResult !== undefined ? event.partialResult : item.partialResult,
-          result: event.result !== undefined ? event.result : item.result,
+          name: event.name || item.name,
+          input: event.input !== undefined ? event.input : item.input,
+          // A tool that has finished keeps what it returned. Replay can deliver
+          // an update behind an end, and with one output field rather than a
+          // partial and a final there is nothing but this to stop the partial
+          // landing on top of the answer.
+          output: event.output !== undefined && !(item.done && event.type !== "tool_execution_end")
+            ? event.output : item.output,
           done: event.done != null ? event.done : (event.type === "tool_execution_end" ? true : item.done),
-          error: event.isError != null ? Boolean(event.isError) : (event.error != null ? Boolean(event.error) : item.error),
+          isError: event.isError != null ? Boolean(event.isError) : item.isError,
         }
         : item)),
       created: false,
@@ -53,15 +53,14 @@ export function mergeToolEvent(tools: ToolItem[], event: ToolLifecycleEvent, opt
   }
   const seq = typeof options.nextSeq === "function" ? options.nextSeq() : (event.seq ?? tools.length);
   const tool: ToolItem = {
-    id,
-    name: event.toolName || event.name || "tool",
-    args: event.args,
+    toolCallId: id,
+    name: event.name || "tool",
+    input: event.input,
     done: Boolean(event.done) || event.type === "tool_execution_end",
-    error: Boolean(event.isError || event.error),
+    isError: Boolean(event.isError),
     timestamp: event.timestamp || new Date().toISOString(),
     seq,
-    result: event.result,
-    partialResult: event.partialResult,
+    output: event.output,
   };
   return { tools: [...tools, tool], created: true };
 }

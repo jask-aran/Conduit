@@ -262,7 +262,7 @@ test("a Codex turn maps onto Conduit's rollup: commentary and commands, then the
   assert.equal(messages[1].content, "Looking now.");
   assert.deepEqual(messages[1].blocks.map((block) => block.kind), ["text", "tool_call"], "commands hang off the message that ran them");
   assert.equal(messages[2].content, "Built.");
-  assert.deepEqual(tools, [{ id: "e1", name: "command", args: "npm run build", done: true, result: "ok", isError: false }]);
+  assert.deepEqual(tools, [{ toolCallId: "e1", name: "command", input: "npm run build", done: true, output: "ok", isError: false }]);
 });
 
 test("a turn with no final_answer phase still ends in an answer", () => {

@@ -95,16 +95,16 @@ export function normalizePiBackendEvent(event) {
     ...(event.log ? { log: event.log } : {}) };
   switch (event.type) {
     case "content_block_delta":
-      return { ...base, type: "assistant_content", phase: "delta", sequence: event.seq,
+      return { ...base, type: "assistant_content", phase: "delta", seq: event.seq,
         messageId: event.messageId, contentIndex: event.contentIndex,
         blockKind: event.blockKind, delta: event.delta };
     case "assistant_message_started":
-      return { ...base, type: "assistant_content", phase: "start", sequence: event.seq, messageId: event.messageId };
+      return { ...base, type: "assistant_content", phase: "start", seq: event.seq, messageId: event.messageId };
     case "assistant_message_completed": {
       // An abort is not a failure. Normalising here keeps the streaming view
       // and the reloaded transcript telling the same story.
       const aborted = wasAborted(event);
-      return { ...base, type: "assistant_content", phase: "final", sequence: event.seq,
+      return { ...base, type: "assistant_content", phase: "final", seq: event.seq,
         messageId: event.messageId,
         stopReason: aborted ? "aborted" : event.stopReason,
         errorMessage: aborted ? null : event.errorMessage,
@@ -114,20 +114,20 @@ export function normalizePiBackendEvent(event) {
     }
     case "generation_started":
     case "generation_running":
-      return { ...base, type: "status", sequence: event.seq, status: "working", activity: "working", detail: event.type };
+      return { ...base, type: "status", seq: event.seq, status: "working", activity: "working", detail: event.type };
     case "generation_stopping":
-      return { ...base, type: "status", sequence: event.seq, status: "stopping", activity: "stopping", detail: event.type };
+      return { ...base, type: "status", seq: event.seq, status: "stopping", activity: "stopping", detail: event.type };
     case "generation_stopped":
-      return { ...base, type: "status", sequence: event.seq, status: "idle", activity: "idle", detail: "stopped", processTerminated: event.processTerminated };
+      return { ...base, type: "status", seq: event.seq, status: "idle", activity: "idle", detail: "stopped", processTerminated: event.processTerminated };
     case "generation_settled":
-      return { ...base, type: "status", sequence: event.seq, status: "idle", activity: "idle", detail: "settled" };
+      return { ...base, type: "status", seq: event.seq, status: "idle", activity: "idle", detail: "settled" };
     case "tool_execution_started":
     case "tool_execution_updated":
     case "tool_execution_completed":
-      return { ...base, type: "tool_activity", sequence: event.seq,
+      return { ...base, type: "tool_activity", seq: event.seq,
         phase: { tool_execution_started: "start", tool_execution_updated: "update", tool_execution_completed: "end" }[event.type],
-        toolCallId: event.toolCallId, name: event.name, input: event.arguments,
-        output: event.type === "tool_execution_updated" ? event.partialResult : event.result, isError: event.isError };
+        toolCallId: event.toolCallId, name: event.name, input: event.input,
+        output: event.output, isError: event.isError };
     case "extension_ui_request": {
       const request = normalizeHostUiRequest(event);
       if (!request) return { ...base, type: "pi_event" };
@@ -147,7 +147,7 @@ export function normalizePiBackendEvent(event) {
     }
     case "generation_resume":
       return { ...base, type: "generation_replay", generationId: event.generationId,
-        sequence: event.seq, generation: event.generation };
+        seq: event.seq, generation: event.generation };
     // The server reads Pi's own session file after a turn and republishes it as
     // the authority on what was said. Without a case here it fell through to
     // the opaque `pi_event`, so the browser kept its optimistic message ids -
@@ -178,7 +178,7 @@ export function normalizePiBackendEvent(event) {
     case "log_reset":
       return { ...base, type: "log_reset", log: event.log };
     case "session_checkpoint":
-      return { ...base, type: "session_checkpoint", sequence: event.generationSeq ?? null,
+      return { ...base, type: "session_checkpoint", seq: event.generationSeq ?? null,
         artifacts: event.artifacts ?? null,
         chatId: event.chat?.id || event.chatId || "", title: event.chat?.title || event.title || null };
     case "queue_update":

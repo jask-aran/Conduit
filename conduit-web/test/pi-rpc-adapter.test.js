@@ -24,7 +24,7 @@ test("Pi adapter maps required neutral events and retains Pi richness", () => {
   const delta = { type: "content_block_delta", generationId: "g1", seq: 2, messageId: "m1", contentIndex: 0, blockKind: "text", delta: "hi" };
   assert.deepEqual(normalizePiBackendEvent(delta), {
     generationId: "g1", pi: delta, type: "assistant_content", phase: "delta",
-    sequence: 2, messageId: "m1", contentIndex: 0, blockKind: "text", delta: "hi",
+    seq: 2, messageId: "m1", contentIndex: 0, blockKind: "text", delta: "hi",
   });
   // The server's post-turn repair: the browser needs the persisted messages,
   // not an opaque pi_event, or its optimistic ids never get replaced.

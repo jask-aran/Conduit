@@ -173,11 +173,11 @@ export type AssistantBlock =
   | { kind: "tool_call"; contentIndex: number; toolCallId: string; name: string; input: unknown };
 
 export type AssistantContentEvent = EventBase & (
-  | { type: "assistant_content"; phase: "start"; sequence: number; messageId: string }
+  | { type: "assistant_content"; phase: "start"; seq: number; messageId: string }
   | {
     type: "assistant_content";
     phase: "delta";
-    sequence: number;
+    seq: number;
     messageId: string;
     contentIndex: number;
     blockKind: AssistantBlock["kind"];
@@ -186,7 +186,7 @@ export type AssistantContentEvent = EventBase & (
   | {
     type: "assistant_content";
     phase: "final";
-    sequence: number;
+    seq: number;
     messageId: string;
     blocks: AssistantBlock[];
     stopReason: string;
@@ -197,7 +197,7 @@ export type AssistantContentEvent = EventBase & (
 export type ToolActivityEvent = EventBase & {
   type: "tool_activity";
   phase: "start" | "update" | "end";
-  sequence: number;
+  seq: number;
   toolCallId: string;
   name: string;
   input?: unknown;
@@ -250,7 +250,7 @@ export interface UsageEvent extends EventBase {
 
 export interface SessionCheckpointEvent extends EventBase {
   type: "session_checkpoint";
-  sequence: number | null;
+  seq: number | null;
 }
 
 export interface RuntimeStateEvent extends EventBase {
@@ -268,7 +268,7 @@ export type OptionalCapabilityEvent = EventBase & (
   | { type: "user_message_committed"; message: unknown }
   /** The backend's own record of recent turns, published to repair live drift. */
   | { type: "transcript_sync"; messages: unknown[]; tools: unknown[] }
-  | { type: "generation_replay"; sequence: number; generation: unknown }
+  | { type: "generation_replay"; seq: number; generation: unknown }
 );
 
 export type ChatBackendEvent =

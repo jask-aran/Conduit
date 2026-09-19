@@ -192,11 +192,10 @@ test("parallel tool executions join independently by toolCallId", () => {
     name: "read",
     arguments: { path: "one" },
     status: "complete",
-    partialResult: null,
-    result: "one",
+    output: "one",
     isError: false,
   });
-  assert.equal(state.toolExecutions.call_two.result, "two");
+  assert.equal(state.toolExecutions.call_two.output, "two");
 });
 
 test("retry gaps retain the generation and settle only after the successful retry", () => {
@@ -303,7 +302,7 @@ test("ordinary block deltas preserve structural and unrelated block identities",
   assert.equal(after.assistantMessages[0].blocks[0], unchanged);
   assert.equal(after.toolExecutions, before.toolExecutions);
   assert.equal(referenceList(after).filter((reference, index) => reference !== references[index]).length, 0);
-  assert.equal(after.assistantMessages[0].blocks[1].argumentsText, "{\"path\":\"README.md\"}");
+  assert.equal(after.assistantMessages[0].blocks[1].inputText, "{\"path\":\"README.md\"}");
   assert.ok(result.metrics.changedAccessorCount > 0);
   assert.ok(result.metrics.workCount > 0);
 });

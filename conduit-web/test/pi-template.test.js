@@ -438,7 +438,7 @@ test("slow clients retain no tool or runtime backlog while Resume State can reco
   for (let index = 0; index < 2_000; index += 1) {
     manager.deliver(record, {
       type: "tool_execution_updated", generationId: "g1", seq: index + 1, toolCallId: "tool-1",
-      partialResult: "x".repeat(8_192),
+      output: "x".repeat(8_192),
     });
     manager.deliver(record, { type: "runtime_state", session: { activity: "working", queue: { steering: [], followUp: [] } } });
   }

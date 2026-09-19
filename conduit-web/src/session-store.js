@@ -681,9 +681,9 @@ export function toolsFromEntries(entries) {
       for (const block of message.content) {
         if (block?.type !== "toolCall" || !block.id) continue;
         tools.set(block.id, {
-          id: block.id,
+          toolCallId: block.id,
           name: block.name,
-          args: block.arguments,
+          input: block.arguments,
           done: false,
           timestamp: entry.timestamp || null,
         });
@@ -691,15 +691,15 @@ export function toolsFromEntries(entries) {
     }
     if (message?.role === "toolResult" && message.toolCallId) {
       const current = tools.get(message.toolCallId) || {
-        id: message.toolCallId,
+        toolCallId: message.toolCallId,
         name: message.toolName,
-        args: {},
+        input: {},
       };
       tools.set(message.toolCallId, {
         ...current,
         name: current.name || message.toolName,
         done: true,
-        result: textContent(message.content),
+        output: textContent(message.content),
       });
     }
   }
@@ -707,13 +707,13 @@ export function toolsFromEntries(entries) {
 }
 
 /** One browser-facing projection of a backend-owned Pi transcript page. */
-export function projectSessionEntries(entries, { toolResultLimit = 4000 } = {}) {
+export function projectSessionEntries(entries, { toolOutputLimit = 4000 } = {}) {
   return {
     messages: messagesFromEntries(entries).filter((message) => ["user", "assistant"].includes(message.role)),
     tools: toolsFromEntries(entries).map((tool) => ({
       ...tool,
-      result: tool.result?.length > toolResultLimit ? null : tool.result,
-      resultDeferred: tool.result?.length > toolResultLimit,
+      output: tool.output?.length > toolOutputLimit ? null : tool.output,
+      outputDeferred: tool.output?.length > toolOutputLimit,
     })),
   };
 }

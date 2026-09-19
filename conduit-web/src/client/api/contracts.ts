@@ -289,15 +289,23 @@ export interface Message {
   order?: number;
 }
 
+/**
+ * A tool call, in Conduit's language -- the same names the ops state it in.
+ *
+ * `output` is what the tool has returned, and `done` whether that is all of it.
+ * They used to be two fields, `partialResult` and `result`, which is the same
+ * split a block in flight has and the same answer: one field, plus the state
+ * that says whether it is finished. Nothing downstream had to ask which of the
+ * two to render; it had to remember to ask.
+ */
 export interface ToolItem {
-  id: string;
+  toolCallId: string;
   name?: string;
-  args?: unknown;
-  result?: unknown;
-  partialResult?: unknown;
-  resultDeferred?: boolean;
-  resultSize?: number;
-  error?: boolean;
+  input?: unknown;
+  output?: unknown;
+  outputDeferred?: boolean;
+  outputSize?: number;
+  isError?: boolean;
   cancelled?: boolean;
   done?: boolean;
   timestamp?: string;

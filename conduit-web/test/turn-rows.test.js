@@ -15,7 +15,7 @@ test("projects a live generation directly from ordered Pi blocks", () => {
       status: "running",
       lastSeq: 9,
       toolExecutions: {
-        call_1: { toolCallId: "call_1", name: "read", status: "complete", result: "ok" },
+        call_1: { toolCallId: "call_1", name: "read", status: "complete", output: "ok" },
       },
       assistantMessages: [{
         id: "m1",
@@ -93,7 +93,7 @@ test("reports an executing tool and a persisted interrupted trace", () => {
       blocks: [{ kind: "tool_call", toolCallId: "call_1", name: "bash", input: {} }],
     },
     { id: "a2", role: "assistant", content: "", stopReason: "aborted", stopped: true },
-  ], [{ id: "call_1", name: "bash", done: true, result: "Command aborted" }]);
+  ], [{ toolCallId: "call_1", name: "bash", done: true, output: "Command aborted" }]);
   const persistedTrace = persisted.find((row) => row.type === "trace");
   assert.equal(persistedTrace?.type === "trace" && persistedTrace.value.status, "interrupted");
 });

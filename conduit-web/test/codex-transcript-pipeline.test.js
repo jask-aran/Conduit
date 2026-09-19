@@ -79,8 +79,7 @@ function harness() {
     if (wire.type === "tool_execution_updated") {
       tools = mergeToolEvent(tools, {
         type: "tool_execution_update",
-        toolCallId: wire.toolCallId, toolName: wire.name, args: wire.arguments,
-        partialResult: wire.partialResult,
+        toolCallId: wire.toolCallId, name: wire.name, input: wire.input, output: wire.output,
       }).tools;
     }
   };
@@ -445,7 +444,7 @@ test("a browser replayed from the chat's order gets the commands back, not just 
   const trace = chat.replay().find((row) => row.type === "trace");
   assert.deepEqual(trace.value.segments.map((segment) => segment.kind), ["narration", "tool"]);
   assert.equal(trace.value.segments[1].tool.name, "command");
-  assert.equal(trace.value.segments[1].tool.result, "ok");
+  assert.equal(trace.value.segments[1].tool.output, "ok");
 });
 
 /**

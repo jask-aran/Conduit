@@ -11,7 +11,7 @@ const commandTools = new Set(["bash", "shell", "exec", "terminal", "run_command"
 const scalar = (value: unknown): string | null => typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : null;
 
 function summary(tool: ToolItem) {
-  const args = tool.args && typeof tool.args === "object" ? tool.args as Record<string, unknown> : {};
+  const args = tool.input && typeof tool.input === "object" ? tool.input as Record<string, unknown> : {};
   for (const key of ["path", "file", "command", "url", "query", "pattern", "name"]) {
     const value = scalar(args[key]);
     if (value) return value.length > 90 ? `…${value.slice(-89)}` : value;
@@ -35,11 +35,11 @@ export function ToolCard(props: { tool?: ToolItem; sessionId?: string | null; in
   const tool = createMemo(() => props.tool);
   const status = createMemo(() => {
     const current = tool();
-    return current?.error ? "Error" : current?.cancelled ? "Cancelled" : current?.done ? "Complete" : "Running";
+    return current?.isError ? "Error" : current?.cancelled ? "Cancelled" : current?.done ? "Complete" : "Running";
   });
   const source = createMemo(() => {
     const current = tool();
-    return loaded() ?? current?.result ?? current?.partialResult ?? current?.args ?? {};
+    return loaded() ?? current?.output ?? current?.input ?? {};
   });
   const output = createMemo(() => stringify(source()));
   const preview = createMemo(() => {
@@ -54,20 +54,20 @@ export function ToolCard(props: { tool?: ToolItem; sessionId?: string | null; in
     const next = !open();
     setOpen(next);
     props.onOpenChange?.(next);
-    if (!next || !current.resultDeferred || loaded() !== undefined || loading() || !props.sessionId) return;
+    if (!next || !current.outputDeferred || loaded() !== undefined || loading() || !props.sessionId) return;
     setLoading(true);
     try {
-      const response = await authorizedFetch(httpUrl(`/v0/sessions/${encodeURIComponent(props.sessionId)}/tools/${encodeURIComponent(current.id)}`));
+      const response = await authorizedFetch(httpUrl(`/v0/sessions/${encodeURIComponent(props.sessionId)}/tools/${encodeURIComponent(current.toolCallId)}`));
       if (!response.ok) throw new Error("Could not load tool output");
-      const payload = await response.json() as { result?: unknown };
-      setLoaded(payload.result ?? "");
+      const payload = await response.json() as { output?: unknown };
+      setLoaded(payload.output ?? "");
     } catch (error) { setLoaded((error as Error).message); }
     finally { setLoading(false); }
   };
 
   return <Show when={tool()}>{(current) => <div class="tool-card" data-status={status().toLowerCase()}>
     <Button variant="outline" class="w-full justify-start" aria-label={`${current().name || "Tool"} ${status()}`} aria-expanded={open()} onClick={toggle}>
-      <Show when={current().done && !current().error} fallback={<Spinner data-icon="inline-start" />}><CheckIcon /></Show>
+      <Show when={current().done && !current().isError} fallback={<Spinner data-icon="inline-start" />}><CheckIcon /></Show>
       <span class="truncate">{current().name || "Tool"}<Show when={summary(current())}> · {summary(current())}</Show></span>
       <span class="ml-auto text-xs text-muted-foreground">{status()}</span>
       <Show when={open()} fallback={<ChevronDownIcon />}><ChevronUpIcon /></Show>

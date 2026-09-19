@@ -79,10 +79,10 @@ test("a tool is a record of its own, opened and closed by the server", () => {
   const openOp = { type: "transcript_op", op: "tool.open", toolCallId: "call_1", name: "bash", input: { command: "ls" } };
   assert.equal(isToolOp(openOp), true);
   let tools = applyToolOp([], openOp);
-  assert.deepEqual(tools.map((tool) => [tool.id, tool.name, tool.done]), [["call_1", "bash", false]]);
+  assert.deepEqual(tools.map((tool) => [tool.toolCallId, tool.name, tool.done]), [["call_1", "bash", false]]);
   tools = applyToolOp(tools, { type: "transcript_op", op: "tool.close", toolCallId: "call_1", output: "a.txt", isError: false });
   assert.equal(tools[0].done, true);
-  assert.equal(tools[0].result, "a.txt");
+  assert.equal(tools[0].output, "a.txt");
   assert.equal(tools[0].error, false);
   // Re-stated rather than duplicated, and it keeps the place it already had.
   assert.equal(applyToolOp(tools, openOp).length, 1);

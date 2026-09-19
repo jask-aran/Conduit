@@ -33,9 +33,9 @@ test("restores completed tool calls from persisted messages", () => {
   assert.deepEqual(toolsFromEntries(entries), [{
     id: "call_1",
     name: "write",
-    args: { path: "note.md" },
+    input: { path: "note.md" },
     done: true,
-    result: "Successfully wrote note.md",
+    output: "Successfully wrote note.md",
     timestamp: null,
   }]);
 });
@@ -56,8 +56,8 @@ test("projects browser messages and tools from the same transcript entries", () 
 
   const projection = projectSessionEntries(entries);
   assert.deepEqual(projection.messages.map((message) => message.role), ["user", "assistant"]);
-  assert.deepEqual(projection.tools.map((tool) => tool.id), ["call-1"]);
-  assert.equal(projection.tools[0].result, "done");
+  assert.deepEqual(projection.tools.map((tool) => tool.toolCallId), ["call-1"]);
+  assert.equal(projection.tools[0].output, "done");
 });
 
 test("restores the latest model and thinking level from a session", () => {

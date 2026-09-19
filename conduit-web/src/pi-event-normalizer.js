@@ -141,22 +141,22 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0, cl
           type: "tool_execution_started",
           toolCallId: String(source.toolCallId || ""),
           name: String(source.toolName || ""),
-          arguments: source.args,
+          input: source.args,
         })];
       case "tool_execution_update":
         return [emit({
           type: "tool_execution_updated",
           toolCallId: String(source.toolCallId || ""),
           name: String(source.toolName || ""),
-          arguments: source.args,
-          partialResult: source.partialResult,
+          input: source.args,
+          output: source.partialResult,
         })];
       case "tool_execution_end":
         return [emit({
           type: "tool_execution_completed",
           toolCallId: String(source.toolCallId || ""),
           name: String(source.toolName || ""),
-          result: source.result,
+          output: source.result,
           isError: Boolean(source.isError),
         })];
       case "auto_retry_start":
