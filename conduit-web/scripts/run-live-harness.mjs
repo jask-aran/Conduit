@@ -184,9 +184,15 @@ async function runLiveMeasurement(configuration, prompt) {
     try { event = JSON.parse(String(data)); } catch { return; }
     const receivedAt = performance.now();
     frames.push({ event, receivedAt });
-    if (event.type === "generation_started") generationId = event.generationId || generationId;
-    if (event.type === "content_block_delta"
-      && event.blockType === "text"
+    // The contract the server actually speaks. This read was in the client's
+    // dialect -- `content_block_delta`, `generation_settled`, `blockType` --
+    // which is what `normalizeLiveEvent` produces in the browser, not what
+    // comes off the socket. `blockType` is a name nothing has used for a long
+    // time, so every delta failed the test and the harness reported that a
+    // streaming server had streamed nothing.
+    if (event.type === "status" && event.status === "working") generationId = event.generationId || generationId;
+    if (event.type === "assistant_content" && event.phase === "delta"
+      && event.blockKind === "text"
       && (!generationId || event.generationId === generationId)) {
       if (firstDeltaAt == null) firstDeltaAt = receivedAt;
       const delta = String(event.delta || "");
@@ -197,7 +203,8 @@ async function runLiveMeasurement(configuration, prompt) {
       }
       deltas.push({ receivedAt, characters: delta.length });
     }
-    if (event.type === "generation_settled" && (!generationId || event.generationId === generationId)) {
+    if (event.type === "status" && event.detail === "settled"
+      && (!generationId || event.generationId === generationId)) {
       completionAt = receivedAt;
       settled = true;
       resolveSettled();
@@ -213,15 +220,17 @@ async function runLiveMeasurement(configuration, prompt) {
     const onMessage = (data) => {
       let event;
       try { event = JSON.parse(String(data)); } catch { return; }
-      if (!["runtime_state", "generation_resume"].includes(event.type)) return;
+      if (!["runtime_state", "generation_replay"].includes(event.type)) return;
       clearTimeout(deadline);
       socket.off("message", onMessage);
       resolve(event);
     };
     socket.on("message", onMessage);
   });
-  if (initialState.type === "generation_resume"
-    || (initialState.type === "runtime_state" && initialState.session?.active)) {
+  // `session` is the browser's shape for this, built by the client from the
+  // flat event the server sends. Reading it here meant the guard never fired.
+  if (initialState.type === "generation_replay"
+    || (initialState.type === "runtime_state" && initialState.status === "working")) {
     clearTimeout(timeout);
     socket.close();
     throw new Error("Performance chat already has an active generation");
@@ -258,7 +267,7 @@ async function runLiveMeasurement(configuration, prompt) {
     startedAt,
     outcome: "passed",
     transport: {
-      promptAcceptedMs: (frames.find((frame) => frame.event.type === "generation_started")?.receivedAt ?? promptStarted) - promptStarted,
+      promptAcceptedMs: (frames.find((frame) => frame.event.type === "status" && frame.event.status === "working")?.receivedAt ?? promptStarted) - promptStarted,
       firstDeltaMs: firstDeltaAt == null ? null : firstDeltaAt - promptStarted,
       completionMs,
       deliveredDeltaCount: deltas.length,

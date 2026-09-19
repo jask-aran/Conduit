@@ -136,25 +136,29 @@ test("live harness measures visible text deltas without counting thinking blocks
     webSocketServer.handleUpgrade(request, socket, head, (client) => webSocketServer.emit("connection", client, request));
   });
   webSocketServer.on("connection", (socket) => {
+    // A stand-in for Conduit has to say what Conduit says. These used to be the
+    // browser's names for these events, which meant the harness was only ever
+    // proved against a server that does not exist.
     setTimeout(() => socket.send(JSON.stringify({
-      type: "runtime_state",
-      session: { active: false },
+      type: "runtime_state", generationId: null, lifecycle: "idle", status: "idle", activity: "idle",
     })), 10);
     socket.once("message", () => {
-      socket.send(JSON.stringify({ type: "generation_started", generationId: "generation-1" }));
       socket.send(JSON.stringify({
-        type: "content_block_delta",
-        generationId: "generation-1",
-        blockKind: "thinking",
-        delta: "Hidden reasoning",
+        type: "status", generationId: "generation-1",
+        status: "working", activity: "working", detail: "generation_started",
       }));
       socket.send(JSON.stringify({
-        type: "content_block_delta",
-        generationId: "generation-1",
-        blockKind: "text",
-        delta: visibleText,
+        type: "assistant_content", phase: "delta", generationId: "generation-1",
+        messageId: "m1", contentIndex: 0, blockKind: "thinking", delta: "Hidden reasoning",
       }));
-      socket.send(JSON.stringify({ type: "generation_settled", generationId: "generation-1" }));
+      socket.send(JSON.stringify({
+        type: "assistant_content", phase: "delta", generationId: "generation-1",
+        messageId: "m1", contentIndex: 1, blockKind: "text", delta: visibleText,
+      }));
+      socket.send(JSON.stringify({
+        type: "status", generationId: "generation-1",
+        status: "idle", activity: "idle", detail: "settled",
+      }));
     });
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
