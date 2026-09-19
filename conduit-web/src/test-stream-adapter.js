@@ -29,9 +29,11 @@ export const TEST_STREAM_CAPABILITIES = Object.freeze({
   followUpQueue: false,
   cancel: true,
   compaction: false,
-  thinkingLevels: false,
-  // The rate presets are the models, so the existing model picker sets the
-  // speed and no second settings surface has to exist for one test backend.
+  // How much comes back is this harness's decision, and a thinking level is
+  // already a signal a harness interprets however it likes -- so the amount
+  // rides on it, labelled in tokens. Two independent questions, the two
+  // pickers that are already in the composer, and no new settings surface.
+  thinkingLevels: true,
   modelSwitch: true,
   toolUse: false,
   approvals: false,
@@ -48,36 +50,38 @@ export const TEST_STREAM_CAPABILITIES = Object.freeze({
 });
 
 /**
- * How fast, and how much: every speed at both lengths.
+ * How fast, as the models.
  *
- * The two are independent questions. A short run says whether a turn starts
- * and settles cleanly; a long one says whether it still paints after a few
- * thousand tokens have gone by, which is where a leak or a growing reconcile
- * shows up and a short run never would. `paced-60` is the control at either
- * length: a frame dropped at 60 tokens/s is not the stream's fault.
+ * `paced-60` is roughly what a fast provider does, and is the control: a frame
+ * dropped at 60 tokens/s is not the stream's fault. The rest climb until
+ * something gives.
  */
-const SPEEDS = [
+export const TEST_STREAM_SPEEDS = Object.freeze([
   { id: "paced-60", label: "60 tokens/s · about a real model", tokensPerSecond: 60 },
   { id: "fast-250", label: "250 tokens/s", tokensPerSecond: 250 },
   { id: "fast-1000", label: "1000 tokens/s", tokensPerSecond: 1000 },
   { id: "flood-4000", label: "4000 tokens/s · past any real provider", tokensPerSecond: 4000 },
-];
+].map(Object.freeze));
 
-const AMOUNTS = [
-  { id: "short", label: "short", tokens: 400 },
-  { id: "long", label: "long", tokens: 4000 },
-];
+/**
+ * How much, as the thinking levels.
+ *
+ * A level is a string a harness is free to interpret, and what this one does
+ * with it is decide how much to send back -- so the level is written as the
+ * amount. Speed and amount are independent questions: a short run says a turn
+ * starts and settles cleanly, a long one says it still paints after tens of
+ * thousands of tokens, which is where a leak or a growing reconcile shows and
+ * a short run never would.
+ */
+export const TEST_STREAM_AMOUNTS = Object.freeze([
+  { id: "400 tokens", tokens: 400 },
+  { id: "2000 tokens", tokens: 2000 },
+  { id: "8000 tokens", tokens: 8000 },
+  { id: "32000 tokens", tokens: 32_000 },
+].map(Object.freeze));
 
-// The label carries the arithmetic because the useful number is how long the
-// run takes, and that is the two chosen values divided.
-export const TEST_STREAM_RATES = Object.freeze(SPEEDS.flatMap((speed) => AMOUNTS.map((amount) => Object.freeze({
-  id: `${speed.id}-${amount.id}`,
-  tokensPerSecond: speed.tokensPerSecond,
-  tokens: amount.tokens,
-  label: `${speed.label} · ${amount.label}, ${amount.tokens} tokens (~${Math.max(1, Math.round(amount.tokens / speed.tokensPerSecond))}s)`,
-}))));
-
-export const DEFAULT_RATE_ID = "fast-250-long";
+export const DEFAULT_SPEED_ID = "fast-250";
+export const DEFAULT_AMOUNT_ID = "2000 tokens";
 const MAX_TOKENS = 100_000;
 // setTimeout cannot be trusted below a couple of milliseconds, so past roughly
 // 500 tokens/s a tick emits several tokens rather than pretending to fire more
@@ -91,15 +95,18 @@ const WORDS = ("the quick brown fox jumps over a lazy dog while conduit streams 
 const adapterError = (message, code = "backend_unavailable", status = 409) =>
   Object.assign(new Error(message), { code, status });
 
-export const rateFor = (id) => TEST_STREAM_RATES.find((rate) => rate.id === id) || TEST_STREAM_RATES.find((rate) => rate.id === DEFAULT_RATE_ID);
+export const speedFor = (id) => TEST_STREAM_SPEEDS.find((speed) => speed.id === id)
+  || TEST_STREAM_SPEEDS.find((speed) => speed.id === DEFAULT_SPEED_ID);
+export const amountFor = (id) => TEST_STREAM_AMOUNTS.find((amount) => amount.id === id)
+  || TEST_STREAM_AMOUNTS.find((amount) => amount.id === DEFAULT_AMOUNT_ID);
 
 /**
  * A one-off amount, taken from the prompt when it names one.
  *
- * Typing "1200t" streams 1200 tokens whatever the model says, for the case the
- * two presets do not cover. Anything else uses the model's own amount, because
- * the prompt is not a question here and refusing it would only mean the tester
- * has to remember the syntax.
+ * Typing "1200t" streams 1200 tokens whatever the level says, for a figure the
+ * four presets do not cover. Anything else uses the level, because the prompt
+ * is not a question here and refusing it would only mean the tester has to
+ * remember the syntax.
  */
 export function amountFromPrompt(message, fallback) {
   const match = /(\d+)\s*t\b/i.exec(String(message || ""));
@@ -120,7 +127,7 @@ export class TestStreamAdapter extends EventEmitter {
     this.sessions = new SessionRecords({
       capabilities: TEST_STREAM_CAPABILITIES,
       backend: { protocol: "native_api", implementation: "test-stream", installationId: "conduit-test-stream" },
-      extras: (record) => ({ rate: rateFor(record.model).label, tokens: record.tokens }),
+      extras: (record) => ({ rate: speedFor(record.model).label, thinkingLevel: record.thinkingLevel, tokens: record.tokens }),
       // Nothing outside this process knows anything about these chats, so the
       // statements are the transcript, exactly as they are for ChatGPT Web. The
       // journal is memory only: this backend exists for the length of a
@@ -140,12 +147,17 @@ export class TestStreamAdapter extends EventEmitter {
     Object.assign(this, unsupported(TEST_STREAM_CAPABILITIES, { label: "Test stream" }));
   }
 
-  async launch(context, { model = "", forceModel = false } = {}) {
-    const selected = (forceModel ? String(model).trim() : "") || String(context.chat.backend.model || "").trim() || DEFAULT_RATE_ID;
-    const live = await this.create({ chatId: context.chat.id, project: context.project, model: selected });
+  async launch(context, { model = "", thinkingLevel = "", forceModel = false } = {}) {
+    const selected = (forceModel ? String(model).trim() : "") || String(context.chat.backend.model || "").trim() || DEFAULT_SPEED_ID;
+    const level = (forceModel ? String(thinkingLevel).trim() : "")
+      || String(context.chat.modelThinkingLevels?.[selected] || "").trim() || DEFAULT_AMOUNT_ID;
+    const live = await this.create({ chatId: context.chat.id, project: context.project, model: selected, thinkingLevel: level });
     return {
       live,
-      mapping: { backend: { ...context.chat.backend, model: selected, opaqueSession: live.chatId } },
+      mapping: {
+        backend: { ...context.chat.backend, model: selected, opaqueSession: live.chatId },
+        modelThinkingLevels: { ...(context.chat.modelThinkingLevels || {}), [selected]: level },
+      },
       modelRecovery: null,
     };
   }
@@ -153,9 +165,10 @@ export class TestStreamAdapter extends EventEmitter {
   create(options) { return this.start(options); }
   restore(_opaqueSession, options) { return this.start(options); }
 
-  async start({ chatId, project, model = "" }) {
+  async start({ chatId, project, model = "", thinkingLevel = "" }) {
     const existing = this.getByChatId(chatId);
     if (existing) return existing;
+    const amount = amountFor(thinkingLevel);
     return this.sessions.add({
       id: crypto.randomUUID(),
       chatId,
@@ -164,8 +177,9 @@ export class TestStreamAdapter extends EventEmitter {
       activity: "idle",
       active: false,
       stopping: false,
-      model: rateFor(model).id,
-      tokens: rateFor(model).tokens,
+      model: speedFor(model).id,
+      thinkingLevel: amount.id,
+      tokens: amount.tokens,
       generation: null,
       clients: new Set(),
       events: [],
@@ -184,7 +198,7 @@ export class TestStreamAdapter extends EventEmitter {
     // on screen: the same prompt twice, until a reload agreed with neither.
     const userMessageId = options?.clientUserMessageId || crypto.randomUUID();
     const messageId = `assistant-${generationId}`;
-    record.tokens = amountFromPrompt(message, rateFor(record.model).tokens);
+    record.tokens = amountFromPrompt(message, amountFor(record.thinkingLevel).tokens);
     record.active = true;
     record.activity = "working";
     record.stopping = false;
@@ -213,16 +227,16 @@ export class TestStreamAdapter extends EventEmitter {
    * the renderer's cost.
    */
   runStream(record) {
-    const rate = rateFor(record.model);
-    const total = Math.max(1, record.tokens || rate.tokens);
-    const intervalMs = Math.max(TICK_FLOOR_MS, Math.floor(1000 / rate.tokensPerSecond));
+    const speed = speedFor(record.model);
+    const total = Math.max(1, record.tokens || amountFor(record.thinkingLevel).tokens);
+    const intervalMs = Math.max(TICK_FLOOR_MS, Math.floor(1000 / speed.tokensPerSecond));
     const startedAt = Date.now();
     const { messageId, generationId } = record.turn;
 
     const tick = () => {
       record.timer = null;
       if (!record.turn || record.stopping) return;
-      const due = Math.min(total, Math.ceil(((Date.now() - startedAt) / 1000) * rate.tokensPerSecond));
+      const due = Math.min(total, Math.ceil(((Date.now() - startedAt) / 1000) * speed.tokensPerSecond));
       while (record.turn.sent < due) {
         const delta = tokenAt(record.turn.sent);
         record.turn.text += delta;
@@ -276,9 +290,10 @@ export class TestStreamAdapter extends EventEmitter {
   }
 
   listModels() {
-    return Promise.resolve(TEST_STREAM_RATES.map((rate) => ({
-      provider: "conduit-test", id: rate.id, spec: rate.id, label: rate.label,
-      reasoning: false, thinkingLevels: [], defaultThinkingLevel: "",
+    return Promise.resolve(TEST_STREAM_SPEEDS.map((speed) => ({
+      provider: "conduit-test", id: speed.id, spec: speed.id, label: speed.label,
+      reasoning: true, thinkingLevels: TEST_STREAM_AMOUNTS.map((amount) => amount.id),
+      defaultThinkingLevel: DEFAULT_AMOUNT_ID,
     })));
   }
 
@@ -288,19 +303,30 @@ export class TestStreamAdapter extends EventEmitter {
 
   async setModel(id, model) {
     const record = this.get(id);
+    // Only the speed: how much comes back is the level's business, and changing
+    // one should not silently change the other.
+    if (record) record.model = speedFor(model).id;
+    return record?.model || DEFAULT_SPEED_ID;
+  }
+
+  async setThinkingLevel(id, level) {
+    const record = this.get(id);
     if (record) {
-      const rate = rateFor(model);
-      record.model = rate.id;
-      // The amount belongs to the model, so switching model switches both. A
-      // one-off amount named in a prompt applies to that prompt only.
-      record.tokens = rate.tokens;
+      const amount = amountFor(level);
+      record.thinkingLevel = amount.id;
+      // A one-off amount named in a prompt applies to that prompt only, so the
+      // level is what the next one goes back to.
+      record.tokens = amount.tokens;
     }
-    return record?.model || DEFAULT_RATE_ID;
+    return record?.thinkingLevel || DEFAULT_AMOUNT_ID;
   }
 
   getModelState(id) {
     const record = this.get(id);
-    return Promise.resolve({ model: record?.model || DEFAULT_RATE_ID, thinkingLevel: "" });
+    return Promise.resolve({
+      model: record?.model || DEFAULT_SPEED_ID,
+      thinkingLevel: record?.thinkingLevel || DEFAULT_AMOUNT_ID,
+    });
   }
 
   getCapabilities() { return TEST_STREAM_CAPABILITIES; }
