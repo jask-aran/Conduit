@@ -199,10 +199,8 @@ export function normalizePiBackendEvent(event) {
     // What the server has decided about the transcript: a message exists, is
     // finished, or is gone, and where it sits. Passed through whole -- the op
     // is already the neutral statement, not a Pi shape needing translation.
-    case "transcript_op": {
-      const { type: _type, pi: _raw, log: _log, generationId: _generation, ...op } = event;
-      return { ...base, type: "transcript_op", ...op };
-    }
+    case "transcript_op":
+      return { ...event, ...base };
     // Where the chat's order stands, and where a client has to give up its own
     // copy and take a fresh one.
     case "log_state":

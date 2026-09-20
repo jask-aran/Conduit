@@ -82,7 +82,7 @@ export function applyTranscriptOp(messages, event) {
         ...message,
         content: event.content ?? message.content,
         blocks: event.blocks ?? message.blocks,
-        interim: event.interim,
+        interim: event.interim === true,
         // Text the reader watched arrive that the harness is not carrying into
         // the next request. It stays in the transcript -- taking it away would
         // remove something they saw -- but it is marked, so nothing here or on
