@@ -62,12 +62,33 @@ export class SessionRecords {
       record.events.push(event);
     }
     if (record.events.length <= this.replayLimit) return;
-    const dropped = record.events.splice(0, record.events.length - this.replayLimit);
-    if (!record.paint?.size) return;
-    for (const stale of dropped) {
-      const staleKey = deliveryKey(stale);
-      if (staleKey && record.paint.get(staleKey) === stale) record.paint.delete(staleKey);
+    this.evict(record, record.events.length - this.replayLimit);
+  }
+
+  /**
+   * Make room, paint first.
+   *
+   * A dropped delta costs a repaint; a dropped `message.open` costs the row the
+   * repaint would go in. Evicting by age alone treated them alike, so a turn
+   * with more blocks and tools than the buffer holds pushed its own structure
+   * out and left a reconnecting browser painting into nothing. Paint goes in
+   * age order until there is room; the record is given up only when a turn has
+   * stated more than the buffer can hold at all, and a client that far behind
+   * is caught up by reading the chat instead.
+   */
+  evict(record, count) {
+    let over = count;
+    const kept = [];
+    const forget = (event) => {
+      const key = deliveryKey(event);
+      if (key && record.paint?.get(key) === event) record.paint.delete(key);
+    };
+    for (const event of record.events) {
+      if (over > 0 && deliveryKey(event)) { over -= 1; forget(event); continue; }
+      kept.push(event);
     }
+    for (const event of kept.splice(0, over)) forget(event);
+    record.events = kept;
   }
 
   add(record) {

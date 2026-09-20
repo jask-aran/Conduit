@@ -211,6 +211,13 @@ interface EventBase {
  * An op may do none of those things. It is delivered, in order, exactly once,
  * and losing one leaves the browser holding a transcript the server does not
  * believe in.
+ *
+ * Paint is `assistant_content` and `tool_activity`, and nothing else. A turn's
+ * transitions -- `status` with a phase -- and a runtime `error` are not paint:
+ * a missed `settled` is a hole a client has to be caught up on, not a repaint
+ * it can do without, so they are numbered in the chat's order and replayed
+ * beside the ops. There are two channels, not three: the record, which is the
+ * ops plus those transitions, and paint.
  */
 
 export type AssistantBlock =

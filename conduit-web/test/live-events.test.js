@@ -53,6 +53,15 @@ test("a generation event is folded only if it carries what the folds read", () =
     messageId: "m1", contentIndex: 0, blockKind: "text", delta: "hi" };
   assert.deepEqual(normalizeLiveEvent(delta), delta);
   assert.equal(normalizeLiveEvent({ ...delta, contentIndex: undefined }).type, "unknown");
+  // A block is text, thinking or a tool call. Anything else is a block kind the
+  // renderer has no case for, arriving as one it does.
+  assert.equal(normalizeLiveEvent({ ...delta, blockKind: "diagram" }).type, "unknown");
+  // And a tool is named when it starts, because that is what the row says while
+  // it runs.
+  const tool = { type: "tool_activity", phase: "start", generationId: "g1", seq: 6,
+    toolCallId: "call_1", name: "read", input: {} };
+  assert.deepEqual(normalizeLiveEvent(tool), tool);
+  assert.equal(normalizeLiveEvent({ ...tool, name: undefined }).type, "unknown");
 });
 
 test("normalizes host UI events into the client discriminated union", () => {
