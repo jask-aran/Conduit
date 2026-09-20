@@ -37,3 +37,7 @@ export function truncateAt(messages: Message[], messageId: string, options?: { i
 export function applyTranscriptOp(messages: Message[], event: TranscriptOp): Message[];
 export function applyToolOp(tools: ToolItem[], event: TranscriptOp): ToolItem[];
 export function isToolOp(event: TranscriptOp | null | undefined): boolean;
+export function applyTranscriptOps(
+  read?: { messages?: Message[]; tools?: ToolItem[] },
+  ops?: (TranscriptOp & { type?: string })[],
+): { messages: Message[]; tools: ToolItem[] };

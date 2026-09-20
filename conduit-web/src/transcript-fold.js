@@ -139,3 +139,28 @@ export function applyToolOp(tools, event) {
 
 /** Whether this op is about a tool rather than a message. */
 export const isToolOp = (event) => event?.op === "tool.open" || event?.op === "tool.close";
+
+/**
+ * A transcript read back from a harness, brought up to what the server has said.
+ *
+ * A harness writes its history down when a turn ends. The server states each
+ * message as it happens, and keeps those statements in the chat's log -- so
+ * mid-turn the two disagree, and the read is the one that is behind. A browser
+ * loading a chat while a turn is running was given the read alone: the prompt
+ * it sent was not in the file yet, so the page came back with no prompt, an
+ * answer arriving from a live generation that belonged to nothing, and a stop
+ * that closed a message the browser did not hold and left an empty chat.
+ *
+ * Every statement is idempotent by message id, so replaying one already in the
+ * file settles the same row rather than adding a second.
+ */
+export function applyTranscriptOps({ messages = [], tools = [] } = {}, ops = []) {
+  let nextMessages = messages;
+  let nextTools = tools;
+  for (const op of ops) {
+    if (op?.type !== "transcript_op") continue;
+    if (isToolOp(op)) nextTools = applyToolOp(nextTools, op);
+    else nextMessages = applyTranscriptOp(nextMessages, op);
+  }
+  return { messages: nextMessages, tools: nextTools };
+}

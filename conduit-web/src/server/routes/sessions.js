@@ -2,6 +2,7 @@ import path from "node:path";
 import { conduitPiSessionFile } from "../../backend-session.js";
 import { chatView, isChatId } from "../../chat-store.js";
 import { applyMessageIds } from "../../message-ids.js";
+import { applyTranscriptOps } from "../../transcript-fold.js";
 import {
   projectSessionEntries,
   removeSessionFamily,
@@ -23,6 +24,7 @@ export function registerSessionRoutes(app, {
   messageIds,
   attachments,
   backends,
+  chatLogs,
   config,
   findChatContext,
   findRegisteredSession,
@@ -32,6 +34,17 @@ export function registerSessionRoutes(app, {
   readSessionPage,
   registry,
 }) {
+  /**
+   * What the server believes this chat holds, not only what the harness wrote.
+   *
+   * Only for the end of the transcript: an older page is history the log has
+   * nothing to say about, and folding the tail's statements into it would put
+   * them in the wrong place.
+   */
+  const upToDate = (context, projection, page) => (page?.before
+    ? projection
+    : { ...projection, ...applyTranscriptOps(projection, chatLogs?.get(context.chat.id)?.entries || []) });
+
   async function transcriptFor(context) {
     if (context.chat.backend?.implementation === "conduit_pi") {
       const session = await findRegisteredSession(context.chat.id);
@@ -63,7 +76,8 @@ export function registerSessionRoutes(app, {
         // Where the rest of the history starts is the adapter's to say, the same
         // as the transcript itself. This used to answer `null` for every backend
         // but Pi, which told the browser a long thread was all of it.
-        return response.json({ ...chatView(context.chat), ...projection, attachments: [],
+        return response.json({ ...chatView(context.chat),
+          ...upToDate(context, projection, projection.page), attachments: [],
           page: projection.page || { before: null } });
       }
       const sessionFile = conduitPiSessionFile(context.chat);
@@ -84,12 +98,13 @@ export function registerSessionRoutes(app, {
         await attachments.decorateMessages(context.project, context.chat.id, projection.messages,
           { fromStart: !session.page?.before }),
         await messageIds.resolver(context.project, context.chat));
+      const current = upToDate(context, projection, session.page);
       response.json({
         ...chatView(context.chat),
         model: session.model,
         thinkingLevel: session.thinkingLevel,
-        messages: projection.messages,
-        tools: projection.tools,
+        messages: current.messages,
+        tools: current.tools,
         page: session.page,
       });
     } catch (error) { next(error); }

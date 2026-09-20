@@ -631,6 +631,7 @@ registerHarnessRoutes(app, { backends, harnessModels, preferences, projects, reg
 registerSessionRoutes(app, {
   attachments,
   backends,
+  chatLogs,
   config,
   findChatContext,
   findRegisteredSession,
