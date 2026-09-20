@@ -1,4 +1,4 @@
-import { Capacitor } from "@capacitor/core";
+import { isInstalledClient } from "../platform/installed-client.ts";
 import { authorizedFetch } from "./native-auth-client.ts";
 
 export const SERVER_ORIGIN_STORAGE_KEY = "conduit.native.server-origin";
@@ -52,11 +52,11 @@ function nativeOrigin() {
 }
 
 export function httpUrl(path) {
-  return Capacitor.isNativePlatform() ? buildHttpUrl(path, nativeOrigin()) : path;
+  return isInstalledClient() ? buildHttpUrl(path, nativeOrigin()) : path;
 }
 
 export async function webSocketUrl(path) {
-  if (!Capacitor.isNativePlatform()) return buildWebSocketUrl(path, location.origin);
+  if (!isInstalledClient()) return buildWebSocketUrl(path, location.origin);
   const origin = nativeOrigin();
   const response = await authorizedFetch(buildHttpUrl("/v0/auth/socket-ticket", origin), { method: "POST" });
   if (!response.ok) throw new Error("Could not authorize the live connection.");

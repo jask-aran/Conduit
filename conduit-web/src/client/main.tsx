@@ -3,7 +3,7 @@ import { isConduitManagedProject } from "./navigation/sidebar-preferences";
 import type { ComputerLocation, ComputerPrefetchPayload } from "./api/contracts";
 import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { render } from "solid-js/web";
-import { Capacitor } from "@capacitor/core";
+import { isInstalledClient } from "./platform/installed-client.ts";
 import {
   ArrowLeftIcon, EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
 } from "lucide-solid";
@@ -95,7 +95,7 @@ import "./project/dashboard.css";
 import "./chat/composer-geometry.css";
 import "./styles.css";
 
-const nativeApp = Capacitor.isNativePlatform();
+const nativeApp = isInstalledClient();
 applyUiScale(selectedUiScale());
 // Stamp the reading-surface presets before first paint so the transcript is
 // never laid out at the default width and then reflowed to the chosen one.

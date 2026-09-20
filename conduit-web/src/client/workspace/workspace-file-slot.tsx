@@ -6,7 +6,7 @@ import { api } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
 import { FileTypeIcon } from "./file-type-icon";
-import { Capacitor } from "@capacitor/core";
+import { isInstalledClient } from "../platform/installed-client.ts";
 import type { WorkspaceEditorHandle } from "./workspace-editor";
 import { addReviewComment, reviewComments } from "../chat/review-comments";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
@@ -208,7 +208,7 @@ export default function WorkspaceFileSlot(props: {
 
   const loadMedia = async (metadata: FileMetadata & { kind: Exclude<FileKind, "text">; mime: string }, projectId: string, owns: () => boolean) => {
     const path = metadata.path;
-    if (!Capacitor.isNativePlatform()) {
+    if (!isInstalledClient()) {
       const url = httpUrl(`/v0/projects/${encodeURIComponent(projectId)}/file?path=${encodeURIComponent(path)}&inline=1&revision=${encodeURIComponent(metadata.revision || "")}`);
       if (asset()?.url !== url) {
         releaseAsset();

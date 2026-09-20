@@ -1,5 +1,5 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { Capacitor } from "@capacitor/core";
+import { isInstalledClient } from "../platform/installed-client.ts";
 import { FileIcon, ImageIcon, XIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { Attachment } from "../api/contracts";
@@ -10,7 +10,7 @@ import { authorizedFetch } from "../api/native-auth-client";
 const sizeLabel = (bytes?: number) => bytes == null ? "" : bytes < 1024 ? `${bytes} B` : bytes < 1_048_576 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1_048_576).toFixed(1)} MB`;
 
 function AttachmentImage(props: { src: string }) {
-  const isNative = Capacitor.isNativePlatform();
+  const isNative = isInstalledClient();
   const [source, setSource] = createSignal(isNative ? "" : props.src);
   let objectUrl = "";
   onMount(() => {
