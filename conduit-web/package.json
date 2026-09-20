@@ -21,6 +21,8 @@
     "android:build": "npm run cap:sync && cd android && ./gradlew assembleDebug",
     "android:open": "cap open android",
     "android:run": "npm run cap:sync && cap run android",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build",
     "bench:renderer": "node scripts/bench-renderer.mjs"
   },
   "dependencies": {
@@ -89,6 +91,7 @@
   "devDependencies": {
     "@capacitor/cli": "8.5.0",
     "@tailwindcss/vite": "^4.3.2",
+    "@tauri-apps/cli": "^2.11.5",
     "tailwindcss": "^4.3.2",
     "typescript": "7.0.2",
     "vite": "^6.4.3",
