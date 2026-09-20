@@ -522,10 +522,17 @@ export function createLiveSessionStream({
     // not overtake an earlier one while attachment paths or an abort resolve.
     let commands = Promise.resolve();
     ws.on("message", (data) => {
+      // Conduit rejecting a command the browser sent is Conduit's own
+      // statement, not a harness event, so it is written in the contract's
+      // words here rather than handed to a harness translator. Routing it
+      // through `toClientEvent` meant Pi renamed it and the other three did
+      // not, and Pi had no code for a bad request so it read as the backend
+      // going away -- which failed a turn that was still running fine.
       const report = (error) => {
-        if (ws.readyState === 1) ws.send(JSON.stringify(adapter.toClientEvent({
-          type: "client_error", code: error.code, message: error.message,
-        })));
+        if (ws.readyState === 1) ws.send(JSON.stringify({
+          type: "error", scope: "request", generationId: null,
+          error: { code: error.code || "invalid_request", message: error.message },
+        }));
       };
       let command;
       try { command = JSON.parse(String(data)); }

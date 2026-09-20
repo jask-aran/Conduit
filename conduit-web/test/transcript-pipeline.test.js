@@ -108,7 +108,7 @@ function harness() {
   const errors = [];
   ws.send = (frame) => {
     const event = JSON.parse(frame);
-    if (event.type === "client_error" || event.type === "error") errors.push(event);
+    if (event.type === "error") errors.push(event);
   };
   const stream = createLiveSessionStream({
     manager,

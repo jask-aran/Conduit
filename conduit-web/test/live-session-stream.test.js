@@ -286,7 +286,7 @@ test("a fork submits its prompt before Pi creates the child session file", async
   assert.deepEqual(operations, ["fork", "history_truncated", "transcript_op", "history_forked", "transcript_op", "prompt"]);
   assert.deepEqual(updates, [{ backend: { implementation: "conduit_pi", opaqueSession: "/tmp/provisional-fork.jsonl" } }]);
   assert.equal(chat.backend.opaqueSession, "/tmp/durable-session.jsonl");
-  assert.equal(sent.some((event) => event.type === "client_error"), false);
+  assert.equal(sent.some((event) => event.type === "error"), false);
 });
 
 test("an unknown browser command cannot reach a backend escape hatch", async () => {
@@ -321,10 +321,14 @@ test("an unknown browser command cannot reach a backend escape hatch", async () 
   ws.emit("message", JSON.stringify({ type: "backend_native_command", payload: { destructive: true } }));
   await new Promise((resolve) => setImmediate(resolve));
 
+  // Conduit's own words, sent without passing through a harness translator:
+  // the same rejection used to reach the browser as `client_error` on three
+  // harnesses and as a `backend_unavailable` runtime failure on Pi.
   assert.deepEqual(sent.at(-1), {
-    type: "client_error",
-    code: "invalid_request",
-    message: "Unknown live-session command: backend_native_command",
+    type: "error",
+    scope: "request",
+    generationId: null,
+    error: { code: "invalid_request", message: "Unknown live-session command: backend_native_command" },
   });
 });
 
@@ -388,7 +392,7 @@ test("regenerate keeps the prompt it re-asks, under the name it already had", as
   const opened = published.filter((event) => event.op === "message.open");
   assert.deepEqual(opened.map((event) => event.message.id), ["m_held"]);
   assert.equal(opened[0].message.content, "a longer story");
-  assert.equal(sent.some((event) => event.type === "client_error"), false);
+  assert.equal(sent.some((event) => event.type === "error"), false);
 });
 
 test("a prompt adopted from history has no name to keep, and is re-sent under a new one", async () => {

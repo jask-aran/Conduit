@@ -224,12 +224,11 @@ export function normalizePiBackendEvent(event) {
     case "context_usage":
       return { ...base, type: "usage", contextUsage: event.contextUsage,
         sessionStats: event.sessionStats, cacheStats: event.cacheStats };
-    case "client_error":
     case "runtime_error":
     case "generation_failed": {
       const error = event.error || event;
       const codes = ["generation_limit", "live_process_limit", "rpc_timeout", "rate_limited", "auth_expired", "backend_unavailable"];
-      return { ...base, type: "error", error: {
+      return { ...base, type: "error", scope: "runtime", error: {
         code: codes.includes(error.code) ? error.code : "backend_unavailable",
         message: error.message,
         ...(error.code === "rate_limited" ? { retryAfterMs: error.retryAfterMs ?? 60_000 } : {}),

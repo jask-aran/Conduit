@@ -41,12 +41,17 @@ test("a message's place in the chat's order survives normalization", () => {
 });
 
 test("normalizes host UI events into the client discriminated union", () => {
+  // Stated flat, the way the contract states it. The nested `request` shape
+  // this used to be given is the harness's, and no adapter sends it.
   assert.deepEqual(normalizeLiveEvent({
-    type: "extension_ui_request",
+    type: "permission_request",
     generationId: 42,
-    request: { id: "request_1", method: "select", title: "Choose", options: ["one", 2] },
+    requestId: "request_1",
+    kind: "select",
+    title: "Choose",
+    options: ["one", 2],
   }), {
-    type: "extension_ui_request",
+    type: "permission_request",
     generationId: "42",
     request: {
       id: "request_1",
@@ -81,15 +86,30 @@ test("normalizes runtime state without a legacy event replay", () => {
 
 test("normalizes aggregate session stats on context usage updates", () => {
   const event = normalizeLiveEvent({
-    type: "context_usage",
+    type: "usage",
     contextUsage: { tokens: null, contextWindow: 128000, percent: null },
     sessionStats: { userMessages: 2, assistantMessages: 2, toolCalls: 1, toolResults: 1, totalMessages: 5, tokens: { input: 100, output: 40, cacheRead: 20, cacheWrite: 10, total: 170 }, cost: 0.123 },
     cacheStats: { eligibleTokens: 500, cacheHits: 450, cacheMissedTokens: 50, eligibleRequests: 4, eligibleHitRate: 0.9 },
   });
-  assert.equal(event.type, "context_usage");
+  assert.equal(event.type, "usage");
   assert.equal(event.contextUsage.tokens, null);
   assert.equal(event.sessionStats.toolCalls, 1);
   assert.equal(event.cacheStats.eligibleTokens, 500);
+});
+
+test("an error states whose fault it was", () => {
+  // Two event names used to carry this, and only Pi's adapter knew to rename
+  // either of them. A rejected command must not read as a failed turn.
+  const rejected = normalizeLiveEvent({
+    type: "error", scope: "request", generationId: "g1",
+    error: { code: "invalid_request", message: "not JSON" },
+  });
+  assert.deepEqual(rejected, { type: "error", scope: "request", generationId: "g1",
+    code: "invalid_request", message: "not JSON" });
+  const failed = normalizeLiveEvent({
+    type: "error", generationId: "g1", error: { code: "backend_unavailable", message: "gone" },
+  });
+  assert.equal(failed.scope, "runtime", "an unscoped error is the runtime's");
 });
 
 test("preserves a checkpoint's durable chat title", () => {
