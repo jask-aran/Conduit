@@ -707,8 +707,15 @@ export function createActiveChat(options: ActiveChatOptions) {
         // A rejected command is not a failed turn. The scope says which this
         // is, rather than the browser reading it off two event names that only
         // one of the four harnesses ever distinguished.
-        if (!stopPending) setGeneration(event.scope === "runtime" ? "failed" : "idle");
-        resetLiveFlags();
+        if (event.scope === "runtime") {
+          if (!stopPending) setGeneration("failed");
+          resetLiveFlags();
+        } else if (generation() === "submitting") {
+          // The request failed before a turn began. An error from a steer or
+          // another command during an active turn must leave that turn alone.
+          setGeneration("idle");
+          resetLiveFlags();
+        }
         if (event.code === "generation_limit") {
           setMessages((current) => {
             const last = current.at(-1);
