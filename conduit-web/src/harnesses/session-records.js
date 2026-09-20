@@ -1,5 +1,5 @@
 import { isLoggedEvent } from "../server/chat-log.js";
-import { SocketDelivery, deliveryKey, mergeDelivery } from "./socket-delivery.js";
+import { SocketDelivery, deliveryKey, isPaint, mergeDelivery } from "./socket-delivery.js";
 
 // The live-record store every non-Pi adapter needs: the id and chat indexes, the
 // attached browser sockets, and the replay buffer. Codex and ChatGPT Web wrote
@@ -71,10 +71,18 @@ export class SessionRecords {
    * A dropped delta costs a repaint; a dropped `message.open` costs the row the
    * repaint would go in. Evicting by age alone treated them alike, so a turn
    * with more blocks and tools than the buffer holds pushed its own structure
-   * out and left a reconnecting browser painting into nothing. Paint goes in
-   * age order until there is room; the record is given up only when a turn has
-   * stated more than the buffer can hold at all, and a client that far behind
-   * is caught up by reading the chat instead.
+   * out and left a reconnecting browser painting into nothing.
+   *
+   * Paint goes in age order until there is room -- all of it, not only the part
+   * that merges. Asking `deliveryKey` which entries were paint answered the
+   * narrower question "which of these merge", so a tool-heavy turn kept its own
+   * starts and ends and evicted the `message.open` they belong under.
+   *
+   * The record is given up only when a turn has stated more than the buffer can
+   * hold at all, and that is not silent: every record event carries its number
+   * in the chat's log, so a client replayed a buffer with a hole in it sees the
+   * gap, asks to be caught up from the last number it held, and is either sent
+   * what it missed or told to take the transcript again.
    */
   evict(record, count) {
     let over = count;
@@ -84,7 +92,7 @@ export class SessionRecords {
       if (key && record.paint?.get(key) === event) record.paint.delete(key);
     };
     for (const event of record.events) {
-      if (over > 0 && deliveryKey(event)) { over -= 1; forget(event); continue; }
+      if (over > 0 && isPaint(event)) { over -= 1; forget(event); continue; }
       kept.push(event);
     }
     for (const event of kept.splice(0, over)) forget(event);
