@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 import { EventEmitter } from "node:events";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { applyTranscriptOp } from "./transcript-fold.js";
-import { messageClose, messageOpen } from "./harnesses/transcript-ops.js";
+import { messageClose, messageDrop, messageOpen, toolClose, toolOpen } from "./harnesses/transcript-ops.js";
+import { reduceActiveGeneration, snapshotActiveGeneration } from "./active-generation.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 /**
@@ -21,26 +22,46 @@ import { unsupported } from "./harnesses/unsupported.js";
  * whole point: if the stream itself drifted, every number read off it would be
  * measuring this file.
  */
+/**
+ * What it can do: everything the reference harness can, deterministically.
+ *
+ * This declared four things and refused the rest, so the profile exercised a
+ * narrow slice of Conduit -- prompt, stream, stop -- and every path built for a
+ * real harness (steering, forks, regenerate, tools, approvals, compaction) had
+ * no coverage here at all. Capabilities are the whole of how a backend's
+ * behaviour is decided: the client hides what is not declared and the server
+ * refuses it, so declaring them is what turns those paths on.
+ *
+ * What it does with each is fixed and repeatable, because that is the point of
+ * this backend. A tool call returns the same output every time, an approval is
+ * asked the same way, a fork cuts at the entry it was given. There is no model
+ * to be unpredictable.
+ */
 export const TEST_STREAM_CAPABILITIES = Object.freeze({
-  history: "linear",
-  fork: false,
-  regenerate: false,
-  steer: false,
-  followUpQueue: false,
+  // Forks are cuts in its own journal, so the history it reports is a tree for
+  // the same reason Pi's is: a chat can hold more than one continuation.
+  history: "tree",
+  fork: true,
+  regenerate: true,
+  steer: true,
+  followUpQueue: true,
   cancel: true,
-  compaction: false,
+  compaction: true,
   // How much comes back is this harness's decision, and a thinking level is
   // already a signal a harness interprets however it likes -- so the amount
   // rides on it, labelled in tokens. Two independent questions, the two
   // pickers that are already in the composer, and no new settings surface.
   thinkingLevels: true,
   modelSwitch: true,
-  toolUse: false,
-  approvals: false,
+  toolUse: true,
+  approvals: true,
+  // Matching Pi: it answers an approval, it does not offer profiles to answer
+  // under. That is a Codex feature, and claiming it here would mean declaring a
+  // surface with nothing behind it.
   permissionModes: false,
-  usage: false,
-  replay: false,
-  attachments: false,
+  usage: true,
+  replay: true,
+  attachments: true,
   // True here, and only here. Every real harness drops an interrupted partial
   // because what it writes and what it sends the model next turn are different
   // things. This backend's journal *is* its transcript and there is no model to
@@ -87,6 +108,9 @@ const MAX_TOKENS = 100_000;
 // 500 tokens/s a tick emits several tokens rather than pretending to fire more
 // often than it can. The rate stays honest; only the deltas-per-tick changes.
 const TICK_FLOOR_MS = 2;
+// More than this in one turn is a typo in the prompt rather than a request.
+const MAX_TOOL_RUNS = 8;
+const CONTEXT_WINDOW = 200_000;
 
 const WORDS = ("the quick brown fox jumps over a lazy dog while conduit streams tokens through "
   + "its transcript at a fixed and deliberate pace so that every frame can be measured against "
@@ -114,12 +138,63 @@ export function amountFromPrompt(message, fallback) {
   return Math.min(MAX_TOKENS, Math.max(1, Number(match[1])));
 }
 
+/**
+ * What else the prompt asks for, in the same spirit as the amount.
+ *
+ * The prompt is not a question here, so it is the one place a tester can steer
+ * a run without leaving the composer: "3 tools" runs three tool calls, "approve"
+ * makes each of them ask first. Everything is deterministic -- the same prompt
+ * produces the same turn, which is what makes this backend worth measuring
+ * against.
+ */
+export function toolRunsFromPrompt(message) {
+  const match = /(\d+)\s*tools?\b/i.exec(String(message || ""));
+  if (match) return Math.min(MAX_TOOL_RUNS, Math.max(0, Number(match[1])));
+  return /\btools?\b/i.test(String(message || "")) ? 1 : 0;
+}
+
+export const approvalFromPrompt = (message) => /\bapprove|approval\b/i.test(String(message || ""));
+
+/** The tool a run calls, and what it returns. Fixed, like everything else. */
+export const TEST_STREAM_TOOL = Object.freeze({
+  name: "read_file",
+  input: Object.freeze({ path: "docs/testing.md" }),
+  output: "docs/testing.md: approach selection, commands, safety boundaries, evidence.",
+});
+
 /** The nth token of the stream, including the paragraph breaks. */
 export function tokenAt(index) {
   const word = WORDS[index % WORDS.length];
   if (index > 0 && index % 60 === 0) return `\n\n${word} `;
   return `${word} `;
 }
+
+/**
+ * The steps a turn will take, decided before it writes a word.
+ *
+ * Text, then a tool, then text, for as many tools as were asked for. Deciding
+ * it up front is what makes a run repeatable: the same prompt produces the same
+ * turn, down to which token the call lands on.
+ */
+export function planTurn(tokens, toolRuns) {
+  const total = Math.max(1, tokens);
+  if (!toolRuns) return [{ kind: "text", tokens: total }];
+  const share = Math.max(1, Math.floor(total / (toolRuns + 1)));
+  const steps = [];
+  let left = total;
+  for (let run = 0; run < toolRuns; run += 1) {
+    steps.push({ kind: "text", tokens: share });
+    steps.push({ kind: "tool", toolCallId: `call_${run + 1}` });
+    left -= share;
+  }
+  steps.push({ kind: "text", tokens: Math.max(1, left) });
+  return steps;
+}
+
+/** What Conduit keeps about an attachment, as this backend would record it. */
+const attachmentSummary = (attachments) => attachments.map((item) => ({
+  id: item.id, name: item.name || item.id, mimeType: item.mimeType || "application/octet-stream",
+}));
 
 export class TestStreamAdapter extends EventEmitter {
   constructor({ logs = null } = {}) {
@@ -185,6 +260,14 @@ export class TestStreamAdapter extends EventEmitter {
       events: [],
       generationSeq: 0,
       timer: null,
+      // Everything a real harness holds between turns: what is waiting to be
+      // said, what it is waiting to be told, and what it has spent.
+      queue: { steering: [], followUp: [] },
+      hostUiRequests: [],
+      pendingApproval: null,
+      streamed: 0,
+      messages: 0,
+      activeGeneration: null,
     });
   }
 
@@ -197,7 +280,6 @@ export class TestStreamAdapter extends EventEmitter {
     // name. Inventing one here would state a second row for a message that is
     // on screen: the same prompt twice, until a reload agreed with neither.
     const userMessageId = options?.clientUserMessageId || crypto.randomUUID();
-    const messageId = `assistant-${generationId}`;
     record.tokens = amountFromPrompt(message, amountFor(record.thinkingLevel).tokens);
     record.active = true;
     record.activity = "working";
@@ -206,15 +288,52 @@ export class TestStreamAdapter extends EventEmitter {
     // Both rows are named before a byte of the answer exists, so nothing
     // arriving later needs a place worked out for it.
     this.publish(record, messageOpen({ id: userMessageId, role: "user", generationId,
-      content: message, timestamp: new Date().toISOString() }));
-    this.publish(record, messageOpen({ id: messageId, role: "assistant", generationId, answers: userMessageId }));
+      content: message, timestamp: new Date().toISOString(),
+      ...(options?.attachments?.length ? { attachments: attachmentSummary(options.attachments) } : {}) }));
     this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.generationSeq,
+      status: "working", activity: "working", detail: null,
+      ...(options?.continuationBase ? { continuation: true, continuationBase: String(options.continuationBase) } : {}) });
+    record.turn = {
+      generationId,
+      answers: userMessageId,
+      steps: planTurn(record.tokens, toolRunsFromPrompt(message)),
+      step: 0,
+      approvals: approvalFromPrompt(message),
+      attachments: attachmentSummary(options?.attachments || []),
+      sent: 0,
+      messageId: null,
+      text: "",
+      blocks: [],
+      contentIndex: 0,
+    };
+    // Accepted, and now working. Both transitions are stated because both are
+    // in the contract's lifecycle and a client that missed the second would
+    // show a turn as submitting for as long as it ran.
+    this.publish(record, { type: "status", generationId, phase: "running", seq: ++record.generationSeq,
       status: "working", activity: "working", detail: null });
-    this.publish(record, { type: "assistant_content", generationId, phase: "start",
-      seq: ++record.generationSeq, messageId });
-    record.turn = { messageId, generationId, text: "", sent: 0 };
+    this.openAnswer(record);
     this.runStream(record);
     return generationId;
+  }
+
+  /**
+   * Open the message this turn is about to write into.
+   *
+   * A turn writes more than one whenever it calls a tool: the message that
+   * asked for the tool is finished when the call is made, and what comes after
+   * the result is a message of its own. That is how every real harness records
+   * it, so it is how this one does.
+   */
+  openAnswer(record) {
+    const turn = record.turn;
+    turn.messageId = `assistant-${turn.generationId}-${turn.messages = (turn.messages || 0) + 1}`;
+    turn.text = "";
+    turn.blocks = [];
+    turn.contentIndex = 0;
+    this.publish(record, messageOpen({ id: turn.messageId, role: "assistant",
+      generationId: turn.generationId, answers: turn.answers }));
+    this.publish(record, { type: "assistant_content", generationId: turn.generationId, phase: "start",
+      seq: ++record.generationSeq, messageId: turn.messageId });
   }
 
   /**
@@ -228,44 +347,246 @@ export class TestStreamAdapter extends EventEmitter {
    */
   runStream(record) {
     const speed = speedFor(record.model);
-    const total = Math.max(1, record.tokens || amountFor(record.thinkingLevel).tokens);
     const intervalMs = Math.max(TICK_FLOOR_MS, Math.floor(1000 / speed.tokensPerSecond));
     const startedAt = Date.now();
-    const { messageId, generationId } = record.turn;
+    const turn = record.turn;
+    const step = turn.steps[turn.step];
+    const target = turn.sent + step.tokens;
+    const from = turn.sent;
+    const { messageId, generationId } = turn;
+    const contentIndex = turn.contentIndex;
 
     const tick = () => {
       record.timer = null;
-      if (!record.turn || record.stopping) return;
-      const due = Math.min(total, Math.ceil(((Date.now() - startedAt) / 1000) * speed.tokensPerSecond));
-      while (record.turn.sent < due) {
-        const delta = tokenAt(record.turn.sent);
-        record.turn.text += delta;
-        record.turn.sent += 1;
+      if (!record.turn || record.stopping || record.turn !== turn) return;
+      const due = Math.min(target, from + Math.ceil(((Date.now() - startedAt) / 1000) * speed.tokensPerSecond));
+      while (turn.sent < due) {
+        const delta = tokenAt(turn.sent);
+        turn.text += delta;
+        turn.sent += 1;
+        record.streamed += 1;
         this.publish(record, { type: "assistant_content", generationId, phase: "delta",
-          seq: ++record.generationSeq, messageId, contentIndex: 0, blockKind: "text", delta });
+          seq: ++record.generationSeq, messageId, contentIndex, blockKind: "text", delta });
       }
-      if (record.turn.sent >= total) { this.finish(record, "stop"); return; }
+      if (turn.sent >= target) { this.advance(record); return; }
       record.timer = setTimeout(tick, intervalMs);
     };
     record.timer = setTimeout(tick, intervalMs);
   }
 
+  /**
+   * The step is done. Take a queued message if one is waiting, then go on.
+   *
+   * A step boundary is where a real harness notices its queue: mid-token would
+   * cut a word in half, and waiting for the turn to end would make steering
+   * indistinguishable from a follow-up.
+   */
+  advance(record) {
+    const turn = record.turn;
+    if (!turn) return;
+    turn.step += 1;
+    if (this.takeQueued(record)) return;
+    const next = turn.steps[turn.step];
+    if (!next) return this.finish(record, "stop");
+    if (next.kind === "tool") return this.runTool(record, next);
+    this.runStream(record);
+  }
+
+  /**
+   * Call the tool, asking first when the run was told to ask.
+   *
+   * The call is a block of the message that made it, exactly as a real harness
+   * writes it, and the result is a tool record beside the transcript rather
+   * than inside it. Both are stated as ops; the activity events beside them are
+   * the paint that draws the call arriving.
+   */
+  runTool(record, step) {
+    const turn = record.turn;
+    if (turn.approvals && !step.approved) return this.askApproval(record, step);
+    const { generationId, messageId } = turn;
+    const toolCallId = step.toolCallId;
+    const input = TEST_STREAM_TOOL.input;
+    turn.contentIndex += 1;
+    const contentIndex = turn.contentIndex;
+    // The call paints like any other block: its input arrives as text into a
+    // block of kind `tool_call`, which is what the reducers at both ends build
+    // a call out of.
+    this.publish(record, { type: "assistant_content", generationId, phase: "delta",
+      seq: ++record.generationSeq, messageId, contentIndex, blockKind: "tool_call",
+      delta: JSON.stringify(input) });
+    turn.blocks.push({ kind: "tool_call", contentIndex, toolCallId, name: TEST_STREAM_TOOL.name, input });
+    this.publish(record, toolOpen({ toolCallId, name: TEST_STREAM_TOOL.name, input,
+      messageId, generationId }));
+    this.publish(record, { type: "tool_activity", phase: "start", generationId,
+      seq: ++record.generationSeq, toolCallId, name: TEST_STREAM_TOOL.name, input });
+    this.publish(record, { type: "tool_activity", phase: "update", generationId,
+      seq: ++record.generationSeq, toolCallId, name: TEST_STREAM_TOOL.name, input,
+      output: TEST_STREAM_TOOL.output.slice(0, 24) });
+    this.publish(record, { type: "tool_activity", phase: "end", generationId,
+      seq: ++record.generationSeq, toolCallId, name: TEST_STREAM_TOOL.name,
+      output: TEST_STREAM_TOOL.output, isError: false });
+    this.publish(record, toolClose({ toolCallId, output: TEST_STREAM_TOOL.output, generationId }));
+    // The message that called the tool is finished with. What answers the
+    // result is the next message of the turn.
+    this.closeAnswer(record, "toolUse");
+    this.openAnswer(record);
+    this.advanceAfterTool(record);
+  }
+
+  advanceAfterTool(record) {
+    const turn = record.turn;
+    turn.step += 1;
+    if (this.takeQueued(record)) return;
+    const next = turn.steps[turn.step];
+    if (!next) return this.finish(record, "stop");
+    if (next.kind === "tool") return this.runTool(record, next);
+    this.runStream(record);
+  }
+
+  /** Ask before running, and stop until the answer comes back. */
+  askApproval(record, step) {
+    const requestId = `approval-${step.toolCallId}`;
+    record.hostUiRequests.push({ id: requestId, kind: "confirm",
+      title: `Run ${TEST_STREAM_TOOL.name}?`,
+      message: `${TEST_STREAM_TOOL.name}(${JSON.stringify(TEST_STREAM_TOOL.input)})`,
+      options: [], placeholder: "", prefill: "", timeoutMs: null });
+    record.pendingApproval = { requestId, step };
+    record.activity = "waiting_for_user";
+    this.publish(record, { type: "permission_request", generationId: record.turn.generationId,
+      requestId, kind: "confirm",
+      title: `Run ${TEST_STREAM_TOOL.name}?`,
+      message: `${TEST_STREAM_TOOL.name}(${JSON.stringify(TEST_STREAM_TOOL.input)})`,
+      options: [], placeholder: "", prefill: "", timeoutMs: null });
+    this.publishState(record);
+  }
+
+  respondHostUi(id, response) {
+    const record = this.get(id);
+    if (!record) throw adapterError("No test stream session", "backend_unavailable", 404);
+    const requestId = response?.id || response?.requestId;
+    if (!requestId) throw adapterError("Host UI response requires id", "host_ui_id_required", 400);
+    const pending = record.pendingApproval;
+    record.hostUiRequests = record.hostUiRequests.filter((item) => item.id !== requestId);
+    record.pendingApproval = null;
+    this.publish(record, { type: "permission_resolved", generationId: record.generation?.id || null, requestId });
+    record.activity = record.active ? "working" : "idle";
+    this.publishState(record);
+    if (!pending || pending.requestId !== requestId || !record.turn) return null;
+    const approved = response.cancelled || response.dismissed ? false
+      : typeof response.confirmed === "boolean" ? response.confirmed
+        : String(response.value || "").toLowerCase() !== "no";
+    if (!approved) {
+      // Refused: the turn says so and stops, which is the shape a refusal takes
+      // on a real harness -- the model is told, and there is nothing else to do
+      // with a step it was not allowed to run.
+      this.finish(record, "aborted");
+      return null;
+    }
+    pending.step.approved = true;
+    this.runTool(record, pending.step);
+    return null;
+  }
+
+  /**
+   * Take one queued message, if the turn has reached a place to take it.
+   *
+   * Steering is answered inside the running turn: the message is committed
+   * where the turn had got to, and what comes after it is a new message
+   * answering that. A follow-up waits for the turn to end, which is what the
+   * two queues mean.
+   */
+  takeQueued(record) {
+    const turn = record.turn;
+    if (!turn || !record.queue.steering.length) return false;
+    const queued = record.queue.steering.shift();
+    this.closeAnswer(record, "toolUse");
+    this.publish(record, messageOpen({ id: queued.messageId, role: "user",
+      generationId: turn.generationId, content: queued.message, timestamp: new Date().toISOString() }));
+    turn.answers = queued.messageId;
+    // What is left of the answer now answers the steer, and it gets a fresh
+    // budget so a message steered at the end still produces something.
+    turn.steps = turn.steps.slice(0, turn.step).concat(planTurn(Math.max(40, Math.round(record.tokens / 4)), 0));
+    turn.step = turn.steps.length - 1;
+    this.publishQueue(record);
+    this.openAnswer(record);
+    this.runStream(record);
+    return true;
+  }
+
+  async queue(id, type, message, options = {}) {
+    const record = this.get(id);
+    if (!record) throw adapterError("No test stream session", "backend_unavailable", 404);
+    const messageId = options.messageId || crypto.randomUUID();
+    const entry = { messageId, message, attachments: attachmentSummary(options.attachments || []) };
+    const list = type === "steer" ? record.queue.steering : record.queue.followUp;
+    list.push(entry);
+    this.publishQueue(record);
+    return { attachmentIdentity: { afterMessageId: messageId, ordinal: 0 } };
+  }
+
+  async clearQueue(id) {
+    const record = this.get(id);
+    if (!record) throw adapterError("No test stream session", "backend_unavailable", 404);
+    const taken = [...record.queue.steering, ...record.queue.followUp];
+    record.queue = { steering: [], followUp: [] };
+    this.publishQueue(record);
+    return {
+      steering: taken.map((item) => item.message),
+      followUp: [],
+      discardedAttachmentIdentities: [],
+      discardedMessageIds: taken.map((item) => item.messageId),
+    };
+  }
+
+  publishQueue(record) {
+    this.publish(record, { type: "queue_state", generationId: record.generation?.id || null,
+      queue: { steering: record.queue.steering.map((item) => item.message),
+        followUp: record.queue.followUp.map((item) => item.message) } });
+  }
+
+  publishState(record) {
+    this.publish(record, { type: "runtime_state", generationId: record.generation?.id || null,
+      session: this.view(record), hostUiRequests: [...record.hostUiRequests],
+      queue: { steering: record.queue.steering.map((item) => item.message),
+        followUp: record.queue.followUp.map((item) => item.message) },
+      contextUsage: this.contextUsage(record) });
+  }
+
+  /** Finish the message being written, with the reason it stopped. */
+  closeAnswer(record, stopReason) {
+    const turn = record.turn;
+    if (!turn?.messageId) return;
+    const blocks = [{ kind: "text", contentIndex: 0, text: turn.text }, ...turn.blocks];
+    this.publish(record, { type: "assistant_content", generationId: turn.generationId, phase: "final",
+      seq: ++record.generationSeq, messageId: turn.messageId, stopReason, errorMessage: null, blocks });
+    this.publish(record, messageClose({ messageId: turn.messageId, stopReason,
+      interim: stopReason === "toolUse",
+      generationId: turn.generationId, keepsPartial: TEST_STREAM_CAPABILITIES.interruptKeepsPartial, blocks }));
+  }
+
   finish(record, stopReason) {
     const turn = record.turn;
     if (!turn) return;
-    record.turn = null;
     if (record.timer) { clearTimeout(record.timer); record.timer = null; }
-    const blocks = [{ kind: "text", contentIndex: 0, text: turn.text }];
-    this.publish(record, { type: "assistant_content", generationId: turn.generationId, phase: "final",
-      seq: ++record.generationSeq, messageId: turn.messageId, stopReason, errorMessage: null, blocks });
-    this.publish(record, messageClose({ messageId: turn.messageId, stopReason, interim: false,
-      generationId: turn.generationId, keepsPartial: TEST_STREAM_CAPABILITIES.interruptKeepsPartial, blocks }));
+    this.closeAnswer(record, stopReason);
+    record.turn = null;
     record.active = false;
     record.stopping = false;
     record.activity = "idle";
+    record.messages += 2;
+    record.pendingApproval = null;
+    record.hostUiRequests = [];
     Object.assign(record.generation, { closed: true, settled: true });
     this.publish(record, { type: "status", generationId: turn.generationId, seq: ++record.generationSeq,
       phase: stopReason === "aborted" ? "stopped" : "settled", status: "idle", activity: "idle", detail: null });
+    this.publishUsage(record);
+    // A follow-up waited for exactly this moment. It is a prompt of its own,
+    // which is the difference between the two queues.
+    const next = record.queue.followUp.shift();
+    if (next) {
+      this.publishQueue(record);
+      void this.prompt(record.id, next.message, { clientUserMessageId: next.messageId });
+    }
     this.emit("settled", { record, completed: stopReason !== "aborted" });
   }
 
@@ -331,11 +652,112 @@ export class TestStreamAdapter extends EventEmitter {
 
   getCapabilities() { return TEST_STREAM_CAPABILITIES; }
   toClientEvent(event) { return event; }
-  replay(id) { return this.sessions.runtimeState(this.get(id)); }
+
+  /**
+   * What the turn so far looks like, for a browser that has just arrived.
+   *
+   * Reduced from the events this adapter published, with the same reducer the
+   * browser runs -- so a reconnecting client is given the view it would have
+   * built if it had never dropped the socket, and paint stays droppable for
+   * this backend the way it is for Pi.
+   */
+  replay(id) {
+    const record = this.get(id);
+    return record?.activeGeneration
+      ? { type: "generation_replay", generationId: record.activeGeneration.id,
+        seq: record.activeGeneration.lastSeq, generation: snapshotActiveGeneration(record.activeGeneration) }
+      : this.sessions.runtimeState(record);
+  }
+
   waitForSession() { return Promise.resolve(); }
-  attach(id, socket) { return this.sessions.attach(id, socket); }
-  view(record) { return this.sessions.view(record); }
-  publish(record, event) { return this.sessions.publish(record, event); }
+
+  attach(id, socket) {
+    const replayed = this.sessions.attach(id, socket);
+    const resume = this.replay(id);
+    return resume?.type === "generation_replay" ? resume : replayed;
+  }
+
+  view(record) {
+    return {
+      ...this.sessions.view(record),
+      hostUiRequests: [...(record?.hostUiRequests || [])],
+      queue: { steering: (record?.queue?.steering || []).map((item) => item.message),
+        followUp: (record?.queue?.followUp || []).map((item) => item.message) },
+      contextUsage: this.contextUsage(record),
+      sessionStats: { totalMessages: record?.messages || 0 },
+      cacheStats: { cacheHits: 0, cacheMisses: 0 },
+    };
+  }
+
+  publish(record, event) {
+    const stamped = this.sessions.publish(record, event);
+    // The turn, folded as it is published. This is the server's copy: what a
+    // paused or reconnecting socket is restated from.
+    record.activeGeneration = reduceActiveGeneration(record.activeGeneration, stamped);
+    return stamped;
+  }
+
+  /** What the turn has spent, counted rather than reported by a provider. */
+  contextUsage(record) {
+    const tokens = record?.streamed || 0;
+    return { tokens, contextWindow: CONTEXT_WINDOW, percentUsed: Math.round((tokens / CONTEXT_WINDOW) * 100) };
+  }
+
+  publishUsage(record) {
+    this.publish(record, { type: "usage", generationId: record.generation?.id || null,
+      contextUsage: this.contextUsage(record),
+      sessionStats: { totalMessages: record.messages },
+      cacheStats: { cacheHits: 0, cacheMisses: 0 } });
+  }
+
+  async refreshContext(id) {
+    const record = this.get(id);
+    if (!record) return null;
+    this.publishUsage(record);
+    return this.contextUsage(record);
+  }
+
+  /**
+   * Fold the context back down, as a harness with a model would.
+   *
+   * There is no history to summarise here -- the transcript is what it says and
+   * nothing is sent to anyone -- so what compaction means for this backend is
+   * exactly what the reader sees of it elsewhere: the context it has spent goes
+   * back to nothing, with the transcript left alone.
+   */
+  async compact(id) {
+    const record = this.get(id);
+    if (!record) throw adapterError("No test stream session", "backend_unavailable", 404);
+    this.publish(record, { type: "compaction", generationId: record.generation?.id || null, active: true });
+    record.streamed = 0;
+    this.publishUsage(record);
+    this.publish(record, { type: "compaction", generationId: record.generation?.id || null, active: false });
+    return { compacted: true };
+  }
+
+  /**
+   * Cut the journal at an entry, and say what was asked there.
+   *
+   * A fork and a regenerate are the same cut: the history ends at the entry
+   * given, and the caller decides what to ask next. The prompt's text is
+   * returned so a regenerate can re-ask exactly what was asked before.
+   */
+  async fork(id, { nodeId } = {}) {
+    const record = this.get(id);
+    if (!record) throw adapterError("No test stream session", "backend_unavailable", 404);
+    const messages = this.transcript(record.chatId);
+    const index = messages.findIndex((message) => message.id === nodeId);
+    if (index < 0) throw adapterError("No such entry in this chat", "entry_not_found", 404);
+    const source = messages[index];
+    // Everything from the entry on is gone, stated as one op rather than left
+    // for the browser to work out from a shorter transcript.
+    this.publish(record, messageDrop({ messageId: nodeId, inclusive: true,
+      generationId: record.generation?.id || null }));
+    this.journals.set(record.chatId, (this.journals.get(record.chatId) || [])
+      .concat([messageDrop({ messageId: nodeId, inclusive: true })]));
+    return { opaqueSession: record.chatId, text: source.content || "",
+      sourceMessage: { id: source.id, text: source.content || "" } };
+  }
 
   transcript(chatId) {
     let messages = [];
@@ -350,6 +772,14 @@ export class TestStreamAdapter extends EventEmitter {
     return { messages: this.transcript(chatId || record?.chatId), tools: [], page: { before: null } };
   }
 
+  /**
+   * The chat as a tree, which is what a forkable history is.
+   *
+   * Linear until something is forked, like Pi's: the shape is the same either
+   * way, and what makes it a tree is that an entry can be cut and asked again.
+   * Every user message says so -- a prompt can be forked from or re-asked --
+   * and an answer can be neither, because re-asking an answer means nothing.
+   */
   async readHistory(options) {
     const { messages } = await this.readTranscript(options);
     let child = null;
@@ -359,13 +789,14 @@ export class TestStreamAdapter extends EventEmitter {
       const node = { entry: {
         id: message.id, parentId: null, timestamp: message.timestamp || null, type: "message",
         display: `${message.role}: ${String(message.content || "").replace(/\s+/g, " ").trim().slice(0, 240)}`,
-        kind: message.role, hidden: false, forkable: false, regeneratable: false,
+        kind: message.role, hidden: false,
+        forkable: message.role === "user", regeneratable: message.role === "user",
       }, children: child ? [child] : [] };
       if (child) child.entry.parentId = node.entry.id;
       else leafId = node.entry.id;
       child = node;
     }
-    return { mode: "linear", leafId, tree: child ? [child] : [] };
+    return { mode: "tree", leafId, tree: child ? [child] : [] };
   }
 
   get(id) { return this.sessions.get(id); }

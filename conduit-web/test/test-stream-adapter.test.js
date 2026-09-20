@@ -3,12 +3,15 @@ import test from "node:test";
 import { assertChatBackendAdapter } from "../src/chat-backend-contract.js";
 import { agentProfiles } from "../src/chat-backend.js";
 import { manifest } from "../src/harnesses/test-stream.js";
+import { buildTurnRows } from "../src/client/turn-rows.ts";
+import { applyToolOp, applyTranscriptOp, isToolOp } from "../src/transcript-fold.js";
 import {
   DEFAULT_AMOUNT_ID,
   DEFAULT_SPEED_ID,
   TEST_STREAM_AMOUNTS,
   TEST_STREAM_CAPABILITIES,
   TEST_STREAM_SPEEDS,
+  TEST_STREAM_TOOL,
   TestStreamAdapter,
   amountFor,
   amountFromPrompt,
@@ -161,6 +164,151 @@ test("the stream is deterministic and broken into paragraphs", () => {
   assert.equal(tokenAt(0), "the ");
   assert.equal(tokenAt(0), tokenAt(0));
   assert.ok(tokenAt(60).startsWith("\n\n"), "a paragraph break so the renderer draws real blocks");
-  assert.equal(TEST_STREAM_CAPABILITIES.toolUse, false);
+  assert.equal(TEST_STREAM_CAPABILITIES.toolUse, true);
   assert.equal(TEST_STREAM_CAPABILITIES.thinkingLevels, true);
+});
+
+/** The transcript a browser would be holding, from the statements alone. */
+function readerOf(adapter) {
+  let messages = [];
+  let tools = [];
+  const record = { messages, tools, events: [] };
+  const socket = { readyState: 1, sent: [], once() {},
+    send(payload) {
+      const event = JSON.parse(payload);
+      record.events.push(event);
+      if (event.type !== "transcript_op") return;
+      if (isToolOp(event)) tools = applyToolOp(tools, event);
+      else messages = applyTranscriptOp(messages, event);
+    } };
+  return { socket,
+    messages: () => messages,
+    tools: () => tools,
+    events: () => record.events,
+    rows: () => buildTurnRows(messages, tools) };
+}
+
+const attached = async (adapter, options = {}) => {
+  const record = await adapter.create({ chatId: options.chatId || "chat-parity", model: "flood-4000",
+    thinkingLevel: "400 tokens" });
+  const reader = readerOf(adapter);
+  adapter.attach(record.id, reader.socket);
+  return { record, reader };
+};
+
+test("a tool call ends the message that made it and is stated as a tool", async () => {
+  const adapter = new TestStreamAdapter();
+  const { record, reader } = await attached(adapter);
+  await adapter.prompt(record.id, "80t 1 tool", { clientUserMessageId: "u1" });
+  await settle(adapter);
+
+  // Two answers, because the message that called the tool is finished when the
+  // call is made and what answers the result is a message of its own.
+  const roles = reader.messages().map((message) => message.role);
+  assert.deepEqual(roles, ["user", "assistant", "assistant"]);
+  assert.equal(reader.messages()[1].interim, true, "the calling message is the turn talking, not its answer");
+  assert.equal(reader.messages()[2].interim, false);
+  // And the tool itself is a record beside the transcript, opened and closed.
+  assert.deepEqual(reader.tools().map((tool) => [tool.name, tool.done, tool.output]),
+    [[TEST_STREAM_TOOL.name, true, TEST_STREAM_TOOL.output]]);
+  // The paint that drew it arriving is there too, in all three phases.
+  assert.deepEqual(reader.events().filter((event) => event.type === "tool_activity").map((event) => event.phase),
+    ["start", "update", "end"]);
+});
+
+test("a tool asks first when the prompt says to, and a refusal stops the turn", async () => {
+  const adapter = new TestStreamAdapter();
+  const { record, reader } = await attached(adapter);
+  await adapter.prompt(record.id, "80t 1 tool approve", { clientUserMessageId: "u1" });
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  const request = reader.events().find((event) => event.type === "permission_request");
+  assert.ok(request, "the turn stops and asks");
+  assert.equal(request.kind, "confirm");
+  assert.equal(adapter.view(record).activity, "waiting_for_user");
+
+  const settled = settle(adapter);
+  adapter.respondHostUi(record.id, { id: request.requestId, confirmed: true });
+  await settled;
+  assert.ok(reader.events().some((event) => event.type === "permission_resolved"));
+  assert.equal(reader.tools().length, 1, "approved, so it ran");
+
+  // And refused, the turn ends where it stood.
+  const second = await attached(adapter, { chatId: "chat-refused" });
+  await adapter.prompt(second.record.id, "80t 1 tool approve", { clientUserMessageId: "u2" });
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  const asked = second.reader.events().find((event) => event.type === "permission_request");
+  const stopped = settle(adapter);
+  adapter.respondHostUi(second.record.id, { id: asked.requestId, confirmed: false });
+  await stopped;
+  assert.equal(second.reader.tools().length, 0);
+  assert.equal(second.reader.messages().at(-1).stopped, true);
+});
+
+test("a steered message lands inside the turn; a follow-up starts its own", async () => {
+  const adapter = new TestStreamAdapter();
+  const { record, reader } = await attached(adapter);
+  await adapter.prompt(record.id, "400t 1 tool", { clientUserMessageId: "u1" });
+  await adapter.queue(record.id, "steer", "make it shorter", { messageId: "u2" });
+  await settle(adapter);
+
+  const roles = reader.messages().map((message) => message.role);
+  assert.deepEqual(roles.slice(0, 2), ["user", "assistant"]);
+  assert.ok(roles.includes("user", 2), "the steer is committed where the turn had got to");
+  // The queue it was drawn from is emptied by the harness that took it.
+  assert.deepEqual(reader.events().filter((event) => event.type === "queue_state").at(-1).queue,
+    { steering: [], followUp: [] });
+
+  const followed = settle(adapter);
+  await adapter.queue(record.id, "follow_up", "and again", { messageId: "u3" });
+  await adapter.prompt(record.id, "40t", { clientUserMessageId: "u4" });
+  await followed;
+  await settle(adapter);
+  assert.ok(reader.messages().some((message) => message.content === "and again"),
+    "a follow-up waits for the turn to end and is asked as its own prompt");
+});
+
+test("a fork cuts the chat at the entry it was given", async () => {
+  const adapter = new TestStreamAdapter();
+  const { record, reader } = await attached(adapter);
+  await adapter.prompt(record.id, "40t", { clientUserMessageId: "u1" });
+  await settle(adapter);
+  await adapter.prompt(record.id, "40t second", { clientUserMessageId: "u2" });
+  await settle(adapter);
+  assert.equal(reader.messages().length, 4);
+
+  const forked = await adapter.fork(record.id, { nodeId: "u2" });
+  assert.equal(forked.sourceMessage.text, "40t second", "what was asked there, so a regenerate can re-ask it");
+  assert.deepEqual(reader.messages().map((message) => message.id), ["u1", reader.messages()[1].id]);
+  // And the history it reports is a tree whose prompts can be forked again.
+  const history = await adapter.readHistory({ liveSessionId: record.id });
+  assert.equal(history.mode, "tree");
+  assert.equal(history.tree[0].entry.forkable, true);
+});
+
+test("it counts what it spent and gives it back when compacted", async () => {
+  const adapter = new TestStreamAdapter();
+  const { record, reader } = await attached(adapter);
+  await adapter.prompt(record.id, "200t", { clientUserMessageId: "u1" });
+  await settle(adapter);
+  const usage = reader.events().findLast((event) => event.type === "usage");
+  assert.equal(usage.contextUsage.tokens, 200);
+  assert.equal(usage.sessionStats.totalMessages, 2);
+
+  await adapter.compact(record.id);
+  assert.deepEqual(reader.events().filter((event) => event.type === "compaction").map((event) => event.active),
+    [true, false]);
+  assert.equal(adapter.view(record).contextUsage.tokens, 0);
+});
+
+test("a browser that arrives mid-turn is given the turn so far", async () => {
+  const adapter = new TestStreamAdapter();
+  const record = await adapter.create({ chatId: "chat-replay", model: "paced-60", thinkingLevel: "400 tokens" });
+  await adapter.prompt(record.id, "400t", { clientUserMessageId: "u1" });
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  const resume = adapter.replay(record.id);
+  assert.equal(resume.type, "generation_replay");
+  assert.equal(resume.generation.status, "running");
+  assert.ok(resume.generation.assistantMessages[0].blocks[0].text.length > 0,
+    "reduced from what it published, with the reducer the browser runs");
+  await adapter.cancel(record.id);
 });
