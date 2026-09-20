@@ -121,7 +121,8 @@ test("unknown wire events cannot masquerade as lifecycle events", () => {
 
 test("preserves reduced-generation events and their sequence at the client boundary", () => {
   const event = normalizeLiveEvent({
-    type: "content_block_delta",
+    type: "assistant_content",
+    phase: "delta",
     generationId: "g1",
     seq: 7,
     messageId: "m1",
@@ -136,12 +137,16 @@ test("preserves reduced-generation events and their sequence at the client bound
   assert.equal(event.delta, "hello");
 });
 
-test("maps neutral adapter events into the existing generation reducer", () => {
+test("carries adapter events into the reducer under the names the contract gave them", () => {
+  // The browser reduces the contract's vocabulary directly. Nothing here
+  // renames `assistant_content` back to a harness's word for it on the way in,
+  // which is the whole point: one translation, in the adapter.
   const delta = normalizeLiveEvent({
     type: "assistant_content", phase: "delta", generationId: "g1", seq: 2,
     messageId: "m1", contentIndex: 0, blockKind: "text", delta: "hello",
   });
-  assert.equal(delta.type, "content_block_delta");
+  assert.equal(delta.type, "assistant_content");
+  assert.equal(delta.phase, "delta");
   assert.equal(delta.seq, 2);
   assert.equal(delta.delta, "hello");
   const state = normalizeLiveEvent({

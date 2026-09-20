@@ -10,6 +10,8 @@ import {
 } from "../src/active-generation.js";
 import { createPiEventNormalizer } from "../src/pi-event-normalizer.js";
 import { createClientActiveGenerationStore } from "../src/client/state/active-generation-store.js";
+import { serializePiV0 } from "../src/pi-rpc-adapter.js";
+import { normalizeLiveEvent } from "../src/client/api/live-events.ts";
 import {
   persistedTextBeforeToolUse,
   piRpcGenerationFixtures,
@@ -38,15 +40,35 @@ function tree(state) {
   }));
 }
 
+/**
+ * The server's generation and the browser's, built the way each really is.
+ *
+ * The server reduces Pi's own stream. The browser reduces what comes off the
+ * socket, which is that stream serialized through the adapter and read back --
+ * so this drives the client through `serializePiV0` and `normalizeLiveEvent`
+ * rather than handing it the internal events directly.
+ *
+ * Feeding both the same internal events is what let six cases sit in the
+ * client reducer that no adapter could ever produce: the test delivered them,
+ * the wire never did. Anything that stops crossing the wire now shows up here
+ * as the two halves disagreeing.
+ */
+/** One event as the browser really receives it: serialized out, read back. */
+const overTheWire = (event) => normalizeLiveEvent(JSON.parse(serializePiV0(event)));
+
 function clientFixture(name, generationId = `g_${name}`) {
   const events = normalizedFixture(name, generationId);
   const client = createClientActiveGenerationStore();
   let shared = null;
-  events.forEach((event, index) => {
+  events.forEach((event) => {
     shared = reduceActiveGeneration(shared, event);
-    client.apply(event);
-    assert.deepEqual(client.snapshot(), shared, `${name} diverged at event ${index} (${event.type})`);
+    client.apply(overTheWire(event));
   });
+  // Mid-turn the two can differ -- the browser is never sent block-level
+  // start/complete events, so a block is "streaming" there until the message
+  // closes. What the turn settles as must agree exactly, because that is what
+  // the reader is left looking at.
+  assert.deepEqual(client.snapshot(), shared, `${name} settled differently on the wire`);
   return { client, events, shared };
 }
 
@@ -65,28 +87,36 @@ function benchmarkStore({ messageCount, blockCount, toolCount, textLength }) {
   const client = createClientActiveGenerationStore({ collectMetrics: true });
   let seq = 0;
   const apply = (event) => client.apply({ ...event, generationId, seq: ++seq });
-  apply({ type: "generation_started" });
+  // Built out of the events the socket really carries. A block is never
+  // announced on its own -- the first delta into it is what opens it -- so the
+  // seeding here is deltas, not block starts.
+  apply({ type: "status", phase: "started" });
   for (let messageIndex = 0; messageIndex < messageCount; messageIndex += 1) {
     const messageId = `m${messageIndex + 1}`;
-    apply({ type: "assistant_message_started", messageId });
+    apply({ type: "assistant_content", phase: "start", messageId });
     for (let contentIndex = 0; contentIndex < blockCount; contentIndex += 1) {
       apply({
-        type: "content_block_started",
+        type: "assistant_content",
+        phase: "delta",
         messageId,
-        block: { kind: "text", contentIndex },
+        contentIndex,
+        blockKind: "text",
+        delta: "",
       });
     }
   }
   for (let toolIndex = 0; toolIndex < toolCount; toolIndex += 1) {
     apply({
-      type: "tool_execution_started",
+      type: "tool_activity",
+      phase: "start",
       toolCallId: `call_${toolIndex}`,
       name: "read",
       input: { path: `file-${toolIndex}.txt` },
     });
   }
   apply({
-    type: "content_block_delta",
+    type: "assistant_content",
+    phase: "delta",
     messageId: "m1",
     contentIndex: 0,
     blockKind: "text",
@@ -276,15 +306,21 @@ test("ordinary block deltas preserve structural and unrelated block identities",
   // rather than assumed, because it is the normalizer's to choose.
   const firstMessageId = events.find((event) => event.type === "assistant_message_started")?.messageId;
   const client = createClientActiveGenerationStore({ collectMetrics: true });
-  let targetDelta = null;
+  // Driven the way the browser is. A block is never announced to it -- there is
+  // no adapter case for `content_block_started` -- so the second block exists
+  // here only once a delta has landed in it, and the turn is left mid-flight so
+  // one more can be applied to it.
+  const openingDelta = events.find((event) => event.type === "content_block_delta"
+    && event.messageId === firstMessageId && event.contentIndex === 1);
   for (const event of events) {
-    client.apply(event);
-    if (event.type === "content_block_started" && event.messageId === firstMessageId && event.block.contentIndex === 1) {
-      targetDelta = events.find((candidate) => candidate.type === "content_block_delta"
-        && candidate.messageId === firstMessageId && candidate.contentIndex === 1);
-      break;
-    }
+    client.apply(overTheWire(event));
+    if (event === openingDelta) break;
   }
+  const targetDelta = {
+    type: "assistant_content", phase: "delta", generationId: "g_identity",
+    seq: client.current().lastSeq + 1, messageId: firstMessageId,
+    contentIndex: 1, blockKind: "text", delta: " and more",
+  };
   assert.ok(targetDelta);
   const before = client.current();
   const references = referenceList(before);
@@ -315,23 +351,25 @@ for (const name of ["noThinkingAnswer", "thinkingThenAnswer"]) {
     let shared = null;
     for (const event of events.slice(0, split)) {
       shared = reduceActiveGeneration(shared, event);
-      client.apply(event);
+      client.apply(overTheWire(event));
     }
+    // The replay is the server handing over its own snapshot, so from here the
+    // two are the same object's worth of state however they got there.
     const resume = generationResumeEvent(shared);
     shared = reduceActiveGeneration(shared, resume);
-    client.apply(resume);
+    client.apply(overTheWire(resume));
     assert.deepEqual(client.snapshot(), shared);
 
     const duplicate = events[split - 1];
     shared = reduceActiveGeneration(shared, duplicate);
-    client.apply(duplicate);
+    client.apply(overTheWire(duplicate));
     assert.deepEqual(client.snapshot(), shared);
 
     for (const event of events.slice(split)) {
       shared = reduceActiveGeneration(shared, event);
-      client.apply(event);
-      assert.deepEqual(client.snapshot(), shared, `${name} diverged after resume at ${event.type}`);
+      client.apply(overTheWire(event));
     }
+    assert.deepEqual(client.snapshot(), shared, `${name} settled differently after resume`);
   });
 }
 
@@ -360,7 +398,8 @@ test("client block update benchmark keeps work and references independent of unr
         const references = referenceList(before);
         const startedAt = performance.now();
         const result = apply({
-          type: "content_block_delta",
+          type: "assistant_content",
+          phase: "delta",
           messageId: "m1",
           contentIndex: 0,
           blockKind: "text",

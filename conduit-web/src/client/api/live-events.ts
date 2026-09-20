@@ -41,25 +41,28 @@ export interface SessionSnapshot {
 export interface LogStamp { id: string; seq: number }
 
 interface EventBase { generationId: string | null; log?: LogStamp }
+/**
+ * The four events a live generation is built from, in Conduit's words.
+ *
+ * These were eighteen, in Pi's words, and the browser reached them by
+ * translating the contract back into the names Pi's own stream uses -- so a
+ * delta was `content_block_delta` here, `assistant_content` on the wire, and
+ * `content_block_delta` again inside Pi. Two translations to arrive where it
+ * started, and for Codex and ChatGPT Web a translation into a vocabulary
+ * neither end speaks.
+ *
+ * Six of the eighteen could not arrive at all: `content_block_started`,
+ * `content_block_completed`, `generation_retry_started`,
+ * `generation_retry_ended`, `generation_turn_ended` and `generation_failed`
+ * have no adapter case, so they reached the browser as `pi_event` and were
+ * dropped. The reducer kept handling them because the test that guards it
+ * feeds Pi's internal stream rather than the wire.
+ */
 export type StructuredGenerationType =
-  | "generation_resume"
-  | "generation_started"
-  | "generation_running"
-  | "generation_stopping"
-  | "assistant_message_started"
-  | "content_block_started"
-  | "content_block_delta"
-  | "content_block_completed"
-  | "assistant_message_completed"
-  | "tool_execution_started"
-  | "tool_execution_updated"
-  | "tool_execution_completed"
-  | "generation_retry_started"
-  | "generation_retry_ended"
-  | "generation_turn_ended"
-  | "generation_settled"
-  | "generation_stopped"
-  | "generation_failed";
+  | "generation_replay"
+  | "assistant_content"
+  | "tool_activity"
+  | "status";
 
 export interface StructuredGenerationEvent extends EventBase {
   type: StructuredGenerationType;
@@ -110,12 +113,11 @@ const optionalText = (value: unknown) => value == null || value === "" ? null : 
 const list = (value: unknown) => Array.isArray(value) ? value : [];
 const number = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : undefined;
 const STRUCTURED_GENERATION_TYPES = new Set<StructuredGenerationType>([
-  "generation_resume", "generation_started", "generation_running", "generation_stopping",
-  "assistant_message_started", "content_block_started", "content_block_delta", "content_block_completed",
-  "assistant_message_completed", "tool_execution_started", "tool_execution_updated", "tool_execution_completed",
-  "generation_retry_started", "generation_retry_ended", "generation_turn_ended", "generation_settled",
-  "generation_stopped", "generation_failed",
+  "generation_replay", "assistant_content", "tool_activity", "status",
 ]);
+
+/** The five transitions a turn makes. A status without one reports activity. */
+const GENERATION_PHASES = new Set(["started", "running", "stopping", "stopped", "settled"]);
 
 export function isStructuredGenerationEvent(event: LiveEvent): event is StructuredGenerationEvent {
   return STRUCTURED_GENERATION_TYPES.has(event.type as StructuredGenerationType)
@@ -224,15 +226,6 @@ export function normalizeLiveEvent(value: unknown): LiveEvent {
   return stamp ? { ...normalized, log: stamp } as LiveEvent : normalized;
 }
 
-/** The five transitions a turn makes, as the adapter states them. */
-const GENERATION_PHASE_EVENTS: Record<string, StructuredGenerationType | undefined> = {
-  started: "generation_started",
-  running: "generation_running",
-  stopping: "generation_stopping",
-  stopped: "generation_stopped",
-  settled: "generation_settled",
-};
-
 function normalizeLiveEventBody(value: unknown): LiveEvent {
   const source = record(value);
   const sourceType = text(source.type);
@@ -245,21 +238,23 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
     return { ...source, type: sourceType as StructuredGenerationType, generationId, seq } as StructuredGenerationEvent;
   }
   switch (sourceType) {
-    case "generation_replay": return { type: "generation_resume", generationId, seq: seq ?? 0, generation: source.generation };
+    case "generation_replay": return { type: "generation_replay", generationId, seq: seq ?? 0, generation: source.generation };
     case "assistant_content": {
       const phase = text(source.phase);
-      if (phase === "start") return { type: "assistant_message_started", generationId, seq: seq ?? 0, messageId: text(source.messageId) };
+      if (phase === "start") return { type: "assistant_content", phase, generationId, seq: seq ?? 0, messageId: text(source.messageId) };
       if (phase === "delta") return {
-        type: "content_block_delta", generationId, seq: seq ?? 0,
+        type: "assistant_content", phase, generationId, seq: seq ?? 0,
         messageId: text(source.messageId), contentIndex: number(source.contentIndex) ?? 0,
         blockKind: text(source.blockKind), delta: text(source.delta),
       };
-      return { type: "assistant_message_completed", generationId, seq: seq ?? 0,
+      return { type: "assistant_content", phase: "final", generationId, seq: seq ?? 0,
         messageId: text(source.messageId), blocks: list(source.blocks),
-        stopReason: text(source.stopReason || "stop"), errorMessage: optionalText(source.errorMessage) };
+        stopReason: text(source.stopReason || "stop"), errorMessage: optionalText(source.errorMessage),
+        provider: optionalText(source.provider), model: optionalText(source.model),
+        timestamp: optionalText(source.timestamp) };
     }
     case "tool_activity": return {
-      type: source.phase === "start" ? "tool_execution_started" : source.phase === "update" ? "tool_execution_updated" : "tool_execution_completed",
+      type: "tool_activity", phase: text(source.phase) || "end",
       generationId, seq: seq ?? 0, toolCallId: text(source.toolCallId), name: text(source.name),
       input: source.input, output: source.output, isError: Boolean(source.isError),
     };
@@ -270,9 +265,9 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
       // approval request, which is not a transition at all, arrived here as the
       // start of a turn. A status with no phase is the session saying what it
       // is busy with; the browser reads nothing else off one.
-      const type = GENERATION_PHASE_EVENTS[text(source.phase)];
-      if (!type) return { type: "unknown", sourceType, generationId };
-      return { type, generationId, seq: seq ?? 0, processTerminated: Boolean(source.processTerminated) };
+      const phase = text(source.phase);
+      if (!GENERATION_PHASES.has(phase)) return { type: "unknown", sourceType, generationId };
+      return { type: "status", phase, generationId, seq: seq ?? 0, processTerminated: Boolean(source.processTerminated) };
     }
     case "error": {
       const detail = record(source.error);
