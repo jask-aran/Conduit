@@ -21,6 +21,54 @@ crosses that function, including into the chat log. A stored log entry is a
 neutral event, and translating one again is a no-op, which is what lets replay
 send log entries back through the same path as live ones.
 
+### Four adapters, one shape
+
+The adapters are parallel, not layered. Nothing routes through Pi, and no
+adapter knows another exists — each one takes its own harness's transport and
+puts Conduit's vocabulary on the other side, where a single delivery,
+numbering and socket path serves all four.
+
+```text
+  conduit_pi           codex              chatgpt-web         test-stream
+  resident process     app-server         python sidecar      in-process
+  Pi JSONL file        daemon, JSON-RPC   account cursor      own journal
+       │                    │                    │                  │
+       ▼                    ▼                    ▼                  ▼
+ ┌────────────┐     ┌──────────────┐     ┌──────────────┐   ┌──────────────┐
+ │PiRpcAdapter│     │CodexAppServer│     │ ChatGptWeb   │   │  TestStream  │
+ │            │     │   Adapter    │     │   Adapter    │   │   Adapter    │
+ └────────────┘     └──────────────┘     └──────────────┘   └──────────────┘
+       │                    │                    │                  │
+ ══════╪════════════════════╪════════════════════╪══════════════════╪══════
+       │     the translation line — no harness word crosses it      │
+ ══════╪════════════════════╪════════════════════╪══════════════════╪══════
+       │                    │                    │                  │
+       └──────────┬─────────┴────────────────────┴──────────────────┘
+                  ▼
+        ┌──────────────────────┐   the record is numbered here, per chat.
+        │  ChatLog.stamp       │   A client that finds a gap in log.seq
+        │  record only         │   asks for what it missed by resume_log.
+        └──────────────────────┘
+                  │
+       ┌──────────┴───────────┐
+       ▼                      ▼
+ ┌────────────┐     ┌───────────────────┐   record: sent whatever the backlog
+ │ PiManager  │     │  SessionRecords   │   paint:  merged per block, paced
+ │  delivery  │     │  + SocketDelivery │           to the reader's frame,
+ └────────────┘     └───────────────────┘           given up over high water
+       │                      │
+       └──────────┬───────────┘
+                  ▼
+        live-session-stream  ── one WebSocket per chat ──▶  browser
+```
+
+Two delivery implementations, one set of promises. Pi has its own because it
+pauses a slow socket and recovers it by restating the running generation,
+which it can do because it holds one; a harness that holds no such thing
+cannot, and `SocketDelivery` needs neither. They share `deliveryKey`, `isPaint`
+and the frame clamp, so what may be merged and what may be dropped has one
+answer.
+
 ## Two channels, not three
 
 ```text
@@ -148,10 +196,7 @@ published, whatever the backlog.
   recovers it by restating the running generation, which it can do because it
   holds one.
 
-Two implementations, one set of promises: `src/harnesses/socket-delivery.js`
-for Codex, ChatGPT Web and Test, and `PiManager`'s own for Pi. They share
-`deliveryKey`, `isPaint` and the frame clamp, so what may be merged and what
-may be dropped is one answer.
+The two implementations are named under "Four adapters, one shape" above.
 
 ## Capabilities
 
@@ -171,10 +216,65 @@ settle, cancel where supported, reconnect or close.
 whether text the reader watched arrive survives into the next request. Where it
 is false, the close marks the message `discarded` — it stays in the
 transcript, because taking away something the reader saw is worse, but nothing
-treats it as part of the conversation the model can answer to.
+treats it as part of the conversation the model can answer to. Which harness
+says what, and why, is in the table below.
 
 `suppliesMessageIds` decides whether Conduit mints message ids for that harness
 or adopts the ones it is given.
+
+### What each harness declares
+
+● declared, ○ not. Every adapter states every flag; there is no "unset".
+
+| | Pi | Codex | ChatGPT Web | Test stream |
+| --- | :---: | :---: | :---: | :---: |
+| `history` | tree | linear | linear | tree |
+| `fork` | ● | ● | ○ | ● |
+| `regenerate` | ● | ● | ○ | ● |
+| `steer` | ● | ● | ○ | ● |
+| `followUpQueue` | ● | ● | ○ | ● |
+| `cancel` | ● | ● | ● | ● |
+| `compaction` | ● | ● | ○ | ● |
+| `thinkingLevels` | ● | ● | ● | ● |
+| `modelSwitch` | ● | ● | ● | ● |
+| `toolUse` | ● | ● | ○ | ● |
+| `approvals` | ● | ● | ○ | ● |
+| `permissionModes` | ○ | ● | ○ | ○ |
+| `usage` | ● | ○ | ○ | ● |
+| `replay` | ● | ○ | ○ | ● |
+| `attachments` | ● | ● | ○ | ● |
+| `interruptKeepsPartial` | ○ | ○ | ○ | ● |
+
+And from the manifest, which decides how a chat on it is made ready:
+
+| | Pi | Codex | ChatGPT Web | Test stream |
+| --- | :---: | :---: | :---: | :---: |
+| `protocol` | `pi_rpc` | `native_api` | `native_api` | `native_api` |
+| `warm` | process | process | none | none |
+| `discovery` | none | machine | none | none |
+| `suppliesMessageIds` | ○ | ● | ● | ● |
+| `nameGeneration` | conduit | conduit | backend | conduit |
+
+Reading down a column is the whole of what that profile can do, and reading
+across a row is the whole of what differs. Three entries are worth naming.
+
+`permissionModes` is Codex alone: it offers profiles to answer an approval
+*under*, where the others answer an approval and nothing more. `usage` and
+`replay` are false for Codex because its `replay` returns runtime state rather
+than a generation in progress, so a browser reconnecting mid-turn is caught up
+from the record and the log instead.
+
+`interruptKeepsPartial` is true only for the Test stream, and that is not a
+gap in the others. Every real harness drops an interrupted partial, because
+what it writes down and what it sends the model next turn are different
+things — measured for Pi, not assumed. This backend's journal *is* its
+transcript and there is no model to disagree with it, so a stopped answer
+really does stand; it is also Conduit's only coverage of the `discarded: false`
+close.
+
+ChatGPT Web declares least because the conversation lives in somebody else's
+account and Conduit follows it by cursor. The client hides what is not there,
+so that profile simply has no fork, no steer and no tool rows.
 
 ## Lifecycle
 
