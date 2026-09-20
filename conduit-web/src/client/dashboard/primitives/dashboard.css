@@ -64,7 +64,8 @@
 .dashboard-empty { display: flex; min-height: 74px; align-items: center; justify-content: center; gap: 7px; color: var(--muted-foreground); font-size: 9.5px; }
 
 @media (--conduit-mobile-layout) {
-  .dashboard-shell { width: calc(100% - 24px); height: auto; padding: calc(52px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 0 calc(92px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
+  /* The pane already reserves the header; this is the gap under it. */
+  .dashboard-shell { width: calc(100% - 24px); height: auto; padding: 14px 0 calc(92px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
   .dashboard-identity { margin-bottom: 16px; }
   .dashboard-identity-name { align-items: flex-start; flex-direction: column; gap: 3px; }
   .dashboard-identity-subtitle { max-width: calc(100vw - 86px); }

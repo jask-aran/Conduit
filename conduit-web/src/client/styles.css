@@ -130,11 +130,11 @@ svg { stroke-width: 1.5; }
 /* Inset panel: floats on the darker frame. The hairline is an inset ring, not a
    border, so the absolutely-positioned meteor field still fills the panel
    exactly rather than being pushed in by a border box. */
-.chat-main { position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 8px 6.4px 1.6px; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 12.8px; background: var(--background); color: var(--foreground); box-shadow: inset 0 0 0 0.8px oklch(1 0 0 / 6%), inset 0 0.8px 0 0 oklch(1 0 0 / 7%); }
-/* The header floats over the transcript so scrolled text runs to the pane's
-   top edge instead of stopping at a hard cut. Its gradient fades what passes
-   underneath, the same trick the phone layout uses. */
-.chat-header { position: absolute; inset: 0 0 auto; z-index: 2; display: flex; height: 44.8px; flex: none; align-items: center; gap: 6.4px; padding: 6.4px 11.2px; background: linear-gradient(to bottom, var(--background) 0 50%, transparent 100%); }
+.chat-main { --chat-header-height: 44.8px; position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 8px 6.4px 1.6px; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 12.8px; background: var(--background); color: var(--foreground); box-shadow: inset 0 0 0 0.8px oklch(1 0 0 / 6%), inset 0 0.8px 0 0 oklch(1 0 0 / 7%); }
+/* The header is a flow item, so it reserves its own height for whatever the
+   pane holds and no surface has to know it is there. It still paints over
+   what runs beneath it -- see `.transcript`, the one surface that asks to. */
+.chat-header { position: relative; z-index: 2; display: flex; height: var(--chat-header-height); flex: none; align-items: center; gap: 6.4px; padding: 6.4px 11.2px; background: linear-gradient(to bottom, var(--background) 0 50%, transparent 100%); }
 .chat-header-title { display: flex; min-width: 0; align-items: center; gap: 5.6px; overflow: hidden; font-size: 11.2px; line-height: 16px; }
 .chat-header-title span, .chat-header-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .breadcrumb-separator::before { content: "/"; }
@@ -173,7 +173,12 @@ svg { stroke-width: 1.5; }
 .terminal-canvas[data-terminal-ready="false"] > canvas { opacity: 0; }
 .terminal-canvas > canvas { display: block; max-width: 100%; max-height: 100%; transition: opacity 80ms linear; }
 
-.transcript { position: relative; z-index: 1; min-height: 0; flex: 1; overflow: hidden; }
+/* The one surface allowed under the header: it takes the header's height back
+   so scrolled text runs to the pane's top edge and fades under the gradient
+   rather than stopping at a hard cut, and restates the clearance as the
+   thread's own top padding so the first message still starts below the bar.
+   Every other pane keeps the space the header reserved, by doing nothing. */
+.transcript { position: relative; z-index: 1; min-height: 0; margin-top: calc(-1 * var(--chat-header-height)); flex: 1; overflow: hidden; }
 .composer-renderer-switch { position: absolute; top: 6.4px; right: 9.6px; z-index: 3; }
 .composer-renderer-switch label { display: flex; align-items: center; gap: 4.8px; color: var(--muted-foreground); font: 8px ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .06em; }
 .composer-renderer-switch select { min-height: 20.8px; border: 0.8px solid var(--border); border-radius: 4px; background: color-mix(in oklch, var(--background), transparent 8%); padding: 1.6px 4px; color: var(--foreground); font: 8.8px ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: none; }
@@ -455,7 +460,7 @@ svg { stroke-width: 1.5; }
 /* Decorative, deterministic meteor field for the entire chat main surface. */
 .chat-meteors { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
 
-.chat-main-empty .transcript { position: absolute; inset: 0; }
+.chat-main-empty .transcript { position: absolute; inset: var(--chat-header-height) 0 0; margin-top: 0; }
 .chat-main-empty .message-scroller-viewport { overflow: hidden; overscroll-behavior-y: none; }
 .chat-main-empty .thread, .chat-main-empty .empty-thread, .chat-main-empty .welcome { width: 100%; min-height: 100%; padding: 0; }
 .chat-main-empty .welcome { padding-bottom: 140.8px; }
@@ -692,6 +697,7 @@ svg { stroke-width: 1.5; }
      disappears here; safe-area padding belongs to the controls that touch
      each edge. */
   .chat-main {
+    --chat-header-height: calc(38.4px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
     width: 100%;
     min-height: 0;
     margin: 0;
@@ -748,10 +754,8 @@ svg { stroke-width: 1.5; }
   .tool-card { margin-left: 0; }
   .response-actions { opacity: 1; }
   .chat-header {
-    position: absolute;
-    top: 0;
-    right: 0;
-    left: 0;
+    position: relative;
+    width: 100%;
     height: calc(38.4px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
     min-height: 38.4px;
     padding: calc(3.2px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 8px 3.2px;
@@ -941,8 +945,8 @@ svg { stroke-width: 1.5; }
 /* Inset panel: floats on the darker frame. The hairline is an inset ring, not a
    border, so the absolutely-positioned meteor field still fills the panel
    exactly rather than being pushed in by a border box. */
-.chat-main { position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 16px); margin: 8px 10px 8px 2px; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 16px; background: var(--background); color: var(--foreground); box-shadow: inset 0 0 0 1px oklch(1 0 0 / 6%), inset 0 1px 0 0 oklch(1 0 0 / 7%); }
-.chat-header { position: absolute; inset: 0 0 auto; z-index: 2; display: flex; height: 56px; flex: none; align-items: center; gap: 8px; padding: 8px 14px; background: linear-gradient(to bottom, var(--background) 0 50%, transparent 100%); }
+.chat-main { --chat-header-height: 56px; position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 16px); margin: 8px 10px 8px 2px; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 16px; background: var(--background); color: var(--foreground); box-shadow: inset 0 0 0 1px oklch(1 0 0 / 6%), inset 0 1px 0 0 oklch(1 0 0 / 7%); }
+.chat-header { position: relative; z-index: 2; display: flex; height: var(--chat-header-height); flex: none; align-items: center; gap: 8px; padding: 8px 14px; background: linear-gradient(to bottom, var(--background) 0 50%, transparent 100%); }
 .chat-header-title { display: flex; min-width: 0; align-items: center; gap: 7px; overflow: hidden; font-size: 14px; line-height: 20px; }
 .chat-header-title span, .chat-header-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .breadcrumb-separator::before { content: "/"; }
@@ -981,7 +985,12 @@ svg { stroke-width: 1.5; }
 .terminal-canvas[data-terminal-ready="false"] > canvas { opacity: 0; }
 .terminal-canvas > canvas { display: block; max-width: 100%; max-height: 100%; transition: opacity 80ms linear; }
 
-.transcript { position: relative; z-index: 1; min-height: 0; flex: 1; overflow: hidden; }
+/* The one surface allowed under the header: it takes the header's height back
+   so scrolled text runs to the pane's top edge and fades under the gradient
+   rather than stopping at a hard cut, and restates the clearance as the
+   thread's own top padding so the first message still starts below the bar.
+   Every other pane keeps the space the header reserved, by doing nothing. */
+.transcript { position: relative; z-index: 1; min-height: 0; margin-top: calc(-1 * var(--chat-header-height)); flex: 1; overflow: hidden; }
 .composer-renderer-switch { position: absolute; top: 8px; right: 12px; z-index: 3; }
 .composer-renderer-switch label { display: flex; align-items: center; gap: 6px; color: var(--muted-foreground); font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .06em; }
 .composer-renderer-switch select { min-height: 26px; border: 1px solid var(--border); border-radius: 5px; background: color-mix(in oklch, var(--background), transparent 8%); padding: 2px 5px; color: var(--foreground); font: 11px ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: none; }
@@ -1231,7 +1240,7 @@ svg { stroke-width: 1.5; }
 /* Decorative, deterministic meteor field for the entire chat main surface. */
 .chat-meteors { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
 
-.chat-main-empty .transcript { position: absolute; inset: 0; }
+.chat-main-empty .transcript { position: absolute; inset: var(--chat-header-height) 0 0; margin-top: 0; }
 .chat-main-empty .message-scroller-viewport { overflow: hidden; overscroll-behavior-y: none; }
 .chat-main-empty .thread, .chat-main-empty .empty-thread, .chat-main-empty .welcome { width: 100%; min-height: 100%; padding: 0; }
 .chat-main-empty .welcome { padding-bottom: 176px; }
@@ -1496,6 +1505,7 @@ svg { stroke-width: 1.5; }
      disappears here; safe-area padding belongs to the controls that touch
      each edge. */
   .chat-main {
+    --chat-header-height: calc(48px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
     width: 100%;
     min-height: 0;
     margin: 0;
@@ -1552,10 +1562,8 @@ svg { stroke-width: 1.5; }
   .tool-card { margin-left: 0; }
   .response-actions { opacity: 1; }
   .chat-header {
-    position: absolute;
-    top: 0;
-    right: 0;
-    left: 0;
+    position: relative;
+    width: 100%;
     height: calc(48px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
     min-height: 48px;
     padding: calc(4px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 10px 4px;
