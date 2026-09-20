@@ -51,7 +51,11 @@ test("ChatGPT Web model catalog stays dynamic", async () => {
     defaultThinkingLevel: "medium" }]);
 });
 
-test("ChatGPT Web rebuilds its transcript from the native journal", () => {
+test("ChatGPT Web still reads a journal written before it stated ops", () => {
+  // The legacy path, and only that: a journal this build writes is ops and
+  // nothing else, which the test below asserts line by line. These two shapes
+  // exist so a conversation that predates the ops is not lost, and no live
+  // path may produce them.
   const adapter = new ChatGptWebAdapter({ dataDir: "." });
   adapter.readJournal = () => [
     { type: "transcript_message", message: { id: "user-1", role: "user", content: "Hi" } },
@@ -79,6 +83,9 @@ test("ChatGPT Web journals the statements that make up its transcript", async ()
     await settled;
     // This backend has nothing to read back, so the ops are the record: the
     // prompt, the answer it opened, and what that answer turned out to say.
+    // Every line is an op -- the legacy shapes the reader above still accepts
+    // are not written by anything here.
+    assert.deepEqual([...new Set(journal.map((event) => event.type))], ["transcript_op"]);
     assert.deepEqual(journal.map((event) => `${event.type}:${event.op}`),
       ["transcript_op:message.open", "transcript_op:message.open", "transcript_op:message.drop"]);
     assert.equal(journal[0].message.role, "user");
