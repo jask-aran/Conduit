@@ -208,7 +208,7 @@ export class TestStreamAdapter extends EventEmitter {
     this.publish(record, messageOpen({ id: userMessageId, role: "user", generationId,
       content: message, timestamp: new Date().toISOString() }));
     this.publish(record, messageOpen({ id: messageId, role: "assistant", generationId, answers: userMessageId }));
-    this.publish(record, { type: "status", generationId, seq: ++record.eventSequence,
+    this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.eventSequence,
       status: "working", activity: "working", detail: null });
     this.publish(record, { type: "assistant_content", generationId, phase: "start",
       seq: ++record.eventSequence, messageId });
@@ -265,7 +265,7 @@ export class TestStreamAdapter extends EventEmitter {
     record.activity = "idle";
     Object.assign(record.generation, { closed: true, settled: true });
     this.publish(record, { type: "status", generationId: turn.generationId, seq: ++record.eventSequence,
-      status: "idle", activity: "idle", detail: stopReason === "aborted" ? "stopped" : "settled" });
+      phase: stopReason === "aborted" ? "stopped" : "settled", status: "idle", activity: "idle", detail: null });
     this.emit("settled", { record, completed: stopReason !== "aborted" });
   }
 

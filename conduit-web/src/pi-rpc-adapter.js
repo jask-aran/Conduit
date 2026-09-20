@@ -112,15 +112,19 @@ export function normalizePiBackendEvent(event) {
         // where it reads Pi's wire, which is the only place they belong.
         blocks: event.blocks };
     }
+    // The transition is stated. `detail` used to carry Pi's own event name so
+    // the browser could read it back out, which made a free-text field the
+    // only record of which of these five had happened.
     case "generation_started":
+      return { ...base, type: "status", phase: "started", seq: event.seq, status: "working", activity: "working", detail: null };
     case "generation_running":
-      return { ...base, type: "status", seq: event.seq, status: "working", activity: "working", detail: event.type };
+      return { ...base, type: "status", phase: "running", seq: event.seq, status: "working", activity: "working", detail: null };
     case "generation_stopping":
-      return { ...base, type: "status", seq: event.seq, status: "stopping", activity: "stopping", detail: event.type };
+      return { ...base, type: "status", phase: "stopping", seq: event.seq, status: "stopping", activity: "stopping", detail: null };
     case "generation_stopped":
-      return { ...base, type: "status", seq: event.seq, status: "idle", activity: "idle", detail: "stopped", processTerminated: event.processTerminated };
+      return { ...base, type: "status", phase: "stopped", seq: event.seq, status: "idle", activity: "idle", detail: null, processTerminated: event.processTerminated };
     case "generation_settled":
-      return { ...base, type: "status", seq: event.seq, status: "idle", activity: "idle", detail: "settled" };
+      return { ...base, type: "status", phase: "settled", seq: event.seq, status: "idle", activity: "idle", detail: null };
     case "tool_execution_started":
     case "tool_execution_updated":
     case "tool_execution_completed":

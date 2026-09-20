@@ -224,6 +224,15 @@ export function normalizeLiveEvent(value: unknown): LiveEvent {
   return stamp ? { ...normalized, log: stamp } as LiveEvent : normalized;
 }
 
+/** The five transitions a turn makes, as the adapter states them. */
+const GENERATION_PHASE_EVENTS: Record<string, StructuredGenerationType | undefined> = {
+  started: "generation_started",
+  running: "generation_running",
+  stopping: "generation_stopping",
+  stopped: "generation_stopped",
+  settled: "generation_settled",
+};
+
 function normalizeLiveEventBody(value: unknown): LiveEvent {
   const source = record(value);
   const sourceType = text(source.type);
@@ -255,12 +264,14 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
       input: source.input, output: source.output, isError: Boolean(source.isError),
     };
     case "status": {
-      const detail = text(source.detail);
-      const status = text(source.status);
-      const type = detail === "stopped" ? "generation_stopped"
-        : status === "idle" ? "generation_settled"
-          : status === "stopping" ? "generation_stopping"
-            : detail === "generation_running" ? "generation_running" : "generation_started";
+      // Read, not rebuilt. This used to derive one of five lifecycle events by
+      // string-matching `detail` and `status`, ending in an `else` that called
+      // anything it did not recognise a started generation -- so a Codex
+      // approval request, which is not a transition at all, arrived here as the
+      // start of a turn. A status with no phase is the session saying what it
+      // is busy with; the browser reads nothing else off one.
+      const type = GENERATION_PHASE_EVENTS[text(source.phase)];
+      if (!type) return { type: "unknown", sourceType, generationId };
       return { type, generationId, seq: seq ?? 0, processTerminated: Boolean(source.processTerminated) };
     }
     case "error": {

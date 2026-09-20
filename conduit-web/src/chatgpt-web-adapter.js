@@ -161,7 +161,7 @@ export class ChatGptWebAdapter extends EventEmitter {
     // What the turn has written so far, so an answer that fails or is stopped
     // can still be settled with the text the reader watched arrive.
     record.turn = { messageId, blocks: [] };
-    this.publish(record, { type: "status", generationId, seq: ++record.eventSequence, status: "working", activity: "working", detail: null });
+    this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.eventSequence, status: "working", activity: "working", detail: null });
     this.publish(record, { type: "assistant_content", generationId, phase: "start", seq: ++record.eventSequence, messageId });
     void this.runPrompt(record, { generationId, messageId, message: userMessage });
     return generationId;
@@ -240,8 +240,8 @@ export class ChatGptWebAdapter extends EventEmitter {
     record.activity = "idle";
     record.abortController = null;
     Object.assign(record.generation, { closed: true, settled: true });
-    this.publish(record, { type: "status", generationId: record.generation.id, seq: ++record.eventSequence,
-      status: "idle", activity: "idle", detail });
+    this.publish(record, { type: "status", generationId: record.generation.id, phase: detail, seq: ++record.eventSequence,
+      status: "idle", activity: "idle", detail: null });
     this.emit("settled", { record, completed: detail !== "stopped" });
   }
 
@@ -263,7 +263,7 @@ export class ChatGptWebAdapter extends EventEmitter {
     if (!record?.active) return false;
     record.stopping = true;
     record.activity = "stopping";
-    this.publish(record, { type: "status", generationId: record.generation.id, seq: ++record.eventSequence,
+    this.publish(record, { type: "status", generationId: record.generation.id, phase: "stopping", seq: ++record.eventSequence,
       status: "stopping", activity: "stopping", detail: null });
     record.abortController.abort();
     return true;

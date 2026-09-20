@@ -34,7 +34,8 @@ test("ChatGPT Web maps a streamed turn to neutral events and retains its cursor"
     // is what a reconnecting browser is replayed, and it keeps a block rather
     // than every delta that built it -- the sockets still saw both.
     assert.deepEqual(record.events.filter((event) => event.phase === "delta").map((event) => event.delta), ["Hello world"]);
-    assert.equal(record.events.at(-1).detail, "settled");
+    // The transition is stated rather than passed along in free text.
+    assert.equal(record.events.at(-1).phase, "settled");
     assert.equal(CHATGPT_WEB_CAPABILITIES.modelSwitch, true);
   } finally {
     globalThis.fetch = originalFetch;
