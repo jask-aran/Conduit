@@ -89,7 +89,6 @@ export type LiveEvent = EventBase & (
   | { type: "permission_resolved"; requestId: string }
   | { type: "history_truncated"; beforeMessageId: string | null; afterMessageId: string | null }
   | { type: "session_checkpoint"; chatId: string; title: string | null; chat: ChatSummary | null; artifacts: TurnArtifactSummary[] | null }
-  | { type: "user_message_committed"; message: ProtocolMessage }
   | { type: "transcript_sync"; messages: unknown[]; tools: unknown[]; replace?: boolean }
   | { type: "transcript_op"; op: "message.open"; message: ProtocolMessage; after: string | null;
     answers: string | null }
@@ -141,22 +140,32 @@ const retry = (value: unknown): RetryState | null | undefined => {
   };
 };
 
+/**
+ * A request the harness is waiting on an answer to, in the contract's words.
+ *
+ * Stated flat: `permission_request` carries `requestId` and the fields beside
+ * it, and `runtime_state` lists the same thing under `id`. The nested
+ * `{ request: { method } }` shape this also accepted is Pi's own, and it is
+ * read where Pi's bytes are read -- `normalizeHostUiRequest` in
+ * `pi-activity.js` -- so by the time anything reaches the browser it has
+ * already been said once, in these names. Accepting the second shape here only
+ * kept a spelling alive that no adapter sends.
+ */
 export function normalizeHostUiRequest(value: unknown): HostUiRequest | null {
   const source = record(value);
-  const nested = record(source.request);
-  const kind = text(source.kind || source.method || nested.kind || nested.method);
+  const kind = text(source.kind);
   if (!["confirm", "select", "input", "editor"].includes(kind)) return null;
-  const id = text(source.id || nested.id);
+  const id = text(source.id || source.requestId);
   if (!id) return null;
   return {
     id,
     kind: kind as HostUiRequest["kind"],
-    title: text(source.title || nested.title || "Request"),
-    message: text(source.message || nested.message),
-    options: list(source.options || nested.options).map(String),
-    placeholder: text(source.placeholder || nested.placeholder),
-    prefill: text(source.prefill || nested.prefill),
-    timeoutMs: number(source.timeout ?? source.timeoutMs ?? nested.timeout) ?? null,
+    title: text(source.title || "Request"),
+    message: text(source.message),
+    options: list(source.options).map(String),
+    placeholder: text(source.placeholder),
+    prefill: text(source.prefill),
+    timeoutMs: number(source.timeoutMs) ?? null,
   };
 }
 
@@ -250,10 +259,8 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
       return { type: "error", scope, generationId, ...(seq === undefined ? {} : { seq }),
         code: text(detail.code), message: text(detail.message), error: detail };
     }
-    case "permission_request": return { type: "permission_request", generationId, request: normalizeHostUiRequest({
-      id: source.requestId, kind: source.kind, title: source.title, message: source.message,
-      options: source.options, placeholder: source.placeholder, prefill: source.prefill, timeoutMs: source.timeoutMs,
-    }) };
+    case "permission_request":
+      return { type: "permission_request", generationId, request: normalizeHostUiRequest(source) };
     case "permission_resolved": return { type: "permission_resolved", generationId, requestId: text(source.requestId) };
     case "usage": return { type: "usage", generationId, contextUsage: contextUsage(source.contextUsage), sessionStats: sessionStats(source.sessionStats), cacheStats: cacheStats(source.cacheStats) };
     case "queue_state": return { type: "queue_state", generationId, queue: queue(source.queue) || { steering: [], followUp: [] } };
@@ -263,7 +270,6 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
     // reading this stream had to refuse.
     case "retry": return { type: "retry", generationId, ...(seq === undefined ? {} : { seq }),
       active: Boolean(source.active), retry: source.active ? retry(source.retry) || {} : null };
-    case "user_message_committed": return { type: "user_message_committed", generationId, message: protocolMessage(source.message) };
     case "transcript_sync": return { type: "transcript_sync", generationId, messages: list(source.messages), tools: list(source.tools),
       ...(source.replace ? { replace: true } : {}) };
     // The server stating the transcript: which messages there are and where,

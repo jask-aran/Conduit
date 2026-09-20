@@ -334,7 +334,10 @@ export class ChatGptWebAdapter extends EventEmitter {
    * applied to the same statements at both ends.
    *
    * Journals written before this backend stated anything are still read, so a
-   * conversation that predates the change is not lost.
+   * conversation that predates the change is not lost. That is the only reason
+   * the two older shapes appear below: nothing writes them -- `onPublish`
+   * journals `transcript_op` and nothing else, asserted in the adapter's
+   * tests -- and no live path knows their names.
    */
   transcript(chatId) {
     let messages = [];

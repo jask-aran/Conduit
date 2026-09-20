@@ -188,8 +188,15 @@ interface EventBase {
  *   per frame rather than one per token.
  * - It may be DROPPED. Past a socket's high-water mark paint is discarded
  *   rather than queued, because a reader who cannot draw what they already have
- *   is not helped by being sent more. The server restates the whole in-flight
- *   generation when that socket recovers, which is what makes dropping safe.
+ *   is not helped by being sent more. What makes that safe is the promise
+ *   below: the message is restated in full when it closes, so the worst a
+ *   dropped delta costs is that the reader watches less of the answer arrive.
+ *   A socket that comes back is also restated from the record's own copy of the
+ *   turn -- the generation Pi reduces from the wire, replayed as
+ *   `generation_replay`, or the merged paint buffer the other harnesses keep
+ *   and replay on attach. Neither is promised mid-stream: a socket that falls
+ *   behind and recovers without reconnecting catches up at the next
+ *   `message.close`.
  * - It is never AUTHORITATIVE. `message.close` restates the message in full, so
  *   a delta that never arrives costs a repaint and nothing else. Nothing
  *   downstream may conclude anything from paint that an op does not also say.
@@ -423,7 +430,6 @@ export type OptionalCapabilityEvent = EventBase & (
   | { type: "queue_state"; queue: { steering: unknown[]; followUp: unknown[] } }
   | { type: "compaction"; active: boolean }
   | { type: "retry"; active: boolean; retry?: unknown }
-  | { type: "user_message_committed"; message: unknown }
   /** The backend's own record of recent turns, published to repair live drift. */
   | { type: "transcript_sync"; messages: unknown[]; tools: unknown[]; replace?: true }
   | { type: "generation_replay"; seq: number; generation: unknown }

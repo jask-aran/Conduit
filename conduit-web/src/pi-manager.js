@@ -33,6 +33,13 @@ export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = ""
   return args;
 }
 
+/** Pi's epoch milliseconds, or an ISO string, as the one spelling ops state. */
+function isoTimestamp(value) {
+  if (value == null || value === "") return new Date().toISOString();
+  const parsed = typeof value === "number" ? new Date(value) : new Date(String(value));
+  return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+}
+
 function emptyQueue() {
   return { steering: [], followUp: [] };
 }
@@ -1509,7 +1516,13 @@ export class PiManager extends EventEmitter {
         record.lastQueuedMessageId = queued;
         event = { ...event, message: { ...event.message, id: queued } };
         this.openMessage(record, queued, "user", {
-          content: event.message.content, timestamp: event.message.timestamp,
+          content: event.message.content,
+          // Pi stamps a message with epoch milliseconds and its session file
+          // with an ISO string. The op states one time in one spelling, said
+          // here, where Pi's bytes are read -- the browser used to convert it,
+          // which is how the same message could render "Invalid Date" live and
+          // correctly after a reload.
+          timestamp: isoTimestamp(event.message.timestamp),
         });
         // An answer this turn goes on to write follows the queued message, not
         // the prompt that opened the turn: that prompt has been answered, and
