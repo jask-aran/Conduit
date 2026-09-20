@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
 import * as KDialog from "@kobalte/core/dialog";
 import { ActivityIcon, BotIcon, ChevronRightIcon, FileTextIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon } from "lucide-solid";
+import { DesktopSettingsTile } from "./desktop-settings";
 import { toast } from "solid-sonner";
 import { Button, Field, FieldGroup, FieldLabel, Input, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
@@ -1096,6 +1097,7 @@ export function Settings(props: {
                   </label>
                 </div>
               </details>
+              <DesktopSettingsTile />
               <details class="settings-tile" open>
                 <summary><span><strong>Reading</strong><small>Transcript column, wide blocks, and panel drag.</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
                 <div class="settings-rows">
