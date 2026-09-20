@@ -463,7 +463,9 @@ test("slow clients close when an unreconstructible notification exceeds its byte
   };
   manager.attach(record.id, socket);
 
-  manager.deliver(record, { type: "runtime_stderr", message: "x".repeat(256) });
+  // A statement the browser is actually sent. `runtime_stderr` no longer
+  // crosses the socket at all, so it can no longer stand for one that does.
+  manager.deliver(record, { type: "history_truncated", beforeMessageId: "x".repeat(256) });
 
   assert.deepEqual(socket.closeArgs, { code: 1013, reason: "Slow client delivery backlog exceeded" });
   assert.equal(record.delivery.has(socket), false);

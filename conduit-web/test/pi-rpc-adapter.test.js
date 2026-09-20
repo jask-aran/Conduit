@@ -12,13 +12,25 @@ import { sendClientEvent } from "../src/server/live-session-stream.js";
 import { piRpcGenerationFixtures } from "./fixtures/pi-rpc-generations.js";
 
 test("Pi adapter normalization retains every native payload in its privileged envelope", () => {
+  const sent = {};
   for (const [name, fixture] of Object.entries(piRpcGenerationFixtures)) {
     const normalizer = createPiEventNormalizer(`adapter-${name}`);
     for (const event of fixture.events.flatMap((item) => normalizer.normalize(item))) {
-      assert.equal(Object.hasOwn(JSON.parse(serializePiV0(event)), "pi"), false, `${name}:${event.type}`);
+      // The native payload is kept on the server's side of the projection and
+      // never on the browser's, whether or not the browser is sent anything.
       assert.deepEqual(normalizePiBackendEvent(event).pi, event, `${name}:${event.type}`);
+      const frame = serializePiV0(event);
+      if (frame === null) { sent[event.type] = sent[event.type] ?? false; continue; }
+      assert.equal(Object.hasOwn(JSON.parse(frame), "pi"), false, `${name}:${event.type}`);
+      sent[event.type] = true;
     }
   }
+  // An event the contract has no case for is not sent as an empty envelope.
+  // These three were a third of every frame in a Pi turn, and the browser's
+  // only handler for them was to recognise the type and drop it.
+  assert.deepEqual(
+    Object.entries(sent).filter(([, delivered]) => !delivered).map(([type]) => type).sort(),
+    ["content_block_completed", "content_block_started", "generation_turn_ended"]);
 });
 
 test("Pi adapter maps required neutral events and retains Pi richness", () => {
