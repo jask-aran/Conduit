@@ -242,12 +242,22 @@ test("native auth uses exact-origin bearer sessions and single-use socket ticket
       body: JSON.stringify({ password: "fixture-pw" }),
     });
     assert.equal(wrongOrigin.status, 403);
+    // Plain HTTP that reached the server through a proxy: the socket says
+    // loopback, the forwarding header says otherwise, and the header wins.
     const insecureLogin = await fetch(`${origin}/v0/auth/native-login`, {
+      method: "POST",
+      headers: { ...nativeHeaders, "x-forwarded-for": "203.0.113.9", "content-type": "application/json" },
+      body: JSON.stringify({ password: "fixture-pw" }),
+    });
+    assert.equal(insecureLogin.status, 400);
+    // A desktop client on this machine reaches the server over loopback, which
+    // no network carries, so it is handed a token without TLS in front of it.
+    const loopbackLogin = await fetch(`${origin}/v0/auth/native-login`, {
       method: "POST",
       headers: { ...nativeHeaders, "content-type": "application/json" },
       body: JSON.stringify({ password: "fixture-pw" }),
     });
-    assert.equal(insecureLogin.status, 400);
+    assert.equal(loopbackLogin.status, 200);
     const wrongPassword = await fetch(`${origin}/v0/auth/native-login`, {
       method: "POST",
       headers: { ...nativeHeaders, "x-forwarded-proto": "https", "content-type": "application/json" },
