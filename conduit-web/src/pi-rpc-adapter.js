@@ -1,5 +1,5 @@
 import { wasAborted, wasDiscarded } from "./abort-signature.js";
-import { normalizeHostUiRequest } from "./activity.js";
+import { normalizeHostUiRequest } from "./pi-activity.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { assertChatBackendAdapter } from "./chat-backend-contract.js";
 import { detect } from "./harnesses/probe.js";

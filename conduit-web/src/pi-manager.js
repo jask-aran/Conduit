@@ -7,12 +7,8 @@ import path from "node:path";
 import { projectEnvironment } from "./project-environment.js";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { buildPiEnvironment, buildPiResourceArgs, resolvePiProcess } from "../../scripts/pi-runtime.mjs";
-import {
-  applyActivityEvent,
-  deriveCoarseActivity,
-  isBlockingHostUi,
-  normalizeHostUiRequest,
-} from "./activity.js";
+import { deriveCoarseActivity } from "./activity.js";
+import { applyActivityEvent, isBlockingHostUi } from "./pi-activity.js";
 import {
   generationResumeEvent,
   reduceActiveGeneration,

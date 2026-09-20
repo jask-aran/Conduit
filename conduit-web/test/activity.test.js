@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  applyActivityEvent,
   deriveCoarseActivity,
   deriveFineActivity,
   activityLabel,
-  normalizeHostUiRequest,
   pickHigherActivity,
 } from "../src/activity.js";
+// Pi's own event names reduce onto the same flags, but from Pi's own module --
+// the three harnesses that are not Pi never send them.
+import { applyActivityEvent, normalizeHostUiRequest } from "../src/pi-activity.js";
 
 function record(overrides = {}) {
   return {
@@ -111,13 +112,15 @@ test("fine activity prefers tools and stop over generic working", () => {
   // Stale coarse "working" must not keep the transcript row after the turn is idle.
   assert.equal(deriveFineActivity({ generation: "idle", coarse: "working" }).kind, "idle");
   assert.deepEqual(deriveFineActivity({ generation: "failed" }), { kind: "request_failed", label: "Request failed · Ready to retry" });
-  assert.deepEqual(deriveFineActivity({ generation: "failed", processStatus: "failed" }), { kind: "runtime_failed", label: "Pi failed" });
+  assert.deepEqual(deriveFineActivity({ generation: "failed", processStatus: "failed" }), { kind: "runtime_failed", label: "Agent failed" });
   assert.deepEqual(deriveFineActivity({ generation: "interrupted", toolName: "bash", thinking: true, responding: true, coarse: "working" }), { kind: "interrupted", label: "Interrupted · Ready" });
 });
 
 test("activity labels and ranking", () => {
-  assert.equal(activityLabel("working", "using read"), "Pi working — using read");
-  assert.equal(activityLabel("idle"), "Pi ready (idle)");
+  // The indicator is given a record with no harness name on it, so it says
+  // what is true of all four rather than naming Pi on a Codex chat.
+  assert.equal(activityLabel("working", "using read"), "Working — using read");
+  assert.equal(activityLabel("idle"), "Ready (idle)");
   assert.ok(pickHigherActivity("failed", "working") === "failed");
   assert.ok(pickHigherActivity("working", "idle") === "working");
 });

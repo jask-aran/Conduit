@@ -1,4 +1,4 @@
-import type { HostUiRequest, RetryState } from "./client/api/contracts";
+import type { RetryState } from "./client/api/contracts";
 
 export interface FineActivityInput {
   generation?: string;
@@ -11,5 +11,4 @@ export interface FineActivityInput {
 }
 
 export function deriveFineActivity(input?: FineActivityInput): { kind: string; label: string | null };
-export function normalizeHostUiRequest(event: unknown): HostUiRequest | null;
 export function activityLabel(activity: string, detail?: string | null): string;
