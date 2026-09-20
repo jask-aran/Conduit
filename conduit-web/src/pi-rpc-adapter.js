@@ -244,20 +244,32 @@ export function normalizePiBackendEvent(event) {
 }
 
 /**
- * The one translation out of Pi's words, and the only place `pi` is stripped.
+ * The one translation out of Pi's words, or null when there is nothing to say.
  *
  * `serializePiV0` and `toClientEvent` each used to spell this out for
  * themselves, so Pi had two projections that happened to agree. Everything
  * leaving for a browser -- the publish path, the attach path, a log replay --
  * goes through this one.
+ *
+ * Null is the answer for an event Conduit has decided the browser does not
+ * need. Those used to travel anyway, as a `pi_event` envelope with the native
+ * payload stripped out of it: across the Pi fixtures, 46 of 125 events -- every
+ * `content_block_started`, every `content_block_completed`, every
+ * `generation_turn_ended` -- crossed the socket carrying a type and a
+ * generation id and nothing else, for the browser to normalize to `unknown`
+ * and drop. A third of the frames in a turn, each costing a send, a parse and
+ * a pass through the client's reducer to reach a `break`.
  */
 export function toNeutralPiEvent(event) {
   const { pi: _pi, ...neutral } = normalizePiBackendEvent(event);
-  return neutral;
+  return neutral.type === "pi_event" ? null : neutral;
 }
 
 // The single existing browser protocol is a lossless projection of Pi events.
-export const serializePiV0 = (event) => JSON.stringify(toNeutralPiEvent(event));
+export const serializePiV0 = (event) => {
+  const neutral = toNeutralPiEvent(event);
+  return neutral === null ? null : JSON.stringify(neutral);
+};
 
 export class PiRpcAdapter {
   constructor(manager) { this.manager = manager; }

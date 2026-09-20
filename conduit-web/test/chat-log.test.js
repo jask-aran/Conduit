@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ChatLog, isLoggedEvent } from "../src/server/chat-log.js";
-import { normalizePiBackendEvent } from "../src/pi-rpc-adapter.js";
+import { ChatLog, LOGGED_EVENT_TYPES, isLoggedEvent } from "../src/server/chat-log.js";
+import { normalizePiBackendEvent, serializePiV0 } from "../src/pi-rpc-adapter.js";
 
 test("only events that change the transcript take a number", () => {
   const log = new ChatLog();
@@ -17,6 +17,19 @@ test("only events that change the transcript take a number", () => {
   const stamped = log.stamp({ type: "transcript_sync" });
   assert.deepEqual(stamped.log, { id: log.id, seq: 1 });
   assert.equal(log.state().seq, 1);
+});
+
+test("an event that takes a number is an event the browser is sent", () => {
+  // These two facts have to agree. A number the browser never receives is a
+  // gap in its copy of the order, and a gap makes it reject the next statement
+  // and ask to be caught up -- with the same undeliverable entry, forever. So
+  // nothing may be both logged and dropped.
+  for (const type of LOGGED_EVENT_TYPES) {
+    const event = { type, generationId: "g1", phase: type === "status" ? "settled" : undefined,
+      op: "message.drop", messageId: "m1", log: { id: "l", seq: 1 } };
+    if (!isLoggedEvent(normalizePiBackendEvent(event))) continue;
+    assert.notEqual(serializePiV0(event), null, `${type} is numbered but never sent`);
+  }
 });
 
 test("one order means the same thing whichever harness is answering", () => {

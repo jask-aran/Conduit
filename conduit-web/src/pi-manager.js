@@ -19,7 +19,7 @@ import { messageClose, messageDrop, messageOpen, toolClose, toolOpen } from "./h
 import { PI_CAPABILITIES } from "./pi-capabilities.js";
 import { PiCommandCatalog } from "./pi-command-catalog.js";
 import { ChatLogs, isLoggedEvent } from "./server/chat-log.js";
-import { normalizePiBackendEvent } from "./pi-rpc-adapter.js";
+import { normalizePiBackendEvent, toNeutralPiEvent } from "./pi-rpc-adapter.js";
 import { messageIsInterim } from "./active-generation.js";
 
 export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = "", models, template }) {
@@ -1581,7 +1581,9 @@ export class PiManager extends EventEmitter {
 
   sendClientEvent(socket, event) {
     if (!socketIsOpen(socket)) return false;
-    socket.send(this.serializeEvent(event));
+    const payload = this.serializeEvent(event);
+    if (payload == null) return false;
+    socket.send(payload);
     return true;
   }
 
@@ -1673,6 +1675,12 @@ export class PiManager extends EventEmitter {
   deliverToClient(record, socket, event) {
     const state = record.delivery.get(socket);
     if (!state || !socketIsOpen(socket)) return;
+    // Asked before the event is merged, queued or counted against the socket's
+    // budget, because an event with nothing to say to a browser should not be
+    // occupying any of the three. The internal bus still carries it: the
+    // server's own reducer reads Pi's block structure, and only the wire does
+    // not need it.
+    if (toNeutralPiEvent(event) === null) return;
     const key = deliveryDeltaKey(event);
     if (state.paused) {
       this.queueDeliveryNotification(record, socket, state, event);

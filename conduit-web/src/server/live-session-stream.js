@@ -48,7 +48,11 @@ export function interruptedPromptInput(taken, message, attachmentIds = []) {
  */
 export function sendClientEvent(ws, adapter, event) {
   if (!event || ws.readyState !== 1) return false;
-  ws.send(JSON.stringify(adapter.toClientEvent(event)));
+  // An adapter may answer that the browser has no use for this one, and then
+  // nothing is sent rather than an envelope with the payload taken out of it.
+  const neutral = adapter.toClientEvent(event);
+  if (neutral == null) return false;
+  ws.send(JSON.stringify(neutral));
   return true;
 }
 
