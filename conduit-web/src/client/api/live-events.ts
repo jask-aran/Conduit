@@ -112,13 +112,57 @@ const optionalText = (value: unknown) => value == null || value === "" ? null : 
 const list = (value: unknown) => Array.isArray(value) ? value : [];
 const number = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : undefined;
 const TRANSCRIPT_OPS = new Set(["message.open", "message.close", "message.drop", "tool.open", "tool.close"]);
-const STRUCTURED_GENERATION_TYPES = new Set<StructuredGenerationType>([
-  "generation_replay", "assistant_content", "tool_activity", "status",
-]);
+/**
+ * The phases each generation event is allowed to arrive in.
+ *
+ * The event itself is passed through -- it is already Conduit's words, and
+ * rebuilding it here is what this file stopped doing -- but which words they
+ * are is checked, because the phase is the discriminator both folds switch on.
+ * An event naming a phase neither end has a case for would otherwise fold into
+ * nothing at both ends while still advancing the turn's position, so a new
+ * adapter event could be added, reach the browser, change nothing, and look
+ * delivered. Rejected here it arrives as `unknown`, which is what it is.
+ *
+ * `status` with no phase at all is a session report -- Codex saying it is
+ * waiting on an approval -- rather than a transition, and is allowed through
+ * without one.
+ */
+const GENERATION_PHASES: Record<StructuredGenerationType, Set<string> | null> = {
+  generation_replay: null,
+  assistant_content: new Set(["start", "delta", "final"]),
+  tool_activity: new Set(["start", "update", "end"]),
+  status: new Set(["started", "running", "stopping", "stopped", "settled", ""]),
+};
+const STRUCTURED_GENERATION_TYPES = new Set<StructuredGenerationType>(
+  Object.keys(GENERATION_PHASES) as StructuredGenerationType[]);
 
 export function isStructuredGenerationEvent(event: LiveEvent): event is StructuredGenerationEvent {
   return STRUCTURED_GENERATION_TYPES.has(event.type as StructuredGenerationType)
     && typeof (event as Partial<StructuredGenerationEvent>).seq === "number";
+}
+
+/**
+ * A turn event that is folded as well as acted on.
+ *
+ * A retry and a failure hold a place in the turn's sequence and both folds have
+ * a case for them -- they are what puts `retry` and `error` on the generation
+ * the server snapshots and a reconnecting browser is restated from. Unlike the
+ * four above they also mean something to the chat around the turn: a retry
+ * moves the composer's state, an error raises a message. So they are folded
+ * first and then handled, rather than routed to one or the other.
+ *
+ * The browser used to only handle them. Its copy of the generation therefore
+ * had `retry: null` and `error: null` through a turn the server's copy had both
+ * on, and the difference only disappeared when a reconnect replaced the whole
+ * snapshot.
+ */
+export type FoldedTurnEvent = Extract<LiveEvent, { type: "retry" } | { type: "error" }> & { seq: number };
+
+export function isFoldedTurnEvent(event: LiveEvent): event is FoldedTurnEvent {
+  // A rejected command is not part of any turn -- it has no generation and no
+  // position -- so only a runtime failure is folded.
+  if (event.type === "error" ? event.scope !== "runtime" : event.type !== "retry") return false;
+  return typeof (event as { seq?: unknown }).seq === "number";
 }
 const contextUsage = (value: unknown): ContextUsage | null => Object.keys(record(value)).length ? record(value) as ContextUsage : null;
 const sessionStats = (value: unknown): SessionStats | null => Object.keys(record(value)).length ? record(value) as unknown as SessionStats : null;
@@ -247,6 +291,8 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
   // They were the last of the field-by-field rewrites, left behind when the
   // pass-through was added above them.
   if (STRUCTURED_GENERATION_TYPES.has(sourceType as StructuredGenerationType) && seq !== undefined) {
+    const phases = GENERATION_PHASES[sourceType as StructuredGenerationType];
+    if (phases && !phases.has(text(source.phase))) return { type: "unknown", sourceType, generationId };
     return { ...source, type: sourceType as StructuredGenerationType, generationId, seq } as StructuredGenerationEvent;
   }
   switch (sourceType) {

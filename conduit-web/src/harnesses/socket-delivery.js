@@ -10,7 +10,7 @@
  *
  * What makes the simple version correct is the contract's own distinction:
  * paint may be merged and may be dropped, an op may be neither. This is where
- * two of those four promises are kept -- the other two, "never authoritative"
+ * those two of the four promises are kept -- the other two, "never authoritative"
  * and "never numbered", are kept by `message.close` restating the message in
  * full and by the chat log leaving paint out. They are stated once, beside
  * `AssistantBlock` in `chat-backend-contract.d.ts`. So paint is merged per
@@ -48,6 +48,19 @@ export function deliveryKey(event) {
   }
   return null;
 }
+
+/**
+ * Whether this event is paint at all, in any phase.
+ *
+ * Merging is only defined for a delta and a tool's partial output, so
+ * `deliveryKey` answers a narrower question than "may this be dropped". The
+ * two were the same test for a while, which meant a message starting, a
+ * message finishing and every tool starting or ending went straight to
+ * `socket.send` however far behind the reader was -- so a tool-heavy turn kept
+ * piling onto a socket the rule was written to stop piling onto. All of it is
+ * restated by `message.close` and `tool.close`, so all of it may be given up.
+ */
+export const isPaint = (event) => event?.type === "assistant_content" || event?.type === "tool_activity";
 
 export function mergeDelivery(previous, next) {
   if (next.type === "assistant_content") return { ...next, delta: `${previous.delta || ""}${next.delta || ""}` };
@@ -105,7 +118,10 @@ export class SocketDelivery {
     // Paint the socket is already holding goes out first, so an op never
     // overtakes the text it is closing.
     this.flush(socket);
-    if (isOpen(socket)) socket.send(this.serialize(event));
+    if (!isOpen(socket)) return;
+    // The record is sent whatever the backlog; paint is not.
+    if (isPaint(event) && bufferedAmount(socket) > this.highWaterMark) return;
+    socket.send(this.serialize(event));
   }
 
   flush(socket) {

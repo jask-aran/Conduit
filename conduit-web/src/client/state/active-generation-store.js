@@ -10,6 +10,7 @@ const TERMINAL_STATUSES = new Set(["stopped", "complete", "failed"]);
 
 /** @typedef {import("../turn-rows").ActiveGenerationView} ActiveGenerationView */
 /** @typedef {import("../api/live-events").StructuredGenerationEvent} StructuredGenerationEvent */
+/** @typedef {import("../api/live-events").FoldedTurnEvent} FoldedTurnEvent */
 
 function terminalStatus(state) {
   const lastMessage = state.assistantMessages.at(-1);
@@ -144,7 +145,7 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
   };
 
   /**
-   * @param {StructuredGenerationEvent} event
+   * @param {StructuredGenerationEvent | FoldedTurnEvent} event
    */
   const apply = (event) => {
     const previous = state;

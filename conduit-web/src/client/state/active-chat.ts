@@ -3,8 +3,8 @@ import { deriveFineActivity } from "../../activity.js";
 import { api, asList } from "../api/client";
 import { createAgentSession } from "./agent-session";
 import { webSocketUrl } from "../api/transport";
-import { isStructuredGenerationEvent, normalizeLiveEvent } from "../api/live-events";
-import type { LiveEvent, RuntimeStateEvent, StructuredGenerationEvent, TurnArtifactSummary } from "../api/live-events";
+import { isFoldedTurnEvent, isStructuredGenerationEvent, normalizeLiveEvent } from "../api/live-events";
+import type { FoldedTurnEvent, LiveEvent, RuntimeStateEvent, StructuredGenerationEvent, TurnArtifactSummary } from "../api/live-events";
 import type {
   ChatStatus,
   Attachment,
@@ -69,15 +69,16 @@ interface LiveOpening {
 /** Mirrors the server's SPAWNING_INTENTS; see the note at its only use. */
 const SPAWNING_INTENTS = new Set(["prompt", "continue", "compact", "regenerate", "steer"]);
 
-function generationChangeFor(event: StructuredGenerationEvent): LiveGenerationChange {
-  const block = event.block && typeof event.block === "object" ? event.block as UnknownRecord : null;
-  const contentIndex = Number.isInteger(event.contentIndex)
-    ? Number(event.contentIndex)
+function generationChangeFor(event: StructuredGenerationEvent | FoldedTurnEvent): LiveGenerationChange {
+  const source = event as unknown as UnknownRecord;
+  const block = source.block && typeof source.block === "object" ? source.block as UnknownRecord : null;
+  const contentIndex = Number.isInteger(source.contentIndex)
+    ? Number(source.contentIndex)
     : Number.isInteger(block?.contentIndex) ? Number(block?.contentIndex) : undefined;
-  const messageId = typeof event.messageId === "string" ? event.messageId : undefined;
-  const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
+  const messageId = typeof source.messageId === "string" ? source.messageId : undefined;
+  const toolCallId = typeof source.toolCallId === "string" ? source.toolCallId : undefined;
   const scope = event.type === "tool_activity" ? "tool"
-    : event.type === "assistant_content" && event.phase === "delta" ? "block"
+    : event.type === "assistant_content" && source.phase === "delta" ? "block"
       : "structural";
   return {
     generationId: String(event.generationId || ""),
@@ -428,7 +429,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   /** The only client owner of assistant generation state and terminal handoff. */
-  const applyGenerationEvent = (event: StructuredGenerationEvent) => {
+  const applyGenerationEvent = (event: StructuredGenerationEvent | FoldedTurnEvent) => {
     if (stopPending && !(event.type === "status" && STOP_TERMINAL_PHASES.has(String(event.phase)))) return;
     if (!live() || live()!.chatId !== selectedId()) return;
     const previous = activeGeneration();
@@ -600,6 +601,10 @@ export function createActiveChat(options: ActiveChatOptions) {
       applyGenerationEvent(event);
       return;
     }
+    // A retry and a failure are part of the turn as well as the chat: they are
+    // folded into the generation the same way the server folds them, and then
+    // handled below for the things that are not the turn.
+    if (isFoldedTurnEvent(event)) applyGenerationEvent(event);
     switch (event.type) {
       case "runtime_state":
         applySnapshot(event);

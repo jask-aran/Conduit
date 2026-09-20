@@ -200,8 +200,13 @@ interface EventBase {
  * - It is never AUTHORITATIVE. `message.close` restates the message in full, so
  *   a delta that never arrives costs a repaint and nothing else. Nothing
  *   downstream may conclude anything from paint that an op does not also say.
- * - It is never NUMBERED. Paint is excluded from the chat's order, so a merged
- *   frame does not look like a hole to a client counting statements.
+ * - It is never NUMBERED IN THE CHAT'S ORDER. Paint is excluded from the log,
+ *   so a merged frame does not look like a hole to a client counting
+ *   statements, and a client asking to be caught up is never caught up on
+ *   paint. It does carry `seq`, the turn-local position both folds order by --
+ *   two different numbers, and only the log's one is a promise about delivery.
+ *   A turn's `seq` says where an event sits among that turn's events; a gap in
+ *   it is expected, because merging and dropping are what make the gaps.
  *
  * An op may do none of those things. It is delivered, in order, exactly once,
  * and losing one leaves the browser holding a transcript the server does not
