@@ -690,6 +690,8 @@ export class TestStreamAdapter extends EventEmitter {
     return resume?.type === "generation_replay" ? resume : replayed;
   }
 
+  setFrameInterval(id, socket, ms) { return this.sessions.setFrameInterval(socket, ms); }
+
   view(record) {
     return {
       ...this.sessions.view(record),

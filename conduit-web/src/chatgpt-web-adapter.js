@@ -305,6 +305,7 @@ export class ChatGptWebAdapter extends EventEmitter {
   replay(id) { return this.runtimeState(this.get(id)); }
   waitForSession() { return Promise.resolve(); }
   attach(id, socket) { return this.sessions.attach(id, socket); }
+  setFrameInterval(id, socket, ms) { return this.sessions.setFrameInterval(socket, ms); }
   view(record) { return this.sessions.view(record); }
   runtimeState(record) { return this.sessions.runtimeState(record); }
   publish(record, event) { return this.sessions.publish(record, event); }

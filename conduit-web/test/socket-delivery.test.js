@@ -10,7 +10,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SocketDelivery, deliveryKey } from "../src/harnesses/socket-delivery.js";
+import { DELIVERY_FLUSH_MS, SocketDelivery, clampFrameMs, deliveryKey } from "../src/harnesses/socket-delivery.js";
 
 const socket = (buffered = 0) => ({ readyState: 1, bufferedAmount: buffered, sent: [],
   send(payload) { this.sent.push(JSON.parse(payload)); } });
@@ -135,4 +135,46 @@ test("only paint is merged", () => {
   assert.equal(deliveryKey({ type: "assistant_content", phase: "final", messageId: "m1" }), null);
   assert.equal(deliveryKey({ type: "transcript_op", op: "message.drop", messageId: "m1" }), null);
   assert.equal(deliveryKey({ type: "status", activity: "working" }), null);
+});
+
+/**
+ * The window was a constant chosen for a 60Hz panel, which is half of what a
+ * 144Hz one draws and twice what some phones do. The browser is the only party
+ * that can see its own refresh, so it measures itself and says so; this is
+ * where what it said takes effect, for that socket and no other.
+ */
+test("a reader paces its own socket, and only its own", async () => {
+  const delivery = new SocketDelivery({ flushMs: 40 });
+  const fast = socket();
+  const untold = socket();
+  assert.equal(delivery.setFrameInterval(fast, 6.9), 7, "rounded to whole milliseconds");
+
+  for (const client of [fast, untold]) delivery.send(client, delta("Once "));
+  // Both are given the leading edge: nothing is ever held back for a window
+  // that has already passed.
+  assert.deepEqual([fast.sent.length, untold.sent.length], [1, 1]);
+
+  delivery.send(fast, delta("upon "));
+  delivery.send(untold, delta("upon "));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  // The reader that said 7ms has its second frame; the one that said nothing is
+  // still inside the window this server assumed for it.
+  assert.equal(fast.sent.length, 2, "paced to the panel that asked for it");
+  assert.equal(untold.sent.length, 1, "the assumption stands for a socket that has not said");
+  // And the assumption is a 60Hz-era number no reader has to accept.
+  assert.ok(DELIVERY_FLUSH_MS >= 4);
+});
+
+test("a frame a reader could not really have is not taken as stated", () => {
+  // Below a 240Hz panel is work the reader's own compositor throws away, and a
+  // throttled tab reporting a second per frame must not pace the stream down
+  // to that. Anything that is not a number leaves the default alone.
+  assert.equal(clampFrameMs(0.5), 4);
+  assert.equal(clampFrameMs(1000), 50);
+  assert.equal(clampFrameMs(16.6), 17);
+  assert.equal(clampFrameMs("soon"), null);
+  assert.equal(clampFrameMs(undefined), null);
+  const delivery = new SocketDelivery();
+  const client = socket();
+  assert.equal(delivery.setFrameInterval(client, "soon"), null);
 });

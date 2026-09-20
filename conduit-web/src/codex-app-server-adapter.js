@@ -1323,6 +1323,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     model: record?.model || "", thinkingLevel: record?.thinkingLevel || "",
   }); }
   attach(id, socket) { return this.sessions.attach(id, socket); }
+  setFrameInterval(id, socket, ms) { return this.sessions.setFrameInterval(socket, ms); }
   view(record) { return this.sessions.view(record); }
   runtimeState(record) { return this.sessions.runtimeState(record); }
   publish(record, event) {

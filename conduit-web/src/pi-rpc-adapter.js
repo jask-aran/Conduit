@@ -313,6 +313,7 @@ export class PiRpcAdapter {
   }
   getCapabilities() { return PI_CAPABILITIES; }
   toClientEvent(event) { return toNeutralPiEvent(event); }
+  setFrameInterval(id, socket, ms) { return this.manager.setFrameInterval(id, socket, ms); }
   listModels(id) { return this.manager.getAvailableModels(id); }
   listCommands(id) { return this.manager.getCommands(id); }
   listAvailableCommands({ cwd, template }) { return this.manager.listAvailableCommands({ cwd, template }); }
