@@ -694,12 +694,13 @@ the bounded diagnostic event ring. The client reduces structured events into
 its Live Response projection; persistence confirmation does not reconstruct
 the live response.
 
-Slow WebSocket clients recover from fresh Resume State, the current runtime
-snapshot, and the latest checkpoint rather than a replay queue. While paused,
-generation, tool, runtime, queue, and host-UI updates are discarded as
-reconstructible; only non-reconstructible diagnostic/notification events are retained in a
-coalesced 32-item/64 KiB budget, after which Conduit closes the socket with
-code 1013.
+Slow WebSocket clients recover from the current runtime snapshot, the server's
+own fold of the running generation, and the chat's log rather than a replay
+queue. Paint is given up first — it is restated in full by the op that closes
+the message or the tool — and the record is delivered whatever the backlog.
+Pi additionally pauses a socket that is too far behind, retaining only
+non-reconstructible notifications in a coalesced 32-item/64 KiB budget, after
+which Conduit closes the socket with code 1013.
 
 Client commands:
 
@@ -712,10 +713,19 @@ Client commands:
 | `regenerate` | `entryId`, optional `model`, `thinkingLevel` | Fork at an entry, apply the composer selection, then resend its recorded prompt |
 | `continue` | — | Experimental hidden-prompt continuation of a stopped response |
 | `extension_ui_response` / `host_ui_response` | `id`, `confirmed` \| `value` \| `cancelled` | Answer a blocking extension UI request |
-| `refresh_context` | — | Request a context-usage refresh via Pi session stats |
+| `refresh_context` | — | Request a context-usage refresh from the backend |
+| `compact` | — | Ask the backend to compact its context |
+| `clear_queue` | — | Discard queued steering and follow-up messages |
+| `interrupt_and_send` | `message`, `attachmentIds[]` | Stop the running turn and send in its place |
+| `resume_log` | `logId`, `since` | Ask for the numbered events this client missed |
+| `frame_interval` | `ms` | State how fast this reader draws, to pace its own socket |
 
-Any other object is forwarded verbatim to Pi's RPC stdin. A failed command
-produces `client_error` with `code` and `message`.
+`resume_log` and `frame_interval` concern one socket and change nothing about
+the chat, so neither joins the ordered command chain. Any other command is
+refused: an unknown `type` is an `invalid_request`, not an escape hatch to the
+backend. A refused command produces `error` with `scope: "request"` and a
+`code`, which belongs to that command and never to a turn that may still be
+running.
 
 ## Voice dictation protocol
 
@@ -873,31 +883,47 @@ either ownership close code automatically. The browser owns VT parsing and
 rendering. Conduit brokers bounded process I/O and closes a slow client with
 code `1013`.
 
-Server events use the backend-neutral vocabulary in
-`docs/chat-backend-contract.md`. Pi and Codex app-server both map into this
-wire contract. `generation_replay` carries the complete current reduced
-generation on reconnect. `runtime_state` carries lifecycle and adapter
-capabilities. Structured events are independent of the capped diagnostic
-event ring.
-Delivery coalesces same-block deltas briefly per socket and flushes before
-message, tool, stop, error, and settlement boundaries. A socket above the
-256 KiB high-water mark stops receiving superseded deltas; when its buffer
-drains, Conduit sends current `generation_resume` before any queued boundaries
-and continues delivery.
-Principal events thereafter:
+Server events use the backend-neutral vocabulary defined by
+`docs/chat-backend-contract.md` and typed in `src/chat-backend-contract.d.ts`.
+All four harnesses — Pi, Codex app-server, ChatGPT Web and the Test stream —
+map into it, and a harness's own words never cross its adapter.
 
-| Event | Fields | Meaning |
-|---|---|---|
-| `generation_replay` | `generationId`, `sequence`, `generation` | Complete active generation on attachment |
-| `runtime_state` | `lifecycle`, `status`, `activity`, `capabilities` | Backend state and supported controls |
-| `status` | `generationId`, `sequence`, `status`, `activity`, `detail` | Generation lifecycle transition |
-| `assistant_content` | `phase`, `generationId`, `sequence`, message and block fields | Assistant start, delta, or final content |
-| `tool_activity` | `phase`, `generationId`, `sequence`, `toolCallId`, tool fields | Generic tool start, update, or completion |
-| `permission_request` / `permission_resolved` | request fields | Backend host interaction |
-| `usage` | usage fields | Optional backend usage data |
-| `queue_state`, `compaction`, `retry` | capability fields | Optional capability state |
-| `session_checkpoint` | chat identity fields | Durable registry checkpoint |
-| `error` | typed error | Backend or client command failure |
+A turn travels on two channels. **The record** is what the browser cannot work
+out for itself: `transcript_op`, `transcript_sync`, `session_checkpoint`,
+`status` carrying a phase, and a runtime-scope `error`. It is ordered,
+delivered exactly once, and numbered in the chat's log. **Paint** is
+`assistant_content` and `tool_activity`: the typewriter, merged per block,
+droppable, never authoritative and never numbered. Dropping paint is safe
+because `message.close` restates the message in full.
+
+| Event | Channel | Fields | Meaning |
+|---|---|---|---|
+| `transcript_op` | record | `op`, `log`, op fields | `message.open` / `message.close` / `message.drop`, `tool.open` / `tool.close` |
+| `status` | record | `generationId`, `phase`, `seq`, `log` | `started`, `running`, `stopping`, `stopped`, `settled`; `running` is not numbered |
+| `error` | record when `scope: "runtime"` | `scope`, `code`, `message` | A failed turn, or with `scope: "request"` a refused command |
+| `transcript_sync` | record | `messages`, `tools`, optional `replace` | A window of the transcript, or the whole of it |
+| `session_checkpoint` | record | chat identity fields | Durable registry checkpoint |
+| `assistant_content` | paint | `phase`, `generationId`, `seq`, message and block fields | Assistant `start`, `delta` or `final` |
+| `tool_activity` | paint | `phase`, `generationId`, `seq`, `toolCallId`, tool fields | Tool `start`, `update` or `end` |
+| `generation_replay` | — | `generationId`, `generation` | The complete reduced generation, on attach |
+| `runtime_state` | — | `session` with capabilities, queue, usage | Backend state and supported controls |
+| `log_state` / `log_reset` | — | `log` | Where the chat's order stands, or that it cannot be resumed |
+| `permission_request` / `permission_resolved` | — | request fields, stated flat | Backend host interaction |
+| `usage`, `queue_state`, `compaction`, `retry` | — | capability fields | Optional capability state |
+
+Delivery merges paint per block and paces it; the record is sent the moment it
+is published, whatever the backlog. The first frame after a quiet moment goes
+out immediately, and only a stream arriving faster than the window is merged
+into it — the window is a rate limit, not a delay. The window is the reader's
+own frame: the browser measures its refresh with `requestAnimationFrame` and
+sends `frame_interval` on connect, which paces that socket alone; until then
+it gets `DELIVERY_FLUSH_MS` (8 ms), and a claim is clamped to 4–50 ms. A
+socket above the 256 KiB high-water mark stops receiving paint and keeps
+receiving the record; Pi additionally pauses such a socket and recovers it by
+restating the running generation.
+
+A client that sees a gap in `log.seq` sends `resume_log` and is either given
+exactly what it missed or told `log_reset` and re-synced from scratch.
 
 The browser does not receive Pi RPC or Codex app-server payloads. Pi-native
 payloads remain available only inside the privileged server adapter.
