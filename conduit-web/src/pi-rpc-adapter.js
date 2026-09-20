@@ -283,6 +283,11 @@ export function normalizePiBackendEvent(event) {
  * a pass through the client's reducer to reach a `break`.
  */
 export function toNeutralPiEvent(event) {
+  // A log replay is already on the far side of Pi's adapter. Its stamp proves
+  // that it came from the neutral chat log rather than directly from Pi.
+  if (event?.log && [
+    "transcript_op", "transcript_sync", "session_checkpoint", "status", "error",
+  ].includes(event.type)) return event;
   const { pi: _pi, ...neutral } = normalizePiBackendEvent(event);
   return neutral.type === "pi_event" ? null : neutral;
 }

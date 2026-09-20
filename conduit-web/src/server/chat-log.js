@@ -41,9 +41,11 @@ import crypto from "node:crypto";
  */
 export const LOGGED_EVENT_TYPES = new Set([
   // What the server has decided about the transcript's shape, said outright.
+  // A cut is `message.drop` and nothing else: `history_truncated` is the older
+  // spelling of the same fact, and numbering both spent two places in the
+  // order on one cut and replayed it twice to a client catching up.
   "transcript_op",
   "transcript_sync",
-  "history_truncated",
   "session_checkpoint",
   // The transitions a turn makes, and the one that ends it badly.
   "status",
@@ -62,7 +64,11 @@ export const LOGGED_STATUS_PHASES = new Set(["started", "stopping", "stopped", "
 
 export const isLoggedEvent = (event) => Boolean(event?.type)
   && LOGGED_EVENT_TYPES.has(event.type)
-  && (event.type !== "status" || LOGGED_STATUS_PHASES.has(event.phase));
+  && (event.type !== "status" || LOGGED_STATUS_PHASES.has(event.phase))
+  // Conduit refusing a command is not a fact about the turn. Numbering one
+  // would put a bad request in the sequence a client rebuilds the transcript
+  // from, and replay it on the next reconnect as though the turn had failed.
+  && (event.type !== "error" || (event.scope || "runtime") === "runtime");
 
 export class ChatLog {
   constructor({ limit = 400 } = {}) {

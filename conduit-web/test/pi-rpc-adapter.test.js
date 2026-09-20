@@ -83,6 +83,12 @@ test("Pi adapter maps required neutral events and retains Pi richness", () => {
   }
 });
 
+test("a neutral Pi log replay is not translated a second time", () => {
+  const event = { type: "status", phase: "settled", generationId: "g1", seq: 4,
+    status: "idle", activity: "idle", detail: null, log: { id: "log-1", seq: 2 } };
+  assert.deepEqual(JSON.parse(serializePiV0(event)), event);
+});
+
 test("Pi adapter delegates the neutral lifecycle to the existing manager", async () => {
   const calls = [];
   const manager = {

@@ -279,6 +279,8 @@ test("a fork cuts the chat at the entry it was given", async () => {
   const forked = await adapter.fork(record.id, { nodeId: "u2" });
   assert.equal(forked.sourceMessage.text, "40t second", "what was asked there, so a regenerate can re-ask it");
   assert.deepEqual(reader.messages().map((message) => message.id), ["u1", reader.messages()[1].id]);
+  assert.equal(adapter.journals.get(record.chatId).filter((event) => event.op === "message.drop").length, 1,
+    "one cut is one record operation");
   // And the history it reports is a tree whose prompts can be forked again.
   const history = await adapter.readHistory({ liveSessionId: record.id });
   assert.equal(history.mode, "tree");

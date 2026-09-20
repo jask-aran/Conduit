@@ -753,8 +753,6 @@ export class TestStreamAdapter extends EventEmitter {
     // for the browser to work out from a shorter transcript.
     this.publish(record, messageDrop({ messageId: nodeId, inclusive: true,
       generationId: record.generation?.id || null }));
-    this.journals.set(record.chatId, (this.journals.get(record.chatId) || [])
-      .concat([messageDrop({ messageId: nodeId, inclusive: true })]));
     return { opaqueSession: record.chatId, text: source.content || "",
       sourceMessage: { id: source.id, text: source.content || "" } };
   }
