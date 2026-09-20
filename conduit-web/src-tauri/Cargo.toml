@@ -1,0 +1,23 @@
+[package]
+name = "conduit-desktop"
+version = "0.2.0"
+description = "Conduit desktop client"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "conduit_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
