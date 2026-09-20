@@ -476,6 +476,16 @@ function App() {
     if (pwaUpdating()) return;
     setPwaUpdating(true);
     try {
+      // The desktop client is one signed artifact rather than a cache a
+      // service worker refreshes, so Update app means the installer. A false
+      // return is the only one that comes back: installing ends in a relaunch.
+      if (desktopShell) {
+        if (!await desktopShell.update()) {
+          setPwaUpdating(false);
+          toast.success("Conduit is up to date");
+        }
+        return;
+      }
       if (!await forcePwaUpdate()) {
         setPwaUpdating(false);
         toast.success("Conduit is up to date");
@@ -1501,9 +1511,11 @@ function App() {
   // one new-chat path however it was asked for.
   onMount(() => {
     if (!desktopShell) return;
-    let stop: (() => void) | undefined;
-    void desktopShell.onNewChat(() => { void createChat(); }).then((unlisten) => { stop = unlisten; });
-    onCleanup(() => stop?.());
+    const stops: Array<() => void> = [];
+    const remember = (unlisten: () => void) => stops.push(unlisten);
+    void desktopShell.onNewChat(() => { void createChat(); }).then(remember);
+    void desktopShell.onCheckForUpdates(() => { void runPwaUpdate(); }).then(remember);
+    onCleanup(() => { for (const stop of stops) stop(); });
   });
 
   onMount(() => {
