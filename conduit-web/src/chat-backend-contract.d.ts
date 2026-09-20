@@ -167,11 +167,46 @@ interface EventBase {
   generationId: string | null;
 }
 
+/**
+ * The two channels a turn is told on, and what each one promises.
+ *
+ * A turn is stated twice, on purpose. `transcript_op` says what the transcript
+ * holds; `assistant_content` and `tool_activity` -- paint -- draw it arriving.
+ * Both are in Conduit's words, translated once by the adapter, and they are not
+ * two versions of the truth: one is the record and the other is the typewriter.
+ *
+ * Statements arrive at message granularity. `message.close` cannot be sent
+ * until the answer is finished, because that is when it is known what the
+ * answer says. Paint is the whole of why a reader watches a turn appear
+ * instead of waiting for a paragraph to land at once.
+ *
+ * What makes the second channel safe to have is that it promises less, and
+ * every part of the server is allowed to rely on it promising less:
+ *
+ * - It may be MERGED. Delivery holds deltas for a frame and concatenates them
+ *   by block, so a harness writing at a thousand tokens a second costs one send
+ *   per frame rather than one per token.
+ * - It may be DROPPED. Past a socket's high-water mark paint is discarded
+ *   rather than queued, because a reader who cannot draw what they already have
+ *   is not helped by being sent more. The server restates the whole in-flight
+ *   generation when that socket recovers, which is what makes dropping safe.
+ * - It is never AUTHORITATIVE. `message.close` restates the message in full, so
+ *   a delta that never arrives costs a repaint and nothing else. Nothing
+ *   downstream may conclude anything from paint that an op does not also say.
+ * - It is never NUMBERED. Paint is excluded from the chat's order, so a merged
+ *   frame does not look like a hole to a client counting statements.
+ *
+ * An op may do none of those things. It is delivered, in order, exactly once,
+ * and losing one leaves the browser holding a transcript the server does not
+ * believe in.
+ */
+
 export type AssistantBlock =
   | { kind: "text"; contentIndex: number; text: string }
   | { kind: "thinking"; contentIndex: number; text: string; redacted: boolean }
   | { kind: "tool_call"; contentIndex: number; toolCallId: string; name: string; input: unknown };
 
+/** Paint: the answer being written. Mergeable, droppable, never the record. */
 export type AssistantContentEvent = EventBase & (
   | { type: "assistant_content"; phase: "start"; seq: number; messageId: string }
   | {
@@ -203,6 +238,7 @@ export type AssistantContentEvent = EventBase & (
   }
 );
 
+/** Paint: a tool running, and its output as it arrives. Same promises. */
 export type ToolActivityEvent = EventBase & {
   type: "tool_activity";
   phase: "start" | "update" | "end";
@@ -335,11 +371,11 @@ export interface RuntimeStateEvent extends EventBase {
 /**
  * What the transcript holds, stated by the adapter.
  *
- * These are the settled record, and the reason the browser does not have to
- * work out what a turn meant from the paint it watched arrive. Paint --
- * `assistant_content`, `tool_activity` -- may be merged or dropped under
- * backpressure; an op may not. A `message.close` restates the message in full,
- * so a dropped delta costs a repaint and nothing else.
+ * This is the record: the other of the two channels described above
+ * `AssistantBlock`, and the reason the browser never has to work out what a
+ * turn meant from the paint it watched arrive. An op is delivered, in order,
+ * exactly once, and it is numbered -- none of the four things paint is allowed
+ * to do apply to one.
  *
  * Every field is stated rather than inferred, including the two the browser
  * used to guess: `answers`, the prompt a message answers, and `interim`,

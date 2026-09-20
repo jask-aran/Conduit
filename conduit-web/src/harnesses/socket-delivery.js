@@ -8,13 +8,14 @@
  * frame's worth of syscalls and a frame's worth of renders where Pi would have
  * put one of each.
  *
- * What makes the simple version correct is a distinction the chat's log already
- * draws. A delta is paint: the message that closes states its whole text, so a
- * delta that never arrives costs a repaint and nothing else. An op is a
- * statement about the transcript's shape, and losing one leaves the browser
- * holding a transcript the server does not believe in. So deltas are merged and
- * may be dropped under pressure, and everything else is sent the moment it is
- * published, backlog or not.
+ * What makes the simple version correct is the contract's own distinction:
+ * paint may be merged and may be dropped, an op may be neither. This is where
+ * two of those four promises are kept -- the other two, "never authoritative"
+ * and "never numbered", are kept by `message.close` restating the message in
+ * full and by the chat log leaving paint out. They are stated once, beside
+ * `AssistantBlock` in `chat-backend-contract.d.ts`. So paint is merged per
+ * frame and given up under pressure, and everything else is sent the moment it
+ * is published, backlog or not.
  *
  * This is deliberately not Pi's implementation. Pi pauses a slow socket and
  * recovers it by restating the running generation, which it can do because it
