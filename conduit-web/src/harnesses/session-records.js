@@ -193,6 +193,9 @@ export class SessionRecords {
     return stamped;
   }
 
+  /** Pace one socket to the reader behind it. See `SocketDelivery`. */
+  setFrameInterval(socket, ms) { return this.delivery.setFrameInterval(socket, ms); }
+
   // A reconnecting browser replays the whole buffer before it sees live events,
   // so the caller can treat attach as "you are now current".
   attach(id, socket) {

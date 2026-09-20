@@ -581,6 +581,13 @@ export function createLiveSessionStream({
       // nothing, so it never joins the ordered command chain or the chat
       // lifecycle. Either the log still holds what it missed, and it is sent
       // exactly that, or it is told to take the transcript again from scratch.
+      // How fast this reader draws, measured by the only party that can see it.
+      // Like a log resume it is about this one socket and changes nothing about
+      // the chat, so it never joins the ordered command chain.
+      if (command.type === "frame_interval") {
+        adapter.setFrameInterval?.(record.id, ws, command.ms);
+        return;
+      }
       if (command.type === "resume_log") {
         const chatLog = logFor(record);
         const missed = chatLog?.since(command.logId, Number(command.since));

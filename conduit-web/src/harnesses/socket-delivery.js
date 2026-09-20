@@ -32,8 +32,26 @@
  * synchronously as it lands -- there is no second coalescing step in the
  * client -- so this number is the whole of the reader's frame budget, and
  * going below a panel's refresh only spends work the compositor never shows.
+ *
+ * It is only the assumption. A browser measures its own refresh and says so on
+ * connect, and `setFrameInterval` replaces this for that one socket.
  */
 export const DELIVERY_FLUSH_MS = 8;
+
+/**
+ * What a reader is allowed to claim its frame is.
+ *
+ * The floor is a 240Hz panel; below that the client is asking for work its own
+ * compositor will throw away. The ceiling keeps a throttled or misreporting tab
+ * from pacing the stream down to a crawl -- and costs it little, because the
+ * first frame after a quiet moment never waits for the window at all.
+ */
+export const MIN_FRAME_MS = 4;
+export const MAX_FRAME_MS = 50;
+
+export const clampFrameMs = (ms) => (Number.isFinite(Number(ms))
+  ? Math.min(MAX_FRAME_MS, Math.max(MIN_FRAME_MS, Math.round(Number(ms))))
+  : null);
 export const SOCKET_HIGH_WATER_MARK = 256 * 1024;
 
 const isOpen = (socket) => socket?.readyState === 1;
@@ -99,7 +117,7 @@ export class SocketDelivery {
   stateFor(socket) {
     let state = this.states.get(socket);
     if (!state) {
-      state = { pending: new Map(), order: [], timer: null, lastFlush: 0 };
+      state = { pending: new Map(), order: [], timer: null, lastFlush: 0, flushMs: this.flushMs };
       this.states.set(socket, state);
     }
     return state;
@@ -121,17 +139,18 @@ export class SocketDelivery {
       else { state.pending.set(key, event); state.order.push(key); }
       if (!state.timer) {
         const since = Date.now() - state.lastFlush;
+        const flushMs = state.flushMs;
         // The first paint after a quiet moment is what the reader is waiting
         // on, and there is nothing yet to merge it with. Holding it bought
         // nothing and cost a frame: at any ordinary token rate the deltas
         // arrive further apart than this window, so every one of them waited
         // and not one of them ever merged. It goes out now, and only a stream
         // arriving faster than a frame is made to wait.
-        if (since >= this.flushMs) { this.flush(socket); return; }
+        if (since >= flushMs) { this.flush(socket); return; }
         // A frame after the last send rather than a frame after this arrival,
         // so a burst keeps one cadence instead of drifting by the gap that
         // preceded it.
-        state.timer = setTimeout(() => this.flush(socket), this.flushMs - since);
+        state.timer = setTimeout(() => this.flush(socket), flushMs - since);
         state.timer.unref?.();
       }
       return;
@@ -143,6 +162,19 @@ export class SocketDelivery {
     // The record is sent whatever the backlog; paint is not.
     if (isPaint(event) && bufferedAmount(socket) > this.highWaterMark) return;
     socket.send(this.serialize(event));
+  }
+
+  /**
+   * Pace this socket to the reader behind it, as that reader measured itself.
+   *
+   * Ignored if it is not a number this side believes: the default stands, which
+   * is what every socket gets until its browser has said anything.
+   */
+  setFrameInterval(socket, ms) {
+    const flushMs = clampFrameMs(ms);
+    if (flushMs === null) return null;
+    this.stateFor(socket).flushMs = flushMs;
+    return flushMs;
   }
 
   flush(socket) {

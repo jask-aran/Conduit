@@ -20,7 +20,7 @@ import { PI_CAPABILITIES } from "./pi-capabilities.js";
 import { PiCommandCatalog } from "./pi-command-catalog.js";
 import { ChatLogs, isLoggedEvent } from "./server/chat-log.js";
 import { normalizePiBackendEvent, toNeutralPiEvent } from "./pi-rpc-adapter.js";
-import { DELIVERY_FLUSH_MS, deliveryKey } from "./harnesses/socket-delivery.js";
+import { DELIVERY_FLUSH_MS, clampFrameMs, deliveryKey } from "./harnesses/socket-delivery.js";
 import { messageIsInterim } from "./active-generation.js";
 
 export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = "", models, template }) {
@@ -1488,7 +1488,7 @@ export class PiManager extends EventEmitter {
     record.clients.add(socket);
     record.delivery.set(socket, {
       pending: new Map(), pendingOrder: [], notifications: new Map(), notificationOrder: [], notificationBytes: 0,
-      lastFlush: 0,
+      lastFlush: 0, flushMs: this.deliveryFlushMs,
       flushTimer: null, recoveryTimer: null, paused: false,
     });
     record.lastClientAt = this.now();
@@ -1698,6 +1698,15 @@ export class PiManager extends EventEmitter {
     state.recoveryTimer.unref?.();
   }
 
+  /** Pace one socket to the reader behind it. See `SocketDelivery`. */
+  setFrameInterval(id, socket, ms) {
+    const state = this.get(id)?.delivery?.get(socket);
+    const flushMs = clampFrameMs(ms);
+    if (!state || flushMs === null) return null;
+    state.flushMs = flushMs;
+    return flushMs;
+  }
+
   flushDelivery(record, socket, state = record.delivery.get(socket)) {
     if (!state || state.paused || !socketIsOpen(socket)) return;
     if (state.flushTimer) clearTimeout(state.flushTimer);
@@ -1734,9 +1743,9 @@ export class PiManager extends EventEmitter {
   scheduleDeliveryFlush(record, socket, state) {
     if (state.flushTimer || state.paused) return;
     const since = Date.now() - (state.lastFlush || 0);
-    if (since >= this.deliveryFlushMs) return this.flushDelivery(record, socket, state);
-    state.flushTimer = setTimeout(() => this.flushDelivery(record, socket, state),
-      this.deliveryFlushMs - since);
+    const flushMs = state.flushMs || this.deliveryFlushMs;
+    if (since >= flushMs) return this.flushDelivery(record, socket, state);
+    state.flushTimer = setTimeout(() => this.flushDelivery(record, socket, state), flushMs - since);
     state.flushTimer.unref?.();
   }
 

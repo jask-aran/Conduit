@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import { webSocketUrl } from "../api/transport";
 import type { LiveRecord, TranscriptDetail } from "../api/contracts";
 import type { RuntimeStore } from "./runtime";
+import { frameIntervalMs } from "../frame-interval";
 
 /** What a caller can say about the agent it needs. */
 export interface AgentRequest {
@@ -114,6 +115,17 @@ export function createAgentSession(deps: {
       if (socket !== next || era !== epoch || deps.chatId() !== chatId) return;
       deps.onEvent(String(data), chatId);
     };
+    // Tell the server how fast this reader can actually draw, so paint is paced
+    // to the panel in front of someone rather than to a constant chosen for a
+    // 60Hz one. Nothing depends on it arriving: the server keeps its own
+    // default until it hears otherwise, and clamps whatever it is told.
+    next.addEventListener("open", () => {
+      if (socket !== next) return;
+      void frameIntervalMs().then((ms) => {
+        if (socket !== next || next.readyState !== WebSocket.OPEN) return;
+        try { next.send(JSON.stringify({ type: "frame_interval", ms })); } catch { /* paced by the default */ }
+      });
+    });
     next.addEventListener("close", () => {
       if (socket !== next) return;
       socket = null;
