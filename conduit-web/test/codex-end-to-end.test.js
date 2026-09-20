@@ -59,7 +59,7 @@ test("a Codex turn reaches the browser as prompt, trace and answer", async (t) =
   t.after(() => harness.stop());
   const { stream } = await codexChat(harness);
 
-  const settled = stream.next((event) => event.type === "status" && event.detail === "settled", 10_000);
+  const settled = stream.next((event) => event.type === "status" && event.phase === "settled", 10_000);
   stream.socket.send(JSON.stringify({ type: "prompt", message: "Fix the build" }));
   await settled;
   stream.close();
@@ -79,7 +79,7 @@ test("the server states the order, and a second turn does not disturb the first"
   t.after(() => harness.stop());
   const { stream } = await codexChat(harness);
 
-  const settledCount = () => stream.messages.filter((event) => event.type === "status" && event.detail === "settled").length;
+  const settledCount = () => stream.messages.filter((event) => event.type === "status" && event.phase === "settled").length;
   for (const [index, message] of ["short first", "short second"].entries()) {
     stream.socket.send(JSON.stringify({ type: "prompt", message }));
     await waitFor(() => settledCount() > index, `turn ${index + 1} never settled`);

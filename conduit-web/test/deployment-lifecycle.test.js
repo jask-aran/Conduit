@@ -36,7 +36,7 @@ test("health identifies the release and SIGTERM drains resident Pi", async () =>
     await waitFor(async () => (await (await harness.request("/healthz")).json()).activeGenerations === 1,
       "Health did not report the active generation");
     await harness.pi.emit({ type: "agent_settled" }, { pid: prompt.pid });
-    await stream.next((event) => event.type === "status" && event.detail === "settled");
+    await stream.next((event) => event.type === "status" && event.phase === "settled");
     stream.close();
 
     const stopped = await harness.terminate();

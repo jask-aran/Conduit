@@ -188,11 +188,11 @@ export async function runDeterministicStreamingScenario(scenario) {
     }, { pid: promptCommand.pid });
     await harness.pi.emit({ type: "agent_end", willRetry: false }, { pid: promptCommand.pid });
     await harness.pi.emit({ type: "agent_settled" }, { pid: promptCommand.pid });
-    await stream.next((event) => event.type === "status" && event.detail === "settled", 5_000);
+    await stream.next((event) => event.type === "status" && event.phase === "settled", 5_000);
 
     const deltaFrames = stream.frames.filter(({ event }) => event.type === "assistant_content" && event.phase === "delta");
     const firstDeltaAt = deltaFrames[0]?.receivedAt;
-    const completionFrame = stream.frames.find(({ event }) => event.type === "status" && event.detail === "settled");
+    const completionFrame = stream.frames.find(({ event }) => event.type === "status" && event.phase === "settled");
     const deliveredText = deltaFrames.map(({ event }) => event.delta).join("");
     const completionMs = (completionFrame?.receivedAt ?? performance.now()) - promptStarted;
     const sourceCharacters = finalText.length;

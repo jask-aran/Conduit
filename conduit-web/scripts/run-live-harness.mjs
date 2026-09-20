@@ -203,7 +203,11 @@ async function runLiveMeasurement(configuration, prompt) {
       }
       deltas.push({ receivedAt, characters: delta.length });
     }
-    if (event.type === "status" && event.detail === "settled"
+    // The transition is stated in `phase`. It used to be read out of `detail`,
+    // which carried Pi's own event name until the day that field stopped
+    // smuggling one -- so against a current server this never fired and the
+    // harness waited out its timeout on every run.
+    if (event.type === "status" && event.phase === "settled"
       && (!generationId || event.generationId === generationId)) {
       completionAt = receivedAt;
       settled = true;
