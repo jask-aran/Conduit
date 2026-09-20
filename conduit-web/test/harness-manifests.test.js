@@ -131,7 +131,9 @@ test("session records index, broadcast and replay to a late socket", () => {
   records.publish(record, { type: "status", status: "working" });
   const state = records.attach("live-1", open);
   assert.deepEqual(sent.map((event) => event.type), ["status"], "a late socket replays the buffer");
-  assert.equal(state.type, "runtime_state");
+  // The stream sends the catch-up frame itself, from the adapter's view, so
+  // attach does not return a thinner second one for it to send first.
+  assert.equal(state, null);
   records.publish(record, { type: "status", status: "idle" });
   assert.equal(sent.length, 2, "an attached socket receives live events");
 

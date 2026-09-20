@@ -175,6 +175,11 @@ export class SessionRecords {
     // through the merge: a browser that has just arrived has nothing to merge
     // into, and the buffer is already bounded.
     for (const event of record.events) if (socket.readyState === 1) socket.send(this.delivery.serialize(event));
-    return this.runtimeState(record);
+    // Nothing: the stream sends the full catch-up frame immediately after this
+    // returns, built from the adapter's view. Returning a second, thinner
+    // `runtime_state` here meant every attach sent two of them, the first a
+    // strict subset of the second -- and that lean form was the only reason
+    // the browser had to understand two shapes of this event.
+    return null;
   }
 }

@@ -143,13 +143,24 @@ export function normalizePiBackendEvent(event) {
     }
     case "extension_ui_resolved":
       return { ...base, type: "permission_resolved", requestId: event.requestId };
+    // Everything the frame was given, plus the three the contract derives.
+    //
+    // This returned the derived three and nothing else, which threw away what
+    // the frame is for. The catch-up sent on attach is built from
+    // `adapter.view(record)` and carries the pending approvals, the queue and
+    // the usage counters; the three harnesses whose `toClientEvent` is identity
+    // deliver all of it, and Pi's -- the only one that rewrites the event --
+    // dropped every field but four. So reconnecting to a Pi chat lost the
+    // context bar until the next turn, lost the queued messages, and left a
+    // confirmation Pi was waiting on undrawn.
     case "runtime_state": {
-      const session = event.session;
-      const activity = session.activity || "idle";
+      const { type: _type, pi: _raw, log: _log, generationId: _generation, ...state } = event;
+      const activity = state.session?.activity || "idle";
       const status = activity === "failed" ? "failed" : activity === "stopping" ? "stopping"
         : activity === "idle" ? "idle" : "working";
-      return { ...base, type: "runtime_state", status, activity,
-        lifecycle: session.status === "stopped" ? "closed" : session.status === "starting" ? "restoring" : status,
+      return { ...base, type: "runtime_state", ...state, status, activity,
+        lifecycle: state.session?.status === "stopped" ? "closed"
+          : state.session?.status === "starting" ? "restoring" : status,
         capabilities: PI_CAPABILITIES };
     }
     case "generation_resume":

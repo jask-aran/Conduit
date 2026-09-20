@@ -294,12 +294,10 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
       return stamp ? { type: "log_state", generationId, log: stamp } : { type: "unknown", sourceType, generationId };
     }
     case "log_reset": return { type: "log_reset", generationId };
+    // One shape. There used to be a second, rebuilt from `lifecycle` when the
+    // event carried no session, for the thinner frame three adapters returned
+    // from `attach` on top of the one the stream sends anyway.
     case "runtime_state": {
-      if (!Object.keys(record(source.session)).length && source.lifecycle) {
-        const active = source.lifecycle === "working" || source.status === "working";
-        const session = sessionSnapshot({ active, stopping: source.status === "stopping", generation: generationId ? { id: generationId, closed: !active, settled: !active } : null, capabilities: source.capabilities });
-        return { type: "runtime_state", generationId, session, contextUsage: null, sessionStats: null, cacheStats: null, queue: null, hostUiRequests: null };
-      }
       const requests = source.hostUiRequests === undefined ? null : list(source.hostUiRequests).map(normalizeHostUiRequest).filter((item): item is HostUiRequest => Boolean(item));
       return { type: "runtime_state", generationId, session: sessionSnapshot(source.session), contextUsage: contextUsage(source.contextUsage), sessionStats: sessionStats(source.sessionStats), cacheStats: cacheStats(source.cacheStats), queue: queue(source.queue), hostUiRequests: requests };
     }
