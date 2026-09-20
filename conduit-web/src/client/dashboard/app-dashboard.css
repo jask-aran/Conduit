@@ -90,7 +90,7 @@
   .computer-explorer-toolbar select { display: none; }
 }
 @media (--conduit-mobile-layout) {
-  .computer-dashboard { padding: calc(45px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 6px 6px; }
+  .computer-dashboard { padding: 6px; }
   .computer-explorer { grid-template-columns: 1fr; }
   .computer-explorer-sidebar { display: none; }
   .computer-sidebar-resize { display: none; }
