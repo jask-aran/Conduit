@@ -106,8 +106,27 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<DesktopShellSettings>("set_desktop_settings", { settings });
   },
+  /**
+   * The whole update, shell and client together: they are one artifact, so
+   * there is no version of Conduit where half of it has been replaced. Returns
+   * false when there was nothing to install; a true return is followed by a
+   * relaunch, so nothing after it runs.
+   */
+  async update(): Promise<boolean> {
+    const { check } = await import("@tauri-apps/plugin-updater");
+    const pending = await check();
+    if (!pending) return false;
+    await pending.downloadAndInstall();
+    const { relaunch } = await import("@tauri-apps/plugin-process");
+    await relaunch();
+    return true;
+  },
   async onNewChat(handler: () => void): Promise<() => void> {
     const { listen } = await import("@tauri-apps/api/event");
     return listen("desktop://new-chat", () => handler());
+  },
+  async onCheckForUpdates(handler: () => void): Promise<() => void> {
+    const { listen } = await import("@tauri-apps/api/event");
+    return listen("desktop://check-for-updates", () => handler());
   },
 };

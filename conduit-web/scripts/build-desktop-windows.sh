@@ -24,10 +24,22 @@ if [ ! -x "$cargo_tauri" ]; then
   exit 1
 fi
 
+# The updater artifact is signed here, with a key that never enters the repo:
+# the public half is in tauri.conf.json, and an installed client refuses an
+# update that the matching private half did not sign.
+key_path=${CONDUIT_UPDATER_KEY:-"$HOME/.conduit/conduit-updater.key"}
+if [ ! -f "$key_path" ]; then
+  echo "No updater signing key at $key_path." >&2
+  echo "Generate one with: npx tauri signer generate -w \"$key_path\"" >&2
+  echo "It must stay outside the repository, and CI reads it from a secret." >&2
+  exit 1
+fi
+signing_key=$(tr -d '\r\n' < "$key_path")
+
 npm run build
 
 project=$(wslpath -w "$PWD/src-tauri")
-powershell.exe -NoProfile -Command "\$env:CARGO_TARGET_DIR='$target_dir'; Set-Location '$project'; & '$(wslpath -w "$cargo_tauri")' build --config tauri.prebuilt.conf.json ${*:-}"
+powershell.exe -NoProfile -Command "\$env:CARGO_TARGET_DIR='$target_dir'; \$env:TAURI_SIGNING_PRIVATE_KEY='$signing_key'; \$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD='${CONDUIT_UPDATER_KEY_PASSWORD:-}'; Set-Location '$project'; & '$(wslpath -w "$cargo_tauri")' build --config tauri.prebuilt.conf.json ${*:-}"
 
 echo
 echo "Installer:"

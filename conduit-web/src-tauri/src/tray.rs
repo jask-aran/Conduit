@@ -1,5 +1,5 @@
 //! The tray is functional chrome, not a second way to navigate Conduit: four
-//! actions, and the two that mean something inside the app are handed to the
+//! actions, and the ones that mean something inside the app are handed to the
 //! client's own command registry rather than reimplemented here.
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -8,13 +8,15 @@ use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 /// What the client listens for. One event, one payload-free command name.
 pub const NEW_CHAT_EVENT: &str = "desktop://new-chat";
+pub const CHECK_FOR_UPDATES_EVENT: &str = "desktop://check-for-updates";
 
 pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Open Conduit", true, None::<&str>)?;
     let new_chat = MenuItem::with_id(app, "new-chat", "New chat", true, None::<&str>)?;
+    let updates = MenuItem::with_id(app, "check-for-updates", "Check for updates", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &new_chat, &separator, &quit])?;
+    let menu = Menu::with_items(app, &[&open, &new_chat, &updates, &separator, &quit])?;
 
     TrayIconBuilder::with_id("conduit")
         .icon(app.default_window_icon().cloned().expect("the bundle ships a window icon"))
@@ -28,6 +30,12 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
             "new-chat" => {
                 reveal(app);
                 let _ = app.emit(NEW_CHAT_EVENT, ());
+            }
+            // The window comes back first: an update that reports its result
+            // into a hidden window has reported it to nobody.
+            "check-for-updates" => {
+                reveal(app);
+                let _ = app.emit(CHECK_FOR_UPDATES_EVENT, ());
             }
             // The only way out when the close button hides: unregister nothing
             // yet, but end the process rather than leaving a hidden window.

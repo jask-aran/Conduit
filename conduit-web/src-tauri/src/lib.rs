@@ -25,6 +25,10 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             tray::reveal(app);
         }))
+        // Updating is the client's command; the shell only supplies the
+        // verified channel it runs through.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![HIDDEN_LAUNCH_ARG]),
