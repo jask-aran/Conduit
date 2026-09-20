@@ -167,9 +167,12 @@ test("carries adapter events into the reducer under the names the contract gave 
   assert.equal(delta.phase, "delta");
   assert.equal(delta.seq, 2);
   assert.equal(delta.delta, "hello");
+  // The session view is the event, not a summary the browser rebuilds from a
+  // `lifecycle` string. There is one shape now; the thin one existed for a
+  // second frame that attach no longer sends.
   const state = normalizeLiveEvent({
     type: "runtime_state", generationId: null, lifecycle: "idle", status: "idle", activity: "idle",
-    capabilities: { steer: false, replay: true },
+    session: { active: false, capabilities: { steer: false, replay: true } },
   });
   assert.equal(state.type, "runtime_state");
   assert.equal(state.session.capabilities.steer, false);

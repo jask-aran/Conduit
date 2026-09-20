@@ -309,12 +309,27 @@ export interface SessionCheckpointEvent extends EventBase {
   type: "session_checkpoint";
 }
 
+/**
+ * Where the session stands, and everything a browser arriving late has missed.
+ *
+ * The first three are derived and always present. The rest are the catch-up:
+ * the approvals the harness is waiting on, what is queued behind the current
+ * turn, and the counters the composer draws. They were flowing undeclared --
+ * three adapters passed them through and the fourth, being the only one that
+ * rewrites the event, dropped them.
+ */
 export interface RuntimeStateEvent extends EventBase {
   type: "runtime_state";
   lifecycle: ChatLifecycleState;
   status: ChatStatus;
   activity: ChatActivity;
   capabilities: ChatCapabilities;
+  session?: unknown;
+  hostUiRequests?: unknown[];
+  queue?: { steering: unknown[]; followUp: unknown[] };
+  contextUsage?: unknown | null;
+  sessionStats?: unknown | null;
+  cacheStats?: unknown | null;
 }
 
 /**

@@ -117,6 +117,36 @@ test("backend registry resolves persisted Pi identity without compatibility shim
   assert.throws(() => registry.forChat({ backend: { protocol: "acp", implementation: "codex" } }), { code: "backend_unavailable" });
 });
 
+test("the frame a reconnecting browser is caught up by keeps what it missed", () => {
+  // Built by the stream from `adapter.view(record)` and sent on every attach.
+  // Pi's is the only adapter that rewrites this event, and it used to return
+  // four derived fields and drop the rest -- so reconnecting to a Pi chat lost
+  // the context bar, lost what was queued, and left a confirmation the harness
+  // was waiting on undrawn, while the same reconnect on Codex kept all three.
+  const view = {
+    status: "running", activity: "waiting_for_user", active: true,
+    hostUiRequests: [{ id: "r1", kind: "confirm", title: "Allow rm -rf?" }],
+    queue: { steering: ["do this next"], followUp: [] },
+    contextUsage: { tokens: 4000, contextWindow: 128000 },
+    sessionStats: { totalMessages: 12 }, cacheStats: { cacheHits: 9 },
+  };
+  const frame = JSON.parse(serializePiV0({ type: "runtime_state", session: view,
+    hostUiRequests: view.hostUiRequests, queue: view.queue, contextUsage: view.contextUsage,
+    sessionStats: view.sessionStats, cacheStats: view.cacheStats }));
+
+  assert.deepEqual(frame.hostUiRequests, view.hostUiRequests);
+  assert.deepEqual(frame.queue, view.queue);
+  assert.deepEqual(frame.contextUsage, view.contextUsage);
+  assert.deepEqual(frame.sessionStats, view.sessionStats);
+  assert.deepEqual(frame.cacheStats, view.cacheStats);
+  assert.deepEqual(frame.session, view, "the whole view, not a summary of it");
+  // And still derives the three the contract states.
+  assert.equal(frame.activity, "waiting_for_user");
+  assert.equal(frame.status, "working");
+  assert.equal(frame.lifecycle, "working");
+  assert.equal(frame.capabilities.approvals, true);
+});
+
 test("what leaves for the browser is the contract, on every path out", () => {
   // Two ways out, and only one of them was mapping. These assert the wire, not
   // the manager's event bus: the bus was already right both times, which is how
