@@ -76,6 +76,29 @@ test("a socket that has stopped keeping up is given paint to drop, not queue", a
   assert.deepEqual(client.sent.map((event) => event.op), ["message.close"]);
 });
 
+test("paint that cannot be merged is dropped by the same rule", async () => {
+  // Only a delta and a tool's partial output can be merged, so these four went
+  // out through the unmerged path -- which had no high-water test at all. A
+  // turn calling tools put a start and an end on a socket for every one of
+  // them, however far behind it was. Each is restated by the op that closes
+  // the message or the tool.
+  const delivery = new SocketDelivery({ highWaterMark: 100 });
+  const client = socket(4096);
+  for (const event of [
+    { type: "assistant_content", phase: "start", generationId: "g1", messageId: "m1" },
+    { type: "tool_activity", phase: "start", generationId: "g1", toolCallId: "t1", name: "read" },
+    { type: "tool_activity", phase: "end", generationId: "g1", toolCallId: "t1", output: "..." },
+    { type: "assistant_content", phase: "final", generationId: "g1", messageId: "m1", blocks: [] },
+  ]) delivery.send(client, event);
+  await frame();
+  assert.deepEqual(client.sent, [], "every phase of paint is droppable");
+
+  // A transition is not paint: a client that misses one has a hole in the
+  // chat's order, which is what `status` being numbered is for.
+  delivery.send(client, { type: "status", phase: "settled", generationId: "g1", seq: 9 });
+  assert.deepEqual(client.sent.map((event) => event.phase), ["settled"]);
+});
+
 test("one event is serialized once however many browsers are reading", () => {
   const delivery = new SocketDelivery();
   const event = { type: "transcript_op", op: "message.open", message: { id: "m1", role: "user" } };

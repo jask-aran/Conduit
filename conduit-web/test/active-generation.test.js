@@ -11,7 +11,7 @@ import {
 import { createPiEventNormalizer } from "../src/pi-event-normalizer.js";
 import { createClientActiveGenerationStore } from "../src/client/state/active-generation-store.js";
 import { serializePiV0 } from "../src/pi-rpc-adapter.js";
-import { normalizeLiveEvent } from "../src/client/api/live-events.ts";
+import { isFoldedTurnEvent, isStructuredGenerationEvent, normalizeLiveEvent } from "../src/client/api/live-events.ts";
 import {
   persistedTextBeforeToolUse,
   piRpcGenerationFixtures,
@@ -75,6 +75,19 @@ const wireSplit = (name) => normalizedFixture(name)
   .slice(0, piRpcGenerationFixtures[name].resumeAfter)
   .filter((event) => serializePiV0(event) !== null).length;
 
+/**
+ * What the browser's router would do with this event.
+ *
+ * The comparison below feeds the client's fold directly, which is one step
+ * short of the browser: `active-chat` decides what reaches that fold, and for a
+ * while it decided that a retry and a failure did not -- both folds had a case
+ * for them and nothing could ever reach it, so the browser's copy of a turn
+ * carried `retry: null` through a retry the server's copy had on. Every event
+ * this test folds is asserted routable, so the two cannot come apart again
+ * without a failure here.
+ */
+const routedToTheFold = (event) => isStructuredGenerationEvent(event) || isFoldedTurnEvent(event);
+
 function clientFixture(name, generationId = `g_${name}`) {
   const events = wireFixture(name, generationId);
   const client = createClientActiveGenerationStore();
@@ -83,7 +96,12 @@ function clientFixture(name, generationId = `g_${name}`) {
   // implementations of one reducer -- plain data for the server, fine-grained
   // for the browser -- given identical input, must agree about the turn.
   events.forEach((event) => {
+    const before = shared;
     shared = reduceActiveGeneration(shared, event);
+    if (shared !== before) {
+      assert.ok(routedToTheFold(event),
+        `${name}: ${event.type} changes the turn but the browser would not fold it`);
+    }
     client.apply(event);
     assert.deepEqual(client.snapshot(), shared, `${name} diverged at seq ${event.seq} (${event.type})`);
   });
