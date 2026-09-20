@@ -301,6 +301,7 @@ export class TestStreamAdapter extends EventEmitter {
       approvals: approvalFromPrompt(message),
       attachments: attachmentSummary(options?.attachments || []),
       sent: 0,
+      userMessages: 1,
       messageId: null,
       text: "",
       blocks: [],
@@ -472,9 +473,13 @@ export class TestStreamAdapter extends EventEmitter {
     record.activity = record.active ? "working" : "idle";
     this.publishState(record);
     if (!pending || pending.requestId !== requestId || !record.turn) return null;
+    // A permission prompt fails closed, the same as the real harnesses: only an
+    // explicit approval runs the step, so an ambiguous or unrecognised response
+    // refuses rather than letting this backend vouch for behaviour the real one
+    // would have denied.
     const approved = response.cancelled || response.dismissed ? false
       : typeof response.confirmed === "boolean" ? response.confirmed
-        : String(response.value || "").toLowerCase() !== "no";
+        : ["yes", "approve"].includes(String(response.value ?? "").toLowerCase());
     if (!approved) {
       // Refused: the turn says so and stops, which is the shape a refusal takes
       // on a real harness -- the model is told, and there is nothing else to do
@@ -499,6 +504,7 @@ export class TestStreamAdapter extends EventEmitter {
     const turn = record.turn;
     if (!turn || !record.queue.steering.length) return false;
     const queued = record.queue.steering.shift();
+    turn.userMessages = (turn.userMessages || 1) + 1;
     this.closeAnswer(record, "toolUse");
     this.publish(record, messageOpen({ id: queued.messageId, role: "user",
       generationId: turn.generationId, content: queued.message, timestamp: new Date().toISOString() }));
@@ -527,13 +533,17 @@ export class TestStreamAdapter extends EventEmitter {
   async clearQueue(id) {
     const record = this.get(id);
     if (!record) throw adapterError("No test stream session", "backend_unavailable", 404);
-    const taken = [...record.queue.steering, ...record.queue.followUp];
+    const { steering, followUp } = record.queue;
+    const taken = [...steering, ...followUp];
     record.queue = { steering: [], followUp: [] };
     this.publishQueue(record);
     return {
-      steering: taken.map((item) => item.message),
-      followUp: [],
-      discardedAttachmentIdentities: [],
+      steering: steering.map((item) => item.message),
+      followUp: followUp.map((item) => item.message),
+      // The identity is the one handed back when the message was queued, so a
+      // cleared message releases the attachments it was holding.
+      discardedAttachmentIdentities: taken.filter((item) => item.attachments.length)
+        .map((item) => ({ afterMessageId: item.messageId, ordinal: 0 })),
       discardedMessageIds: taken.map((item) => item.messageId),
     };
   }
@@ -573,7 +583,10 @@ export class TestStreamAdapter extends EventEmitter {
     record.active = false;
     record.stopping = false;
     record.activity = "idle";
-    record.messages += 2;
+    // One user message for the prompt, one more for every steer taken mid-turn,
+    // and one assistant message per answer opened -- a turn that called a tool
+    // opened more than one.
+    record.messages += (turn.userMessages || 1) + (turn.messages || 1);
     record.pendingApproval = null;
     record.hostUiRequests = [];
     Object.assign(record.generation, { closed: true, settled: true });
