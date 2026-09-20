@@ -23,7 +23,17 @@
  * grow one to share the code. The rule above needs neither.
  */
 
-export const DELIVERY_FLUSH_MS = 16;
+/**
+ * How long paint may be held back to be merged with what follows it.
+ *
+ * A frame, and the frame is the reader's, not a convention: 16ms was 60Hz and
+ * a 144Hz panel draws twice in that window, so half of what the socket could
+ * have shown was already stale when it arrived. The browser applies a frame
+ * synchronously as it lands -- there is no second coalescing step in the
+ * client -- so this number is the whole of the reader's frame budget, and
+ * going below a panel's refresh only spends work the compositor never shows.
+ */
+export const DELIVERY_FLUSH_MS = 8;
 export const SOCKET_HIGH_WATER_MARK = 256 * 1024;
 
 const isOpen = (socket) => socket?.readyState === 1;
@@ -89,7 +99,7 @@ export class SocketDelivery {
   stateFor(socket) {
     let state = this.states.get(socket);
     if (!state) {
-      state = { pending: new Map(), order: [], timer: null };
+      state = { pending: new Map(), order: [], timer: null, lastFlush: 0 };
       this.states.set(socket, state);
     }
     return state;
@@ -110,7 +120,18 @@ export class SocketDelivery {
       if (previous) state.pending.set(key, mergeDelivery(previous, event));
       else { state.pending.set(key, event); state.order.push(key); }
       if (!state.timer) {
-        state.timer = setTimeout(() => this.flush(socket), this.flushMs);
+        const since = Date.now() - state.lastFlush;
+        // The first paint after a quiet moment is what the reader is waiting
+        // on, and there is nothing yet to merge it with. Holding it bought
+        // nothing and cost a frame: at any ordinary token rate the deltas
+        // arrive further apart than this window, so every one of them waited
+        // and not one of them ever merged. It goes out now, and only a stream
+        // arriving faster than a frame is made to wait.
+        if (since >= this.flushMs) { this.flush(socket); return; }
+        // A frame after the last send rather than a frame after this arrival,
+        // so a burst keeps one cadence instead of drifting by the gap that
+        // preceded it.
+        state.timer = setTimeout(() => this.flush(socket), this.flushMs - since);
         state.timer.unref?.();
       }
       return;
@@ -129,6 +150,7 @@ export class SocketDelivery {
     if (!state) return;
     if (state.timer) clearTimeout(state.timer);
     state.timer = null;
+    state.lastFlush = Date.now();
     const pending = state.order.map((key) => state.pending.get(key)).filter(Boolean);
     state.pending.clear();
     state.order = [];

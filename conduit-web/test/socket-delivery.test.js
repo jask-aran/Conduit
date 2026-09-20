@@ -22,14 +22,30 @@ const delta = (text, contentIndex = 0) => ({
 
 const frame = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-test("a frame of deltas for one block arrives as one send", async () => {
+/**
+ * The window is a rate limit, not a delay. Holding the first delta bought
+ * nothing -- there was nothing to merge it with -- and cost a frame on every
+ * stream slower than the window, which is every ordinary token rate.
+ */
+test("the first delta goes out now and the rest of the burst arrives as one send", async () => {
   const delivery = new SocketDelivery();
   const client = socket();
   for (const piece of ["Once ", "upon ", "a ", "time."]) delivery.send(client, delta(piece));
-  assert.deepEqual(client.sent, [], "nothing goes out inside the frame");
+  assert.deepEqual(client.sent.map((event) => event.delta), ["Once "], "the reader is not made to wait for it");
   await frame();
-  assert.equal(client.sent.length, 1);
-  assert.equal(client.sent[0].delta, "Once upon a time.");
+  assert.deepEqual(client.sent.map((event) => event.delta), ["Once ", "upon a time."]);
+});
+
+test("a stream slower than the frame is never held back", async () => {
+  const delivery = new SocketDelivery();
+  const client = socket();
+  for (const piece of ["Once ", "upon "]) {
+    delivery.send(client, delta(piece));
+    await frame();
+  }
+  // Two deltas further apart than the window: two sends, neither delayed, and
+  // nothing merged because there was never anything to merge.
+  assert.deepEqual(client.sent.map((event) => event.delta), ["Once ", "upon "]);
 });
 
 test("deltas for different blocks keep their own order", async () => {
@@ -39,8 +55,11 @@ test("deltas for different blocks keep their own order", async () => {
   delivery.send(client, delta("answer", 1));
   delivery.send(client, delta(" more", 0));
   await frame();
+  // The first goes out on the leading edge; the two behind it are one frame,
+  // in the order their blocks were first spoken to. A block's own deltas are
+  // never reordered against each other, which is the whole of the promise.
   assert.deepEqual(client.sent.map((event) => [event.contentIndex, event.delta]),
-    [[0, "thinking more"], [1, "answer"]]);
+    [[0, "thinking"], [1, "answer"], [0, " more"]]);
 });
 
 /**
@@ -55,7 +74,7 @@ test("a statement about the transcript overtakes nothing and waits for nothing",
   delivery.send(client, delta("time."));
   delivery.send(client, { type: "transcript_op", op: "message.close", messageId: "m1" });
   assert.deepEqual(client.sent.map((event) => event.delta ?? event.op),
-    ["Once upon a time.", "message.close"]);
+    ["Once upon a ", "time.", "message.close"]);
 });
 
 /**

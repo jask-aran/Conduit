@@ -20,7 +20,7 @@ import { PI_CAPABILITIES } from "./pi-capabilities.js";
 import { PiCommandCatalog } from "./pi-command-catalog.js";
 import { ChatLogs, isLoggedEvent } from "./server/chat-log.js";
 import { normalizePiBackendEvent, toNeutralPiEvent } from "./pi-rpc-adapter.js";
-import { deliveryKey } from "./harnesses/socket-delivery.js";
+import { DELIVERY_FLUSH_MS, deliveryKey } from "./harnesses/socket-delivery.js";
 import { messageIsInterim } from "./active-generation.js";
 
 export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = "", models, template }) {
@@ -257,7 +257,7 @@ export class PiManager extends EventEmitter {
     idleProcessTtlMs = 120_000,
     reaperIntervalMs = 15_000,
     socketHighWaterMark = 256 * 1024,
-    deliveryFlushMs = 16,
+    deliveryFlushMs = DELIVERY_FLUSH_MS,
     socketRecoveryPollMs = 50,
     deliveryMaxNotifications = 32,
     deliveryMaxNotificationBytes = 64 * 1024,
@@ -286,7 +286,7 @@ export class PiManager extends EventEmitter {
     this.idleProcessTtlMs = Math.max(30_000, Math.trunc(Number(idleProcessTtlMs) || 120_000));
     this.socketHighWaterMark = Math.max(1024, Math.trunc(Number(socketHighWaterMark) || 256 * 1024));
     this.socketLowWaterMark = Math.floor(this.socketHighWaterMark / 2);
-    this.deliveryFlushMs = Math.max(0, Math.trunc(Number(deliveryFlushMs) || 16));
+    this.deliveryFlushMs = Math.max(0, Math.trunc(Number(deliveryFlushMs) || DELIVERY_FLUSH_MS));
     this.socketRecoveryPollMs = Math.max(10, Math.trunc(Number(socketRecoveryPollMs) || 50));
     this.deliveryMaxNotifications = Math.max(1, Math.trunc(Number(deliveryMaxNotifications) || 32));
     this.deliveryMaxNotificationBytes = Math.max(1024, Math.trunc(Number(deliveryMaxNotificationBytes) || 64 * 1024));
@@ -1488,6 +1488,7 @@ export class PiManager extends EventEmitter {
     record.clients.add(socket);
     record.delivery.set(socket, {
       pending: new Map(), pendingOrder: [], notifications: new Map(), notificationOrder: [], notificationBytes: 0,
+      lastFlush: 0,
       flushTimer: null, recoveryTimer: null, paused: false,
     });
     record.lastClientAt = this.now();
@@ -1701,6 +1702,7 @@ export class PiManager extends EventEmitter {
     if (!state || state.paused || !socketIsOpen(socket)) return;
     if (state.flushTimer) clearTimeout(state.flushTimer);
     state.flushTimer = null;
+    state.lastFlush = Date.now();
     if (socketBufferedAmount(socket) > this.socketHighWaterMark) return this.pauseDelivery(record, socket, state);
     const pending = state.pendingOrder.map((key) => state.pending.get(key)).filter(Boolean);
     state.pending.clear();
@@ -1721,9 +1723,20 @@ export class PiManager extends EventEmitter {
     }
   }
 
+  /**
+   * Hold this paint until the frame is up, or send it now if the frame is over.
+   *
+   * The same leading edge `SocketDelivery` keeps: the first frame after a quiet
+   * moment has nothing to merge with, so waiting for the window only made the
+   * reader later. What follows inside the window is merged and goes out on one
+   * cadence measured from the last send, not from this arrival.
+   */
   scheduleDeliveryFlush(record, socket, state) {
     if (state.flushTimer || state.paused) return;
-    state.flushTimer = setTimeout(() => this.flushDelivery(record, socket, state), this.deliveryFlushMs);
+    const since = Date.now() - (state.lastFlush || 0);
+    if (since >= this.deliveryFlushMs) return this.flushDelivery(record, socket, state);
+    state.flushTimer = setTimeout(() => this.flushDelivery(record, socket, state),
+      this.deliveryFlushMs - since);
     state.flushTimer.unref?.();
   }
 
