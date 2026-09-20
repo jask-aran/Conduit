@@ -148,12 +148,15 @@ const STRUCTURED_GENERATION_TYPES = new Set<StructuredGenerationType>(
  * rather than a dropped event. This is a check, not a rebuild: what passes is
  * the event as the server stated it.
  */
+/** The three kinds a block can be, per `AssistantBlock`. */
+const BLOCK_KINDS = new Set(["text", "thinking", "tool_call"]);
 const GENERATION_REQUIREMENTS: Record<string, (source: UnknownRecord) => boolean> = {
   "assistant_content:start": (source) => typeof source.messageId === "string",
   "assistant_content:delta": (source) => typeof source.messageId === "string"
-    && typeof source.delta === "string" && Number.isInteger(source.contentIndex),
+    && typeof source.delta === "string" && Number.isInteger(source.contentIndex)
+    && BLOCK_KINDS.has(text(source.blockKind)),
   "assistant_content:final": (source) => typeof source.messageId === "string" && Array.isArray(source.blocks),
-  "tool_activity:start": (source) => typeof source.toolCallId === "string",
+  "tool_activity:start": (source) => typeof source.toolCallId === "string" && typeof source.name === "string",
   "tool_activity:update": (source) => typeof source.toolCallId === "string",
   "tool_activity:end": (source) => typeof source.toolCallId === "string",
   "generation_replay:": (source) => Boolean(record(source.generation).id),
