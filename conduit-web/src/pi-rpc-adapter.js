@@ -239,11 +239,21 @@ export function normalizePiBackendEvent(event) {
   }
 }
 
-// The single existing browser protocol is a lossless projection of Pi events.
-export function serializePiV0(event) {
+/**
+ * The one translation out of Pi's words, and the only place `pi` is stripped.
+ *
+ * `serializePiV0` and `toClientEvent` each used to spell this out for
+ * themselves, so Pi had two projections that happened to agree. Everything
+ * leaving for a browser -- the publish path, the attach path, a log replay --
+ * goes through this one.
+ */
+export function toNeutralPiEvent(event) {
   const { pi: _pi, ...neutral } = normalizePiBackendEvent(event);
-  return JSON.stringify(neutral);
+  return neutral;
 }
+
+// The single existing browser protocol is a lossless projection of Pi events.
+export const serializePiV0 = (event) => JSON.stringify(toNeutralPiEvent(event));
 
 export class PiRpcAdapter {
   constructor(manager) { this.manager = manager; }
@@ -259,7 +269,7 @@ export class PiRpcAdapter {
     return record ? this.manager.currentGenerationResume(record) : null;
   }
   getCapabilities() { return PI_CAPABILITIES; }
-  toClientEvent(event) { const { pi: _pi, ...neutral } = normalizePiBackendEvent(event); return neutral; }
+  toClientEvent(event) { return toNeutralPiEvent(event); }
   listModels(id) { return this.manager.getAvailableModels(id); }
   listCommands(id) { return this.manager.getCommands(id); }
   listAvailableCommands({ cwd, template }) { return this.manager.listAvailableCommands({ cwd, template }); }
@@ -269,15 +279,13 @@ export class PiRpcAdapter {
   list() { return this.manager.list(); }
   rawRecords() { return this.manager.rawRecords(); }
   waitForSession(id) { return this.manager.waitForSession(id); }
-  attach(id, socket) {
-    const replay = this.manager.attach(id, socket);
-    // Through the same serializer every other event leaves by. Normalizing
-    // without stripping left `pi` on the replay, and the stream sends this one
-    // straight out -- so a reconnect was the single path that put native Pi in
-    // front of the browser, carrying a second copy of the whole generation
-    // snapshot with it.
-    return replay ? this.toClientEvent(replay) : null;
-  }
+  // What a reconnecting browser has to be told before anything live. It is
+  // returned in Pi's words and translated where it is sent, like every other
+  // event: translating it here instead made this the one path whose serializer
+  // lived somewhere else, and before that it was the one path with no
+  // serializer at all -- a reconnect put native Pi in front of the browser,
+  // carrying a second copy of the whole generation snapshot with it.
+  attach(id, socket) { return this.manager.attach(id, socket); }
   queue(id, type, message, options) { return this.manager.queueAccepted(id, type, message, options); }
   clearQueue(id) { return this.manager.clearQueue(id); }
   readTranscript({ liveSessionId, ...options }) { return this.manager.readTranscript(liveSessionId, options); }

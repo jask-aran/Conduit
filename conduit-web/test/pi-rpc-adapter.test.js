@@ -8,6 +8,7 @@ import {
   serializePiV0,
 } from "../src/pi-rpc-adapter.js";
 import { createPiEventNormalizer } from "../src/pi-event-normalizer.js";
+import { sendClientEvent } from "../src/server/live-session-stream.js";
 import { piRpcGenerationFixtures } from "./fixtures/pi-rpc-generations.js";
 
 test("Pi adapter normalization retains every native payload in its privileged envelope", () => {
@@ -118,17 +119,25 @@ test("what leaves for the browser is the contract, on every path out", () => {
     { generationId: null, type: "runtime_exit", deliberate: true });
   assert.equal(JSON.parse(serializePiV0({ ...exit, deliberate: false })).deliberate, false);
 
-  // The replay a reconnecting browser is sent goes out without `toClientEvent`,
-  // so it has to leave the adapter already neutral. It used to carry `pi`,
-  // which on this event is a second copy of the entire generation snapshot.
+  // The replay a reconnecting browser reads first is the path that used to have
+  // no serializer at all, then had one of its own. Asserted here as a frame off
+  // the socket, through the same helper the stream sends everything by, because
+  // that is the only thing that proves it is the same path.
   const generation = { id: "g1", lastSeq: 5, assistantMessages: [{ id: "m1", blocks: [] }] };
   const adapter = new PiRpcAdapter({
     attach: () => ({ type: "generation_resume", generationId: "g1", seq: 5, generation }),
   });
-  const replay = adapter.attach("live", {});
+  const frames = [];
+  const ws = { readyState: 1, send: (payload) => frames.push(JSON.parse(payload)) };
+  assert.equal(sendClientEvent(ws, adapter, adapter.attach("live", ws)), true);
+  const replay = frames[0];
+  // `pi` on this event is a second copy of the entire generation snapshot.
   assert.equal(Object.hasOwn(replay, "pi"), false, "no native payload reaches the browser");
   assert.equal(replay.type, "generation_replay");
   assert.equal(replay.seq, 5);
   assert.deepEqual(replay.generation, generation);
-  assert.equal(adapter.attach("live", {}) && new PiRpcAdapter({ attach: () => null }).attach("live", {}), null);
+  // Nothing to say is nothing sent, so a fresh session does not open with an
+  // empty frame the browser has to recognise and ignore.
+  assert.equal(sendClientEvent(ws, adapter, new PiRpcAdapter({ attach: () => null }).attach("live", ws)), false);
+  assert.equal(frames.length, 1);
 });
