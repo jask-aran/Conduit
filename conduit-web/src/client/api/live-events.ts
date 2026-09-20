@@ -93,7 +93,8 @@ export type LiveEvent = EventBase & (
   | { type: "transcript_op"; op: "message.open"; message: ProtocolMessage; after: string | null;
     answers: string | null }
   | { type: "transcript_op"; op: "message.close"; messageId: string; stopReason: string | null;
-    content: string; blocks: unknown[]; interim: boolean; discarded?: boolean }
+    content: string; blocks: unknown[]; interim: boolean; discarded?: boolean;
+    provider?: string; model?: string; timestamp?: string; errorMessage?: string }
   | { type: "transcript_op"; op: "message.drop"; messageId: string; inclusive: boolean; keep: boolean }
   | { type: "transcript_op"; op: "tool.open"; toolCallId: string; name: string; input: unknown;
     messageId: string | null }
@@ -123,18 +124,40 @@ const TRANSCRIPT_OPS = new Set(["message.open", "message.close", "message.drop",
  * adapter event could be added, reach the browser, change nothing, and look
  * delivered. Rejected here it arrives as `unknown`, which is what it is.
  *
- * `status` with no phase at all is a session report -- Codex saying it is
- * waiting on an approval -- rather than a transition, and is allowed through
- * without one.
+ * A `status` with no phase is not a transition and has no case in either fold,
+ * so it is not one of these. Codex used to send one to report that it was
+ * waiting on an approval; what the session is busy with travels as
+ * `runtime_state`, which the browser has a case for.
  */
 const GENERATION_PHASES: Record<StructuredGenerationType, Set<string> | null> = {
   generation_replay: null,
   assistant_content: new Set(["start", "delta", "final"]),
   tool_activity: new Set(["start", "update", "end"]),
-  status: new Set(["started", "running", "stopping", "stopped", "settled", ""]),
+  status: new Set(["started", "running", "stopping", "stopped", "settled"]),
 };
 const STRUCTURED_GENERATION_TYPES = new Set<StructuredGenerationType>(
   Object.keys(GENERATION_PHASES) as StructuredGenerationType[]);
+
+/**
+ * What each of those events has to carry to be foldable.
+ *
+ * Only the fields both folds read without asking: a delta names the block it is
+ * adding to, a final states the blocks it ended with, a tool event names the
+ * call. A frame missing one of them used to pass through and throw inside the
+ * browser's store -- `event.blocks.map` on an undefined -- which is a crash
+ * rather than a dropped event. This is a check, not a rebuild: what passes is
+ * the event as the server stated it.
+ */
+const GENERATION_REQUIREMENTS: Record<string, (source: UnknownRecord) => boolean> = {
+  "assistant_content:start": (source) => typeof source.messageId === "string",
+  "assistant_content:delta": (source) => typeof source.messageId === "string"
+    && typeof source.delta === "string" && Number.isInteger(source.contentIndex),
+  "assistant_content:final": (source) => typeof source.messageId === "string" && Array.isArray(source.blocks),
+  "tool_activity:start": (source) => typeof source.toolCallId === "string",
+  "tool_activity:update": (source) => typeof source.toolCallId === "string",
+  "tool_activity:end": (source) => typeof source.toolCallId === "string",
+  "generation_replay:": (source) => Boolean(record(source.generation).id),
+};
 
 export function isStructuredGenerationEvent(event: LiveEvent): event is StructuredGenerationEvent {
   return STRUCTURED_GENERATION_TYPES.has(event.type as StructuredGenerationType)
@@ -293,6 +316,8 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
   if (STRUCTURED_GENERATION_TYPES.has(sourceType as StructuredGenerationType) && seq !== undefined) {
     const phases = GENERATION_PHASES[sourceType as StructuredGenerationType];
     if (phases && !phases.has(text(source.phase))) return { type: "unknown", sourceType, generationId };
+    const carries = GENERATION_REQUIREMENTS[`${sourceType}:${text(source.phase)}`];
+    if (carries && !carries(source)) return { type: "unknown", sourceType, generationId };
     return { ...source, type: sourceType as StructuredGenerationType, generationId, seq } as StructuredGenerationEvent;
   }
   switch (sourceType) {
