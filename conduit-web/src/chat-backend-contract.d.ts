@@ -290,6 +290,13 @@ export interface StatusEvent extends EventBase {
   status: ChatStatus;
   activity: ChatActivity;
   detail: string | null;
+  /**
+   * On `started`: the answer this turn is continuing, when it is continuing
+   * one. The transcript shows a continued answer as the one message it is, so
+   * the browser needs the text being continued at the moment the turn opens.
+   */
+  continuation?: boolean;
+  continuationBase?: string;
 }
 
 /** A runtime failure names one of a fixed set of causes. */

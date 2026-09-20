@@ -118,8 +118,14 @@ export function normalizePiBackendEvent(event) {
     // The transition is stated. `detail` used to carry Pi's own event name so
     // the browser could read it back out, which made a free-text field the
     // only record of which of these five had happened.
+    // What the turn is continuing travels with the transition that opens it.
+    // It used to be dropped here, so only the server held it -- and the browser
+    // learned it from the replay a reconnect sends. A reader who stayed
+    // connected watched a continued answer render as the fragment alone,
+    // without the text it continues, until they reloaded.
     case "generation_started":
-      return { ...base, type: "status", phase: "started", seq: event.seq, status: "working", activity: "working", detail: null };
+      return { ...base, type: "status", phase: "started", seq: event.seq, status: "working", activity: "working", detail: null,
+        ...(event.continuation ? { continuation: true, continuationBase: String(event.continuationBase || "") } : {}) };
     case "generation_running":
       return { ...base, type: "status", phase: "running", seq: event.seq, status: "working", activity: "working", detail: null };
     case "generation_stopping":

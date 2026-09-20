@@ -373,6 +373,23 @@ for (const name of ["noThinkingAnswer", "thinkingThenAnswer"]) {
   });
 }
 
+test("a continued answer reaches the browser as the one message it is", () => {
+  // The browser merges the text a turn continues with what the turn writes, so
+  // it needs both at the moment the turn opens. This travelled only in the
+  // server's snapshot, which a client gets on a reconnect and not otherwise --
+  // so staying connected showed the fragment without the answer it continues.
+  const client = createClientActiveGenerationStore();
+  client.apply(overTheWire({ type: "generation_started", generationId: "g_continue", seq: 1,
+    continuation: true, continuationBase: "The story so far" }));
+  assert.equal(client.current().continuation, true);
+  assert.equal(client.current().continuationBase, "The story so far");
+
+  const plain = createClientActiveGenerationStore();
+  plain.apply(overTheWire({ type: "generation_started", generationId: "g_plain", seq: 1 }));
+  assert.equal(plain.current().continuation, false);
+  assert.equal(plain.current().continuationBase, "");
+});
+
 test("client block update benchmark keeps work and references independent of unrelated size", () => {
   const axes = {
     textLength: [1_000, 10_000, 100_000],
