@@ -182,5 +182,12 @@ export class ChatLogs {
     return log;
   }
 
+  /**
+   * The chat's log if it already has one. A read is not a reason to make one:
+   * every opened chat would otherwise leave a log behind for the life of the
+   * process, whether or not it ever streamed.
+   */
+  peek(chatId) { return (chatId && this.logs.get(chatId)) || null; }
+
   forget(chatId) { this.logs.delete(chatId); }
 }

@@ -332,6 +332,42 @@ test("an unknown browser command cannot reach a backend escape hatch", async () 
   });
 });
 
+test("a fresh socket learns the log order before replay", () => {
+  const sent = [];
+  const record = { id: "live-1", chatId: "chat-1", status: "running", hostUiRequests: [] };
+  const adapter = {
+    attach: () => { sent.push({ type: "transcript_op", op: "message.close", log: { id: "log", seq: 7 } }); },
+    view: () => record,
+    toClientEvent: (event) => event,
+    refreshContext: async () => {},
+  };
+  const ws = new EventEmitter();
+  ws.readyState = 1;
+  ws.send = (message) => sent.push(JSON.parse(message));
+  const chatLogs = new ChatLogs();
+  const log = chatLogs.get(record.chatId);
+  for (let index = 0; index < 7; index += 1) log.stamp({ type: "status", phase: "started" });
+  const stream = createLiveSessionStream({
+    manager: {},
+    wss: { handleUpgrade: (_request, _socket, _head, accept) => accept(ws) },
+    attachments: {},
+    registry: { metadata: () => ({ backend: { implementation: "test" } }) },
+    config: {},
+    findChatContext: async () => null,
+    lifecycle,
+    messageIds,
+    chatLogs,
+    backends: { get: () => record, forChat: () => adapter },
+  });
+
+  stream.handleUpgrade(record.id, {}, {}, null);
+
+  assert.deepEqual(sent.slice(0, 2), [
+    { type: "log_state", log: { id: log.id, seq: 0 } },
+    { type: "transcript_op", op: "message.close", log: { id: "log", seq: 7 } },
+  ]);
+});
+
 /**
  * Regenerating re-asks a prompt; it does not replace it.
  *

@@ -148,12 +148,17 @@ export function createLiveSessionStream({
     const adapter = adapterFor(record);
     if (record.ephemeral) return;
     try {
-      const context = await findChatContext(record.chatId);
-      if (!context) return;
-      const projection = await adapter.readTranscript({
-        liveSessionId: record.id, chatId: record.chatId, project: context.project, turns,
-      });
-      if (projection.messages?.length) {
+      for (;;) {
+        const log = replace ? logFor(record) : null;
+        const logSeq = log?.state().seq;
+        const context = await findChatContext(record.chatId);
+        if (!context) return;
+        const projection = await adapter.readTranscript({
+          liveSessionId: record.id, chatId: record.chatId, project: context.project, turns,
+        });
+        if (!replace && !projection.messages?.length) return;
+        projection.messages ||= [];
+        projection.tools ||= [];
         // A window is often the first sight of entries Pi has only just
         // written, so the ids claimed for them are bound here rather than left
         // until the turn checkpoints. Without this the sync an interrupt
@@ -163,7 +168,12 @@ export function createLiveSessionStream({
         projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages, { fromStart: !turns });
         projection.messages = applyMessageIds(projection.messages,
           await messageIds.resolver(context.project, context.chat));
+        // A replacement read outside the event loop can straddle a numbered
+        // transcript change. Retry until the read and its publication share
+        // one log position, or the stale snapshot can erase that newer event.
+        if (log && log.state().seq !== logSeq) continue;
         adapter.publish(record, { type: "transcript_sync", generationId, ...(replace ? { replace: true } : {}), ...projection });
+        return;
       }
     } catch (error) {
       // A sync is a repair, never the only path to correctness.
@@ -523,6 +533,11 @@ export function createLiveSessionStream({
     }
     const adapter = adapterFor(record);
     const send = (event) => sendClientEvent(ws, adapter, event);
+    const log = logFor(record);
+    // Establish the order before replay. A fresh browser starts at zero, so a
+    // retained suffix begins with a visible gap and asks the log for its
+    // missing prefix instead of adopting that suffix as complete.
+    if (log) send({ type: "log_state", log: { ...log.state(), seq: 0 } });
     send(adapter.attach(id, ws));
     if (record.status === "running" && !record.contextUsage?.contextWindow) adapter.refreshContext(record.id).catch(() => {});
     send({
@@ -538,7 +553,6 @@ export function createLiveSessionStream({
     // Where this chat's order stands right now. A client that was here before
     // answers with how far it got, and is either caught up or told to start
     // again from a snapshot; one arriving fresh simply adopts the number.
-    const log = logFor(record);
     if (log) send({ type: "log_state", log: log.state() });
     // A chat can be written to without anyone prompting from here, so naming is
     // set up on attach rather than waiting for the first prompt.

@@ -43,7 +43,7 @@ export function registerSessionRoutes(app, {
    */
   const upToDate = (context, projection, page) => (page?.before
     ? projection
-    : { ...projection, ...applyTranscriptOps(projection, chatLogs?.get(context.chat.id)?.entries || []) });
+    : { ...projection, ...applyTranscriptOps(projection, chatLogs?.peek(context.chat.id)?.entries || []) });
 
   async function transcriptFor(context) {
     if (context.chat.backend?.implementation === "conduit_pi") {
