@@ -48,7 +48,7 @@ function harness() {
     id: "live-1", chatId: "chat-1", sessionId: "thread-1", status: "running", activity: "idle",
     active: false, stopping: false, generation: null, clients: new Set(), events: [],
     pending: new Map(), approvals: new Map(), steering: [], followUp: [], hostUiRequests: [],
-    sequence: 0, eventSequence: 0, messageIds: new Set(),
+    rpcRequestId: 0, generationSeq: 0, messageIds: new Set(),
     child: { stdin: { writable: true, write: (line) => {
       const message = JSON.parse(line);
       sent.push(message);

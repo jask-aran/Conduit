@@ -192,9 +192,13 @@ export function normalizePiBackendEvent(event) {
       return { ...base, type: "log_state", log: event.log };
     case "log_reset":
       return { ...base, type: "log_reset", log: event.log };
+    // A checkpoint says the turn's record on disk is settled, and carries the
+    // chat row and the artifacts the turn wrote. It used to carry a number as
+    // well, spelled `sequence` where the native adapters raised it,
+    // `generationSeq` where Pi's did, and `seq` on the wire -- so it arrived
+    // null for three of the four harnesses, and nothing in the browser read it.
     case "session_checkpoint":
-      return { ...base, type: "session_checkpoint", seq: event.generationSeq ?? null,
-        artifacts: event.artifacts ?? null,
+      return { ...base, type: "session_checkpoint", artifacts: event.artifacts ?? null,
         chatId: event.chat?.id || event.chatId || "", title: event.chat?.title || event.title || null };
     case "queue_update":
       // Pi reports its queue as top-level arrays, not a nested object, so the

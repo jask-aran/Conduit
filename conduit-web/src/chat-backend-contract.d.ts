@@ -304,9 +304,9 @@ export interface UsageEvent extends EventBase {
   cacheStats: unknown | null;
 }
 
+/** The turn's record on disk is settled. Carries the chat row and its artifacts. */
 export interface SessionCheckpointEvent extends EventBase {
   type: "session_checkpoint";
-  seq: number | null;
 }
 
 export interface RuntimeStateEvent extends EventBase {

@@ -116,12 +116,10 @@ test("preserves a checkpoint's durable chat title", () => {
   assert.deepEqual(normalizeLiveEvent({
     type: "session_checkpoint",
     generationId: "g4",
-    generationSeq: 18,
     chat: { id: "chat_1", title: "Tell me a long story" },
   }), {
     type: "session_checkpoint",
     generationId: "g4",
-    generationSeq: 18,
     chatId: "chat_1",
     title: "Tell me a long story",
     // The whole row travels with the checkpoint: the open chat's unread state

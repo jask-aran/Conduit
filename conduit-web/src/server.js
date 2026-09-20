@@ -494,7 +494,6 @@ manager.on("event", ({ record, event }) => {
         record.lastCheckpoint = {
           type: "session_checkpoint",
           generationId: checkpoint.id,
-          generationSeq: checkpoint.seq,
           chat: chatView(registry.metadata(record.chatId)),
           artifacts: applyArtifactMessageIds(artifacts, idFor),
         };
@@ -520,7 +519,7 @@ function checkpointNativeAdapter(adapter, record, completed = true) {
     lastMessageAt: completedAt })
     .then((chat) => {
       record.lastCheckpoint = { type: "session_checkpoint", generationId: record.generation?.id || null,
-        sequence: record.eventSequence, chatId: chat.id, title: chat.title || null };
+        chatId: chat.id, title: chat.title || null };
       adapter.publish(record, record.lastCheckpoint);
       runtimeHub.publish({ type: "chat_changed", chat: chatView(chat), at: completedAt });
     })
@@ -530,7 +529,7 @@ async function applyBackendName(adapter, record, name) {
   if (!await registry.fallbackTitle(record.chatId, name)) return;
   const chat = registry.metadata(record.chatId);
   adapter.publish(record, { type: "session_checkpoint", generationId: record.generation?.id || null,
-    sequence: record.eventSequence, chatId: chat.id, title: chat.title });
+    chatId: chat.id, title: chat.title });
   runtimeHub.publish({ type: "chat_changed", chat: chatView(chat), at: new Date().toISOString() });
 }
 // Every native adapter checkpoints the same way. PiRpcAdapter is not an event
@@ -768,7 +767,6 @@ const liveSessionStream = createLiveSessionStream({
           type: "session_checkpoint",
           chat: chatView(updated),
           generationId: record.generation?.id || null,
-          generationSeq: record.generation?.seq || null,
         });
         runtimeHub.publish({ type: "chat_changed", chat: chatView(updated), at: new Date().toISOString() });
         return "applied";

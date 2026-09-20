@@ -183,7 +183,7 @@ export class TestStreamAdapter extends EventEmitter {
       generation: null,
       clients: new Set(),
       events: [],
-      eventSequence: 0,
+      generationSeq: 0,
       timer: null,
     });
   }
@@ -208,10 +208,10 @@ export class TestStreamAdapter extends EventEmitter {
     this.publish(record, messageOpen({ id: userMessageId, role: "user", generationId,
       content: message, timestamp: new Date().toISOString() }));
     this.publish(record, messageOpen({ id: messageId, role: "assistant", generationId, answers: userMessageId }));
-    this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.eventSequence,
+    this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.generationSeq,
       status: "working", activity: "working", detail: null });
     this.publish(record, { type: "assistant_content", generationId, phase: "start",
-      seq: ++record.eventSequence, messageId });
+      seq: ++record.generationSeq, messageId });
     record.turn = { messageId, generationId, text: "", sent: 0 };
     this.runStream(record);
     return generationId;
@@ -242,7 +242,7 @@ export class TestStreamAdapter extends EventEmitter {
         record.turn.text += delta;
         record.turn.sent += 1;
         this.publish(record, { type: "assistant_content", generationId, phase: "delta",
-          seq: ++record.eventSequence, messageId, contentIndex: 0, blockKind: "text", delta });
+          seq: ++record.generationSeq, messageId, contentIndex: 0, blockKind: "text", delta });
       }
       if (record.turn.sent >= total) { this.finish(record, "stop"); return; }
       record.timer = setTimeout(tick, intervalMs);
@@ -257,14 +257,14 @@ export class TestStreamAdapter extends EventEmitter {
     if (record.timer) { clearTimeout(record.timer); record.timer = null; }
     const blocks = [{ kind: "text", contentIndex: 0, text: turn.text }];
     this.publish(record, { type: "assistant_content", generationId: turn.generationId, phase: "final",
-      seq: ++record.eventSequence, messageId: turn.messageId, stopReason, errorMessage: null, blocks });
+      seq: ++record.generationSeq, messageId: turn.messageId, stopReason, errorMessage: null, blocks });
     this.publish(record, messageClose({ messageId: turn.messageId, stopReason, interim: false,
       generationId: turn.generationId, keepsPartial: TEST_STREAM_CAPABILITIES.interruptKeepsPartial, blocks }));
     record.active = false;
     record.stopping = false;
     record.activity = "idle";
     Object.assign(record.generation, { closed: true, settled: true });
-    this.publish(record, { type: "status", generationId: turn.generationId, seq: ++record.eventSequence,
+    this.publish(record, { type: "status", generationId: turn.generationId, seq: ++record.generationSeq,
       phase: stopReason === "aborted" ? "stopped" : "settled", status: "idle", activity: "idle", detail: null });
     this.emit("settled", { record, completed: stopReason !== "aborted" });
   }
