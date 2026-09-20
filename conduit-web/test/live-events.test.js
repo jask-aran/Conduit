@@ -105,7 +105,11 @@ test("an error states whose fault it was", () => {
     error: { code: "invalid_request", message: "not JSON" },
   });
   assert.deepEqual(rejected, { type: "error", scope: "request", generationId: "g1",
-    code: "invalid_request", message: "not JSON" });
+    code: "invalid_request", message: "not JSON",
+    // The cause travels whole as well: a reducer reading this stream keeps it
+    // on the generation, and reads the code off it rather than off two fields
+    // that have to be kept in step.
+    error: { code: "invalid_request", message: "not JSON" } });
   const failed = normalizeLiveEvent({
     type: "error", generationId: "g1", error: { code: "backend_unavailable", message: "gone" },
   });

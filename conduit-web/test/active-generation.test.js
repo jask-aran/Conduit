@@ -53,22 +53,40 @@ function tree(state) {
  * the wire never did. Anything that stops crossing the wire now shows up here
  * as the two halves disagreeing.
  */
-/** One event as the browser really receives it: serialized out, read back. */
-const overTheWire = (event) => normalizeLiveEvent(JSON.parse(serializePiV0(event)));
+/**
+ * One event as the browser really receives it: serialized out, read back.
+ * Null for an event the browser is not sent at all.
+ */
+const overTheWire = (event) => {
+  const frame = serializePiV0(event);
+  return frame === null ? null : normalizeLiveEvent(JSON.parse(frame));
+};
+
+/** A fixture as it crosses the socket, which is what both reducers now read. */
+const wireFixture = (name, generationId = `g_${name}`) =>
+  normalizedFixture(name, generationId).map(overTheWire).filter(Boolean);
+
+/**
+ * Where a fixture says to disconnect, counted in frames rather than in Pi
+ * events. The fixture names an index into Pi's stream, and not every one of
+ * those reaches a browser.
+ */
+const wireSplit = (name) => normalizedFixture(name)
+  .slice(0, piRpcGenerationFixtures[name].resumeAfter)
+  .filter((event) => serializePiV0(event) !== null).length;
 
 function clientFixture(name, generationId = `g_${name}`) {
-  const events = normalizedFixture(name, generationId);
+  const events = wireFixture(name, generationId);
   const client = createClientActiveGenerationStore();
   let shared = null;
+  // The same object into both. That is the whole assertion: two
+  // implementations of one reducer -- plain data for the server, fine-grained
+  // for the browser -- given identical input, must agree about the turn.
   events.forEach((event) => {
     shared = reduceActiveGeneration(shared, event);
-    client.apply(overTheWire(event));
+    client.apply(event);
+    assert.deepEqual(client.snapshot(), shared, `${name} diverged at seq ${event.seq} (${event.type})`);
   });
-  // Mid-turn the two can differ -- the browser is never sent block-level
-  // start/complete events, so a block is "streaming" there until the message
-  // closes. What the turn settles as must agree exactly, because that is what
-  // the reader is left looking at.
-  assert.deepEqual(client.snapshot(), shared, `${name} settled differently on the wire`);
   return { client, events, shared };
 }
 
@@ -141,7 +159,7 @@ function summarizeBenchmarkSamples(samples) {
 }
 
 test("normalizes Pi block structure with stable generation-local identities", () => {
-  const state = reduceGenerationEvents(normalizedFixture("multipleToolTurns", "g_tools"));
+  const state = reduceGenerationEvents(wireFixture("multipleToolTurns", "g_tools"));
 
   assert.deepEqual(tree(state), [
     {
@@ -174,7 +192,7 @@ test("normalizes Pi block structure with stable generation-local identities", ()
 });
 
 test("classifies provisional answer text exactly once when later tool structure appears", () => {
-  const events = normalizedFixture("textBeforeToolUse", "g_interim");
+  const events = wireFixture("textBeforeToolUse", "g_interim");
   let state = null;
   const observed = [];
   for (const event of events) {
@@ -191,7 +209,7 @@ test("classifies provisional answer text exactly once when later tool structure 
 });
 
 test("live and persisted structures produce identical interim classification", () => {
-  const live = reduceGenerationEvents(normalizedFixture("textBeforeToolUse", "g_same"));
+  const live = reduceGenerationEvents(wireFixture("textBeforeToolUse", "g_same"));
   const persisted = activeGenerationFromPersistedMessages("g_same", persistedTextBeforeToolUse);
 
   assert.deepEqual(textBlockClassifications(live), textBlockClassifications(persisted));
@@ -200,10 +218,10 @@ test("live and persisted structures produce identical interim classification", (
 
 for (const name of ["noThinkingAnswer", "thinkingThenAnswer"]) {
   test(`resume during ${name === "noThinkingAnswer" ? "answer" : "thinking"} is idempotent and converges`, () => {
-    const events = normalizedFixture(name);
-    const split = piRpcGenerationFixtures[name].resumeAfter;
+    const events = wireFixture(name);
+    const split = wireSplit(name);
     const beforeDisconnect = reduceGenerationEvents(events.slice(0, split));
-    const resume = generationResumeEvent(beforeDisconnect);
+    const resume = overTheWire(generationResumeEvent(beforeDisconnect));
     let reconnected = reduceActiveGeneration(null, resume);
 
     reconnected = reduceActiveGeneration(reconnected, events[split - 1]);
@@ -214,7 +232,7 @@ for (const name of ["noThinkingAnswer", "thinkingThenAnswer"]) {
 }
 
 test("parallel tool executions join independently by toolCallId", () => {
-  const state = reduceGenerationEvents(normalizedFixture("parallelTools"));
+  const state = reduceGenerationEvents(wireFixture("parallelTools"));
 
   assert.deepEqual(Object.keys(state.toolExecutions), ["call_one", "call_two"]);
   assert.deepEqual(state.toolExecutions.call_one, {
@@ -229,8 +247,8 @@ test("parallel tool executions join independently by toolCallId", () => {
 });
 
 test("retry gaps retain the generation and settle only after the successful retry", () => {
-  const events = normalizedFixture("retry");
-  const retryStart = events.findIndex((event) => event.type === "generation_retry_started");
+  const events = wireFixture("retry");
+  const retryStart = events.findIndex((event) => event.type === "retry" && event.active);
   const duringRetry = reduceGenerationEvents(events.slice(0, retryStart + 1));
   const settled = reduceGenerationEvents(events);
 
@@ -243,7 +261,7 @@ test("retry gaps retain the generation and settle only after the successful retr
 });
 
 test("stop closes the generation and ignores all later events for that id", () => {
-  const state = reduceGenerationEvents(normalizedFixture("stopped", "g_stop"));
+  const state = reduceGenerationEvents(wireFixture("stopped", "g_stop"));
 
   assert.equal(state.status, "stopped");
   assert.equal(state.assistantMessages[0].blocks[0].text, "Partial");
@@ -256,7 +274,7 @@ test("stop closes the generation and ignores all later events for that id", () =
 });
 
 test("provider error settles as a failed generation", () => {
-  const state = reduceGenerationEvents(normalizedFixture("providerError"));
+  const state = reduceGenerationEvents(wireFixture("providerError"));
 
   assert.equal(state.status, "failed");
   assert.equal(state.assistantMessages[0].status, "error");
@@ -267,7 +285,7 @@ test("provider error settles as a failed generation", () => {
 });
 
 test("multiple native text and thinking blocks retain their separate positions", () => {
-  const state = reduceGenerationEvents(normalizedFixture("multipleTextThinkingBlocks", "g_blocks"));
+  const state = reduceGenerationEvents(wireFixture("multipleTextThinkingBlocks", "g_blocks"));
 
   assert.deepEqual(state.assistantMessages[0].blocks.map(({ kind, contentIndex, text }) => ({
     kind,
@@ -290,7 +308,7 @@ test("does not duplicate a provider's first block token when start and delta ove
       type: "thinking_start", contentIndex: 0, partial: { content: [{ type: "thinking", thinking: "Now" }] },
     } },
     { type: "message_update", assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "Now" } },
-  ].flatMap((event) => normalizer.normalize(event));
+  ].flatMap((event) => normalizer.normalize(event)).map(overTheWire).filter(Boolean);
   const state = reduceGenerationEvents(events);
   assert.equal(state.assistantMessages[0].blocks[0].text, "Now");
 });
@@ -300,20 +318,21 @@ test("client live state remains equivalent to the shared reducer after every fix
 });
 
 test("ordinary block deltas preserve structural and unrelated block identities", () => {
-  const events = normalizedFixture("multipleToolTurns", "g_identity");
+  const events = wireFixture("multipleToolTurns", "g_identity");
   // Pi names nothing it streams, so the normalizer names the turn's answers
   // after the generation that is writing them. The id is read from the events
   // rather than assumed, because it is the normalizer's to choose.
-  const firstMessageId = events.find((event) => event.type === "assistant_message_started")?.messageId;
+  const firstMessageId = events.find((event) => event.type === "assistant_content"
+    && event.phase === "start")?.messageId;
   const client = createClientActiveGenerationStore({ collectMetrics: true });
   // Driven the way the browser is. A block is never announced to it -- there is
   // no adapter case for `content_block_started` -- so the second block exists
   // here only once a delta has landed in it, and the turn is left mid-flight so
   // one more can be applied to it.
-  const openingDelta = events.find((event) => event.type === "content_block_delta"
-    && event.messageId === firstMessageId && event.contentIndex === 1);
+  const openingDelta = events.find((event) => event.type === "assistant_content"
+    && event.phase === "delta" && event.messageId === firstMessageId && event.contentIndex === 1);
   for (const event of events) {
-    client.apply(overTheWire(event));
+    client.apply(event);
     if (event === openingDelta) break;
   }
   const targetDelta = {
@@ -345,29 +364,29 @@ test("ordinary block deltas preserve structural and unrelated block identities",
 
 for (const name of ["noThinkingAnswer", "thinkingThenAnswer"]) {
   test(`client state resumes and converges during ${name}`, () => {
-    const events = normalizedFixture(name);
-    const split = piRpcGenerationFixtures[name].resumeAfter;
+    const events = wireFixture(name);
+    const split = wireSplit(name);
     const client = createClientActiveGenerationStore();
     let shared = null;
     for (const event of events.slice(0, split)) {
       shared = reduceActiveGeneration(shared, event);
-      client.apply(overTheWire(event));
+      client.apply(event);
     }
     // The replay is the server handing over its own snapshot, so from here the
     // two are the same object's worth of state however they got there.
-    const resume = generationResumeEvent(shared);
+    const resume = overTheWire(generationResumeEvent(shared));
     shared = reduceActiveGeneration(shared, resume);
-    client.apply(overTheWire(resume));
+    client.apply(resume);
     assert.deepEqual(client.snapshot(), shared);
 
     const duplicate = events[split - 1];
     shared = reduceActiveGeneration(shared, duplicate);
-    client.apply(overTheWire(duplicate));
+    client.apply(duplicate);
     assert.deepEqual(client.snapshot(), shared);
 
     for (const event of events.slice(split)) {
       shared = reduceActiveGeneration(shared, event);
-      client.apply(overTheWire(event));
+      client.apply(event);
     }
     assert.deepEqual(client.snapshot(), shared, `${name} settled differently after resume`);
   });

@@ -277,6 +277,22 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
           });
           break;
         }
+        // A turn retrying, and a turn that failed. The browser held these only
+        // after a reconnect installed the server's snapshot, so a reader who
+        // stayed connected never saw a retry on the generation itself.
+        case "retry":
+          if (event.active) {
+            setPath(["status"], "running");
+            setPath(["retry"], event.retry);
+          } else {
+            setPath(["retry"], null);
+          }
+          break;
+        case "error":
+          setPath(["status"], "failed");
+          setPath(["error"], event.error);
+          setPath(["retry"], null);
+          break;
         case "status:settled":
           setPath(["status"], terminalStatus(state));
           setPath(["retry"], null);

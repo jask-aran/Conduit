@@ -83,7 +83,7 @@ export type LiveEvent = EventBase & (
   | RuntimeStateEvent
   | { type: "usage"; contextUsage: ContextUsage | null; sessionStats: SessionStats | null; cacheStats: CacheStats | null }
   | { type: "compaction"; active: boolean }
-  | { type: "retry"; active: boolean; retry: RetryState | null }
+  | { type: "retry"; active: boolean; retry: RetryState | null; seq?: number }
   | { type: "queue_state"; queue: QueueState }
   | { type: "permission_request"; request: HostUiRequest | null }
   | { type: "permission_resolved"; requestId: string }
@@ -102,7 +102,7 @@ export type LiveEvent = EventBase & (
   | { type: "log_state"; log: LogStamp }
   | { type: "log_reset" }
   | StructuredGenerationEvent
-  | { type: "error"; scope: "runtime" | "request"; code: string; message: string }
+  | { type: "error"; scope: "runtime" | "request"; code: string; message: string; seq?: number; error?: unknown }
   | { type: "runtime_exit"; deliberate: boolean }
   | { type: "unknown"; sourceType: string }
 );
@@ -246,7 +246,8 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
     case "error": {
       const detail = record(source.error);
       const scope = source.scope === "request" ? "request" : "runtime";
-      return { type: "error", scope, generationId, code: text(detail.code), message: text(detail.message) };
+      return { type: "error", scope, generationId, ...(seq === undefined ? {} : { seq }),
+        code: text(detail.code), message: text(detail.message), error: detail };
     }
     case "permission_request": return { type: "permission_request", generationId, request: normalizeHostUiRequest({
       id: source.requestId, kind: source.kind, title: source.title, message: source.message,
@@ -256,8 +257,11 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
     case "usage": return { type: "usage", generationId, contextUsage: contextUsage(source.contextUsage), sessionStats: sessionStats(source.sessionStats), cacheStats: cacheStats(source.cacheStats) };
     case "queue_state": return { type: "queue_state", generationId, queue: queue(source.queue) || { steering: [], followUp: [] } };
     case "compaction": return { type: "compaction", generationId, active: Boolean(source.active) };
-    case "retry": return { type: "retry", generationId, active: Boolean(source.active),
-      retry: source.active ? retry(source.retry) || {} : null };
+    // `seq` is the turn-local position, and both reducers order by it. Leaving
+    // it off here made a retry and a failure the two lifecycle events a reducer
+    // reading this stream had to refuse.
+    case "retry": return { type: "retry", generationId, ...(seq === undefined ? {} : { seq }),
+      active: Boolean(source.active), retry: source.active ? retry(source.retry) || {} : null };
     case "user_message_committed": return { type: "user_message_committed", generationId, message: protocolMessage(source.message) };
     case "transcript_sync": return { type: "transcript_sync", generationId, messages: list(source.messages), tools: list(source.tools),
       ...(source.replace ? { replace: true } : {}) };

@@ -229,12 +229,18 @@ export function normalizePiBackendEvent(event) {
     case "compaction_start":
     case "compaction_end":
       return { ...base, type: "compaction", active: event.type === "compaction_start" };
+    // A retry is a step in the turn, so it keeps the turn-local position the
+    // normalizer gave it. Dropping `seq` left the only two lifecycle events
+    // with no place in the sequence they belong to, which a reducer reading
+    // this stream has to reject.
     case "auto_retry_start":
     case "generation_retry_started":
-      return { ...base, type: "retry", active: true, retry: event.retry || event };
+      return { ...base, type: "retry", active: true, retry: event.retry || event,
+        ...(event.seq === undefined ? {} : { seq: event.seq }) };
     case "auto_retry_end":
     case "generation_retry_ended":
-      return { ...base, type: "retry", active: false };
+      return { ...base, type: "retry", active: false,
+        ...(event.seq === undefined ? {} : { seq: event.seq }) };
     // A user message Pi has committed was already stated as a `message.open`
     // -- by the prompt that sent it, or, for one off the queue or typed into a
     // driven thread's CLI, at the moment Pi first reported it. Announcing it a
@@ -249,7 +255,8 @@ export function normalizePiBackendEvent(event) {
     case "generation_failed": {
       const error = event.error || event;
       const codes = ["generation_limit", "live_process_limit", "rpc_timeout", "rate_limited", "auth_expired", "backend_unavailable"];
-      return { ...base, type: "error", scope: "runtime", error: {
+      return { ...base, type: "error", scope: "runtime",
+        ...(event.seq === undefined ? {} : { seq: event.seq }), error: {
         code: codes.includes(error.code) ? error.code : "backend_unavailable",
         message: error.message,
         ...(error.code === "rate_limited" ? { retryAfterMs: error.retryAfterMs ?? 60_000 } : {}),
