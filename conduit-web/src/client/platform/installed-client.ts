@@ -83,6 +83,11 @@ export const secureTokenStore: SecureTokenStore = installedClientKind === "deskt
   : installedClientKind === "android" ? androidStore() : browserStore();
 
 /** What the desktop shell decides before the client has loaded. */
+export interface GlobalShortcut {
+  accelerator: string;
+  commandId: string;
+}
+
 export interface DesktopShellSettings {
   keepRunningInTray: boolean;
   launchAtLogin: boolean;
@@ -128,5 +133,20 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
   async onCheckForUpdates(handler: () => void): Promise<() => void> {
     const { listen } = await import("@tauri-apps/api/event");
     return listen("desktop://check-for-updates", () => handler());
+  },
+  /**
+   * Hand the shell the whole set of system-wide keys. It is a replacement, not
+   * an addition, so the client's registry stays the only account of what is
+   * bound; the shell either takes all of it or keeps what it had and says which
+   * chord another application owns.
+   */
+  async setGlobalShortcuts(shortcuts: GlobalShortcut[]): Promise<void> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("set_global_shortcuts", { shortcuts });
+  },
+  /** A system-wide key fired: the payload is a command id from the registry. */
+  async onCommand(handler: (commandId: string) => void): Promise<() => void> {
+    const { listen } = await import("@tauri-apps/api/event");
+    return listen<string>("desktop://command", (event) => handler(event.payload));
   },
 };

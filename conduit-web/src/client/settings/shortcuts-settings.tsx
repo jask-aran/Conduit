@@ -5,6 +5,7 @@ import {
   AlertTriangleIcon, KeyboardIcon, PlusIcon, RotateCcwIcon, SearchIcon, XIcon,
 } from "lucide-solid";
 import { Button, Input } from "@/components/primitives";
+import { desktopShell } from "../platform/installed-client";
 import { shortcutConflicts } from "../shortcuts/shortcut-conflicts";
 import { shortcutEnvironmentLabel } from "../shortcuts/shortcut-environment";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
@@ -20,6 +21,7 @@ const GROUP_LABELS: Record<string, string> = {
   commands: "Application",
   "chat-management": "Chat search",
   danger: "Danger zone",
+  desktop: "System-wide",
   navigation: "Navigation",
   "workspace-panel": "Workspace panel",
 };
@@ -65,6 +67,9 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
     const normalized = query().trim().toLocaleLowerCase();
     return props.manager.commands.filter((command) => {
       if (!command.configurable) return false;
+      // A system-wide key is something only the desktop shell can hold, so it
+      // is not offered where nothing could act on it.
+      if (!desktopShell && command.contexts.every((context) => context === "global")) return false;
       if (!normalized) return true;
       const bindings = props.manager.effectiveBindings(command.id)
         .map((binding) => formatShortcutBinding(binding, props.manager.environment));

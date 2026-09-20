@@ -10,6 +10,9 @@ import {
 import {
   detectShortcutEnvironment, shortcutEnvironmentLabel,
 } from "../src/client/shortcuts/shortcut-environment.ts";
+import {
+  globalAccelerator, globalShortcuts,
+} from "../src/client/shortcuts/global-shortcuts.ts";
 import { ShortcutManager } from "../src/client/shortcuts/shortcut-manager.ts";
 import {
   bindingIdentity, formatShortcutBinding, normalizeKeyboardEvent, normalizeStoredBinding,
@@ -384,4 +387,29 @@ test("preference parsing fails open for malformed or future documents", () => {
     "future.plugin-command": [],
   } })), {});
   assert.deepEqual(parseShortcutOverrides(JSON.stringify({ version: 1, overrides: [] })), {});
+});
+
+test("the global scope offers the OS only chords it can hold", () => {
+  // A bare key would be taken from every application at once, and the OS hands
+  // over one chord, so neither is offered.
+  assert.equal(globalAccelerator(shortcutBinding(shortcutStroke("KeyC", "C"))), null);
+  assert.equal(globalAccelerator(shortcutBinding(
+    shortcutStroke("KeyX", "X", ["primary"]), shortcutStroke("KeyC", "C"))), null);
+  assert.equal(
+    globalAccelerator(shortcutBinding(shortcutStroke("KeyC", "C", ["alt", "shift"]))),
+    "Alt+Shift+KeyC");
+  assert.equal(
+    globalAccelerator(shortcutBinding(shortcutStroke("KeyK", "K", ["primary"]))),
+    "CommandOrControl+KeyK");
+
+  const shortcuts = globalShortcuts(commandRegistry, {});
+  assert.deepEqual(shortcuts.map((shortcut) => shortcut.commandId).sort(),
+    [COMMAND_IDS.newChatGlobally, COMMAND_IDS.revealWindow].sort());
+  // An override is what the shell is told to hold; a rebinding the OS cannot
+  // express drops out rather than being sent and refused.
+  const rebound = globalShortcuts(commandRegistry, {
+    [COMMAND_IDS.revealWindow]: [shortcutBinding(shortcutStroke("KeyJ", "J", ["primary", "shift"]))],
+    [COMMAND_IDS.newChatGlobally]: [shortcutBinding(shortcutStroke("KeyN", "N"))],
+  });
+  assert.deepEqual(rebound, [{ accelerator: "CommandOrControl+Shift+KeyJ", commandId: COMMAND_IDS.revealWindow }]);
 });
