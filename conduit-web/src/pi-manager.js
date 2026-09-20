@@ -201,7 +201,7 @@ const RECONSTRUCTIBLE_DELIVERY_TYPES = new Set([
 
 function deliveryNotificationKey(event) {
   if (deliveryDeltaKey(event) || event.seq != null || RECONSTRUCTIBLE_DELIVERY_TYPES.has(event.type)) return null;
-  if (["runtime_stdout", "runtime_stderr", "history_forked", "history_truncated"].includes(event.type)) return event.type;
+  if (["runtime_stdout", "runtime_stderr", "history_truncated"].includes(event.type)) return event.type;
   return `unknown:${event.type}`;
 }
 
