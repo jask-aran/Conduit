@@ -977,7 +977,7 @@ export class PiManager extends EventEmitter {
    * settled under ids derived from Pi's entries -- the same message, twice.
    */
   beginQueuedGeneration(record) {
-    record.pendingQueuedPrompts.shift();
+    this.takeQueuedMessage(record, null);
     const generationId = `g${++record.generationSequence}`;
     const claims = record.claimAnswer
       ? { claimAnswer: record.claimAnswer, answersAfter: record.lastQueuedMessageId || null,
@@ -1528,9 +1528,35 @@ export class PiManager extends EventEmitter {
         // the prompt that opened the turn: that prompt has been answered, and
         // this is what the model is replying to now.
         if (claims) claims.answersAfter = queued;
+        // The message now has a row of its own, so it is no longer waiting.
+        this.takeQueuedMessage(record, queued);
+        this.publishState(record);
       }
     }
     return this.publishRaw(record, event);
+  }
+
+  /**
+   * A queued message has been taken: say so, rather than waiting to be told.
+   *
+   * The bubble a queued message draws comes from the queue the browser was last
+   * given, and Pi reports its queue when something is put into it. When it
+   * takes one off to answer, Conduit knows first -- that is the moment a user
+   * row is opened for the message -- and the browser was left drawing both the
+   * row the transcript now holds and the queued bubble nothing had told it to
+   * drop, until a reload. Pi's own report, when it sends one, says the same
+   * thing and overwrites this.
+   */
+  takeQueuedMessage(record, messageId) {
+    const index = messageId
+      ? record.pendingQueuedPrompts.findIndex((item) => item.messageId === messageId)
+      : 0;
+    if (index < 0 || !record.pendingQueuedPrompts.length) return;
+    record.pendingQueuedPrompts.splice(index, 1);
+    record.queue = {
+      steering: record.pendingQueuedPrompts.filter((item) => item.type === "steer").map((item) => item.message),
+      followUp: record.pendingQueuedPrompts.filter((item) => item.type !== "steer").map((item) => item.message),
+    };
   }
 
   /** Publish without asking whose message it is; `publish` has already asked. */
