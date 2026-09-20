@@ -386,9 +386,15 @@ test("coalesces adjacent block deltas for each connected client", async () => {
 
   manager.deliver(record, { type: "content_block_delta", generationId: "g1", seq: 3, messageId: "m1", blockKind: "text", contentIndex: 0, delta: "Hel" });
   manager.deliver(record, { type: "content_block_delta", generationId: "g1", seq: 4, messageId: "m1", blockKind: "text", contentIndex: 0, delta: "lo" });
-  assert.equal(socket.events.length, 0);
+  // The first goes out on the leading edge -- there was nothing to merge it
+  // with, so holding it only made the reader later -- and everything arriving
+  // inside the frame behind it is merged into one send.
+  assert.deepEqual(socket.events.map((event) => event.delta), ["Hel"]);
   await wait(30);
-  assert.deepEqual(socket.events, [{ type: "content_block_delta", generationId: "g1", seq: 4, messageId: "m1", blockKind: "text", contentIndex: 0, delta: "Hello" }]);
+  assert.deepEqual(socket.events, [
+    { type: "content_block_delta", generationId: "g1", seq: 3, messageId: "m1", blockKind: "text", contentIndex: 0, delta: "Hel" },
+    { type: "content_block_delta", generationId: "g1", seq: 4, messageId: "m1", blockKind: "text", contentIndex: 0, delta: "lo" },
+  ]);
 });
 
 test("slow clients discard superseded deltas and recover from Resume State", async () => {
