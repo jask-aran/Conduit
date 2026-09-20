@@ -94,7 +94,7 @@ export type LiveEvent = EventBase & (
   | { type: "transcript_op"; op: "message.open"; message: ProtocolMessage; after: string | null;
     answers: string | null }
   | { type: "transcript_op"; op: "message.close"; messageId: string; stopReason: string | null;
-    content: string; blocks: unknown[]; interim: boolean; discarded: boolean }
+    content: string; blocks: unknown[]; interim: boolean; discarded?: boolean }
   | { type: "transcript_op"; op: "message.drop"; messageId: string; inclusive: boolean; keep: boolean }
   | { type: "transcript_op"; op: "tool.open"; toolCallId: string; name: string; input: unknown;
     messageId: string | null }
@@ -112,6 +112,7 @@ const text = (value: unknown) => value == null ? "" : String(value);
 const optionalText = (value: unknown) => value == null || value === "" ? null : String(value);
 const list = (value: unknown) => Array.isArray(value) ? value : [];
 const number = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : undefined;
+const TRANSCRIPT_OPS = new Set(["message.open", "message.close", "message.drop", "tool.open", "tool.close"]);
 const STRUCTURED_GENERATION_TYPES = new Set<StructuredGenerationType>([
   "generation_replay", "assistant_content", "tool_activity", "status",
 ]);
@@ -268,30 +269,16 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
     // The server stating the transcript: which messages there are and where,
     // what each one says, and which tools ran. This is the whole of how a row
     // gets its place -- nothing downstream works one out.
+    // The op is the statement. It was checked where it was made -- every
+    // builder in `transcript-ops.js` runs `assertTranscriptOp` before the op
+    // leaves -- so rebuilding it here field by field only invented a second
+    // spelling of the same thing, and quietly dropped any field the builders
+    // learned to say until this list was updated to match. What the server
+    // stated is what the client applies.
     case "transcript_op": {
       const op = text(source.op);
-      if (op === "message.open") {
-        return { type: "transcript_op", op, generationId, message: protocolMessage(source.message),
-          after: optionalText(source.after), answers: optionalText(source.answers) };
-      }
-      if (op === "message.close") {
-        return { type: "transcript_op", op, generationId, messageId: text(source.messageId),
-          stopReason: optionalText(source.stopReason), content: text(source.content), blocks: list(source.blocks),
-          interim: Boolean(source.interim), discarded: Boolean(source.discarded) };
-      }
-      if (op === "message.drop") {
-        return { type: "transcript_op", op, generationId, messageId: text(source.messageId),
-          inclusive: Boolean(source.inclusive), keep: Boolean(source.keep) };
-      }
-      if (op === "tool.open") {
-        return { type: "transcript_op", op, generationId, toolCallId: text(source.toolCallId),
-          name: text(source.name), input: source.input, messageId: optionalText(source.messageId) };
-      }
-      if (op === "tool.close") {
-        return { type: "transcript_op", op, generationId, toolCallId: text(source.toolCallId),
-          output: source.output, isError: Boolean(source.isError) };
-      }
-      return { type: "unknown", sourceType, generationId };
+      if (!TRANSCRIPT_OPS.has(op)) return { type: "unknown", sourceType, generationId };
+      return { ...source, type: "transcript_op", generationId } as unknown as LiveEvent;
     }
     case "log_state": {
       const stamp = logStamp(source.log);

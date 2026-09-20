@@ -18,8 +18,10 @@ test("preserves a sync that replaces the whole transcript", () => {
   });
 });
 
-test("a message's place in the chat's order survives normalization", () => {
-  assert.deepEqual(normalizeLiveEvent({
+test("an op arrives at the client as the server stated it", () => {
+  // Not rebuilt: the op is checked where it is made, and anything the builders
+  // add travels without this file learning about it first.
+  const op = {
     type: "transcript_op",
     op: "message.open",
     generationId: "g1",
@@ -27,17 +29,11 @@ test("a message's place in the chat's order survives normalization", () => {
     answers: "m_prompt",
     message: { id: "m_answer", role: "assistant" },
     log: { id: "log-1", seq: 7 },
-  }), {
-    type: "transcript_op",
-    op: "message.open",
-    generationId: "g1",
-    after: "m_prompt",
-    // The prompt being answered, stated rather than read off the transcript.
-    answers: "m_prompt",
-    message: { id: "m_answer", role: "assistant", content: undefined, timestamp: undefined,
-      stopReason: undefined, errorMessage: null },
-    log: { id: "log-1", seq: 7 },
-  });
+  };
+  assert.deepEqual(normalizeLiveEvent(op), op);
+  // An op name nothing applies is not passed through as one.
+  assert.deepEqual(normalizeLiveEvent({ ...op, op: "message.rewrite" }),
+    { type: "unknown", sourceType: "transcript_op", generationId: "g1", log: { id: "log-1", seq: 7 } });
 });
 
 test("normalizes host UI events into the client discriminated union", () => {
