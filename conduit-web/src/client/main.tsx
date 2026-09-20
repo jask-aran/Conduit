@@ -3,7 +3,7 @@ import { isConduitManagedProject } from "./navigation/sidebar-preferences";
 import type { ComputerLocation, ComputerPrefetchPayload } from "./api/contracts";
 import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { render } from "solid-js/web";
-import { isInstalledClient } from "./platform/installed-client.ts";
+import { desktopShell, isInstalledClient } from "./platform/installed-client.ts";
 import {
   ArrowLeftIcon, EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
 } from "lucide-solid";
@@ -1470,6 +1470,16 @@ function App() {
       if (mobileSidebarOpen()) { event.preventDefault(); setMobileSidebarOpen(false); return; }
     }
   };
+
+  // The tray's New chat is the same command the palette and the sidebar run.
+  // The shell dispatches it rather than opening anything itself, so there is
+  // one new-chat path however it was asked for.
+  onMount(() => {
+    if (!desktopShell) return;
+    let stop: (() => void) | undefined;
+    void desktopShell.onNewChat(() => { void createChat(); }).then((unlisten) => { stop = unlisten; });
+    onCleanup(() => stop?.());
+  });
 
   onMount(() => {
     let hydratingUiPreferences = false;

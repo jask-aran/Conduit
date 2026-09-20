@@ -81,3 +81,33 @@ const browserStore = (): SecureTokenStore => ({
 export const secureTokenStore: SecureTokenStore = installedClientKind === "desktop"
   ? desktopStore()
   : installedClientKind === "android" ? androidStore() : browserStore();
+
+/** What the desktop shell decides before the client has loaded. */
+export interface DesktopShellSettings {
+  keepRunningInTray: boolean;
+  launchAtLogin: boolean;
+  startHidden: boolean;
+}
+
+/**
+ * The desktop shell's own surface: the window lifecycle it owns, and the tray
+ * actions it hands back. Null on every other client, which is what the Settings
+ * tile and the tray listener check rather than asking which shell this is.
+ */
+export const desktopShell = installedClientKind !== "desktop" ? null : {
+  async settings(): Promise<DesktopShellSettings> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<DesktopShellSettings>("desktop_settings");
+  },
+  // Returns what the shell ended up with: the OS registration for launch-at-
+  // login can refuse, and the caller must show what is true rather than what
+  // was asked for.
+  async saveSettings(settings: DesktopShellSettings): Promise<DesktopShellSettings> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<DesktopShellSettings>("set_desktop_settings", { settings });
+  },
+  async onNewChat(handler: () => void): Promise<() => void> {
+    const { listen } = await import("@tauri-apps/api/event");
+    return listen("desktop://new-chat", () => handler());
+  },
+};
