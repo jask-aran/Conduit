@@ -3,7 +3,7 @@ import type { Message, ToolItem } from "./api/contracts";
 // its own journal. One description of what a transcript is, applied at both
 // ends -- see `src/transcript-fold.js`.
 export {
-  applyToolOp, applyTranscriptOp, displayUserText, isToolOp, openMessage, truncateAt,
+  applyToolOp, applyTranscriptOp, applyTranscriptOps, displayUserText, isToolOp, openMessage, truncateAt,
 } from "../transcript-fold.js";
 export type { ProtocolMessage, TranscriptOp } from "../transcript-fold";
 

@@ -19,7 +19,7 @@ import { PiRpcAdapter, normalizePiBackendEvent } from "../src/pi-rpc-adapter.js"
 import { ChatLogs } from "../src/server/chat-log.js";
 import { createLiveSessionStream } from "../src/server/live-session-stream.js";
 import { normalizeLiveEvent } from "../src/client/api/live-events.ts";
-import { applyToolOp, applyTranscriptOp, isToolOp, mergeToolEvent } from "../src/client/timeline-order.ts";
+import { applyToolOp, applyTranscriptOp, applyTranscriptOps, isToolOp, mergeToolEvent } from "../src/client/timeline-order.ts";
 import { buildTurnRows } from "../src/client/turn-rows.ts";
 
 const lifecycle = { run: (_chatId, operation) => operation(), assertAvailable: () => {} };
@@ -110,9 +110,12 @@ function harness() {
     const event = JSON.parse(frame);
     if (event.type === "error") errors.push(event);
   };
+  // Which socket the next upgrade lands on, so a test can put a second browser
+  // on the same chat.
+  let attaching = ws;
   const stream = createLiveSessionStream({
     manager,
-    wss: { handleUpgrade: (_request, _socket, _head, accept) => accept(ws) },
+    wss: { handleUpgrade: (_request, _socket, _head, accept) => accept(attaching) },
     attachments: {
       resolveMany: async () => [], pathFor: () => "", recordMessage: async () => {},
       decorateMessages: async (_p, _c, list) => list, discardMessages: async () => {},
@@ -154,7 +157,39 @@ function harness() {
   /** Emit a command that answers with no prompt of its own, such as a stop. */
   const dispatch = (command) => { ws.emit("message", JSON.stringify(command)); };
 
-  return { pi, send, begin, dispatch, read, accept, acceptPrompt, promptRead, settle, sent, errors,
+  /**
+   * A second browser opening this chat, the way a reload does it.
+   *
+   * It reads the transcript over HTTP -- whatever the harness has written so
+   * far, which mid-turn is nothing, because Pi writes its session file when the
+   * turn ends -- and then attaches. Everything it knows after that is what the
+   * socket tells it.
+   */
+  const reattach = async () => {
+    const socket = new EventEmitter();
+    socket.readyState = 1;
+    // What `GET /v0/sessions/:id` serves: the harness's own read, brought up to
+    // what the server has stated about this chat.
+    const loaded = applyTranscriptOps(
+      { messages: (transcriptWindow().messages || []).map((message) => ({ ...message })),
+        tools: transcriptWindow().tools || [] },
+      manager.logs.get(record.chatId)?.entries || []);
+    let held = loaded.messages;
+    let heldTools = loaded.tools;
+    socket.send = (frame) => {
+      const wire = normalizeLiveEvent(JSON.parse(frame));
+      if (wire.type !== "transcript_op") return;
+      if (isToolOp(wire)) heldTools = applyToolOp(heldTools, wire);
+      else held = applyTranscriptOp(held, wire);
+    };
+    attaching = socket;
+    stream.handleUpgrade(record.id, {}, {}, null);
+    attaching = ws;
+    await settle();
+    return { messages: () => held, rows: () => buildTurnRows(held, heldTools) };
+  };
+
+  return { pi, send, begin, dispatch, read, accept, acceptPrompt, promptRead, settle, sent, errors, reattach,
     setTranscriptWindow: (window) => { transcriptWindow = window; },
     // A turn checkpoints after it ends, which republishes its own window --
     // late, and long after a replacement prompt has been sent.
@@ -464,4 +499,51 @@ test("an interrupted answer is kept, and marked as something the agent no longer
   chat.pi({ type: "agent_settled" });
   await chat.settle();
   assert.equal(chat.messages().at(-1).discarded, false);
+});
+
+/**
+ * Reloading the page in the middle of a turn.
+ *
+ * The browser reads the transcript over HTTP and attaches. Mid-turn the read
+ * has nothing to give it -- Pi writes its session file when the turn ends --
+ * so everything the reader sees has to come off the socket. The prompt was
+ * stated once, before this browser existed, and the chat's log is the only
+ * thing that still holds it.
+ */
+test("a browser that arrives mid-turn is told the prompt it is watching an answer to", async () => {
+  const chat = harness();
+  await chat.send({ type: "prompt", message: "Output a long story" });
+  chat.pi({ type: "agent_start" });
+  assistantText(chat.pi, "The Cartographer of Lost Things");
+  await chat.settle();
+
+  const late = await chat.reattach();
+  assert.deepEqual(shape(late.rows()), [
+    "user: Output a long story",
+    "assistant: The Cartographer of Lost Things",
+  ]);
+});
+
+/**
+ * And stopping it does not take the chat with it.
+ *
+ * A browser holding no prompt row is handed a `message.close` for an answer it
+ * also does not hold, so nothing is left -- the reader watches a story being
+ * written and is returned to an empty chat.
+ */
+test("stopping a turn a late browser is watching leaves the turn on screen", async () => {
+  const chat = harness();
+  await chat.send({ type: "prompt", message: "Output a long story" });
+  chat.pi({ type: "agent_start" });
+  assistantText(chat.pi, "The Cartographer of Lost Things", { stopReason: "aborted" });
+  await chat.settle();
+
+  const late = await chat.reattach();
+  chat.dispatch({ type: "stop_generation" });
+  await chat.settle();
+  chat.pi({ type: "agent_settled" });
+  await chat.settle();
+
+  assert.equal(late.messages().length > 0, true, "the chat did not empty itself");
+  assert.deepEqual(shape(late.rows()).map((row) => row.split(":")[0]), ["user", "assistant"]);
 });
