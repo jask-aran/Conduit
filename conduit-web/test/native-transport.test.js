@@ -30,6 +30,12 @@ test("native server origins accept only normalized HTTPS origins", () => {
     "https://conduit.tailnet.ts.net#fragment",
     "not a URL",
   ]) assert.throws(() => normalizeServerOrigin(value));
+  // A server on this machine is reached over loopback, which no network
+  // carries, so it does not have to present a certificate to be addressed.
+  assert.equal(normalizeServerOrigin("http://127.0.0.1:4310"), "http://127.0.0.1:4310");
+  assert.equal(normalizeServerOrigin("http://localhost:4310/"), "http://localhost:4310");
+  assert.equal(buildWebSocketUrl("/v0/dictation/stream", "http://127.0.0.1:4310"),
+    "ws://127.0.0.1:4310/v0/dictation/stream");
 });
 
 test("native server origin persists and clears without credentials", () => {

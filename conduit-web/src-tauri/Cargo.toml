@@ -15,6 +15,18 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 
+# The token is held by the OS credential store for the signed-in user: on
+# Windows that is Credential Manager, which encrypts it under the user's own
+# DPAPI key. Nothing Conduit ships can decrypt it for anyone else.
+[target.'cfg(windows)'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service"] }
+
 [profile.release]
 codegen-units = 1
 lto = true

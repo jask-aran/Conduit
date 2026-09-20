@@ -52,13 +52,25 @@ const androidStore = (): SecureTokenStore => ({
   },
 });
 
-// Stronghold replaces this when the desktop shell ships. Until then the desktop
-// kind cannot be reached -- there is no desktop bundle -- and a placeholder that
-// says so is better than one that quietly keeps a token in memory.
-const desktopStore = (): SecureTokenStore => {
-  const unwired = async () => { throw new Error("Desktop secure storage is not wired yet."); };
-  return { get: unwired, set: unwired, remove: unwired };
-};
+// The desktop shell answers these from the OS credential store -- Windows
+// Credential Manager, keyed to the signed-in user -- so nothing is kept in a
+// file the webview could read back. The web half never learns which store it
+// is talking to, exactly as on Android.
+const desktopStore = (): SecureTokenStore => ({
+  async get(key) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const value = await invoke<string | null>("secret_get", { key });
+    return value || null;
+  },
+  async set(key, value) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("secret_set", { key, value });
+  },
+  async remove(key) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("secret_remove", { key });
+  },
+});
 
 const browserStore = (): SecureTokenStore => ({
   async get() { return null; },
