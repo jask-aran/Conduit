@@ -24,6 +24,8 @@ serde_json = "1"
 # DPAPI key. Nothing Conduit ships can decrypt it for anyone else.
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }
+# Only for the caption colour: the title bar is native, and stays native.
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dwm"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }

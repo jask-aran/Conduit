@@ -7,6 +7,7 @@
 mod desktop_settings;
 mod secrets;
 mod tray;
+mod window_chrome;
 
 use std::sync::Mutex;
 
@@ -33,6 +34,9 @@ pub fn run() {
             let settings = desktop_settings::load(handle);
             app.manage(desktop_settings::Store(Mutex::new(settings)));
             tray::install(handle)?;
+            if let Some(window) = app.get_webview_window("main") {
+                window_chrome::paint_caption(&window);
+            }
             let asked_to_hide = std::env::args().any(|argument| argument == HIDDEN_LAUNCH_ARG);
             if asked_to_hide && settings.start_hidden {
                 if let Some(window) = app.get_webview_window("main") {
