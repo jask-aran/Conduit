@@ -676,6 +676,10 @@ export class CodexAppServerAdapter extends EventEmitter {
       // told, rather than deciding it from what a later message went on to do.
       interim,
       blocks,
+      // The turn's model, so it does not live only on the record while the
+      // close is the statement the transcript keeps. Codex does not name a
+      // provider or a write-time on the item.
+      model: record.model || null,
     }));
     return id;
   }

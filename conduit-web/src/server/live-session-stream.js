@@ -144,11 +144,17 @@ export function createLiveSessionStream({
   // `replace` says the window is the whole of what the client should hold: it
   // is the answer to a client that has lost its place in the chat's order and
   // cannot be replayed back into it.
+  // A replacing read that races the log must not spin: `resume_log` has already
+  // sent `log_reset`, so a snapshot has to follow. Three attempts cover a
+  // quiet moment; the last publishes even if the log moved, rather than leaving
+  // the client with a reset and nothing to fold.
+  const REPLACE_SYNC_ATTEMPTS = 3;
+
   async function syncTranscript(record, turns = 1, generationId = null, { replace = false } = {}) {
     const adapter = adapterFor(record);
     if (record.ephemeral) return;
     try {
-      for (;;) {
+      for (let attempt = 0; attempt < REPLACE_SYNC_ATTEMPTS; attempt += 1) {
         const log = replace ? logFor(record) : null;
         const logSeq = log?.state().seq;
         const context = await findChatContext(record.chatId);
@@ -169,9 +175,9 @@ export function createLiveSessionStream({
         projection.messages = applyMessageIds(projection.messages,
           await messageIds.resolver(context.project, context.chat));
         // A replacement read outside the event loop can straddle a numbered
-        // transcript change. Retry until the read and its publication share
-        // one log position, or the stale snapshot can erase that newer event.
-        if (log && log.state().seq !== logSeq) continue;
+        // transcript change. Retry while attempts remain; the last publish
+        // stands, because `log_reset` already told the client to take a snapshot.
+        if (log && log.state().seq !== logSeq && attempt < REPLACE_SYNC_ATTEMPTS - 1) continue;
         adapter.publish(record, { type: "transcript_sync", generationId, ...(replace ? { replace: true } : {}), ...projection });
         return;
       }
@@ -550,9 +556,10 @@ export function createLiveSessionStream({
       cacheStats: record.cacheStats || null,
     });
     send(record.lastCheckpoint);
-    // Where this chat's order stands right now. A client that was here before
-    // answers with how far it got, and is either caught up or told to start
-    // again from a snapshot; one arriving fresh simply adopts the number.
+    // Where the order actually stands. A client that already held this log
+    // compares against the seq: 0 frame above and asks for what it missed; a
+    // suffix in the attach replay is a hole against zero rather than a number
+    // it could adopt as complete.
     if (log) send({ type: "log_state", log: log.state() });
     // A chat can be written to without anyone prompting from here, so naming is
     // set up on attach rather than waiting for the first prompt.
@@ -577,17 +584,15 @@ export function createLiveSessionStream({
       let command;
       try { command = JSON.parse(String(data)); }
       catch (error) { report(Object.assign(error, { code: "invalid_request" })); return; }
-      // Catching one client up is answered on its own socket and changes
-      // nothing, so it never joins the ordered command chain or the chat
-      // lifecycle. Either the log still holds what it missed, and it is sent
-      // exactly that, or it is told to take the transcript again from scratch.
       // How fast this reader draws, measured by the only party that can see it.
-      // Like a log resume it is about this one socket and changes nothing about
-      // the chat, so it never joins the ordered command chain.
+      // About this one socket; it never joins the ordered command chain.
       if (command.type === "frame_interval") {
         adapter.setFrameInterval?.(record.id, ws, command.ms);
         return;
       }
+      // Catching one client up is answered on its own socket and changes
+      // nothing, so it never joins the ordered command chain. Either the log
+      // still holds what it missed, or it is told to take the transcript again.
       if (command.type === "resume_log") {
         const chatLog = logFor(record);
         const missed = chatLog?.since(command.logId, Number(command.since));

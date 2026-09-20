@@ -366,6 +366,55 @@ test("a fresh socket learns the log order before replay", () => {
     { type: "log_state", log: { id: log.id, seq: 0 } },
     { type: "transcript_op", op: "message.close", log: { id: "log", seq: 7 } },
   ]);
+  const states = sent.filter((event) => event.type === "log_state");
+  assert.equal(states.at(-1).log.seq, 7);
+});
+
+test("a replacing sync that races the log still publishes", async () => {
+  const published = [];
+  let reads = 0;
+  const record = { id: "live-1", chatId: "chat-1", status: "running", hostUiRequests: [] };
+  const chatLogs = new ChatLogs();
+  const log = chatLogs.get(record.chatId);
+  log.stamp({ type: "status", phase: "started" });
+  const adapter = {
+    attach: () => null,
+    view: () => record,
+    toClientEvent: (event) => event,
+    refreshContext: async () => {},
+    readTranscript: async () => {
+      reads += 1;
+      log.stamp({ type: "status", phase: "started" });
+      return { messages: [{ id: "m1", role: "user", content: "hi" }], tools: [] };
+    },
+    publish: (_record, event) => { published.push(event); },
+  };
+  const chat = { id: "chat-1", backend: { implementation: "conduit_pi" } };
+  const project = { id: "project-1" };
+  const ws = new EventEmitter();
+  ws.readyState = 1;
+  ws.send = () => {};
+  const stream = createLiveSessionStream({
+    manager: {},
+    wss: { handleUpgrade: (_request, _socket, _head, accept) => accept(ws) },
+    attachments: { decorateMessages: async (_project, _chatId, messages) => messages },
+    registry: { metadata: () => chat },
+    config: {},
+    findChatContext: async () => ({ chat, project }),
+    lifecycle,
+    messageIds,
+    chatLogs,
+    backends: { get: () => record, forChat: () => adapter, adapterForRecord: () => adapter },
+  });
+
+  stream.handleUpgrade(record.id, {}, {}, null);
+  ws.emit("message", JSON.stringify({ type: "resume_log", logId: "other", since: 0 }));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  assert.equal(reads, 3);
+  assert.equal(published.length, 1);
+  assert.equal(published[0].type, "transcript_sync");
+  assert.equal(published[0].replace, true);
 });
 
 /**
