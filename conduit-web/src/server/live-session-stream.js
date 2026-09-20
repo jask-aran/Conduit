@@ -33,6 +33,25 @@ export function interruptedPromptInput(taken, message, attachmentIds = []) {
   };
 }
 
+/**
+ * One event, one path out.
+ *
+ * Every frame this stream sends a browser is the adapter's translation of the
+ * event, stringified -- there is no second spelling of that anywhere. It used
+ * to be written out at each send site, and the one site that forgot it was the
+ * replay a reconnecting browser reads first, so a Pi reconnect was the single
+ * path that put native harness events in front of the client.
+ *
+ * The exception is Conduit refusing a command, which is Conduit's own
+ * statement about its own API rather than a harness event, and is written in
+ * the contract's words where it is raised.
+ */
+export function sendClientEvent(ws, adapter, event) {
+  if (!event || ws.readyState !== 1) return false;
+  ws.send(JSON.stringify(adapter.toClientEvent(event)));
+  return true;
+}
+
 export function createLiveSessionStream({
   manager,
   wss,
@@ -496,10 +515,10 @@ export function createLiveSessionStream({
       return;
     }
     const adapter = adapterFor(record);
-    const generationResume = adapter.attach(id, ws);
-    if (generationResume) ws.send(JSON.stringify(generationResume));
+    const send = (event) => sendClientEvent(ws, adapter, event);
+    send(adapter.attach(id, ws));
     if (record.status === "running" && !record.contextUsage?.contextWindow) adapter.refreshContext(record.id).catch(() => {});
-    ws.send(JSON.stringify(adapter.toClientEvent({
+    send({
       type: "runtime_state",
       session: adapter.view(record),
       hostUiRequests: record.hostUiRequests || [],
@@ -507,13 +526,13 @@ export function createLiveSessionStream({
       contextUsage: record.contextUsage || null,
       sessionStats: record.sessionStats || null,
       cacheStats: record.cacheStats || null,
-    })));
-    if (record.lastCheckpoint) ws.send(JSON.stringify(adapter.toClientEvent(record.lastCheckpoint)));
+    });
+    send(record.lastCheckpoint);
     // Where this chat's order stands right now. A client that was here before
     // answers with how far it got, and is either caught up or told to start
     // again from a snapshot; one arriving fresh simply adopts the number.
     const log = logFor(record);
-    if (log) ws.send(JSON.stringify(adapter.toClientEvent({ type: "log_state", log: log.state() })));
+    if (log) send({ type: "log_state", log: log.state() });
     // A chat can be written to without anyone prompting from here, so naming is
     // set up on attach rather than waiting for the first prompt.
     if (record.chatId) void findChatContext(record.chatId).then((context) => bindNaming(record, context)).catch(() => {});
@@ -545,10 +564,10 @@ export function createLiveSessionStream({
         const chatLog = logFor(record);
         const missed = chatLog?.since(command.logId, Number(command.since));
         if (missed) {
-          for (const event of missed) ws.send(JSON.stringify(adapter.toClientEvent(event)));
+          for (const event of missed) send(event);
           return;
         }
-        ws.send(JSON.stringify(adapter.toClientEvent({ type: "log_reset", log: chatLog?.state() || null })));
+        send({ type: "log_reset", log: chatLog?.state() || null });
         void syncTranscript(record, 10, null, { replace: true });
         return;
       }
