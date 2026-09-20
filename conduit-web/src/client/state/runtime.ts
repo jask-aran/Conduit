@@ -1,5 +1,5 @@
 import { createSignal, onCleanup, onMount } from "solid-js";
-import { Capacitor } from "@capacitor/core";
+import { isInstalledClient } from "../platform/installed-client.ts";
 import type { RuntimeProcess } from "../api/contracts";
 import { eventSourceUrl } from "../api/transport";
 import { authorizedFetch } from "../api/native-auth-client";
@@ -95,7 +95,7 @@ export function createRuntimeStore() {
       if (reconnectTimer) clearTimeout(reconnectTimer);
       reconnectTimer = setTimeout(connect, offline ? 10_000 : Math.min(1000 * 2 ** Math.min(attempts, 4), 8000));
     };
-    if (Capacitor.isNativePlatform()) {
+    if (isInstalledClient()) {
       const controller = new AbortController();
       const next = { close: () => controller.abort() };
       source = next;

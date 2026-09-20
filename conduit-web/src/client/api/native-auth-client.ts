@@ -1,26 +1,24 @@
-import { Capacitor } from "@capacitor/core";
-import { SecureStorage } from "@aparajita/capacitor-secure-storage";
+import { isInstalledClient, secureTokenStore } from "../platform/installed-client.ts";
 
 const TOKEN_KEY = "conduit.native.bearer-token";
 export const NATIVE_AUTH_REQUIRED_EVENT = "conduit:native-auth-required";
 let cachedToken: string | null | undefined;
 
 export async function nativeBearerToken() {
-  if (!Capacitor.isNativePlatform()) return null;
+  if (!isInstalledClient()) return null;
   if (cachedToken !== undefined) return cachedToken;
-  const value = await SecureStorage.get(TOKEN_KEY);
-  cachedToken = typeof value === "string" && value ? value : null;
+  cachedToken = await secureTokenStore.get(TOKEN_KEY);
   return cachedToken;
 }
 
 export async function saveNativeBearerToken(token: string) {
-  await SecureStorage.set(TOKEN_KEY, token);
+  await secureTokenStore.set(TOKEN_KEY, token);
   cachedToken = token;
 }
 
 export async function clearNativeBearerToken() {
   cachedToken = null;
-  if (Capacitor.isNativePlatform()) await SecureStorage.remove(TOKEN_KEY);
+  if (isInstalledClient()) await secureTokenStore.remove(TOKEN_KEY);
 }
 
 export async function authorizedFetch(input: RequestInfo | URL, init: RequestInit = {}) {
@@ -28,7 +26,7 @@ export async function authorizedFetch(input: RequestInfo | URL, init: RequestIni
   const token = await nativeBearerToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const response = await fetch(input, { ...init, headers });
-  if (Capacitor.isNativePlatform() && response.status === 401) {
+  if (isInstalledClient() && response.status === 401) {
     await clearNativeBearerToken();
     window.dispatchEvent(new Event(NATIVE_AUTH_REQUIRED_EVENT));
   }

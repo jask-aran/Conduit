@@ -1,6 +1,6 @@
 import { httpUrl, loginUrl } from "./transport.js";
 import { authorizedFetch } from "./native-auth-client.ts";
-import { Capacitor } from "@capacitor/core";
+import { isInstalledClient } from "../platform/installed-client.ts";
 
 export interface ApiRequestMetadata {
   method: string;
@@ -15,7 +15,7 @@ export async function api<T>(url: string, options: RequestInit = {}): Promise<T>
   }
   const requestUrl = httpUrl(url);
   const response = await authorizedFetch(requestUrl, { ...options, headers });
-  if (response.status === 401 && !Capacitor.isNativePlatform()) {
+  if (response.status === 401 && !isInstalledClient()) {
     location.href = loginUrl(location.pathname + location.search);
   }
   const text = await response.text();
