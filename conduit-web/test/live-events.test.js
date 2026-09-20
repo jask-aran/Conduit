@@ -65,28 +65,31 @@ test("a generation event is folded only if it carries what the folds read", () =
 });
 
 test("normalizes host UI events into the client discriminated union", () => {
-  // Stated flat, the way the contract states it. The nested `request` shape
-  // this used to be given is the harness's, and no adapter sends it.
-  assert.deepEqual(normalizeLiveEvent({
+  // Stated flat, the way the contract states it. The nested `request` is
+  // derived for the dialog; the rest of the frame travels with it.
+  const event = normalizeLiveEvent({
     type: "permission_request",
     generationId: 42,
     requestId: "request_1",
     kind: "select",
     title: "Choose",
     options: ["one", 2],
-  }), {
-    type: "permission_request",
-    generationId: "42",
-    request: {
-      id: "request_1",
-      kind: "select",
-      title: "Choose",
-      message: "",
-      options: ["one", "2"],
-      placeholder: "",
-      prefill: "",
-      timeoutMs: null,
-    },
+    grantRoot: "/tmp",
+  });
+  assert.equal(event.type, "permission_request");
+  assert.equal(event.generationId, "42");
+  assert.equal(event.requestId, "request_1");
+  assert.equal(event.grantRoot, "/tmp");
+  assert.deepEqual(event.request, {
+    id: "request_1",
+    kind: "select",
+    title: "Choose",
+    message: "",
+    options: ["one", "2"],
+    placeholder: "",
+    prefill: "",
+    timeoutMs: null,
+    grantRoot: "/tmp",
   });
 });
 
@@ -129,10 +132,6 @@ test("an error states whose fault it was", () => {
     error: { code: "invalid_request", message: "not JSON" },
   });
   assert.deepEqual(rejected, { type: "error", scope: "request", generationId: "g1",
-    code: "invalid_request", message: "not JSON",
-    // The cause travels whole as well: a reducer reading this stream keeps it
-    // on the generation, and reads the code off it rather than off two fields
-    // that have to be kept in step.
     error: { code: "invalid_request", message: "not JSON" } });
   const failed = normalizeLiveEvent({
     type: "error", generationId: "g1", error: { code: "backend_unavailable", message: "gone" },

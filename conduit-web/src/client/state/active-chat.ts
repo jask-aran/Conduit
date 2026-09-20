@@ -716,17 +716,18 @@ export function createActiveChat(options: ActiveChatOptions) {
           setGeneration("idle");
           resetLiveFlags();
         }
-        if (event.code === "generation_limit") {
+        const errorCode = event.error?.code;
+        if (errorCode === "generation_limit") {
           setMessages((current) => {
             const last = current.at(-1);
             if (last?.role === "user" && last.id.startsWith("user_")) { setDraft((value) => value || last.content || ""); return current.slice(0, -1); }
             return current;
           });
         }
-        const message = event.message || (event.code === "generation_limit" ? "Too many concurrent generations. Wait for another chat to finish." : "Runtime error");
+        const message = event.error?.message || (errorCode === "generation_limit" ? "Too many concurrent generations. Wait for another chat to finish." : "Runtime error");
         onError(Object.assign(new Error(message), {
-          code: event.code,
-          runtimeEvent: { type: event.type, code: event.code, generationId: event.generationId },
+          code: errorCode,
+          runtimeEvent: { type: event.type, code: errorCode, generationId: event.generationId },
         }));
         break;
       case "unknown":

@@ -121,12 +121,16 @@ error is neither — it belongs to the command that failed, not to a turn, and
 numbering one would replay a bad request as a failed turn on the next
 reconnect.
 
-Dropping paint is safe because `message.close` restates the message in full,
-including who wrote it, with what, when, and what went wrong. Nothing the
-reader can see arrives only as paint. A socket that reconnects is additionally
-restated from the record's own copy of the turn — a server-side fold of the
-generation — and when a record's buffer is full, paint is evicted before the
-record.
+Dropping paint is safe because `message.close` restates the message in full.
+Who wrote it, with what, when, and what went wrong travel on the close when
+the adapter has them: Pi copies them off the reduced generation; Codex,
+ChatGPT Web and Test stream state the turn's `model` from the live record.
+They do not invent a provider or a write-time they were never given.
+
+A socket that reconnects is restated from a server-side fold of the generation
+on harnesses that declare `replay` (Pi, Test stream). Codex and ChatGPT Web do
+not; a reconnecting browser is caught up from the record buffer and the chat's
+log. When a record's buffer is full, paint is evicted before the record.
 
 ### Vocabulary
 
@@ -163,14 +167,16 @@ says, so a page load and a live stream agree.
 
 Server and browser reduce the same stream with the same case names —
 `src/active-generation.js` as plain data, `src/client/state/active-generation-store.js`
-fine-grained in Solid. The server's copy is what makes paint droppable: it is
+fine-grained in Solid. On harnesses that declare `replay`, the server's copy is
 what a reconnecting socket is restated from. Transcript ops are folded
 identically at both ends and on reload by `src/transcript-fold.js`.
 
 The client boundary (`src/client/api/live-events.ts`) checks; it does not
-rebuild. It verifies an event's name, phase and the fields both folds
-dereference, then applies the server's object as stated. Anything else arrives
-as `unknown` rather than taking a place in the turn.
+rebuild generation events or ops. It verifies an event's name, phase and the
+fields both folds dereference, then applies the server's object as stated.
+`permission_request` is given a `request` object for the dialog; the rest of
+the frame travels with it. Anything else arrives as `unknown` rather than
+taking a place in the turn.
 
 ## Delivery and pacing
 

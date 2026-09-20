@@ -231,6 +231,7 @@ export class ChatGptWebAdapter extends EventEmitter {
       // so the next prompt is sent from the message before this one and the
       // account keeps no record of what was written here.
       keepsPartial: CHATGPT_WEB_CAPABILITIES.interruptKeepsPartial,
+      model: record.model || null,
       blocks: [{ kind: "text", contentIndex: 0, text }] }));
   }
 

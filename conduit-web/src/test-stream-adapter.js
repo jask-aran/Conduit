@@ -571,7 +571,8 @@ export class TestStreamAdapter extends EventEmitter {
       seq: ++record.generationSeq, messageId: turn.messageId, stopReason, errorMessage: null, blocks });
     this.publish(record, messageClose({ messageId: turn.messageId, stopReason,
       interim: stopReason === "toolUse",
-      generationId: turn.generationId, keepsPartial: TEST_STREAM_CAPABILITIES.interruptKeepsPartial, blocks }));
+      generationId: turn.generationId, keepsPartial: TEST_STREAM_CAPABILITIES.interruptKeepsPartial, blocks,
+      model: record.model || null }));
   }
 
   finish(record, stopReason) {

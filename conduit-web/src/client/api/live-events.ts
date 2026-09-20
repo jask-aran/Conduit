@@ -102,7 +102,7 @@ export type LiveEvent = EventBase & (
   | { type: "log_state"; log: LogStamp }
   | { type: "log_reset" }
   | StructuredGenerationEvent
-  | { type: "error"; scope: "runtime" | "request"; code: string; message: string; seq?: number; error?: unknown }
+  | { type: "error"; scope: "runtime" | "request"; seq?: number; error?: { code?: string; message?: string } }
   | { type: "runtime_exit"; deliberate: boolean }
   | { type: "unknown"; sourceType: string }
 );
@@ -316,12 +316,16 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
     // ends it.
     case "error": {
       const detail = record(source.error);
+      if (!text(detail.code) && !text(source.code)) return { type: "unknown", sourceType, generationId };
       const scope = source.scope === "request" ? "request" : "runtime";
-      return { type: "error", scope, generationId, ...(seq === undefined ? {} : { seq }),
-        code: text(detail.code), message: text(detail.message), error: detail };
+      return { ...source, type: "error", scope, generationId, ...(seq === undefined ? {} : { seq }),
+        error: Object.keys(detail).length ? detail : { code: text(source.code), message: text(source.message) } } as LiveEvent;
     }
-    case "permission_request":
-      return { type: "permission_request", generationId, request: normalizeHostUiRequest(source) };
+    case "permission_request": {
+      const request = normalizeHostUiRequest(source);
+      if (!request) return { type: "unknown", sourceType, generationId };
+      return { ...source, type: "permission_request", generationId, request } as LiveEvent;
+    }
     case "permission_resolved": return { type: "permission_resolved", generationId, requestId: text(source.requestId) };
     case "usage": return { type: "usage", generationId, contextUsage: contextUsage(source.contextUsage), sessionStats: sessionStats(source.sessionStats), cacheStats: cacheStats(source.cacheStats) };
     case "queue_state": return { type: "queue_state", generationId, queue: queue(source.queue) || { steering: [], followUp: [] } };
@@ -329,8 +333,8 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
     // `seq` is the turn-local position, and both reducers order by it. Leaving
     // it off here made a retry and a failure the two lifecycle events a reducer
     // reading this stream had to refuse.
-    case "retry": return { type: "retry", generationId, ...(seq === undefined ? {} : { seq }),
-      active: Boolean(source.active), retry: source.active ? retry(source.retry) || {} : null };
+    case "retry": return { ...source, type: "retry", generationId, ...(seq === undefined ? {} : { seq }),
+      active: Boolean(source.active), retry: source.active ? source.retry ?? {} : null } as LiveEvent;
     case "transcript_sync": return { type: "transcript_sync", generationId, messages: list(source.messages), tools: list(source.tools),
       ...(source.replace ? { replace: true } : {}) };
     // The server stating the transcript: which messages there are and where,
