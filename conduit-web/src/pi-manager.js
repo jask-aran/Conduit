@@ -947,7 +947,10 @@ export class PiManager extends EventEmitter {
       continuation: Boolean(continuationBase),
       continuationBase,
     });
-    record.activeGeneration = reduceActiveGeneration(null, started);
+    // Reduced from what the browser is sent, not from Pi's own stream, so the
+    // snapshot a reconnect is restated from is the one the browser would have
+    // built for itself.
+    record.activeGeneration = reduceActiveGeneration(null, toNeutralPiEvent(started));
     return { previous, started };
   }
 
@@ -995,7 +998,7 @@ export class PiManager extends EventEmitter {
     if (record.generation?.closed && !allowClosed && !finishing) return [];
     const events = record.generationNormalizer.normalize(source);
     for (const event of events) {
-      record.activeGeneration = reduceActiveGeneration(record.activeGeneration, event);
+      record.activeGeneration = reduceActiveGeneration(record.activeGeneration, toNeutralPiEvent(event));
       this.publishTransient(record, event);
       // The turn's own statements about the transcript, made from the state
       // just reduced: what the message it finished says, and which of the rows

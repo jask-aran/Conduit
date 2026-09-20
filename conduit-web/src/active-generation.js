@@ -78,14 +78,29 @@ export function generationResumeEvent(state) {
   };
 }
 
+/**
+ * The turn so far, from the events the browser is sent.
+ *
+ * This read Pi's own event names while the browser's store read the contract's
+ * -- one turn, two reducers, two vocabularies, agreeing only because a test
+ * said so. It now reduces exactly what crosses the socket, so the snapshot it
+ * builds is what a browser that saw everything would have built, by
+ * construction rather than by assertion. That snapshot is the whole point of
+ * keeping one here: it is what a reconnecting or paused socket is restated
+ * from, which is what makes paint droppable.
+ *
+ * Block starts and completions are gone with the rename, because the browser
+ * is not sent them: a block opens on its first delta and completes when the
+ * message closes, at both ends.
+ */
 export function reduceActiveGeneration(current, event) {
   if (!event || !event.generationId) return current;
-  if (event.type === "generation_resume") {
+  if (event.type === "generation_replay") {
     if (!event.generation || event.generation.id !== event.generationId) return current;
     if (current?.id === event.generationId && current.lastSeq > event.seq) return current;
     return snapshotActiveGeneration(event.generation);
   }
-  if (event.type === "generation_started") {
+  if (event.type === "status" && event.phase === "started") {
     if (current?.id === event.generationId) return current;
     const started = createActiveGeneration(event.generationId, {
       continuation: Boolean(event.continuation),
@@ -95,19 +110,24 @@ export function reduceActiveGeneration(current, event) {
     return started;
   }
   if (!current || current.id !== event.generationId) return current;
+  // Only a stated position can be ordered. An event without one is not part of
+  // the turn's sequence and must not move `lastSeq` off a number.
+  if (typeof event.seq !== "number") return current;
   if (event.seq <= current.lastSeq || TERMINAL_STATUSES.has(current.status)) return current;
 
   const next = cloneGeneration(current);
   next.lastSeq = event.seq;
 
-  switch (event.type) {
-    case "generation_running":
+  switch (event.type === "status" ? `status:${event.phase}`
+    : event.type === "assistant_content" ? `content:${event.phase}`
+      : event.type === "tool_activity" ? `tool:${event.phase}` : event.type) {
+    case "status:running":
       next.status = "running";
       break;
-    case "generation_stopping":
+    case "status:stopping":
       next.status = "stopping";
       break;
-    case "assistant_message_started":
+    case "content:start":
       if (!next.assistantMessages.some((message) => message.id === event.messageId)) {
         next.assistantMessages.push({
           id: event.messageId,
@@ -118,16 +138,7 @@ export function reduceActiveGeneration(current, event) {
         });
       }
       break;
-    case "content_block_started": {
-      const message = cloneMessage(next, event.messageId);
-      if (message) upsertBlock(message, {
-        ...event.block,
-        status: "streaming",
-        identity: contentBlockIdentity(event.messageId, event.block.contentIndex),
-      });
-      break;
-    }
-    case "content_block_delta": {
+    case "content:delta": {
       const message = cloneMessage(next, event.messageId);
       if (!message) break;
       const existing = message.blocks.find((block) => block.contentIndex === event.contentIndex);
@@ -141,16 +152,7 @@ export function reduceActiveGeneration(current, event) {
       else block.text = `${existing?.text || ""}${event.delta}`;
       break;
     }
-    case "content_block_completed": {
-      const message = cloneMessage(next, event.messageId);
-      if (message) upsertBlock(message, {
-        ...event.block,
-        status: "complete",
-        identity: contentBlockIdentity(event.messageId, event.block.contentIndex),
-      });
-      break;
-    }
-    case "assistant_message_completed": {
+    case "content:final": {
       const message = cloneMessage(next, event.messageId);
       if (!message) break;
       const existingByIndex = new Map(message.blocks.map((block) => [block.contentIndex, block]));
@@ -168,7 +170,7 @@ export function reduceActiveGeneration(current, event) {
       if (event.timestamp) message.timestamp = event.timestamp;
       break;
     }
-    case "tool_execution_started":
+    case "tool:start":
       next.toolExecutions[event.toolCallId] = {
         toolCallId: event.toolCallId,
         name: event.name,
@@ -181,7 +183,7 @@ export function reduceActiveGeneration(current, event) {
         isError: false,
       };
       break;
-    case "tool_execution_updated": {
+    case "tool:update": {
       const existing = next.toolExecutions[event.toolCallId] || { toolCallId: event.toolCallId };
       next.toolExecutions[event.toolCallId] = {
         ...existing,
@@ -192,7 +194,7 @@ export function reduceActiveGeneration(current, event) {
       };
       break;
     }
-    case "tool_execution_completed": {
+    case "tool:end": {
       const existing = next.toolExecutions[event.toolCallId] || { toolCallId: event.toolCallId };
       next.toolExecutions[event.toolCallId] = {
         ...existing,
@@ -203,21 +205,19 @@ export function reduceActiveGeneration(current, event) {
       };
       break;
     }
-    case "generation_retry_started":
-      next.status = "running";
-      next.retry = event.retry;
+    case "retry":
+      if (event.active) {
+        next.status = "running";
+        next.retry = event.retry;
+      } else {
+        next.retry = null;
+      }
       break;
-    case "generation_retry_ended":
-      next.retry = null;
-      break;
-    case "generation_turn_ended":
-      if (!event.willRetry) next.retry = null;
-      break;
-    case "generation_settled":
+    case "status:settled":
       next.status = terminalStatus(next);
       next.retry = null;
       break;
-    case "generation_stopped":
+    case "status:stopped":
       next.status = "stopped";
       next.retry = null;
       for (const execution of Object.values(next.toolExecutions)) {
@@ -227,7 +227,7 @@ export function reduceActiveGeneration(current, event) {
         }
       }
       break;
-    case "generation_failed":
+    case "error":
       next.status = "failed";
       next.error = event.error;
       next.retry = null;
