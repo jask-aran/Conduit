@@ -36,10 +36,19 @@ test("delivery coalescing keeps the current Pi block key and complete text", () 
   };
   const next = { ...first, seq: 5, delta: " world" };
 
-  assert.equal(deliveryDeltaKey(first), "structured:g1:m2:text:3");
-  assert.equal(deliveryDeltaKey({ ...first, contentIndex: 4 }), "structured:g1:m2:text:4");
+  // The same key the other delivery stack would give it: what may be coalesced
+  // is asked in the contract's words, not in Pi's.
+  assert.equal(deliveryDeltaKey(first), "text:g1:m2:text:3");
+  assert.equal(deliveryDeltaKey({ ...first, contentIndex: 4 }), "text:g1:m2:text:4");
   assert.equal(deliveryDeltaKey({ type: "generation_settled" }), null);
   assert.deepEqual(mergeDeliveryDelta(first, next), { ...next, delta: "Hello world" });
+  // A tool's progress is coalesced here too, which it was not while this asked
+  // about Pi's name for a text delta and nothing else.
+  const running = { type: "tool_execution_updated", generationId: "g1", toolCallId: "call_1", status: "running" };
+  assert.equal(deliveryDeltaKey(running), "tool:g1:call_1");
+  // And the later statement stands whole rather than being concatenated onto
+  // the earlier one.
+  assert.deepEqual(mergeDeliveryDelta(running, { ...running, status: "done" }), { ...running, status: "done" });
 });
 
 test("steady, burst, and stall harness profiles emit versioned passing reports", async () => {

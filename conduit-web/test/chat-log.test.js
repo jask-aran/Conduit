@@ -10,6 +10,9 @@ test("only events that change the transcript take a number", () => {
   assert.equal(isLoggedEvent({ type: "runtime_state" }), false);
   assert.equal(isLoggedEvent({ type: "transcript_sync" }), true);
   assert.equal(isLoggedEvent({ type: "status", phase: "settled" }), true);
+  assert.equal(isLoggedEvent({ type: "error", scope: "runtime" }), true);
+  assert.equal(isLoggedEvent({ type: "error", scope: "request" }), false);
+  assert.equal(isLoggedEvent({ type: "history_truncated" }), false);
   // A status with no phase reports what the session is busy with -- Codex
   // waiting on an approval -- rather than a transition, and the statement that
   // follows restates whatever it implied.

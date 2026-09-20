@@ -20,6 +20,7 @@ import { PI_CAPABILITIES } from "./pi-capabilities.js";
 import { PiCommandCatalog } from "./pi-command-catalog.js";
 import { ChatLogs, isLoggedEvent } from "./server/chat-log.js";
 import { normalizePiBackendEvent, toNeutralPiEvent } from "./pi-rpc-adapter.js";
+import { deliveryKey } from "./harnesses/socket-delivery.js";
 import { messageIsInterim } from "./active-generation.js";
 
 export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = "", models, template }) {
@@ -183,17 +184,24 @@ function socketBufferedAmount(socket) {
   return Number.isFinite(amount) && amount > 0 ? amount : 0;
 }
 
+/**
+ * Which paint frames this one replaces, asked in the contract's words.
+ *
+ * Pi's own names stop at its adapter, and that includes the question of what
+ * may be coalesced: asked of `content_block_delta`, this merged Pi's text and
+ * left every `tool_execution_update` to cross the socket on its own, so a
+ * tool-heavy turn coalesced nothing while the same turn on any other harness
+ * did. One rule, in `socket-delivery`, answers for both delivery stacks.
+ */
 export function deliveryDeltaKey(event) {
-  if (event.type === "content_block_delta") {
-    return `structured:${event.generationId}:${event.messageId}:${event.blockKind}:${event.contentIndex}`;
-  }
-  return null;
+  return deliveryKey(toNeutralPiEvent(event));
 }
 
-export function mergeDeliveryDelta(previous, next) {
-  if (next.type === "content_block_delta") {
-    return { ...next, delta: `${previous.delta || ""}${next.delta || ""}` };
-  }
+export function mergeDeliveryDelta(previous, next, key = deliveryDeltaKey(next)) {
+  // Text accumulates, because a delta is the part that was added. Everything
+  // else a key names -- a tool's progress -- is a restatement, and the later
+  // one is the whole truth.
+  if (key?.startsWith("text:")) return { ...next, delta: `${previous.delta || ""}${next.delta || ""}` };
   return next;
 }
 
@@ -1575,11 +1583,16 @@ export class PiManager extends EventEmitter {
    */
   stampForLog(record, event) {
     const log = this.logFor(record);
-    // Asked of the event as the browser will receive it, not as Pi wrote it.
-    // The log speaks Conduit's words so that one order means the same thing on
-    // all four harnesses; translating Pi's is Pi's adapter's job, and this is
-    // the one place that had it deciding order from Pi's names instead.
-    return log && isLoggedEvent(normalizePiBackendEvent(event)) ? log.stamp(event) : event;
+    const neutral = toNeutralPiEvent(event);
+    if (!log || !isLoggedEvent(neutral)) return event;
+    // The log is past the adapter boundary, so it keeps Conduit's event rather
+    // than Pi's source event. Pi's internal listeners still need the native
+    // event; copy only the log stamp back onto that internal form.
+    const stamped = log.stamp(neutral);
+    // Transcript ops are already Conduit's shape, and positioning adds `after`
+    // to message.open. Keep that field on the live event as well as in replay.
+    if (event.type === "transcript_op") return stamped;
+    return { ...event, log: stamped.log };
   }
 
   /**
@@ -1722,8 +1735,9 @@ export class PiManager extends EventEmitter {
     // occupying any of the three. The internal bus still carries it: the
     // server's own reducer reads Pi's block structure, and only the wire does
     // not need it.
-    if (toNeutralPiEvent(event) === null) return;
-    const key = deliveryDeltaKey(event);
+    const neutral = toNeutralPiEvent(event);
+    if (neutral === null) return;
+    const key = deliveryKey(neutral);
     if (state.paused) {
       this.queueDeliveryNotification(record, socket, state, event);
       return;
@@ -1735,7 +1749,7 @@ export class PiManager extends EventEmitter {
     }
     if (key) {
       const previous = state.pending.get(key);
-      if (previous) state.pending.set(key, mergeDeliveryDelta(previous, event));
+      if (previous) state.pending.set(key, mergeDeliveryDelta(previous, event, key));
       else {
         state.pending.set(key, event);
         state.pendingOrder.push(key);

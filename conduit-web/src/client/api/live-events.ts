@@ -227,7 +227,15 @@ export function normalizeHostUiRequest(value: unknown): HostUiRequest | null {
   if (!["confirm", "select", "input", "editor"].includes(kind)) return null;
   const id = text(source.id || source.requestId);
   if (!id) return null;
+  // Checked, then carried. The fields below are the ones something reads
+  // without asking first, so they are given a shape here; everything else the
+  // request was stated with travels with it, and a harness adding a field does
+  // not have to teach this file about it before the dialog can show it.
+  // The envelope is not part of the request: this is handed the whole event,
+  // because the contract states a request flat rather than nested.
+  const { requestId: _requestId, type: _type, generationId: _generationId, seq: _seq, log: _log, ...rest } = source;
   return {
+    ...rest,
     id,
     kind: kind as HostUiRequest["kind"],
     title: text(source.title || "Request"),
@@ -236,7 +244,7 @@ export function normalizeHostUiRequest(value: unknown): HostUiRequest | null {
     placeholder: text(source.placeholder),
     prefill: text(source.prefill),
     timeoutMs: number(source.timeoutMs) ?? null,
-  };
+  } as HostUiRequest;
 }
 
 function generation(value: unknown): GenerationHandle | null {
@@ -260,27 +268,6 @@ function sessionSnapshot(value: unknown): SessionSnapshot {
     stopping: Boolean(source.stopping),
     active: Boolean(source.active),
     capabilities: Object.keys(record(source.capabilities)).length ? record(source.capabilities) as unknown as ChatCapabilities : null,
-  };
-}
-
-// Pi timestamps messages with epoch milliseconds, while the session file
-// timestamps its entries with an ISO string. Stringifying the number gave the
-// transcript "Invalid Date" live and the right time after a reload.
-function messageTimestamp(value: unknown): string | undefined {
-  if (value == null || value === "") return undefined;
-  const parsed = typeof value === "number" ? new Date(value) : new Date(String(value));
-  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
-}
-
-function protocolMessage(value: unknown): ProtocolMessage {
-  const source = record(value);
-  return {
-    id: optionalText(source.id) || undefined,
-    role: optionalText(source.role) || undefined,
-    content: source.content,
-    timestamp: messageTimestamp(source.timestamp),
-    stopReason: optionalText(source.stopReason) || undefined,
-    errorMessage: optionalText(source.errorMessage),
   };
 }
 
