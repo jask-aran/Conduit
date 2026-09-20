@@ -1809,6 +1809,12 @@ export class PiManager extends EventEmitter {
       // The generation already holds Conduit's blocks -- Pi's names were turned
       // into them as the deltas arrived -- so a close states what it has.
       blocks,
+      // And what else it holds about the message, so none of it depends on the
+      // final paint frame surviving the socket.
+      provider: written?.provider || null,
+      model: written?.model || null,
+      timestamp: written?.timestamp || null,
+      errorMessage: written?.errorMessage || null,
     }));
     return id;
   }

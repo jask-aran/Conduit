@@ -603,8 +603,12 @@ export class CodexAppServerAdapter extends EventEmitter {
       title: descriptor.title(params), message: descriptor.message(params),
       options: [...APPROVAL_OPTIONS], placeholder: "", prefill: "", timeoutMs: null,
     });
-    this.publish(record, { type: "status", generationId, seq: ++record.generationSeq,
-      status: "working", activity: "waiting_for_user", detail: descriptor.title(params) });
+    // What the session is busy with, not a transition the turn made. It used to
+    // be published as a `status` with no phase, which is a shape neither fold
+    // has a case for: it took a place in the turn's sequence and then changed
+    // nothing at either end, and the browser's router sent it to the fold
+    // rather than to the chat. The state event is the one the browser reads.
+    this.publish(record, { type: "runtime_state", generationId, session: this.view(record) });
   }
 
   /** Send the user's answer back to Codex and let the turn continue. */
@@ -626,8 +630,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     record.approvals.delete(requestId);
     if (!record.approvals.size) record.activity = record.active ? "working" : "idle";
     this.publish(record, { type: "permission_resolved", generationId, requestId });
-    this.publish(record, { type: "status", generationId, seq: ++record.generationSeq,
-      status: record.active ? "working" : "idle", activity: record.activity, detail: null });
+    this.publish(record, { type: "runtime_state", generationId, session: this.view(record) });
   }
 
   /**
@@ -1324,7 +1327,7 @@ export class CodexAppServerAdapter extends EventEmitter {
   runtimeState(record) { return this.sessions.runtimeState(record); }
   publish(record, event) {
     const result = this.sessions.publish(record, event);
-    if (event?.type === "status" || event?.type === "error") {
+    if (event?.type === "status" || event?.type === "error" || event?.type === "runtime_state") {
       this.emit("changed", { record, reason: event.type });
     }
     return result;

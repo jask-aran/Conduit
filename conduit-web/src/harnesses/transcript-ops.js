@@ -100,7 +100,8 @@ export const messageOpen = ({ id, role, generationId = null, answers = null, ...
  * same blocks and had already drifted into doing it over two different
  * spellings of them.
  */
-export const messageClose = ({ messageId, stopReason = null, blocks = [], interim = false, generationId = null, keepsPartial = false }) => {
+export const messageClose = ({ messageId, stopReason = null, blocks = [], interim = false, generationId = null,
+  keepsPartial = false, provider = null, model = null, timestamp = null, errorMessage = null }) => {
   const content = blocks.filter((block) => block.kind === "text").map((block) => block.text || "").join("\n");
   return assertTranscriptOp({
     type: "transcript_op", op: "message.close", messageId, stopReason, interim,
@@ -112,6 +113,16 @@ export const messageClose = ({ messageId, stopReason = null, blocks = [], interi
     ...(wasDiscarded({ role: "assistant", stopReason, content }, { keepsPartial }) ? { discarded: true } : {}),
     ...(generationId ? { generationId } : {}),
     content,
+    // Who wrote it, with what, when, and what went wrong -- stated here because
+    // the record has to say everything the reader can see. These four reached
+    // the browser only on the final paint frame, which may be merged away or
+    // dropped under backpressure, so the message details panel showed a
+    // provider and a model during the turn and nothing after it settled, until
+    // a reload read them off the harness's own file.
+    ...(provider ? { provider } : {}),
+    ...(model ? { model } : {}),
+    ...(timestamp ? { timestamp } : {}),
+    ...(errorMessage ? { errorMessage } : {}),
     // Blocks leave exactly as the adapter stated them. They used to be rewritten
     // here into Pi's spelling so the browser would not have to convert them,
     // which meant the server built the renderer's dialect on behalf of two

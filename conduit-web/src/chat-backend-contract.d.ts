@@ -409,7 +409,9 @@ export type TranscriptOpEvent = EventBase & { type: "transcript_op" } & (
   | { op: "message.open"; message: { id: string; role: "user" | "assistant"; [field: string]: unknown };
       answers: string | null; after?: string | null }
   | { op: "message.close"; messageId: string; stopReason: string | null; interim: boolean;
-      content: string; blocks: unknown[]; discarded?: true }
+      content: string; blocks: unknown[]; discarded?: true;
+      /** Who wrote it, with what, when, and what went wrong, when the harness knows. */
+      provider?: string; model?: string; timestamp?: string; errorMessage?: string }
   /** One row taken back (`keep`), the history cut after it, or cut through it. */
   | { op: "message.drop"; messageId: string; keep?: boolean; inclusive?: boolean }
   | { op: "tool.open"; toolCallId: string; name: string; input: unknown }

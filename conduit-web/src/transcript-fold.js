@@ -90,6 +90,12 @@ export function applyTranscriptOp(messages, event) {
         discarded: event.discarded === true,
         stopReason: event.stopReason || message.stopReason,
         stopped: event.stopReason === "aborted" || message.stopped,
+        // Who wrote it, with what, when, and what went wrong. The deltas carried
+        // these too, but a delta may be dropped and this may not.
+        ...(event.provider ? { provider: event.provider } : {}),
+        ...(event.model ? { model: event.model } : {}),
+        ...(event.timestamp ? { timestamp: event.timestamp } : {}),
+        ...(event.errorMessage ? { errorMessage: event.errorMessage } : {}),
         streaming: false,
       }
       : message));
