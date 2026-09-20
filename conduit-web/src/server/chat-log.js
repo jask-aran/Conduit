@@ -13,11 +13,10 @@
  * old one is told to take a snapshot rather than being replayed into a
  * sequence that no longer means the same thing.
  *
- * Deltas are deliberately not in here. They are the volume and none of the
- * structure: the delivery layer is allowed to merge and drop them under
- * backpressure, and what they were building is restated in full when the
- * message they belong to completes. Sequencing them would make every coalesced
- * frame look like a hole.
+ * Paint is deliberately not in here -- "never numbered" is one of the four
+ * things the contract promises about that channel, stated once beside
+ * `AssistantBlock` in `chat-backend-contract.d.ts`. Numbering it would make
+ * every merged frame look like a hole to a client counting statements.
  */
 import crypto from "node:crypto";
 
