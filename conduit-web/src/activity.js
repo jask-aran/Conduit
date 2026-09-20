@@ -1,6 +1,10 @@
 /**
  * Coarse process activity for global runtime indicators.
  * Precedence: failed > stopping > waiting_for_user > compacting > retrying > working > starting > idle
+ *
+ * Everything here reads a record's flags, never a harness's events. Pi's own
+ * reduction onto those flags lives in `pi-activity.js`, where only Pi imports
+ * it; the other three harnesses set the same flags through their adapters.
  */
 
 export const COARSE_ACTIVITIES = [
@@ -56,134 +60,24 @@ export function deriveCoarseActivity(record) {
 }
 
 /**
- * Apply a Pi/Conduit event to mutable activity-related flags on a process record.
- * Returns true when coarse activity may have changed.
+ * What the indicator says a session is doing.
+ *
+ * These named Pi outright -- "Pi working", "Pi failed" -- on every chat,
+ * including the three harnesses that are not Pi. The record the indicator is
+ * given does not carry a harness name, so the labels say what is true of all
+ * four instead of naming the wrong one.
  */
-export function applyActivityEvent(record, event) {
-  if (!record || !event?.type) return false;
-  const before = deriveCoarseActivity(record);
-  let detail = record.activityDetail || null;
-
-  switch (event.type) {
-    case "agent_start":
-      record.active = true;
-      if (record.generation) record.generation.settled = false;
-      detail = null;
-      break;
-    case "agent_end":
-      record.active = false;
-      if (!event.willRetry) {
-        record.retrying = false;
-        record.retry = null;
-        if (record.generation) record.generation.settled = true;
-      }
-      detail = null;
-      break;
-    case "agent_settled":
-      record.active = false;
-      if (record.generation) record.generation.settled = true;
-      detail = null;
-      break;
-    case "tool_execution_start":
-      record.active = true;
-      detail = event.toolName ? `using ${event.toolName}` : "using tool";
-      break;
-    case "tool_execution_end":
-      if (record.activityDetail?.startsWith("using ")) detail = null;
-      break;
-    case "compaction_start":
-      record.compacting = true;
-      detail = "compacting context";
-      break;
-    case "compaction_end":
-      record.compacting = false;
-      detail = null;
-      break;
-    case "auto_retry_start":
-      record.retrying = true;
-      record.retry = {
-        attempt: event.attempt,
-        maxAttempts: event.maxAttempts,
-        delayMs: event.delayMs,
-        errorMessage: event.errorMessage || null,
-      };
-      detail = event.attempt != null ? `retry attempt ${event.attempt}` : "retrying";
-      break;
-    case "auto_retry_end":
-      record.retrying = false;
-      record.retry = null;
-      detail = null;
-      break;
-    case "extension_ui_request": {
-      if (isBlockingHostUi(event)) {
-        const request = normalizeHostUiRequest(event);
-        if (request && !record.hostUiRequests.some((item) => item.id === request.id)) {
-          record.hostUiRequests.push(request);
-        }
-        detail = request?.title || "waiting for confirmation";
-      }
-      break;
-    }
-    case "extension_ui_resolved":
-    case "extension_ui_response_sent": {
-      const requestId = event.requestId || event.id;
-      record.hostUiRequests = (record.hostUiRequests || []).filter((item) => item.id !== requestId);
-      if (!record.hostUiRequests.length) detail = null;
-      break;
-    }
-    case "queue_update":
-      record.queue = {
-        steering: listStrings(event.steering),
-        followUp: listStrings(event.followUp),
-      };
-      break;
-    case "runtime_error":
-      if (record.status === "failed") detail = event.message || "failed";
-      break;
-    default:
-      break;
-  }
-
-  const beforeDetail = record.activityDetail || null;
-  record.activityDetail = detail;
-  const after = deriveCoarseActivity(record);
-  record.activity = after;
-  return before !== after || beforeDetail !== detail;
-}
-
-export function isBlockingHostUi(event) {
-  const method = event.method || event.request?.method || event.request?.kind;
-  return ["confirm", "select", "input", "editor"].includes(method);
-}
-
-export function normalizeHostUiRequest(event) {
-  const method = event.method || event.request?.method;
-  if (!["confirm", "select", "input", "editor"].includes(method)) return null;
-  const id = event.id || event.request?.id;
-  if (!id) return null;
-  return {
-    id,
-    kind: method,
-    title: event.title || event.request?.title || "Request",
-    message: event.message || event.request?.message || "",
-    options: listStrings(event.options || event.request?.options),
-    placeholder: event.placeholder || event.request?.placeholder || "",
-    prefill: event.prefill || event.request?.prefill || "",
-    timeoutMs: event.timeout ?? event.timeoutMs ?? event.request?.timeout ?? null,
-  };
-}
-
 export function activityLabel(activity, detail = null) {
   const base = {
-    idle: "Pi ready (idle)",
-    starting: "Pi starting",
-    working: "Pi working",
+    idle: "Ready (idle)",
+    starting: "Starting",
+    working: "Working",
     waiting_for_user: "Waiting for you",
     retrying: "Retrying",
     compacting: "Compacting context",
     stopping: "Stopping",
-    failed: "Pi failed",
-  }[activity] || "Pi";
+    failed: "Failed",
+  }[activity] || "Agent";
   if (detail && activity !== "idle") return `${base} — ${detail}`;
   return base;
 }
@@ -198,7 +92,7 @@ export function deriveFineActivity({
   toolName = null,
   retry = null,
 } = {}) {
-  if (coarse === "failed" || processStatus === "failed") return { kind: "runtime_failed", label: "Pi failed" };
+  if (coarse === "failed" || processStatus === "failed") return { kind: "runtime_failed", label: "Agent failed" };
   if (generation === "failed") return { kind: "request_failed", label: "Request failed · Ready to retry" };
   if (generation === "interrupted") return { kind: "interrupted", label: "Interrupted · Ready" };
   if (generation === "stopping" || coarse === "stopping") return { kind: "stopping", label: "Stopping" };
@@ -213,7 +107,7 @@ export function deriveFineActivity({
     return { kind: "retrying", label: parts.join(" ") };
   }
   if (processStatus === "starting" || generation === "submitting" || coarse === "starting") {
-    return { kind: "starting", label: generation === "submitting" ? "Starting…" : "Starting Pi…" };
+    return { kind: "starting", label: generation === "submitting" ? "Starting…" : "Starting agent…" };
   }
   // Once the selected chat lifecycle is idle, do not keep showing activity from
   // a stale coarse flag — the transcript row must clear when the turn ends.
@@ -227,8 +121,4 @@ export function deriveFineActivity({
     return { kind: "waiting_for_model", label: "Waiting for model" };
   }
   return { kind: "idle", label: null };
-}
-
-function listStrings(value) {
-  return Array.isArray(value) ? value.map(String) : [];
 }
