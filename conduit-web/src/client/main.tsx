@@ -121,9 +121,15 @@ const Settings = lazy(() => import("./settings/settings").then((module) => ({ de
 const prefetchProjectDashboard = (project: Project) => void import("./project/dashboard").then((module) => module.prefetchProjectDashboard(project)).catch(() => {});
 const prefetchWorkspaceTerminal = () => void import("./workspace/workspace-panel");
 
+// The desktop client is often installed on the machine the server runs on, and
+// that address is one nobody should have to type. It is offered only when the
+// probe answers as Conduit, so the button never points at nothing.
+const LOCAL_SERVER_ORIGIN = "http://127.0.0.1:4310";
+
 function NativeServerSetup(props: { onAuthenticated: () => void }) {
   const [address, setAddress] = createSignal(configuredServerOrigin() || "");
   const [verifiedOrigin, setVerifiedOrigin] = createSignal(configuredServerOrigin());
+  const [localServer, setLocalServer] = createSignal<string | null>(null);
   const [password, setPassword] = createSignal("");
   const [error, setError] = createSignal("");
   const [submitting, setSubmitting] = createSignal(false);
@@ -159,11 +165,30 @@ function NativeServerSetup(props: { onAuthenticated: () => void }) {
       setSubmitting(false);
     }
   };
+  onMount(() => {
+    if (!desktopShell || configuredServerOrigin()) return;
+    void fetch(buildHttpUrl("/healthz", LOCAL_SERVER_ORIGIN), { cache: "no-store" })
+      .then((response) => response.ok ? response.json() as Promise<{ ok?: boolean }> : null)
+      .then((health) => { if (health?.ok) setLocalServer(LOCAL_SERVER_ORIGIN); })
+      .catch(() => { /* nothing is listening, so nothing is offered */ });
+  });
+
+  const useLocalServer = () => {
+    const origin = localServer();
+    if (!origin) return;
+    saveServerOrigin(origin);
+    setAddress(origin);
+    setVerifiedOrigin(origin);
+  };
+
   return <main class="native-server-setup">
     <form class="native-server-card" onSubmit={submit}>
       <span class="native-server-brand">Conduit</span>
       <h1>Connect to your server</h1>
       <p>{verifiedOrigin() ? "Server confirmed. Enter your Conduit password." : "Enter the HTTPS address for your Conduit server."}</p>
+      <Show when={localServer() && !verifiedOrigin()}>
+        <Button type="button" variant="outline" onClick={useLocalServer}>Use the server on this computer</Button>
+      </Show>
       <label for="native-server-address">Server address</label>
       <input id="native-server-address" type="text" inputMode="url" autocomplete="url" autocapitalize="none" spellcheck={false}
         placeholder="https://conduit.your-tailnet.ts.net" value={address()} onInput={(event) => setAddress(event.currentTarget.value)}

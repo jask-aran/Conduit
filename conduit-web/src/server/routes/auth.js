@@ -4,6 +4,7 @@ import {
   issueSessionCookie,
   isNativeRequest,
   isSecureRequest,
+  isTrustworthyRequest,
   readCookie,
   safeRedirectTarget,
 } from "../../auth-middleware.js";
@@ -60,7 +61,7 @@ export function registerAuthRoutes(app, { authStore, socketTickets }) {
 
   app.post("/v0/auth/native-login", async (request, response) => {
     if (!isNativeRequest(request)) return response.status(403).json({ error: "native_origin_required" });
-    if (!isSecureRequest(request)) return response.status(400).json({ error: "https_required", message: "Native login requires HTTPS." });
+    if (!isTrustworthyRequest(request)) return response.status(400).json({ error: "https_required", message: "Native login requires HTTPS unless the client is on this machine." });
     const login = await authenticate(request, response, { native: true });
     if (!login || response.headersSent) return;
     response.set("Cache-Control", "no-store").json({ token: login.token });

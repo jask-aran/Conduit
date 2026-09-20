@@ -171,6 +171,24 @@ function isSecureRequest(request) {
   return forwarded.includes("https");
 }
 
+const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+
+/**
+ * A request that arrived on the loopback interface never crossed a network, so
+ * there is nothing for TLS to protect it from. Any forwarding header means a
+ * proxy is in front and the address on the socket is the proxy's, not the
+ * caller's, so the exemption does not apply.
+ */
+function isLoopbackRequest(request) {
+  if (request.headers["x-forwarded-for"] || request.headers["x-forwarded-proto"]) return false;
+  return LOOPBACK_ADDRESSES.has(String(request.socket?.remoteAddress || ""));
+}
+
+/** Where a bearer token may be handed out: over TLS, or not over a network. */
+function isTrustworthyRequest(request) {
+  return isSecureRequest(request) || isLoopbackRequest(request);
+}
+
 const NO_PASSWORD_NEGATIVE_CACHE_MS = 5_000;
 
 export function prepareAuthMiddleware(authStore) {
@@ -201,4 +219,4 @@ export function prepareAuthMiddleware(authStore) {
   };
 }
 
-export { COOKIE_NAME, isSecureRequest };
+export { COOKIE_NAME, isSecureRequest, isTrustworthyRequest };
