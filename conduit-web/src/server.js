@@ -34,7 +34,7 @@ import {
   prepareAuthMiddleware,
   validateSession,
 } from "./auth-middleware.js";
-import { NATIVE_APP_ORIGIN, SocketTicketStore } from "./native-auth.js";
+import { SocketTicketStore, installedClientOrigin } from "./native-auth.js";
 import { listWorkspaceDirectory, readWorkspaceCommit, readWorkspaceDiff, readWorkspaceFile, readWorkspaceFileMetadata, readWorkspaceVersion, runWorkspaceGitAction } from "./workspace-inspector.js";
 import { currentMagicDnsOrigin } from "./tailscale-share.js";
 import { buildProjectDashboard } from "./project-dashboard.js";
@@ -793,7 +793,7 @@ server.on("upgrade", async (request, socket, head) => {
     if (authStore.hasPassword()) {
       const ticket = requestUrl.searchParams.get("ticket");
       if (ticket) {
-        if (request.headers.origin !== NATIVE_APP_ORIGIN) return socket.destroy();
+        if (!installedClientOrigin(request.headers.origin)) return socket.destroy();
         const sessionHash = socketTickets.consume(ticket);
         const session = await authStore.findSessionHash(sessionHash);
         if (!session || session.kind !== "native") return socket.destroy();
