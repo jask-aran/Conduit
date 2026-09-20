@@ -1,15 +1,41 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ChatLog, isLoggedEvent } from "../src/server/chat-log.js";
+import { normalizePiBackendEvent } from "../src/pi-rpc-adapter.js";
 
 test("only events that change the transcript take a number", () => {
   const log = new ChatLog();
-  assert.equal(isLoggedEvent({ type: "content_block_delta" }), false);
+  assert.equal(isLoggedEvent({ type: "assistant_content", phase: "delta" }), false);
+  assert.equal(isLoggedEvent({ type: "tool_activity", phase: "update" }), false);
   assert.equal(isLoggedEvent({ type: "runtime_state" }), false);
   assert.equal(isLoggedEvent({ type: "transcript_sync" }), true);
+  assert.equal(isLoggedEvent({ type: "status", phase: "settled" }), true);
+  // A status with no phase reports what the session is busy with -- Codex
+  // waiting on an approval -- rather than a transition, and the statement that
+  // follows restates whatever it implied.
+  assert.equal(isLoggedEvent({ type: "status", activity: "waiting_for_user" }), false);
   const stamped = log.stamp({ type: "transcript_sync" });
   assert.deepEqual(stamped.log, { id: log.id, seq: 1 });
   assert.equal(log.state().seq, 1);
+});
+
+test("one order means the same thing whichever harness is answering", () => {
+  // The set used to be written in Pi's words, so a turn on Codex was numbered
+  // for its transcript statements and not for its lifecycle. Pi's events reach
+  // the question through Pi's adapter, and the two must agree about what is
+  // worth a number.
+  const pi = (event) => isLoggedEvent(normalizePiBackendEvent(event));
+  assert.equal(pi({ type: "generation_settled", generationId: "g1" }), true);
+  assert.equal(pi({ type: "generation_started", generationId: "g1" }), true);
+  assert.equal(pi({ type: "generation_running", generationId: "g1" }), false, "not a transition worth replaying");
+  assert.equal(pi({ type: "content_block_delta", generationId: "g1" }), false);
+  assert.equal(pi({ type: "assistant_message_started", generationId: "g1" }), false, "paint, restated by message.close");
+  assert.equal(pi({ type: "generation_failed", generationId: "g1", error: { message: "gone" } }), true);
+  // And the same turn stated by a harness that speaks the contract directly.
+  assert.equal(isLoggedEvent({ type: "status", phase: "settled" }), true);
+  assert.equal(isLoggedEvent({ type: "status", phase: "started" }), true);
+  assert.equal(isLoggedEvent({ type: "status", phase: "running" }), false);
+  assert.equal(isLoggedEvent({ type: "error", scope: "runtime" }), true);
 });
 
 test("a client is caught up from where it got to, and not sent what it has", () => {
