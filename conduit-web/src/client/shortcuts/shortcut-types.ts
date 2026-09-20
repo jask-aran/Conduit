@@ -13,6 +13,11 @@ export const SHORTCUT_CONTEXT_PRIORITY = [
   "composer",
   "chat",
   "application",
+  // Not a context the window dispatches in: a command scoped here is handed to
+  // the OS by the desktop shell and fires while Conduit is not focused. It sits
+  // in this list so the registry checks it for ambiguity like any other scope,
+  // and last so that nothing in the window is ever shadowed by it.
+  "global",
 ] as const;
 
 export type KnownShortcutContext = typeof SHORTCUT_CONTEXT_PRIORITY[number];

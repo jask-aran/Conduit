@@ -37,9 +37,13 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
                 reveal(app);
                 let _ = app.emit(CHECK_FOR_UPDATES_EVENT, ());
             }
-            // The only way out when the close button hides: unregister nothing
-            // yet, but end the process rather than leaving a hidden window.
-            "quit" => app.exit(0),
+            // The only way out when the close button hides. The keys the shell
+            // took from the whole system are given back before the process
+            // ends, so quitting never leaves a chord claimed by nothing.
+            "quit" => {
+                crate::global_shortcuts::release(app);
+                app.exit(0)
+            }
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {

@@ -56,6 +56,8 @@ export const COMMAND_IDS = {
   deleteChat: "delete",
   deleteFolder: "delete-folder",
   logout: "logout",
+  revealWindow: "desktop.reveal",
+  newChatGlobally: "desktop.new-chat",
   toggleChatEdit: "chat-search.toggle-edit",
   renameHighlightedChat: "chat-search.rename-highlighted",
   moveHighlightedChat: "chat-search.move-highlighted",
@@ -162,6 +164,32 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     contexts: ["application", "palette.root"],
     defaultBindings: [binding(stroke("KeyC", "C", ["primary", "shift"]))],
     palette: true,
+  }),
+  // The two system-wide commands. They are separate definitions rather than a
+  // global scope added to their in-window twins, because every binding on a
+  // command in this scope is taken from the OS: giving New chat the scope would
+  // have claimed Ctrl+Shift+C from every other application. The defaults use
+  // Alt+Shift, which no browser or Windows shell shortcut occupies, and either
+  // can be rebound or cleared in Settings like any other.
+  command({
+    id: COMMAND_IDS.revealWindow,
+    label: "Open Conduit",
+    description: "Bring the window forward from anywhere, even when Conduit is hidden",
+    group: "desktop",
+    icon: "window",
+    keywords: ["show", "reveal", "focus", "global", "system", "desktop", "tray"],
+    contexts: ["global"],
+    defaultBindings: [binding(stroke("KeyC", "C", ["alt", "shift"]))],
+  }),
+  command({
+    id: COMMAND_IDS.newChatGlobally,
+    label: "New chat from anywhere",
+    description: "Open Conduit and start a chat without leaving what you are doing",
+    group: "desktop",
+    icon: "new-chat",
+    keywords: ["create", "conversation", "global", "system", "desktop"],
+    contexts: ["global"],
+    defaultBindings: [binding(stroke("KeyN", "N", ["alt", "shift"]))],
   }),
   command({
     id: COMMAND_IDS.newFolder,

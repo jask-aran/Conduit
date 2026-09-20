@@ -61,6 +61,7 @@ import { createRuntimeStore } from "./state/runtime";
 import { VoiceWaveform } from "./chat/voice-waveform";
 import { browserShortcutEnvironmentProvider } from "./shortcuts/shortcut-environment";
 import { ShortcutManager } from "./shortcuts/shortcut-manager";
+import { globalShortcuts } from "./shortcuts/global-shortcuts";
 import { dropScope, migrateWorkspacePanelStorage, readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace/workspace-panel-storage";
 import { publishUiPreference, saveUiPreference, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
 import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
@@ -1515,7 +1516,25 @@ function App() {
     const remember = (unlisten: () => void) => stops.push(unlisten);
     void desktopShell.onNewChat(() => { void createChat(); }).then(remember);
     void desktopShell.onCheckForUpdates(() => { void runPwaUpdate(); }).then(remember);
+    void desktopShell.onCommand((commandId) => {
+      if (commandId === COMMAND_IDS.newChatGlobally) void createChat();
+    }).then(remember);
     onCleanup(() => { for (const stop of stops) stop(); });
+  });
+
+  // The system-wide keys follow the registry: whatever is bound now is what the
+  // shell holds, and rebinding one in Settings re-sends the whole set. A chord
+  // another application already owns is reported and changes nothing, which is
+  // the shell's guarantee, not something to re-check here.
+  onMount(() => {
+    if (!desktopShell) return;
+    const shell = desktopShell;
+    const publish = () => {
+      void shell.setGlobalShortcuts(globalShortcuts(shortcutManager.commands, shortcutManager.shortcutOverrides()))
+        .catch(showPlainError);
+    };
+    publish();
+    onCleanup(shortcutManager.subscribe(publish));
   });
 
   onMount(() => {

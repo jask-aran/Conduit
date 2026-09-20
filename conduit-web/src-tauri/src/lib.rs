@@ -5,6 +5,7 @@
 //! Android client does.
 
 mod desktop_settings;
+mod global_shortcuts;
 mod secrets;
 mod tray;
 mod window_chrome;
@@ -29,6 +30,7 @@ pub fn run() {
         // verified channel it runs through.
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(global_shortcuts::plugin())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![HIDDEN_LAUNCH_ARG]),
@@ -37,6 +39,9 @@ pub fn run() {
             let handle = app.handle();
             let settings = desktop_settings::load(handle);
             app.manage(desktop_settings::Store(Mutex::new(settings)));
+            // Empty until the client says what it wants: the registry it holds
+            // is the only place a shortcut is decided.
+            app.manage(global_shortcuts::Registered::default());
             tray::install(handle)?;
             if let Some(window) = app.get_webview_window("main") {
                 window_chrome::paint_caption(&window);
@@ -65,7 +70,8 @@ pub fn run() {
             secrets::secret_set,
             secrets::secret_remove,
             desktop_settings::desktop_settings,
-            desktop_settings::set_desktop_settings
+            desktop_settings::set_desktop_settings,
+            global_shortcuts::set_global_shortcuts
         ])
         .run(tauri::generate_context!())
         .expect("Conduit desktop failed to start");
