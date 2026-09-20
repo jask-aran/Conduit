@@ -88,7 +88,7 @@ export type LiveEvent = EventBase & (
   | { type: "permission_request"; request: HostUiRequest | null }
   | { type: "permission_resolved"; requestId: string }
   | { type: "history_truncated"; beforeMessageId: string | null; afterMessageId: string | null }
-  | { type: "session_checkpoint"; chatId: string; title: string | null; chat: ChatSummary | null; generationSeq: number | null; artifacts: TurnArtifactSummary[] | null }
+  | { type: "session_checkpoint"; chatId: string; title: string | null; chat: ChatSummary | null; artifacts: TurnArtifactSummary[] | null }
   | { type: "user_message_committed"; message: ProtocolMessage }
   | { type: "transcript_sync"; messages: unknown[]; tools: unknown[]; replace?: boolean }
   | { type: "transcript_op"; op: "message.open"; message: ProtocolMessage; after: string | null;
@@ -341,7 +341,6 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
       return {
         type: "session_checkpoint",
         generationId,
-        generationSeq: number(source.generationSeq ?? source.seq) ?? null,
         chatId: text(chat.id || source.chatId),
         title: optionalText(chat.title || source.title),
         // The socket carries the whole chat row. Dropping it made the open

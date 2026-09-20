@@ -6,7 +6,7 @@ function record() {
   return {
     id: "live", chatId: "chat", status: "running", activity: "idle", active: false, stopping: false,
     sessionId: "thread-1", generation: null, clients: new Set(), events: [], pending: new Map(),
-    approvals: new Map(), steering: [], followUp: [], sequence: 0, eventSequence: 0, messageIds: new Set(),
+    approvals: new Map(), steering: [], followUp: [], rpcRequestId: 0, generationSeq: 0, messageIds: new Set(),
   };
 }
 
@@ -27,7 +27,9 @@ test("Codex notifications map to neutral streaming events", () => {
   assert.equal(settled.phase, "final");
   assert.equal(settled.stopReason, "stop");
   assert.equal(settled.blocks[0].text, "Hello");
-  assert.equal(live.events[4].detail, "settled");
+  // The transition is stated, not spelled out in `detail` for the browser to
+  // string-match back into one.
+  assert.equal(live.events[4].phase, "settled");
   assert.equal(live.active, false);
 });
 

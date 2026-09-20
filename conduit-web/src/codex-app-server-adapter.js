@@ -470,9 +470,13 @@ export class CodexAppServerAdapter extends EventEmitter {
       clients: new Set(), events: [], pending: new Map(), approvals: new Map(),
       steering: [], followUp: [],
       permissionMode: "", permissionProfile: "", approvalPolicy: "", approvalsReviewer: "", serviceLevel: "",
-      // The JSON-RPC request counter, which is Codex's protocol and not the
-      // transcript's order -- `eventSequence` is that.
-      sequence: 0, eventSequence: 0, messageIds: new Set(),
+      // Two counters that both used to be called a sequence. `rpcRequestId` is
+      // Codex's own protocol -- the id a response is matched back to its
+      // request by, meaningful to nothing outside this file. `generationSeq` is
+      // the order a turn's events are in, which is what the browser reduces and
+      // what `seq` carries on the wire. A chat's own order is a third number
+      // again, and it lives in the log as `log.seq`.
+      rpcRequestId: 0, generationSeq: 0, messageIds: new Set(),
       // Not able to answer until the app-server has finished its handshake.
       ready: false,
     };
@@ -526,7 +530,7 @@ export class CodexAppServerAdapter extends EventEmitter {
   }
 
   request(record, method, params) {
-    const id = ++record.sequence;
+    const id = ++record.rpcRequestId;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         record.pending.delete(id);
@@ -599,7 +603,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       title: descriptor.title(params), message: descriptor.message(params),
       options: [...APPROVAL_OPTIONS], placeholder: "", prefill: "", timeoutMs: null,
     });
-    this.publish(record, { type: "status", generationId, seq: ++record.eventSequence,
+    this.publish(record, { type: "status", generationId, seq: ++record.generationSeq,
       status: "working", activity: "waiting_for_user", detail: descriptor.title(params) });
   }
 
@@ -622,7 +626,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     record.approvals.delete(requestId);
     if (!record.approvals.size) record.activity = record.active ? "working" : "idle";
     this.publish(record, { type: "permission_resolved", generationId, requestId });
-    this.publish(record, { type: "status", generationId, seq: ++record.eventSequence,
+    this.publish(record, { type: "status", generationId, seq: ++record.generationSeq,
       status: record.active ? "working" : "idle", activity: record.activity, detail: null });
   }
 
@@ -724,17 +728,17 @@ export class CodexAppServerAdapter extends EventEmitter {
    */
   attachToolCall(record, turnId, toolCallId, activity) {
     if (!record.turn || record.turn.id !== turnId) {
-      const messageId = `tools-${turnId}-${record.eventSequence}`;
+      const messageId = `tools-${turnId}-${record.generationSeq}`;
       this.settleCarrier(record, messageId);
       this.openMessage(record, messageId, "assistant", { answers: record.answering || null, generationId: turnId });
       this.publish(record, { type: "assistant_content", generationId: turnId, phase: "start",
-        seq: ++record.eventSequence, messageId });
+        seq: ++record.generationSeq, messageId });
       record.turn = { id: turnId, messageId, blocks: [] };
     }
     record.turn.blocks.push({ kind: "tool_call", contentIndex: record.turn.blocks.length,
       id: toolCallId, toolCallId, name: activity.name, input: activity.input });
     this.publish(record, { type: "assistant_content", generationId: turnId, phase: "final",
-      seq: ++record.eventSequence, messageId: record.turn.messageId, stopReason: "toolUse",
+      seq: ++record.generationSeq, messageId: record.turn.messageId, stopReason: "toolUse",
       errorMessage: null, blocks: record.turn.blocks });
   }
 
@@ -768,7 +772,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       record.activity = "working";
       record.generation = { id: turnId, closed: false, settled: false };
       record.turn = null;
-      this.publish(record, { type: "status", generationId: turnId, phase: "started", seq: ++record.eventSequence, status: "working", activity: "working", detail: null });
+      this.publish(record, { type: "status", generationId: turnId, phase: "started", seq: ++record.generationSeq, status: "working", activity: "working", detail: null });
     } else if (method === "item/started" && params.item?.type === "contextCompaction") {
       record.compacting = true;
       record.activity = "compacting";
@@ -798,9 +802,9 @@ export class CodexAppServerAdapter extends EventEmitter {
         record.messageIds.add(messageId);
         this.openMessage(record, messageId, "assistant", { answers: record.answering || null, generationId: turnId });
         this.publish(record, { type: "assistant_content", generationId: turnId, phase: "start",
-          seq: ++record.eventSequence, messageId });
+          seq: ++record.generationSeq, messageId });
       }
-      this.publish(record, { type: "assistant_content", generationId: turnId, phase: "delta", seq: ++record.eventSequence,
+      this.publish(record, { type: "assistant_content", generationId: turnId, phase: "delta", seq: ++record.generationSeq,
         messageId, contentIndex: 0, blockKind: "text", delta: params.delta || "" });
       // Hold what has been streamed so far. An interrupted answer is the one
       // case where Codex never reports the item at all -- the thread keeps the
@@ -815,10 +819,10 @@ export class CodexAppServerAdapter extends EventEmitter {
         record.messageIds.add(messageId);
         this.openMessage(record, messageId, "assistant", { answers: record.answering || null, generationId: turnId });
         this.publish(record, { type: "assistant_content", generationId: turnId, phase: "start",
-          seq: ++record.eventSequence, messageId });
+          seq: ++record.generationSeq, messageId });
       }
       this.publish(record, { type: "assistant_content", generationId: turnId, phase: "delta",
-        seq: ++record.eventSequence, messageId, contentIndex: params.summaryIndex || 0,
+        seq: ++record.generationSeq, messageId, contentIndex: params.summaryIndex || 0,
         blockKind: "thinking", delta: params.delta || "" });
       this.streamInto(record, turnId, messageId, "thinking");
       record.turn.blocks[0].text += params.delta || "";
@@ -828,14 +832,14 @@ export class CodexAppServerAdapter extends EventEmitter {
         record.messageIds.add(messageId);
         this.openMessage(record, messageId, "assistant", { answers: record.answering || null, generationId: turnId });
         this.publish(record, { type: "assistant_content", generationId: turnId,
-          phase: "start", seq: ++record.eventSequence, messageId });
+          phase: "start", seq: ++record.generationSeq, messageId });
       }
       const text = CodexAppServerAdapter.itemText(params.item);
       const interim = params.item.phase !== "final_answer";
       this.settleCarrier(record, messageId);
       record.turn = { id: turnId, messageId, phase: params.item.phase || null,
         blocks: [{ kind: "text", contentIndex: 0, text }] };
-      this.publish(record, { type: "assistant_content", generationId: turnId, phase: "final", seq: ++record.eventSequence,
+      this.publish(record, { type: "assistant_content", generationId: turnId, phase: "final", seq: ++record.generationSeq,
         messageId, stopReason: interim ? "toolUse" : "stop",
         errorMessage: null, blocks: record.turn.blocks });
     } else if (method === "item/completed" && params.item?.type === "reasoning") {
@@ -845,19 +849,19 @@ export class CodexAppServerAdapter extends EventEmitter {
         record.messageIds.add(messageId);
         this.openMessage(record, messageId, "assistant", { answers: record.answering || null, generationId: turnId });
         this.publish(record, { type: "assistant_content", generationId: turnId,
-          phase: "start", seq: ++record.eventSequence, messageId });
+          phase: "start", seq: ++record.generationSeq, messageId });
       }
       this.settleCarrier(record, messageId);
       record.turn = { id: turnId, messageId, blocks: text
         ? [{ kind: "thinking", contentIndex: 0, text, redacted: false }]
         : [] };
       this.publish(record, { type: "assistant_content", generationId: turnId, phase: "final",
-        seq: ++record.eventSequence, messageId, stopReason: "toolUse", errorMessage: null, blocks: record.turn.blocks });
+        seq: ++record.generationSeq, messageId, stopReason: "toolUse", errorMessage: null, blocks: record.turn.blocks });
     } else if (method === "item/started" || method === "item/completed") {
       const activity = CodexAppServerAdapter.toolActivity(params.item || {});
       if (!activity) return;
       if (method === "item/started") {
-        this.publish(record, { type: "tool_activity", generationId: turnId, phase: "start", seq: ++record.eventSequence,
+        this.publish(record, { type: "tool_activity", generationId: turnId, phase: "start", seq: ++record.generationSeq,
           toolCallId: params.item.id, name: activity.name, input: activity.input });
         this.attachToolCall(record, turnId, params.item.id, activity);
         if (this.states(record)) {
@@ -865,7 +869,7 @@ export class CodexAppServerAdapter extends EventEmitter {
             input: activity.input, messageId: record.turn?.messageId || null, generationId: turnId }));
         }
       } else {
-        this.publish(record, { type: "tool_activity", generationId: turnId, phase: "end", seq: ++record.eventSequence,
+        this.publish(record, { type: "tool_activity", generationId: turnId, phase: "end", seq: ++record.generationSeq,
           toolCallId: params.item.id, name: activity.name, output: truncate(activity.output), isError: activity.isError });
         if (this.states(record)) {
           this.publish(record, toolClose({ toolCallId: params.item.id, output: truncate(activity.output),
@@ -901,7 +905,7 @@ export class CodexAppServerAdapter extends EventEmitter {
         && !record.turn.blocks.some((block) => block.kind === "tool_call");
       if (promoted) {
         this.publish(record, { type: "assistant_content", generationId: turnId, phase: "final",
-          seq: ++record.eventSequence, messageId: record.turn.messageId, stopReason: "stop",
+          seq: ++record.generationSeq, messageId: record.turn.messageId, stopReason: "stop",
           errorMessage: null, blocks: record.turn.blocks });
         this.closeMessage(record, record.turn.messageId, "stop", { blocks: record.turn.blocks, interim: false });
       }
@@ -912,7 +916,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       record.answering = null;
       this.publish(record, failed
         ? { type: "error", generationId: turnId, error: { code: "backend_unavailable", message: params.turn?.error?.message || "Codex turn failed" } }
-        : { type: "status", generationId: turnId, phase: "settled", seq: ++record.eventSequence, status: "idle", activity: "idle", detail: null });
+        : { type: "status", generationId: turnId, phase: "settled", seq: ++record.generationSeq, status: "idle", activity: "idle", detail: null });
       this.emit("settled", { record, completed: !failed && !stopped });
       if (record.followUp.length) void this.flushFollowUp(record);
     }

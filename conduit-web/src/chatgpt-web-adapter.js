@@ -132,7 +132,7 @@ export class ChatGptWebAdapter extends EventEmitter {
       id: crypto.randomUUID(), chatId, projectId: project?.id, status: "running", activity: "idle",
       active: false, stopping: false, sessionId: { conversationId: cursor.conversationId || "", parentMessageId: cursor.parentMessageId || "" },
       model: model || cursor.model || "", thinkingLevel: thinkingLevel || cursor.thinkingLevel || "medium",
-      generation: null, clients: new Set(), events: [], eventSequence: 0,
+      generation: null, clients: new Set(), events: [], generationSeq: 0,
       abortController: null,
     };
     record.events = this.readJournal(chatId).slice(-500);
@@ -161,8 +161,8 @@ export class ChatGptWebAdapter extends EventEmitter {
     // What the turn has written so far, so an answer that fails or is stopped
     // can still be settled with the text the reader watched arrive.
     record.turn = { messageId, blocks: [] };
-    this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.eventSequence, status: "working", activity: "working", detail: null });
-    this.publish(record, { type: "assistant_content", generationId, phase: "start", seq: ++record.eventSequence, messageId });
+    this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.generationSeq, status: "working", activity: "working", detail: null });
+    this.publish(record, { type: "assistant_content", generationId, phase: "start", seq: ++record.generationSeq, messageId });
     void this.runPrompt(record, { generationId, messageId, message: userMessage });
     return generationId;
   }
@@ -181,7 +181,7 @@ export class ChatGptWebAdapter extends EventEmitter {
         const event = JSON.parse(line);
         if (event.type === "delta") {
           fullText += event.text;
-          this.publish(record, { type: "assistant_content", generationId, phase: "delta", seq: ++record.eventSequence,
+          this.publish(record, { type: "assistant_content", generationId, phase: "delta", seq: ++record.generationSeq,
             messageId, contentIndex: 0, blockKind: "text", delta: event.text });
         } else if (event.type === "done") {
           record.sessionId = { conversationId: event.conversationId || record.sessionId.conversationId,
@@ -193,14 +193,14 @@ export class ChatGptWebAdapter extends EventEmitter {
             event.retryAfterMs ? { retryAfterMs: event.retryAfterMs } : {});
         }
       }
-      this.publish(record, { type: "assistant_content", generationId, phase: "final", seq: ++record.eventSequence,
+      this.publish(record, { type: "assistant_content", generationId, phase: "final", seq: ++record.generationSeq,
         messageId, stopReason: record.stopping ? "aborted" : "stop", errorMessage: null,
         blocks: [{ kind: "text", contentIndex: 0, text: fullText }] });
       this.closeTurn(record, record.stopping ? "aborted" : "stop", fullText);
       this.settle(record, record.stopping ? "stopped" : "settled");
     } catch (cause) {
       if (cause.name === "AbortError") {
-        this.publish(record, { type: "assistant_content", generationId, phase: "final", seq: ++record.eventSequence,
+        this.publish(record, { type: "assistant_content", generationId, phase: "final", seq: ++record.generationSeq,
           messageId, stopReason: "aborted", errorMessage: null, blocks: [{ kind: "text", contentIndex: 0, text: fullText }] });
         this.closeTurn(record, "aborted", fullText);
         this.settle(record, "stopped");
@@ -240,7 +240,7 @@ export class ChatGptWebAdapter extends EventEmitter {
     record.activity = "idle";
     record.abortController = null;
     Object.assign(record.generation, { closed: true, settled: true });
-    this.publish(record, { type: "status", generationId: record.generation.id, phase: detail, seq: ++record.eventSequence,
+    this.publish(record, { type: "status", generationId: record.generation.id, phase: detail, seq: ++record.generationSeq,
       status: "idle", activity: "idle", detail: null });
     this.emit("settled", { record, completed: detail !== "stopped" });
   }
@@ -263,7 +263,7 @@ export class ChatGptWebAdapter extends EventEmitter {
     if (!record?.active) return false;
     record.stopping = true;
     record.activity = "stopping";
-    this.publish(record, { type: "status", generationId: record.generation.id, phase: "stopping", seq: ++record.eventSequence,
+    this.publish(record, { type: "status", generationId: record.generation.id, phase: "stopping", seq: ++record.generationSeq,
       status: "stopping", activity: "stopping", detail: null });
     record.abortController.abort();
     return true;
