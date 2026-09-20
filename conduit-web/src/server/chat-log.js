@@ -21,26 +21,50 @@
  */
 import crypto from "node:crypto";
 
-/** Events whose loss actually changes what the transcript says. */
+/**
+ * Events whose loss actually changes what the transcript says, in Conduit's
+ * words.
+ *
+ * This set was written in Pi's -- `assistant_message_started`,
+ * `tool_execution_completed`, `generation_settled` -- so the order a chat is
+ * kept in depended on which harness was answering it. Codex, ChatGPT Web and
+ * the test harness publish the contract's names, which matched five of the
+ * fifteen entries, so their turns were numbered for the transcript statements
+ * and not for the lifecycle. Pi's events are translated to these names by
+ * Pi's own adapter before the question is asked.
+ *
+ * What is in here is what the browser cannot work out for itself: the server's
+ * statements about the transcript, and the transitions a turn makes. Paint is
+ * not -- `assistant_content` and `tool_activity` may be merged or dropped
+ * under backpressure by design, and a `message.close` restates in full what
+ * every delta was building, so numbering them would make each coalesced frame
+ * look like a hole in the order.
+ */
 export const LOGGED_EVENT_TYPES = new Set([
-  "assistant_message_started",
-  "assistant_message_completed",
-  "tool_execution_started",
-  "tool_execution_completed",
-  "generation_started",
-  "generation_stopping",
-  "generation_stopped",
-  "generation_settled",
-  "generation_failed",
+  // What the server has decided about the transcript's shape, said outright.
+  "transcript_op",
   "transcript_sync",
   "history_truncated",
   "history_forked",
   "session_checkpoint",
-  // What the server has decided about the transcript's shape, said outright.
-  "transcript_op",
+  // The transitions a turn makes, and the one that ends it badly.
+  "status",
+  "error",
 ]);
 
-export const isLoggedEvent = (event) => Boolean(event?.type && LOGGED_EVENT_TYPES.has(event.type));
+/**
+ * The transitions a client has to be caught up on.
+ *
+ * `running` is left out because `started` has already said a turn began, and a
+ * status with no phase at all reports what the session is busy with -- Codex
+ * waiting on an approval -- rather than a transition, which the next statement
+ * restates anyway.
+ */
+export const LOGGED_STATUS_PHASES = new Set(["started", "stopping", "stopped", "settled"]);
+
+export const isLoggedEvent = (event) => Boolean(event?.type)
+  && LOGGED_EVENT_TYPES.has(event.type)
+  && (event.type !== "status" || LOGGED_STATUS_PHASES.has(event.phase));
 
 export class ChatLog {
   constructor({ limit = 400 } = {}) {

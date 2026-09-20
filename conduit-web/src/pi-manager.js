@@ -19,6 +19,7 @@ import { messageClose, messageDrop, messageOpen, toolClose, toolOpen } from "./h
 import { PI_CAPABILITIES } from "./pi-capabilities.js";
 import { PiCommandCatalog } from "./pi-command-catalog.js";
 import { ChatLogs, isLoggedEvent } from "./server/chat-log.js";
+import { normalizePiBackendEvent } from "./pi-rpc-adapter.js";
 import { messageIsInterim } from "./active-generation.js";
 
 export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = "", models, template }) {
@@ -1532,7 +1533,11 @@ export class PiManager extends EventEmitter {
    */
   stampForLog(record, event) {
     const log = this.logFor(record);
-    return log && isLoggedEvent(event) ? log.stamp(event) : event;
+    // Asked of the event as the browser will receive it, not as Pi wrote it.
+    // The log speaks Conduit's words so that one order means the same thing on
+    // all four harnesses; translating Pi's is Pi's adapter's job, and this is
+    // the one place that had it deciding order from Pi's names instead.
+    return log && isLoggedEvent(normalizePiBackendEvent(event)) ? log.stamp(event) : event;
   }
 
   /**
