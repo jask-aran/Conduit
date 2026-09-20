@@ -110,7 +110,10 @@ export function normalizePiBackendEvent(event) {
         errorMessage: aborted ? null : event.errorMessage,
         // Already Conduit's blocks: the normalizer turns Pi's names into them
         // where it reads Pi's wire, which is the only place they belong.
-        blocks: event.blocks };
+        blocks: event.blocks,
+        provider: event.provider ?? null,
+        model: event.model ?? null,
+        timestamp: event.timestamp ?? null };
     }
     // The transition is stated. `detail` used to carry Pi's own event name so
     // the browser could read it back out, which made a free-text field the

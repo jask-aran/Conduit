@@ -76,12 +76,8 @@ function generationChangeFor(event: StructuredGenerationEvent): LiveGenerationCh
     : Number.isInteger(block?.contentIndex) ? Number(block?.contentIndex) : undefined;
   const messageId = typeof event.messageId === "string" ? event.messageId : undefined;
   const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
-  const scope = event.type === "tool_execution_started"
-    || event.type === "tool_execution_updated"
-    || event.type === "tool_execution_completed"
-    ? "tool"
-    : event.type === "content_block_delta" || event.type === "content_block_completed"
-      ? "block"
+  const scope = event.type === "tool_activity" ? "tool"
+    : event.type === "assistant_content" && event.phase === "delta" ? "block"
       : "structural";
   return {
     generationId: String(event.generationId || ""),
@@ -285,7 +281,11 @@ export function createActiveChat(options: ActiveChatOptions) {
   const prefetch = (chat: ChatSummary) => {
     if (!chatIsLive(chat)) void loadTranscript(chat).catch(() => {});
   };
-  const STOP_TERMINAL_EVENT_TYPES = new Set(["generation_stopping", "generation_stopped", "generation_settled", "generation_failed"]);
+  // A stop is finished when the turn says it stopped, settled or is stopping.
+  // `generation_failed` used to be in here and could never arrive: a failed
+  // generation reaches the browser as `error`, which is not a structured
+  // generation event and never reached this check.
+  const STOP_TERMINAL_PHASES = new Set(["stopping", "stopped", "settled"]);
 
   const selectedId = catalogue.selectedId;
   /**
@@ -429,7 +429,7 @@ export function createActiveChat(options: ActiveChatOptions) {
 
   /** The only client owner of assistant generation state and terminal handoff. */
   const applyGenerationEvent = (event: StructuredGenerationEvent) => {
-    if (stopPending && !STOP_TERMINAL_EVENT_TYPES.has(event.type)) return;
+    if (stopPending && !(event.type === "status" && STOP_TERMINAL_PHASES.has(String(event.phase)))) return;
     if (!live() || live()!.chatId !== selectedId()) return;
     const previous = activeGeneration();
     // The Solid store mutates in place. Capture the status before apply;
@@ -544,7 +544,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     else if (next.status === "stopped") {
       stopPending = false;
       setGeneration("interrupted");
-      if (event.type === "generation_stopped" && Boolean(event.processTerminated)) {
+      if (event.type === "status" && event.phase === "stopped" && Boolean(event.processTerminated)) {
         setLive(null);
         session.detach();
       }
@@ -865,7 +865,7 @@ export function createActiveChat(options: ActiveChatOptions) {
    * run together while the already-mounted transcript stays hidden. Live frames
    * are buffered until the persisted transcript is installed, then replayed in
    * order. The first runtime_state is the attach boundary: the server always
-   * sends it after the optional generation_resume snapshot.
+   * sends it after the optional generation_replay snapshot.
    */
   const performLiveSelect = async (
     chat: ChatSummary,

@@ -154,14 +154,14 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
     }
     if (!event || !event.generationId) return result(previous, Boolean(previous));
 
-    if (event.type === "generation_resume") {
+    if (event.type === "generation_replay") {
       if (!event.generation || event.generation.id !== event.generationId) return result(previous, Boolean(previous));
       if (state?.id === event.generationId && state.lastSeq > event.seq) return result(previous, true);
       install(snapshotActiveGeneration(event.generation));
       return result(previous, true);
     }
 
-    if (event.type === "generation_started") {
+    if (event.type === "status" && event.phase === "started") {
       if (state?.id === event.generationId) return result(previous, true);
       const started = createActiveGeneration(event.generationId, {
         continuation: Boolean(event.continuation),
@@ -173,19 +173,25 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
     }
 
     if (!state || state.id !== event.generationId) return result(previous, false);
+    // Only a stated position can be ordered. Anything the socket carries
+    // without one -- an event no adapter case claims -- is not part of the
+    // lifecycle and must not be allowed to move `lastSeq` off a number.
+    if (typeof event.seq !== "number") return result(previous, true);
     if (event.seq <= state.lastSeq || TERMINAL_STATUSES.has(state.status)) return result(previous, true);
 
     batch(() => {
       setPath(["lastSeq"], event.seq);
 
-      switch (event.type) {
-        case "generation_running":
+      switch (event.type === "status" ? `status:${event.phase}`
+        : event.type === "assistant_content" ? `content:${event.phase}`
+          : event.type === "tool_activity" ? `tool:${event.phase}` : event.type) {
+        case "status:running":
           setPath(["status"], "running");
           break;
-        case "generation_stopping":
+        case "status:stopping":
           setPath(["status"], "stopping");
           break;
-        case "assistant_message_started":
+        case "content:start":
           if (currentMessageIndex(event.messageId) == null) {
             appendMessage({
               id: event.messageId,
@@ -196,16 +202,7 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
             });
           }
           break;
-        case "content_block_started": {
-          const block = event.block || {};
-          upsertBlock(event.messageId, block.contentIndex, {
-            ...block,
-            status: "streaming",
-            identity: contentBlockIdentity(event.messageId, block.contentIndex),
-          });
-          break;
-        }
-        case "content_block_delta": {
+        case "content:delta": {
           const messageIndex = currentMessageIndex(event.messageId);
           const existingIndex = messageIndex == null ? null : currentBlockIndex(event.messageId, event.contentIndex);
           const existing = messageIndex != null && existingIndex != null
@@ -223,16 +220,7 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
           setPath([...blockPath(block.messageIndex, block.blockIndex), field], value);
           break;
         }
-        case "content_block_completed": {
-          const block = event.block || {};
-          upsertBlock(event.messageId, block.contentIndex, {
-            ...block,
-            status: "complete",
-            identity: contentBlockIdentity(event.messageId, block.contentIndex),
-          });
-          break;
-        }
-        case "assistant_message_completed": {
+        case "content:final": {
           const messageIndex = currentMessageIndex(event.messageId);
           if (messageIndex == null) break;
           const message = state.assistantMessages[messageIndex];
@@ -257,7 +245,7 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
           rebuildMessageIndex(messageIndex);
           break;
         }
-        case "tool_execution_started":
+        case "tool:start":
           setPath(["toolExecutions", event.toolCallId], {
             toolCallId: event.toolCallId,
             name: event.name,
@@ -267,7 +255,7 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
             isError: false,
           });
           break;
-        case "tool_execution_updated": {
+        case "tool:update": {
           const existing = state.toolExecutions[event.toolCallId] || { toolCallId: event.toolCallId };
           setPath(["toolExecutions", event.toolCallId], {
             ...existing,
@@ -278,7 +266,7 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
           });
           break;
         }
-        case "tool_execution_completed": {
+        case "tool:end": {
           const existing = state.toolExecutions[event.toolCallId] || { toolCallId: event.toolCallId };
           setPath(["toolExecutions", event.toolCallId], {
             ...existing,
@@ -289,21 +277,11 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
           });
           break;
         }
-        case "generation_retry_started":
-          setPath(["status"], "running");
-          setPath(["retry"], event.retry);
-          break;
-        case "generation_retry_ended":
-          setPath(["retry"], null);
-          break;
-        case "generation_turn_ended":
-          if (!event.willRetry) setPath(["retry"], null);
-          break;
-        case "generation_settled":
+        case "status:settled":
           setPath(["status"], terminalStatus(state));
           setPath(["retry"], null);
           break;
-        case "generation_stopped":
+        case "status:stopped":
           setPath(["status"], "stopped");
           setPath(["retry"], null);
           for (const [toolCallId, execution] of Object.entries(state.toolExecutions)) {
@@ -311,11 +289,6 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
             setPath(["toolExecutions", toolCallId, "status"], "cancelled");
             setPath(["toolExecutions", toolCallId, "isError"], false);
           }
-          break;
-        case "generation_failed":
-          setPath(["status"], "failed");
-          setPath(["error"], event.error);
-          setPath(["retry"], null);
           break;
       }
     });

@@ -191,6 +191,15 @@ export type AssistantContentEvent = EventBase & (
     blocks: AssistantBlock[];
     stopReason: string;
     errorMessage: string | null;
+    /**
+     * Who wrote it, when. The harness knows at this point and the reader is
+     * shown it; without these on the close the browser could only learn them by
+     * reloading the transcript, so a live answer and the same answer after a
+     * refresh disagreed about which model produced it.
+     */
+    provider?: string | null;
+    model?: string | null;
+    timestamp?: string | null;
   }
 );
 
