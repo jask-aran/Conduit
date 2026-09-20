@@ -144,20 +144,20 @@ test("live harness measures visible text deltas without counting thinking blocks
     })), 10);
     socket.once("message", () => {
       socket.send(JSON.stringify({
-        type: "status", generationId: "generation-1",
-        status: "working", activity: "working", detail: "generation_started",
+        type: "status", phase: "started", seq: 1, generationId: "generation-1",
+        status: "working", activity: "working", detail: null,
       }));
       socket.send(JSON.stringify({
         type: "assistant_content", phase: "delta", generationId: "generation-1",
-        messageId: "m1", contentIndex: 0, blockKind: "thinking", delta: "Hidden reasoning",
+        seq: 2, messageId: "m1", contentIndex: 0, blockKind: "thinking", delta: "Hidden reasoning",
       }));
       socket.send(JSON.stringify({
         type: "assistant_content", phase: "delta", generationId: "generation-1",
-        messageId: "m1", contentIndex: 1, blockKind: "text", delta: visibleText,
+        seq: 3, messageId: "m1", contentIndex: 1, blockKind: "text", delta: visibleText,
       }));
       socket.send(JSON.stringify({
-        type: "status", generationId: "generation-1",
-        status: "idle", activity: "idle", detail: "settled",
+        type: "status", phase: "settled", seq: 4, generationId: "generation-1",
+        status: "idle", activity: "idle", detail: null,
       }));
     });
   });

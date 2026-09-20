@@ -192,7 +192,7 @@ test("Codex app-server profile creates, streams, and reconnects through neutral 
     // than the first thing the turn says.
     const answerDelta = (event) => event.type === "assistant_content" && event.phase === "delta" && event.delta.includes("works");
     assert.equal((await stream.next(answerDelta)).delta, "codex-test low works");
-    await stream.next((event) => event.type === "status" && event.detail === "settled");
+    await stream.next((event) => event.type === "status" && event.phase === "settled");
     stream.close();
     const reattached = harness.connectStream(live.id);
     await reattached.opened;
@@ -280,7 +280,7 @@ test("reattachment receives a terminal generation and its durable checkpoint", a
       },
     }, { pid: prompt.pid });
     await harness.pi.emit({ type: "agent_settled" }, { pid: prompt.pid });
-    await original.next((event) => event.type === "status" && event.detail === "settled");
+    await original.next((event) => event.type === "status" && event.phase === "settled");
     original.close();
 
     const reattached = harness.connectStream(live.id);
