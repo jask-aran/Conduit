@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { NATIVE_APP_ORIGIN } from "./native-auth.js";
+import { installedClientOrigin } from "./native-auth.js";
 
 const COOKIE_NAME = "conduit_session";
 const COOKIE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -111,7 +111,7 @@ export async function validateSession(authStore, request) {
 }
 
 export function isNativeRequest(request) {
-  return request.headers?.origin === NATIVE_APP_ORIGIN;
+  return installedClientOrigin(request.headers?.origin) !== null;
 }
 
 export async function validateNativeSession(authStore, request) {
@@ -130,7 +130,8 @@ const NATIVE_HEADERS = new Set(["authorization", "content-type"]);
 
 export function nativeCors(request, response, next) {
   if (!isNativeRequest(request)) return next();
-  response.set("Access-Control-Allow-Origin", NATIVE_APP_ORIGIN);
+  // The matched member of the set, not the header as sent.
+  response.set("Access-Control-Allow-Origin", installedClientOrigin(request.headers.origin));
   response.set("Vary", "Origin");
   if (request.method !== "OPTIONS") return next();
   const method = String(request.headers["access-control-request-method"] || "").toUpperCase();
