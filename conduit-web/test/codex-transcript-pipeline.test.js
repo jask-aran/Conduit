@@ -67,7 +67,10 @@ function harness() {
   ws.readyState = 1;
   ws.send = (frame) => {
     const raw = JSON.parse(frame);
-    if (raw.type === "client_error" || raw.type === "error") { errors.push(raw); return; }
+    // One event, one shape: `error` with the cause nested, whichever scope it
+    // is. A rejected command used to arrive as `client_error` with the message
+    // at the top level, so the two had to be caught and read separately.
+    if (raw.type === "error") { errors.push(raw); return; }
     const wire = normalizeLiveEvent(raw);
     // Exactly what the browser does with these: the statements decide what the
     // transcript holds, and live activity only paints output arriving while a
@@ -349,7 +352,7 @@ test("a prompt Codex refuses takes back the row it stated", async () => {
 
   // The failure is reported, and the prompt is not left sitting in a
   // transcript that no turn will ever answer.
-  assert.deepEqual(chat.errors.map((event) => event.message), ["refused"]);
+  assert.deepEqual(chat.errors.map((event) => event.error?.message), ["refused"]);
   assert.deepEqual(buildTurnRows(chat.messages(), []), []);
 });
 

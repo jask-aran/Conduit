@@ -81,12 +81,12 @@ export interface RuntimeStateEvent extends EventBase {
 
 export type LiveEvent = EventBase & (
   | RuntimeStateEvent
-  | { type: "context_usage"; contextUsage: ContextUsage | null; sessionStats: SessionStats | null; cacheStats: CacheStats | null }
-  | { type: "compaction_start" | "compaction_end" | "auto_retry_end" }
-  | { type: "auto_retry_start"; retry: RetryState }
-  | { type: "queue_update"; queue: QueueState }
-  | { type: "extension_ui_request"; request: HostUiRequest | null }
-  | { type: "extension_ui_resolved"; requestId: string }
+  | { type: "usage"; contextUsage: ContextUsage | null; sessionStats: SessionStats | null; cacheStats: CacheStats | null }
+  | { type: "compaction"; active: boolean }
+  | { type: "retry"; active: boolean; retry: RetryState | null }
+  | { type: "queue_state"; queue: QueueState }
+  | { type: "permission_request"; request: HostUiRequest | null }
+  | { type: "permission_resolved"; requestId: string }
   | { type: "history_truncated"; beforeMessageId: string | null; afterMessageId: string | null }
   | { type: "session_checkpoint"; chatId: string; title: string | null; chat: ChatSummary | null; generationSeq: number | null; artifacts: TurnArtifactSummary[] | null }
   | { type: "user_message_committed"; message: ProtocolMessage }
@@ -102,7 +102,7 @@ export type LiveEvent = EventBase & (
   | { type: "log_state"; log: LogStamp }
   | { type: "log_reset" }
   | StructuredGenerationEvent
-  | { type: "runtime_error" | "client_error"; code: string; message: string }
+  | { type: "error"; scope: "runtime" | "request"; code: string; message: string }
   | { type: "runtime_exit"; deliberate: boolean }
   | { type: "unknown"; sourceType: string }
 );
@@ -269,23 +269,24 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
       if (!GENERATION_PHASES.has(phase)) return { type: "unknown", sourceType, generationId };
       return { type: "status", phase, generationId, seq: seq ?? 0, processTerminated: Boolean(source.processTerminated) };
     }
+    // Whose fault it was is stated, not guessed from which of two event names
+    // arrived. A rejected command leaves the turn alone; a runtime failure
+    // ends it.
     case "error": {
       const detail = record(source.error);
-      return { type: "runtime_error", generationId, code: text(detail.code), message: text(detail.message) };
+      const scope = source.scope === "request" ? "request" : "runtime";
+      return { type: "error", scope, generationId, code: text(detail.code), message: text(detail.message) };
     }
-    case "permission_request": return { type: "extension_ui_request", generationId, request: normalizeHostUiRequest({
+    case "permission_request": return { type: "permission_request", generationId, request: normalizeHostUiRequest({
       id: source.requestId, kind: source.kind, title: source.title, message: source.message,
       options: source.options, placeholder: source.placeholder, prefill: source.prefill, timeoutMs: source.timeoutMs,
     }) };
-    case "permission_resolved": return { type: "extension_ui_resolved", generationId, requestId: text(source.requestId) };
-    case "usage": return { type: "context_usage", generationId, contextUsage: contextUsage(source.contextUsage), sessionStats: sessionStats(source.sessionStats), cacheStats: cacheStats(source.cacheStats) };
-    case "queue_state": return { type: "queue_update", generationId, queue: queue(source.queue) || { steering: [], followUp: [] } };
-    case "compaction": return { type: source.active ? "compaction_start" : "compaction_end", generationId };
-    case "retry": return source.active
-      ? { type: "auto_retry_start", generationId, retry: retry(source.retry) || {} }
-      : { type: "auto_retry_end", generationId };
-    // Read compatibility for events retained by older ChatGPT Web journals.
-    case "transcript_message": return { type: "user_message_committed", generationId, message: protocolMessage(source.message) };
+    case "permission_resolved": return { type: "permission_resolved", generationId, requestId: text(source.requestId) };
+    case "usage": return { type: "usage", generationId, contextUsage: contextUsage(source.contextUsage), sessionStats: sessionStats(source.sessionStats), cacheStats: cacheStats(source.cacheStats) };
+    case "queue_state": return { type: "queue_state", generationId, queue: queue(source.queue) || { steering: [], followUp: [] } };
+    case "compaction": return { type: "compaction", generationId, active: Boolean(source.active) };
+    case "retry": return { type: "retry", generationId, active: Boolean(source.active),
+      retry: source.active ? retry(source.retry) || {} : null };
     case "user_message_committed": return { type: "user_message_committed", generationId, message: protocolMessage(source.message) };
     case "transcript_sync": return { type: "transcript_sync", generationId, messages: list(source.messages), tools: list(source.tools),
       ...(source.replace ? { replace: true } : {}) };
@@ -331,14 +332,6 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
       const requests = source.hostUiRequests === undefined ? null : list(source.hostUiRequests).map(normalizeHostUiRequest).filter((item): item is HostUiRequest => Boolean(item));
       return { type: "runtime_state", generationId, session: sessionSnapshot(source.session), contextUsage: contextUsage(source.contextUsage), sessionStats: sessionStats(source.sessionStats), cacheStats: cacheStats(source.cacheStats), queue: queue(source.queue), hostUiRequests: requests };
     }
-    case "context_usage": return { type: "context_usage", generationId, contextUsage: contextUsage(source.contextUsage), sessionStats: sessionStats(source.sessionStats), cacheStats: cacheStats(source.cacheStats) };
-    case "compaction_start": return { type: "compaction_start", generationId };
-    case "compaction_end": return { type: "compaction_end", generationId };
-    case "auto_retry_start": return { type: "auto_retry_start", generationId, retry: retry(source) || {} };
-    case "auto_retry_end": return { type: "auto_retry_end", generationId };
-    case "queue_update": return { type: "queue_update", generationId, queue: queue(source) || { steering: [], followUp: [] } };
-    case "extension_ui_request": return { type: "extension_ui_request", generationId, request: normalizeHostUiRequest(source) };
-    case "extension_ui_resolved": return { type: "extension_ui_resolved", generationId, requestId: text(source.requestId || source.id) };
     case "history_truncated":
       return { type: "history_truncated", generationId,
         beforeMessageId: optionalText(source.beforeMessageId),
@@ -369,8 +362,6 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
     // the reaper, or someone picking Stop process -- from a crash, because only
     // the second is worth reconnecting through.
     case "runtime_exit": return { type: "runtime_exit", generationId, deliberate: Boolean(source.deliberate) };
-    case "runtime_error": return { type: "runtime_error", generationId, code: text(source.code), message: text(source.message) };
-    case "client_error": return { type: "client_error", generationId, code: text(source.code), message: text(source.message) };
     default: return { type: "unknown", sourceType, generationId };
   }
 }

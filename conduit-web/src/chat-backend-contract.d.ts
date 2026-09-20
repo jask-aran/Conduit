@@ -256,23 +256,52 @@ export interface StatusEvent extends EventBase {
   detail: string | null;
 }
 
+/** A runtime failure names one of a fixed set of causes. */
 export type ChatError =
   | { code: "generation_limit" | "live_process_limit" | "rpc_timeout" | "auth_expired" | "backend_unavailable"; message: string }
   | { code: "rate_limited"; message: string; retryAfterMs: number };
 
-export interface ErrorEvent extends EventBase {
-  type: "error";
-  error: ChatError;
-}
+/**
+ * A rejected command names why Conduit refused it, and that set is open --
+ * `invalid_request`, `chat_not_found`, whatever a command handler throws.
+ * These are Conduit's own words about its own API, not a harness failing.
+ */
+export interface ChatRequestError { code: string; message: string }
 
+/**
+ * Something went wrong, and whose fault it was.
+ *
+ * `runtime` is the harness or the session failing: the turn is lost and the
+ * transcript says so. `request` is Conduit rejecting a command the browser
+ * sent -- a malformed frame, a steer with nothing running -- which leaves the
+ * turn exactly as it was.
+ *
+ * The two used to travel as two event types, `runtime_error` and
+ * `client_error`, and only Pi's adapter renamed either of them. The other
+ * three passed `client_error` through under its own name, so the same rejected
+ * command reached the browser as a different event depending on which harness
+ * the chat happened to be on -- and Pi, which does rename it, had no code for
+ * a bad request and coerced it to `backend_unavailable`, failing a turn that
+ * was still running.
+ */
+export type ErrorEvent = EventBase & (
+  | { type: "error"; scope: "runtime"; error: ChatError }
+  | { type: "error"; scope: "request"; error: ChatRequestError }
+);
+
+/**
+ * What the session has spent, as the three views the composer draws.
+ *
+ * This declared six flat token counts that no adapter has ever sent. The one
+ * emitter states the three summaries instead, so the counts are declared where
+ * they actually live -- inside `contextUsage` and `sessionStats` -- rather
+ * than as a shape the contract invented and nothing satisfies.
+ */
 export interface UsageEvent extends EventBase {
   type: "usage";
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
-  totalTokens: number;
-  costUsd: number | null;
+  contextUsage: unknown | null;
+  sessionStats: unknown | null;
+  cacheStats: unknown | null;
 }
 
 export interface SessionCheckpointEvent extends EventBase {

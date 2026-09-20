@@ -604,31 +604,25 @@ export function createActiveChat(options: ActiveChatOptions) {
       case "runtime_state":
         applySnapshot(event);
         break;
-      case "context_usage":
+      case "usage":
         if (event.contextUsage) setContextUsage(event.contextUsage);
         if (event.sessionStats) setSessionStats(event.sessionStats);
         if (event.cacheStats) setCacheStats(event.cacheStats);
         break;
-      case "compaction_start":
-        setCompacting(true);
+      case "compaction":
+        setCompacting(event.active);
         break;
-      case "compaction_end":
-        setCompacting(false);
-        break;
-      case "auto_retry_start":
+      case "retry":
         setRetry(event.retry);
-        setGeneration((current) => current === "stopping" ? current : "active");
+        if (event.active) setGeneration((current) => current === "stopping" ? current : "active");
         break;
-      case "auto_retry_end":
-        setRetry(null);
-        break;
-      case "queue_update":
+      case "queue_state":
         setQueue(event.queue);
         break;
-      case "extension_ui_request":
+      case "permission_request":
         if (event.request) setHostUiRequests((current) => current.some((item) => item.id === event.request!.id) ? current : [...current, event.request!]);
         break;
-      case "extension_ui_resolved":
+      case "permission_resolved":
         setHostUiRequests((current) => current.filter((item) => item.id !== event.requestId));
         break;
       case "session_checkpoint":
@@ -704,9 +698,11 @@ export function createActiveChat(options: ActiveChatOptions) {
           session.detach();
         }
         break;
-      case "runtime_error":
-      case "client_error":
-        if (!stopPending) setGeneration(event.type === "runtime_error" ? "failed" : "idle");
+      case "error":
+        // A rejected command is not a failed turn. The scope says which this
+        // is, rather than the browser reading it off two event names that only
+        // one of the four harnesses ever distinguished.
+        if (!stopPending) setGeneration(event.scope === "runtime" ? "failed" : "idle");
         resetLiveFlags();
         if (event.code === "generation_limit") {
           setMessages((current) => {
