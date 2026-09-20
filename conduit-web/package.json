@@ -23,6 +23,7 @@
     "android:run": "npm run cap:sync && cap run android",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
+    "desktop:build:win": "bash scripts/build-desktop-windows.sh",
     "bench:renderer": "node scripts/bench-renderer.mjs"
   },
   "dependencies": {
