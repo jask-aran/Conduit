@@ -45,7 +45,6 @@ export const LOGGED_EVENT_TYPES = new Set([
   "transcript_op",
   "transcript_sync",
   "history_truncated",
-  "history_forked",
   "session_checkpoint",
   // The transitions a turn makes, and the one that ends it badly.
   "status",

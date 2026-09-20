@@ -265,7 +265,7 @@ export function toNeutralPiEvent(event) {
   return neutral.type === "pi_event" ? null : neutral;
 }
 
-// The single existing browser protocol is a lossless projection of Pi events.
+/** A frame for the browser, or null when there is nothing to send it. */
 export const serializePiV0 = (event) => {
   const neutral = toNeutralPiEvent(event);
   return neutral === null ? null : JSON.stringify(neutral);

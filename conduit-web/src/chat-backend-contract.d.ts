@@ -371,7 +371,6 @@ export type OptionalCapabilityEvent = EventBase & (
   | { type: "generation_replay"; seq: number; generation: unknown }
   /** Where the history now ends, so the browser cuts to it rather than deducing it. */
   | { type: "history_truncated"; beforeMessageId: string | null; afterMessageId: string | null }
-  | { type: "history_forked"; beforeMessageId?: string | null; afterMessageId?: string | null }
   /**
    * The process is gone, and whether that was asked for. A deliberate exit
    * settles the session; anything else is a drop the browser reconnects from.

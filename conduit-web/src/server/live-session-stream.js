@@ -1,7 +1,6 @@
 import { CONTINUE_PROMPT } from "../continuation.js";
 import { messageDrop, messageOpen } from "../harnesses/transcript-ops.js";
 import { messagesFromEntries } from "../session-store.js";
-import { chatView } from "../chat-store.js";
 import { parseAttachmentEnvelope } from "../attachment-envelope.js";
 import { ChatBackendRegistry } from "../pi-rpc-adapter.js";
 import { manifestForImplementation } from "../harnesses/index.js";
@@ -326,6 +325,12 @@ export function createLiveSessionStream({
    * because Pi names the fork's file before writing it and there was nothing
    * to read. The truncation above says that directly, and a fork keeps the
    * entry ids of everything it retains, so there is nothing left to re-sync.
+   *
+   * Which file the chat now points at is the server's business. This also
+   * published a `history_forked` carrying the updated row, but the one field a
+   * fork changes is `opaqueSession`, and `chatView` strips it -- so the row
+   * went out identical to the one the browser already had, and no client ever
+   * read the event.
    */
   async function syncForkedChat(record, forked) {
     const context = await findChatContext(record.chatId);
@@ -334,9 +339,7 @@ export function createLiveSessionStream({
       ...context.chat.backend,
       opaqueSession: forked?.opaqueSession,
     } });
-    const updated = registry.metadata(context.chat.id);
-    adapterFor(record).publish(record, { type: "history_forked", chat: chatView(updated) });
-    return updated;
+    return registry.metadata(context.chat.id);
   }
 
   async function clearQueuedMessages(record, adapter) {

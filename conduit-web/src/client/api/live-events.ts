@@ -116,9 +116,6 @@ const STRUCTURED_GENERATION_TYPES = new Set<StructuredGenerationType>([
   "generation_replay", "assistant_content", "tool_activity", "status",
 ]);
 
-/** The five transitions a turn makes. A status without one reports activity. */
-const GENERATION_PHASES = new Set(["started", "running", "stopping", "stopped", "settled"]);
-
 export function isStructuredGenerationEvent(event: LiveEvent): event is StructuredGenerationEvent {
   return STRUCTURED_GENERATION_TYPES.has(event.type as StructuredGenerationType)
     && typeof (event as Partial<StructuredGenerationEvent>).seq === "number";
@@ -234,41 +231,15 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
   // the log, the reducer and every event type here called it `seq`, and this
   // line was the bridge between the two.
   const seq = number(source.seq);
+  // A generation event is passed straight through. Below this there used to be
+  // a case per type rebuilding each field, which could only run for an event
+  // with no `seq` -- and every adapter states one, so none of them ever did.
+  // They were the last of the field-by-field rewrites, left behind when the
+  // pass-through was added above them.
   if (STRUCTURED_GENERATION_TYPES.has(sourceType as StructuredGenerationType) && seq !== undefined) {
     return { ...source, type: sourceType as StructuredGenerationType, generationId, seq } as StructuredGenerationEvent;
   }
   switch (sourceType) {
-    case "generation_replay": return { type: "generation_replay", generationId, seq: seq ?? 0, generation: source.generation };
-    case "assistant_content": {
-      const phase = text(source.phase);
-      if (phase === "start") return { type: "assistant_content", phase, generationId, seq: seq ?? 0, messageId: text(source.messageId) };
-      if (phase === "delta") return {
-        type: "assistant_content", phase, generationId, seq: seq ?? 0,
-        messageId: text(source.messageId), contentIndex: number(source.contentIndex) ?? 0,
-        blockKind: text(source.blockKind), delta: text(source.delta),
-      };
-      return { type: "assistant_content", phase: "final", generationId, seq: seq ?? 0,
-        messageId: text(source.messageId), blocks: list(source.blocks),
-        stopReason: text(source.stopReason || "stop"), errorMessage: optionalText(source.errorMessage),
-        provider: optionalText(source.provider), model: optionalText(source.model),
-        timestamp: optionalText(source.timestamp) };
-    }
-    case "tool_activity": return {
-      type: "tool_activity", phase: text(source.phase) || "end",
-      generationId, seq: seq ?? 0, toolCallId: text(source.toolCallId), name: text(source.name),
-      input: source.input, output: source.output, isError: Boolean(source.isError),
-    };
-    case "status": {
-      // Read, not rebuilt. This used to derive one of five lifecycle events by
-      // string-matching `detail` and `status`, ending in an `else` that called
-      // anything it did not recognise a started generation -- so a Codex
-      // approval request, which is not a transition at all, arrived here as the
-      // start of a turn. A status with no phase is the session saying what it
-      // is busy with; the browser reads nothing else off one.
-      const phase = text(source.phase);
-      if (!GENERATION_PHASES.has(phase)) return { type: "unknown", sourceType, generationId };
-      return { type: "status", phase, generationId, seq: seq ?? 0, processTerminated: Boolean(source.processTerminated) };
-    }
     // Whose fault it was is stated, not guessed from which of two event names
     // arrived. A rejected command leaves the turn alone; a runtime failure
     // ends it.

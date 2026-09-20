@@ -221,7 +221,7 @@ test("a successful fork replaces the browser transcript before the new prompt", 
   assert.equal(operations[0], "fork");
   assert.deepEqual(operations.filter((item) => typeof item === "string"), ["fork", "prompt"]);
   assert.deepEqual(operations.filter((item) => item?.type).map((item) => item.type),
-    ["history_truncated", "transcript_op", "history_forked", "transcript_op"]);
+    ["history_truncated", "transcript_op", "transcript_op"]);
   assert.deepEqual(operations.find((item) => item?.type === "history_truncated"),
     { type: "history_truncated", beforeMessageId: "user-old" });
 });
@@ -283,7 +283,7 @@ test("a fork submits its prompt before Pi creates the child session file", async
   // The prompt's own message is stated before it is sent: the harness can start
   // answering while its acceptance is still in flight, and an answer must not
   // be placed before the prompt it answers exists.
-  assert.deepEqual(operations, ["fork", "history_truncated", "transcript_op", "history_forked", "transcript_op", "prompt"]);
+  assert.deepEqual(operations, ["fork", "history_truncated", "transcript_op", "transcript_op", "prompt"]);
   assert.deepEqual(updates, [{ backend: { implementation: "conduit_pi", opaqueSession: "/tmp/provisional-fork.jsonl" } }]);
   assert.equal(chat.backend.opaqueSession, "/tmp/durable-session.jsonl");
   assert.equal(sent.some((event) => event.type === "error"), false);
