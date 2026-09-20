@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { SessionRecords } from "../src/harnesses/session-records.js";
 import { ChatLogs } from "../src/server/chat-log.js";
-import { messageOpen } from "../src/harnesses/transcript-ops.js";
+import { messageOpen, toolClose, toolOpen } from "../src/harnesses/transcript-ops.js";
 
 const CAPABILITIES = Object.freeze({ history: "linear", steer: false, cancel: true });
 const BACKEND = { protocol: "native_api", implementation: "test", installationId: "test" };
@@ -97,4 +97,28 @@ test("structure survives a buffer long past its limit", () => {
   assert.ok(live.paint.size <= 4);
   sessions.publish(live, { ...delta(0), contentIndex: 0, blockKind: "text" });
   assert.equal(live.events.at(-1).delta, "0 ");
+});
+
+test("a tool-heavy turn keeps its structure, not its paint", () => {
+  // Paint that cannot be merged -- a message starting, a tool starting and
+  // ending -- was not recognised as paint by the eviction, because the question
+  // asked was "does this merge". So a turn calling tools kept its own starts
+  // and ends and evicted the row they belong under.
+  const sessions = records({ logs: new ChatLogs(), replayLimit: 6 });
+  const live = sessions.add(record());
+  sessions.publish(live, messageOpen({ id: "m1", role: "assistant", generationId: "g1", answers: "u1" }));
+  for (let index = 0; index < 2; index += 1) {
+    const toolCallId = `call_${index}`;
+    sessions.publish(live, { type: "tool_activity", phase: "start", generationId: "g1", seq: index, toolCallId, name: "read" });
+    sessions.publish(live, toolOpen({ toolCallId, name: "read", input: {}, generationId: "g1" }));
+    sessions.publish(live, { type: "tool_activity", phase: "end", generationId: "g1", seq: index, toolCallId, output: "ok" });
+    sessions.publish(live, toolClose({ toolCallId, output: "ok", generationId: "g1" }));
+  }
+  assert.equal(live.events.length, 6);
+  // Every statement the turn made is still there; what went is the paint that
+  // drew them arriving.
+  assert.deepEqual(live.events.filter((event) => event.type === "transcript_op").map((event) => event.op),
+    ["message.open", "tool.open", "tool.close", "tool.open", "tool.close"]);
+  assert.equal(live.events.filter((event) => event.type === "tool_activity").length, 1,
+    "paint is given up first, in every phase");
 });
