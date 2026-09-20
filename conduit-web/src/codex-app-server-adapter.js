@@ -768,7 +768,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       record.activity = "working";
       record.generation = { id: turnId, closed: false, settled: false };
       record.turn = null;
-      this.publish(record, { type: "status", generationId: turnId, seq: ++record.eventSequence, status: "working", activity: "working", detail: null });
+      this.publish(record, { type: "status", generationId: turnId, phase: "started", seq: ++record.eventSequence, status: "working", activity: "working", detail: null });
     } else if (method === "item/started" && params.item?.type === "contextCompaction") {
       record.compacting = true;
       record.activity = "compacting";
@@ -912,7 +912,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       record.answering = null;
       this.publish(record, failed
         ? { type: "error", generationId: turnId, error: { code: "backend_unavailable", message: params.turn?.error?.message || "Codex turn failed" } }
-        : { type: "status", generationId: turnId, seq: ++record.eventSequence, status: "idle", activity: "idle", detail: "settled" });
+        : { type: "status", generationId: turnId, phase: "settled", seq: ++record.eventSequence, status: "idle", activity: "idle", detail: null });
       this.emit("settled", { record, completed: !failed && !stopped });
       if (record.followUp.length) void this.flushFollowUp(record);
     }

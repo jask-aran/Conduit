@@ -222,8 +222,26 @@ export interface PermissionResolvedEvent extends EventBase {
   requestId: string;
 }
 
+/**
+ * Where a generation has got to, stated.
+ *
+ * A status event carries two different things and they must not be confused. A
+ * `phase` is a transition in the turn's life; without one the event is only
+ * saying what the session is busy with -- an approval waiting, a mode changing
+ * -- and no turn has started or finished.
+ *
+ * These used to be flattened into `status`/`activity` with the original name
+ * passed along in `detail` as free text, and the browser rebuilt the five by
+ * string-matching it, with a final `else` that called anything unrecognised a
+ * started generation. So an approval request, which is not a transition at
+ * all, arrived as the start of a turn.
+ */
+export type GenerationPhase = "started" | "running" | "stopping" | "stopped" | "settled";
+
 export interface StatusEvent extends EventBase {
   type: "status";
+  /** Absent when the event reports activity rather than a transition. */
+  phase?: GenerationPhase;
   status: ChatStatus;
   activity: ChatActivity;
   detail: string | null;
