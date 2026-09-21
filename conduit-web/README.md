@@ -384,10 +384,18 @@ configuration for other services.
 
 ### Auth
 
-Every route below — plus the SPA bundle, every static asset, every upload, and
-every WebSocket upgrade — requires an authenticated session except the login
-flow, `GET /healthz`, and the public PWA bootstrap assets (`favicon.svg`, PWA
-icons, manifests, service workers, and Workbox assets).
+Every route below — plus every upload and every WebSocket upgrade — requires an
+authenticated session except the login flow, `GET /healthz`, the PWA bootstrap
+assets (`favicon.svg`, PWA icons, manifests, service workers, and Workbox
+assets), and the compiled client under `/assets/`.
+
+`/assets/` is public deliberately. The service worker is served without a
+session and its precache manifest lists every one of those paths, so the names
+have always been public; the files are content-hashed build output carrying
+nobody's data. Withholding them bought nothing and cost the shell: a page
+served from the worker's cache renders without asking anyone, and a stylesheet
+answered with 401 does not become a sign-in screen — it becomes the page with
+no stylesheet. What needs a session is the API the client then calls.
 Provision one user, one password from the CLI:
 
 ```bash
@@ -941,16 +949,36 @@ Add to Home Screen. The plugin injects manifest link and service-worker
 registration into the production HTML only; Vite dev does not register a
 worker, so installability is a production property.
 
-To force an installed app to check for a new shell, open any chat's More chat
-options menu and select `Update app`. Conduit asks the active service worker to
-update, waits for a new worker to take control when needed, and reloads the
-current chat.
+To force a check for a new shell, use `Check for updates` in the sidebar footer
+menu. Conduit asks the registration to update and, if a new worker was found,
+waits for it to take control and reloads.
+
+The worker is generated with `registerType: "autoUpdate"`, so it calls
+`self.skipWaiting()` itself and registers **no message handler at all** — do not
+post `SKIP_WAITING` to it, and do not wait for it to reach `activated`. A worker
+that skips waiting can be installed, activated and in charge before `update()`
+resolves, leaving nothing in `installing` or `waiting` to watch; waiting for
+that is how an update that succeeded got reported as a failure. `updatefound`
+is the reliable account of whether there was anything to install, and
+`controllerchange` is the event that means it happened.
+
+`controllerchange` also reloads the page outside that flow, because the worker
+claiming this page does not change what is already on it: without the reload a
+new build is fetched, activated, and then not shown. It is skipped on a first
+visit, where there is no worker to replace.
 
 The service worker precaches static shell assets (`js`/`css`/`html`/`svg`/
 `png`/`ico`/`woff2`). It does **not** add runtime caching for `/v0`,
-`/healthz`, or `/login`. Express already serves non-asset `dist/` files
-(including `sw.js` and the manifest) with `Cache-Control: no-cache`, which is
-required so updates activate without clearing site data. Do not add a blanket
+`/healthz`, or `/login`. Express serves non-asset `dist/` files with
+`Cache-Control: no-cache`, and the worker scripts themselves (`sw.js`,
+`registerSW.js`, `workbox-*.js`) with `no-store, must-revalidate`. The stronger
+header is not pedantry: the service worker decides which build every other file
+comes from, so a cached copy of it pins the client to a build the server no
+longer has, and a CDN in front of this will rewrite a revalidating header into
+a browser TTL of its own. Cloudflare returned `max-age=14400` for `sw.js`
+against an origin asking for `no-cache`, and a browser that will not re-fetch
+that file cannot discover that a new one exists — one address served
+yesterday's client while another served today's. Do not add a blanket
 `NetworkFirst` (or any) Workbox route for `/v0`: those endpoints are
 authenticated and mutable. Offline after a successful online load serves the
 shell only; API and live-session calls fail on the network as usual.
@@ -972,10 +1000,15 @@ Rebuild a suite deliberately if it earns its place.
 
 Two shells package the production `dist/` bundle around the same client the
 browser runs: the Capacitor project in `android/` and the Tauri 2 project in
-`src-tauri/`. Both hold a bearer token instead of a cookie, choose the server
-rather than inheriting it, and never redirect to `/login`.
+`src-tauri/`. Both hold bearer tokens instead of a cookie, choose the servers
+rather than inheriting one, and never redirect to `/login`.
 `src/client/platform/installed-client.ts` is the single place that asks which
 client is running; nothing else tests for Capacitor or Tauri.
+
+Holding several servers at once, moving between them, and the directory they
+share is documented in [`../docs/servers.md`](../docs/servers.md). It covers
+browsers too: a browser can only navigate between servers, and the reason is a
+property of this server's CORS and cookie rules rather than of the client.
 
 The Windows desktop client -- how it is built from WSL, how a development
 client installs beside the released one, how updates are signed and how to test

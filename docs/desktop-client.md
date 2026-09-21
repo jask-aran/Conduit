@@ -94,6 +94,19 @@ being arranged separately. The token is stored under the running build's
 identifier for exactly this reason: under a constant name, signing out of one
 client would sign out the other.
 
+The **executable name is a separate axis**, and `--dev` sets `mainBinaryName` too. NSIS looks
+for a running instance by binary name, so two installs shipping
+`conduit-desktop.exe` are one application as far as Windows is concerned:
+installing the development client asks to close "Conduit", and Windows search
+offers two entries that read the same.
+
+A development client points its updater at a loopback address, which the
+updater refuses outright unless `dangerousInsecureTransportProtocol` is set —
+right for a release and impossible for a server on this machine, which has no
+certificate to present. Without it the client panics before its first window.
+The allowance relaxes the transport only; the signature is still checked
+against the key compiled into the build, which is what makes an update safe.
+
 **A development build names its own version**: the patch after the last tag, as
 a prerelease carrying the build time and the commit. It sorts above the release
 it was built from, below the release it anticipates — so a real release always
@@ -135,16 +148,19 @@ a download and code running on the phone.
 npm run desktop:build:win -- --dev
 #    install "Conduit Dev_<version>_x64-setup.exe"
 
-# 2. the server serves the build directory
-CONDUIT_DESKTOP_UPDATE_DIR=/mnt/c/Users/<you>/conduit-desktop-target/release/bundle/nsis \
-  bash .devcontainer/start-conduit.sh restart
+# 2. the server serves the build directory -- it finds it by itself
+bash .devcontainer/start-conduit.sh restart
 
 # 3. something newer, then press Check for updates
 npm run desktop:build:win -- --dev
 ```
 
-`/desktop-updates` exists only when `CONDUIT_DESKTOP_UPDATE_DIR` names a
-directory, serves that one directory, and 404s a missing file. It sits **ahead
+`start-conduit.sh` looks for the directory the Windows build writes into and
+serves it when it is there, because remembering an environment variable before
+every restart is the difference between testing an update and not bothering.
+`CONDUIT_DESKTOP_UPDATE_DIR` still overrides it. `/desktop-updates` exists only
+when that names a directory, serves that one directory, and 404s a missing
+file. It sits **ahead
 of authentication**, because the updater runs in the shell and carries no
 session: what makes an update safe to install is the signature the client
 checks, not the secrecy of the URL it came from.
@@ -190,6 +206,14 @@ Two of those steps are not arbitrary:
 A client only accepts updates signed by the key **its own build** carried, so
 replacing the key strands every install that is already out. Losing the private
 key or its password means no installed client can ever be updated again.
+
+## Talking to more than one server
+
+An installed client holds a list of servers and a token for each, switches by
+remounting rather than reloading, and shares the list with other clients
+through the servers themselves. That model is the same for the browser except
+for how a switch happens, so it is documented once in
+[`servers.md`](servers.md) rather than here.
 
 ## Which build am I running
 
