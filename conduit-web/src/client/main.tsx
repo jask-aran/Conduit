@@ -15,7 +15,7 @@ import "@jask-aran/solid-components/meteor-shower.css";
 import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/primitives";
 import { api, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./api/client";
 import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl } from "./api/transport";
-import { activeOrigin, addServer, forgetServer, setActiveServer, switchToServer } from "./platform/servers";
+import { activeOrigin, addServer, forgetServer, mergeServerDirectory, servers, setActiveServer, switchToServer } from "./platform/servers";
 import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
 import { manifestForChat, resolveCapability, resolveHistory } from "./chat-capabilities";
 import type { BooleanCapability, ChatSummary, DashboardChat, HarnessManifestView, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
@@ -154,6 +154,15 @@ const LOCAL_SERVER_ORIGIN = "http://127.0.0.1:4310";
  * Nothing is remembered until the server has actually answered. A half-added
  * entry that was never signed in to is a row that can only fail.
  */
+/** Tell this server about an address it does not list. Advisory, so a refusal
+ * is nothing to report: the directory is a convenience and the list here is
+ * already correct. */
+async function publishServerDirectory(directory: Array<{ origin: string; name: string }>, held?: Array<{ origin?: unknown }>) {
+  const known = new Set((held || []).map((item) => String(item?.origin || "")));
+  if (directory.every((entry) => known.has(entry.origin))) return;
+  try { await api("/v0/preferences", { method: "PATCH", body: JSON.stringify({ knownServers: directory }) }); } catch {}
+}
+
 function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) => void }) {
   const recordOnly = !isInstalledClient();
   const [address, setAddress] = createSignal(props.adding ? "" : activeOrigin() || "");
@@ -1757,8 +1766,14 @@ function App() {
         window.dispatchEvent(new CustomEvent(COMPOSER_SURFACE_CHANGE_EVENT, { detail: value }));
       }
     };
-    void api<UiPreferences>("/v0/preferences").then(async (serverPreferences) => {
+    void api<UiPreferences & { knownServers?: Array<{ origin?: unknown; name?: unknown }> }>("/v0/preferences").then(async (serverPreferences) => {
       setSidebarPins(Array.isArray(serverPreferences.sidebarPins) ? serverPreferences.sidebarPins : []);
+      // Every server keeps the directory, and every client that reaches one
+      // both reads it and tops it up. Two addresses for the same machine share
+      // it outright; two machines learn each other the first time one client
+      // has been to both. Either way an address is typed once, anywhere.
+      const directory = mergeServerDirectory(serverPreferences.knownServers || []);
+      void publishServerDirectory(directory, serverPreferences.knownServers);
       const migration: Partial<UiPreferences> = {};
       hydratingUiPreferences = true;
       try {
@@ -2025,7 +2040,13 @@ function App() {
       onAddServer={() => setAddingServer(true)}
       onLogout={() => void logout()} />
     <Modal open={addingServer()} title="Add server" closeButton onClose={() => setAddingServer(false)} class="add-server-dialog">
-      <ServerConnectForm adding onDone={(origin) => { setAddingServer(false); switchToServer(origin, isInstalledClient()); }} />
+      <ServerConnectForm adding onDone={(origin) => {
+        setAddingServer(false);
+        // Told to the server being left, before leaving it: otherwise the one
+        // that was asked to remember this address is the only one that never
+        // hears about it.
+        void publishServerDirectory(servers(), []).finally(() => switchToServer(origin, isInstalledClient()));
+      }} />
     </Modal>
     <div class="workspace-layout">
     <main data-slot="sidebar-inset" data-shortcut-scope="chat" tabIndex={-1} onPointerDown={focusChatSurface} class={`chat-main${routeKind() === "chat" && emptyChat() ? " chat-main-empty" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
