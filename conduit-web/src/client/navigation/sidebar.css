@@ -333,3 +333,20 @@
 .sidebar-user > .sidebar-user-label { gap: 0; }
 .sidebar-user-label > strong { overflow: hidden; font-size: 10.5px; font-weight: 580; letter-spacing: -.01em; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-user-label > small { overflow: hidden; color: var(--muted-foreground); font-size: 8.5px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+
+/*
+ * A folder opens by growing rather than by appearing.
+ *
+ * The rows below it used to jump to their new position in one frame, which
+ * read as a flash rather than as a list getting longer. Animating the row
+ * track of a one-row grid is the only way to transition to a height nobody
+ * has measured: the inner element keeps its natural height, and the track
+ * goes from none of it to all of it.
+ */
+.sidebar-project-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 180ms var(--panel-motion-easing, ease), opacity 140ms ease; opacity: 0; }
+.sidebar-project-body > div { overflow: hidden; min-height: 0; }
+.sidebar-project-body[data-open] { grid-template-rows: 1fr; opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-project-body { transition-duration: 0.01ms; }
+}
