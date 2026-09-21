@@ -318,3 +318,11 @@
 
 .sidebar-harness-status[data-status="ready"] { background: var(--success, #45a56b); }
 .sidebar-harness-status[data-status="authentication_required"] { background: var(--warning, #d99a22); }
+
+/* A list that has not arrived, drawn as the shape of a list. Static: nothing
+   here is worth an animation, and a pulse would be one more thing to hold
+   still under prefers-reduced-motion. */
+.sidebar-skeleton { display: flex; flex-direction: column; gap: 6px; padding: 4px 8px 6px; }
+.sidebar-skeleton > span { height: 9px; border-radius: var(--radius-sm); background: var(--muted); }
+.sidebar-skeleton > span:nth-child(2n) { width: 72%; }
+.sidebar-skeleton > span:nth-child(3n) { width: 58%; }

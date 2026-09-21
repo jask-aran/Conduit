@@ -1948,7 +1948,7 @@ function App() {
       </DialogContent>
     </Dialog>
     <Show when={routeKind() !== "terminal"}>
-    <Sidebar projects={catalogue.projects()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard"} project={routeKind() === "project"} computer={routeKind() === "computer"} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
+    <Sidebar projects={catalogue.projects()} catalogueLoaded={catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard"} project={routeKind() === "project"} computer={routeKind() === "computer"} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
