@@ -254,7 +254,7 @@ export class PiManager extends EventEmitter {
     spawnImpl = spawn,
     maxLiveProcesses = 12,
     maxGeneratingProcesses = 2,
-    idleProcessTtlMs = 120_000,
+    idleProcessTtlMs = 300_000,
     reaperIntervalMs = 15_000,
     socketHighWaterMark = 256 * 1024,
     deliveryFlushMs = DELIVERY_FLUSH_MS,
@@ -283,7 +283,7 @@ export class PiManager extends EventEmitter {
     this.serializeEvent = serializeEvent;
     this.maxLiveProcesses = Math.max(1, Math.trunc(Number(maxLiveProcesses) || 12));
     this.maxGeneratingProcesses = Math.max(1, Math.trunc(Number(maxGeneratingProcesses) || 2));
-    this.idleProcessTtlMs = Math.max(30_000, Math.trunc(Number(idleProcessTtlMs) || 120_000));
+    this.idleProcessTtlMs = Math.max(30_000, Math.trunc(Number(idleProcessTtlMs) || 300_000));
     this.socketHighWaterMark = Math.max(1024, Math.trunc(Number(socketHighWaterMark) || 256 * 1024));
     this.socketLowWaterMark = Math.floor(this.socketHighWaterMark / 2);
     this.deliveryFlushMs = Math.max(0, Math.trunc(Number(deliveryFlushMs) || DELIVERY_FLUSH_MS));
