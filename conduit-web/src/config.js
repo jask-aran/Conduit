@@ -83,6 +83,7 @@ export function loadConfig(env = process.env) {
     bridgeSystemPrompt: path.join(templatesRoot, "conduit-workspace", "SYSTEM.md"),
     bridgeSkill: path.join(templatesRoot, "conduit-workspace", "SKILL.md"),
     runtimeSettingsFile: absolute(env.CONDUIT_RUNTIME_SETTINGS_FILE || path.join(dataRoot, "runtime.json")),
+    identityFile: absolute(env.CONDUIT_IDENTITY_FILE || path.join(dataRoot, "identity.json")),
     remotesFile: absolute(env.CONDUIT_REMOTES_FILE || path.join(dataRoot, "remotes.json")),
     authFile: absolute(env.CONDUIT_AUTH_FILE || path.join(dataRoot, "auth.json")),
     cloneTimeoutMs: boundedMilliseconds(env.CONDUIT_CLONE_TIMEOUT_MS, 120_000),

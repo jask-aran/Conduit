@@ -17,7 +17,39 @@ export function registerRuntimeRoutes(app, {
   templatePublicView,
   projects,
   promptStore,
+  serverIdentity,
 }) {
+  /*
+   * Who this server is, and where else it answers.
+   *
+   * Authenticated on purpose. An unauthenticated version of this would let
+   * anything on the network say "I am the server you already hold a token
+   * for", which is the whole reason two addresses were kept apart until now.
+   *
+   * The reply is a claim, not an instruction: a client probes a path and
+   * checks the id it gets back before addressing the server by it.
+   */
+  app.get("/v0/server", (request, response) => {
+    serverIdentity.observe(request);
+    response.json(serverIdentity.describe());
+  });
+
+  /*
+   * Prove this is the server somebody already paired with.
+   *
+   * Unauthenticated, and that is the point: a client asks this *before* it
+   * sends a token, so that moving to a new address cannot be the thing that
+   * hands a credential to whatever happened to answer there. The caller picks
+   * the nonce, so an answer recorded off the wire is no use for the next
+   * question, and a client that holds no public half for this server learns
+   * nothing it can act on.
+   */
+  app.post("/v0/server/prove", (request, response) => {
+    const proof = serverIdentity.prove(request.body?.nonce);
+    if (!proof) return response.status(400).json({ error: "invalid_nonce" });
+    response.json(proof);
+  });
+
   app.get("/healthz", (request, response) => {
     const activeGenerations = runtimeHub.snapshot().processes.filter((process) => drainsOnRestart(process)
       && (process.active || process.stopping || process.compacting || process.retrying
