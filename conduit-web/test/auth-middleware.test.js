@@ -14,6 +14,9 @@ test("isAllowlistedPath allows login, health, the PWA bootstrap and the client b
   assert.equal(isAllowlistedPath("GET", "/login"), true);
   assert.equal(isAllowlistedPath("POST", "/v0/auth/login"), true);
   assert.equal(isAllowlistedPath("POST", "/v0/auth/native-login"), true);
+  assert.equal(isAllowlistedPath("POST", "/v0/server/prove"), true);
+  assert.equal(isAllowlistedPath("GET", "/v0/server/prove"), false, "it signs what it is given, and there is nothing to read");
+  assert.equal(isAllowlistedPath("GET", "/v0/server"), false, "who this server is needs a session");
   assert.equal(isAllowlistedPath("GET", "/healthz"), true);
   assert.equal(isAllowlistedPath("GET", "/manifest.webmanifest"), true);
   assert.equal(isAllowlistedPath("GET", "/manifest-abc123.webmanifest"), true);
