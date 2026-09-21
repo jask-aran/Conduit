@@ -14,7 +14,8 @@ import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
 import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/primitives";
 import { api, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./api/client";
-import { buildHttpUrl, clearServerOrigin, configuredServerOrigin, loginUrl, logoutUrl, normalizeServerOrigin, saveServerOrigin, transcriptUrl } from "./api/transport";
+import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl } from "./api/transport";
+import { activeOrigin, addServer, forgetServer, setActiveServer, switchToServer } from "./platform/servers";
 import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
 import { manifestForChat, resolveCapability, resolveHistory } from "./chat-capabilities";
 import type { BooleanCapability, ChatSummary, DashboardChat, HarnessManifestView, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
@@ -44,7 +45,7 @@ import type { PaletteActions, PaletteContext } from "./palette/command-registry"
 import { bindVisualViewportShell, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobileOverlayKind } from "./navigation/mobile-layout";
 import { mobileSwipeAction } from "./navigation/mobile-swipe";
 import { bindOverlayScrollbars } from "./navigation/overlay-scrollbars";
-import { Sidebar, type SidebarCommand } from "./navigation/sidebar";
+import { Modal, Sidebar, type SidebarCommand } from "./navigation/sidebar";
 import { clampSidebarChatLimit, selectedSidebarChatLimit, SIDEBAR_CHAT_LIMIT_STORAGE_KEY } from "./navigation/sidebar-preferences";
 import { CHAT_SORT_STORAGE_KEY, selectedChatSort, useChatSort } from "./preferences/chat-sort";
 import { WorkspaceAppearanceEditor } from "./project/workspace-appearance-editor";
@@ -144,37 +145,55 @@ const prefetchWorkspaceTerminal = () => void import("./workspace/workspace-panel
 // probe answers as Conduit, so the button never points at nothing.
 const LOCAL_SERVER_ORIGIN = "http://127.0.0.1:4310";
 
-function NativeServerSetup(props: { onAuthenticated: () => void }) {
-  const [address, setAddress] = createSignal(configuredServerOrigin() || "");
-  const [verifiedOrigin, setVerifiedOrigin] = createSignal(configuredServerOrigin());
+/**
+ * Address, then password. The two steps are separate because the first one is
+ * the only chance to say "that is not a Conduit server" before asking for a
+ * password, and because a browser can only ever do the first: it has no way to
+ * reach another origin, so there it records an address and nothing more.
+ *
+ * Nothing is remembered until the server has actually answered. A half-added
+ * entry that was never signed in to is a row that can only fail.
+ */
+function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) => void }) {
+  const recordOnly = !isInstalledClient();
+  const [address, setAddress] = createSignal(props.adding ? "" : activeOrigin() || "");
+  const [verifiedOrigin, setVerifiedOrigin] = createSignal(props.adding ? null : activeOrigin());
   const [localServer, setLocalServer] = createSignal<string | null>(null);
   const [password, setPassword] = createSignal("");
   const [error, setError] = createSignal("");
   const [submitting, setSubmitting] = createSignal(false);
+
   const submit = async (event: SubmitEvent) => {
     event.preventDefault();
     setError("");
     setSubmitting(true);
     try {
+      if (recordOnly) {
+        const origin = normalizeServerOrigin(address());
+        addServer(origin);
+        props.onDone(origin);
+        return;
+      }
       if (!verifiedOrigin()) {
         const origin = normalizeServerOrigin(address());
         const response = await fetch(buildHttpUrl("/healthz", origin), { cache: "no-store" });
         const health = response.ok ? await response.json() as { ok?: boolean } : null;
         if (!response.ok || !health?.ok) throw new Error(`Server health check failed (${response.status}).`);
-        saveServerOrigin(origin);
         setAddress(origin);
         setVerifiedOrigin(origin);
         return;
       }
-      const response = await fetch(buildHttpUrl("/v0/auth/native-login", verifiedOrigin()!), {
+      const origin = verifiedOrigin()!;
+      const response = await fetch(buildHttpUrl("/v0/auth/native-login", origin), {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
         body: JSON.stringify({ password: password() }),
       });
       const body = await response.json().catch(() => ({})) as { token?: string; message?: string };
       if (!response.ok || !body.token) throw new Error(body.message || "Could not sign in.");
-      await saveNativeBearerToken(body.token);
-      props.onAuthenticated();
+      addServer(origin);
+      await saveNativeBearerToken(body.token, origin);
+      props.onDone(origin);
     } catch (cause) {
       setError(cause instanceof TypeError
         ? "Could not reach this Conduit server. Check Tailscale, HTTPS, and the server address."
@@ -183,8 +202,9 @@ function NativeServerSetup(props: { onAuthenticated: () => void }) {
       setSubmitting(false);
     }
   };
+
   onMount(() => {
-    if (!desktopShell || configuredServerOrigin()) return;
+    if (!desktopShell || verifiedOrigin()) return;
     void fetch(buildHttpUrl("/healthz", LOCAL_SERVER_ORIGIN), { cache: "no-store" })
       .then((response) => response.ok ? response.json() as Promise<{ ok?: boolean }> : null)
       .then((health) => { if (health?.ok) setLocalServer(LOCAL_SERVER_ORIGIN); })
@@ -194,41 +214,47 @@ function NativeServerSetup(props: { onAuthenticated: () => void }) {
   const useLocalServer = () => {
     const origin = localServer();
     if (!origin) return;
-    saveServerOrigin(origin);
     setAddress(origin);
     setVerifiedOrigin(origin);
   };
 
+  return <form class="native-server-card" onSubmit={submit}>
+    <Show when={!props.adding}><span class="native-server-brand">Conduit</span><h1>Connect to your server</h1></Show>
+    <p>{recordOnly ? "This browser can only be signed in to the server that served it, so Conduit remembers the address and opens it in place."
+      : verifiedOrigin() ? "Server confirmed. Enter your Conduit password."
+        : "Enter the HTTPS address for your Conduit server."}</p>
+    <Show when={localServer() && !verifiedOrigin()}>
+      <Button type="button" variant="outline" onClick={useLocalServer}>Use the server on this computer</Button>
+    </Show>
+    <label for="native-server-address">Server address</label>
+    <input id="native-server-address" type="text" inputMode="url" autocomplete="url" autocapitalize="none" spellcheck={false}
+      placeholder="https://conduit.your-tailnet.ts.net" value={address()} onInput={(event) => setAddress(event.currentTarget.value)}
+      disabled={submitting() || Boolean(verifiedOrigin())} />
+    <Show when={verifiedOrigin()}>
+      <label for="native-password">Password</label>
+      <input id="native-password" type="password" autocomplete="current-password" value={password()}
+        onInput={(event) => setPassword(event.currentTarget.value)} disabled={submitting()} autofocus />
+    </Show>
+    <Show when={error()}><p class="native-server-error" role="alert">{error()}</p></Show>
+    <Button type="submit" disabled={submitting() || Boolean(verifiedOrigin() && !password())}>
+      {submitting() ? (verifiedOrigin() ? "Signing in…" : "Checking…") : recordOnly ? "Remember server" : verifiedOrigin() ? "Sign in" : "Connect"}
+    </Button>
+    <Show when={verifiedOrigin() && !props.adding}><Button type="button" variant="ghost" onClick={() => {
+      const previous = activeOrigin();
+      void clearNativeBearerToken().finally(() => {
+        if (previous) forgetServer(previous);
+        setVerifiedOrigin(null);
+        setAddress("");
+        setPassword("");
+        setError("");
+      });
+    }}>Change server</Button></Show>
+  </form>;
+}
+
+function NativeServerSetup(props: { onAuthenticated: () => void }) {
   return <main class="native-server-setup">
-    <form class="native-server-card" onSubmit={submit}>
-      <span class="native-server-brand">Conduit</span>
-      <h1>Connect to your server</h1>
-      <p>{verifiedOrigin() ? "Server confirmed. Enter your Conduit password." : "Enter the HTTPS address for your Conduit server."}</p>
-      <Show when={localServer() && !verifiedOrigin()}>
-        <Button type="button" variant="outline" onClick={useLocalServer}>Use the server on this computer</Button>
-      </Show>
-      <label for="native-server-address">Server address</label>
-      <input id="native-server-address" type="text" inputMode="url" autocomplete="url" autocapitalize="none" spellcheck={false}
-        placeholder="https://conduit.your-tailnet.ts.net" value={address()} onInput={(event) => setAddress(event.currentTarget.value)}
-        disabled={submitting() || Boolean(verifiedOrigin())} />
-      <Show when={verifiedOrigin()}>
-        <label for="native-password">Password</label>
-        <input id="native-password" type="password" autocomplete="current-password" value={password()}
-          onInput={(event) => setPassword(event.currentTarget.value)} disabled={submitting()} autofocus />
-      </Show>
-      <Show when={error()}><p class="native-server-error" role="alert">{error()}</p></Show>
-      <Button type="submit" disabled={submitting() || Boolean(verifiedOrigin() && !password())}>
-        {submitting() ? (verifiedOrigin() ? "Signing in…" : "Checking…") : (verifiedOrigin() ? "Sign in" : "Connect")}
-      </Button>
-      <Show when={verifiedOrigin()}><Button type="button" variant="ghost" onClick={() => {
-        void clearNativeBearerToken().finally(() => {
-          clearServerOrigin();
-          setVerifiedOrigin(null);
-          setPassword("");
-          setError("");
-        });
-      }}>Change server</Button></Show>
-    </form>
+    <ServerConnectForm onDone={(origin) => { setActiveServer(origin); props.onAuthenticated(); }} />
   </main>;
 }
 
@@ -239,7 +265,7 @@ function NativeRoot() {
     window.addEventListener(NATIVE_AUTH_REQUIRED_EVENT, requireLogin);
     onCleanup(() => window.removeEventListener(NATIVE_AUTH_REQUIRED_EVENT, requireLogin));
     void nativeBearerToken().then(async (token) => {
-      const origin = configuredServerOrigin();
+      const origin = activeOrigin();
       if (!token || !origin) return setState("login");
       try {
         const response = await authorizedFetch(buildHttpUrl("/v0/auth/status", origin));
@@ -490,6 +516,7 @@ function App() {
     });
   };
   const [pwaUpdating, setPwaUpdating] = createSignal(false);
+  const [addingServer, setAddingServer] = createSignal(false);
   const runPwaUpdate = async () => {
     if (pwaUpdating()) return;
     setPwaUpdating(true);
@@ -1981,8 +2008,11 @@ function App() {
       onOpenDashboard={() => openDashboard()}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
       onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating()}
-      onChangeServer={nativeApp ? () => { void clearNativeBearerToken().finally(() => { clearServerOrigin(); location.reload(); }); } : undefined}
+      onAddServer={() => setAddingServer(true)}
       onLogout={() => void logout()} />
+    <Modal open={addingServer()} title="Add server" closeButton onClose={() => setAddingServer(false)} class="add-server-dialog">
+      <ServerConnectForm adding onDone={(origin) => { setAddingServer(false); switchToServer(origin, isInstalledClient()); }} />
+    </Modal>
     <div class="workspace-layout">
     <main data-slot="sidebar-inset" data-shortcut-scope="chat" tabIndex={-1} onPointerDown={focusChatSurface} class={`chat-main${routeKind() === "chat" && emptyChat() ? " chat-main-empty" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"

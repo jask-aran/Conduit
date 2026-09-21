@@ -1760,6 +1760,11 @@ svg { stroke-width: 1.5; }
   background: var(--background);
 }
 .native-server-card .native-server-error { color: var(--destructive); }
+/* The same form, minus the page it owns on first launch. */
+.add-server-dialog { width: min(92vw, 420px); }
+.add-server-dialog .native-server-card { width: 100%; gap: 10px; }
+.add-server-dialog .native-server-card label { margin-top: 6px; }
+.server-row-latency { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-variant-numeric: tabular-nums; }
 
 /* Settings is a full control surface. Keep this final layer outside the
    density and mobile rebuild blocks so its desktop geometry is authoritative. */
