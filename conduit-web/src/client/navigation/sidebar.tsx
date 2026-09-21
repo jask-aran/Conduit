@@ -94,6 +94,8 @@ type DeleteTarget = { type: "chat"; chat: ChatSummary; project: Project }
   | { type: "terminal"; terminal: Pty }
   | { type: "chats"; targets: ChatTarget[] };
 const COLLAPSED_PROJECTS_KEY = "conduit.sidebar.collapsed-projects";
+/** How long a folder takes to open or close; matches the CSS transition. */
+const SIDEBAR_FOLDER_MS = 180;
 
 function SidebarChatTitle(props: { title: string; animate: boolean }) {
   let element!: HTMLSpanElement;
@@ -858,6 +860,33 @@ export function Sidebar(props: {
 
   const ProjectBlock = (blockProps: { project: Project; workspace?: boolean }) => {
     const open = () => !collapsedProjectIds().has(blockProps.project.id);
+    /*
+     * A folder's chats slide rather than appear.
+     *
+     * Two signals rather than one, because a height transition needs a height
+     * to start from: the rows have to be in the document, still closed, for a
+     * frame before they are told to open. `shown` is what is mounted and
+     * `grown` is what is animating, and on the way back the rows stay mounted
+     * until the collapse has finished so there is something to collapse.
+     *
+     * Closed folders keep nothing in the document. A sidebar can hold a lot of
+     * chats across a lot of folders, and paying for all of them so the few
+     * that are open can animate would be the wrong trade.
+     */
+    const [shown, setShown] = createSignal(open());
+    const [grown, setGrown] = createSignal(open());
+    let settle: ReturnType<typeof setTimeout> | undefined;
+    createEffect(() => {
+      clearTimeout(settle);
+      if (open()) {
+        setShown(true);
+        requestAnimationFrame(() => requestAnimationFrame(() => { if (open()) setGrown(true); }));
+      } else {
+        setGrown(false);
+        settle = setTimeout(() => { if (!open()) setShown(false); }, SIDEBAR_FOLDER_MS);
+      }
+    });
+    onCleanup(() => clearTimeout(settle));
     const guard = guardFor(blockProps.project);
     const isWorkspace = () => blockProps.project.origin === "linked" || blockProps.project.origin === "created" || blockProps.project.origin === "cloned" || blockProps.project.kind === "workspace";
     const cloning = () => blockProps.project.state === "cloning";
@@ -913,9 +942,11 @@ export function Sidebar(props: {
           </Show>
         </ContextMenuContent>
       </ContextMenu>
-      <Show when={open()}>
-        <For each={sortChats(blockProps.project.sessions, chatSort())}>{(chat) => <ChatMenu chat={chat} project={blockProps.project} />}</For>
-        <Show when={!blockProps.project.sessions.length}><div class="sidebar-empty">No chats</div></Show>
+      <Show when={shown()}>
+        <div class="sidebar-project-body" data-open={grown() ? "true" : undefined}><div>
+          <For each={sortChats(blockProps.project.sessions, chatSort())}>{(chat) => <ChatMenu chat={chat} project={blockProps.project} />}</For>
+          <Show when={!blockProps.project.sessions.length}><div class="sidebar-empty">No chats</div></Show>
+        </div></div>
       </Show>
     </div>;
   };
