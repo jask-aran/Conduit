@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
 import * as KDialog from "@kobalte/core/dialog";
 import { ActivityIcon, BotIcon, ChevronRightIcon, FileTextIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon } from "lucide-solid";
+import { CableIcon } from "lucide-solid";
 import { AboutSettingsTile } from "./about-settings";
 import { ServersSettingsTile } from "./servers-settings";
 import { DesktopSettingsTile } from "./desktop-settings";
@@ -41,7 +42,7 @@ import { ShortcutsSettings } from "./shortcuts-settings";
 const sectionGroups = [
   { label: "Personal", sections: [{ id: "ui", label: "Appearance", icon: MonitorIcon }, { id: "shortcuts", label: "Shortcuts", icon: KeyboardIcon }] },
   { label: "AI", sections: [{ id: "models", label: "Models & accounts", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: FileTextIcon }] },
-  { label: "System", sections: [{ id: "runtime", label: "Runtime", icon: ActivityIcon }] },
+  { label: "System", sections: [{ id: "runtime", label: "Runtime", icon: ActivityIcon }, { id: "servers", label: "Servers", icon: CableIcon }] },
   { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: SearchIcon }] },
 ] as const;
 type VisibleSection = typeof sectionGroups[number]["sections"][number]["id"];
@@ -52,6 +53,7 @@ const sectionLabels: Record<Section, string> = {
   models: "Models & accounts",
   prompts: "Prompts",
   runtime: "Runtime",
+  servers: "Servers",
   workspaces: "Workspace profile",
   voice: "Voice",
   search: "Web search",
@@ -63,6 +65,7 @@ const sectionDescriptions: Record<Section, string> = {
   models: "Choose the models, defaults, and accounts that power your sessions.",
   prompts: "Edit the instructions that shape profiles and automatic chat names.",
   runtime: "Control process capacity and inspect this server.",
+  servers: "The Conduit servers this client can reach, and which of them other clients are told about.",
   workspaces: "Choose how this workspace starts new sessions.",
   voice: "Configure dictation, audio input, and transcription.",
   search: "Connect external search providers.",
@@ -1172,10 +1175,10 @@ export function Settings(props: {
                   </div>
                 </div>
               </details>
-              <ServersSettingsTile />
               <AboutSettingsTile />
             </div>
           </Show>
+          <Show when={section() === "servers"}><div class="settings-stack"><ServersSettingsTile /></div></Show>
           <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
           <Show when={section() === "runtime"}>
             <Show when={runtimeStatus() === "ready" && runtime()} fallback={<Show when={runtimeStatus() === "error"} fallback={<div class="settings-loading"><Spinner /><span>Loading runtime settings…</span></div>}><div role="alert" class="settings-error"><span>{runtimeError() || "Runtime settings could not be loaded."}</span><Button variant="outline" size="sm" onClick={() => void loadRuntime()}>Retry</Button></div></Show>}>
