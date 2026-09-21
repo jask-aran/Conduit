@@ -481,9 +481,19 @@ function App() {
       // service worker refreshes, so Update app means the installer. A false
       // return is the only one that comes back: installing ends in a relaunch.
       if (desktopShell) {
-        if (!await desktopShell.update()) {
+        // One progress line in Conduit's own window, then the relaunch. The
+        // installer is silent, so nothing else appears and nothing is left to
+        // dismiss: it downloads, it restarts, it is the new version.
+        const notice = toast.loading("Checking for updates…");
+        const updated = await desktopShell.update((progress) => {
+          const share = progress.total ? Math.round((progress.downloaded / progress.total) * 100) : 0;
+          toast.loading(progress.phase === "installing"
+            ? `Installing ${progress.version}…`
+            : `Downloading ${progress.version}… ${share}%`, { id: notice });
+        });
+        if (!updated) {
           setPwaUpdating(false);
-          toast.success("Conduit is up to date");
+          toast.success("Conduit is up to date", { id: notice });
         }
         return;
       }

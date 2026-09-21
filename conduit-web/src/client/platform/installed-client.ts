@@ -83,6 +83,13 @@ export const secureTokenStore: SecureTokenStore = installedClientKind === "deskt
   : installedClientKind === "android" ? androidStore() : browserStore();
 
 /** What the desktop shell decides before the client has loaded. */
+export interface UpdateProgress {
+  phase: "downloading" | "installing";
+  version: string;
+  downloaded: number;
+  total: number;
+}
+
 export interface GlobalShortcut {
   accelerator: string;
   commandId: string;
@@ -116,12 +123,32 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
    * there is no version of Conduit where half of it has been replaced. Returns
    * false when there was nothing to install; a true return is followed by a
    * relaunch, so nothing after it runs.
+   *
+   * The progress it reports is Conduit's own -- the installer runs silently --
+   * so the whole update reads as one action in one window rather than a
+   * download followed by somebody else's dialog.
    */
-  async update(): Promise<boolean> {
+  async update(onProgress?: (update: UpdateProgress) => void): Promise<boolean> {
     const { check } = await import("@tauri-apps/plugin-updater");
     const pending = await check();
     if (!pending) return false;
-    await pending.downloadAndInstall();
+    let downloaded = 0;
+    let total = 0;
+    await pending.downloadAndInstall((event) => {
+      if (!onProgress) return;
+      if (event.event === "Started") {
+        total = event.data.contentLength || 0;
+        downloaded = 0;
+        onProgress({ phase: "downloading", version: pending.version, downloaded, total });
+        return;
+      }
+      if (event.event === "Progress") {
+        downloaded += event.data.chunkLength;
+        onProgress({ phase: "downloading", version: pending.version, downloaded, total });
+        return;
+      }
+      onProgress({ phase: "installing", version: pending.version, downloaded: total, total });
+    });
     const { relaunch } = await import("@tauri-apps/plugin-process");
     await relaunch();
     return true;
