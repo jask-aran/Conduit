@@ -968,12 +968,29 @@ for the same reason, and the repository now has no headless browser suite at
 all. Browser-level checking is Agent Browser, driven rather than asserted.
 Rebuild a suite deliberately if it earns its place.
 
-## Android shell
+## Installed shells
+
+Two shells package the production `dist/` bundle around the same client the
+browser runs: the Capacitor project in `android/` and the Tauri 2 project in
+`src-tauri/`. Both hold a bearer token instead of a cookie, choose the server
+rather than inheriting it, and never redirect to `/login`.
+`src/client/platform/installed-client.ts` is the single place that asks which
+client is running; nothing else tests for Capacitor or Tauri.
+
+The Windows desktop client -- how it is built from WSL, how a development
+client installs beside the released one, how updates are signed and how to test
+one without publishing it -- is documented in
+[`../docs/desktop-client.md`](../docs/desktop-client.md).
+
+### Android
 
 The Capacitor 8 project in `android/` packages the production `dist/` bundle
 under the application ID `com.jaskaran.conduit`. It uses the secure local
 WebView origin and does not load a production `server.url`. Native builds do not
-register the PWA service worker or show its update and cache-reset actions.
+register the PWA service worker or show its update and cache-reset actions;
+Check for updates asks the GitHub releases API for a newer APK instead, and
+hands it to the system installer, which confirms before installing anything
+from outside the Play Store.
 First launch requests one HTTPS Conduit server origin and checks `/healthz`.
 The same form then reveals the normal Conduit password field. The server
 origin stays in local storage because it is not secret; the bearer token stays
