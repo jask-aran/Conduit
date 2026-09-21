@@ -38,9 +38,11 @@ jobs:
             echo "::error::Release changelog is empty: $changelog"
             exit 1
           fi
+          # A ceiling against a file that ran away, not a word budget. A
+          # release that touched several things has several things to say.
           line_count="$(wc -l < "$changelog")"
-          if (( line_count > 40 )); then
-            echo "::error::Release changelog must be 40 lines or shorter: $changelog has $line_count lines"
+          if (( line_count > 200 )); then
+            echo "::error::Release changelog must be 200 lines or shorter: $changelog has $line_count lines"
             exit 1
           fi
 
