@@ -177,6 +177,36 @@ export function forgetServer(origin: string) {
   persist(list, active() === origin ? list[0]?.origin ?? null : active());
 }
 
+/**
+ * Fold a server's directory into this client's list, and report back anything
+ * it did not have.
+ *
+ * Union, never replacement. The two lists are both partial -- this client has
+ * been somewhere the server has not been told about, and the server has been
+ * told by clients this one has never met -- so the only merge that loses
+ * nothing is to keep both. A name already held here wins, because it is the
+ * one the person using this client chose.
+ *
+ * Forgetting is the cost of that: an address removed here comes back the next
+ * time a server that still lists it is opened. Names are cheap to correct and
+ * a wrong address is inert, which is a better trade than a list that silently
+ * disagrees with itself across devices.
+ */
+export function mergeServerDirectory(entries: Array<{ origin?: unknown; name?: unknown }>): ServerEntry[] {
+  const list = [...serverList()];
+  const known = new Set(list.map((entry) => entry.origin));
+  for (const item of Array.isArray(entries) ? entries : []) {
+    let origin: string;
+    try { origin = normalizeServerOrigin(item?.origin); } catch { continue; }
+    if (known.has(origin)) continue;
+    known.add(origin);
+    const name = typeof item?.name === "string" && item.name.trim() ? item.name.trim() : defaultServerName(origin);
+    list.push({ origin, name });
+  }
+  if (list.length !== serverList().length) persist(list, active());
+  return list;
+}
+
 export function setActiveServer(origin: string) {
   if (!serverList().some((entry) => entry.origin === origin)) return;
   persist(serverList(), origin);

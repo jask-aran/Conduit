@@ -1,4 +1,4 @@
-import { validSidebarPins, validTerminalShortcuts, validUiPreferencePatch } from "../../preferences-store.js";
+import { normalizeKnownServers, validKnownServers, validSidebarPins, validTerminalShortcuts, validUiPreferencePatch } from "../../preferences-store.js";
 import { manifestForImplementation } from "../../harnesses/index.js";
 
 const drainsOnRestart = (process) => manifestForImplementation(process.backend?.implementation)?.restartDrain !== false;
@@ -138,6 +138,10 @@ export function registerRuntimeRoutes(app, {
       if (sidebarPins != null && !validSidebarPins(sidebarPins)) {
         return response.status(400).json({ error: "invalid_sidebar_pins" });
       }
+      const knownServers = request.body?.knownServers;
+      if (knownServers != null && !validKnownServers(knownServers)) {
+        return response.status(400).json({ error: "invalid_known_servers" });
+      }
       if (!validUiPreferencePatch(request.body)) {
         return response.status(400).json({ error: "invalid_ui_preferences" });
       }
@@ -158,6 +162,7 @@ export function registerRuntimeRoutes(app, {
         ...(thinkingLevel != null ? { sessionNameThinkingLevel: thinkingLevel } : {}),
         ...(terminalShortcuts != null ? { terminalShortcuts } : {}),
         ...(sidebarPins != null ? { sidebarPins } : {}),
+        ...(knownServers != null ? { knownServers: normalizeKnownServers(knownServers) } : {}),
         ...uiPatch,
       });
       response.json(saved);

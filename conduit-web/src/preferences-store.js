@@ -27,9 +27,59 @@ const DEFAULTS = {
   chatSort: null,
   shortcutOverrides: null,
   voicePreferences: null,
+  knownServers: [],
 };
 
 const SIDEBAR_PIN_PATTERN = /^(chat|project|terminal):[^\s:][^\s]*$/;
+
+/* The addresses this Conduit knows other Conduits by.
+ *
+ * A client learns servers one at a time and then has to be told again on every
+ * other device it uses. Keeping the directory here means a server that has
+ * been told about another one tells every client that connects to it, and a
+ * client that knows one the server does not tells the server -- so the first
+ * address anyone types is the last time that address has to be typed.
+ *
+ * It is a convenience, not an authority: nothing here grants access to
+ * anything, a client still signs in to each server separately, and a name is
+ * just a label. It does mean each server learns where the others are, which is
+ * the cost of not maintaining the same list by hand in several places. */
+const LOOPBACK_SERVER_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+function validServerOrigin(value) {
+  if (typeof value !== "string" || value.length > 253) return false;
+  let url;
+  try { url = new URL(value); } catch { return false; }
+  if (url.username || url.password) return false;
+  if (url.pathname !== "/" || url.search || url.hash) return false;
+  return url.protocol === "https:" || (url.protocol === "http:" && LOOPBACK_SERVER_HOSTS.has(url.hostname));
+}
+
+export function validKnownServers(input) {
+  if (!Array.isArray(input) || input.length > 20) return false;
+  const origins = new Set();
+  for (const item of input) {
+    if (!item || typeof item !== "object") return false;
+    if (!validServerOrigin(item.origin)) return false;
+    if (typeof item.name !== "string" || item.name.length > 60) return false;
+    if (origins.has(item.origin)) return false;
+    origins.add(item.origin);
+  }
+  return true;
+}
+
+export function normalizeKnownServers(input) {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set();
+  const list = [];
+  for (const item of input) {
+    const origin = item?.origin;
+    if (!validServerOrigin(origin) || seen.has(origin)) continue;
+    seen.add(origin);
+    list.push({ origin, name: typeof item?.name === "string" ? item.name.slice(0, 60) : "" });
+  }
+  return list.slice(0, 20);
+}
 
 export function normalizeSidebarPins(input) {
   if (!Array.isArray(input)) return [];
