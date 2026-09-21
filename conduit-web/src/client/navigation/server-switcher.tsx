@@ -2,8 +2,9 @@ import { createSignal, For, onCleanup, Show } from "solid-js";
 import { ExternalLinkIcon, PlusIcon, RefreshCwIcon } from "lucide-solid";
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger, Spinner } from "@/components/primitives";
 import { buildHttpUrl } from "../api/transport";
+import { proveServer } from "../platform/server-proof";
 import { isInstalledClient } from "../platform/installed-client.ts";
-import { activeOrigin, activeServer, servers, switchToServer, type ServerEntry } from "../platform/servers.ts";
+import { activePath, activeOrigin, activeServer, clearActivePath, pathsOf, servers, setActivePath, switchToServer, type ServerEntry, type ServerPath } from "../platform/servers.ts";
 
 const PROBE_TIMEOUT_MS = 4000;
 const PROBE_INTERVAL_MS = 5000;
@@ -45,12 +46,19 @@ export function ServerSwitcher(props: {
 }) {
   const [latency, setLatency] = createSignal<Record<string, number | null>>({});
   const [probing, setProbing] = createSignal(false);
+  const [checking, setChecking] = createSignal("");
+  const [routeError, setRouteError] = createSignal("");
   let timer: ReturnType<typeof setInterval> | undefined;
+
+  // Every address of every server, not just the one each is filed under: the
+  // question the menu answers is "which of these is quickest from here", and a
+  // path that cannot be reached from this network has to be able to say so.
+  const allPaths = () => servers().flatMap((entry) => pathsOf(entry).map((path) => path.origin));
 
   const measure = async () => {
     setProbing(true);
-    const measured = await Promise.all(servers().map(async (entry) =>
-      [entry.origin, canProbe(entry.origin) ? await probe(entry.origin) : undefined] as const));
+    const measured = await Promise.all(allPaths().map(async (origin) =>
+      [origin, canProbe(origin) ? await probe(origin) : undefined] as const));
     setLatency(Object.fromEntries(measured.filter(([, value]) => value !== undefined)) as Record<string, number | null>);
     setProbing(false);
   };
@@ -74,17 +82,68 @@ export function ServerSwitcher(props: {
 
   const serverName = () => activeServer()?.name || "Conduit";
   const activeLatency = () => {
-    const origin = activeOrigin();
+    const origin = activePath();
     const value = origin ? latency()[origin] : undefined;
     return typeof value === "number" ? ` · ${value} ms` : "";
   };
   const triggerDetail = () => `${connectionLabel()}${activeLatency()}`;
 
-  const latencyLabel = (entry: ServerEntry) => {
-    if (!canProbe(entry.origin)) return "";
-    const value = latency()[entry.origin];
+  const latencyLabel = (origin: string) => {
+    if (!canProbe(origin)) return "";
+    const value = latency()[origin];
     if (value === undefined) return probing() ? "…" : "";
     return value === null ? "Unreachable" : `${value} ms`;
+  };
+
+  // What the address is, rather than what it says: "on this machine" is the
+  // useful fact about 127.0.0.1, and it is the same fact on every client.
+  const scopeLabel = (path: ServerPath) => path.scope === "loopback" ? "This machine"
+    : path.scope === "private" ? "This network" : "Anywhere";
+
+  const activeServerPaths = () => {
+    const entry = activeServer();
+    return entry ? pathsOf(entry) : [];
+  };
+
+  /*
+   * An installed client changes route in place. A browser navigates, for the
+   * same reason it navigates between servers: its cookie, its storage and its
+   * worker belong to the origin that served it, so another address is another
+   * installation of this app however much it is the same machine behind it.
+   * Offering the route anyway is the point -- the addresses were collapsed
+   * into one server, and without this a browser would lose the only way it had
+   * to reach the others.
+   */
+  /*
+   * An installed client changes route in place. A browser navigates, for the
+   * same reason it navigates between servers: its cookie, its storage and its
+   * worker belong to the origin that served it, so another address is another
+   * installation of this app however much it is the same machine behind it.
+   * Offering the route anyway is the point -- the addresses were collapsed
+   * into one server, and without this a browser would lose the only way it had
+   * to reach the others.
+   *
+   * The address is made to prove itself first. Choosing a route is what sends
+   * this client's token somewhere new, so "is that really the server" has to
+   * be answered before the move rather than discovered by making it.
+   */
+  const chooseRoute = async (origin: string) => {
+    const entry = activeServer();
+    if (!entry) return;
+    if (!isInstalledClient()) {
+      if (origin !== location.origin) location.assign(origin);
+      return;
+    }
+    if (origin === entry.origin) return clearActivePath();
+
+    setChecking(origin);
+    setRouteError("");
+    const proof = await proveServer(origin, entry.id || "", entry.publicKey || "");
+    setChecking("");
+    if (proof.ok) return setActivePath(origin);
+    setRouteError(proof.reason === "unreachable" ? "That address did not answer."
+      : proof.reason === "unverifiable" ? "This client cannot check a server's identity, so the route was left alone."
+        : "That address answered, but it is not this server.");
   };
 
   const away = (entry: ServerEntry) => !isInstalledClient() && entry.origin !== location.origin;
@@ -105,9 +164,30 @@ export function ServerSwitcher(props: {
               <MenuRadioItem value={entry.origin}>
                 <span class="truncate">{entry.name}</span>
                 <Show when={away(entry)}><ExternalLinkIcon class="size-3 text-muted-foreground" /></Show>
-                <span class="server-row-latency ml-auto text-xs text-muted-foreground">{latencyLabel(entry)}</span>
+                <span class="server-row-latency ml-auto text-xs text-muted-foreground">{latencyLabel(entry.origin)}</span>
               </MenuRadioItem>}</For>
           </MenuRadioGroup>
+        </MenuGroup>
+        <MenuSeparator />
+      </Show>
+      {/*
+        * The routes to the server already open, which is a different question
+        * from which server to open. Shown only when there is a choice.
+        */}
+      <Show when={activeServerPaths().length > 1}>
+        <MenuGroup>
+          <MenuLabel>Route to {serverName()}</MenuLabel>
+          <MenuRadioGroup value={activePath() || ""} onChange={(origin) => void chooseRoute(origin)}>
+            <For each={activeServerPaths()}>{(path) =>
+              <MenuRadioItem value={path.origin}>
+                <span class="truncate">{scopeLabel(path)}</span>
+                <Show when={!isInstalledClient() && path.origin !== location.origin}><ExternalLinkIcon class="size-3 text-muted-foreground" /></Show>
+                <span class="server-row-latency ml-auto text-xs text-muted-foreground">
+                  {checking() === path.origin ? "Checking…" : latencyLabel(path.origin)}
+                </span>
+              </MenuRadioItem>}</For>
+          </MenuRadioGroup>
+          <Show when={routeError()}><MenuLabel class="server-route-error">{routeError()}</MenuLabel></Show>
         </MenuGroup>
         <MenuSeparator />
       </Show>

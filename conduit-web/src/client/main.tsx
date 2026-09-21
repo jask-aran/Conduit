@@ -15,7 +15,7 @@ import "@jask-aran/solid-components/meteor-shower.css";
 import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/primitives";
 import { api, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./api/client";
 import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl } from "./api/transport";
-import { activeOrigin, addServer, forgetServer, mergeServerDirectory, servers, setActiveServer, switchToServer } from "./platform/servers";
+import { activeOrigin, addServer, forgetServer, learnIdentity, mergeServerDirectory, servers, setActiveServer, switchToServer } from "./platform/servers";
 import { publishServerDirectory } from "./platform/server-directory";
 import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
 import { manifestForChat, resolveCapability, resolveHistory } from "./chat-capabilities";
@@ -1773,6 +1773,14 @@ function App() {
       // has been to both. Either way an address is typed once, anywhere.
       const directory = mergeServerDirectory(serverPreferences.knownServers || []);
       void publishServerDirectory(directory, serverPreferences.knownServers);
+      // Ask the server it just signed in to who it is and where else it
+      // answers. This connection is authenticated, which is the only kind that
+      // may be believed about identity: an open endpoint saying "I am the
+      // server you hold a token for" is the thing worth being unable to say.
+      // A server too old to answer leaves the list exactly as it was.
+      void api<{ id?: string; paths?: unknown }>("/v0/server")
+        .then((identity) => { const origin = activeOrigin(); if (origin) learnIdentity(origin, identity); })
+        .catch(() => { /* an older server has no identity, and needs none */ });
       const migration: Partial<UiPreferences> = {};
       hydratingUiPreferences = true;
       try {
