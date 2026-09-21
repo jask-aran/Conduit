@@ -22,6 +22,7 @@ import {
 } from "@/components/primitives";
 import { api } from "../api/client";
 import type { Connectivity } from "../state/runtime";
+import { onPathChange } from "../platform/servers";
 import { terminalSocketUrl } from "../api/transport";
 import { clipboardPasteText, createTerminalRenderer, type TerminalPasteFiles, type TerminalRenderer } from "./terminal-renderer";
 import { terminalRecoveryView, type TerminalConnectionState } from "./terminal-recovery";
@@ -289,6 +290,22 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     setError("");
     setConnectionState("idle");
   };
+
+  /*
+   * The route to the server changed under an attached terminal.
+   *
+   * The pty is untouched -- same server, same tmux session, same scrollback --
+   * so this reattaches rather than reporting an interruption. `connect` closes
+   * the old socket through `disposeConnection`, which marks it deliberate, so
+   * no error is shown and no backoff is scheduled for a close nobody suffered.
+   * The renderer is kept and tmux repaints the pane on attach, which is why
+   * the move costs a repaint rather than a blank terminal.
+   */
+  onPathChange(() => {
+    const record = pty();
+    if (!record || record.status !== "running" || props.active === false) return;
+    void connect(record);
+  });
 
   const ensureRenderer = async ({ fresh = false } = {}) => {
     if (!host) throw new Error("Terminal surface is unavailable");

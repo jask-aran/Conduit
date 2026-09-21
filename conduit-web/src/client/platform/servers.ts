@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { createEffect, createSignal, on } from "solid-js";
 import { isInstalledClient } from "./installed-client.ts";
 
 /**
@@ -15,9 +15,34 @@ import { isInstalledClient } from "./installed-client.ts";
  * choosing another server there means navigating to it -- a separate install
  * of the same app. The list is the same list; only the verb differs.
  */
+export type PathScope = "loopback" | "private" | "public";
+
+/** An address this server answers on, and what it costs to get there. */
+export interface ServerPath {
+  origin: string;
+  scope: PathScope;
+}
+
 export interface ServerEntry {
   name: string;
   origin: string;
+  /**
+   * What the server says it is, once it has been asked over a connection it
+   * authenticated. Absent until then, and absent forever for a server too old
+   * to answer -- which is why nothing may depend on having it.
+   */
+  id?: string;
+  /**
+   * The public half of this server's key, handed over when this client signed
+   * in. It is what makes another address checkable before a token is sent to
+   * it -- see `server-proof.ts`.
+   */
+  publicKey?: string;
+  /**
+   * The other addresses this same server answers on. The entry's own `origin`
+   * is always a path and is not repeated here.
+   */
+  paths?: ServerPath[];
   /**
    * Whether this address travels. The directory is kept by the servers, which
    * is the only channel two origins on one device share -- and it is a channel
@@ -108,6 +133,35 @@ function storageOrNull(): Storageish | null {
   catch { return null; }
 }
 
+const SCOPES: PathScope[] = ["loopback", "private", "public"];
+
+function readPaths(value: unknown, self: string): ServerPath[] {
+  const seen = new Set([self]);
+  const paths: ServerPath[] = [];
+  for (const item of Array.isArray(value) ? value as Array<Record<string, unknown>> : []) {
+    let origin: string;
+    try { origin = normalizeServerOrigin(item?.origin); } catch { continue; }
+    if (seen.has(origin)) continue;
+    seen.add(origin);
+    const scope = SCOPES.includes(item?.scope as PathScope) ? item?.scope as PathScope : scopeOf(origin);
+    paths.push({ origin, scope });
+  }
+  return paths;
+}
+
+/** What this address costs to reach, worked out from the address alone. */
+export function scopeOf(origin: string): PathScope {
+  const host = hostOf(origin);
+  if (LOOPBACK_HOST.test(host)) return "loopback";
+  return PRIVATE_HOST.test(host) ? "private" : "public";
+}
+
+/** Every address that reaches this server, its own included, nearest first. */
+export function pathsOf(entry: ServerEntry): ServerPath[] {
+  const all = [{ origin: entry.origin, scope: scopeOf(entry.origin) }, ...(entry.paths ?? [])];
+  return all.sort((left, right) => SCOPES.indexOf(left.scope) - SCOPES.indexOf(right.scope));
+}
+
 export function readServers(storage: Storageish | null): ServerEntry[] {
   const raw = storage?.getItem(SERVERS_STORAGE_KEY);
   let parsed: unknown = [];
@@ -121,7 +175,10 @@ export function readServers(storage: Storageish | null): ServerEntry[] {
     seen.add(origin);
     const name = typeof item?.name === "string" && item.name.trim() ? item.name.trim() : defaultServerName(origin);
     const shared = typeof item?.shared === "boolean" ? item.shared : sharedByDefault(origin);
-    list.push({ origin, name, shared });
+    const id = typeof item?.id === "string" && /^[0-9a-f]{32}$/.test(item.id) ? item.id : undefined;
+    const publicKey = typeof item?.publicKey === "string" && item.publicKey.length <= 128 ? item.publicKey : undefined;
+    const paths = readPaths(item?.paths, origin);
+    list.push({ origin, name, shared, ...(id ? { id } : {}), ...(publicKey ? { publicKey } : {}), ...(paths.length ? { paths } : {}) });
   }
   return list;
 }
@@ -182,10 +239,98 @@ function adoptServingOrigin() {
 adoptServingOrigin();
 
 export const servers = serverList;
+/*
+ * The path in use, separately from the server in use.
+ *
+ * A server is one thing; the route taken to it is another, and they change for
+ * different reasons and cost different amounts. Choosing a different *server*
+ * means everything on screen belonged to somewhere else, so the client is
+ * rebuilt around the new one. Choosing a different *path* to the server
+ * already open means nothing on screen is wrong -- the same chats, the same
+ * processes, the same running generation -- so nothing may be torn down. Only
+ * the connections move.
+ *
+ * Until a server can say which addresses are it, a server has exactly one
+ * path: its own origin. `activePath` therefore reads as `activeOrigin` today
+ * and the machinery below is exercised by nothing but its test. That is
+ * deliberate -- the reconnect is the part that can fail ugly, and it is worth
+ * having working before anything starts choosing paths automatically.
+ */
+const [pathOverride, setPathOverride] = createSignal<string | null>(null);
+const [pathEpoch, bumpPathEpoch] = createSignal(0);
+
 export const activeOrigin = active;
+/** Where requests actually go: the chosen path, or the server's own address. */
+export const activePath = (): string | null => pathOverride() ?? active();
+/**
+ * Changes whenever the path does. Long-lived connections watch this and
+ * reopen; nothing else should need it.
+ */
+export const pathGeneration = pathEpoch;
+
+/**
+ * Take a different route to the server already in use. A no-op if it is the
+ * route already in use, so a probe that keeps choosing the same winner costs
+ * nothing.
+ */
+export function setActivePath(origin: string) {
+  const next = normalizeServerOrigin(origin);
+  if (activePath() === next) return;
+  setPathOverride(next);
+  bumpPathEpoch((value) => value + 1);
+}
+
+/**
+ * Run something whenever the path changes, and not when it is first read.
+ *
+ * Every long-lived connection builds its URL through `transport.js` at the
+ * moment it opens, so a connection that closes and reopens lands on the new
+ * path without being told what it is. That makes this the whole of the move:
+ * close, and let the reconnect each of them already has do the rest.
+ *
+ * Takes the caller's owner, so a connection that is disposed stops listening.
+ */
+export function onPathChange(handler: () => void) {
+  createEffect(on(pathGeneration, () => handler(), { defer: true }));
+}
+
+/*
+ * A way to move the path by hand, until a server can say which addresses are
+ * it and something starts choosing between them.
+ *
+ * The reconnect is the part of this that can fail ugly, and it cannot be
+ * proved by a unit test: what has to hold is that a live terminal repaints
+ * instead of erroring and a running generation keeps streaming, in a real
+ * client, over a real network. So the move is reachable from the console
+ * before there is a UI for it:
+ *
+ *   conduitPath.set("http://192.168.0.128:4310")   // same server, new route
+ *   conduitPath.clear()                            // back to its own address
+ *
+ * Removed once something chooses paths on its own.
+ */
+if (typeof window !== "undefined") {
+  (window as unknown as { conduitPath: unknown }).conduitPath = {
+    get current() { return activePath(); },
+    get server() { return active(); },
+    set: (origin: string) => { setActivePath(origin); return activePath(); },
+    clear: () => { clearActivePath(); return activePath(); },
+  };
+}
+
+/** Back to addressing the server by its own address. */
+export function clearActivePath() {
+  if (pathOverride() === null) return;
+  setPathOverride(null);
+  bumpPathEpoch((value) => value + 1);
+}
+
 export const activeServer = (): ServerEntry | null => serverList().find((entry) => entry.origin === active()) ?? null;
 
 function persist(list: ServerEntry[], nextActive: string | null) {
+  // A path belongs to the server it reaches, so changing server drops it
+  // rather than carrying an address that now names somewhere else.
+  if (nextActive !== active()) setPathOverride(null);
   setServerList(list);
   writeServers(store, list);
   setActive(nextActive);
@@ -256,6 +401,55 @@ export function mergeServerDirectory(entries: Array<{ origin?: unknown; name?: u
 
 export function setServerShared(origin: string, shared: boolean) {
   persist(serverList().map((entry) => entry.origin === origin ? { ...entry, shared } : entry), active());
+}
+
+/*
+ * Take what a server said about itself, and fold the list around it.
+ *
+ * Two addresses the user added separately turn out to be one machine. The
+ * entry that answered keeps its name and its place; the other is removed and
+ * survives as a path underneath it, so a server registered twice stops looking
+ * like two servers without anyone having to notice and tidy up.
+ *
+ * The addresses the server offers are recorded, not trusted. Every one of them
+ * is a claim made by something that could be wrong about its own network -- a
+ * LAN address is only true on that LAN -- so they are candidates for probing,
+ * and never somewhere requests are sent because a payload said so.
+ */
+export function learnIdentity(origin: string, identity: { id?: unknown; publicKey?: unknown; paths?: unknown }) {
+  const id = typeof identity?.id === "string" && /^[0-9a-f]{32}$/.test(identity.id) ? identity.id : "";
+  if (!id) return;
+  const publicKey = typeof identity?.publicKey === "string" && identity.publicKey.length <= 128 ? identity.publicKey : "";
+  const list = serverList();
+  const self = list.find((entry) => entry.origin === origin);
+  if (!self) return;
+
+  const offered = readPaths(identity?.paths, origin);
+  // An address the user already added, which this server now says is itself.
+  const absorbed = list.filter((entry) => entry.origin !== origin
+    && (entry.id === id || offered.some((path) => path.origin === entry.origin)));
+
+  const paths = readPaths([
+    ...offered,
+    ...(self.paths ?? []),
+    ...absorbed.map((entry) => ({ origin: entry.origin, scope: scopeOf(entry.origin) })),
+  ], origin);
+
+  const next = list
+    .filter((entry) => !absorbed.includes(entry))
+    .map((entry) => entry.origin === origin
+      ? { ...entry, id, paths, ...(publicKey ? { publicKey } : {}) }
+      : entry);
+
+  if (sameList(next, list)) return;
+  // The active server may have been one of the absorbed rows, in which case it
+  // is now reached as a path of the survivor rather than as itself.
+  const stillActive = next.some((entry) => entry.origin === active()) ? active() : origin;
+  persist(next, stillActive);
+}
+
+function sameList(left: ServerEntry[], right: ServerEntry[]) {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 export function setActiveServer(origin: string) {

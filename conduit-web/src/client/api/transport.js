@@ -1,5 +1,5 @@
 import { isInstalledClient } from "../platform/installed-client.ts";
-import { activeOrigin, normalizeServerOrigin } from "../platform/servers.ts";
+import { activePath, normalizeServerOrigin } from "../platform/servers.ts";
 import { authorizedFetch } from "./native-auth-client.ts";
 
 // Re-exported so every caller still asks one module how to reach a server,
@@ -17,7 +17,9 @@ export function buildWebSocketUrl(path, origin) {
 }
 
 function nativeOrigin() {
-  const origin = activeOrigin();
+  // The path, not the server: the same server may answer at more than one
+  // address, and this is the one chosen to reach it right now.
+  const origin = activePath();
   if (!origin) throw new Error("Choose a Conduit server first.");
   return origin;
 }
