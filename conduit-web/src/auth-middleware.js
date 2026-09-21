@@ -192,9 +192,35 @@ function isLoopbackRequest(request) {
   return LOOPBACK_ADDRESSES.has(String(request.socket?.remoteAddress || ""));
 }
 
-/** Where a bearer token may be handed out: over TLS, or not over a network. */
+// 10/8, 172.16/12, 192.168/16, and the 169.254/16 a machine gives itself when
+// nothing hands it an address. IPv4-mapped IPv6 is how Node reports a v4 peer
+// on a dual-stack socket, so the prefix is stripped before matching.
+const PRIVATE_ADDRESS = /^(10(\.\d{1,3}){3}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2}|192\.168(\.\d{1,3}){2}|169\.254(\.\d{1,3}){2})$/;
+
+/**
+ * A request that arrived from a private address, on a socket with no proxy in
+ * front of it, reached this server without crossing the internet. That is a
+ * weaker claim than loopback and deliberately so: the traffic did cross a
+ * network, one the caller and this machine are both sitting on.
+ *
+ * It is allowed because the alternative is not "more secure", it is "a server
+ * on the LAN cannot be signed in to at all" -- no public authority issues a
+ * certificate for 192.168.0.128, so requiring TLS here removes the address
+ * rather than protecting it. The same line is drawn in the client's
+ * `normalizeServerOrigin`, and the two have to agree.
+ */
+function isPrivateNetworkRequest(request) {
+  if (request.headers["x-forwarded-for"] || request.headers["x-forwarded-proto"]) return false;
+  const address = String(request.socket?.remoteAddress || "").replace(/^::ffff:/, "");
+  return PRIVATE_ADDRESS.test(address);
+}
+
+/**
+ * Where a bearer token may be handed out: over TLS, or over a hop that did not
+ * cross the internet.
+ */
 function isTrustworthyRequest(request) {
-  return isSecureRequest(request) || isLoopbackRequest(request);
+  return isSecureRequest(request) || isLoopbackRequest(request) || isPrivateNetworkRequest(request);
 }
 
 const NO_PASSWORD_NEGATIVE_CACHE_MS = 5_000;

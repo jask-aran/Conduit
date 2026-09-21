@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { authStartupViolation, createRateLimiter, isAllowlistedPath, readCookie, safeRedirectTarget } from "../src/auth-middleware.js";
+import { authStartupViolation, createRateLimiter, isAllowlistedPath, isTrustworthyRequest, readCookie, safeRedirectTarget } from "../src/auth-middleware.js";
 import { AuthStore } from "../src/auth-store.js";
 
 function mockConfig(host, allowInsecure = false) {
@@ -79,4 +79,29 @@ test("safeRedirectTarget only allows same-origin paths", () => {
   assert.equal(safeRedirectTarget(null), "/");
   assert.equal(safeRedirectTarget(undefined), "/");
   assert.equal(safeRedirectTarget(123), "/");
+});
+
+test("a bearer token is handed out over TLS, or over a hop that stayed off the internet", () => {
+  const request = (remoteAddress, headers = {}, protocol = "http") => ({ protocol, headers, socket: { remoteAddress } });
+
+  assert.equal(isTrustworthyRequest(request("203.0.113.9", {}, "https")), true, "TLS needs no address");
+  assert.equal(isTrustworthyRequest(request("203.0.113.9", { "x-forwarded-proto": "https" })), true, "a proxy that says it terminated TLS");
+  assert.equal(isTrustworthyRequest(request("127.0.0.1")), true, "never crossed a network");
+  assert.equal(isTrustworthyRequest(request("::ffff:127.0.0.1")), true);
+
+  // A LAN caller: the traffic crossed a network, but not the internet, and no
+  // certificate exists for an address like this to require instead.
+  for (const address of ["192.168.0.128", "::ffff:192.168.0.128", "10.1.2.3", "172.16.0.9", "169.254.1.1"]) {
+    assert.equal(isTrustworthyRequest(request(address)), true, address);
+  }
+
+  // Just outside the private ranges, and so still plain HTTP from anywhere.
+  for (const address of ["172.32.0.1", "11.0.0.1", "192.169.0.1", "203.0.113.9"]) {
+    assert.equal(isTrustworthyRequest(request(address)), false, address);
+  }
+
+  // A forwarding header means the address on the socket belongs to the proxy,
+  // so it says nothing about where the caller was.
+  assert.equal(isTrustworthyRequest(request("192.168.0.128", { "x-forwarded-for": "203.0.113.9" })), false);
+  assert.equal(isTrustworthyRequest(request("127.0.0.1", { "x-forwarded-for": "203.0.113.9" })), false);
 });
