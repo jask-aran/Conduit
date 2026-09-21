@@ -2146,6 +2146,10 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   touch-action: none; user-select: none; cursor: default;
 }
 .overlay-scrollbar::backdrop { background: transparent; pointer-events: none; }
+/* On touch the overlay is an indicator, not a control: the finger belongs to
+   the list underneath it. */
+.overlay-scrollbar[data-touch] { pointer-events: none; }
+.overlay-scrollbar[data-touch] .overlay-scrollbar-thumb { opacity: 0.55; }
 .overlay-scrollbar-thumb {
   position: absolute; border-radius: 999px;
   background: var(--muted-foreground); opacity: 0.8;
