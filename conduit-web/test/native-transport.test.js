@@ -6,7 +6,18 @@ import {
   defaultServerName,
   migrateLegacyServer,
   normalizeServerOrigin,
+  activeOrigin,
+  activePath,
+  addServer,
+  clearActivePath,
+  learnIdentity,
+  pathsOf,
+  scopeOf,
+  servers,
+  pathGeneration,
   readServers,
+  setActivePath,
+  setActiveServer,
   sharedByDefault,
   writeServers,
 } from "../src/client/platform/servers.ts";
@@ -118,4 +129,79 @@ test("a published release is newer only when its version is", async () => {
   }), { status: 200 }));
   assert.deepEqual(release, { tag: "v0.7.2", version: "0.7.2", apkUrl: "https://example.invalid/apk" });
   assert.equal(await latestRelease(async () => new Response("", { status: 404 })), null);
+});
+
+test("a path is chosen underneath the server, and changing server drops it", () => {
+  addServer("https://conduit.tailnet.ts.net", "Home");
+  addServer("http://192.168.0.128:4310", "Desk");
+  setActiveServer("https://conduit.tailnet.ts.net");
+
+  // With no path chosen, requests go to the server's own address.
+  clearActivePath();
+  assert.equal(activePath(), "https://conduit.tailnet.ts.net");
+
+  const before = pathGeneration();
+  setActivePath("http://192.168.0.128:4310");
+  assert.equal(activePath(), "http://192.168.0.128:4310", "requests follow the path");
+  assert.equal(activeOrigin(), "https://conduit.tailnet.ts.net", "the server in use has not changed");
+  assert.equal(pathGeneration(), before + 1, "connections are told to move");
+
+  // Choosing the path already in use is not a move, or a probe that keeps
+  // picking the same winner would reconnect everything on every pass.
+  setActivePath("http://192.168.0.128:4310");
+  assert.equal(pathGeneration(), before + 1);
+
+  // A path belongs to the server it reaches. Going somewhere else drops it
+  // rather than addressing the new server by the old one's route.
+  addServer("http://10.0.0.5:4310", "Other");
+  setActiveServer("http://10.0.0.5:4310");
+  assert.equal(activeOrigin(), "http://10.0.0.5:4310");
+  assert.equal(activePath(), "http://10.0.0.5:4310", "not the route to the server we left");
+});
+
+test("two addresses that answer with the same id become one server", () => {
+  const id = "a".repeat(32);
+  // The list is module state shared with the test above, so this asserts on
+  // the rows it touches rather than on the length of the whole list.
+  addServer("https://conduit.tailnet.ts.net", "Home");
+  addServer("http://127.0.0.1:4310", "Loopback");
+  addServer("http://192.168.0.128:4310", "Desk");
+  setActiveServer("https://conduit.tailnet.ts.net");
+
+  learnIdentity("https://conduit.tailnet.ts.net", {
+    id,
+    paths: [
+      { origin: "http://127.0.0.1:4310", scope: "loopback" },
+      { origin: "http://192.168.0.128:4310", scope: "private" },
+      { origin: "https://conduit.tailnet.ts.net", scope: "public" },
+    ],
+  });
+
+  // Three rows the person added separately are one server with three routes.
+  const entry = servers().find((item) => item.origin === "https://conduit.tailnet.ts.net");
+  for (const absorbed of ["http://127.0.0.1:4310", "http://192.168.0.128:4310"]) {
+    assert.equal(servers().some((item) => item.origin === absorbed), false,
+      `${absorbed} is no longer a server of its own`);
+  }
+  assert.equal(entry.name, "Home", "the entry that answered keeps its name");
+  assert.equal(entry.id, id);
+  assert.deepEqual(pathsOf(entry).map((path) => path.origin), [
+    // Nearest first, so the menu reads in the order the paths cost.
+    "http://127.0.0.1:4310",
+    "http://192.168.0.128:4310",
+    "https://conduit.tailnet.ts.net",
+  ]);
+
+  // The server's own address is not repeated as one of its paths.
+  assert.equal(entry.paths.some((path) => path.origin === "https://conduit.tailnet.ts.net"), false);
+
+  // Scope is read off the address, so it means the same on every client.
+  assert.equal(scopeOf("http://127.0.0.1:4310"), "loopback");
+  assert.equal(scopeOf("http://192.168.0.128:4310"), "private");
+  assert.equal(scopeOf("https://conduit.tailnet.ts.net"), "public");
+
+  // A server with nothing to say leaves the list alone.
+  const before = JSON.stringify(servers());
+  learnIdentity("https://conduit.tailnet.ts.net", {});
+  assert.equal(JSON.stringify(servers()), before);
 });
