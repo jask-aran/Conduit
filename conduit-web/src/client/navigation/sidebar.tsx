@@ -863,30 +863,49 @@ export function Sidebar(props: {
     /*
      * A folder's chats slide rather than appear.
      *
-     * Two signals rather than one, because a height transition needs a height
-     * to start from: the rows have to be in the document, still closed, for a
-     * frame before they are told to open. `shown` is what is mounted and
-     * `grown` is what is animating, and on the way back the rows stay mounted
-     * until the collapse has finished so there is something to collapse.
+     * Animated by the Web Animations API on a measured height rather than by
+     * a CSS transition on a grid track. Interpolating `grid-template-rows`
+     * makes the style engine resolve the track on every frame, on the main
+     * thread, for the whole list -- which is exactly the work a phone has no
+     * spare budget for, and it showed as a stutter rather than a slide.
+     * Measuring once and animating a plain height keeps the per-frame cost to
+     * laying out this one folder.
      *
      * Closed folders keep nothing in the document. A sidebar can hold a lot of
      * chats across a lot of folders, and paying for all of them so the few
-     * that are open can animate would be the wrong trade.
+     * that are open can animate would be the wrong trade -- so the rows stay
+     * mounted for the length of the collapse and no longer.
      */
     const [shown, setShown] = createSignal(open());
-    const [grown, setGrown] = createSignal(open());
-    let settle: ReturnType<typeof setTimeout> | undefined;
+    let body: HTMLDivElement | undefined;
+    let motion: Animation | undefined;
+    let settled = false;
     createEffect(() => {
-      clearTimeout(settle);
-      if (open()) {
-        setShown(true);
-        requestAnimationFrame(() => requestAnimationFrame(() => { if (open()) setGrown(true); }));
-      } else {
-        setGrown(false);
-        settle = setTimeout(() => { if (!open()) setShown(false); }, SIDEBAR_FOLDER_MS);
-      }
+      const wanted = open();
+      if (wanted) setShown(true);
+      // The first pass is the folder's initial state, not a change to animate.
+      if (!settled) { settled = true; if (!wanted) setShown(false); return; }
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) { if (!wanted) setShown(false); return; }
+      requestAnimationFrame(() => {
+        const node = body;
+        if (!node || open() !== wanted) { if (!open()) setShown(false); return; }
+        motion?.cancel();
+        const full = `${node.scrollHeight}px`;
+        motion = node.animate(
+          wanted ? [{ height: "0px" }, { height: full }] : [{ height: full }, { height: "0px" }],
+          { duration: SIDEBAR_FOLDER_MS, easing: "cubic-bezier(0.32, 0.72, 0, 1)", fill: "both" },
+        );
+        motion.onfinish = () => {
+          // Dropping the fill hands the height back to the content, so a chat
+          // added while the folder is open does not have to fit a number
+          // measured before it existed.
+          motion?.cancel();
+          motion = undefined;
+          if (!open()) setShown(false);
+        };
+      });
     });
-    onCleanup(() => clearTimeout(settle));
+    onCleanup(() => motion?.cancel());
     const guard = guardFor(blockProps.project);
     const isWorkspace = () => blockProps.project.origin === "linked" || blockProps.project.origin === "created" || blockProps.project.origin === "cloned" || blockProps.project.kind === "workspace";
     const cloning = () => blockProps.project.state === "cloning";
@@ -943,10 +962,10 @@ export function Sidebar(props: {
         </ContextMenuContent>
       </ContextMenu>
       <Show when={shown()}>
-        <div class="sidebar-project-body" data-open={grown() ? "true" : undefined}><div>
+        <div class="sidebar-project-body" ref={body}>
           <For each={sortChats(blockProps.project.sessions, chatSort())}>{(chat) => <ChatMenu chat={chat} project={blockProps.project} />}</For>
           <Show when={!blockProps.project.sessions.length}><div class="sidebar-empty">No chats</div></Show>
-        </div></div>
+        </div>
       </Show>
     </div>;
   };
