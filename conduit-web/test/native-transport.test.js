@@ -1,14 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  SERVER_ORIGIN_STORAGE_KEY,
-  buildHttpUrl,
-  buildWebSocketUrl,
-  clearServerOrigin,
-  configuredServerOrigin,
+  ACTIVE_SERVER_STORAGE_KEY,
+  LEGACY_ORIGIN_STORAGE_KEY,
+  defaultServerName,
+  migrateLegacyServer,
   normalizeServerOrigin,
-  saveServerOrigin,
-} from "../src/client/api/transport.js";
+  readServers,
+  writeServers,
+} from "../src/client/platform/servers.ts";
+import { buildHttpUrl, buildWebSocketUrl } from "../src/client/api/transport.js";
 
 const memoryStorage = () => {
   const values = new Map();
@@ -38,13 +39,38 @@ test("native server origins accept only normalized HTTPS origins", () => {
     "ws://127.0.0.1:4310/v0/dictation/stream");
 });
 
-test("native server origin persists and clears without credentials", () => {
+test("a stored server list keeps only addresses it would accept", () => {
   const storage = memoryStorage();
-  saveServerOrigin("https://conduit.tailnet.ts.net/", storage);
-  assert.equal(storage.getItem(SERVER_ORIGIN_STORAGE_KEY), "https://conduit.tailnet.ts.net");
-  assert.equal(configuredServerOrigin(storage), "https://conduit.tailnet.ts.net");
-  clearServerOrigin(storage);
-  assert.equal(configuredServerOrigin(storage), null);
+  writeServers(storage, [
+    { origin: "https://conduit.tailnet.ts.net", name: "Home" },
+    { origin: "http://127.0.0.1:4310", name: "" },
+    { origin: "https://conduit.tailnet.ts.net", name: "Duplicate" },
+    { origin: "http://insecure.example.com", name: "Refused" },
+  ]);
+  assert.deepEqual(readServers(storage), [
+    { origin: "https://conduit.tailnet.ts.net", name: "Home" },
+    // Unnamed servers answer to their host, so two addresses tell themselves
+    // apart without anyone typing a label.
+    { origin: "http://127.0.0.1:4310", name: "127.0.0.1" },
+  ]);
+  assert.equal(defaultServerName("https://conduit.tailnet.ts.net"), "conduit.tailnet.ts.net");
+  assert.deepEqual(readServers(memoryStorage()), []);
+});
+
+test("the one server an older client held becomes the first of the list", () => {
+  const storage = memoryStorage();
+  storage.setItem(LEGACY_ORIGIN_STORAGE_KEY, "https://conduit.tailnet.ts.net");
+  migrateLegacyServer(storage);
+  assert.deepEqual(readServers(storage), [{ origin: "https://conduit.tailnet.ts.net", name: "conduit.tailnet.ts.net" }]);
+  assert.equal(storage.getItem(ACTIVE_SERVER_STORAGE_KEY), "https://conduit.tailnet.ts.net");
+  // Left in place: the token for that server is still filed under the old name
+  // too, and this is the only record of which server it belongs to.
+  assert.equal(storage.getItem(LEGACY_ORIGIN_STORAGE_KEY), "https://conduit.tailnet.ts.net");
+
+  // A list that already exists is never overwritten by a stale single server.
+  writeServers(storage, [{ origin: "http://127.0.0.1:4310", name: "Local" }]);
+  migrateLegacyServer(storage);
+  assert.deepEqual(readServers(storage), [{ origin: "http://127.0.0.1:4310", name: "Local" }]);
 });
 
 test("transport builds every remote path from the configured origin", () => {

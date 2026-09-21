@@ -1,4 +1,5 @@
 import { isConduitManagedProject } from "./sidebar-preferences";
+import { ServerSwitcher } from "./server-switcher";
 import { batch, createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show } from "solid-js";
 import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import * as KDialog from "@kobalte/core/dialog";
@@ -131,7 +132,7 @@ function SidebarSkeleton(props: { rows: number }) {
   </div>;
 }
 
-function Modal(props: { open: boolean; title: string; description?: string; children: unknown; onClose: () => void; class?: string; closeButton?: boolean }) {
+export function Modal(props: { open: boolean; title: string; description?: string; children: unknown; onClose: () => void; class?: string; closeButton?: boolean }) {
   let returnFocus: HTMLElement | null = null;
   let wasOpen = false;
   createEffect(() => { if (props.open && !wasOpen) returnFocus = document.activeElement as HTMLElement | null; wasOpen = props.open; });
@@ -205,7 +206,7 @@ export function Sidebar(props: {
   onOpenPalette: (page?: string | null, initialQuery?: string | null) => void;
   onUpdatePwa: () => void;
   pwaUpdating: boolean;
-  onChangeServer?: () => void;
+  onAddServer?: () => void;
   onLogout?: () => void;
   sidebarPins: string[];
   onTogglePin: (type: PinnedItem["type"], id: string) => Promise<void>;
@@ -1008,9 +1009,6 @@ export function Sidebar(props: {
     </section>;
   };
 
-  const connectionLabel = () => props.connectivity === "online" ? "Server connected" : props.connectivity === "offline" ? "Server unavailable" : props.connectivity === "reconnecting" ? "Reconnecting" : "Connecting";
-  const connectionTone = () => props.connectivity === "online" ? "success" : props.connectivity === "offline" ? "danger" : props.connectivity === "reconnecting" ? "warn" : "muted";
-
   const onSidebarTrigger = () => {
     if (isMobileLayout()) closeMobile();
     else toggleSidebar();
@@ -1105,12 +1103,11 @@ export function Sidebar(props: {
             <Group label="Chats" projects={[]} chatRoot={chats()} />
           </Show>
         </div>
-        <div data-sidebar="footer"><Menu><MenuTrigger class="sidebar-user" aria-label={`Conduit · ${connectionLabel()}`} title={connectionLabel()}><CableIcon /><span><strong>Conduit</strong><small>{connectionLabel()}</small></span><span class={`server-status-indicator runtime-indicator runtime-indicator-${connectionTone()}`} aria-hidden="true"><Show when={props.connectivity === "connecting" || props.connectivity === "reconnecting"} fallback={<span class="runtime-indicator-dot" />}><Spinner class="size-3" /></Show></span></MenuTrigger><MenuContent>
-          <MenuItem onSelect={() => { closeMobile(); props.onOpenSettings("models"); }}>Manage settings</MenuItem>
-          <MenuItem disabled={props.pwaUpdating} onSelect={() => { closeMobile(); props.onUpdatePwa(); }}><RefreshCwIcon class={props.pwaUpdating ? "pwa-update-icon pwa-update-icon-active" : "pwa-update-icon"} />{props.pwaUpdating ? "Checking for updates…" : "Check for updates"}</MenuItem>
-          <Show when={props.onChangeServer}><MenuItem onSelect={() => props.onChangeServer?.()}>Change server</MenuItem></Show>
-          <MenuItem onSelect={() => props.onLogout?.()}>Sign out</MenuItem>
-        </MenuContent></Menu></div>
+        <div data-sidebar="footer"><ServerSwitcher connectivity={props.connectivity} pwaUpdating={props.pwaUpdating}
+          onOpenSettings={() => { closeMobile(); props.onOpenSettings("models"); }}
+          onUpdatePwa={() => { closeMobile(); props.onUpdatePwa(); }}
+          onAddServer={() => { closeMobile(); props.onAddServer?.(); }}
+          onLogout={() => props.onLogout?.()} /></div>
       </div>
     </aside>
 
