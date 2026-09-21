@@ -27,6 +27,22 @@ android {
         }
     }
     buildTypes {
+        /*
+         * A debug build installs beside the released one rather than over it.
+         * Android keys an install by application id, and the two are signed by
+         * different keys, so without this a development build can only be
+         * installed by first uninstalling the real Conduit -- and the person
+         * testing is the same person relying on it. Same axis as the desktop
+         * client's `--dev`: its own id, its own name on the launcher, its own
+         * storage, so the token and the server list of one are not the other's.
+         *
+         * The launcher name comes from `src/debug/res`, which overrides main
+         * for this build type only.
+         */
+        debug {
+            applicationIdSuffix ".dev"
+            versionNameSuffix "-dev"
+        }
         release {
             minifyEnabled false
             signingConfig signingConfigs.release
