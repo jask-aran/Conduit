@@ -59,17 +59,6 @@ const sectionLabels: Record<Section, string> = {
   search: "Web search",
 };
 const label = (section: Section) => sectionLabels[section];
-const sectionDescriptions: Record<Section, string> = {
-  ui: "Shape Conduit around how you read, write, and navigate.",
-  shortcuts: "Make frequent actions immediate.",
-  models: "Choose the models, defaults, and accounts that power your sessions.",
-  prompts: "Edit the instructions that shape profiles and automatic chat names.",
-  runtime: "Control process capacity and inspect this server.",
-  servers: "The Conduit servers this client can reach, and which of them other clients are told about.",
-  workspaces: "Choose how this workspace starts new sessions.",
-  voice: "Configure dictation, audio input, and transcription.",
-  search: "Connect external search providers.",
-};
 interface RuntimeSettings {
   maxLiveProcesses: number;
   maxGeneratingProcesses: number;
@@ -1056,7 +1045,7 @@ export function Settings(props: {
             <Show when={narrow()}>
               <Button variant="ghost" size="icon-sm" class="settings-back" aria-label="All settings" onClick={() => setBrowsingSections(true)}><ChevronLeftIcon aria-hidden="true" /></Button>
             </Show>
-            <div><h2>{label(section())}</h2><p>{sectionDescriptions[section()]}</p></div>
+            <h2>{label(section())}</h2>
             <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onOpenChange(false)}>×</Button>
           </header>
           <Show when={section() === "models"}><Show when={!props.templatesLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading profiles…</span></div>}><section class="settings-section-block"><h3>Model defaults</h3><FieldGroup>

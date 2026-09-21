@@ -1827,7 +1827,7 @@ svg { stroke-width: 1.5; }
 .prompt-editor-footer > div { display: flex; gap: 8px; }
 /* Settings content follows the dashboard tile pattern: hairline groups of
    stacked rows. No multi-column card grids as chrome. */
-.settings-stack { display: grid; gap: 10px; }
+.settings-stack { display: grid; gap: 12px; }
 .settings-tile { overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: transparent; }
 .settings-tile > summary,
 .settings-disclosure > summary {
@@ -1862,7 +1862,9 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .settings-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(108px, 148px); align-items: center; gap: 10px; min-height: 38px; padding: 5px 12px; border-top: 1px solid var(--border); }
 .settings-rows > .settings-row:nth-child(-n+2) { border-top: 0; }
 .settings-rows > .settings-row:nth-child(2n) { border-left: 1px solid var(--border); }
-.settings-row > span { min-width: 0; color: var(--muted-foreground); font-size: 11px; font-weight: 400; }
+/* The name of a setting is the thing being read, so it is foreground -- muted
+   left it dimmer than the value beside it, which is the wrong way round. */
+.settings-row > span { min-width: 0; color: var(--foreground); font-size: 12px; font-weight: 500; }
 .settings-dialog .settings-row > select,
 .settings-dialog .settings-row > input:not([type="checkbox"]),
 .settings-dialog .settings-row > [data-slot="input"] { width: 100%; min-width: 0; min-height: 30px; height: 30px; margin: 0; font-size: 12px; }
@@ -1889,6 +1891,46 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .settings-dialog .settings-section-block { display: grid; gap: 8px; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: transparent; }
 .settings-dialog .settings-section-block + .settings-section-block { border-top: 1px solid var(--border); padding-top: 14px; }
 .settings-dialog .settings-section-block > h3 { margin: 0; font-size: 13px; }
+
+/*
+ * Weight, so the page has a foreground and a background.
+ *
+ * Everything sat on one fill at one colour: tile and pane were the same shade,
+ * a setting's name and the sentence explaining it were the same grey, and the
+ * only separation anywhere was a hairline. Flat in the literal sense -- there
+ * was nothing for the eye to sort by, so every screen read as a single field
+ * of text at one distance.
+ *
+ * Tiles take the card fill and sit on the pane rather than in it. A name is
+ * foreground; its help is muted and smaller. A tile's heading is heavier than
+ * the names beneath it. None of this is decoration: it is the order of the
+ * page, said in the only three things that can say it.
+ */
+.settings-dialog .settings-section-block,
+.settings-dialog .settings-tile,
+.settings-dialog .settings-disclosure,
+.settings-dialog .settings-content .settings-control-grid,
+.settings-dialog .settings-rows { background: var(--card); }
+.settings-dialog .settings-content [data-slot="field"] > label {
+  color: var(--foreground); font-size: 12.5px; font-weight: 550; letter-spacing: -.005em;
+}
+.settings-dialog .settings-content [data-slot="field"] > small { color: var(--muted-foreground); font-size: 11px; }
+.settings-dialog .settings-section-block > h3 { font-size: 13px; font-weight: 620; }
+/* The header of a section carries the page, so it is display weight, not a
+   heading the tiles beneath it have to compete with. */
+.settings-dialog .settings-content > header h2 { font-size: 21px; font-weight: 600; letter-spacing: -.03em; }
+
+/*
+ * Tiles are separate things and sit apart. Sections put theirs straight into
+ * the content flow with nothing between them, so a group of settings and the
+ * accounts below it read as one run of rows with a stray hairline in it.
+ */
+.settings-dialog .settings-content > .settings-section-block,
+.settings-dialog .settings-content > .settings-disclosure,
+.settings-dialog .settings-content > .settings-tile,
+.settings-dialog .settings-content > .settings-control-grid,
+.settings-dialog .settings-content > .settings-stack { margin-bottom: 12px; }
+.settings-dialog .settings-content > .settings-disclosure + .settings-disclosure { margin-top: 0; }
 
 /*
  * A setting is a row, not a stack.
@@ -1926,13 +1968,13 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
  */
 .settings-dialog .settings-section-block { padding: 0; }
 .settings-dialog .settings-section-block > h3 {
-  margin: 0; border-bottom: 1px solid var(--border); padding: 9px 12px;
+  margin: 0; border-bottom: 1px solid var(--border); padding: 11px 14px;
   color: var(--foreground); font-size: 12.5px; font-weight: 600; letter-spacing: -.01em;
 }
 .settings-dialog .settings-section-block > [data-slot="field-group"] { padding: 10px 12px !important; }
 /* Rows inside one tile are separated by the hairline, as tiled lists are. */
 .settings-dialog .settings-section-block > [data-slot="field-group"] { gap: 0 !important; padding: 0 !important; }
-.settings-dialog .settings-section-block > [data-slot="field-group"] > [data-slot="field"] { padding: 10px 12px; }
+.settings-dialog .settings-section-block > [data-slot="field-group"] > [data-slot="field"] { padding: 12px 14px; }
 .settings-dialog .settings-section-block > [data-slot="field-group"] > [data-slot="field"] + [data-slot="field"] { border-top: 1px solid var(--border); }
 
 /*
@@ -1957,11 +1999,11 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .settings-dialog .settings-content .settings-control-grid {
   border: 1px solid var(--border); border-radius: 10px; gap: 0 !important; overflow: hidden;
 }
-.settings-dialog .settings-content .settings-control-grid > [data-slot="field"] { padding: 10px 12px; }
+.settings-dialog .settings-content .settings-control-grid > [data-slot="field"] { padding: 12px 14px; }
 .settings-dialog .settings-content .settings-control-grid > [data-slot="field"] + [data-slot="field"] { border-top: 1px solid var(--border); }
 /* An action belongs to the rows above it, on a line of its own beneath them. */
 .settings-dialog .settings-content .settings-control-grid > [data-slot="button"] {
-  margin: 0; border-top: 1px solid var(--border); border-radius: 0; padding: 10px 12px; justify-self: stretch; width: 100%;
+  margin: 0; border-top: 1px solid var(--border); border-radius: 0; padding: 11px 14px; justify-self: stretch; width: 100%;
 }
 .settings-dialog .settings-content .settings-control-grid > [role="alert"] { border-top: 1px solid var(--border); padding: 8px 12px; }
 
