@@ -32,15 +32,20 @@
         /*
          * Open the connection to the server before anything asks for it.
          *
-         * Only an installed client gains anything: its page comes from the
-         * shell's own origin, so the first request to the server pays a fresh
-         * connect and TLS handshake -- about a third of a second over a
-         * tunnel -- where a browser is already connected to the origin that
-         * served it. The address is read here rather than written into the
-         * HTML because the HTML is the same file for every server.
+         * Desktop and Android only. Their page comes from the shell's own
+         * origin -- `http://tauri.localhost`, `https://localhost` -- so the
+         * first request to the server pays a fresh connect and TLS handshake,
+         * about a third of a second over a tunnel, in front of an empty
+         * window. A browser was served by the origin it is about to call and
+         * is already connected to it, so there is nothing to open early.
+         *
+         * The address is read from storage rather than written into the HTML,
+         * because this is the same file whichever server it ends up on.
          */
+        var shell = typeof window.__TAURI_INTERNALS__ !== "undefined"
+          || location.origin === "https://localhost";
         try {
-          var active = localStorage.getItem("conduit.servers.active");
+          var active = shell && localStorage.getItem("conduit.servers.active");
           if (active && active !== location.origin) {
             var hint = document.createElement("link");
             hint.rel = "preconnect";
