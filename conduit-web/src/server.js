@@ -660,9 +660,17 @@ registerSessionRoutes(app, {
   readSessionPage,
   registry,
 });
+// The service worker decides which build everything else comes from, so a
+// cached copy of it pins the whole client to a build that is no longer there.
+// `no-store` rather than `no-cache` because a CDN in front of this will happily
+// rewrite a revalidating header into a browser TTL of its own -- and a browser
+// that will not re-fetch this file cannot discover a new one.
+const WORKER_SCRIPTS = /^(sw|service-worker|registerSW|workbox-[^/]+)\.js$/;
+
 app.use(express.static(dist, {
   setHeaders(response, file) {
-    if (file.includes(`${path.sep}assets${path.sep}`)) response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    if (WORKER_SCRIPTS.test(path.basename(file))) response.setHeader("Cache-Control", "no-store, must-revalidate");
+    else if (file.includes(`${path.sep}assets${path.sep}`)) response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
     else response.setHeader("Cache-Control", "no-cache");
   },
 }));
