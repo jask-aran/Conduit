@@ -9,6 +9,8 @@
 - `docs/desktop-client.md` — how the Windows desktop and Android clients are
   built, released, updated and run as a development client beside the released
   one.
+- `docs/servers.md` — how a client holds several Conduit servers, what happens
+  when it moves between them, and how the list of them is shared.
 
 ## Contribution guidance
 
