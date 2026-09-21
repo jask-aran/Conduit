@@ -120,6 +120,17 @@ function storedCollapsedProjects(): Set<string> {
   }
 }
 
+/**
+ * Rows that are not there yet. Quiet bars rather than the word "Loading":
+ * the sidebar is a list, so the honest placeholder for a list is the shape of
+ * one, and it says nothing that turns out to be untrue.
+ */
+function SidebarSkeleton(props: { rows: number }) {
+  return <div class="sidebar-skeleton" role="status" aria-label="Loading">
+    <For each={Array.from({ length: props.rows })}>{() => <span />}</For>
+  </div>;
+}
+
 function Modal(props: { open: boolean; title: string; description?: string; children: unknown; onClose: () => void; class?: string; closeButton?: boolean }) {
   let returnFocus: HTMLElement | null = null;
   let wasOpen = false;
@@ -152,6 +163,7 @@ function AlertModal(props: { open: boolean; title: string; description: string; 
 
 export function Sidebar(props: {
   projects: Project[];
+  catalogueLoaded: boolean;
   projectId: string;
   selectedId: string | null;
   navigatingId?: string | null;
@@ -985,10 +997,14 @@ export function Sidebar(props: {
             <SearchIcon /><span>View all chats</span><small>{moreChats()} more</small>
           </button>
         </Show>
-        <Show when={!allChats().length}><div class="sidebar-empty">No chats</div></Show>
+        <Show when={!allChats().length}>
+          <Show when={props.catalogueLoaded} fallback={<SidebarSkeleton rows={4} />}><div class="sidebar-empty">No chats</div></Show>
+        </Show>
       </Show>
       <For each={groupProps.projects}>{(project) => <ProjectBlock project={project} workspace={groupProps.workspace} />}</For>
-      <Show when={!groupProps.chatRoot && !groupProps.projects.length && groupProps.emptyLabel}><div class="sidebar-empty">{groupProps.emptyLabel}</div></Show>
+      <Show when={!groupProps.chatRoot && !groupProps.projects.length && groupProps.emptyLabel}>
+        <Show when={props.catalogueLoaded} fallback={<SidebarSkeleton rows={2} />}><div class="sidebar-empty">{groupProps.emptyLabel}</div></Show>
+      </Show>
     </section>;
   };
 
