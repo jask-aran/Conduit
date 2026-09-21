@@ -1788,6 +1788,7 @@ svg { stroke-width: 1.5; }
   background: color-mix(in oklch, var(--card), var(--background) 30%);
 }
 .settings-dialog .settings-rail h2 { margin: 0 9px 18px; font-size: 18px; letter-spacing: -.02em; }
+.settings-dialog .settings-rail-close, .settings-dialog .settings-nav-chevron, .settings-dialog .settings-back { display: none; }
 .settings-dialog .settings-rail nav { display: flex; flex-direction: column; gap: 12px; }
 .settings-dialog .settings-nav-group { display: flex; width: 100%; flex-direction: column; gap: 3px; }
 .settings-dialog .settings-nav-group > h3 { margin: 0; padding: 0 10px 4px; color: var(--muted-foreground); font-size: 9px; letter-spacing: .1em; }
@@ -1888,6 +1889,104 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .settings-dialog .settings-section-block { display: grid; gap: 8px; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: transparent; }
 .settings-dialog .settings-section-block + .settings-section-block { border-top: 1px solid var(--border); padding-top: 14px; }
 .settings-dialog .settings-section-block > h3 { margin: 0; font-size: 13px; }
+
+/*
+ * A setting is a row, not a stack.
+ *
+ * Every field was a label with its control on the next line at full width, so
+ * a select holding the word "Assistant" ran the whole pane and the eye had to
+ * travel the width of the dialog to get from one setting to the next. Reading
+ * down a column of names and a column of values is the thing this page is for,
+ * and it is what the tiled lists elsewhere already do.
+ *
+ * The control column is bounded rather than proportional: these are short
+ * values -- a profile, a model, a number -- and a control sized to the pane
+ * says the value is longer than it is.
+ */
+.settings-dialog .settings-content [data-slot="field"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(170px, 260px);
+  align-items: center;
+  gap: 2px 18px;
+}
+.settings-dialog .settings-content [data-slot="field"] > label { grid-column: 1; align-self: center; }
+/* Help belongs under the name it explains, not under the control it precedes. */
+.settings-dialog .settings-content [data-slot="field"] > small { grid-column: 1; grid-row: 2; margin: 0; color: var(--muted-foreground); font-size: 11px; line-height: 1.4; }
+.settings-dialog .settings-content [data-slot="field"] > :not(label):not(small) { grid-column: 2; grid-row: 1 / span 2; justify-self: stretch; }
+/* Anything that needs the width keeps it: a key, a path, a prompt. */
+.settings-dialog .settings-content [data-slot="field"]:has(> textarea),
+.settings-dialog .settings-content [data-slot="field"][data-wide] { grid-template-columns: minmax(0, 1fr); }
+.settings-dialog .settings-content [data-slot="field"]:has(> textarea) > :not(label):not(small),
+.settings-dialog .settings-content [data-slot="field"][data-wide] > :not(label):not(small) { grid-column: 1; grid-row: auto; }
+
+/*
+ * The tile's name reads as a heading over its rows rather than as the first of
+ * them: it had the weight of the labels beneath it and sat at the same indent,
+ * so nothing said which was the container.
+ */
+.settings-dialog .settings-section-block { padding: 0; }
+.settings-dialog .settings-section-block > h3 {
+  margin: 0; border-bottom: 1px solid var(--border); padding: 9px 12px;
+  color: var(--foreground); font-size: 12.5px; font-weight: 600; letter-spacing: -.01em;
+}
+.settings-dialog .settings-section-block > [data-slot="field-group"] { padding: 10px 12px !important; }
+/* Rows inside one tile are separated by the hairline, as tiled lists are. */
+.settings-dialog .settings-section-block > [data-slot="field-group"] { gap: 0 !important; padding: 0 !important; }
+.settings-dialog .settings-section-block > [data-slot="field-group"] > [data-slot="field"] { padding: 10px 12px; }
+.settings-dialog .settings-section-block > [data-slot="field-group"] > [data-slot="field"] + [data-slot="field"] { border-top: 1px solid var(--border); }
+
+/*
+ * Selected is a wash, not an outline. The bright box was the leftover
+ * treatment DESIGN.md names, and it read as focus on something the pointer was
+ * nowhere near.
+ */
+.settings-dialog .settings-nav-item > button[aria-selected="true"] {
+  border: 0; outline: 0; box-shadow: none; background: var(--accent); color: var(--accent-foreground);
+}
+.settings-dialog .settings-nav-item > button:focus-visible { outline: 1px solid var(--ring); outline-offset: -1px; }
+
+/*
+ * A group of settings is a tile wherever it appears.
+ *
+ * Runtime's rows sat directly on the pane with no hairline around them while
+ * the same kind of rows in Models sat inside one, so two pages built from the
+ * same parts did not look related. The container is what says "these belong
+ * together", and it should not depend on which section happened to use which
+ * wrapper.
+ */
+.settings-dialog .settings-content .settings-control-grid {
+  border: 1px solid var(--border); border-radius: 10px; gap: 0 !important; overflow: hidden;
+}
+.settings-dialog .settings-content .settings-control-grid > [data-slot="field"] { padding: 10px 12px; }
+.settings-dialog .settings-content .settings-control-grid > [data-slot="field"] + [data-slot="field"] { border-top: 1px solid var(--border); }
+/* An action belongs to the rows above it, on a line of its own beneath them. */
+.settings-dialog .settings-content .settings-control-grid > [data-slot="button"] {
+  margin: 0; border-top: 1px solid var(--border); border-radius: 0; padding: 10px 12px; justify-self: stretch; width: 100%;
+}
+.settings-dialog .settings-content .settings-control-grid > [role="alert"] { border-top: 1px solid var(--border); padding: 8px 12px; }
+
+/*
+ * Setup instructions are help, not content.
+ *
+ * The ChatGPT steps were body copy at body weight, open by default, and ran
+ * the width of the pane -- so the longest thing on the page was a procedure
+ * followed once, sitting above the settings somebody actually came for. They
+ * now read as the aside they are, and the panel opens closed: it says whether
+ * it is connected on the summary row, which is the part worth seeing daily.
+ */
+.settings-dialog .pi-auth-panel { padding: 12px; }
+.settings-dialog .pi-auth-panel > p,
+.settings-dialog .pi-auth-panel > ol {
+  margin: 0 0 10px; max-width: 68ch; color: var(--muted-foreground); font-size: 11px; line-height: 1.5;
+}
+.settings-dialog .pi-auth-panel > ol { padding-left: 18px; }
+.settings-dialog .pi-auth-panel > ol li + li { margin-top: 3px; }
+.settings-dialog .pi-auth-panel > p > strong { color: var(--foreground); }
+.settings-dialog .pi-auth-panel code { font-size: 10.5px; }
+
+/* The close sits in the dialog's corner, level with the title it closes. */
+.settings-dialog .settings-content > header { align-items: start; }
+.settings-dialog .settings-content > header > [data-slot="button"]:last-child { margin: -4px -8px 0 0; }
 .settings-dialog .search-provider-card { grid-template-columns: minmax(0, 1fr) !important; }
 .settings-control-grid > [role="alert"] { grid-column: 1 / -1; }
 .settings-control-grid > [data-slot="button"] { justify-self: start; }
@@ -1947,11 +2046,39 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .overlay-scrollbar-thumb:hover, .overlay-scrollbar-thumb:active { opacity: 1; }
 
 @media (max-width: 760px) {
+  /*
+   * Settings on a phone is two screens, not a rail beside a pane: the list of
+   * sections, then the one that was opened. A strip narrow enough to leave
+   * room for content is a strip too narrow for the words, and a column of
+   * unlabelled icons is the same list with the part that said what it meant
+   * taken out.
+   */
   .settings-dialog .settings-shell { width: calc(100vw - 12px); height: calc(100dvh - 12px); }
-  .settings-dialog .settings-rail { width: 82px; padding-inline: 6px; }
-  .settings-dialog .settings-rail h2, .settings-dialog .settings-nav-group > h3, .settings-dialog .settings-nav-item span { display: none; }
-  .settings-dialog .settings-nav-item > button { justify-content: center; }
-  .settings-dialog .settings-content { padding: 16px; }
+  .settings-dialog .settings-rail { width: 100%; padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); border-right: 0; overflow-y: auto; }
+  .settings-dialog .settings-rail-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 4px 14px; }
+  .settings-dialog .settings-rail h2 { margin: 0; }
+  .settings-dialog .settings-nav-group > h3 { padding-bottom: 6px; }
+  .settings-dialog .settings-nav-item > button {
+    min-height: 44px; gap: 12px; border-radius: var(--radius-md); padding: 8px 10px; font-size: 13px;
+  }
+  .settings-dialog .settings-nav-item > button svg { width: 18px; height: 18px; }
+  .settings-dialog .settings-rail-close { display: inline-flex; }
+  .settings-dialog .settings-back { display: inline-flex; }
+  .settings-dialog .settings-nav-chevron { display: block; margin-left: auto; opacity: .55; }
+  /*
+   * Selection is a desktop idea: on a phone the list is left behind rather
+   * than kept alongside what it opened, so a washed row would only mark where
+   * somebody had already been.
+   */
+  .settings-dialog .settings-nav-item > button[aria-selected="true"] { background: transparent; }
+
+  .settings-dialog .settings-content { padding: 14px 14px calc(20px + env(safe-area-inset-bottom)); }
+  .settings-dialog .settings-content > header { display: flex; position: sticky; top: 0; z-index: 1; align-items: flex-start; gap: 6px; margin: -14px -14px 12px; border-bottom: 1px solid var(--border); background: var(--background); padding: 12px 14px; }
+  .settings-dialog .settings-content > header > div { flex: 1; min-width: 0; }
+  .settings-dialog .settings-content > header h2 { font-size: 17px; }
+  .settings-dialog .settings-content > header p { margin: 2px 0 0; }
+  .settings-shell[data-view="index"] > .settings-content,
+  .settings-shell[data-view="detail"] > .settings-rail { display: none; }
   .settings-control-grid, .settings-dialog .settings-cards,
   .settings-dialog .settings-content[data-section="models"] .settings-section-block > [data-slot="field-group"],
   .settings-dialog .pi-auth-panel > [data-slot="field-group"],
