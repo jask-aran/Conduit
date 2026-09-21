@@ -36,6 +36,14 @@ if [ ! -f "$key_path" ]; then
 fi
 signing_key=$(tr -d '\r\n' < "$key_path")
 
+# The key is encrypted, so signing needs its password too. It sits beside the
+# key rather than in the environment, so a shell history or a process listing
+# never carries it; CI passes the same value as a second secret.
+password_path=${CONDUIT_UPDATER_KEY_PASSWORD_FILE:-"$key_path.password"}
+if [ -z "${CONDUIT_UPDATER_KEY_PASSWORD:-}" ] && [ -f "$password_path" ]; then
+  CONDUIT_UPDATER_KEY_PASSWORD=$(tr -d '\r\n' < "$password_path")
+fi
+
 # A build interrupted from this side leaves the Windows half running: the
 # powershell.exe seen here is a shim, so killing it orphans cargo-tauri.exe,
 # which keeps the lock on the target directory. A second build then waits on
