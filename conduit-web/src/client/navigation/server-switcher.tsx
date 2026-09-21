@@ -3,8 +3,11 @@ import { ExternalLinkIcon, PlusIcon, RefreshCwIcon } from "lucide-solid";
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger, Spinner } from "@/components/primitives";
 import { buildHttpUrl } from "../api/transport";
 import { proveServer } from "../platform/server-proof";
+
+/** Not an address: the row that hands the choice back to the client. */
+const AUTOMATIC = "automatic";
 import { isInstalledClient } from "../platform/installed-client.ts";
-import { activePath, activeOrigin, activeServer, clearActivePath, pathsOf, servers, setActivePath, switchToServer, type ServerEntry, type ServerPath } from "../platform/servers.ts";
+import { activePath, activeOrigin, activeServer, clearActivePath, pathIsPinned, pathsOf, servers, setActivePath, switchToServer, type ServerEntry, type ServerPath } from "../platform/servers.ts";
 
 const PROBE_TIMEOUT_MS = 4000;
 const PROBE_INTERVAL_MS = 5000;
@@ -127,6 +130,9 @@ export function ServerSwitcher(props: {
    * this client's token somewhere new, so "is that really the server" has to
    * be answered before the move rather than discovered by making it.
    */
+  /** The route the client settled on, which is what "Automatic" resolved to. */
+  const inUse = () => activeServerPaths().find((path) => path.origin === activePath());
+
   const chooseRoute = async (origin: string) => {
     const entry = activeServer();
     if (!entry) return;
@@ -134,13 +140,14 @@ export function ServerSwitcher(props: {
       if (origin !== location.origin) location.assign(origin);
       return;
     }
-    if (origin === entry.origin) return clearActivePath();
+    if (origin === AUTOMATIC) return clearActivePath({ manual: false });
+    if (origin === entry.origin) return clearActivePath({ manual: true });
 
     setChecking(origin);
     setRouteError("");
     const proof = await proveServer(origin, entry.id || "", entry.publicKey || "");
     setChecking("");
-    if (proof.ok) return setActivePath(origin);
+    if (proof.ok) return setActivePath(origin, { manual: true });
     setRouteError(proof.reason === "unreachable" ? "That address did not answer."
       : proof.reason === "unverifiable" ? "This client cannot check a server's identity, so the route was left alone."
         : "That address answered, but it is not this server.");
@@ -177,7 +184,22 @@ export function ServerSwitcher(props: {
       <Show when={activeServerPaths().length > 1}>
         <MenuGroup>
           <MenuLabel>Route to {serverName()}</MenuLabel>
-          <MenuRadioGroup value={activePath() || ""} onChange={(origin) => void chooseRoute(origin)}>
+          <MenuRadioGroup value={pathIsPinned() ? activePath() || "" : AUTOMATIC} onChange={(origin) => void chooseRoute(origin)}>
+            {/*
+              * Left to itself, the client takes the nearest route that answers
+              * and proves itself. Picking one by hand says otherwise, and is
+              * respected until this is chosen again -- a route someone chose
+              * should not be quietly overruled by something measuring in the
+              * background.
+              */}
+            <Show when={isInstalledClient()}>
+              <MenuRadioItem value={AUTOMATIC}>
+                <span class="truncate">Automatic</span>
+                <span class="server-row-latency ml-auto text-xs text-muted-foreground">
+                  {inUse() ? scopeLabel(inUse()!) : ""}
+                </span>
+              </MenuRadioItem>
+            </Show>
             <For each={activeServerPaths()}>{(path) =>
               <MenuRadioItem value={path.origin}>
                 <span class="truncate">{scopeLabel(path)}</span>
