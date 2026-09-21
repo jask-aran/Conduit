@@ -135,6 +135,31 @@ export class AttachmentStore {
     await fsp.appendFile(messages, identities.map((identity) => JSON.stringify({ discardedIdentity: identity })).join("\n") + "\n", "utf8");
   }
 
+  async messageRows(project, chatId) {
+    const { messages } = this.directories(project, chatId);
+    return (await fsp.readFile(messages, "utf8").catch((error) => error.code === "ENOENT" ? "" : Promise.reject(error)))
+      .split("\n").filter(Boolean).flatMap((line) => { try { return [JSON.parse(line)]; } catch { return []; } });
+  }
+
+  /**
+   * The attachments this chat has already sent with a message.
+   *
+   * Stored files outlive the message they were sent with, so "everything in
+   * the directory" is not what the composer should be holding -- without this
+   * the composer of a chat reopened anywhere else fills up with the images of
+   * every message already in it. The send ledger answers for every harness,
+   * which the Pi session file cannot: it is the only record another backend
+   * writes at all.
+   *
+   * A discarded turn counts too. Its files are no longer decorating anything,
+   * but they were deliberately sent once, and returning them to the composer
+   * of whoever opens the chat next is a stranger outcome than leaving them.
+   */
+  async announcedIds(project, chatId) {
+    const rows = await this.messageRows(project, chatId);
+    return new Set(rows.flatMap((row) => (row.attachments || []).map((item) => String(item.id || "").toLowerCase())).filter(Boolean));
+  }
+
   /**
    * Attach stored files to the user messages that own them.
    *
@@ -146,9 +171,7 @@ export class AttachmentStore {
    * how a regenerated turn came back wearing the opening message's image.
    */
   async decorateMessages(project, chatId, transcript, { fromStart = true } = {}) {
-    const { messages } = this.directories(project, chatId);
-    const rows = (await fsp.readFile(messages, "utf8").catch((error) => error.code === "ENOENT" ? "" : Promise.reject(error)))
-      .split("\n").filter(Boolean).flatMap((line) => { try { return [JSON.parse(line)]; } catch { return []; } });
+    const rows = await this.messageRows(project, chatId);
     const identityKey = (identity) => identity ? JSON.stringify(identity) : "";
     const discarded = new Set(rows.flatMap((row) => row.discardedIdentity ? [identityKey(row.discardedIdentity)] : []));
     const activeRows = rows.filter((row) => !row.identity || !discarded.has(identityKey(row.identity)));
