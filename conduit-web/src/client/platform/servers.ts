@@ -185,10 +185,10 @@ export function setActiveServer(origin: string) {
 /**
  * Go to a server.
  *
- * An installed client reloads: its assets are on disk, so this is a genuine
- * cold start against the new address rather than an attempt to unwind every
- * socket, stream and cache by hand -- and an attempt is all it could be, since
- * nothing loaded belongs to the server being left.
+ * An installed client only records the choice: the client watches the active
+ * address and rebuilds itself around the new one, which disposes everything
+ * the old server owned without re-parsing a bundle that says nothing about
+ * either of them.
  *
  * A browser navigates instead, because the other server is a different origin
  * and therefore a different installation of this app, with its own session,
@@ -199,7 +199,5 @@ export function switchToServer(origin: string, installed: boolean) {
     if (origin !== location.origin) location.assign(origin);
     return;
   }
-  if (origin === active()) return;
   setActiveServer(origin);
-  location.reload();
 }

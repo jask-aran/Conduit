@@ -258,25 +258,39 @@ function NativeServerSetup(props: { onAuthenticated: () => void }) {
   </main>;
 }
 
+/**
+ * Which server this client is on, and whether it can get in.
+ *
+ * Changing server remounts `App` rather than reloading the window. A reload
+ * re-parses the whole bundle to arrive at the same place, and the assets are
+ * on disk: nothing about the new server is in them. Disposing the tree runs
+ * every `onCleanup` there is, which closes the streams, sockets and terminals
+ * belonging to the server being left -- so this is a cold start in the only
+ * sense that matters, minus the part that costs.
+ *
+ * Holding a token is taken as being signed in, without asking. The check cost
+ * a round trip in front of a blank window -- a fifth of a second over a tunnel
+ * -- to learn something the next request reveals anyway: every response goes
+ * through `authorizedFetch`, and a 401 lands here as `NATIVE_AUTH_REQUIRED`.
+ */
 function NativeRoot() {
   const [state, setState] = createSignal<"loading" | "login" | "app">("loading");
   onMount(() => {
     const requireLogin = () => setState("login");
     window.addEventListener(NATIVE_AUTH_REQUIRED_EVENT, requireLogin);
     onCleanup(() => window.removeEventListener(NATIVE_AUTH_REQUIRED_EVENT, requireLogin));
-    void nativeBearerToken().then(async (token) => {
-      const origin = activeOrigin();
-      if (!token || !origin) return setState("login");
-      try {
-        const response = await authorizedFetch(buildHttpUrl("/v0/auth/status", origin));
-        setState(response.status === 401 ? "login" : "app");
-      } catch {
-        setState("app");
-      }
-    }).catch(() => setState("login"));
+  });
+  createEffect(() => {
+    const origin = activeOrigin();
+    if (!origin) return setState("login");
+    void nativeBearerToken(origin)
+      .then((token) => setState(token ? "app" : "login"))
+      .catch(() => setState("login"));
   });
   return <Show when={state() !== "loading"} fallback={<main class="native-server-setup"><span class="native-server-brand">Conduit</span></main>}>
-    {state() === "app" ? <App /> : <NativeServerSetup onAuthenticated={() => setState("app")} />}
+    <Show when={state() === "app" ? activeOrigin() ?? undefined : undefined} keyed fallback={<NativeServerSetup onAuthenticated={() => setState("app")} />}>
+      {(_origin: string) => <App />}
+    </Show>
   </Show>;
 }
 
