@@ -51,7 +51,7 @@ test("a stored server list keeps only addresses it would accept", () => {
     { origin: "https://conduit.tailnet.ts.net", name: "Home" },
     // Unnamed servers answer to their host, so two addresses tell themselves
     // apart without anyone typing a label.
-    { origin: "http://127.0.0.1:4310", name: "127.0.0.1" },
+    { origin: "http://127.0.0.1:4310", name: "127.0.0.1:4310" },
   ]);
   assert.equal(defaultServerName("https://conduit.tailnet.ts.net"), "conduit.tailnet.ts.net");
   assert.deepEqual(readServers(memoryStorage()), []);
