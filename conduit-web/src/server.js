@@ -18,6 +18,7 @@ import { ChatStore, chatView, isChatId } from "./chat-store.js";
 import { AttachmentStore } from "./attachment-store.js";
 import { RuntimeHub } from "./runtime-hub.js";
 import { defaultsFromEnv, RuntimeSettingsStore } from "./runtime-settings.js";
+import { ServerIdentity } from "./server-identity.js";
 import { DraftStore } from "./draft-store.js";
 import { PreferencesStore } from "./preferences-store.js";
 import { SessionNameService } from "./session-name-service.js";
@@ -97,6 +98,7 @@ const attachments = new AttachmentStore(registry, { maxBytes: config.maxAttachme
 const terminalPastes = new TerminalPasteStore({ root: config.terminalPasteRoot });
 const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, defaultsFromEnv(process.env));
 await runtimeSettings.load();
+const serverIdentity = await new ServerIdentity(config.identityFile, { port: config.port }).load();
 const searchSettings = new SearchSettingsStore({ filePath: config.searchConfigFile, environment: process.env });
 await searchSettings.initialize();
 const voiceSettings = new VoiceSettingsStore({ filePath: config.voiceConfigFile, catalog: VOICE_EXECUTION_CATALOG });
@@ -576,6 +578,7 @@ registerRuntimeRoutes(app, {
   templatePublicView,
   projects,
   promptStore,
+  serverIdentity,
 });
 
 registerPiAuthRoutes(app, {
