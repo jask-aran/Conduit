@@ -96,6 +96,91 @@ jobs:
             conduit-web/conduit-${{ github.ref_name }}.apk.sha256
           if-no-files-found: error
 
+  windows:
+    if: github.ref_type == 'tag'
+    needs: validate
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: conduit-web
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: conduit-web/package-lock.json
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+        with:
+          workspaces: conduit-web/src-tauri
+      - name: Take the version from the tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # The app, the manifest and the Release must name the same version, or
+          # an installed client compares itself against a number nothing built.
+          version="${RELEASE_TAG#v}"
+          node -e '
+            const file = "src-tauri/tauri.conf.json";
+            const fs = require("fs");
+            const config = JSON.parse(fs.readFileSync(file, "utf8"));
+            config.version = process.argv[1];
+            fs.writeFileSync(file, JSON.stringify(config, null, 2) + "\n");
+          ' "$version"
+          echo "CONDUIT_DESKTOP_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Build the desktop client
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          # The same split the local build uses: the CLI bundles, and the
+          # updater archive is signed afterwards by a command that can be given
+          # a password rather than one that stops to ask for it.
+          npx tauri build --config src-tauri/tauri.prebuilt.conf.json
+      - name: Sign the updater artifact
+        shell: bash
+        env:
+          CONDUIT_UPDATER_KEY: ${{ secrets.CONDUIT_UPDATER_KEY }}
+          CONDUIT_UPDATER_KEY_PASSWORD: ${{ secrets.CONDUIT_UPDATER_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${CONDUIT_UPDATER_KEY:-}" ]]; then
+            echo "::error::Missing GitHub Actions secret: CONDUIT_UPDATER_KEY"
+            exit 1
+          fi
+          bundle="src-tauri/target/release/bundle/nsis"
+          installer=$(ls -1 "$bundle"/*.exe | head -1)
+          archive="${installer%.exe}.nsis.zip"
+          powershell -NoProfile -Command "Compress-Archive -Path '$installer' -DestinationPath '$archive' -Force"
+          key="$RUNNER_TEMP/conduit-updater.key"
+          printf '%s' "$CONDUIT_UPDATER_KEY" > "$key"
+          npx tauri signer sign \
+            --private-key-path "$key" \
+            --password "${CONDUIT_UPDATER_KEY_PASSWORD:-}" \
+            --app-version "$CONDUIT_DESKTOP_VERSION" \
+            "$archive"
+          rm -f "$key"
+          node scripts/desktop-update-manifest.mjs \
+            "$CONDUIT_DESKTOP_VERSION" \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/$(basename "$archive")" \
+            "$archive.sig" \
+            "$bundle/latest.json"
+      - name: Store the Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: conduit-windows-${{ github.ref_name }}
+          path: |
+            conduit-web/src-tauri/target/release/bundle/nsis/*.exe
+            conduit-web/src-tauri/target/release/bundle/nsis/*.nsis.zip
+            conduit-web/src-tauri/target/release/bundle/nsis/*.nsis.zip.sig
+            conduit-web/src-tauri/target/release/bundle/nsis/latest.json
+          if-no-files-found: error
+
   container:
     needs: validate
     runs-on: ubuntu-latest
@@ -152,6 +237,7 @@ jobs:
     needs:
       - android
       - container
+      - windows
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -159,6 +245,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: conduit-android-${{ github.ref_name }}
+          path: release-assets
+      - name: Download the Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: conduit-windows-${{ github.ref_name }}
           path: release-assets
       - name: Create GitHub Release
         env:
@@ -181,3 +272,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$GITHUB_REF_NAME" release-assets/conduit-*.apk release-assets/conduit-*.apk.sha256 --clobber
+      - name: Upload the Windows installer and its update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # latest.json goes up with the artifacts it describes, in one command:
+        # a Release holding a manifest whose archive is missing would tell every
+        # installed client to fetch something that is not there.
+        run: |
+          gh release upload "$GITHUB_REF_NAME" \
+            release-assets/*.exe \
+            release-assets/*.nsis.zip \
+            release-assets/*.nsis.zip.sig \
+            release-assets/latest.json \
+            --clobber
