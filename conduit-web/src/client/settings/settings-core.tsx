@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
 import * as KDialog from "@kobalte/core/dialog";
-import { ActivityIcon, BotIcon, ChevronLeftIcon, ChevronRightIcon, FileTextIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon } from "lucide-solid";
+import { ActivityIcon, BotIcon, ChevronLeftIcon, ChevronRightIcon, FileTextIcon, XIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon } from "lucide-solid";
 import { CableIcon } from "lucide-solid";
 import { AboutSettingsTile } from "./about-settings";
 import { ServersSettingsTile } from "./servers-settings";
@@ -1031,7 +1031,7 @@ export function Settings(props: {
         <div class="settings-rail">
           <div class="settings-rail-header">
             <KDialog.Title>Settings</KDialog.Title>
-            <Button variant="ghost" size="icon-sm" class="settings-rail-close" aria-label="Close" onClick={() => props.onOpenChange(false)}>×</Button>
+            <Button variant="ghost" size="icon-sm" class="settings-rail-close" aria-label="Close" onClick={() => props.onOpenChange(false)}><XIcon aria-hidden="true" /></Button>
           </div>
           <nav data-slot="tabs-list" role="tablist" aria-label="Settings sections" aria-orientation="vertical">
             <For each={sectionGroups}>{(group) => <section role="presentation" class="settings-nav-group">
@@ -1046,7 +1046,7 @@ export function Settings(props: {
               <Button variant="ghost" size="icon-sm" class="settings-back" aria-label="All settings" onClick={() => setBrowsingSections(true)}><ChevronLeftIcon aria-hidden="true" /></Button>
             </Show>
             <h2>{label(section())}</h2>
-            <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onOpenChange(false)}>×</Button>
+            <Button variant="ghost" size="icon-sm" class="settings-close" aria-label="Close" onClick={() => props.onOpenChange(false)}><XIcon aria-hidden="true" /></Button>
           </header>
           <Show when={section() === "models"}><Show when={!props.templatesLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading profiles…</span></div>}><section class="settings-section-block"><h3>Model defaults</h3><FieldGroup>
             <Field><FieldLabel for="default-profile">Default profile</FieldLabel><select id="default-profile" value={props.defaultTemplateId} onChange={(event) => void props.onDefaultTemplateChange(event.currentTarget.value)}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></select></Field>

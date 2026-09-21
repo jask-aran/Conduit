@@ -1915,10 +1915,38 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   color: var(--foreground); font-size: 12.5px; font-weight: 550; letter-spacing: -.005em;
 }
 .settings-dialog .settings-content [data-slot="field"] > small { color: var(--muted-foreground); font-size: 11px; }
-.settings-dialog .settings-section-block > h3 { font-size: 13px; font-weight: 620; }
 /* The header of a section carries the page, so it is display weight, not a
    heading the tiles beneath it have to compete with. */
-.settings-dialog .settings-content > header h2 { font-size: 21px; font-weight: 600; letter-spacing: -.03em; }
+
+/*
+ * One type scale, with steps big enough to be steps.
+ *
+ * A tile's heading and the name of a setting inside it were half a pixel and
+ * half a weight apart, so the heading did not read as one; the two kinds of
+ * tile heading were set separately and drifted; and the small print under a
+ * summary was 9px while the same help elsewhere was 11px. Four sizes, each
+ * clearly apart from the next, used everywhere:
+ *
+ *   section title 19 · tile heading 14 · name 12.5 · help 11
+ */
+.settings-dialog .settings-content > header h2 { font-size: 19px; font-weight: 600; letter-spacing: -.025em; }
+.settings-dialog .settings-section-block > h3,
+.settings-dialog .settings-tile > summary strong,
+.settings-dialog .settings-disclosure > summary strong { font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+.settings-dialog .settings-tile > summary small,
+.settings-dialog .settings-disclosure > summary small { font-size: 11px; line-height: 1.45; }
+
+/*
+ * The close and the back control are the same kind of thing and are drawn the
+ * same size. The close was the character "x" at the button's text size, beside
+ * a chevron drawn as an icon -- two different weights doing the same job.
+ */
+.settings-dialog .settings-close svg,
+.settings-dialog .settings-rail-close svg,
+.settings-dialog .settings-back svg { width: 18px; height: 18px; color: var(--muted-foreground); }
+.settings-dialog .settings-close:hover svg,
+.settings-dialog .settings-rail-close:hover svg,
+.settings-dialog .settings-back:hover svg { color: var(--foreground); }
 
 /*
  * Tiles are separate things and sit apart. Sections put theirs straight into
@@ -2193,7 +2221,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
      up left the first paragraph of a section drawn underneath it. */
   .settings-dialog .settings-content > header { display: flex; position: sticky; top: 0; z-index: 1; align-items: flex-start; gap: 8px; margin: 0 -12px 14px; border-bottom: 1px solid var(--border); background: var(--background); padding: calc(12px + env(safe-area-inset-top)) 12px 12px; }
   .settings-dialog .settings-content > header > div { flex: 1; min-width: 0; }
-  .settings-dialog .settings-content > header h2 { font-size: 17px; }
+  .settings-dialog .settings-content > header h2 { font-size: 18px; }
   .settings-dialog .settings-content > header p { margin: 2px 0 0; }
   .settings-shell[data-view="index"] > .settings-content,
   .settings-shell[data-view="detail"] > .settings-rail { display: none; }
