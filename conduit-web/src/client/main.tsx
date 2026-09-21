@@ -158,9 +158,13 @@ const LOCAL_SERVER_ORIGIN = "http://127.0.0.1:4310";
  * is nothing to report: the directory is a convenience and the list here is
  * already correct. */
 async function publishServerDirectory(directory: Array<{ origin: string; name: string }>, held?: Array<{ origin?: unknown }>) {
+  // Loopback stays local. "127.0.0.1" names whatever machine is reading it, so
+  // sharing it would hand every other device an address that resolves to
+  // itself -- the one case where the same string is not the same server.
+  const shared = directory.filter((entry) => !/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(entry.origin));
   const known = new Set((held || []).map((item) => String(item?.origin || "")));
-  if (directory.every((entry) => known.has(entry.origin))) return;
-  try { await api("/v0/preferences", { method: "PATCH", body: JSON.stringify({ knownServers: directory }) }); } catch {}
+  if (shared.every((entry) => known.has(entry.origin))) return;
+  try { await api("/v0/preferences", { method: "PATCH", body: JSON.stringify({ knownServers: shared }) }); } catch {}
 }
 
 function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) => void }) {
