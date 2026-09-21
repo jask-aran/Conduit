@@ -11,7 +11,10 @@ pub const NEW_CHAT_EVENT: &str = "desktop://new-chat";
 pub const CHECK_FOR_UPDATES_EVENT: &str = "desktop://check-for-updates";
 
 pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, "open", "Open Conduit", true, None::<&str>)?;
+    // Named for the build, so a development client sitting in the tray beside
+    // the released one can be told apart before it is clicked.
+    let name = app.config().product_name.clone().unwrap_or_else(|| "Conduit".into());
+    let open = MenuItem::with_id(app, "open", format!("Open {name}"), true, None::<&str>)?;
     let new_chat = MenuItem::with_id(app, "new-chat", "New chat", true, None::<&str>)?;
     let updates = MenuItem::with_id(app, "check-for-updates", "Check for updates", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
@@ -20,7 +23,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 
     TrayIconBuilder::with_id("conduit")
         .icon(app.default_window_icon().cloned().expect("the bundle ships a window icon"))
-        .tooltip("Conduit")
+        .tooltip(&name)
         .menu(&menu)
         // Left click restores the window; the menu is the right-click gesture,
         // so a click never has to be aimed at a menu the person did not want.

@@ -25,7 +25,11 @@ if (!signature) {
 const manifest = {
   version,
   pub_date: new Date().toISOString(),
-  platforms: { "windows-x86_64": { signature, url } },
+  // Normalised, because a product name with a space in it reaches here as a
+  // space in the path, and a URL with a space in it is not one the updater can
+  // parse. The URL constructor encodes the path and leaves an already-valid
+  // URL untouched.
+  platforms: { "windows-x86_64": { signature, url: new URL(url).href } },
 };
 
 writeFileSync(out, `${JSON.stringify(manifest, null, 2)}\n`);

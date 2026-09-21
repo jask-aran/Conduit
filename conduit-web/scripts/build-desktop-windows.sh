@@ -17,20 +17,27 @@
 #                     newer to find
 #   --local-updates   point this build's updater at the Conduit server running
 #                     on this machine instead of at GitHub
+#   --dev             build a separate application -- its own name, identifier,
+#                     install directory, settings, token and tray entry -- so it
+#                     can be installed alongside the released client. Implies
+#                     --local-updates, since a development client that updated
+#                     itself from GitHub would replace itself with the release.
 #
-# Together they close the loop locally: build 0.7.2 --local-updates, install it,
-# then build 0.7.3 --local-updates and press Update app.
+# Together they close the loop locally: build --dev --version 0.7.2, install it,
+# then build --dev --version 0.7.3 and press Update app.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
 build_version=""
 local_updates=""
+dev_client=""
 passthrough=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --version) build_version=${2:-}; shift 2 ;;
     --local-updates) local_updates=1; shift ;;
+    --dev) dev_client=1; local_updates=1; shift ;;
     *) passthrough+=("$1"); shift ;;
   esac
 done
@@ -89,12 +96,22 @@ update_base=${CONDUIT_LOCAL_UPDATE_URL:-"http://127.0.0.1:${CONDUIT_PORT:-4310}/
 overlay="src-tauri/tauri.build-overlay.conf.json"
 trap 'rm -f "$overlay"' EXIT
 node -e '
-  const [out, version, localUpdates, base] = process.argv.slice(1);
+  const [out, version, localUpdates, base, dev] = process.argv.slice(1);
   const overlay = { build: { beforeBuildCommand: "" }, bundle: { createUpdaterArtifacts: false } };
   if (version) overlay.version = version;
   if (localUpdates) overlay.plugins = { updater: { endpoints: [`${base}/latest.json`] } };
+  if (dev) {
+    // A different identifier is what makes this a second application rather
+    // than a second copy of the same one: Windows keys the install entry, the
+    // per-user data directory, the single-instance lock and the credential
+    // entry on it, so all four separate without being listed here.
+    const config = JSON.parse(require("fs").readFileSync("src-tauri/tauri.conf.json", "utf8"));
+    overlay.productName = "Conduit Dev";
+    overlay.identifier = `${config.identifier}.dev`;
+    overlay.app = { windows: [{ ...config.app.windows[0], title: "Conduit Dev" }] };
+  }
   require("fs").writeFileSync(out, JSON.stringify(overlay, null, 2) + "\n");
-' "$overlay" "$build_version" "$local_updates" "$update_base"
+' "$overlay" "$build_version" "$local_updates" "$update_base" "$dev_client"
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass \
   -File "$(wslpath -w "$PWD/scripts/build-desktop-windows.ps1")" \
