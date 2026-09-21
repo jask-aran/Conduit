@@ -44,7 +44,12 @@ const SIDEBAR_PIN_PATTERN = /^(chat|project|terminal):[^\s:][^\s]*$/;
  * anything, a client still signs in to each server separately, and a name is
  * just a label. It does mean each server learns where the others are, which is
  * the cost of not maintaining the same list by hand in several places. */
-const LOOPBACK_SERVER_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+// The same line the client draws in `client/platform/servers.ts`: plain HTTP
+// is accepted for an address that cannot leave the machine, or cannot leave
+// the network it is on. Kept in step by hand rather than shared, because this
+// half runs in Node and decides what a server will store on behalf of every
+// client, and the two are allowed to disagree only by being wrong.
+const DIRECT_SERVER_HOST = /^(localhost|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|\[::1\]|10(\.\d{1,3}){3}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2}|192\.168(\.\d{1,3}){2}|169\.254(\.\d{1,3}){2})$/;
 
 function validServerOrigin(value) {
   if (typeof value !== "string" || value.length > 253) return false;
@@ -52,7 +57,7 @@ function validServerOrigin(value) {
   try { url = new URL(value); } catch { return false; }
   if (url.username || url.password) return false;
   if (url.pathname !== "/" || url.search || url.hash) return false;
-  return url.protocol === "https:" || (url.protocol === "http:" && LOOPBACK_SERVER_HOSTS.has(url.hostname));
+  return url.protocol === "https:" || (url.protocol === "http:" && DIRECT_SERVER_HOST.test(url.hostname));
 }
 
 export function validKnownServers(input) {
