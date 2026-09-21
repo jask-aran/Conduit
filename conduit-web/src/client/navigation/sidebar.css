@@ -343,4 +343,15 @@
  * containment keeps each frame's layout inside this folder instead of letting
  * it walk the whole sidebar.
  */
-.sidebar-project-body { overflow: hidden; contain: layout paint; }
+.sidebar-project-body { overflow: hidden; contain: layout paint; overflow-anchor: none; }
+/*
+ * Scroll anchoring is turned off for the list while a folder is opening.
+ *
+ * The browser keeps a node still when content around it resizes, which is the
+ * right instinct for a page that reflowed underneath a reader and the wrong
+ * one here: the folder is growing on purpose, so every frame of the slide
+ * looked like a reason to move the scroll position, and the rows above jumped
+ * and then settled back. The one thing that must not move during a slide is
+ * everything that is not sliding.
+ */
+.sidebar-content:has(.sidebar-project-body) { overflow-anchor: none; }
