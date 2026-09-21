@@ -9,15 +9,20 @@
 //! The web half sees three commands and knows nothing about which store
 //! answered them, which is the same arrangement Android has with its keystore.
 
-const SERVICE: &str = "com.jaskaran.conduit.desktop";
+use tauri::{AppHandle, Runtime};
 
-fn entry(key: &str) -> Result<keyring::Entry, String> {
-    keyring::Entry::new(SERVICE, key).map_err(|error| error.to_string())
+/// The credential store is shared by everything on the machine, so the entry is
+/// named for this build's identifier rather than a constant. A development
+/// client installed beside the released one is a different application with its
+/// own identifier, and therefore its own token: signing out of one does not
+/// sign out of the other.
+fn entry<R: Runtime>(app: &AppHandle<R>, key: &str) -> Result<keyring::Entry, String> {
+    keyring::Entry::new(&app.config().identifier, key).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
-pub fn secret_get(key: String) -> Result<Option<String>, String> {
-    match entry(&key)?.get_password() {
+pub fn secret_get<R: Runtime>(app: AppHandle<R>, key: String) -> Result<Option<String>, String> {
+    match entry(&app, &key)?.get_password() {
         Ok(value) => Ok(Some(value)),
         // Nothing stored is an answer, not a failure: it is what a first launch
         // and a signed-out client both look like.
@@ -27,13 +32,13 @@ pub fn secret_get(key: String) -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
-pub fn secret_set(key: String, value: String) -> Result<(), String> {
-    entry(&key)?.set_password(&value).map_err(|error| error.to_string())
+pub fn secret_set<R: Runtime>(app: AppHandle<R>, key: String, value: String) -> Result<(), String> {
+    entry(&app, &key)?.set_password(&value).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
-pub fn secret_remove(key: String) -> Result<(), String> {
-    match entry(&key)?.delete_credential() {
+pub fn secret_remove<R: Runtime>(app: AppHandle<R>, key: String) -> Result<(), String> {
+    match entry(&app, &key)?.delete_credential() {
         // Signing out twice is not an error, and the caller wants the same
         // state either way: nothing stored.
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
