@@ -1919,6 +1919,41 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
    heading the tiles beneath it have to compete with. */
 
 /*
+ * Black pane, grey cards.
+ *
+ * The shell took the same fill as the tiles on it, so the page was grey on
+ * grey and a tile was distinguishable only by its hairline. The pane drops to
+ * the frame colour -- the ground the rest of the app already sits on -- and
+ * the cards keep theirs, so the separation is a difference in lightness rather
+ * than a line somebody has to notice.
+ */
+.settings-dialog {
+  /* Near black rather than the frame's grey: with the pane one step off the
+     cards, the whole panel read as one grey surface with hairlines drawn on
+     it. Local to Settings, because the rest of the app is layered against a
+     transcript rather than against tiles. */
+  --settings-ground: oklch(0.098 0.004 264);
+}
+.settings-dialog .settings-shell { background: var(--settings-ground); }
+.settings-dialog .settings-rail { background: var(--settings-ground); }
+.settings-dialog .settings-content > header { background: var(--settings-ground); }
+
+/*
+ * A setting is one line.
+ *
+ * Name on the left, control on the right, and nothing in between -- which is
+ * what Appearance already did and what made it the one section that read
+ * well. The stacked form was only needed because each row carried a sentence
+ * explaining itself; without those, the rows fit.
+ */
+.settings-dialog .settings-content [data-slot="field"] {
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 236px);
+  align-items: center;
+  gap: 2px 16px;
+  min-height: 44px;
+}
+
+/*
  * One type scale, with steps big enough to be steps.
  *
  * A tile's heading and the name of a setting inside it were half a pixel and
@@ -1983,6 +2018,9 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 /* Help belongs under the name it explains, not under the control it precedes. */
 .settings-dialog .settings-content [data-slot="field"] > small { grid-column: 1; grid-row: 2; margin: 0; color: var(--muted-foreground); font-size: 11px; line-height: 1.4; }
 .settings-dialog .settings-content [data-slot="field"] > :not(label):not(small) { grid-column: 2; grid-row: 1 / span 2; justify-self: stretch; }
+/* The model trigger is a menu button rather than a control, so it sized to
+   its text and floated at the end of a column its neighbours filled. */
+.settings-dialog .settings-content [data-slot="field"] .model-trigger { width: 100%; justify-content: space-between; }
 /* Anything that needs the width keeps it: a key, a path, a prompt. */
 .settings-dialog .settings-content [data-slot="field"]:has(> textarea),
 .settings-dialog .settings-content [data-slot="field"][data-wide] { grid-template-columns: minmax(0, 1fr); }
@@ -2004,6 +2042,8 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .settings-dialog .settings-section-block > [data-slot="field-group"] { gap: 0 !important; padding: 0 !important; }
 .settings-dialog .settings-section-block > [data-slot="field-group"] > [data-slot="field"] { padding: 12px 14px; }
 .settings-dialog .settings-section-block > [data-slot="field-group"] > [data-slot="field"] + [data-slot="field"] { border-top: 1px solid var(--border); }
+/* A server is a row of the tile like any other, so it is inset like one. */
+.settings-dialog .settings-section-block > .settings-server-row { padding: 12px 14px; }
 
 /*
  * Selected is a wash, not an outline. The bright box was the leftover
@@ -2137,12 +2177,22 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
    * a 170px control, which wrapped the help text one word to a line and ran
    * the control over the label.
    */
-  .settings-dialog .settings-content [data-slot="field"] { grid-template-columns: minmax(0, 1fr); gap: 3px; }
-  /* Name, then what it means, then the control: the help explains the setting,
-     so it reads before the thing that changes it rather than after. */
-  .settings-dialog .settings-content [data-slot="field"] > label { grid-column: 1; grid-row: 1; }
-  .settings-dialog .settings-content [data-slot="field"] > small { grid-column: 1; grid-row: 2; }
-  .settings-dialog .settings-content [data-slot="field"] > :not(label):not(small) { grid-column: 1; grid-row: 3; margin-top: 7px; justify-self: stretch; }
+  /* Two columns still, and a note under the name keeps the row on one line:
+     a row that stacked whenever it carried a status line made neighbouring
+     rows in the same tile read as different kinds of thing. Only a control
+     that genuinely needs the width takes it -- see below. */
+  .settings-dialog .settings-content [data-slot="field"] { grid-template-columns: minmax(0, 1fr) minmax(112px, 46%); gap: 0 12px; }
+  .settings-dialog .settings-content [data-slot="field"]:has(> input[type="text"]),
+  .settings-dialog .settings-content [data-slot="field"]:has(> input[type="url"]),
+  .settings-dialog .settings-content [data-slot="field"]:has(> input[type="password"]),
+  .settings-dialog .settings-content [data-slot="field"]:has(> input[type="search"]),
+  .settings-dialog .settings-content [data-slot="field"]:has(.model-trigger) { grid-template-columns: minmax(0, 1fr); }
+  /* Where a row does stack, the help reads before the control it explains. */
+  .settings-dialog .settings-content [data-slot="field"]:has(> input[type="text"]) > :not(label):not(small),
+  .settings-dialog .settings-content [data-slot="field"]:has(> input[type="url"]) > :not(label):not(small),
+  .settings-dialog .settings-content [data-slot="field"]:has(> input[type="password"]) > :not(label):not(small),
+  .settings-dialog .settings-content [data-slot="field"]:has(> input[type="search"]) > :not(label):not(small),
+  .settings-dialog .settings-content [data-slot="field"]:has(.model-trigger) > :not(label):not(small) { grid-column: 1; grid-row: 3; margin-top: 7px; justify-self: stretch; }
   .settings-dialog .settings-rail { width: 100%; padding: calc(10px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom)); border-right: 0; overflow-y: auto; }
   .settings-dialog .settings-rail-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 4px 14px; }
   /* Undoes the old icon-rail breakpoints, which hid the title because there
@@ -2206,6 +2256,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
    * name in and an address truncated to nothing.
    */
   .settings-server-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 12px 0; align-items: center; }
+  .settings-dialog .settings-section-block > .settings-server-row { padding: 12px; }
   .settings-server-row > [data-slot="input"],
   .settings-server-row > input { grid-column: 1 / -1; }
   .settings-server-row > code { grid-column: 1; white-space: normal; overflow-wrap: anywhere; }
@@ -2219,7 +2270,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   .settings-dialog .settings-back { flex: none; border: 0; background: transparent; margin-left: -4px; }
   /* Full-bleed by its own padding rather than by a negative margin: the pull
      up left the first paragraph of a section drawn underneath it. */
-  .settings-dialog .settings-content > header { display: flex; position: sticky; top: 0; z-index: 1; align-items: flex-start; gap: 8px; margin: 0 -12px 14px; border-bottom: 1px solid var(--border); background: var(--background); padding: calc(12px + env(safe-area-inset-top)) 12px 12px; }
+  .settings-dialog .settings-content > header { display: flex; position: sticky; top: 0; z-index: 1; align-items: flex-start; gap: 8px; margin: 0 -12px 14px; border-bottom: 1px solid var(--border); background: var(--settings-ground); padding: calc(12px + env(safe-area-inset-top)) 12px 12px; }
   .settings-dialog .settings-content > header > div { flex: 1; min-width: 0; }
   .settings-dialog .settings-content > header h2 { font-size: 18px; }
   .settings-dialog .settings-content > header p { margin: 2px 0 0; }

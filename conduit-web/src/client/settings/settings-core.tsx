@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
 import * as KDialog from "@kobalte/core/dialog";
-import { ActivityIcon, BotIcon, ChevronLeftIcon, ChevronRightIcon, FileTextIcon, XIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon } from "lucide-solid";
+import { ActivityIcon, BotIcon, ChevronLeftIcon, ChevronRightIcon, FileTextIcon, XIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon, SlidersHorizontalIcon } from "lucide-solid";
 import { CableIcon } from "lucide-solid";
 import { AboutSettingsTile } from "./about-settings";
 import { ServersSettingsTile } from "./servers-settings";
@@ -1048,7 +1048,7 @@ export function Settings(props: {
             <h2>{label(section())}</h2>
             <Button variant="ghost" size="icon-sm" class="settings-close" aria-label="Close" onClick={() => props.onOpenChange(false)}><XIcon aria-hidden="true" /></Button>
           </header>
-          <Show when={section() === "models"}><Show when={!props.templatesLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading profiles…</span></div>}><section class="settings-section-block"><h3>Model defaults</h3><FieldGroup>
+          <Show when={section() === "models"}><Show when={!props.templatesLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading profiles…</span></div>}><section class="settings-section-block"><FieldGroup>
             <Field><FieldLabel for="default-profile">Default profile</FieldLabel><select id="default-profile" value={props.defaultTemplateId} onChange={(event) => void props.onDefaultTemplateChange(event.currentTarget.value)}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></select></Field>
             <Field>
               <FieldLabel>Session naming</FieldLabel>
@@ -1061,15 +1061,11 @@ export function Settings(props: {
                 onThinkingLevelChange={(level) => void saveSessionNaming(sessionNameModel(), level)}
                 onManageModels={props.onOpenModelSelector}
               />
-              <small class="text-muted-foreground">Select a scoped model to name new chats from the first user message with one request.</small>
             </Field>
             <Field>
               <FieldLabel>Available models</FieldLabel>
-              <div class="settings-inline-action">
-                <span>{props.models.enabledModels().length} models enabled</span>
-                <Button variant="outline" onClick={props.onOpenModelSelector}>Open model selector</Button>
-              </div>
-              <small>Choose the models that appear in chat model controls.</small>
+              <small>{props.models.enabledModels().length} enabled</small>
+              <Button variant="outline" onClick={props.onOpenModelSelector}>Manage models</Button>
             </Field>
           </FieldGroup></section></Show></Show>
           <Show when={section() === "prompts"}>
@@ -1097,7 +1093,7 @@ export function Settings(props: {
           <Show when={section() === "ui"}>
             <div class="settings-stack">
               <details class="settings-tile" open>
-                <summary><span><strong>Interface</strong><small>Scale, chrome, and composer material for this browser.</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
+                <summary><span><strong>Interface</strong></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
                 <div class="settings-rows">
                   <label class="settings-row" for="interface-scale"><span>Scale</span>
                     <select id="interface-scale" aria-label="Interface scale" value={props.interfaceScale} onChange={(event) => props.onInterfaceScaleChange(parseUiScale(event.currentTarget.value))}>
@@ -1127,7 +1123,7 @@ export function Settings(props: {
               </details>
               <DesktopSettingsTile />
               <details class="settings-tile" open>
-                <summary><span><strong>Reading</strong><small>Transcript column, wide blocks, and panel drag.</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
+                <summary><span><strong>Reading</strong></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
                 <div class="settings-rows">
                   <label class="settings-row" for="transcript-width"><span>Transcript width</span>
                     <select id="transcript-width" aria-label="Transcript width" value={props.transcriptWidth} onChange={(event) => props.onTranscriptWidthChange(event.currentTarget.value as TranscriptWidthMode)}>
@@ -1152,7 +1148,7 @@ export function Settings(props: {
                 </div>
               </details>
               <details class="settings-tile" open>
-                <summary><span><strong>Collapse</strong><small>Fold long code and prompts so the answer stays on screen.</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
+                <summary><span><strong>Collapse</strong></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
                 <div class="settings-rows">
                   <label class="settings-row" for="code-block-collapse"><span>Code blocks</span>
                     <select id="code-block-collapse" aria-label="Collapse code blocks" value={props.codeBlockCollapse} onChange={(event) => props.onCodeBlockCollapseChange(event.currentTarget.value as CodeBlockCollapseMode)}>
@@ -1206,9 +1202,9 @@ export function Settings(props: {
           <Show when={section() === "runtime"}>
             <Show when={runtimeStatus() === "ready" && runtime()} fallback={<Show when={runtimeStatus() === "error"} fallback={<div class="settings-loading"><Spinner /><span>Loading runtime settings…</span></div>}><div role="alert" class="settings-error"><span>{runtimeError() || "Runtime settings could not be loaded."}</span><Button variant="outline" size="sm" onClick={() => void loadRuntime()}>Retry</Button></div></Show>}>
               <FieldGroup class="settings-control-grid">
-                <Field><FieldLabel for="warm-processes">Max warm agent processes</FieldLabel><Input id="warm-processes" type="number" value={runtime()!.maxLiveProcesses} onInput={(event) => updateRuntime({ ...runtime()!, maxLiveProcesses: Number(event.currentTarget.value) })} /><small>{runtime()!.liveCount || 0} live now</small></Field>
-                <Field><FieldLabel for="generations">Max concurrent generations</FieldLabel><Input id="generations" type="number" value={runtime()!.maxGeneratingProcesses} onInput={(event) => updateRuntime({ ...runtime()!, maxGeneratingProcesses: Number(event.currentTarget.value) })} /><small>{runtime()!.generatingCount || 0} generating</small></Field>
-                <Field><FieldLabel for="idle-ttl">Idle process TTL (seconds)</FieldLabel><Input id="idle-ttl" type="number" value={Math.round(runtime()!.idleProcessTtlMs / 1000)} onInput={(event) => updateRuntime({ ...runtime()!, idleProcessTtlMs: Number(event.currentTarget.value) * 1000 })} /></Field>
+                <Field><FieldLabel for="warm-processes">Warm processes</FieldLabel><Input id="warm-processes" type="number" value={runtime()!.maxLiveProcesses} onInput={(event) => updateRuntime({ ...runtime()!, maxLiveProcesses: Number(event.currentTarget.value) })} /><small>{runtime()!.liveCount || 0} live now</small></Field>
+                <Field><FieldLabel for="generations">Concurrent generations</FieldLabel><Input id="generations" type="number" value={runtime()!.maxGeneratingProcesses} onInput={(event) => updateRuntime({ ...runtime()!, maxGeneratingProcesses: Number(event.currentTarget.value) })} /><small>{runtime()!.generatingCount || 0} generating</small></Field>
+                <Field><FieldLabel for="idle-ttl">Idle TTL (seconds)</FieldLabel><Input id="idle-ttl" type="number" value={Math.round(runtime()!.idleProcessTtlMs / 1000)} onInput={(event) => updateRuntime({ ...runtime()!, idleProcessTtlMs: Number(event.currentTarget.value) * 1000 })} /></Field>
                 <Show when={runtimeError()}><p role="alert" class="settings-inline-error">{runtimeError()}</p></Show>
                 <Button variant="outline" disabled={!runtimeDirty() || runtimeSaving()} onClick={() => void saveRuntime()}>{runtimeSaving() ? <Spinner /> : null}Save runtime settings</Button>
               </FieldGroup>
@@ -1226,12 +1222,11 @@ export function Settings(props: {
           <Show when={section() === "voice"}>
             <Show when={voiceStatus() === "ready" && voiceServerSettings()} fallback={<Show when={voiceStatus() === "error"} fallback={<div class="settings-loading"><Spinner /><span>Loading voice settings…</span></div>}><div role="alert" class="settings-error"><span>{voiceError() || "Voice settings could not be loaded."}</span><Button variant="outline" size="sm" onClick={() => void loadVoiceSettings()}>Retry</Button></div></Show>}>
               <div class="voice-settings">
-                <p class="voice-settings-intro">Dictation passes through authenticated Conduit. Microphone-test playback stays in browser memory. Server dictation can retain configured diagnostic WAV/JSON pairs; Cloud credentials stay server-side.</p>
                 <FieldGroup>
                   <Field><FieldLabel for="voice-mode">Transcription source</FieldLabel><select id="voice-mode" disabled={voiceBusy()} value={voiceServerSettings()!.mode} onChange={(event) => {
                     const mode = event.currentTarget.value as VoiceServerSettings["mode"];
                     updateVoiceServer({ mode });
-                  }}><option value="off">Off</option><option value="local">This machine</option><option value="remote">Cloud</option></select><small>Choose where Conduit runs dictation. The selected source controls the settings panel below.</small></Field>
+                  }}><option value="off">Off</option><option value="local">This machine</option><option value="remote">Cloud</option></select></Field>
                 </FieldGroup>
                 <Show when={voiceServerSettings()!.mode === "local" && voiceCatalogue()}>{(catalogue) => <VoiceLocalCatalogue
                   catalogue={catalogue()}
@@ -1289,10 +1284,10 @@ export function Settings(props: {
                   </details>
                 </Show>
 
-                <details class="voice-advanced" id="voice-advanced">
-                  <summary id="voice-advanced-summary"><span>Advanced</span><small>Input and capture behaviour</small><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
+                <details class="settings-disclosure voice-advanced" id="voice-advanced">
+                  <summary id="voice-advanced-summary"><span><SlidersHorizontalIcon /><strong>Advanced</strong><small>Input and capture behaviour</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
                   <FieldGroup>
-                  <div class="voice-advanced-heading"><h3>Input</h3><p>These controls affect capture and draft delivery. They do not change the selected runtime.</p></div>
+                  
                   <div class="voice-input-test">
                     <Field><FieldLabel for="voice-input-device">Microphone</FieldLabel><select ref={voiceInputSelect} id="voice-input-device" disabled={audioInputBusy()} value={voiceDraft().inputDeviceId} onChange={(event) => updateVoiceDraft({ inputDeviceId: event.currentTarget.value })}>
                       <option value="">System default microphone</option>
@@ -1349,12 +1344,11 @@ export function Settings(props: {
           <Show when={section() === "search"}>
             <Show when={searchStatus() === "ready" && searchSettings()} fallback={<Show when={searchStatus() === "error"} fallback={<div class="settings-loading"><Spinner /><span>Loading search settings…</span></div>}><div role="alert" class="settings-error"><span>{searchError() || "Search settings could not be loaded."}</span><Button variant="outline" size="sm" onClick={() => void loadSearchSettings()}>Retry</Button></div></Show>}>
               <div class="search-settings">
-                <p class="search-settings-intro">Conduit uses OpenAI or Codex native search when the active provider supports it, then falls back to configured web providers. Search runs without Pi’s curator window.</p>
                 <FieldGroup>
                   <Field>
                     <FieldLabel for="brave-search-api-key">Brave Search API key</FieldLabel>
                     <Input id="brave-search-api-key" type="password" autocomplete="off" value={searchKey()} onInput={(event) => setSearchKey(event.currentTarget.value)} placeholder={searchSettings()!.providers.find((provider) => provider.id === "brave")?.configured ? "A key is already configured" : "BSA_…"} onKeyDown={(event) => { if (event.key === "Enter") void saveSearchKey(); }} />
-                    <small>The key stays on this server in the Conduit-owned Pi configuration. It is never returned to the browser.</small>
+                    
                   </Field>
                   <div class="search-provider-actions">
                     <span class="search-provider-status" data-configured={searchSettings()!.providers.find((provider) => provider.id === "brave")?.configured}>{searchSettings()!.providers.find((provider) => provider.id === "brave")?.source === "environment" ? "Using BRAVE_API_KEY from the server environment" : searchSettings()!.providers.find((provider) => provider.id === "brave")?.stored ? "Stored key active" : "No Brave key configured"}</span>
