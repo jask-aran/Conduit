@@ -326,3 +326,10 @@
 .sidebar-skeleton > span { height: 9px; border-radius: var(--radius-sm); background: var(--muted); }
 .sidebar-skeleton > span:nth-child(2n) { width: 72%; }
 .sidebar-skeleton > span:nth-child(3n) { width: 58%; }
+
+/* The footer names the server, which is a hostname: long, and the one thing in
+   the sidebar that must not wrap. It is a row title rather than a heading, so
+   it takes the row-title size and truncates like every other row. */
+.sidebar-user > .sidebar-user-label { gap: 0; }
+.sidebar-user-label > strong { overflow: hidden; font-size: 10.5px; font-weight: 580; letter-spacing: -.01em; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-user-label > small { overflow: hidden; color: var(--muted-foreground); font-size: 8.5px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
