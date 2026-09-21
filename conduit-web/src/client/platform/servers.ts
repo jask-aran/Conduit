@@ -46,9 +46,15 @@ export function normalizeServerOrigin(value: unknown): string {
   return url.origin;
 }
 
-/** What a server is called before anyone names it: the host, not the origin. */
+/**
+ * What a server is called before anyone names it.
+ *
+ * The host including its port, because the port is often the only thing
+ * telling two of them apart: a name taken from the hostname alone turns every
+ * server on this machine into another row reading "127.0.0.1".
+ */
 export function defaultServerName(origin: string): string {
-  try { return new URL(origin).hostname || origin; }
+  try { return new URL(origin).host || origin; }
   catch { return origin; }
 }
 

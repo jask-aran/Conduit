@@ -16,6 +16,7 @@ import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, 
 import { api, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./api/client";
 import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl } from "./api/transport";
 import { activeOrigin, addServer, forgetServer, mergeServerDirectory, servers, setActiveServer, switchToServer } from "./platform/servers";
+import { publishServerDirectory } from "./platform/server-directory";
 import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
 import { manifestForChat, resolveCapability, resolveHistory } from "./chat-capabilities";
 import type { BooleanCapability, ChatSummary, DashboardChat, HarnessManifestView, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
@@ -154,19 +155,6 @@ const LOCAL_SERVER_ORIGIN = "http://127.0.0.1:4310";
  * Nothing is remembered until the server has actually answered. A half-added
  * entry that was never signed in to is a row that can only fail.
  */
-/** Tell this server about an address it does not list. Advisory, so a refusal
- * is nothing to report: the directory is a convenience and the list here is
- * already correct. */
-async function publishServerDirectory(directory: Array<{ origin: string; name: string }>, held?: Array<{ origin?: unknown }>) {
-  // Loopback stays local. "127.0.0.1" names whatever machine is reading it, so
-  // sharing it would hand every other device an address that resolves to
-  // itself -- the one case where the same string is not the same server.
-  const shared = directory.filter((entry) => !/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(entry.origin));
-  const known = new Set((held || []).map((item) => String(item?.origin || "")));
-  if (shared.every((entry) => known.has(entry.origin))) return;
-  try { await api("/v0/preferences", { method: "PATCH", body: JSON.stringify({ knownServers: shared }) }); } catch {}
-}
-
 function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) => void }) {
   const recordOnly = !isInstalledClient();
   const [address, setAddress] = createSignal(props.adding ? "" : activeOrigin() || "");
@@ -217,7 +205,14 @@ function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) =
   };
 
   onMount(() => {
-    if (!desktopShell || verifiedOrigin()) return;
+    if (verifiedOrigin() || servers().some((entry) => entry.origin === LOCAL_SERVER_ORIGIN)) return;
+    // A browser cannot ask: Conduit answers a cross-origin request only for
+    // the two shells it ships, so the probe would be refused rather than
+    // answered. It offers the address anyway, as something to fill in rather
+    // than something confirmed -- being wrong costs a row that says
+    // Unreachable, and being silent costs the address nobody should have to
+    // type.
+    if (recordOnly) return setLocalServer(LOCAL_SERVER_ORIGIN);
     void fetch(buildHttpUrl("/healthz", LOCAL_SERVER_ORIGIN), { cache: "no-store" })
       .then((response) => response.ok ? response.json() as Promise<{ ok?: boolean }> : null)
       .then((health) => { if (health?.ok) setLocalServer(LOCAL_SERVER_ORIGIN); })
@@ -2049,7 +2044,7 @@ function App() {
         // Told to the server being left, before leaving it: otherwise the one
         // that was asked to remember this address is the only one that never
         // hears about it.
-        void publishServerDirectory(servers(), []).finally(() => switchToServer(origin, isInstalledClient()));
+        void publishServerDirectory(servers()).finally(() => switchToServer(origin, isInstalledClient()));
       }} />
     </Modal>
     <div class="workspace-layout">
