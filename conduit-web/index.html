@@ -29,6 +29,30 @@
        * than the blank page it is trying to fix.
        */
       (function () {
+        /*
+         * Open the connection to the server before anything asks for it.
+         *
+         * Only an installed client gains anything: its page comes from the
+         * shell's own origin, so the first request to the server pays a fresh
+         * connect and TLS handshake -- about a third of a second over a
+         * tunnel -- where a browser is already connected to the origin that
+         * served it. The address is read here rather than written into the
+         * HTML because the HTML is the same file for every server.
+         */
+        try {
+          var active = localStorage.getItem("conduit.servers.active");
+          if (active && active !== location.origin) {
+            var hint = document.createElement("link");
+            hint.rel = "preconnect";
+            hint.href = active;
+            // Matches how the client asks: cross-origin, no credentials, since
+            // it carries a bearer token rather than a cookie. A mismatch here
+            // opens a second connection instead of reusing this one.
+            hint.crossOrigin = "anonymous";
+            document.head.appendChild(hint);
+          }
+        } catch (error) { /* no storage, no hint, no harm */ }
+
         var GUARD = "conduit.recovered";
         setTimeout(function () {
           var root = document.getElementById("root");
