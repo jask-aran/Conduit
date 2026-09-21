@@ -32,6 +32,17 @@ export CONDUIT_PI_TEMPLATE="${CONDUIT_PI_TEMPLATE:-$ROOT/templates/assistant/tem
 # Set only when testing a desktop update against a local build: the server then
 # serves that directory at /desktop-updates so the updater has somewhere to
 # look. Unset, the route does not exist.
+# A development desktop client checks this server for its updates, so the
+# directory the Windows build writes into is served whenever it exists. Found
+# rather than configured: remembering an environment variable before every
+# restart is the difference between testing an update and not bothering.
+if [ -z "${CONDUIT_DESKTOP_UPDATE_DIR:-}" ] && command -v wslpath >/dev/null 2>&1; then
+  windows_home=$(cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')
+  if [ -n "$windows_home" ]; then
+    candidate="$(wslpath -u "${CONDUIT_DESKTOP_TARGET_DIR:-$windows_home\\conduit-desktop-target}" 2>/dev/null)/release/bundle/nsis"
+    if [ -d "$candidate" ]; then CONDUIT_DESKTOP_UPDATE_DIR="$candidate"; fi
+  fi
+fi
 if [ -n "${CONDUIT_DESKTOP_UPDATE_DIR:-}" ]; then export CONDUIT_DESKTOP_UPDATE_DIR; fi
 HEALTH_URL="http://127.0.0.1:${CONDUIT_PORT}/healthz"
 DRAIN_TIMEOUT_SECONDS="${CONDUIT_RESTART_DRAIN_TIMEOUT_SECONDS:-600}"
