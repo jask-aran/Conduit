@@ -6,6 +6,9 @@
 - `conduit-web/README.md` — runtime model, HTTP API, auth mechanism, process
   residency and caps, and the live-session WebSocket protocol.
 - `DESIGN.md` — in-app visual language for user-facing UI, read this before building or modifying any UI.
+- `docs/desktop-client.md` — how the Windows desktop and Android clients are
+  built, released, updated and run as a development client beside the released
+  one.
 
 ## Contribution guidance
 

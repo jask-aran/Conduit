@@ -110,7 +110,11 @@ Tagged releases also require a short committed changelog at
 workflow checks this file before it builds or pushes the image, then uses it as
 the GitHub release body. Keep the file to 40 lines or fewer and describe the
 user-visible changes and any important deployment note.
-Push the annotated release tag (`git push origin <tag>`) to trigger the GHCR publish workflow.
+Push the annotated release tag (`git push origin <tag>`) to trigger the publish
+workflow, which builds the container image, the Android APK and the Windows
+desktop client, and creates the GitHub Release only once all three succeed. The
+desktop client's installer, signed update and manifest are attached to that
+same Release; see `docs/desktop-client.md` for how it is built and updated.
 
 Deploying a packaged release is the same two-step flow:
 
