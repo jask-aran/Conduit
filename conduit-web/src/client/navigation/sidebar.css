@@ -337,16 +337,10 @@
 /*
  * A folder opens by growing rather than by appearing.
  *
- * The rows below it used to jump to their new position in one frame, which
- * read as a flash rather than as a list getting longer. Animating the row
- * track of a one-row grid is the only way to transition to a height nobody
- * has measured: the inner element keeps its natural height, and the track
- * goes from none of it to all of it.
+ * The height itself is animated in script, because the open height is the
+ * content's and nothing has measured it. What CSS owns is the clip: the rows
+ * have to be cut off by the animating box rather than overflow it, and the
+ * containment keeps each frame's layout inside this folder instead of letting
+ * it walk the whole sidebar.
  */
-.sidebar-project-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 180ms var(--panel-motion-easing, ease), opacity 140ms ease; opacity: 0; }
-.sidebar-project-body > div { overflow: hidden; min-height: 0; }
-.sidebar-project-body[data-open] { grid-template-rows: 1fr; opacity: 1; }
-
-@media (prefers-reduced-motion: reduce) {
-  .sidebar-project-body { transition-duration: 0.01ms; }
-}
+.sidebar-project-body { overflow: hidden; contain: layout paint; }
