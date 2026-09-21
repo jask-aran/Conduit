@@ -40,9 +40,8 @@ export async function shellVersion(): Promise<string | null> {
       return await getVersion();
     }
     if (installedClientKind === "android") {
-      const { App } = await import("@capacitor/app");
-      const info = await App.getInfo();
-      return info.build ? `${info.version} (${info.build})` : info.version;
+      const { androidShell } = await import("./installed-client.ts");
+      return await androidShell?.version() ?? null;
     }
   } catch {
     return null;

@@ -10,6 +10,7 @@ param(
   [Parameter(Mandatory = $true)][string] $CargoTauri,
   [Parameter(Mandatory = $true)][string] $TargetDir,
   [Parameter(Mandatory = $true)][string] $SigningKey,
+  [string] $ConfigFile = 'tauri.prebuilt.conf.json',
   [string] $SigningKeyPassword = '',
   [Parameter(ValueFromRemainingArguments = $true)][string[]] $BuildArgs = @()
 )
@@ -27,5 +28,5 @@ if ($SigningKeyPassword -ne '') { $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = $Sig
 
 Set-Location $Project
 & $CargoTauri --version
-& $CargoTauri build --config tauri.prebuilt.conf.json @BuildArgs
+& $CargoTauri build --config $ConfigFile @BuildArgs
 exit $LASTEXITCODE

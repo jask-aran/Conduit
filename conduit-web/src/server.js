@@ -424,6 +424,24 @@ async function ensureChatTemplate(chat, project = null) {
 app.use(compression());
 app.use(nativeCors);
 
+// A desktop client can only be offered an update over HTTP -- the updater
+// speaks no file:// -- so during development the server that is already
+// running serves the local build's artifacts. It sits ahead of authentication
+// because the updater runs in the shell and carries no session: the artifacts
+// are signed, and a signature is what makes an update safe to install, not the
+// secrecy of the URL it came from. It exists only when the directory is named
+// explicitly, and it serves that one directory.
+const desktopUpdateDir = process.env.CONDUIT_DESKTOP_UPDATE_DIR;
+if (desktopUpdateDir) {
+  console.warn(`Serving desktop update artifacts from ${desktopUpdateDir} (development only).`);
+  app.use("/desktop-updates", express.static(desktopUpdateDir, {
+    index: false,
+    dotfiles: "deny",
+    fallthrough: false,
+    setHeaders: (response) => response.setHeader("Cache-Control", "no-store"),
+  }));
+}
+
 const requireAuth = prepareAuthMiddleware(authStore);
 app.use(requireAuth);
 

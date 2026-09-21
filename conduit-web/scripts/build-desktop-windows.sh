@@ -10,9 +10,30 @@
 # Cargo's target directory lives on the Windows filesystem. Left in the working
 # tree it would write every object file across the 9p share, which turns a
 # five-minute build into a much longer one.
+#
+# Two options exist for testing the update path without cutting a release:
+#
+#   --version X.Y.Z   build as that version, so an installed copy has something
+#                     newer to find
+#   --local-updates   point this build's updater at the Conduit server running
+#                     on this machine instead of at GitHub
+#
+# Together they close the loop locally: build 0.7.2 --local-updates, install it,
+# then build 0.7.3 --local-updates and press Update app.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+
+build_version=""
+local_updates=""
+passthrough=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --version) build_version=${2:-}; shift 2 ;;
+    --local-updates) local_updates=1; shift ;;
+    *) passthrough+=("$1"); shift ;;
+  esac
+done
 
 windows_home=$(cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')
 cargo_tauri="$(wslpath -u "$windows_home")/.cargo/bin/cargo-tauri.exe"
@@ -60,6 +81,21 @@ npm run build
 
 # The Windows half is a script file rather than a -Command string so the
 # signing key passes through one layer of quoting instead of three.
+# What this build overrides, written next to the config it overrides so the
+# CLI resolves it the same way. The committed config is never edited: a build
+# that failed halfway would otherwise leave the repository claiming a version
+# or an endpoint nobody chose.
+update_base=${CONDUIT_LOCAL_UPDATE_URL:-"http://127.0.0.1:${CONDUIT_PORT:-4310}/desktop-updates"}
+overlay="src-tauri/tauri.build-overlay.conf.json"
+trap 'rm -f "$overlay"' EXIT
+node -e '
+  const [out, version, localUpdates, base] = process.argv.slice(1);
+  const overlay = { build: { beforeBuildCommand: "" }, bundle: { createUpdaterArtifacts: false } };
+  if (version) overlay.version = version;
+  if (localUpdates) overlay.plugins = { updater: { endpoints: [`${base}/latest.json`] } };
+  require("fs").writeFileSync(out, JSON.stringify(overlay, null, 2) + "\n");
+' "$overlay" "$build_version" "$local_updates" "$update_base"
+
 powershell.exe -NoProfile -ExecutionPolicy Bypass \
   -File "$(wslpath -w "$PWD/scripts/build-desktop-windows.ps1")" \
   -Project "$(wslpath -w "$PWD/src-tauri")" \
@@ -67,7 +103,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass \
   -TargetDir "$target_dir" \
   -SigningKey "$signing_key" \
   -SigningKeyPassword "${CONDUIT_UPDATER_KEY_PASSWORD:-}" \
-  ${*:-}
+  -ConfigFile "$(basename "$overlay")" \
+  ${passthrough[@]+"${passthrough[@]}"}
 
 bundle=$(wslpath -u "$target_dir")/release/bundle/nsis
 installer=$(ls -1t "$bundle"/*.exe 2>/dev/null | head -1)
@@ -88,7 +125,7 @@ rm -f "$archive" "$archive.sig"
 # Stored, not compressed: the updater reads the zip crate's Stored method only.
 (cd "$bundle" && zip -q -0 -j "$(basename "$archive")" "$(basename "$installer")")
 node scripts/check-updater-archive.mjs "$archive"
-version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+version=${build_version:-$(node -p "require('./src-tauri/tauri.conf.json').version")}
 npx tauri signer sign \
   --private-key-path "$key_path" \
   --password "${CONDUIT_UPDATER_KEY_PASSWORD:-}" \
@@ -100,6 +137,8 @@ npx tauri signer sign \
 # it was signed against.
 tag=${CONDUIT_RELEASE_TAG:-"v$version"}
 base=${CONDUIT_UPDATER_BASE_URL:-"https://github.com/jask-aran/Conduit/releases/download/$tag"}
+# The manifest has to name the same place the build was told to look.
+if [ -n "$local_updates" ]; then base=$update_base; fi
 node scripts/desktop-update-manifest.mjs \
   "$version" "$base/$(basename "$archive")" "$archive.sig" "$bundle/latest.json" > /dev/null
 
