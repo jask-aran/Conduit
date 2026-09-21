@@ -85,7 +85,9 @@ fi
 # this side is the same artifact without the dead end.
 archive="${installer%.exe}.nsis.zip"
 rm -f "$archive" "$archive.sig"
-(cd "$bundle" && zip -q -j "$(basename "$archive")" "$(basename "$installer")")
+# Stored, not compressed: the updater reads the zip crate's Stored method only.
+(cd "$bundle" && zip -q -0 -j "$(basename "$archive")" "$(basename "$installer")")
+node scripts/check-updater-archive.mjs "$archive"
 version=$(node -p "require('./src-tauri/tauri.conf.json').version")
 npx tauri signer sign \
   --private-key-path "$key_path" \
