@@ -879,12 +879,21 @@ export function Sidebar(props: {
     const [shown, setShown] = createSignal(open());
     let body: HTMLDivElement | undefined;
     let motion: Animation | undefined;
-    let settled = false;
+    let was: boolean | undefined;
     createEffect(() => {
       const wanted = open();
       if (wanted) setShown(true);
-      // The first pass is the folder's initial state, not a change to animate.
-      if (!settled) { settled = true; if (!wanted) setShown(false); return; }
+      /*
+       * Only this folder's own change is animated.
+       *
+       * Every folder reads the one set of collapsed ids, so toggling any of
+       * them re-runs this for all of them -- and an open folder that replayed
+       * its slide dropped to nothing and grew back, which pulled everything
+       * below it up for a frame and then let it fall.
+       */
+      const changed = was !== undefined && was !== wanted;
+      was = wanted;
+      if (!changed) { if (!wanted) setShown(false); return; }
       if (matchMedia("(prefers-reduced-motion: reduce)").matches) { if (!wanted) setShown(false); return; }
       requestAnimationFrame(() => {
         const node = body;
