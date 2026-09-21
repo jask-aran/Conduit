@@ -12,21 +12,25 @@ export async function checkForPwaUpdate() {
   await registration?.update();
 }
 
-const waitForActivation = (worker: ServiceWorker) => new Promise<void>((resolve, reject) => {
-  if (worker.state === "activated") return resolve();
-  const timeout = window.setTimeout(() => reject(new Error("The app update did not activate. Try again.")), 15_000);
-  const advance = () => {
-    if (worker.state === "installed") worker.postMessage({ type: "SKIP_WAITING" });
-    if (worker.state === "activated") {
-      window.clearTimeout(timeout);
-      resolve();
-    } else if (worker.state === "redundant") {
-      window.clearTimeout(timeout);
-      reject(new Error("The app update could not be installed."));
-    }
+/**
+ * Wait for the new worker to take this page over.
+ *
+ * There is nothing to ask it to do. The generated worker skips waiting and
+ * claims its clients by itself -- it registers no message handler at all, so
+ * the older habit of posting SKIP_WAITING to it was talking to nobody. The
+ * handover is the only event worth waiting for, and it is not one that can
+ * fail: if it does not arrive, the new worker is active regardless and a
+ * reload is what shows it. So this times out into success rather than into an
+ * error about an update that did in fact install.
+ */
+const waitForHandover = (timeoutMs = 10_000) => new Promise<void>((resolve) => {
+  const settle = () => {
+    window.clearTimeout(timer);
+    navigator.serviceWorker.removeEventListener("controllerchange", settle);
+    resolve();
   };
-  worker.addEventListener("statechange", advance);
-  advance();
+  const timer = window.setTimeout(settle, timeoutMs);
+  navigator.serviceWorker.addEventListener("controllerchange", settle);
 });
 
 async function performPwaUpdate(reloadPage: () => void) {
@@ -41,14 +45,16 @@ async function performPwaUpdate(reloadPage: () => void) {
     return true;
   }
 
-  let update = registration.installing || registration.waiting;
-  const captureUpdate = () => { update = registration.installing || registration.waiting; };
-  registration.addEventListener("updatefound", captureUpdate);
-  await registration.update();
-  registration.removeEventListener("updatefound", captureUpdate);
-  update ||= registration.installing || registration.waiting;
-  if (!update) return false;
-  await waitForActivation(update);
+  // `updatefound` is the only reliable account of whether there was anything to
+  // install: a worker that skips waiting can be installed, activated and in
+  // charge before `update()` even resolves, leaving nothing behind to inspect.
+  let found = Boolean(registration.installing || registration.waiting);
+  const noteUpdate = () => { found = true; };
+  registration.addEventListener("updatefound", noteUpdate);
+  try { await registration.update(); }
+  finally { registration.removeEventListener("updatefound", noteUpdate); }
+  if (!found) return false;
+  await waitForHandover();
   reloadPage();
   return true;
 }
