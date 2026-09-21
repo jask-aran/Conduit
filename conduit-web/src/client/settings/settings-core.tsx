@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
 import * as KDialog from "@kobalte/core/dialog";
-import { ActivityIcon, BotIcon, ChevronRightIcon, FileTextIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon } from "lucide-solid";
+import { ActivityIcon, BotIcon, ChevronLeftIcon, ChevronRightIcon, FileTextIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon } from "lucide-solid";
 import { CableIcon } from "lucide-solid";
 import { AboutSettingsTile } from "./about-settings";
 import { ServersSettingsTile } from "./servers-settings";
@@ -239,6 +239,26 @@ export function Settings(props: {
   shortcuts: ShortcutManager;
 }) {
   const [section, setSection] = createSignal<Section>(props.initialSection || "models");
+  /*
+   * On a phone, Settings is two screens rather than a rail beside a pane.
+   *
+   * The rail was 190px of labelled rows on a desktop and 82px of unlabelled
+   * icons on a phone, which is the same information with the part that said
+   * what it meant removed. There is no room for both a list and what it opens,
+   * so they take turns: the list, then the section, with a way back.
+   */
+  const [browsingSections, setBrowsingSections] = createSignal(true);
+  const [narrow, setNarrow] = createSignal(false);
+  if (typeof window !== "undefined" && window.matchMedia) {
+    const query = window.matchMedia("(max-width: 760px)");
+    const sync = () => setNarrow(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    onCleanup(() => query.removeEventListener("change", sync));
+  }
+  const openSection = (id: Section) => { setSection(id); setBrowsingSections(false); };
+  /** The list is a screen of its own only when there is no room for both. */
+  const showingIndex = () => narrow() && browsingSections();
   const [runtime, setRuntime] = createSignal<RuntimeSettings | null>(null);
   const [runtimeBaseline, setRuntimeBaseline] = createSignal<RuntimeSettings | null>(null);
   const [runtimeStatus, setRuntimeStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
@@ -399,6 +419,9 @@ export function Settings(props: {
     setVoiceSettingsSaved(false);
     const initial = props.initialSection || "models";
     setSection(initial);
+    // Asked for a section by name -- from a command, or a link out of the app
+    // -- so that is what was wanted, not a list with it somewhere in it.
+    setBrowsingSections(!props.initialSection);
     setWorkspaceId(props.initialWorkspaceId || props.projects.find((project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || ""))?.id || null);
   }));
 
@@ -1013,18 +1036,27 @@ export function Settings(props: {
 
   return <KDialog.Root open={props.open} onOpenChange={props.onOpenChange}>
     <KDialog.Portal><KDialog.Content data-state={props.open ? "open" : "closed"} class="settings-dialog" onEscapeKeyDown={dismissEscape} onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}>
-      <div class="settings-shell">
+      <div class="settings-shell" data-view={showingIndex() ? "index" : "detail"}>
         <div class="settings-rail">
-          <KDialog.Title>Settings</KDialog.Title>
+          <div class="settings-rail-header">
+            <KDialog.Title>Settings</KDialog.Title>
+            <Button variant="ghost" size="icon-sm" class="settings-rail-close" aria-label="Close" onClick={() => props.onOpenChange(false)}>×</Button>
+          </div>
           <nav data-slot="tabs-list" role="tablist" aria-label="Settings sections" aria-orientation="vertical">
             <For each={sectionGroups}>{(group) => <section role="presentation" class="settings-nav-group">
               <h3 role="presentation">{group.label}</h3>
-              <For each={group.sections}>{(item) => <div role="presentation" class="settings-nav-item"><button role="tab" tabIndex={section() === item.id ? 0 : -1} aria-selected={section() === item.id} onClick={() => setSection(item.id)} onKeyDown={navigateSettingsTabs}><item.icon aria-hidden="true" /><span>{item.label}</span></button></div>}</For>
+              <For each={group.sections}>{(item) => <div role="presentation" class="settings-nav-item"><button role="tab" tabIndex={section() === item.id ? 0 : -1} aria-selected={section() === item.id} onClick={() => openSection(item.id)} onKeyDown={navigateSettingsTabs}><item.icon aria-hidden="true" /><span>{item.label}</span><ChevronRightIcon class="settings-nav-chevron" aria-hidden="true" /></button></div>}</For>
             </section>}</For>
           </nav>
         </div>
         <main class="settings-content" data-section={section()}>
-          <header><div><h2>{label(section())}</h2><p>{sectionDescriptions[section()]}</p></div><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onOpenChange(false)}>×</Button></header>
+          <header>
+            <Show when={narrow()}>
+              <Button variant="ghost" size="icon-sm" class="settings-back" aria-label="All settings" onClick={() => setBrowsingSections(true)}><ChevronLeftIcon aria-hidden="true" /></Button>
+            </Show>
+            <div><h2>{label(section())}</h2><p>{sectionDescriptions[section()]}</p></div>
+            <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onOpenChange(false)}>×</Button>
+          </header>
           <Show when={section() === "models"}><Show when={!props.templatesLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading profiles…</span></div>}><section class="settings-section-block"><h3>Model defaults</h3><FieldGroup>
             <Field><FieldLabel for="default-profile">Default profile</FieldLabel><select id="default-profile" value={props.defaultTemplateId} onChange={(event) => void props.onDefaultTemplateChange(event.currentTarget.value)}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></select></Field>
             <Field>
@@ -1344,7 +1376,7 @@ export function Settings(props: {
             </Show>
           </Show>
           <Show when={section() === "models"}>
-            <details class="settings-disclosure" open><summary><span><BotIcon /><strong>ChatGPT Web</strong><small>{chatGptStatus()?.auth === "configured" ? "Connected" : "Not connected"}</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary><div class="pi-auth-panel">
+            <details class="settings-disclosure"><summary><span><BotIcon /><strong>ChatGPT Web</strong><small>{chatGptStatus()?.auth === "configured" ? "Connected" : "Not connected"}</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary><div class="pi-auth-panel">
               <p>Paste the cookie string from a signed-in ChatGPT browser. Conduit stores it on this server and never returns its values.</p>
               <ol>
                 <li>Sign in at <a href="https://chatgpt.com" target="_blank" rel="noreferrer">chatgpt.com</a>.</li>
