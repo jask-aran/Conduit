@@ -11,6 +11,7 @@ import {
   addServer,
   clearActivePath,
   learnIdentity,
+  pathIsPinned,
   pathsOf,
   scopeOf,
   servers,
@@ -204,4 +205,36 @@ test("two addresses that answer with the same id become one server", () => {
   const before = JSON.stringify(servers());
   learnIdentity("https://conduit.tailnet.ts.net", {});
   assert.equal(JSON.stringify(servers()), before);
+});
+
+test("automatic selection looks nearer than the route in use, and a chosen route stops it", async () => {
+  const { nearerThan } = await import("../src/client/platform/path-selector.ts");
+  const routes = [
+    { origin: "http://127.0.0.1:4310", scope: "loopback" },
+    { origin: "http://192.168.0.128:4310", scope: "private" },
+    { origin: "https://conduit.tailnet.ts.net", scope: "public" },
+  ];
+
+  // On the tunnel, both local routes are worth asking about.
+  assert.deepEqual(nearerThan(routes, "https://conduit.tailnet.ts.net").map((path) => path.origin),
+    ["http://127.0.0.1:4310", "http://192.168.0.128:4310"]);
+  // On the LAN, only loopback would be an improvement.
+  assert.deepEqual(nearerThan(routes, "http://192.168.0.128:4310").map((path) => path.origin),
+    ["http://127.0.0.1:4310"]);
+  // Already nearest: nothing to ask, so nothing is asked.
+  assert.deepEqual(nearerThan(routes, "http://127.0.0.1:4310"), []);
+  // A route that is not one of this server's is the worst case, not the best.
+  assert.deepEqual(nearerThan(routes, null).length, 3);
+
+  // A route chosen by hand is a decision, and selection stands down until it
+  // is handed back.
+  addServer("https://pinning.example.com", "Pinned");
+  setActiveServer("https://pinning.example.com");
+  assert.equal(pathIsPinned(), false, "a fresh server chooses for itself");
+  setActivePath("http://10.0.0.7:4310", { manual: true });
+  assert.equal(pathIsPinned(), true);
+  setActivePath("http://10.0.0.8:4310");
+  assert.equal(pathIsPinned(), true, "the client moving the route does not un-choose it");
+  clearActivePath({ manual: false });
+  assert.equal(pathIsPinned(), false);
 });

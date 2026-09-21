@@ -258,6 +258,14 @@ export const servers = serverList;
  */
 const [pathOverride, setPathOverride] = createSignal<string | null>(null);
 const [pathEpoch, bumpPathEpoch] = createSignal(0);
+/**
+ * Whether a person chose this route.
+ *
+ * A route picked by hand is a decision, and something measuring latency in the
+ * background has no business overruling it. Automatic selection stands down
+ * until the route is set back to automatic.
+ */
+const [pinned, setPinned] = createSignal(false);
 
 export const activeOrigin = active;
 /** Where requests actually go: the chosen path, or the server's own address. */
@@ -273,8 +281,11 @@ export const pathGeneration = pathEpoch;
  * route already in use, so a probe that keeps choosing the same winner costs
  * nothing.
  */
-export function setActivePath(origin: string) {
+export const pathIsPinned = pinned;
+
+export function setActivePath(origin: string, { manual = false } = {}) {
   const next = normalizeServerOrigin(origin);
+  if (manual) setPinned(true);
   if (activePath() === next) return;
   setPathOverride(next);
   bumpPathEpoch((value) => value + 1);
@@ -318,8 +329,16 @@ if (typeof window !== "undefined") {
   };
 }
 
-/** Back to addressing the server by its own address. */
-export function clearActivePath() {
+/**
+ * Back to addressing the server by its own address.
+ *
+ * `manual` says who decided. A person picking that address is a choice like
+ * any other and pins it; the client being handed the decision back -- the
+ * "Automatic" row, or moving to another server -- is the opposite, and frees
+ * selection to choose again.
+ */
+export function clearActivePath({ manual = false } = {}) {
+  setPinned(manual);
   if (pathOverride() === null) return;
   setPathOverride(null);
   bumpPathEpoch((value) => value + 1);
@@ -330,7 +349,7 @@ export const activeServer = (): ServerEntry | null => serverList().find((entry) 
 function persist(list: ServerEntry[], nextActive: string | null) {
   // A path belongs to the server it reaches, so changing server drops it
   // rather than carrying an address that now names somewhere else.
-  if (nextActive !== active()) setPathOverride(null);
+  if (nextActive !== active()) { setPathOverride(null); setPinned(false); }
   setServerList(list);
   writeServers(store, list);
   setActive(nextActive);

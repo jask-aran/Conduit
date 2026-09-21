@@ -1,4 +1,4 @@
-import { buildHttpUrl } from "../api/transport";
+import { buildHttpUrl } from "../api/transport.js";
 
 /*
  * Check that the thing answering at an address is the server we paired with,

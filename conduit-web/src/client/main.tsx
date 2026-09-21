@@ -15,6 +15,7 @@ import "@jask-aran/solid-components/meteor-shower.css";
 import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/primitives";
 import { api, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./api/client";
 import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl } from "./api/transport";
+import { startPathSelection } from "./platform/path-selector";
 import { activeOrigin, addServer, forgetServer, learnIdentity, mergeServerDirectory, servers, setActiveServer, switchToServer } from "./platform/servers";
 import { publishServerDirectory } from "./platform/server-directory";
 import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
@@ -592,6 +593,19 @@ function App() {
     }
   };
   const runtime = createRuntimeStore();
+  /*
+   * Take the nearest route to this server that is there and can prove it is
+   * this server, and stop taking one that is not.
+   *
+   * "Busy" is a generation running or a harness waiting on one. A route change
+   * repaints a terminal and reopens a stream, which is a poor trade against a
+   * few milliseconds while somebody is watching output arrive -- so an upgrade
+   * waits for a quiet moment. Losing a route does not wait, and nothing here
+   * decides that.
+   */
+  startPathSelection({
+    busy: () => [...runtime.processes().values()].some((process) => process.active || process.waiting),
+  });
   let hasConnected = false;
   createEffect(() => {
     if (runtime.connectivity() !== "online") return;
