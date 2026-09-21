@@ -28,11 +28,16 @@ export function registerAttachmentRoutes(app, { attachments, findChatContext }) 
     try {
       const context = await findChatContext(request.params.chatId);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
-      let announced = new Set();
+      // What the composer is holding is what has not been sent, so both
+      // records of a send count. The send ledger is the one every harness
+      // writes; the Pi session file is read as well because a chat that
+      // predates the ledger has its sends recorded only there.
+      const announced = await attachments.announcedIds(context.project, context.chat.id);
       const sessionFile = conduitPiSessionFile(context.chat);
       if (sessionFile) {
-        try { announced = await readAnnouncedAttachmentIds(sessionFile, context.project); }
-        catch (error) { if (error.code !== "ENOENT") throw error; }
+        try {
+          for (const id of await readAnnouncedAttachmentIds(sessionFile, context.project)) announced.add(id);
+        } catch (error) { if (error.code !== "ENOENT") throw error; }
       }
       response.json({ attachments: (await attachments.list(context.project, context.chat.id))
         .map((attachment) => ({ ...attachment, announced: announced.has(attachment.id) })) });
