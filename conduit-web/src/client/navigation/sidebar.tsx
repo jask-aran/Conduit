@@ -95,7 +95,7 @@ type DeleteTarget = { type: "chat"; chat: ChatSummary; project: Project }
   | { type: "chats"; targets: ChatTarget[] };
 const COLLAPSED_PROJECTS_KEY = "conduit.sidebar.collapsed-projects";
 /** How long a folder takes to open or close; matches the CSS transition. */
-const SIDEBAR_FOLDER_MS = 180;
+const SIDEBAR_FOLDER_MS = 240;
 
 function SidebarChatTitle(props: { title: string; animate: boolean }) {
   let element!: HTMLSpanElement;
@@ -879,22 +879,28 @@ export function Sidebar(props: {
     const [shown, setShown] = createSignal(open());
     let body: HTMLDivElement | undefined;
     let motion: Animation | undefined;
-    let was: boolean | undefined;
+    /*
+     * The state the rows are already in, and the only reason to animate.
+     *
+     * Every folder reads the one set of collapsed ids, and one toggle writes
+     * that set more than once -- from the click, and again from the preference
+     * that comes back -- so this effect runs several times per toggle, for
+     * every folder. Acting on each run cancelled the animation the previous
+     * run had just started, which made an opening folder snap most of the way
+     * and unmounted a closing one before it had moved at all.
+     *
+     * Comparing against what the DOM already shows makes every one of those
+     * re-runs a no-op, and leaves exactly one that has something to do.
+     */
+    let was = open();
     createEffect(() => {
       const wanted = open();
-      if (wanted) setShown(true);
-      /*
-       * Only this folder's own change is animated.
-       *
-       * Every folder reads the one set of collapsed ids, so toggling any of
-       * them re-runs this for all of them -- and an open folder that replayed
-       * its slide dropped to nothing and grew back, which pulled everything
-       * below it up for a frame and then let it fall.
-       */
-      const changed = was !== undefined && was !== wanted;
+      if (was === wanted) return;
       was = wanted;
-      if (!changed) { if (!wanted) setShown(false); return; }
+      if (wanted) setShown(true);
       if (matchMedia("(prefers-reduced-motion: reduce)").matches) { if (!wanted) setShown(false); return; }
+      // A frame late on purpose: the rows have to be in the document, at their
+      // natural height, before there is a height to animate from or to.
       requestAnimationFrame(() => {
         const node = body;
         if (!node || open() !== wanted) { if (!open()) setShown(false); return; }
