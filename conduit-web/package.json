@@ -24,7 +24,8 @@
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
     "desktop:build:win": "bash scripts/build-desktop-windows.sh",
-    "bench:renderer": "node scripts/bench-renderer.mjs"
+    "bench:renderer": "node scripts/bench-renderer.mjs",
+    "desktop:dev:win": "bash scripts/dev-desktop-windows.sh"
   },
   "dependencies": {
     "@aparajita/capacitor-secure-storage": "^8.0.0",
