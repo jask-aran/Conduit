@@ -156,7 +156,17 @@ jobs:
           bundle="src-tauri/target/release/bundle/nsis"
           installer=$(ls -1 "$bundle"/*.exe | head -1)
           archive="${installer%.exe}.nsis.zip"
-          powershell -NoProfile -Command "Compress-Archive -Path '$installer' -DestinationPath '$archive' -Force"
+          # Stored, not compressed. tauri-plugin-updater depends on the zip
+          # crate with default-features off, so the only method it can read is
+          # Stored; a deflated archive is refused with "Compression method not
+          # supported" after the whole thing has been downloaded. The installer
+          # is stored by its bare name so the updater extracts one file, not a
+          # tree. 7-Zip rather than Compress-Archive, which cannot store.
+          rm -f "$archive"
+          (cd "$bundle" && 7z a -tzip -mm=Copy "$(basename "$archive")" "$(basename "$installer")" > /dev/null)
+          # Proven here rather than on someone's machine, because the reader
+          # only refuses the archive after downloading all of it.
+          node scripts/check-updater-archive.mjs "$archive"
           key="$RUNNER_TEMP/conduit-updater.key"
           printf '%s' "$CONDUIT_UPDATER_KEY" > "$key"
           npx tauri signer sign \
