@@ -3,6 +3,8 @@ import solid from "vite-plugin-solid";
 import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { solidComponentsViteOptions } from "./scripts/solid-components-mode.mjs";
 import { MOBILE_LAYOUT_BREAKPOINT_PX, NON_PHONE_LAYOUT_QUERY, PHONE_LAYOUT_QUERY } from "./src/client/layout-geometry.ts";
 
@@ -22,6 +24,32 @@ function sharedGeometryCssPlugin() {
       for (const [source, target] of replacements) transformed = transformed.replaceAll(source, target);
       return transformed === code ? null : { code: transformed, map: null };
     },
+  };
+}
+
+/**
+ * What this bundle is, stamped in at build time.
+ *
+ * The interface, the server and the shell around an installed client are three
+ * separately released things, so a report that says only "Conduit" names none
+ * of them. CI passes the commit it checked out; a local build asks git, and a
+ * build from an archive with no git at all still names its version.
+ */
+function buildStamp() {
+  const { version } = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
+  const describe = (...args) => {
+    try {
+      return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    } catch {
+      return "";
+    }
+  };
+  return {
+    version,
+    commit: (process.env.GITHUB_SHA || describe("rev-parse", "HEAD")).slice(0, 12) || "unknown",
+    // The tag, when this build is a release; a plain commit otherwise.
+    release: process.env.CONDUIT_RELEASE_TAG || (process.env.GITHUB_REF_TYPE === "tag" ? process.env.GITHUB_REF_NAME : "") || describe("describe", "--tags", "--exact-match") || "",
+    builtAt: new Date().toISOString(),
   };
 }
 
@@ -84,6 +112,7 @@ export default defineConfig(() => {
     optimizeDeps: solidComponents
       ? { exclude: ["@jask-aran/solid-components"] }
       : undefined,
+    define: { __CONDUIT_BUILD__: JSON.stringify(buildStamp()) },
     build: { outDir: "dist", emptyOutDir: true },
     server: {
       fs: solidComponents

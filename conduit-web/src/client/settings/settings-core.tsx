@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
 import * as KDialog from "@kobalte/core/dialog";
 import { ActivityIcon, BotIcon, ChevronRightIcon, FileTextIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon } from "lucide-solid";
+import { AboutSettingsTile } from "./about-settings";
 import { DesktopSettingsTile } from "./desktop-settings";
 import { toast } from "solid-sonner";
 import { Button, Field, FieldGroup, FieldLabel, Input, Spinner } from "@/components/primitives";
@@ -1170,6 +1171,7 @@ export function Settings(props: {
                   </div>
                 </div>
               </details>
+              <AboutSettingsTile />
             </div>
           </Show>
           <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
