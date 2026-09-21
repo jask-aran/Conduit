@@ -44,7 +44,18 @@ done
 
 windows_home=$(cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')
 cargo_tauri="$(wslpath -u "$windows_home")/.cargo/bin/cargo-tauri.exe"
-target_dir=${CONDUIT_DESKTOP_TARGET_DIR:-"$windows_home\\conduit-desktop-target"}
+# A development build compiles into a directory of its own.
+#
+# The last step of a build renames `release\conduit-desktop.exe`, and Windows
+# refuses to touch an image a process is running from. `npm run desktop:dev:win`
+# runs the binary straight out of this tree, so a dev session and an artifact
+# build sharing one directory means the build fails with "Access is denied" and
+# the only way forward is to close the window somebody is working in.
+#
+# Separate directories cost one more full compile the first time and a second
+# copy of the build output on disk. Both are cheaper than a build that can only
+# run when nothing is open.
+target_dir=${CONDUIT_DESKTOP_TARGET_DIR:-"$windows_home\\conduit-desktop-target${dev_client:+-dev}"}
 
 if [ ! -x "$cargo_tauri" ]; then
   echo "No cargo-tauri.exe under $windows_home\\.cargo: install Rust and the" >&2

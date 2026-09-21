@@ -58,7 +58,13 @@ Options, all of which write to a temporary overlay config rather than editing
 - `--version X.Y.Z` — build as that version.
 - `--local-updates` — point this build's updater at the Conduit server on this
   machine instead of at GitHub.
-- `--dev` — build a **separate application**, and imply `--local-updates`.
+- `--dev` — build a **separate application**, and imply `--local-updates`. It
+  compiles into `conduit-desktop-target-dev\` rather than the shared tree,
+  because the last step of a build renames the binary and Windows refuses to
+  touch an image a process is running from — so a `desktop:dev:win` session and
+  an artifact build sharing one directory means the build fails until the
+  window somebody is working in is closed. `start-conduit.sh` prefers this
+  directory when serving updates.
 
 The script refuses to start while another `cargo-tauri.exe` is alive. An
 interrupted build orphans the Windows process — `powershell.exe` under WSL is a
