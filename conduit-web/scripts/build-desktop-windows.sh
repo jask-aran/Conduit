@@ -110,7 +110,18 @@ node -e '
   const [out, version, localUpdates, base, dev] = process.argv.slice(1);
   const overlay = { build: { beforeBuildCommand: "" }, bundle: { createUpdaterArtifacts: false } };
   if (version) overlay.version = version;
-  if (localUpdates) overlay.plugins = { updater: { endpoints: [`${base}/latest.json`] } };
+  if (localUpdates) {
+    // The updater refuses a plain-HTTP endpoint outright, which is right for a
+    // release and impossible for a loopback one: a server on this machine has
+    // no certificate to present. The signature is still checked, so the
+    // guarantee that matters is unchanged.
+    overlay.plugins = {
+      updater: {
+        endpoints: [`${base}/latest.json`],
+        dangerousInsecureTransportProtocol: true,
+      },
+    };
+  }
   if (dev) {
     // A different identifier is what makes this a second application rather
     // than a second copy of the same one: Windows keys the install entry, the
@@ -119,6 +130,11 @@ node -e '
     const config = JSON.parse(require("fs").readFileSync("src-tauri/tauri.conf.json", "utf8"));
     overlay.productName = "Conduit Dev";
     overlay.identifier = `${config.identifier}.dev`;
+    // The executable is named too. Two installs whose binaries share a name
+    // are one running application as far as Windows is concerned: the
+    // installer asks to close "Conduit" when the other one is running, and
+    // both read as the same entry when searched for.
+    overlay.mainBinaryName = "conduit-desktop-dev";
     overlay.app = { windows: [{ ...config.app.windows[0], title: "Conduit Dev" }] };
   }
   require("fs").writeFileSync(out, JSON.stringify(overlay, null, 2) + "\n");
