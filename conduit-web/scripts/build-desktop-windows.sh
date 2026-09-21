@@ -92,6 +92,17 @@ npm run build
 # CLI resolves it the same way. The committed config is never edited: a build
 # that failed halfway would otherwise leave the repository claiming a version
 # or an endpoint nobody chose.
+# A development build names itself, so no version has to be invented and no
+# two builds are ever the same version. It is a prerelease of the patch after
+# the last tag: below that release when it arrives, above the release it was
+# built from, and ordered against other development builds by the timestamp.
+# The commit is carried for reading, not for ordering.
+if [ -n "$dev_client" ] && [ -z "$build_version" ]; then
+  last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+  next=$(node -p "const p='${last_tag}'.replace(/^v/,'').split('.').map(Number); \`\${p[0]||0}.\${p[1]||0}.\${(p[2]||0)+1}\`")
+  build_version="$next-dev.$(date -u +%Y%m%d%H%M%S).$(git rev-parse --short=7 HEAD 2>/dev/null || echo nogit)"
+fi
+
 update_base=${CONDUIT_LOCAL_UPDATE_URL:-"http://127.0.0.1:${CONDUIT_PORT:-4310}/desktop-updates"}
 overlay="src-tauri/tauri.build-overlay.conf.json"
 trap 'rm -f "$overlay"' EXIT
