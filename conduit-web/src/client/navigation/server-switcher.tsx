@@ -1,5 +1,5 @@
 import { createSignal, For, onCleanup, Show } from "solid-js";
-import { CableIcon, ExternalLinkIcon, PlusIcon, RefreshCwIcon } from "lucide-solid";
+import { ExternalLinkIcon, PlusIcon, RefreshCwIcon } from "lucide-solid";
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger, Spinner } from "@/components/primitives";
 import { buildHttpUrl } from "../api/transport";
 import { isInstalledClient } from "../platform/installed-client.ts";
@@ -91,8 +91,7 @@ export function ServerSwitcher(props: {
 
   return <Menu onOpenChange={onOpenChange}>
     <MenuTrigger class="sidebar-user" aria-label={`${serverName()} · ${triggerDetail()}`} title={`${activeOrigin() || "No server"} — ${triggerDetail()}`}>
-      <CableIcon />
-      <span><strong>{serverName()}</strong><small>{triggerDetail()}</small></span>
+      <span class="sidebar-user-label"><strong>{serverName()}</strong><small>{triggerDetail()}</small></span>
       <span class={`server-status-indicator runtime-indicator runtime-indicator-${connectionTone()}`} aria-hidden="true">
         <Show when={props.connectivity === "connecting" || props.connectivity === "reconnecting"} fallback={<span class="runtime-indicator-dot" />}><Spinner class="size-3" /></Show>
       </span>
