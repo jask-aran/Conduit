@@ -1765,10 +1765,11 @@ svg { stroke-width: 1.5; }
 .add-server-dialog .native-server-card { width: 100%; gap: 10px; }
 .add-server-dialog .native-server-card label { margin-top: 6px; }
 .server-row-latency { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-variant-numeric: tabular-nums; }
-.settings-server-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); }
+.settings-server-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto auto; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); }
 .settings-server-row:first-of-type { border-top: 0; }
 .settings-server-row > code { overflow: hidden; color: var(--muted-foreground); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .settings-server-current { color: var(--muted-foreground); font-size: 11px; }
+.settings-server-share { display: inline-flex; align-items: center; gap: 5px; color: var(--muted-foreground); font-size: 11px; white-space: nowrap; }
 .settings-note { margin: 0 0 8px; color: var(--muted-foreground); font-size: 11px; }
 
 /* Settings is a full control surface. Keep this final layer outside the

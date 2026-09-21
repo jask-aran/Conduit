@@ -4,7 +4,7 @@ import { Button, Input } from "@/components/primitives";
 import { clearNativeBearerToken } from "../api/native-auth-client.ts";
 import { isInstalledClient } from "../platform/installed-client.ts";
 import { saveServerDirectory } from "../platform/server-directory.ts";
-import { activeOrigin, forgetServer, renameServer, servers } from "../platform/servers.ts";
+import { activeOrigin, forgetServer, renameServer, servers, setServerShared } from "../platform/servers.ts";
 
 /**
  * The servers this client knows, and the only place one can be removed.
@@ -34,16 +34,23 @@ export function ServersSettingsTile() {
     await saveServerDirectory();
   };
 
+  const share = async (origin: string, shared: boolean) => {
+    setServerShared(origin, shared);
+    await saveServerDirectory();
+  };
+
   return <details class="settings-tile">
     <summary><span><CableIcon /><strong>Servers</strong>
       <small>{servers().length === 1 ? "One server" : `${servers().length} servers`} · on {active()?.name || "none"}</small>
     </span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
     <div class="settings-disclosure-content">
-      <p class="settings-note">Every server keeps this list and shares it with the next client that connects, so an address is entered once. Forgetting one removes it everywhere.</p>
+      <p class="settings-note">A shared address is kept by every server you sign in to and handed to the next client that connects, so it is entered once. An address that is not shared stays on this device. Loopback starts unshared, because <code>127.0.0.1</code> means a different machine on each one.</p>
       <For each={servers()}>{(entry) => <div class="settings-server-row">
         <Input aria-label={`Name for ${entry.origin}`} value={entry.name}
           onChange={(event) => void rename(entry.origin, event.currentTarget.value)} />
         <code>{entry.origin}</code>
+        <label class="settings-server-share"><input type="checkbox" aria-label={`Share ${entry.name} with other clients`}
+          checked={entry.shared} onChange={(event) => void share(entry.origin, event.currentTarget.checked)} />Share</label>
         <Show when={entry.origin === activeOrigin()} fallback={
           <Button variant="ghost" size="sm" aria-label={`Forget ${entry.name}`} onClick={() => void forget(entry.origin)}>
             <Trash2Icon /> Forget
