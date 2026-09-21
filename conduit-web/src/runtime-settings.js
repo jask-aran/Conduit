@@ -4,7 +4,11 @@ import path from "node:path";
 const DEFAULTS = {
   maxLiveProcesses: 12,
   maxGeneratingProcesses: 2,
-  idleProcessTtlMs: 120_000,
+  // Five minutes, because the wait it removes is an agent starting from cold,
+  // which is long enough to notice and frequent enough to be the reason a
+  // process was kept at all. A process that idles that long costs memory; a
+  // restart costs the person in front of it.
+  idleProcessTtlMs: 300_000,
 };
 
 function clampInt(value, min, max, fallback) {
