@@ -221,7 +221,6 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
     <div class="shortcuts-intro">
       <div>
         <p class="shortcuts-environment"><KeyboardIcon />{shortcutEnvironmentLabel(props.manager.environment)}</p>
-        <p>Browser-owned shortcuts can run before Conduit receives them. A captured shortcut only proves that it reached this page now.</p>
       </div>
       <Button variant="outline" size="sm" onClick={resetAll} disabled={!hasOverrides()}>
         <RotateCcwIcon /> Reset all
@@ -257,7 +256,6 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
                     <strong>{command.label}</strong>
                     <Show when={overridden(command.id)}><span class="shortcut-override-badge">Custom</span></Show>
                   </div>
-                  <p>{command.description}</p>
                   <div class="shortcut-contexts">
                     <For each={command.contexts}>{(context) => <span>{contextLabel(context)}</span>}</For>
                   </div>
