@@ -4,6 +4,7 @@ import { webSocketUrl } from "../api/transport";
 import type { LiveRecord, TranscriptDetail } from "../api/contracts";
 import type { RuntimeStore } from "./runtime";
 import { frameIntervalMs } from "../frame-interval";
+import { onPathChange } from "../platform/servers";
 
 /** What a caller can say about the agent it needs. */
 export interface AgentRequest {
@@ -88,6 +89,23 @@ export function createAgentSession(deps: {
     if (reconnectTimer) clearTimeout(reconnectTimer);
     reconnectTimer = null;
   };
+
+  /*
+   * The route to the server changed under a live session.
+   *
+   * The process on the other end did not move -- it is the same server, the
+   * same session, and it is still generating. Only the address reaching it is
+   * different, so the socket is closed and the reconnect this already has
+   * rebuilds it against the new one. The backoff is reset first: this is a
+   * deliberate move rather than a network that failed, and waiting out a
+   * penalty earned by an earlier failure would be a pause nobody caused.
+   */
+  onPathChange(() => {
+    const current = socket;
+    if (!current) return;
+    reconnectAttempts = 0;
+    current.close();
+  });
 
   const scheduleReconnect = (chatId: string, era: number) => {
     if (reconnectTimer || era !== epoch || deps.chatId() !== chatId) return;

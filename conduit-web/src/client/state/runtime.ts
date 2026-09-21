@@ -1,6 +1,7 @@
 import { createSignal, onCleanup, onMount } from "solid-js";
 import { isInstalledClient } from "../platform/installed-client.ts";
 import type { RuntimeProcess } from "../api/contracts";
+import { onPathChange } from "../platform/servers";
 import { eventSourceUrl } from "../api/transport";
 import { authorizedFetch } from "../api/native-auth-client";
 
@@ -127,6 +128,15 @@ export function createRuntimeStore() {
       next.onerror = () => onError(next);
     }
   };
+
+  /*
+   * The route to the server changed. The stream is carrying this server's own
+   * events, so it is not wrong -- it is merely arriving by an address nobody
+   * is using any more, and a stream left on a path that may be about to stop
+   * answering is a client that looks alive and reports nothing. Replaced at
+   * once rather than waited out by the watchdog.
+   */
+  onPathChange(() => connect());
 
   const resume = () => {
     if (document.visibilityState === "hidden") return;
