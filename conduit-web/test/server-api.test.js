@@ -8,14 +8,28 @@ import path from "node:path";
 import test from "node:test";
 import { sessionDirectoryFor } from "../src/session-store.js";
 
-async function availablePort() {
+/**
+ * The origin the server actually bound, read from the server itself.
+ *
+ * Choosing a port in advance -- bind zero, close, hand the number to a child
+ * -- is a guess with a gap in it: test files run at the same time, and a port
+ * that was free a moment ago stays free only until something else is told the
+ * same number. Whoever binds first keeps it, and the loser's requests are
+ * answered by a server the test never started. The kernel picks instead, and
+ * the server says what it picked.
+ */
+function boundOrigin(child) {
   return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const { port } = server.address();
-      server.close((error) => error ? reject(error) : resolve(port));
-    });
+    let seen = "";
+    const onData = (chunk) => {
+      seen += chunk.toString();
+      const match = seen.match(/listening on (http:\/\/\S+)/);
+      if (!match) return;
+      child.stdout.off("data", onData);
+      resolve(match[1].replace("0.0.0.0", "127.0.0.1"));
+    };
+    child.stdout.on("data", onData);
+    child.once("exit", (code) => reject(new Error(`Conduit server exited before it listened (${code})`)));
   });
 }
 
@@ -33,8 +47,6 @@ async function waitForServer(origin, child) {
 
 test("raw JSON uploads publish atomically through the durable chat route", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-server-api-"));
-  const port = await availablePort();
-  const origin = `http://127.0.0.1:${port}`;
   const freshSessionFile = path.join(sessionDirectoryFor(path.join(root, "files"), path.join(root, "pi")), "future.jsonl");
   const conduitPi = path.join(root, "conduit-pi");
   await fs.writeFile(conduitPi, `#!/usr/bin/env node
@@ -80,7 +92,7 @@ exit 0
       ...process.env,
       HOME: home,
       CONDUIT_HOST: "127.0.0.1",
-      CONDUIT_PORT: String(port),
+      CONDUIT_PORT: "0",
       CONDUIT_FILES_ROOT: path.join(root, "files"),
       CONDUIT_CATALOG_FILE: path.join(root, "conduit.json"),
       CONDUIT_SESSION_REGISTRY_FILE: path.join(root, "sessions.json"),
@@ -98,6 +110,7 @@ exit 0
   });
 
   try {
+    const origin = await boundOrigin(child);
     await waitForServer(origin, child);
     const nativeHealth = await fetch(`${origin}/healthz`, { headers: { origin: "https://localhost" } });
     assert.equal(nativeHealth.headers.get("access-control-allow-origin"), "https://localhost");
