@@ -137,6 +137,10 @@ Keep Git history intentional and reviewable.
   larger run.
 - Treat pull requests as optional review bundles, not as a second source of
   project history or planning truth.
+- Run `npm test` in `conduit-web/` before tagging a commit as a release. A
+  release is the one point where the whole suite has to have passed, because
+  the surgical seam chosen for a change is sometimes the wrong one, and a tag
+  is what publishes that mistake.
 
 ### Performance observations
 
