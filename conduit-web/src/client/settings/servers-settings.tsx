@@ -39,7 +39,7 @@ export function ServersSettingsTile() {
     await saveServerDirectory();
   };
 
-  return <details class="settings-tile">
+  return <details class="settings-tile" open>
     <summary><span><CableIcon /><strong>Servers</strong>
       <small>{servers().length === 1 ? "One server" : `${servers().length} servers`} · on {active()?.name || "none"}</small>
     </span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
