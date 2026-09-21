@@ -18,6 +18,13 @@ import { isInstalledClient } from "./installed-client.ts";
 export interface ServerEntry {
   name: string;
   origin: string;
+  /**
+   * Whether this address travels. The directory is kept by the servers, which
+   * is the only channel two origins on one device share -- and it is a channel
+   * every other device reads too, so what belongs on this machine and what
+   * belongs everywhere has to be said rather than guessed.
+   */
+  shared: boolean;
 }
 
 export const SERVERS_STORAGE_KEY = "conduit.servers";
@@ -31,6 +38,16 @@ export const LEGACY_ORIGIN_STORAGE_KEY = "conduit.native.server-origin";
 // context, and it is what lets a desktop client on the same machine as the
 // server address it as 127.0.0.1 instead of needing a certificate for it.
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|$)/;
+
+export const isLoopbackOrigin = (origin: string) => LOOPBACK_ORIGIN.test(origin);
+
+/**
+ * Loopback stays put unless it is told otherwise: "127.0.0.1" names whatever
+ * machine reads it, so it is the one address that is not the same server
+ * everywhere. Anything else is worth having on every client that connects.
+ */
+export const sharedByDefault = (origin: string) => !isLoopbackOrigin(origin);
 
 export function normalizeServerOrigin(value: unknown): string {
   const input = String(value || "").trim();
@@ -83,7 +100,8 @@ export function readServers(storage: Storageish | null): ServerEntry[] {
     if (seen.has(origin)) continue;
     seen.add(origin);
     const name = typeof item?.name === "string" && item.name.trim() ? item.name.trim() : defaultServerName(origin);
-    list.push({ origin, name });
+    const shared = typeof item?.shared === "boolean" ? item.shared : sharedByDefault(origin);
+    list.push({ origin, name, shared });
   }
   return list;
 }
@@ -105,7 +123,7 @@ export function migrateLegacyServer(storage: Storageish | null) {
   if (!legacy) return;
   let origin: string;
   try { origin = normalizeServerOrigin(legacy); } catch { return; }
-  writeServers(storage, [{ origin, name: defaultServerName(origin) }]);
+  writeServers(storage, [{ origin, name: defaultServerName(origin), shared: sharedByDefault(origin) }]);
   try { storage.setItem(ACTIVE_SERVER_STORAGE_KEY, origin); } catch {}
 }
 
@@ -134,7 +152,7 @@ function adoptServingOrigin() {
   try { here = normalizeServerOrigin(location.origin); } catch { return; }
   const list = serverList();
   if (!list.some((entry) => entry.origin === here)) {
-    const next = [{ origin: here, name: defaultServerName(here) }, ...list];
+    const next = [{ origin: here, name: defaultServerName(here), shared: sharedByDefault(here) }, ...list];
     setServerList(next);
     writeServers(store, next);
   }
@@ -164,7 +182,7 @@ export function addServer(value: string, name?: string): ServerEntry {
   const existing = serverList().find((entry) => entry.origin === origin);
   const list = existing
     ? serverList().map((entry) => entry.origin === origin ? { ...entry, name: name?.trim() || entry.name } : entry)
-    : [...serverList(), { origin, name: label }];
+    : [...serverList(), { origin, name: label, shared: sharedByDefault(origin) }];
   persist(list, active() ?? origin);
   return list.find((entry) => entry.origin === origin)!;
 }
@@ -207,10 +225,17 @@ export function mergeServerDirectory(entries: Array<{ origin?: unknown; name?: u
     if (known.has(origin)) continue;
     known.add(origin);
     const name = typeof item?.name === "string" && item.name.trim() ? item.name.trim() : defaultServerName(origin);
-    list.push({ origin, name });
+    // It arrived through the directory, so it is already an address that
+    // travels; recording it as anything else would quietly drop it the next
+    // time this client wrote the directory back.
+    list.push({ origin, name, shared: true });
   }
   if (list.length !== serverList().length) persist(list, active());
   return list;
+}
+
+export function setServerShared(origin: string, shared: boolean) {
+  persist(serverList().map((entry) => entry.origin === origin ? { ...entry, shared } : entry), active());
 }
 
 export function setActiveServer(origin: string) {

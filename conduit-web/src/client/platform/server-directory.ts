@@ -8,14 +8,18 @@ import { servers, type ServerEntry } from "./servers.ts";
  * only ever added to would hand back every address anyone had ever forgotten,
  * the next time a client connected.
  */
+export function sharedServers(list: ServerEntry[] = servers()) {
+  return list.filter((entry) => entry.shared).map(({ origin, name }) => ({ origin, name }));
+}
+
 export async function saveServerDirectory(list: ServerEntry[] = servers()) {
-  try { await api("/v0/preferences", { method: "PATCH", body: JSON.stringify({ knownServers: list }) }); }
+  try { await api("/v0/preferences", { method: "PATCH", body: JSON.stringify({ knownServers: sharedServers(list) }) }); }
   catch { /* advisory: the list held here is already right */ }
 }
 
 /** The same write, skipped when the server already knows everything in it. */
 export async function publishServerDirectory(list: ServerEntry[], held?: Array<{ origin?: unknown }>) {
   const known = new Set((held || []).map((item) => String(item?.origin || "")));
-  if (list.every((entry) => known.has(entry.origin))) return;
+  if (sharedServers(list).every((entry) => known.has(entry.origin))) return;
   await saveServerDirectory(list);
 }

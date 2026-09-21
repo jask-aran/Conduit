@@ -48,10 +48,11 @@ test("a stored server list keeps only addresses it would accept", () => {
     { origin: "http://insecure.example.com", name: "Refused" },
   ]);
   assert.deepEqual(readServers(storage), [
-    { origin: "https://conduit.tailnet.ts.net", name: "Home" },
+    { origin: "https://conduit.tailnet.ts.net", name: "Home", shared: true },
     // Unnamed servers answer to their host, so two addresses tell themselves
-    // apart without anyone typing a label.
-    { origin: "http://127.0.0.1:4310", name: "127.0.0.1:4310" },
+    // apart without anyone typing a label -- and loopback starts unshared,
+    // since it names a different machine on every device that reads it.
+    { origin: "http://127.0.0.1:4310", name: "127.0.0.1:4310", shared: false },
   ]);
   assert.equal(defaultServerName("https://conduit.tailnet.ts.net"), "conduit.tailnet.ts.net");
   assert.deepEqual(readServers(memoryStorage()), []);
@@ -61,7 +62,7 @@ test("the one server an older client held becomes the first of the list", () => 
   const storage = memoryStorage();
   storage.setItem(LEGACY_ORIGIN_STORAGE_KEY, "https://conduit.tailnet.ts.net");
   migrateLegacyServer(storage);
-  assert.deepEqual(readServers(storage), [{ origin: "https://conduit.tailnet.ts.net", name: "conduit.tailnet.ts.net" }]);
+  assert.deepEqual(readServers(storage), [{ origin: "https://conduit.tailnet.ts.net", name: "conduit.tailnet.ts.net", shared: true }]);
   assert.equal(storage.getItem(ACTIVE_SERVER_STORAGE_KEY), "https://conduit.tailnet.ts.net");
   // Left in place: the token for that server is still filed under the old name
   // too, and this is the only record of which server it belongs to.
@@ -70,7 +71,7 @@ test("the one server an older client held becomes the first of the list", () => 
   // A list that already exists is never overwritten by a stale single server.
   writeServers(storage, [{ origin: "http://127.0.0.1:4310", name: "Local" }]);
   migrateLegacyServer(storage);
-  assert.deepEqual(readServers(storage), [{ origin: "http://127.0.0.1:4310", name: "Local" }]);
+  assert.deepEqual(readServers(storage), [{ origin: "http://127.0.0.1:4310", name: "Local", shared: false }]);
 });
 
 test("transport builds every remote path from the configured origin", () => {
