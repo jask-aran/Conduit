@@ -12,6 +12,41 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      /*
+       * Recovery for a client that never starts.
+       *
+       * Everything that could fix a bad cache -- the worker registration, the
+       * update check, the reload when a new worker takes over -- lives inside
+       * the bundle, so none of it runs when it is the bundle that failed to
+       * load. A cached index.html naming a hashed file the server no longer
+       * has renders as a blank page with no way out but a hard reload, which
+       * is a thing only someone who knows to try it will do.
+       *
+       * So the check sits here instead, outside everything it is checking: if
+       * nothing has been drawn by now, discard the worker and its caches and
+       * come back once. Once per tab, because a reload loop would be worse
+       * than the blank page it is trying to fix.
+       */
+      (function () {
+        var GUARD = "conduit.recovered";
+        setTimeout(function () {
+          var root = document.getElementById("root");
+          if (root && root.childElementCount) return;
+          try {
+            if (sessionStorage.getItem(GUARD)) return;
+            sessionStorage.setItem(GUARD, "1");
+          } catch (error) { return; }
+          var reload = function () { location.reload(); };
+          if (!navigator.serviceWorker) return reload();
+          navigator.serviceWorker.getRegistrations()
+            .then(function (all) { return Promise.all(all.map(function (one) { return one.unregister(); })); })
+            .then(function () { return window.caches ? caches.keys() : []; })
+            .then(function (names) { return Promise.all(names.map(function (name) { return caches.delete(name); })); })
+            .then(reload, reload);
+        }, 8000);
+      })();
+    </script>
     <script type="module" src="/src/client/main.tsx"></script>
   </body>
 </html>
