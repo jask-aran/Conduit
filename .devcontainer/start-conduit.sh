@@ -29,6 +29,10 @@ export CONDUIT_CATALOG_FILE="${CONDUIT_CATALOG_FILE:-$ROOT/data/conduit.json}"
 export CONDUIT_SESSION_REGISTRY_FILE="${CONDUIT_SESSION_REGISTRY_FILE:-$ROOT/data/sessions.json}"
 export CONDUIT_PI_AGENT_DIR="${CONDUIT_PI_AGENT_DIR:-$ROOT/data/pi}"
 export CONDUIT_PI_TEMPLATE="${CONDUIT_PI_TEMPLATE:-$ROOT/templates/assistant/template.json}"
+# Set only when testing a desktop update against a local build: the server then
+# serves that directory at /desktop-updates so the updater has somewhere to
+# look. Unset, the route does not exist.
+if [ -n "${CONDUIT_DESKTOP_UPDATE_DIR:-}" ]; then export CONDUIT_DESKTOP_UPDATE_DIR; fi
 HEALTH_URL="http://127.0.0.1:${CONDUIT_PORT}/healthz"
 DRAIN_TIMEOUT_SECONDS="${CONDUIT_RESTART_DRAIN_TIMEOUT_SECONDS:-600}"
 

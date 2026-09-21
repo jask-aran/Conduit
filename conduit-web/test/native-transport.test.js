@@ -62,3 +62,21 @@ test("transport builds every remote path from the configured origin", () => {
   assert.equal(buildWebSocketUrl("/v0/ptys/pty-1/attach", origin), "wss://conduit.tailnet.ts.net/v0/ptys/pty-1/attach");
   assert.equal(buildWebSocketUrl("/v0/dictation/stream", origin), "wss://conduit.tailnet.ts.net/v0/dictation/stream");
 });
+
+test("a published release is newer only when its version is", async () => {
+  const { isNewerVersion, latestRelease } = await import("../src/client/platform/github-release.ts");
+  assert.equal(isNewerVersion("v0.7.2", "0.7.1"), true);
+  assert.equal(isNewerVersion("0.7.1", "v0.7.1"), false, "the running version is not an update");
+  assert.equal(isNewerVersion("0.7.1", "0.10.0"), false, "versions compare as numbers, not as text");
+  assert.equal(isNewerVersion("1.0.0", "0.99.99"), true);
+
+  const release = await latestRelease(async () => new Response(JSON.stringify({
+    tag_name: "v0.7.2",
+    assets: [
+      { name: "conduit-v0.7.2.apk.sha256", browser_download_url: "https://example.invalid/sum" },
+      { name: "conduit-v0.7.2.apk", browser_download_url: "https://example.invalid/apk" },
+    ],
+  }), { status: 200 }));
+  assert.deepEqual(release, { tag: "v0.7.2", version: "0.7.2", apkUrl: "https://example.invalid/apk" });
+  assert.equal(await latestRelease(async () => new Response("", { status: 404 })), null);
+});

@@ -3,7 +3,7 @@ import { isConduitManagedProject } from "./navigation/sidebar-preferences";
 import type { ComputerLocation, ComputerPrefetchPayload } from "./api/contracts";
 import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { render } from "solid-js/web";
-import { desktopShell, isInstalledClient } from "./platform/installed-client.ts";
+import { androidShell, desktopShell, isInstalledClient } from "./platform/installed-client.ts";
 import {
   ArrowLeftIcon, EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
 } from "lucide-solid";
@@ -495,6 +495,15 @@ function App() {
           setPwaUpdating(false);
           toast.success("Conduit is up to date", { id: notice });
         }
+        return;
+      }
+      // A new APK replaces the shell, which a service worker cannot do, so on
+      // Android this is a question about releases rather than about caches.
+      if (androidShell) {
+        const version = await androidShell.update();
+        setPwaUpdating(false);
+        if (version) toast.success(`Conduit ${version} is downloading. Open it to install.`);
+        else toast.success("Conduit is up to date");
         return;
       }
       if (!await forcePwaUpdate()) {

@@ -30,6 +30,7 @@
   "dependencies": {
     "@aparajita/capacitor-secure-storage": "^8.0.0",
     "@capacitor/android": "8.5.0",
+    "@capacitor/app": "^8.1.1",
     "@capacitor/core": "8.5.0",
     "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/commands": "^6.11.0",

@@ -83,6 +83,41 @@ export const secureTokenStore: SecureTokenStore = installedClientKind === "deskt
   : installedClientKind === "android" ? androidStore() : browserStore();
 
 /** What the desktop shell decides before the client has loaded. */
+/**
+ * Android replaces its shell by handing the APK to the system, which asks
+ * before installing anything. That confirmation cannot be suppressed for an
+ * app installed outside the Play Store, and should not be: it is the only
+ * thing standing between a download and code running on the phone. So this
+ * finds the release and opens it, and Android takes it from there.
+ */
+export const androidShell = installedClientKind !== "android" ? null : {
+  async version(): Promise<string | null> {
+    try {
+      const { App } = await import("@capacitor/app");
+      return (await App.getInfo()).version;
+    } catch {
+      return null;
+    }
+  },
+  /**
+   * Returns the version it sent to the installer, or null when the running
+   * build is already the latest. The download leaves the app, so nothing
+   * after this reports back.
+   */
+  async update(): Promise<string | null> {
+    const { isNewerVersion, latestRelease } = await import("./github-release.ts");
+    const release = await latestRelease();
+    if (!release?.apkUrl) return null;
+    const { App } = await import("@capacitor/app");
+    const current = (await App.getInfo()).version;
+    if (!isNewerVersion(release.version, current)) return null;
+    // Opened outside the webview, so the browser downloads it and Android's
+    // package installer is what the person confirms.
+    window.open(release.apkUrl, "_blank");
+    return release.version;
+  },
+};
+
 export interface UpdateProgress {
   phase: "downloading" | "installing";
   version: string;
