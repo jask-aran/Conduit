@@ -2053,16 +2053,38 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
    * unlabelled icons is the same list with the part that said what it meant
    * taken out.
    */
-  .settings-dialog .settings-shell { width: calc(100vw - 12px); height: calc(100dvh - 12px); }
-  .settings-dialog .settings-rail { width: 100%; padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); border-right: 0; overflow-y: auto; }
-  .settings-dialog .settings-rail-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 4px 14px; }
-  .settings-dialog .settings-rail h2 { margin: 0; }
+  /*
+   * Full bleed. A phone has no room to spend on a margin proving this is a
+   * dialog: the inset and the rounded corner cost the width that the rows
+   * inside were short of, and nothing is behind it to see anyway.
+   */
+  .settings-dialog { padding: 0; }
+  .settings-dialog .settings-shell { width: 100vw; height: 100dvh; border: 0; border-radius: 0; box-shadow: none; }
+
+  /*
+   * A row goes back to being a stack, because there is no width for two
+   * columns. The desktop rule squeezed the name into whatever was left beside
+   * a 170px control, which wrapped the help text one word to a line and ran
+   * the control over the label.
+   */
+  .settings-dialog .settings-content [data-slot="field"] { grid-template-columns: minmax(0, 1fr); gap: 3px; }
+  /* Name, then what it means, then the control: the help explains the setting,
+     so it reads before the thing that changes it rather than after. */
+  .settings-dialog .settings-content [data-slot="field"] > label { grid-column: 1; grid-row: 1; }
+  .settings-dialog .settings-content [data-slot="field"] > small { grid-column: 1; grid-row: 2; }
+  .settings-dialog .settings-content [data-slot="field"] > :not(label):not(small) { grid-column: 1; grid-row: 3; margin-top: 7px; justify-self: stretch; }
+  .settings-dialog .settings-rail { width: 100%; padding: calc(10px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom)); border-right: 0; overflow-y: auto; }
+  .settings-dialog .settings-rail-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 4px 14px; }
+  /* Undoes the old icon-rail breakpoints, which hid the title because there
+     was no room for it beside a pane. There is room: this is the pane. */
+  .settings-dialog .settings-rail h2 { display: block; margin: 0; font-size: 19px; }
   .settings-dialog .settings-nav-group > h3 { padding-bottom: 6px; }
   .settings-dialog .settings-nav-item > button {
     min-height: 44px; gap: 12px; border-radius: var(--radius-md); padding: 8px 10px; font-size: 13px;
   }
   .settings-dialog .settings-nav-item > button svg { width: 18px; height: 18px; }
   .settings-dialog .settings-rail-close { display: inline-flex; }
+  .settings-dialog .settings-rail-close:focus:not(:focus-visible) { outline: 0; box-shadow: none; }
   .settings-dialog .settings-back { display: inline-flex; }
   .settings-dialog .settings-nav-chevron { display: block; margin-left: auto; opacity: .55; }
   /*
@@ -2072,8 +2094,62 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
    */
   .settings-dialog .settings-nav-item > button[aria-selected="true"] { background: transparent; }
 
-  .settings-dialog .settings-content { padding: 14px 14px calc(20px + env(safe-area-inset-bottom)); }
-  .settings-dialog .settings-content > header { display: flex; position: sticky; top: 0; z-index: 1; align-items: flex-start; gap: 6px; margin: -14px -14px 12px; border-bottom: 1px solid var(--border); background: var(--background); padding: 12px 14px; }
+  /* Tiles need air around them, and each other, or the page is one grey slab. */
+  .settings-dialog .settings-content { padding: 0 12px calc(24px + env(safe-area-inset-bottom)); }
+  .settings-dialog .settings-content > .settings-stack,
+  .settings-dialog .settings-content > .settings-section-block,
+  .settings-dialog .settings-content .settings-control-grid { margin-bottom: 12px; }
+  .settings-dialog .settings-section-block > [data-slot="field-group"] > [data-slot="field"],
+  .settings-dialog .settings-content .settings-control-grid > [data-slot="field"] { padding: 12px; }
+  .settings-dialog .settings-section-block > h3 { padding: 11px 12px; }
+  /*
+   * An intro paragraph is the first thing in the flow after a sticky header,
+   * and its top margin was collapsing through it -- so the first line of Voice
+   * and Web search was drawn underneath the header and clipped. Nothing here
+   * needs a top margin: the header already provides the gap.
+   */
+  .settings-dialog .settings-content > *:not(header) { margin-top: 0; }
+  /* Each section wraps its own content, so the paragraph that clipped is a
+     grandchild rather than a child -- named by where it sits, not by depth. */
+  .settings-dialog .settings-content > *:not(header) > :first-child { margin-top: 0; }
+  .settings-dialog .voice-settings-intro,
+  .settings-dialog .settings-note,
+  .settings-dialog .search-settings > p,
+  .settings-dialog .voice-settings > p {
+    margin: 0 0 12px; color: var(--muted-foreground); font-size: 11px; line-height: 1.5;
+  }
+  /*
+   * Loose fields belong in a tile like every other group. Voice and Web search
+   * put theirs straight on the pane, so the same controls looked unrelated to
+   * the ones a section away.
+   */
+  .settings-dialog .settings-content [data-slot="field-group"]:not(.settings-section-block [data-slot="field-group"]):not(.pi-auth-panel [data-slot="field-group"]) {
+    border: 1px solid var(--border); border-radius: 10px; margin-bottom: 12px; overflow: hidden;
+  }
+  .settings-dialog .settings-content [data-slot="field-group"]:not(.settings-section-block [data-slot="field-group"]):not(.pi-auth-panel [data-slot="field-group"]) > [data-slot="field"] { padding: 12px; }
+  .settings-dialog .settings-content [data-slot="field-group"]:not(.settings-section-block [data-slot="field-group"]):not(.pi-auth-panel [data-slot="field-group"]) > [data-slot="field"] + [data-slot="field"] { border-top: 1px solid var(--border); }
+
+  /*
+   * A server is a small stack on a phone, not four controls on one line. The
+   * name, the address it answers on, and what to do about it each want the
+   * width, and sharing it between them left a name box too narrow to read a
+   * name in and an address truncated to nothing.
+   */
+  .settings-server-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 12px 0; align-items: center; }
+  .settings-server-row > [data-slot="input"],
+  .settings-server-row > input { grid-column: 1 / -1; }
+  .settings-server-row > code { grid-column: 1; white-space: normal; overflow-wrap: anywhere; }
+  .settings-server-row > .settings-server-share { grid-column: 1; }
+  .settings-server-row > [data-slot="button"],
+  .settings-server-row > .settings-server-current { grid-column: 2; grid-row: 3; justify-self: end; }
+  .settings-dialog .settings-disclosure-content { padding: 12px; }
+  .settings-dialog .settings-note { margin: 0 0 10px; font-size: 11px; line-height: 1.5; }
+
+  /* The back chevron is a control, not a target: it was drawing its own box. */
+  .settings-dialog .settings-back { flex: none; border: 0; background: transparent; margin-left: -4px; }
+  /* Full-bleed by its own padding rather than by a negative margin: the pull
+     up left the first paragraph of a section drawn underneath it. */
+  .settings-dialog .settings-content > header { display: flex; position: sticky; top: 0; z-index: 1; align-items: flex-start; gap: 8px; margin: 0 -12px 14px; border-bottom: 1px solid var(--border); background: var(--background); padding: calc(12px + env(safe-area-inset-top)) 12px 12px; }
   .settings-dialog .settings-content > header > div { flex: 1; min-width: 0; }
   .settings-dialog .settings-content > header h2 { font-size: 17px; }
   .settings-dialog .settings-content > header p { margin: 2px 0 0; }

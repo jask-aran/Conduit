@@ -485,6 +485,8 @@ function App() {
   const [sidebarPins, setSidebarPins] = createSignal<string[]>([]);
   const [settingsLoaded, setSettingsLoaded] = createSignal(false);
   const [settingsSection, setSettingsSection] = createSignal<SettingsSection>("models");
+  /** Whether a caller asked for that section, or merely opened Settings. */
+  const [settingsNamedSection, setSettingsNamedSection] = createSignal(false);
   const [settingsWorkspaceId, setSettingsWorkspaceId] = createSignal<string | null>(null);
   const [workspaceIdentityId, setWorkspaceIdentityId] = createSignal<string | null>(null);
   const [workspaceIdentitySaving, setWorkspaceIdentitySaving] = createSignal(false);
@@ -1335,8 +1337,15 @@ function App() {
     await api(`/v0/workspace-operations/${encodeURIComponent(operationId)}`, { method: "DELETE" });
   };
 
-  const openSettings = (section: string = "models", workspaceId: string | null = null) => {
-    setSettingsSection(section as SettingsSection);
+  /*
+   * `section` is what was asked for, and asking for nothing is a real answer:
+   * on a phone Settings opens on the list of sections, and only a caller that
+   * names one skips it. Everything used to name "models" by default, so the
+   * list could never be the thing you arrived at.
+   */
+  const openSettings = (section: string | null = null, workspaceId: string | null = null) => {
+    setSettingsSection((section || "models") as SettingsSection);
+    setSettingsNamedSection(Boolean(section));
     setSettingsWorkspaceId(workspaceId);
     setSettingsLoaded(true);
     setSettingsOpen(true);
@@ -1818,7 +1827,7 @@ function App() {
         else openPalette(null);
       }),
       shortcutManager.registerHandler(COMMAND_IDS.searchChats, "application", toggleSearchPalette),
-      shortcutManager.registerHandler(COMMAND_IDS.openSettings, "application", () => openSettings("models")),
+      shortcutManager.registerHandler(COMMAND_IDS.openSettings, "application", () => openSettings()),
       shortcutManager.registerHandler(COMMAND_IDS.openModelSelector, "application", openModelSelector),
       shortcutManager.registerHandler(COMMAND_IDS.newChat, "application", () => {
         setMobileSidebarOpen(false);
@@ -2242,7 +2251,7 @@ function App() {
       context={paletteContext()} actions={paletteActions} onChooseModel={(spec) => void models.chooseModel(spec)} scopeModels={models.allModels()} enabledModelSpecs={models.enabledModels()} onToggleModelScope={(spec) => { const enabled = models.enabledModels(); void models.saveScope(enabled.includes(spec) ? enabled.filter((item) => item !== spec) : [...enabled, spec]); }} shortcuts={shortcutManager} />
     <LeaderPalette shortcuts={shortcutManager} />
     <Show when={settingsLoaded()}>
-      <Settings open={settingsOpen()} initialSection={settingsSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} rendererControlsVisible={rendererControlsVisible()} onRendererControlsVisibleChange={switchRendererControlsVisible} meteorField={meteorField()} onMeteorFieldChange={switchMeteorField} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} contextMetrics={contextMetrics()} onContextMetricsChange={switchContextMetrics} onOpenModelSelector={openModelSelector} shortcuts={shortcutManager} />
+      <Settings open={settingsOpen()} initialSection={settingsSection()} sectionWasNamed={settingsNamedSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} rendererControlsVisible={rendererControlsVisible()} onRendererControlsVisibleChange={switchRendererControlsVisible} meteorField={meteorField()} onMeteorFieldChange={switchMeteorField} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} contextMetrics={contextMetrics()} onContextMetricsChange={switchContextMetrics} onOpenModelSelector={openModelSelector} shortcuts={shortcutManager} />
     </Show>
   </>;
 }

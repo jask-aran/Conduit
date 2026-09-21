@@ -193,6 +193,8 @@ const VoiceLocalCatalogue = lazy(() => import("./voice-local-catalogue"));
 export function Settings(props: {
   open: boolean;
   initialSection: Section;
+  /** False when Settings was opened without naming a section. */
+  sectionWasNamed?: boolean;
   initialWorkspaceId?: string | null;
   onOpenChange: (open: boolean) => void;
   models: ModelSettings;
@@ -421,7 +423,7 @@ export function Settings(props: {
     setSection(initial);
     // Asked for a section by name -- from a command, or a link out of the app
     // -- so that is what was wanted, not a list with it somewhere in it.
-    setBrowsingSections(!props.initialSection);
+    setBrowsingSections(!props.sectionWasNamed);
     setWorkspaceId(props.initialWorkspaceId || props.projects.find((project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || ""))?.id || null);
   }));
 
