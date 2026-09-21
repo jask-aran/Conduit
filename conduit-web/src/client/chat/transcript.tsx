@@ -791,7 +791,30 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     });
     if (composerStack) composerResizeObserver.observe(composerStack);
     const visualViewport = window.visualViewport;
+    /*
+     * The keyboard takes height from the bottom, so the transcript gives it
+     * back from the top.
+     *
+     * The shell already shrinks to the visual viewport, which moves the
+     * composer up but leaves the thread's scroll position where it was --
+     * so the lines somebody was reading went behind the keyboard and the
+     * window onto the transcript slid backwards through the conversation.
+     * Shifting the scroll by exactly what the viewport lost keeps the same
+     * text against the composer, which is what "the keyboard pushed it up"
+     * means. A thread that is following its tail needs none of this: it is
+     * already pinned to the bottom, wherever the bottom now is.
+     */
+    let lastViewportHeight = visualViewport?.height ?? 0;
+    const holdAgainstKeyboard = () => {
+      const height = visualViewport?.height ?? 0;
+      const lost = lastViewportHeight - height;
+      lastViewportHeight = height;
+      if (!Number.isFinite(lost) || Math.abs(lost) < 1) return;
+      if (following()) return;
+      setViewportScrollTop(Math.max(0, Math.min(viewportMaxScrollTop(), viewport.scrollTop + lost)), false);
+    };
     window.addEventListener("resize", scheduleLatestButtonAnchor);
+    visualViewport?.addEventListener("resize", holdAgainstKeyboard);
     visualViewport?.addEventListener("resize", scheduleLatestButtonAnchor);
     scheduleLatestButtonAnchor();
     panelMotion = mountTranscriptPanelMotion(
@@ -910,6 +933,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface);
       composerResizeObserver.disconnect();
       window.removeEventListener("resize", scheduleLatestButtonAnchor);
+      visualViewport?.removeEventListener("resize", holdAgainstKeyboard);
       visualViewport?.removeEventListener("resize", scheduleLatestButtonAnchor);
       if (latestButtonAnchorFrame != null) cancelAnimationFrame(latestButtonAnchorFrame);
       latestButton?.style.removeProperty("--message-scroller-button-bottom");
