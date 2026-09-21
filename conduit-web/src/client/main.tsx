@@ -108,7 +108,24 @@ applyTranscriptAppearance({
   codeWidth: selectedCodeBlockWidth(),
   userMessageCollapse: selectedUserMessageCollapse(),
 });
-if (import.meta.env.PROD && !nativeApp) registerSW({ immediate: true, onRegisteredSW: (_url, registration) => rememberPwaRegistration(registration) });
+if (import.meta.env.PROD && !nativeApp) {
+  // The new worker skips waiting and claims this page, but everything already
+  // on screen came from the worker it replaced, so without this a new build is
+  // fetched, installed, and then not shown until someone reloads past the
+  // cache. Taking control is the moment it can be.
+  //
+  // Only when there was a worker to replace: the first visit to an origin has
+  // no controller until registration finishes, and reloading there would be
+  // reloading onto what is already running.
+  const replacing = Boolean(navigator.serviceWorker?.controller);
+  let reloading = false;
+  navigator.serviceWorker?.addEventListener("controllerchange", () => {
+    if (!replacing || reloading) return;
+    reloading = true;
+    location.reload();
+  });
+  registerSW({ immediate: true, onRegisteredSW: (_url, registration) => rememberPwaRegistration(registration) });
+}
 
 type SettingsSection = "ui" | "shortcuts" | "models" | "prompts" | "runtime" | "workspaces" | "voice" | "search";
 type WorkspaceView = "files" | "diff" | "chat" | "terminal";
