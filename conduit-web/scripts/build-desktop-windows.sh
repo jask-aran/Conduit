@@ -85,21 +85,13 @@ npx tauri signer sign \
   --app-version "$version" \
   "$archive" > /dev/null
 
-# The manifest an installed client reads before it downloads anything. It is
-# written beside the artifacts so a release is these four files and nothing
-# assembled by hand; the URL points at the tag rather than `latest` so a
-# manifest always names the build it was signed against.
+# The manifest, written by the same script the release workflow uses. The URL
+# points at the tag rather than at `latest` so a manifest always names the build
+# it was signed against.
 tag=${CONDUIT_RELEASE_TAG:-"v$version"}
 base=${CONDUIT_UPDATER_BASE_URL:-"https://github.com/jask-aran/Conduit/releases/download/$tag"}
-node -e '
-  const [version, url, signature, out] = process.argv.slice(1);
-  const manifest = {
-    version,
-    pub_date: new Date().toISOString(),
-    platforms: { "windows-x86_64": { signature, url } },
-  };
-  require("fs").writeFileSync(out, JSON.stringify(manifest, null, 2) + "\n");
-' "$version" "$base/$(basename "$archive")" "$(cat "$archive.sig")" "$bundle/latest.json"
+node scripts/desktop-update-manifest.mjs \
+  "$version" "$base/$(basename "$archive")" "$archive.sig" "$bundle/latest.json" > /dev/null
 
 echo
 echo "Bundle ($bundle):"
