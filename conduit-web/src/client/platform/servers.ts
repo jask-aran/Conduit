@@ -32,22 +32,42 @@ export const ACTIVE_SERVER_STORAGE_KEY = "conduit.servers.active";
 /** What a client that could only hold one server wrote. Read, never written. */
 export const LEGACY_ORIGIN_STORAGE_KEY = "conduit.native.server-origin";
 
-// A plain-HTTP server on the loopback interface never leaves the machine, so
-// there is no network to protect it from; every other address must be HTTPS.
-// This is the same line browsers draw when they decide what counts as a secure
-// context, and it is what lets a desktop client on the same machine as the
-// server address it as 127.0.0.1 instead of needing a certificate for it.
-const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
-const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|$)/;
+// Where plain HTTP is allowed, and why it is not simply "never".
+//
+// Loopback never leaves the machine, so there is no network to protect it
+// from -- the same line browsers draw for a secure context, and what lets a
+// desktop client address the server beside it as 127.0.0.1 rather than
+// needing a certificate for it.
+//
+// A private range is a weaker claim and worth saying out loud: the traffic
+// does leave the machine, onto a network the person is standing on. Demanding
+// HTTPS there does not protect that hop, it just means a server on the LAN
+// cannot be reached at all without a certificate for an address that no
+// public authority will issue one for. So these are allowed, and the address
+// bar says http, which is the honest thing for it to say.
+const LOOPBACK_HOST = /^(localhost|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|\[::1\])$/;
+// 10/8, 172.16/12, 192.168/16 and the 169.254/16 a machine gives itself when
+// nothing handed it an address.
+const PRIVATE_HOST = /^(10(\.\d{1,3}){3}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2}|192\.168(\.\d{1,3}){2}|169\.254(\.\d{1,3}){2})$/;
 
-export const isLoopbackOrigin = (origin: string) => LOOPBACK_ORIGIN.test(origin);
+const hostOf = (origin: string) => { try { return new URL(origin).hostname; } catch { return ""; } };
+
+export const isLoopbackOrigin = (origin: string) => LOOPBACK_HOST.test(hostOf(origin));
+/** On this machine, or on the network it is sitting on. */
+export const isDirectOrigin = (origin: string) => {
+  const host = hostOf(origin);
+  return LOOPBACK_HOST.test(host) || PRIVATE_HOST.test(host);
+};
 
 /**
- * Loopback stays put unless it is told otherwise: "127.0.0.1" names whatever
- * machine reads it, so it is the one address that is not the same server
- * everywhere. Anything else is worth having on every client that connects.
+ * A local address stays put unless it is told otherwise. "127.0.0.1" names
+ * whatever machine reads it, and "192.168.0.128" names whatever machine holds
+ * that address on whatever network the reader happens to be on -- neither is
+ * the same server everywhere, and a phone carrying one onto mobile data would
+ * be pointed at nothing. Anything reachable by name is worth having on every
+ * client that connects.
  */
-export const sharedByDefault = (origin: string) => !isLoopbackOrigin(origin);
+export const sharedByDefault = (origin: string) => !isDirectOrigin(origin);
 
 export function normalizeServerOrigin(value: unknown): string {
   const input = String(value || "").trim();
@@ -55,8 +75,8 @@ export function normalizeServerOrigin(value: unknown): string {
   let url: URL;
   try { url = new URL(candidate); }
   catch { throw new Error("Enter a complete HTTPS server address."); }
-  if (url.protocol !== "https:" && !(url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname))) {
-    throw new Error("The server address must use HTTPS unless it is on this machine.");
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && isDirectOrigin(url.origin))) {
+    throw new Error("The server address must use HTTPS unless it is on this machine or this network.");
   }
   if (url.username || url.password) throw new Error("The server address cannot contain credentials.");
   if (url.pathname !== "/" || url.search || url.hash) throw new Error("Enter the server origin without a path, query, or fragment.");

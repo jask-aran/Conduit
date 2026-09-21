@@ -74,11 +74,33 @@ identifier a browser could carry across origins to narrow it. So "keep these
 two browsers in step" cannot be answered without also reaching every other
 client, which is why each address says for itself whether it travels.
 
-`shared` is per entry. Loopback starts **off**, because `127.0.0.1` names a
-different machine on every device that reads it — the one address that is not
-the same server everywhere. Everything else starts **on**. Either can be
-flipped in Settings → System → Servers: two browsers on the machine the server
-runs on can agree about a loopback address by saying so.
+`shared` is per entry. A **local** address starts **off**: `127.0.0.1` names a
+different machine on every device that reads it, and `192.168.0.128` names
+whatever machine holds that address on whatever network the reader is on, so a
+phone carrying either onto mobile data is pointed at nothing. Everything
+reachable by name starts **on**. Either can be flipped in Settings → System →
+Servers: two browsers on the machine the server runs on can agree about a
+loopback address by saying so.
+
+## What an address may look like
+
+HTTPS, unless the address cannot leave the machine (`localhost`, `127.0.0.0/8`,
+`[::1]`) or cannot leave the network in front of it (`10/8`, `172.16/12`,
+`192.168/16`, and the `169.254/16` a machine gives itself when nothing hands it
+an address). Those are served over plain HTTP.
+
+Loopback is the line a browser already draws for a secure context. A private
+range is a weaker claim and worth saying out loud: that traffic does leave the
+machine, onto a network the person is standing on. Requiring HTTPS there would
+not protect the hop — it would mean a server on the LAN cannot be reached at
+all, because no public authority issues a certificate for an address like that.
+
+This costs the installed clients, which is the trade. A page at
+`https://localhost` (Android) or `http://tauri.localhost` (Windows) calling a
+plain-HTTP address is active mixed content, and Android additionally refuses
+cleartext by default. **A LAN address is a browser address**: reach the server
+directly at `http://<lan-ip>:<port>` and it is an ordinary web page, with no
+service worker, because that is not a secure context either.
 
 An address adopted from the directory is recorded as shared, since that is how
 it arrived. Recording it otherwise would quietly drop it the next time that

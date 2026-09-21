@@ -230,7 +230,7 @@ function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) =
     <Show when={!props.adding}><span class="native-server-brand">Conduit</span><h1>Connect to your server</h1></Show>
     <p>{recordOnly ? "This browser can only be signed in to the server that served it, so Conduit remembers the address and opens it in place."
       : verifiedOrigin() ? "Server confirmed. Enter your Conduit password."
-        : "Enter the HTTPS address for your Conduit server."}</p>
+        : "Enter the address of your Conduit server. HTTPS, unless it is on this machine or this network."}</p>
     <Show when={localServer() && !verifiedOrigin()}>
       <Button type="button" variant="outline" onClick={useLocalServer}>Use the server on this computer</Button>
     </Show>

@@ -7,6 +7,7 @@ import {
   migrateLegacyServer,
   normalizeServerOrigin,
   readServers,
+  sharedByDefault,
   writeServers,
 } from "../src/client/platform/servers.ts";
 import { buildHttpUrl, buildWebSocketUrl } from "../src/client/api/transport.js";
@@ -35,6 +36,17 @@ test("native server origins accept only normalized HTTPS origins", () => {
   // carries, so it does not have to present a certificate to be addressed.
   assert.equal(normalizeServerOrigin("http://127.0.0.1:4310"), "http://127.0.0.1:4310");
   assert.equal(normalizeServerOrigin("http://localhost:4310/"), "http://localhost:4310");
+  // Nor does one on the network in front of the person: no public authority
+  // will certify a private address, so refusing HTTP there refuses the server.
+  for (const origin of ["http://192.168.0.128:4310", "http://10.1.2.3:4310", "http://172.16.0.9:4310", "http://169.254.1.1:4310"]) {
+    assert.equal(normalizeServerOrigin(origin), origin);
+    assert.equal(sharedByDefault(origin), false, `${origin} names a different machine on a different network`);
+  }
+  // Just outside the private ranges, and so still only reachable over HTTPS.
+  for (const origin of ["http://172.32.0.1:4310", "http://11.0.0.1:4310", "http://192.169.0.1:4310"]) {
+    assert.throws(() => normalizeServerOrigin(origin), new RegExp("HTTPS"), origin);
+  }
+  assert.equal(sharedByDefault("https://conduit.tailnet.ts.net"), true);
   assert.equal(buildWebSocketUrl("/v0/dictation/stream", "http://127.0.0.1:4310"),
     "ws://127.0.0.1:4310/v0/dictation/stream");
 });
