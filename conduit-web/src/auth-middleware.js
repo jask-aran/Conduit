@@ -20,6 +20,14 @@ const UNAUTHENTICATED_PWA_PATTERNS = [
   /^\/(?:sw|service-worker)\.js$/,
   /^\/workbox-[^/]+\.js$/,
   /^\/registerSW\.js$/,
+  // The compiled client itself. It has to be, because the service worker that
+  // is already served without a session lists every one of these paths in its
+  // precache manifest -- so withholding the files named there buys nothing and
+  // costs the shell: a page served from cache whose stylesheet is answered
+  // with 401 renders as unstyled HTML rather than as a sign-in screen. The
+  // bundles are content-hashed build output and carry nobody's data; what
+  // needs a session is the API they call, which still has one.
+  /^\/assets\/[^/]+$/,
 ];
 
 function isLoopback(host) {
