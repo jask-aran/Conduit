@@ -90,13 +90,32 @@ export function bindVisualViewportShell(): () => void {
     }
     const vv = window.visualViewport;
     const viewport = vv?.height ?? window.innerHeight;
-    noteResting(viewport);
+    /*
+     * Which measurement is the truth, when the shell reports the keyboard
+     * frame by frame.
+     *
+     * Nothing resizes the window then -- the keyboard overlays it -- so
+     * `innerHeight` stays the whole screen and the keyboard's height is the
+     * only thing to take off it. The visual viewport is not usable at all
+     * here: Chromium shrinks it by the keyboard's full height on the first
+     * frame, so a shell sized from it lands at the end of the travel while
+     * the keyboard is still a quarter of the way up, and holds there. That is
+     * the composer running ahead with a band of empty screen beneath it, and
+     * on the way back it is the viewport springing to full height while the
+     * keyboard is still descending -- a move upward before the move down.
+     *
+     * So where the keyboard's position is known, it is the only input.
+     * Everywhere else the viewport is still all there is.
+     */
+    const owned = source === "insets";
+    const measured = owned ? window.innerHeight : viewport;
+    noteResting(measured);
     // A shrink of a few pixels is a toolbar, not a keyboard.
-    const viewportShrank = viewport < restingHeight - 48;
+    const viewportShrank = !owned && viewport < restingHeight - 48;
     // One of the two, never both: the viewport if something already took the
     // keyboard out of it, otherwise the resting height less what the keyboard
     // is covering.
-    const height = Math.max(0, shellKeyboard && !viewportShrank ? restingHeight - shellKeyboard : viewport);
+    const height = Math.max(0, shellKeyboard && !viewportShrank ? restingHeight - shellKeyboard : measured);
     const offsetTop = vv?.offsetTop ?? 0;
     /*
      * Shortening the window is only half of getting out of the keyboard's way.
@@ -130,6 +149,7 @@ export function bindVisualViewportShell(): () => void {
       source,
       inner: window.innerHeight,
       visual: Math.round(viewport),
+      base: Math.round(measured),
       offset: Math.round(offsetTop),
       resting: Math.round(restingHeight),
       keyboard: Math.round(shellKeyboard),
