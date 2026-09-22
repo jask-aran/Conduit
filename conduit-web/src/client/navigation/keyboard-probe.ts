@@ -8,8 +8,11 @@
  * survived one look at the actual numbers, so this exists to show them.
  *
  * Off by default and on by name: it is a diagnostic, not a feature, and it
- * covers the corner of the screen it is drawn in. Delete it once the keyboard
- * is settled.
+ * covers the corner of the screen it is drawn in. It stays, though. A phone is
+ * the only place several of these numbers are ever true -- the emulator's
+ * WebView honours `interactive-widget=overlays-content` where a current one
+ * does not, and no recording of a screen can say what the page believed at the
+ * time -- so this is the only instrument that works where the bugs are.
  */
 const STORAGE_KEY = "conduit:keyboard-probe";
 
