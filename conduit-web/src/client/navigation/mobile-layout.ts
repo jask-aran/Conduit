@@ -376,10 +376,17 @@ export function bindVisualViewportShell(): () => void {
         if (!info.animating) logKeyboardEvent("ime-end", Math.round(info.height));
         sync();
       });
+      const restObserver = new MutationObserver(() => {
+        const held = restBottom;
+        readRestBottom();
+        if (restBottom !== held) sync();
+      });
       dropKeyboard = () => {
         void animation.remove();
         void geometry.remove();
         stopDrawing();
+        restObserver.disconnect();
+        shellKeyboard = 0;
         // Back to measuring, or the shell goes on subtracting a keyboard
         // nothing is reporting any more from a height nothing is updating.
         source = "viewport";
@@ -395,11 +402,7 @@ export function bindVisualViewportShell(): () => void {
        * somebody typed. Watching the attribute the shell writes catches both.
        */
       readRestBottom();
-      new MutationObserver(() => {
-        const held = restBottom;
-        readRestBottom();
-        if (restBottom !== held) sync();
-      }).observe(root, { attributes: true, attributeFilter: ["style"] });
+      restObserver.observe(root, { attributes: true, attributeFilter: ["style"] });
       // Only now is the keyboard's position actually being reported. Claiming
       // it up front meant a shell whose plugin failed to register went on
       // believing `innerHeight` was the window -- the full screen, keyboard

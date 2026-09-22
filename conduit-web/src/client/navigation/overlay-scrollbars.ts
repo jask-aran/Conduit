@@ -219,6 +219,7 @@ export function bindOverlayScrollbars() {
     touching = true;
     bar.dataset.touch = "true";
     target = { element, axis };
+    clearTimeout(lingerTimer);
     lingerTimer = window.setTimeout(hide, TOUCH_LINGER);
     reveal();
   }

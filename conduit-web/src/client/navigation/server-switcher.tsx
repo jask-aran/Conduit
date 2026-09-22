@@ -135,7 +135,7 @@ export function ServerSwitcher(props: {
       // offers this there, so reaching it means something went wrong; saying
       // nothing is better than ejecting somebody out of the app.
       if (isStandaloneBrowser()) return;
-      if (origin !== location.origin) location.assign(origin);
+      if (origin !== AUTOMATIC && origin !== location.origin) location.assign(origin);
       return;
     }
     if (origin === AUTOMATIC) return clearActivePath({ manual: false });
