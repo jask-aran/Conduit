@@ -243,6 +243,19 @@ export function bindVisualViewportShell(): () => void {
      * the drawing is the only account of it that is listened to.
      */
     let travelling = false;
+    /*
+     * The shape of the last travel the platform described in full.
+     *
+     * A hide still slides down the screen when `getDurationMillis` answers
+     * -1, so the travel is drawn with the shape of the one before it rather
+     * than handed back to the per-frame events, which arrive about six times
+     * across a travel and read as a stutter. A show and the hide that follows
+     * it are the same curve run in opposite directions, so the one just seen
+     * is the closest description available of the one that will not describe
+     * itself.
+     */
+    let lastDurationMs = 250;
+    let lastCurve: number[] = [0, 1];
     const stopDrawing = () => {
       if (drawing) cancelAnimationFrame(drawing);
       drawing = 0;
@@ -267,14 +280,29 @@ export function bindVisualViewportShell(): () => void {
         ): Promise<{ remove(): void }>;
       }>("ConduitKeyboard");
       const animation = await plugin.addListener("keyboardAnimation", (info) => {
-        if (!info.durationMs || !Array.isArray(info.curve) || info.curve.length < 2) return;
-        logKeyboardEvent("ime-start", `${Math.round(info.from)}->${Math.round(info.to)} ${info.durationMs}ms`);
+        /*
+         * `getDurationMillis` answers -1 when the platform will not say how
+         * long the travel takes -- Gboard does this when the back button
+         * dismisses it, where the emulator's keyboard gives a real duration --
+         * and dividing by that runs the clock backwards, pins the curve at its
+         * first point and leaves the shell holding the keyboard's old position
+         * while the keyboard leaves without it.
+         */
+        const described = info.durationMs > 0 && Array.isArray(info.curve) && info.curve.length >= 2;
+        if (described) {
+          lastDurationMs = info.durationMs;
+          lastCurve = info.curve;
+        }
+        const durationMs = described ? info.durationMs : lastDurationMs;
+        const curve = described ? info.curve : lastCurve;
+        logKeyboardEvent(described ? "ime-start" : "ime-nodur",
+          `${Math.round(info.from)}->${Math.round(info.to)} ${Math.round(durationMs)}ms`);
         stopDrawing();
         travelling = true;
         const began = performance.now();
         const draw = () => {
-          const t = (performance.now() - began) / info.durationMs;
-          shellKeyboard = info.from + (info.to - info.from) * along(info.curve, t);
+          const t = (performance.now() - began) / durationMs;
+          shellKeyboard = info.from + (info.to - info.from) * along(curve, t);
           noteKeyboardFrame(t >= 1);
           sync();
           drawing = t >= 1 ? 0 : requestAnimationFrame(draw);
