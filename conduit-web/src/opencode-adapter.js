@@ -202,8 +202,8 @@ export class OpenCodeAdapter extends EventEmitter {
       this.poll(record);
       return { generationId, attachmentIdentity: { messageId: clientUserMessageId } };
     } catch (cause) {
-      record.active = false;
-      record.activity = "failed";
+      // "started" already went out, so the generation has to be settled too.
+      this.settle(record, "failed");
       throw cause;
     }
   }

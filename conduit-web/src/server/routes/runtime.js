@@ -1,6 +1,9 @@
 import { normalizeKnownServers, validKnownServers, validSidebarPins, validTerminalShortcuts, validUiPreferencePatch } from "../../preferences-store.js";
 import { manifestForImplementation } from "../../harnesses/index.js";
 
+const PROOF_WINDOW_MS = 10_000;
+const PROOF_LIMIT = 20;
+
 const drainsOnRestart = (process) => manifestForImplementation(process.backend?.implementation)?.restartDrain !== false;
 
 export function registerRuntimeRoutes(app, {
@@ -44,7 +47,18 @@ export function registerRuntimeRoutes(app, {
    * question, and a client that holds no public half for this server learns
    * nothing it can act on.
    */
+  // Cheap to answer but free to ask, so each address gets a small budget.
+  // Real clients probe a handful of paths now and then; nothing needs more.
+  const proofWindows = new Map();
   app.post("/v0/server/prove", (request, response) => {
+    const now = Date.now();
+    let window = proofWindows.get(request.ip);
+    if (!window || now - window.start >= PROOF_WINDOW_MS) {
+      if (proofWindows.size >= 1024) proofWindows.clear();
+      window = { start: now, count: 0 };
+      proofWindows.set(request.ip, window);
+    }
+    if (++window.count > PROOF_LIMIT) return response.status(429).json({ error: "rate_limited" });
     const proof = serverIdentity.prove(request.body?.nonce);
     if (!proof) return response.status(400).json({ error: "invalid_nonce" });
     response.json(proof);

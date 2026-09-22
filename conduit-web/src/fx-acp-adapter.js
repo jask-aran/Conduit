@@ -48,6 +48,9 @@ class AcpClient {
     this.child.stdout.on("data", (chunk) => this.read(chunk));
     this.child.stderr.on("data", (chunk) => { this.stderr = `${this.stderr}${chunk}`.slice(-8_192); });
     this.child.once("error", (cause) => this.fail(cause));
+    // A write racing the child's exit fails with EPIPE on stdin; unheard, that
+    // error would take the whole server down with it.
+    this.child.stdin.on("error", (cause) => this.fail(cause));
     this.child.once("exit", (code, signal) => this.fail(failure(
       this.stderr.trim() || `fx ACP exited (${signal || code})`, "backend_unavailable")));
   }
