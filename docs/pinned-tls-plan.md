@@ -111,6 +111,34 @@ the self-signed authority:
 So the Android half is a WebView client and a set of fingerprints, not a
 native proxy. `ConduitWebViewClient` holds it.
 
+### The page cannot always do the verifying
+
+Measured on the WSL emulator (API 36, WebView 133.0.6943.137) once the pin was
+plumbed from pairing: nothing was ever pinned, because
+`crypto.subtle.importKey` refuses `Ed25519` there -- "Unrecognized name".
+Chromium only shipped Ed25519 in WebCrypto in 137.
+
+The code fails in the right direction: `canVerify()` returns false,
+`verifyLeaf` returns null, no fingerprint is stored, and the shell goes on
+refusing every certificate. But on such a WebView the feature simply does not
+exist, and the same gap has always applied to `proveServer` -- route proving
+has been silently `unverifiable` there since it was written.
+
+The bridge either side of it does work. Pushing a fingerprint straight to
+`ConduitTls.pin` on that same emulator and opening
+`wss://127.0.0.1:4319/...` gives `pinned=true` and an accepted handshake, so
+only the verification step is missing.
+
+Two ways out, and the second is probably right:
+
+- Require a WebView of 137 or newer for pinning, and let older ones keep
+  plain HTTP. Nothing to build; the feature is absent where the platform is.
+- **Verify in the shell instead of the page.** Android has
+  `Signature.getInstance("Ed25519")` from API 33, and the shell is already
+  where the answer is used. That takes WebCrypto out of the trust path for
+  both pinning and `proveServer`, on every WebView. It is more code, and it
+  is security-critical code, which is the argument against doing it casually.
+
 Still unmeasured: whether WebView2's event covers WebSockets. Microsoft's
 documentation describes it as raised when a server certificate cannot be
 verified "while loading a web page" and does not say either way. Measuring it
