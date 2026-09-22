@@ -148,6 +148,22 @@ before concluding anything about behaviour that Chromium has changed --
 `interactive-widget=overlays-content` is honoured on 133 and not on the
 phone's 153, which is exactly the kind of difference that will not reproduce.
 
+#### Reading more than the on-screen probe
+
+`scripts/android-keyboard-trace.mjs` records every frame of a keyboard
+travel over CDP -- height, `scrollTop`, `clientHeight`, `scrollHeight` and
+the distance from the bottom -- with no limit on how many. The probe drawn
+on the phone is a nine-row ring because it has to fit on a phone; nothing
+run from here has that constraint, and two keyboard bugs survived several
+rounds because they were looked for through the phone-sized window anyway.
+
+It needs a chat with enough history to scroll, which is the harness's real
+gap: a throwaway server with no model credentials cannot be seeded, because
+a send fails before anything is persisted, and a transcript that does not
+scroll cannot tell a thread following its tail apart from one scrolled away
+from it. Point the shell at a server that can answer before trusting
+anything this says about scrolling.
+
 #### What the emulator cannot tell you
 
 It renders through SwiftShader at around 30fps. Anything about smoothness,
