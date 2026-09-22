@@ -203,30 +203,57 @@ export function bindVisualViewportShell(): () => void {
   }
 
   /*
-   * The Android shell's answer, and the only one that is a position rather
-   * than a destination.
+   * The Android shell's answer, and the only one that is a curve rather than
+   * a stream of positions.
    *
    * `@capacitor/keyboard` reported the keyboard once, after it had finished
    * moving, so a shell sized from it snapped to where the keyboard was about
-   * to be and then waited for it -- the composer arriving early and the
-   * keyboard sliding up to meet it. Worse, it took the frames in between away
+   * to be and then waited for it. Worse, it took the frames in between away
    * from everyone else: its own animation callback sits on the root view with
    * `DISPATCH_MODE_STOP`, so nothing below could follow the keyboard even
-   * knowing how. `ConduitKeyboardPlugin` replaces it and reports every frame,
-   * so the height that draws the composer is where the keyboard is now.
+   * knowing how. It is gone, and `ConduitKeyboardPlugin` replaces it.
    *
-   * A frame is a layout of the whole shell, so they are coalesced onto the
-   * frame that will draw them: several arriving inside one are the same
-   * answer asked repeatedly, and only the last of them is true.
+   * What that plugin sends is the whole travel at its start -- where the
+   * keyboard is going, how long it will take, and the system's own
+   * interpolator sampled into a table -- rather than a height per frame. A
+   * height per frame can only ever be as smooth as the bridge carrying it,
+   * and the bridge delivered six of them across a 285ms animation. Drawn from
+   * the description instead, the shell produces a height on every frame the
+   * display renders, on exactly the curve the keyboard is using, and no frame
+   * waits on a message to arrive.
+   *
+   * The per-frame events still arrive and are still listened to, because the
+   * animation is the system's to change or cancel: they correct the drawing
+   * if the two ever disagree, and `ime-end` is what settles it.
    */
   let dropKeyboard: (() => void) | null = null;
   let disposed = false;
   if (installedClientKind === "android") {
     source = "insets";
-    let frame = 0;
-    const settle = () => {
-      frame = 0;
-      sync();
+    let drawing = 0;
+    /*
+     * Whether a travel has been described and not yet reported finished.
+     *
+     * Separate from whether a frame is scheduled, because the two stop at
+     * different times: the drawing reaches the end of its duration while
+     * per-frame events are still arriving behind it, late, carrying positions
+     * the keyboard has already left. Accepted then, they drag the shell back
+     * down the curve it has just finished climbing -- which is a composer that
+     * settles, jumps, and settles again. Until the travel is reported over,
+     * the drawing is the only account of it that is listened to.
+     */
+    let travelling = false;
+    const stopDrawing = () => {
+      if (drawing) cancelAnimationFrame(drawing);
+      drawing = 0;
+    };
+    /** The sampled curve, read between its points. */
+    const along = (curve: number[], t: number) => {
+      const span = (curve.length - 1) * Math.min(1, Math.max(0, t));
+      const step = Math.min(curve.length - 2, Math.floor(span));
+      const here = curve[step] ?? 0;
+      const next = curve[step + 1] ?? here;
+      return here + (next - here) * (span - step);
     };
     void import("@capacitor/core").then(async ({ registerPlugin }) => {
       const plugin = registerPlugin<{
@@ -234,24 +261,44 @@ export function bindVisualViewportShell(): () => void {
           event: "keyboardGeometry",
           handler: (info: { height: number; animating: boolean }) => void,
         ): Promise<{ remove(): void }>;
+        addListener(
+          event: "keyboardAnimation",
+          handler: (info: { from: number; to: number; durationMs: number; curve: number[] }) => void,
+        ): Promise<{ remove(): void }>;
       }>("ConduitKeyboard");
+      const animation = await plugin.addListener("keyboardAnimation", (info) => {
+        if (!info.durationMs || !Array.isArray(info.curve) || info.curve.length < 2) return;
+        logKeyboardEvent("ime-start", `${Math.round(info.from)}->${Math.round(info.to)} ${info.durationMs}ms`);
+        stopDrawing();
+        travelling = true;
+        const began = performance.now();
+        const draw = () => {
+          const t = (performance.now() - began) / info.durationMs;
+          shellKeyboard = info.from + (info.to - info.from) * along(info.curve, t);
+          noteKeyboardFrame(t >= 1);
+          sync();
+          drawing = t >= 1 ? 0 : requestAnimationFrame(draw);
+        };
+        drawing = requestAnimationFrame(draw);
+      });
       const geometry = await plugin.addListener("keyboardGeometry", (info) => {
+        // The drawing is the system's curve reproduced, so while it is running
+        // it is the better account of where the keyboard is -- it has a value
+        // for every frame and these arrive a handful of times. They are the
+        // authority only once it has stopped, which is also how a cancelled
+        // animation gets put right.
+        if (travelling && info.animating) return;
+        travelling = false;
+        stopDrawing();
         shellKeyboard = info.height;
         noteKeyboardFrame(!info.animating);
-        // Only the end of a travel. Every frame of one is in the summary, and
-        // a hundred of them in the ring buffer push out the focus and scroll
-        // rows that are the only reason the ring buffer is there.
         if (!info.animating) logKeyboardEvent("ime-end", Math.round(info.height));
-        if (!info.animating) {
-          if (frame) cancelAnimationFrame(frame);
-          settle();
-          return;
-        }
-        if (!frame) frame = requestAnimationFrame(settle);
+        sync();
       });
       dropKeyboard = () => {
+        void animation.remove();
         void geometry.remove();
-        if (frame) cancelAnimationFrame(frame);
+        stopDrawing();
       };
       if (disposed) dropKeyboard();
     }).catch(() => { /* no shell to ask; visualViewport is the whole answer */ });

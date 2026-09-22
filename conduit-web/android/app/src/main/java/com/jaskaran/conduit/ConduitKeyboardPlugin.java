@@ -8,6 +8,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsAnimationCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.annotation.CapacitorPlugin;
@@ -52,7 +53,11 @@ import java.util.Locale;
 @CapacitorPlugin(name = "ConduitKeyboard")
 public class ConduitKeyboardPlugin extends Plugin {
 
+    /** Points sampled off the system's interpolator, enough to redraw it. */
+    private static final int CURVE_SAMPLES = 24;
+
     private float density = 1f;
+    private View hostView = null;
     /** The height already announced, to keep identical frames off the bridge. */
     private int lastSent = -1;
     /** Whether the keyboard is mid-travel, and so reporting its own position. */
@@ -63,6 +68,7 @@ public class ConduitKeyboardPlugin extends Plugin {
         density = getActivity().getResources().getDisplayMetrics().density;
         getActivity().getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
         final View host = (View) getBridge().getWebView().getParent();
+        hostView = host;
 
 
         ViewCompat.setOnApplyWindowInsetsListener(host, (v, insets) -> {
@@ -82,6 +88,12 @@ public class ConduitKeyboardPlugin extends Plugin {
         ViewCompat.setWindowInsetsAnimationCallback(
             host,
             new WindowInsetsAnimationCompat.Callback(WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                @Override
+                public WindowInsetsAnimationCompat.BoundsCompat onStart(WindowInsetsAnimationCompat animation, WindowInsetsAnimationCompat.BoundsCompat bounds) {
+                    if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) != 0) announce(animation, bounds);
+                    return bounds;
+                }
+
                 @Override
                 public void onPrepare(WindowInsetsAnimationCompat animation) {
                     if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) != 0) animating = true;
@@ -104,6 +116,54 @@ public class ConduitKeyboardPlugin extends Plugin {
         );
 
         host.requestApplyInsets();
+    }
+
+    /**
+     * The whole travel, once, instead of a sample of it per frame.
+     *
+     * A keyboard animation is an analytic curve: two bounds, a duration and an
+     * interpolator, all of them known before the first frame is drawn. Sending
+     * a position per frame samples that curve at whatever rate the bridge
+     * happens to run -- six callbacks across 285ms here -- and the page can
+     * only draw the samples it was given. Sent as a description, the page
+     * draws it on every frame it renders, at the display's rate rather than
+     * the bridge's, and no frame is ever late because none of them is waiting
+     * for a message.
+     *
+     * The curve is the system's own, sampled rather than guessed, because
+     * guessing which `PathInterpolator` Android used this release is how a
+     * composer ends up almost keeping up with a keyboard.
+     */
+    private void announce(WindowInsetsAnimationCompat animation, WindowInsetsAnimationCompat.BoundsCompat bounds) {
+        /*
+         * The bounds are a range, not a direction: `getLowerBound` is the
+         * smaller inset and `getUpperBound` the larger, whichever way the
+         * keyboard is going. Which end is the destination is decided by
+         * whether the keyboard is on its way in, and the insets have already
+         * been applied for the state being animated to by the time this runs.
+         */
+        WindowInsetsCompat now = ViewCompat.getRootWindowInsets(hostView);
+        boolean arriving = now != null && now.isVisible(WindowInsetsCompat.Type.ime());
+        int low = Math.round(bounds.getLowerBound().bottom / density);
+        int high = Math.round(bounds.getUpperBound().bottom / density);
+        JSObject payload = new JSObject();
+        payload.put("from", arriving ? low : high);
+        payload.put("to", arriving ? high : low);
+        payload.put("durationMs", animation.getDurationMillis());
+        JSArray curve = new JSArray();
+        android.view.animation.Interpolator in = animation.getInterpolator();
+        try {
+            for (int k = 0; k <= CURVE_SAMPLES; k++) {
+                float t = (float) k / CURVE_SAMPLES;
+                curve.put((double) Math.round((in == null ? t : in.getInterpolation(t)) * 1000) / 1000);
+            }
+        } catch (org.json.JSONException ignored) {
+            // A curve that cannot be described is not worth describing badly;
+            // the per-frame events still settle the keyboard without it.
+            return;
+        }
+        payload.put("curve", curve);
+        notifyListeners("keyboardAnimation", payload);
     }
 
     private int imeHeight(WindowInsetsCompat insets) {
