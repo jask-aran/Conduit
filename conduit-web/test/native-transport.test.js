@@ -13,6 +13,7 @@ import {
   learnIdentity,
   pathIsPinned,
   pathsOf,
+  pinnedFingerprints,
   scopeOf,
   servers,
   pathGeneration,
@@ -237,4 +238,50 @@ test("automatic selection looks nearer than the route in use, and a chosen route
   assert.equal(pathIsPinned(), true, "the client moving the route does not un-choose it");
   clearActivePath({ manual: false });
   assert.equal(pathIsPinned(), false);
+});
+
+test("a certificate is pinned only when this server's own key attested it", async () => {
+  const { verifyLeaf } = await import("../src/client/platform/server-proof.ts");
+  const { attestLeaf, issueLeafCertificate, leafFingerprint } = await import("../src/server-tls.js");
+  const crypto = await import("node:crypto");
+  const identity = crypto.generateKeyPairSync("ed25519");
+  const stranger = crypto.generateKeyPairSync("ed25519");
+  const id = "b".repeat(32);
+  const publicKey = identity.publicKey.export({ format: "der", type: "spki" }).toString("base64");
+  const leaf = issueLeafCertificate({ commonName: `Conduit ${id}`, hosts: ["192.168.0.128"] });
+  const fingerprint = leafFingerprint(leaf.spki).toString("base64");
+  const claim = { port: 4319, fingerprint, attestation: attestLeaf(id, leaf.spki, identity.privateKey) };
+
+  assert.deepEqual(await verifyLeaf(id, publicKey, claim), { port: 4319, fingerprint });
+
+  // Each of these is the relay the whole arrangement exists to stop, and a
+  // fingerprint kept without this check is one the shell would then accept on
+  // every network it ever met that certificate on.
+  const strangerKey = stranger.publicKey.export({ format: "der", type: "spki" }).toString("base64");
+  assert.equal(await verifyLeaf(id, strangerKey, claim), null, "another identity cannot vouch for it");
+  assert.equal(await verifyLeaf("c".repeat(32), publicKey, claim), null, "the attestation names the server it is for");
+  assert.equal(await verifyLeaf(id, publicKey, { ...claim, fingerprint: `A${fingerprint.slice(1)}` }), null,
+    "a different certificate cannot borrow an attestation");
+  assert.equal(await verifyLeaf(id, publicKey, { ...claim, port: 0 }), null);
+  assert.equal(await verifyLeaf(id, publicKey, undefined), null);
+});
+
+test("a verified certificate is kept with its server, and a tampered one is not read back", () => {
+  const storage = memoryStorage();
+  const id = "d".repeat(32);
+  const fingerprint = "sFgA8zKSQJFABJl0G606Rt6oHMBJ0CXYmOav8GMUnbA=";
+  writeServers(storage, [
+    { origin: "https://one.example", name: "One", shared: true, id, secure: { port: 4319, fingerprint } },
+    // The store is a file another process can edit, and it cannot be
+    // re-verified without the server, so the shape is all that stands in the
+    // way of a pin nobody attested.
+    { origin: "https://two.example", name: "Two", shared: true, secure: { port: 4319, fingerprint: "not-a-hash" } },
+    { origin: "https://three.example", name: "Three", shared: true, secure: { port: 70000, fingerprint } },
+  ]);
+  const list = readServers(storage);
+
+  assert.deepEqual(list[0].secure, { port: 4319, fingerprint });
+  assert.equal(list[1].secure, undefined, "a fingerprint of the wrong shape is not a fingerprint");
+  assert.equal(list[2].secure, undefined, "nor is a port that is not one");
+  assert.deepEqual(pinnedFingerprints(list), [fingerprint]);
 });

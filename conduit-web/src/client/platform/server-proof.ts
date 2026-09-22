@@ -104,3 +104,52 @@ export async function proveServer(origin: string, id: string, publicKey: string)
     return { ok: false, reason: "mismatch" };
   }
 }
+
+/** Domain separation, matching `server-tls.js`: an attestation is only that. */
+const ATTESTATION_PREFIX = "conduit-leaf-spki-sha256.v1";
+
+/** What a server says about the certificate it answers on over TLS. */
+export interface SecureClaim {
+  port: number;
+  fingerprint: string;
+  attestation: string;
+}
+
+/** The same claim, once this client has checked it against the key it holds. */
+export interface VerifiedLeaf {
+  port: number;
+  fingerprint: string;
+}
+
+/**
+ * Check a server's word that a certificate is its own.
+ *
+ * This is the step that makes pinning mean anything. The server answers over
+ * TLS with a certificate it signed itself, which by itself proves nothing --
+ * so does an impostor's. What distinguishes them is that the identity key this
+ * client was given at pairing signed the hash of the real certificate's public
+ * key, and nothing else holds that identity key.
+ *
+ * So a fingerprint arrives here as a claim and leaves as a pin, or does not
+ * leave at all. Everything is refused rather than assumed: an unverifiable
+ * client, a malformed claim, a signature over another server's id. Saving an
+ * unchecked fingerprint would be worse than saving none, because the shell
+ * would then accept that certificate on every network it ever meets it on.
+ */
+export async function verifyLeaf(id: string, publicKey: string, claim: unknown): Promise<VerifiedLeaf | null> {
+  const secure = claim as Partial<SecureClaim> | undefined;
+  if (!id || !publicKey || !secure) return null;
+  const port = Number(secure.port);
+  const fingerprint = typeof secure.fingerprint === "string" ? secure.fingerprint : "";
+  const attestation = typeof secure.attestation === "string" ? secure.attestation : "";
+  if (!Number.isInteger(port) || port < 1 || port > 65535 || !fingerprint || !attestation) return null;
+  if (!await canVerify()) return null;
+  try {
+    const key = await crypto.subtle.importKey("spki", base64ToBytes(publicKey), { name: "Ed25519" }, false, ["verify"]);
+    const signed = new TextEncoder().encode(`${ATTESTATION_PREFIX}.${id}.${fingerprint}`);
+    const verified = await crypto.subtle.verify("Ed25519", key, base64ToBytes(attestation), signed);
+    return verified ? { port, fingerprint } : null;
+  } catch {
+    return null;
+  }
+}
