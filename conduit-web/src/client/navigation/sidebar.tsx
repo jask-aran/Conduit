@@ -113,13 +113,14 @@ function UpdateNotice(props: { state?: UpdateState; onTake?: () => void }) {
     const current = state();
     if (current.kind === "checking") return "Checking for updates…";
     if (current.kind === "current") return "Conduit is up to date";
+    if (current.kind === "updated") return "Conduit updated";
     if (current.kind === "ready") return "New version ready";
     return current.kind === "working" ? current.label : "";
   };
   return <Show when={state().kind !== "idle"}>
     <div class="sidebar-update" data-kind={state().kind} role="status">
       <Show when={state().kind === "checking" || state().kind === "working"} fallback={
-        state().kind === "current" ? <CheckIcon /> : <DownloadIcon />
+        state().kind === "ready" ? <DownloadIcon /> : <CheckIcon />
       }><Spinner class="size-3" /></Show>
       <span>{words()}</span>
       <Show when={state().kind === "ready"}>
