@@ -5,6 +5,7 @@
 //! Android client does.
 
 mod desktop_settings;
+mod discovery;
 mod global_shortcuts;
 mod secrets;
 mod tray;
@@ -71,7 +72,8 @@ pub fn run() {
             secrets::secret_remove,
             desktop_settings::desktop_settings,
             desktop_settings::set_desktop_settings,
-            global_shortcuts::set_global_shortcuts
+            global_shortcuts::set_global_shortcuts,
+            discovery::discover_servers
         ])
         .run(tauri::generate_context!())
         .expect("Conduit desktop failed to start");
