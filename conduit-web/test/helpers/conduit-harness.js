@@ -255,6 +255,10 @@ export async function startConduitHarness({ env = {} } = {}) {
       // child that took a second to start: anything else listening on 0 in that
       // window could be given the same port, and test files run side by side.
       CONDUIT_PORT: "0",
+      // Tests do not announce themselves to the network the machine is on:
+      // a dozen harness servers publishing the same instance name would be
+      // renamed past each other, and none of it is what is under test.
+      CONDUIT_ADVERTISE_ON_LAN: "false",
       CONDUIT_FILES_ROOT: path.join(root, "files"),
       CONDUIT_CATALOG_FILE: path.join(root, "conduit.json"),
       CONDUIT_SESSION_REGISTRY_FILE: path.join(root, "sessions.json"),

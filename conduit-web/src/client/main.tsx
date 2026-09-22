@@ -1,11 +1,11 @@
 /// <reference types="vite-plugin-pwa/client" />
 import { isConduitManagedProject } from "./navigation/sidebar-preferences";
 import type { ComputerLocation, ComputerPrefetchPayload } from "./api/contracts";
-import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, lazy, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, For, lazy, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { render } from "solid-js/web";
 import { androidShell, desktopShell, isInstalledClient } from "./platform/installed-client.ts";
 import {
-  ArrowLeftIcon, EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
+  ArrowLeftIcon, EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ServerIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
 } from "lucide-solid";
 import { registerSW } from "virtual:pwa-register";
 import { Toaster, toast } from "solid-sonner";
@@ -16,6 +16,8 @@ import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, 
 import { api, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./api/client";
 import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl } from "./api/transport";
 import { startPathSelection } from "./platform/path-selector";
+import { canDiscoverServers, discoverServers, type FoundServer } from "./platform/discovery";
+import { proveServer } from "./platform/server-proof";
 import { activeOrigin, addServer, forgetServer, learnIdentity, mergeServerDirectory, servers, setActiveServer, switchToServer } from "./platform/servers";
 import { publishServerDirectory } from "./platform/server-directory";
 import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
@@ -161,6 +163,8 @@ function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) =
   const [address, setAddress] = createSignal(props.adding ? "" : activeOrigin() || "");
   const [verifiedOrigin, setVerifiedOrigin] = createSignal(props.adding ? null : activeOrigin());
   const [localServer, setLocalServer] = createSignal<string | null>(null);
+  const [found, setFound] = createSignal<FoundServer[]>([]);
+  const [searching, setSearching] = createSignal(canDiscoverServers());
   const [password, setPassword] = createSignal("");
   const [error, setError] = createSignal("");
   const [submitting, setSubmitting] = createSignal(false);
@@ -220,6 +224,45 @@ function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) =
       .catch(() => { /* nothing is listening, so nothing is offered */ });
   });
 
+  /*
+   * What is on this network, asked once when the form opens.
+   *
+   * A server already held is not offered as though it were new, and that is
+   * matched on identity rather than address: the same machine found at
+   * 192.168.0.128 having been added by its tunnel name is a route this client
+   * already has, not a server it is missing.
+   */
+  onMount(() => {
+    if (!canDiscoverServers()) return;
+    void discoverServers().then((all) => {
+      const heldOrigins = new Set(servers().map((entry) => entry.origin));
+      const heldIds = new Set(servers().map((entry) => entry.id).filter(Boolean));
+      setFound(all.filter((server) => !heldOrigins.has(server.origin) && !heldIds.has(server.id)));
+    }).finally(() => setSearching(false));
+  });
+
+  /*
+   * Take a found address as far as the password, and no further.
+   *
+   * Proved first, against the key that came with it. That is a weaker claim
+   * than proving a server this client already knows -- both halves came from
+   * the same advertisement -- but it is the one that matters here: it says the
+   * thing answering at this address is the thing that published the record,
+   * rather than a record pointing at somebody else's machine. Who the server
+   * is, the person settles by signing in to it.
+   */
+  const chooseFound = async (server: FoundServer) => {
+    setError("");
+    setAddress(server.origin);
+    const proof = await proveServer(server.origin, server.id, server.publicKey);
+    if (proof.ok) return setVerifiedOrigin(server.origin);
+    if (proof.reason === "unreachable") return setError("That server did not answer. It may have gone since it was found.");
+    if (proof.reason === "mismatch") return setError("That address did not prove it is the server that advertised it.");
+    // Unverifiable: this client cannot check an Ed25519 signature at all. The
+    // address is filled in rather than accepted, so it goes through the same
+    // health check as one that was typed.
+  };
+
   const useLocalServer = () => {
     const origin = localServer();
     if (!origin) return;
@@ -234,6 +277,33 @@ function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) =
         : "Enter the address of your Conduit server. HTTPS, unless it is on this machine or this network."}</p>
     <Show when={localServer() && !verifiedOrigin()}>
       <Button type="button" variant="outline" onClick={useLocalServer}>Use the server on this computer</Button>
+    </Show>
+    {/*
+      * What is on this network, offered before the address field rather than
+      * beside it: a server found is the answer to the question the field asks,
+      * and the field is what is left when there is no answer.
+      *
+      * A browser is told plainly that this needs the app. There is no mDNS in
+      * a page and an HTTPS document cannot reach a plaintext LAN address, so
+      * the alternative is a search that spins forever over something that was
+      * never going to work.
+      */}
+    <Show when={!verifiedOrigin()}>
+      <Show when={canDiscoverServers()} fallback={<p class="native-server-hint">Finding servers on this network needs the Conduit app.</p>}>
+        <Show when={found().length} fallback={
+          <p class="native-server-hint">{searching() ? "Looking for servers on this network…" : "No servers found on this network."}</p>
+        }>
+          <ul class="native-server-found">
+            <For each={found()}>{(server) => <li>
+              <button type="button" onClick={() => void chooseFound(server)} disabled={submitting()}>
+                <ServerIcon />
+                <span>{server.name}</span>
+                <code>{server.origin.replace(/^https?:\/\//, "")}</code>
+              </button>
+            </li>}</For>
+          </ul>
+        </Show>
+      </Show>
     </Show>
     <label for="native-server-address">Server address</label>
     <input id="native-server-address" type="text" inputMode="url" autocomplete="url" autocapitalize="none" spellcheck={false}
