@@ -84,10 +84,12 @@ node ../scripts/run-windows-chrome-devtools.mjs stop-cli
 `stop-cli` leaves Chrome and its profile running. Agent Browser is not a native
 performance surface.
 
-The dev server registers a service worker with `autoUpdate`/`skipWaiting`, so a
-page opened in that profile can keep serving the previous bundle after a
-rebuild. Anything that measures a build must clear it first, or the numbers
-describe code that is not running:
+The local server serves a production build, so the page has a service worker
+and can keep serving the previous bundle after a rebuild. Since a new worker
+now waits rather than taking over (see the PWA section of
+`conduit-web/README.md`), a reload alone is not enough. Anything that measures
+a build must clear the worker first, or the numbers describe code that is not
+running:
 
 ```js
 navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister()));
@@ -106,6 +108,37 @@ Wrapper and `cli` commands:
 - Performance: `performance_start_trace`, `performance_stop_trace`, `performance_analyze_insight`, `lighthouse_audit`
 - Memory: `take_heapsnapshot`, `get_heapsnapshot_summary`, `get_heapsnapshot_details`, `compare_heapsnapshots`
 - Reference: `chrome-devtools --help` or `chrome-devtools <command> --help`
+
+## Which client build you are testing
+
+Four installed builds exist, two per platform, and each pair installs **beside**
+the other rather than over it. Testing the wrong one is the usual reason a fix
+looks like it did not land.
+
+| | Built by | Identifier | Signed with | Updates from |
+| --- | --- | --- | --- | --- |
+| **Windows, released** | CI, on a tag | `com.jaskaran.conduit.desktop` | the minisign release key | GitHub releases |
+| **Windows, dev** | `npm run desktop:build:win -- --dev` | `com.jaskaran.conduit.desktop.dev` | the same key | `http://127.0.0.1:4310/desktop-updates` |
+| **Android, released** | CI, on a tag | `com.jaskaran.conduit` | the persistent Android keystore | GitHub releases |
+| **Android, dev** | `npm run android:build` | `com.jaskaran.conduit.dev` | the local debug key | nothing |
+
+**The Windows dev client is the one that can test an update**, because its
+updater points at this machine. Build a baseline, install it, build again, and
+press Check for updates -- `start-conduit.sh` finds the build directory by
+itself and serves it at `/desktop-updates`. The full sequence is in
+`docs/desktop-client.md`.
+
+**The Android dev APK cannot test an update at all.** It is a debug-signed
+local file at `conduit-web/android/app/build/outputs/apk/debug/app-debug.apk`,
+installed by hand, with no update channel of its own. It reports version
+`0.0.0-dev`, which is below every release, so Check for updates always offers
+the latest release -- and because the identifiers differ, taking that offer
+installs the *released* app beside the dev one rather than updating it. To test
+a new dev build, build and sideload it again.
+
+Both dev builds carry whatever is in the working tree. Neither is a release
+candidate: a candidate is a CI artifact from a tag, and only CI holds the
+signing keys that let it install over a previous release.
 
 ## Deterministic harnesses
 

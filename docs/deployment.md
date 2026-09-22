@@ -19,8 +19,8 @@ unpacked at `/srv/conduit`:
 
 `CONDUIT_DATA_ROOT=/data` is the single application-state boundary. It contains
 the project and chat registries, preferences, runtime policy, password and
-sessions, Isolated Pi settings/credentials/JSONL transcripts, chat working
-files, and attachments. Clone reservations and atomic-write temporary files
+sessions, the server's own identity, Isolated Pi settings/credentials/JSONL
+transcripts, chat working files, and attachments. Clone reservations and atomic-write temporary files
 also live there; they may be transient individually, but retaining the whole
 root is the supported backup and restore contract.
 
@@ -61,6 +61,21 @@ data location, the host user is not the intended file owner, or a different
 loopback port is needed. Secrets are not environment variables: the password
 hash, browser sessions, and Isolated Pi provider credentials remain inside the
 mounted `/data` root.
+
+`data/identity.json` (mode `0600`) holds this server's stable id and its
+Ed25519 key pair, which is how a client recognises two addresses as one server
+and how it proves an address before sending a token there — see
+[`servers.md`](servers.md). Restore it with the rest of `/data`: losing it
+makes every paired client treat this as a server it has never met, which costs
+a re-pair rather than data. **Never copy it to a second deployment.** Two
+servers presenting the same identity are indistinguishable to every client, and
+each would prove the other's addresses.
+
+Conduit advertises itself on the local network over mDNS so a client on the
+same LAN can find it without being told an address. On a VPS there is no such
+network and multicast does not leave the container, so the advertisement simply
+never publishes; set `CONDUIT_ADVERTISE_ON_LAN=false` to switch it off outright
+on a host whose network is not the owner's.
 
 The Workspace dialog shows `/workspaces` for container deployments and uses
 `~` only for a native Conduit home. Users cannot widen the allowlist in the
