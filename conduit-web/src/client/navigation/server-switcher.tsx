@@ -188,13 +188,11 @@ export function ServerSwitcher(props: {
             * An installed-to-home-screen browser is shown the routes and
             * offered none of them: it is one origin, and the only way it could
             * take another is to navigate, which would put the person in a
-            * browser instead of the app they opened. Better to say that the
-            * other addresses exist than to pretend they do not, or to offer a
-            * move that ends somewhere else.
+            * browser instead of the app they opened. The rows say so by being
+            * unselectable; why they are is a fact about this client rather
+            * than about this server, so it is stated once in Settings ->
+            * Appearance -> About and not on top of the route list.
             */}
-          <Show when={isStandaloneBrowser()}>
-            <MenuLabel class="server-route-note">Installed to the home screen, so this stays on {shortOrigin(activeOrigin() || "")}. Open one of the others in a browser to use it.</MenuLabel>
-          </Show>
           <MenuRadioGroup value={pathIsPinned() ? activePath() || "" : AUTOMATIC} onChange={(origin) => void chooseRoute(origin)}>
             {/*
               * Left to itself, the client takes the nearest route that answers
