@@ -148,13 +148,19 @@ Two ways out, and the second is probably right:
   and it now reports absence as absence rather than as a bad signature -- but
   on this platform it answers "cannot", and the client falls back to
   unverifiable.
-- **Verify in JavaScript.** The remaining option, and probably the right one:
-  a small audited Ed25519 verifier in the bundle works on every WebView, the
-  desktop shell and the browser alike, and removes the platform question
-  entirely. It means a dependency in the trust path, which is the thing
-  avoided for the certificate encoder -- the difference being that there the
-  alternative was a hundred lines of DER, and here the alternative is that
-  the feature does not exist.
+- **Verify in JavaScript.** What was done. `@noble/ed25519`, verify-only,
+  loaded lazily and only where WebCrypto has no Ed25519 to offer -- a
+  platform implementation is still the better one to trust where there is a
+  choice. It is a dependency in the trust path, which was the thing avoided
+  for the certificate encoder; the difference is that there the alternative
+  was a hundred lines of DER, and here the alternative was that the feature
+  did not exist on most of the devices it was written for.
+
+  Measured on the same emulator that could not verify anything: the pin now
+  arrives from the server's attestation, through the page, to the shell, and
+  `wss://127.0.0.1:4319` reports `pinned=true` with nothing handed in at
+  launch. `proveServer` works there for the first time as well, which is the
+  part that was already shipped and quietly broken.
 
 Still unmeasured: whether WebView2's event covers WebSockets. Microsoft's
 documentation describes it as raised when a server certificate cannot be

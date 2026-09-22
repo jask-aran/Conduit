@@ -87,7 +87,8 @@ test("an unavailable harness registers nothing but a built-in one always does", 
       assert.equal(backends.adapters.has(implementation), Boolean(manifest.builtIn), implementation);
     }
   }
-  assert.deepEqual(harnessCatalog(backends).map((row) => row.available), [false, false]);
+  assert.deepEqual(harnessCatalog(backends).map((row) => row.available),
+    MANIFESTS.filter((manifest) => !manifest.builtIn).map(() => false));
   assert.equal(agentProfiles([]).find((profile) => profile.id === "codex").disabled, false,
     "agentProfiles without an availability set treats every profile as usable");
 });

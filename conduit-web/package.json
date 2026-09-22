@@ -66,6 +66,7 @@
     "@kobalte/core": "0.13.12",
     "@lezer/highlight": "^1.2.3",
     "@lezer/markdown": "^1.7.2",
+    "@noble/ed25519": "^3.2.0",
     "@prosemark/core": "^0.0.9",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-process": "^2.3.1",

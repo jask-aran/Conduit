@@ -285,3 +285,54 @@ test("a verified certificate is kept with its server, and a tampered one is not 
   assert.equal(list[2].secure, undefined, "nor is a port that is not one");
   assert.deepEqual(pinnedFingerprints(list), [fingerprint]);
 });
+
+test("a signature is checked without asking the platform for the curve", async () => {
+  const { verifyEd25519 } = await import("../src/client/platform/signatures.ts");
+  const crypto = await import("node:crypto");
+  const { privateKey, publicKey } = crypto.generateKeyPairSync("ed25519");
+  const spki = publicKey.export({ format: "der", type: "spki" }).toString("base64");
+  const message = "5abbb638e71e73e663ec3e1e4f902997.a-nonce";
+  const signature = crypto.sign(null, Buffer.from(message, "utf8"), privateKey).toString("base64");
+
+  assert.equal(await verifyEd25519(spki, message, signature), true);
+  assert.equal(await verifyEd25519(spki, `${message}x`, signature), false, "a signature is over one message");
+  assert.equal(await verifyEd25519(spki, message, crypto.randomBytes(64).toString("base64")), false);
+  // A key this client cannot read is not one it has been shown anything by.
+  assert.equal(await verifyEd25519("not base64 at all!!", message, signature), false);
+  assert.equal(await verifyEd25519(Buffer.from("short").toString("base64"), message, signature), false);
+  assert.equal(await verifyEd25519("", message, signature), false);
+});
+
+test("a webview with no Ed25519 still checks the signature", async () => {
+  /*
+   * The case this dependency exists for, and the one Node would otherwise
+   * never take: its WebCrypto knows the curve, so the path above tests the
+   * platform rather than the fallback. Hiding the algorithm is the only way
+   * to reach the code every WebView below Chromium 137 will be running.
+   */
+  const node = await import("node:crypto");
+  const platform = globalThis.crypto.subtle.importKey.bind(globalThis.crypto.subtle);
+  globalThis.crypto.subtle.importKey = async (...args) => {
+    if (args[2]?.name === "Ed25519") throw new Error("Unrecognized name");
+    return platform(...args);
+  };
+  try {
+    // A fresh instance, because whether the page can verify is asked once.
+    const { verifyEd25519 } = await import("../src/client/platform/signatures.ts?no-ed25519");
+    const keys = node.generateKeyPairSync("ed25519");
+    const spki = keys.publicKey.export({ format: "der", type: "spki" }).toString("base64");
+    const message = "conduit-leaf-spki-sha256.v1.ffff.AAAA";
+    const signature = node.sign(null, Buffer.from(message, "utf8"), keys.privateKey).toString("base64");
+
+    assert.equal(await verifyEd25519(spki, message, signature), true);
+    assert.equal(await verifyEd25519(spki, `${message}x`, signature), false);
+    const stranger = node.generateKeyPairSync("ed25519").publicKey.export({ format: "der", type: "spki" }).toString("base64");
+    assert.equal(await verifyEd25519(stranger, message, signature), false);
+    // An SPKI header that is not Ed25519's describes some other key, and
+    // taking its last 32 bytes would turn it into one.
+    const p256 = node.generateKeyPairSync("ec", { namedCurve: "prime256v1" }).publicKey.export({ format: "der", type: "spki" }).toString("base64");
+    assert.equal(await verifyEd25519(p256, message, signature), false);
+  } finally {
+    globalThis.crypto.subtle.importKey = platform;
+  }
+});
