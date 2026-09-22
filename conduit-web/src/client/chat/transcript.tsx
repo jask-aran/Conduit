@@ -821,15 +821,37 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
      * already measured, without reading layout back.
      */
     let lastScrollerHeight = 0;
+    /*
+     * The position asked for, which is not always the position the scroller is
+     * at.
+     *
+     * A scroller that grows lowers its own maximum scroll, and the browser
+     * quietly clamps `scrollTop` down to meet it. Reading `scrollTop` back and
+     * adding to it therefore builds every correction on top of a number the
+     * clamp has already eaten into, and the loss is permanent: the keyboard
+     * closed leaving the thread about ten pixels above where it opened, every
+     * time. Kept unclamped here, the arithmetic survives the travel, and the
+     * last frame -- by which point the scroller is full height again and the
+     * maximum is back -- lands exactly where it started. -1 means nothing has
+     * been asked for yet.
+     */
+    let intendedScrollTop = -1;
     const holdAgainstKeyboard = (height: number) => {
       const lost = lastScrollerHeight - height;
       lastScrollerHeight = height;
       if (!lost || !Number.isFinite(lost) || Math.abs(lost) < 1) return;
       if (following()) {
         setViewportScrollTop(viewportMaxScrollTop(), false);
+        intendedScrollTop = -1;
         return;
       }
-      setViewportScrollTop(Math.max(0, Math.min(viewportMaxScrollTop(), viewport.scrollTop + lost)), false);
+      // Anything that moved the thread other than the last correction -- a
+      // finger, a fold, a new message -- is where the thread actually is now,
+      // and what was asked for before it is no longer worth holding.
+      const clamped = Math.max(0, Math.min(viewportMaxScrollTop(), intendedScrollTop));
+      if (intendedScrollTop < 0 || Math.abs(viewport.scrollTop - clamped) > 1) intendedScrollTop = viewport.scrollTop;
+      intendedScrollTop += lost;
+      setViewportScrollTop(Math.max(0, Math.min(viewportMaxScrollTop(), intendedScrollTop)), false);
     };
     const scrollerResizeObserver = new ResizeObserver((entries) => {
       const box = entries[0]?.contentRect;

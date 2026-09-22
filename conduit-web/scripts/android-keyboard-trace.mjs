@@ -61,7 +61,7 @@ const show=(label,rows)=>{
 };
 
 const where=process.argv[2]||"bottom";
-await ev(`(()=>{const v=document.querySelector(".message-scroller-viewport");if(!v)return;v.scrollTop=${where==="bottom"?"v.scrollHeight":"Math.max(0,v.scrollHeight-v.clientHeight-300)"};})()`);
+await ev(`(()=>{const v=document.querySelector(".message-scroller-viewport");if(!v)return;v.scrollTop=${where==="bottom"?"v.scrollHeight":"Math.max(0,(v.scrollHeight-v.clientHeight)/2)"};})()`);
 await wait(700);
 console.log("start:", await ev(`(()=>{const v=document.querySelector(".message-scroller-viewport");return v?{st:Math.round(v.scrollTop),ch:v.clientHeight,sh:v.scrollHeight,fromBottom:Math.round(v.scrollHeight-v.scrollTop-v.clientHeight)}:null})()`));
 const c=await composer();
