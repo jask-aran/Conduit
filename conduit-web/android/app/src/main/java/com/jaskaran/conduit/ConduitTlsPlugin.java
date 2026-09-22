@@ -8,7 +8,6 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -27,28 +26,21 @@ import java.util.Set;
 public class ConduitTlsPlugin extends Plugin {
 
     /**
-     * Check an Ed25519 signature on the shell's behalf.
+     * Replace the set of leaf fingerprints the WebView may accept.
      *
-     * The page would rather do this itself -- it holds the keys and the
-     * records -- but `crypto.subtle` only learned Ed25519 in Chromium 137,
-     * and a WebView older than that throws "Unrecognized name" instead. So
-     * everything that rests on a signature silently stopped working there:
-     * not only the certificate pin, but `proveServer`, which is what decides
-     * whether an address may be moved to at all.
-     *
-     * Android has had this since API 33, which is a lower bar than 137, so
-     * the shell answers where the page cannot. It verifies and nothing else:
-     * no key is held here, no decision is made here, and an answer of false
-     * and an answer of "cannot" are told apart by the caller, because a
-     * client that cannot check a signature must not behave as though it did.
+     * Only fingerprints the page has already verified against a server's
+     * identity key arrive here; this holds no keys and makes no decision.
      */
     @PluginMethod
     public void pin(PluginCall call) {
         JSArray offered = call.getArray("fingerprints", new JSArray());
         Set<String> fingerprints = new HashSet<>();
         try {
-            List<String> values = offered.toList();
-            for (String value : values) if (value != null && !value.isEmpty()) fingerprints.add(value);
+            for (int index = 0; index < offered.length(); index++) {
+                Object value = offered.get(index);
+                if (!(value instanceof String)) throw new org.json.JSONException("not a string");
+                if (!((String) value).isEmpty()) fingerprints.add((String) value);
+            }
         } catch (org.json.JSONException malformed) {
             call.reject("fingerprints must be a list of strings");
             return;

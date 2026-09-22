@@ -1,6 +1,7 @@
 import { createEffect, createSignal, on } from "solid-js";
 import { isInstalledClient } from "./installed-client.ts";
 import { publishCertificatePins } from "./certificate-pins.ts";
+import { LOOPBACK_HOST, PRIVATE_HOST } from "../../network-hosts.js";
 
 /**
  * The Conduit servers this client knows how to reach.
@@ -80,10 +81,6 @@ export const LEGACY_ORIGIN_STORAGE_KEY = "conduit.native.server-origin";
 // cannot be reached at all without a certificate for an address that no
 // public authority will issue one for. So these are allowed, and the address
 // bar says http, which is the honest thing for it to say.
-const LOOPBACK_HOST = /^(localhost|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|\[::1\])$/;
-// 10/8, 172.16/12, 192.168/16 and the 169.254/16 a machine gives itself when
-// nothing handed it an address.
-const PRIVATE_HOST = /^(10(\.\d{1,3}){3}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2}|192\.168(\.\d{1,3}){2}|169\.254(\.\d{1,3}){2})$/;
 
 const hostOf = (origin: string) => { try { return new URL(origin).hostname; } catch { return ""; } };
 

@@ -1,3 +1,4 @@
+import { PRIVATE_HOST } from "./network-hosts.js";
 import crypto from "node:crypto";
 import { installedClientOrigin } from "./native-auth.js";
 
@@ -197,10 +198,8 @@ function isLoopbackRequest(request) {
   return LOOPBACK_ADDRESSES.has(String(request.socket?.remoteAddress || ""));
 }
 
-// 10/8, 172.16/12, 192.168/16, and the 169.254/16 a machine gives itself when
-// nothing hands it an address. IPv4-mapped IPv6 is how Node reports a v4 peer
-// on a dual-stack socket, so the prefix is stripped before matching.
-const PRIVATE_ADDRESS = /^(10(\.\d{1,3}){3}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2}|192\.168(\.\d{1,3}){2}|169\.254(\.\d{1,3}){2})$/;
+// IPv4-mapped IPv6 is how Node reports a v4 peer on a dual-stack socket, so
+// the prefix is stripped before matching against the shared private ranges.
 
 /**
  * A request that arrived from a private address, on a socket with no proxy in
@@ -217,7 +216,7 @@ const PRIVATE_ADDRESS = /^(10(\.\d{1,3}){3}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2
 function isPrivateNetworkRequest(request) {
   if (request.headers["x-forwarded-for"] || request.headers["x-forwarded-proto"]) return false;
   const address = String(request.socket?.remoteAddress || "").replace(/^::ffff:/, "");
-  return PRIVATE_ADDRESS.test(address);
+  return PRIVATE_HOST.test(address);
 }
 
 /**
