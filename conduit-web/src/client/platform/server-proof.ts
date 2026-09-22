@@ -1,4 +1,5 @@
 import { buildHttpUrl } from "../api/transport.js";
+import { canVerifyInPage, verifyEd25519 } from "./signatures.ts";
 
 /*
  * Check that the thing answering at an address is the server we paired with,
@@ -22,32 +23,20 @@ const PROOF_TIMEOUT_MS = 4000;
 const bytesToBase64Url = (bytes: Uint8Array) =>
   btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
-const base64ToBytes = (value: string) =>
-  Uint8Array.from(atob(value.replace(/-/g, "+").replace(/_/g, "/")), (character) => character.charCodeAt(0));
-
 /**
  * Whether this client can check a signature at all.
  *
- * Ed25519 arrived in WebCrypto later than the rest of it, so a shell on an old
- * webview may not have it. That is reported rather than worked around: a
- * client that cannot verify must not pretend it did, and the caller's job is
- * then to leave the address to a person to choose rather than move to it on
- * its own.
+ * Ed25519 arrived in WebCrypto later than the rest of it -- Chromium 137 --
+ * so a shell on an older webview does not have it in the page. The Android
+ * shell can check from API 33 and is asked instead, which is why this is no
+ * longer only a question about `crypto.subtle`; see `signatures.ts`.
+ *
+ * Where neither can, that is reported rather than worked around: a client
+ * that cannot verify must not pretend it did, and the caller's job is then to
+ * leave the address to a person to choose rather than move to it on its own.
  */
-let support: Promise<boolean> | null = null;
 export function canVerify(): Promise<boolean> {
-  support ??= (async () => {
-    try {
-      await crypto.subtle.importKey("spki", base64ToBytes(
-        // A throwaway public key, used only to ask whether the algorithm exists.
-        "MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE",
-      ), { name: "Ed25519" }, false, ["verify"]);
-      return true;
-    } catch {
-      return false;
-    }
-  })();
-  return support;
+  return canVerifyInPage();
 }
 
 export interface ServerProof {
@@ -67,7 +56,6 @@ export interface ServerProof {
  */
 export async function proveServer(origin: string, id: string, publicKey: string): Promise<ServerProof> {
   if (!id || !publicKey) return { ok: false, reason: "unverifiable" };
-  if (!await canVerify()) return { ok: false, reason: "unverifiable" };
 
   const nonce = bytesToBase64Url(crypto.getRandomValues(new Uint8Array(24)));
   const controller = new AbortController();
@@ -95,14 +83,12 @@ export async function proveServer(origin: string, id: string, publicKey: string)
     return { ok: false, reason: "mismatch" };
   }
 
-  try {
-    const key = await crypto.subtle.importKey("spki", base64ToBytes(publicKey), { name: "Ed25519" }, false, ["verify"]);
-    const signed = new TextEncoder().encode(`${id}.${nonce}`);
-    const verified = await crypto.subtle.verify("Ed25519", key, base64ToBytes(answer.signature), signed);
-    return verified ? { ok: true } : { ok: false, reason: "mismatch" };
-  } catch {
-    return { ok: false, reason: "mismatch" };
-  }
+  const verified = await verifyEd25519(publicKey, `${id}.${nonce}`, answer.signature);
+  // Told apart on purpose. A client with no way to check has learned nothing
+  // about this address; one that checked and got a bad signature has learned
+  // that something else answered.
+  if (verified === null) return { ok: false, reason: "unverifiable" };
+  return verified ? { ok: true } : { ok: false, reason: "mismatch" };
 }
 
 /** Domain separation, matching `server-tls.js`: an attestation is only that. */
@@ -143,13 +129,9 @@ export async function verifyLeaf(id: string, publicKey: string, claim: unknown):
   const fingerprint = typeof secure.fingerprint === "string" ? secure.fingerprint : "";
   const attestation = typeof secure.attestation === "string" ? secure.attestation : "";
   if (!Number.isInteger(port) || port < 1 || port > 65535 || !fingerprint || !attestation) return null;
-  if (!await canVerify()) return null;
-  try {
-    const key = await crypto.subtle.importKey("spki", base64ToBytes(publicKey), { name: "Ed25519" }, false, ["verify"]);
-    const signed = new TextEncoder().encode(`${ATTESTATION_PREFIX}.${id}.${fingerprint}`);
-    const verified = await crypto.subtle.verify("Ed25519", key, base64ToBytes(attestation), signed);
-    return verified ? { port, fingerprint } : null;
-  } catch {
-    return null;
-  }
+  // Here the two failures are the same answer: a certificate that was not
+  // checked is not pinned, whether because it did not verify or because this
+  // client had no way to try.
+  const verified = await verifyEd25519(publicKey, `${ATTESTATION_PREFIX}.${id}.${fingerprint}`, attestation);
+  return verified === true ? { port, fingerprint } : null;
 }
