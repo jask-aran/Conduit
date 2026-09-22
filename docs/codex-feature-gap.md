@@ -4,7 +4,9 @@ This document tracks the difference between Conduit and the Codex app-server
 protocol. The reference implementation is the installed Codex CLI. Recheck
 method and field names when that version changes.
 
-Current reference: `codex-cli 0.154.0`.
+Current reference: `codex-cli 0.154.0`, checked 2026-09-13. Re-read this
+against the installed CLI before trusting the gap list; a version bump is what
+makes it wrong, and nothing here notices on its own.
 
 ## Implemented
 

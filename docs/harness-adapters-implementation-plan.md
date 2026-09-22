@@ -1,5 +1,13 @@
 # Harness adapters implementation plan
 
+> **Status (2026-09-22): half landed.** The registration refactor this plan
+> argues for is done — `src/harnesses/index.js` holds the manifests and
+> `SUPPORTED` is derived from them, so the "hard-coded today" table below
+> describes code that no longer exists. What did **not** land is the point of
+> the exercise: Claude Code, opencode and native Pi are still not harnesses.
+> `src/harnesses/` ships `pi`, `codex`, `chatgpt-web` and `unsupported`.
+> Read the table as history, not as a survey of the tree.
+
 Adds Claude Code, opencode, and native Pi as Conduit harnesses, and makes
 harness registration and detection data-driven so a fourth backend costs one
 file instead of seven edits.

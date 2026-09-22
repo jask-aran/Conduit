@@ -1,5 +1,13 @@
 # Workspace editor and diff split
 
+> **Status (2026-09-22): outcome delivered, structure not.** The four product
+> views exist and Git review and chat review own separate scopes
+> (`sourceControlScopes` and `chatScopes` in `workspace-panel.tsx`), so the
+> drift this plan set out to prevent is prevented. The component decomposition
+> it proposes did not happen: there is no `FilesView` or `SourceControlView`,
+> and `workspace-panel.tsx` is one file of ~2,260 lines. Treat the target
+> structure below as an unbuilt refactor.
+
 ## Goal
 
 Separate file editing from change review without allowing the Git and agent

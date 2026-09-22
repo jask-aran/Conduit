@@ -1,5 +1,11 @@
 # Making the backend's transcript authoritative
 
+> **Status (2026-09-22): not started.** Conduit still keeps the two transcripts
+> this describes: `buildTurnRows` is live in `client/turn-rows.ts` and
+> `pendingMessages` in `client/state/active-chat.ts`. Individual bugs in the
+> table below have been fixed one at a time, which is the pattern the plan
+> exists to stop. `promotePendingUser` is gone; nothing else here has moved.
+
 ## The problem
 
 Conduit keeps two transcripts. The backend's — Pi's JSONL, correct by
