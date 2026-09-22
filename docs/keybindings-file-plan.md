@@ -1,5 +1,11 @@
 # Keybindings as a file
 
+> **Status (2026-09-22): not started.** Nothing in the tree is named
+> `keybindings`. Overrides remain where the plan says they are, inside
+> `shortcutOverrides` in preferences. The "What already exists" section below
+> is a reading of the code as it stood on 2026-09-14 and is worth checking
+> before trusting a line number.
+
 Make Conduit's keyboard overrides a readable JSON file on the server that a
 person — or an agent — can edit directly, instead of an opaque object buried in
 `preferences.json`.
