@@ -101,7 +101,25 @@ public class ConduitKeyboardPlugin extends Plugin {
 
                 @Override
                 public WindowInsetsCompat onProgress(WindowInsetsCompat insets, List<WindowInsetsAnimationCompat> running) {
-                    emit(imeHeight(insets), true);
+                    /*
+                     * How far along the system says it is, beside where it
+                     * says the keyboard has got to.
+                     *
+                     * The page draws the curve on its own clock, which starts
+                     * when the description reaches it rather than when the
+                     * animation started, so it runs the width of the bridge
+                     * behind. The fraction is the system's own progress in
+                     * its own terms: with it the page can put its clock back
+                     * where it should have been.
+                     */
+                    float fraction = -1f;
+                    for (WindowInsetsAnimationCompat animation : running) {
+                        if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) != 0) {
+                            fraction = animation.getInterpolatedFraction();
+                            break;
+                        }
+                    }
+                    emit(animatingImeHeight(insets), true, fraction);
                     return insets;
                 }
 
@@ -135,20 +153,28 @@ public class ConduitKeyboardPlugin extends Plugin {
      * composer ends up almost keeping up with a keyboard.
      */
     private void announce(WindowInsetsAnimationCompat animation, WindowInsetsAnimationCompat.BoundsCompat bounds) {
-        /*
-         * The bounds are a range, not a direction: `getLowerBound` is the
-         * smaller inset and `getUpperBound` the larger, whichever way the
-         * keyboard is going. Which end is the destination is decided by
-         * whether the keyboard is on its way in, and the insets have already
-         * been applied for the state being animated to by the time this runs.
-         */
+        // The bounds are a range, not a direction: `getLowerBound` is the
+        // smaller inset and `getUpperBound` the larger, whichever way the
+        // keyboard is going.
         WindowInsetsCompat now = ViewCompat.getRootWindowInsets(hostView);
-        boolean arriving = now != null && now.isVisible(WindowInsetsCompat.Type.ime());
+        int here = now == null ? 0 : (now.isVisible(WindowInsetsCompat.Type.ime()) ? animatingImeHeight(now) : 0);
         int low = Math.round(bounds.getLowerBound().bottom / density);
         int high = Math.round(bounds.getUpperBound().bottom / density);
+        /*
+         * The insets have already been applied for the state being animated
+         * to, so the height they report now is the destination, and the end of
+         * the range nearest it is which end that is.
+         *
+         * Asking instead whether the keyboard is on its way in answers the two
+         * common travels and the third one wrongly: a keyboard that changes
+         * height while it stays visible -- a layout with a number row, a
+         * one-handed switch -- is arriving by that test, and would be drawn
+         * climbing back to its old height while it shrank.
+         */
+        int to = Math.abs(here - low) <= Math.abs(here - high) ? low : high;
         JSObject payload = new JSObject();
-        payload.put("from", arriving ? low : high);
-        payload.put("to", arriving ? high : low);
+        payload.put("from", to == low ? high : low);
+        payload.put("to", to);
         payload.put("durationMs", animation.getDurationMillis());
         JSArray curve = new JSArray();
         android.view.animation.Interpolator in = animation.getInterpolator();
@@ -163,7 +189,18 @@ public class ConduitKeyboardPlugin extends Plugin {
             return;
         }
         payload.put("curve", curve);
+        payload.put("here", here);
         notifyListeners("keyboardAnimation", payload);
+    }
+
+    /**
+     * The keyboard's inset as it stands, without asking whether it counts as
+     * visible. Visibility flips at the start of a travel, so the gated height
+     * reads 0 for every frame of a hide; mid-animation the inset itself is the
+     * interpolated position, which is the whole point of reading it.
+     */
+    private int animatingImeHeight(WindowInsetsCompat insets) {
+        return Math.round(insets.getInsets(WindowInsetsCompat.Type.ime()).bottom / density);
     }
 
     private int imeHeight(WindowInsetsCompat insets) {
@@ -178,11 +215,16 @@ public class ConduitKeyboardPlugin extends Plugin {
      * and each one that reaches the page costs a layout.
      */
     private void emit(int height, boolean moving) {
+        emit(height, moving, -1f);
+    }
+
+    private void emit(int height, boolean moving, float fraction) {
         if (height == lastSent && moving) return;
         lastSent = height;
         JSObject payload = new JSObject();
         payload.put("height", height);
         payload.put("animating", moving);
+        payload.put("fraction", fraction);
         notifyListeners("keyboardGeometry", payload);
     }
 
