@@ -32,6 +32,44 @@ let firstAt = 0;
 let lastKey = "";
 let repeats = 0;
 
+/*
+ * What the last keyboard travel actually looked like, rather than its last
+ * nine rows.
+ *
+ * A tail of a decelerating curve is the least informative part of it: the
+ * values barely change and the frames that matter have already scrolled off.
+ * What decides whether the composer looks stuck to the keyboard is the whole
+ * run -- how many frames arrived, over how long, and whether any two of them
+ * were far enough apart to be seen as a stutter. Three numbers, and they fit
+ * on one line.
+ */
+let runFrames = 0;
+let runStart = 0;
+let runLast = 0;
+let runGap = 0;
+let runSummary = "";
+
+export function noteKeyboardFrame(final: boolean): void {
+  if (!keyboardProbeOn()) return;
+  const now = performance.now();
+  if (!runStart || now - runLast > 400) {
+    runStart = now;
+    runFrames = 0;
+    runGap = 0;
+  } else {
+    runGap = Math.max(runGap, now - runLast);
+  }
+  runLast = now;
+  runFrames += 1;
+  if (final) {
+    const span = Math.round(now - runStart);
+    const fps = span > 0 ? Math.round((runFrames / span) * 1000) : 0;
+    runSummary = `${runFrames}f / ${span}ms / ${fps}fps / gap ${Math.round(runGap)}ms`;
+    runStart = 0;
+    draw();
+  }
+}
+
 export function logKeyboardEvent(name: string, detail: unknown = ""): void {
   if (!keyboardProbeOn()) return;
   const now = Date.now();
@@ -78,7 +116,12 @@ function draw(): void {
     panel.setAttribute("style", styles);
     document.body.appendChild(panel);
   }
-  panel.textContent = events.length ? `${numbers}\n--\n${events.join("\n")}` : numbers;
+  const run = runSummary ? `\nlast run  ${runSummary}` : "";
+  panel.textContent = events.length ? `${numbers}${run}\n--\n${events.join("\n")}` : `${numbers}${run}`;
+}
+
+export function keyboardRunSummary(): string {
+  return runSummary;
 }
 
 export function reportKeyboardProbe(lines: Record<string, unknown>): void {
