@@ -71,11 +71,11 @@ the impostor at `192.168.0.128` fails to connect instead of succeeding.
 
 ## What it costs
 
-Two pieces of security-critical native code that cannot be tested from the
-development machine.
+Two pieces of security-critical native code.
 
-- **Android** — `onReceivedSslError` on the WebView client.
-- **Windows** — WebView2's `ServerCertificateErrorDetected`.
+- **Android** — `onReceivedSslError` on the WebView client. **Measured, and it
+  works**; see below.
+- **Windows** — WebView2's `ServerCertificateErrorDetected`. Not measured.
 
 Both must cover **WebSockets**, which means the override lives in the
 WebView's TLS stack rather than in a native HTTP client; `CapacitorHttp` can
@@ -84,6 +84,39 @@ carry a fetch but not a socket.
 The natural bug in both is "accept any certificate", which is worse than the
 situation today. Whatever lands here needs a test that a *wrong* attestation
 is refused, not only that a right one is accepted.
+
+### Measured on Android, 2026-09-22
+
+The question that could have sunk the whole approach was whether
+`onReceivedSslError` is reached for a WebSocket handshake or only for the page
+and its resources. Everything live in Conduit is a socket, so if `wss://`
+never arrived there, pinning in the WebView could not work and TLS would have
+had to be terminated somewhere else.
+
+It is reached. On a Pixel 10 Pro XL emulator, API 36, against a Conduit
+serving its own leaf on 4319 and 4320, with the ports reversed into the guest
+so the dialled address matches the certificate's SANs and the only fault is
+the self-signed authority:
+
+- `wss://127.0.0.1:4320/v0/dictation/stream` raises the callback with
+  `primary=3` (`SSL_UNTRUSTED`) and `error.getUrl()` carrying the `wss://`
+  URL.
+- `error.getCertificate().getX509Certificate().getPublicKey().getEncoded()`
+  hashes to exactly the fingerprint the server's identity attested, so the pin
+  can be compared where the decision is made.
+- With that fingerprint pinned, the socket opens: `OPEN`, live, over TLS.
+- With one byte of the fingerprint changed, the same socket to the same
+  server is refused -- `pinned=false`, `handler.cancel()`.
+
+So the Android half is a WebView client and a set of fingerprints, not a
+native proxy. `ConduitWebViewClient` holds it.
+
+Still unmeasured: whether WebView2's event covers WebSockets. Microsoft's
+documentation describes it as raised when a server certificate cannot be
+verified "while loading a web page" and does not say either way. Measuring it
+means writing the COM handler in the Tauri shell and running a Windows debug
+build -- there is no cheaper seam, because the event only exists once
+something subscribes to it.
 
 ## What it unlocks
 
