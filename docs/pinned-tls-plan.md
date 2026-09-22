@@ -133,11 +133,28 @@ Two ways out, and the second is probably right:
 
 - Require a WebView of 137 or newer for pinning, and let older ones keep
   plain HTTP. Nothing to build; the feature is absent where the platform is.
-- **Verify in the shell instead of the page.** Android has
-  `Signature.getInstance("Ed25519")` from API 33, and the shell is already
-  where the answer is used. That takes WebCrypto out of the trust path for
-  both pinning and `proveServer`, on every WebView. It is more code, and it
-  is security-critical code, which is the argument against doing it casually.
+- **Verify in the shell instead of the page.** Tried, and it does not work:
+  stock Android has no software Ed25519 to offer. API 33 added the curve to
+  the *keystore*, for keys the device generates and holds, and asking the
+  unqualified `KeyFactory.getInstance("Ed25519")` reaches exactly that --
+  AndroidKeyStore, which refuses an encoded key with "To generate a key pair
+  in Android Keystore, use KeyPairGenerator". Naming Conscrypt instead gives
+  "no such algorithm: Ed25519 for provider AndroidOpenSSL". Enumerated on the
+  API 36 image, the only services for the curve are `AndroidKeyStore`
+  KeyFactory/KeyPairGenerator and `AndroidKeyStoreBCWorkaround` Signature.
+  None of them will take a public half that arrived over the network.
+
+  The plugin method stays, because it is correct where a provider does exist
+  and it now reports absence as absence rather than as a bad signature -- but
+  on this platform it answers "cannot", and the client falls back to
+  unverifiable.
+- **Verify in JavaScript.** The remaining option, and probably the right one:
+  a small audited Ed25519 verifier in the bundle works on every WebView, the
+  desktop shell and the browser alike, and removes the platform question
+  entirely. It means a dependency in the trust path, which is the thing
+  avoided for the certificate encoder -- the difference being that there the
+  alternative was a hundred lines of DER, and here the alternative is that
+  the feature does not exist.
 
 Still unmeasured: whether WebView2's event covers WebSockets. Microsoft's
 documentation describes it as raised when a server certificate cannot be
