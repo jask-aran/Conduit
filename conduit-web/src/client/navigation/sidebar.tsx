@@ -7,6 +7,7 @@ import {
   CableIcon,
   ChevronRightIcon,
   ClipboardCopyIcon,
+  CheckIcon,
   DownloadIcon,
   ExternalLinkIcon,
   FolderIcon,
@@ -111,12 +112,15 @@ function UpdateNotice(props: { state?: UpdateState; onTake?: () => void }) {
   const words = () => {
     const current = state();
     if (current.kind === "checking") return "Checking for updates…";
+    if (current.kind === "current") return "Conduit is up to date";
     if (current.kind === "ready") return "New version ready";
     return current.kind === "working" ? current.label : "";
   };
   return <Show when={state().kind !== "idle"}>
     <div class="sidebar-update" data-kind={state().kind} role="status">
-      <Show when={state().kind === "ready"} fallback={<Spinner class="size-3" />}><DownloadIcon /></Show>
+      <Show when={state().kind === "checking" || state().kind === "working"} fallback={
+        state().kind === "current" ? <CheckIcon /> : <DownloadIcon />
+      }><Spinner class="size-3" /></Show>
       <span>{words()}</span>
       <Show when={state().kind === "ready"}>
         <button type="button" onClick={() => props.onTake?.()}>Restart</button>
@@ -1208,11 +1212,17 @@ export function Sidebar(props: {
             * Settings opens with no section named, which on a phone is the list
             * of sections. Naming "models" here made that list unreachable and
             * landed every client on the same tab.
+            *
+            * Checking for an update does not close the drawer, unlike every
+            * other item in that menu. It reports itself in this row, and
+            * closing the sidebar on the way out put the row behind the thread
+            * -- so the one thing the person asked to watch was the one thing
+            * they could not see.
             */}
           <UpdateNotice state={props.updateState} onTake={props.onTakeUpdate} />
           <ServerSwitcher connectivity={props.connectivity} pwaUpdating={props.pwaUpdating}
           onOpenSettings={() => { closeMobile(); props.onOpenSettings(); }}
-          onUpdatePwa={() => { closeMobile(); props.onUpdatePwa(); }}
+          onUpdatePwa={() => props.onUpdatePwa()}
           onAddServer={() => { closeMobile(); props.onAddServer?.(); }}
           onLogout={() => props.onLogout?.()} />
         </div>

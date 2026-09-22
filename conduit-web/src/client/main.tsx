@@ -124,6 +124,7 @@ type SettingsSection = "ui" | "shortcuts" | "models" | "prompts" | "runtime" | "
 export type UpdateState =
   | { kind: "idle" }
   | { kind: "checking" }
+  | { kind: "current" }
   | { kind: "ready" }
   | { kind: "working"; label: string };
 type WorkspaceView = "files" | "diff" | "chat" | "terminal";
@@ -615,6 +616,17 @@ function App() {
    */
   const [updateState, setUpdateState] = createSignal<UpdateState>({ kind: "idle" });
   const pwaUpdating = () => { const state = updateState().kind; return state === "checking" || state === "working"; };
+  /*
+   * "Nothing to install" is an answer, and it was only ever given in a toast.
+   * Somebody who pressed Check for updates is owed a conclusion in the place
+   * they pressed it, and then owed their sidebar back.
+   */
+  let settleTimer = 0;
+  const sayUpToDate = () => {
+    setUpdateState({ kind: "current" });
+    clearTimeout(settleTimer);
+    settleTimer = window.setTimeout(() => setUpdateState((state) => state.kind === "current" ? { kind: "idle" } : state), 4_000);
+  };
   const setPwaUpdating = (busy: boolean) => setUpdateState(busy ? { kind: "checking" } : { kind: "idle" });
   const [addingServer, setAddingServer] = createSignal(false);
   const runPwaUpdate = async () => {
@@ -638,7 +650,7 @@ function App() {
           toast.loading(label, { id: notice });
         });
         if (!updated) {
-          setPwaUpdating(false);
+          sayUpToDate();
           toast.success("Conduit is up to date", { id: notice });
         }
         return;
@@ -647,15 +659,19 @@ function App() {
       // Android this is a question about releases rather than about caches.
       if (androidShell) {
         const version = await androidShell.update();
-        setUpdateState(version ? { kind: "working", label: `Conduit ${version} is downloading` } : { kind: "idle" });
-        if (version) toast.success(`Conduit ${version} is downloading. Open it to install.`);
-        else toast.success("Conduit is up to date");
+        if (version) {
+          setUpdateState({ kind: "working", label: `Conduit ${version} is downloading` });
+          toast.success(`Conduit ${version} is downloading. Open it to install.`);
+        } else {
+          sayUpToDate();
+          toast.success("Conduit is up to date");
+        }
         return;
       }
       // Stays "checking" until it resolves: a true return is followed by the
       // reload, so there is no install to narrate.
       if (!await forcePwaUpdate()) {
-        setUpdateState({ kind: "idle" });
+        sayUpToDate();
         toast.success("Conduit is up to date");
       }
     } catch (error) {
