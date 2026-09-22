@@ -123,6 +123,36 @@ Both clients claim the same global shortcuts by default. Whichever starts
 second reports the refused chord and keeps working; rebind it in that client's
 settings, which are its own.
 
+## The Android development APK
+
+`npm run android:build` writes
+`conduit-web/android/app/build/outputs/apk/debug/app-debug.apk`. It follows the
+same "beside, not over" rule as the Windows development client, by the same
+mechanism:
+
+| | Released | Development |
+| --- | --- | --- |
+| Built by | CI, on a tag | `npm run android:build`, locally |
+| Identifier | `com.jaskaran.conduit` | `com.jaskaran.conduit.dev` |
+| Signed with | the persistent release keystore | the local debug key |
+| Version | the tag's | `0.0.0-dev` |
+| Updates from | GitHub releases | nothing |
+
+The suffix comes from `applicationIdSuffix ".dev"` on the debug build type, so
+the two installs keep separate storage, separate tokens and separate entries in
+the launcher.
+
+**It has no update path.** The version it reports is below every release, so
+Check for updates always finds the latest release newer — and because the
+identifiers differ, taking that offer installs the *released* app beside the
+development one rather than updating it. To move a development build forward,
+build and sideload again.
+
+**The signing keys are why a development APK can never become a release.**
+Android refuses an update signed with a different key, and only CI holds the
+release keystore (`ANDROID_KEYSTORE_BASE64` and friends). A release candidate
+is a CI artifact from a tag; a local APK is for looking at, not for shipping.
+
 ## Updating
 
 ### Desktop
@@ -217,9 +247,11 @@ key or its password means no installed client can ever be updated again.
 
 An installed client holds a list of servers and a token for each, switches by
 remounting rather than reloading, and shares the list with other clients
-through the servers themselves. That model is the same for the browser except
-for how a switch happens, so it is documented once in
-[`servers.md`](servers.md) rather than here.
+through the servers themselves. It also does two things no browser can: it
+browses the local network for servers over mDNS, and it can move between them
+without navigating. That model is the same for the browser except for how a
+switch happens, so it is documented once in [`servers.md`](servers.md) rather
+than here.
 
 ## Which build am I running
 
@@ -227,6 +259,12 @@ Settings → Appearance → **About** names the three things that ship separatel
 the interface (release or version, commit, build time), the shell's own version
 on an installed client, and the server's release from `/healthz`. It is also
 how you see that an update took.
+
+A development build says so in its identity rather than only in its version:
+"Conduit Dev" in the launcher on Windows, `com.jaskaran.conduit.dev` on
+Android. Both install beside the release, so both can be present at once and
+"which one did I just open" is a real question. `docs/testing.md` lists the
+four builds side by side.
 
 ## Not done
 

@@ -5,20 +5,103 @@ how the list of them gets from one client to the next.
 
 ## What a server is, here
 
-An address, a name, and — on an installed client — a token of its own. Nothing
-identifies a server beyond the address it is reached at: two addresses that
-happen to arrive at the same machine are two entries, because nothing the
-client can see says otherwise and the only thing that could say so is an
-unauthenticated endpoint nobody should be trusting for it.
+An identity, the addresses that reach it, a name, and — on an installed client
+— a token of its own.
+
+The identity is a 32-hex id and an Ed25519 key pair, held in `data/identity.json`
+at mode `0600` (`src/server-identity.js`). The id is stable across restarts and
+grants nothing; it exists so that two addresses can be recognised as one server
+rather than kept apart forever. The private half never leaves the machine and
+is not a login: possessing it proves identity and authorises nothing.
+
+The addresses are called **routes**, and they are a property of the server
+rather than separate servers. A client reaching the same machine at
+`127.0.0.1:4310` and at `localconduit.example.com` holds one entry with two
+routes, and which one is in use is a fact about where the client is standing.
 
 The name defaults to the host **including the port**, because the port is
 usually the only thing telling two of them apart. A list where every local
 server reads `127.0.0.1` is a list you cannot use.
 
-`src/client/platform/servers.ts` holds the list and the active address;
-`src/client/api/transport.js` asks it where to send everything. Every request
-already funnels through `httpUrl`/`webSocketUrl`, so no call site knows which
-server it is talking to.
+`src/client/platform/servers.ts` holds the list, the active server and the
+active route; `src/client/api/transport.js` asks it where to send everything.
+Every request already funnels through `httpUrl`/`webSocketUrl`, so no call site
+knows which server or which route it is talking to.
+
+## Identity, and why one endpoint is authenticated and one is not
+
+Two questions, answered separately on purpose.
+
+**"Who are you, and where else do you answer?"** — `GET /v0/server`, which
+requires a session. It returns the id, the public key and the routes. It is
+authenticated because an open version of it would let anything on the network
+say "I am the server you already hold a token for", which is the whole reason
+addresses were kept apart before this existed.
+
+**"Prove you are the server I already paired with."** — `POST /v0/server/prove`,
+which does **not** require a session, and that is the point. A client asks it
+*before* it sends a token, so moving to a new address cannot be the thing that
+hands a credential to whatever happened to answer there. The caller picks the
+nonce and the server signs `<id>.<nonce>`, so a reply recorded off the wire is
+worthless for the next question, and a caller holding no public half for this
+server learns nothing it can act on.
+
+### Where the routes come from
+
+- **Loopback and LAN are derived.** `localPaths()` reads
+  `os.networkInterfaces()` and keeps IPv4 loopback plus the private ranges.
+  Link-local `169.254/16` is excluded: a machine gives itself one when nothing
+  handed it an address, and offering it would put a row in every client's menu
+  that only ever fails to answer.
+- **The public address is observed.** Nothing on the machine says it sits
+  behind `localconduit.example.com`; a client that arrived through it proves
+  the address works by arriving. So `observe()` records the `Host` header —
+  **only for authenticated requests**, because a `Host` header is written by
+  whoever sends it, and an unauthenticated one would let a passer-by write an
+  address into the list every client then reads. Capped at ten, oldest dropped.
+
+### Choosing one
+
+`src/client/platform/path-selector.ts` probes the routes and takes the nearest
+one that answers and can prove it is this server, preferring loopback, then
+private, then public. A route picked by hand is a decision and is pinned;
+automatic selection stands down until it is set back. A switch does not rebuild
+the client — the live sockets are moved — and it waits for a quiet moment,
+because repainting a terminal while somebody is watching output arrive is a
+poor trade against a few milliseconds.
+
+## Finding a server that was never typed
+
+Everything above works outwards from an address the client already has. The
+first time, there is none: a server is running on a machine at home and the
+phone has never heard of it.
+
+The server publishes `_conduit._tcp` over mDNS (`src/lan-advertisement.js`),
+with the identity id and the Ed25519 public half in the TXT record. Those are
+the same two facts `/v0/server` hands out, and putting them on the LAN is what
+makes discovery safe rather than merely convenient: whatever answers can be
+asked to sign a nonce and checked against the key before a credential goes near
+it. It is withdrawn when the machine holds no private address, republished when
+the interfaces change, and turned off with `CONDUIT_ADVERTISE_ON_LAN=false`.
+
+The built shells browse for it — Android through `NsdManager` in a Capacitor
+plugin, the desktop through `mdns-sd` behind a Tauri command — and hand raw
+advertisements to `src/client/platform/discovery.ts`, which picks the usable
+address and shapes one result. Browsing lasts as long as the question; a
+standing listener would hold a multicast socket open for the life of the app,
+and on a phone that is a radio kept awake.
+
+**A browser cannot do this at all**: there is no mDNS API in a page, and an
+HTTPS document cannot open a plaintext connection to a LAN address. The
+add-server form says so rather than showing a search that was never going to
+finish.
+
+**There is deliberately no subnet sweep.** Probing every host on a /24 is
+indistinguishable from a port scan to any IDS or managed access point, it
+cannot see past the client's own subnet, it has to guess the port — so "nothing
+found" becomes a confident wrong answer — and it is impossible from a browser
+anyway, which is the client that most needs help. If it ever earns a place it
+is a button somebody presses, not something the app does on its own.
 
 ## Switching
 
@@ -120,15 +203,21 @@ several places.
 ## Where it appears
 
 - **Sidebar footer** — the active server's name, its state, and its round trip.
-  The menu lists the servers with what each costs to reach, then Add server.
-  Reachability is measured only while that menu is open: a timer pinging every
-  known address forever is traffic nobody asked for over links that may be
-  metered. A browser can only measure the origin it was served by, for the
-  cross-origin reason above.
-- **Settings → System → Servers** — rename, share, forget.
-- **Add server** — address, then password, on an installed client. A browser
-  cannot probe another origin or sign in to it, so there it records an address
-  and says so rather than offering a password field that could not work. The
+  The menu lists the servers, and under the active one its routes with what
+  each costs to reach. Reachability is measured only while that menu is open: a
+  timer pinging every known address forever is traffic nobody asked for over
+  links that may be metered. A browser can only measure the origin it was
+  served by, for the cross-origin reason above — and an installed PWA cannot
+  change route at all, since navigating away ejects the person from the app, so
+  there the routes are shown as facts rather than as choices.
+- **Settings → System → Servers** — each server with its routes listed beneath
+  it, and which one is in use. Rename, share, forget.
+- **Add server** — what was found on this network first, then the address
+  field, then the password, on an installed client. Picking a found server
+  proves the address against the key that came with it before going on to the
+  password. A browser cannot browse the network, cannot probe another origin
+  and cannot sign in to it, so there it gets the address field alone, a line
+  saying discovery needs the app, and a record rather than a sign-in. The
   server on this machine is offered wherever it might help; in a browser as an
   address to fill in rather than one confirmed.
 
@@ -136,9 +225,12 @@ several places.
 
 | | Where |
 | --- | --- |
-| The list, the active address | `localStorage`, per origin |
+| The list, the active server, the pinned route | `localStorage`, per origin |
+| Each entry's id, public key and known routes | alongside it in that list |
 | An installed client's token | OS credential store, keyed per address |
 | The shared directory | `knownServers` in each server's preferences |
+| The server's own id and key pair | `data/identity.json`, mode `0600` |
+| Composer drafts | `localStorage`, keyed by server origin and chat, mirroring the server's copy |
 
 The token key carries the address with everything a credential store cannot
 hold folded to dashes, so `http` and `https` and two ports stay distinct. A

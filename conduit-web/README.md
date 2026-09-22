@@ -411,19 +411,31 @@ cookie (`HttpOnly`, `SameSite=Lax`, `Secure` over HTTPS/X-Forwarded-Proto),
 30-day rolling expiry, capped at 20 stored sessions. The hashed session row
 (SHA-256) is the only thing persisted server-side.
 
-The Android shell uses a separate native session. It sends the password only
-to the configured HTTPS server, stores the returned bearer token through
-Android Keystore-backed secure storage, and sends it in the `Authorization`
-header. Native requests are accepted only from the exact Capacitor
-`https://localhost` origin. CORS does not permit wildcard origins,
-cross-origin cookies, or headers other than `Authorization` and
-`Content-Type`. WebSockets use a random 30-second ticket that expires after one
-upgrade; the bearer token never enters a URL.
+The installed shells use a separate native session. They send the password to
+the chosen server, store the returned bearer token in the platform's secure
+store — Android Keystore, Windows Credential Manager — and send it in the
+`Authorization` header. Native requests are accepted from exactly two origins,
+the Capacitor webview `https://localhost` and the Tauri shell
+`http://tauri.localhost` (`src/native-auth.js`); `validateNativeSession`
+refuses a bearer token that did not come from one of them. CORS does not permit
+wildcard origins, cross-origin cookies, or headers other than `Authorization`
+and `Content-Type`. WebSockets use a random 30-second ticket that expires after
+one upgrade; the bearer token never enters a URL.
+
+The server need not be HTTPS. `normalizeServerOrigin` accepts plain `http://`
+for loopback and the private ranges, because no public authority issues a
+certificate for a LAN address and requiring one would mean a server on the
+network in front of you could not be reached at all. That is the whole reason
+the Android shell sets `allowMixedContent` — see `docs/servers.md`.
 
 Enforcement is a single `requireAuth` middleware mounted before every other
 route and static handler, plus the WebSocket upgrade validator. The allowlist
-is `GET /login`, `POST /v0/auth/login`, `GET /healthz`, and the PWA bootstrap
-assets required before the application session exists. Logout
+is `GET /login`, `POST /v0/auth/login`, `POST /v0/auth/native-login`,
+`POST /v0/server/prove`, `GET /healthz`, and the PWA bootstrap assets required
+before the application session exists. `/v0/server/prove` is open on purpose:
+its whole job is to be checkable *before* a credential is sent, and it reveals
+only a signature over a nonce the caller chose. `GET /v0/server`, which lists
+the routes, is authenticated. See `docs/servers.md`. Logout
 (`POST /v0/auth/logout`) requires a valid session like any other route. Loopback
 binding without a configured password stays open for local dev; non-loopback
 binding refuses to start without a password or `CONDUIT_ALLOW_INSECURE=1`.
@@ -438,8 +450,10 @@ so timing reveals nothing.
   cookie and returns `303 → after` (form) or `{ ok, redirect }` (JSON). Wrong
   password re-renders the page with an inline error (form) or returns `401`
   JSON (fetch).
-- `POST /v0/auth/native-login` — accepts the password from the exact Capacitor
-  origin over HTTPS and returns one native bearer token
+- `POST /v0/auth/native-login` — accepts the password from one of the two
+  installed-client origins and returns one native bearer token
+- `GET /v0/server` — this server's id, public key and routes (authenticated)
+- `POST /v0/server/prove` — signs a caller-chosen nonce (unauthenticated)
 - `POST /v0/auth/socket-ticket` — exchanges a native bearer token for one
   short-lived, single-use WebSocket ticket
 - `POST /v0/auth/logout` — clears the current session row and cookie
@@ -949,23 +963,44 @@ Add to Home Screen. The plugin injects manifest link and service-worker
 registration into the production HTML only; Vite dev does not register a
 worker, so installability is a production property.
 
-To force a check for a new shell, use `Check for updates` in the sidebar footer
-menu. Conduit asks the registration to update and, if a new worker was found,
-waits for it to take control and reloads.
+### When a new build replaces the page
 
-The worker is generated with `registerType: "autoUpdate"`, so it calls
-`self.skipWaiting()` itself and registers **no message handler at all** — do not
-post `SKIP_WAITING` to it, and do not wait for it to reach `activated`. A worker
-that skips waiting can be installed, activated and in charge before `update()`
-resolves, leaving nothing in `installing` or `waiting` to watch; waiting for
-that is how an update that succeeded got reported as a failure. `updatefound`
-is the reliable account of whether there was anything to install, and
-`controllerchange` is the event that means it happened.
+`registerType: "prompt"` and `skipWaiting: false`: a new worker installs and
+then **waits**, and `src/client/pwa-update.ts` is the only thing that decides
+when it takes over.
 
-`controllerchange` also reloads the page outside that flow, because the worker
-claiming this page does not change what is already on it: without the reload a
-new build is fetched, activated, and then not shown. It is skipped on a first
-visit, where there is no worker to replace.
+It used to be `autoUpdate` with `skipWaiting`, and the page reloaded itself
+from two places at once — a `controllerchange` listener in `main.tsx`, and the
+`activated` listener `registerSW` attaches under `autoUpdate`. Neither asked
+what the page was doing, so a tab that woke from the background and checked for
+updates could reload mid-sentence.
+
+Holding the **worker** rather than the reload matters for more than politeness.
+Once a new worker activates, Workbox deletes the precached files the running
+page still needs, and this client loads Settings, the workspace panel, the
+terminal and the project dashboard on demand — an old page left running past
+activation would fault on the next one it opened. Waiting keeps both builds
+whole, which is what makes holding the update free.
+
+The decision:
+
+- **Nothing in the composer** — taken at once. The reload is invisible because
+  there was nothing to interrupt.
+- **Something in the composer** — the build waits, a persistent notice says so,
+  and an effect on the composer takes it the moment the draft empties. Sending,
+  discarding and clearing all release it without knowing this exists.
+- **`Check for updates` in the sidebar footer** — the same lever, minus the
+  asking. `forcePwaUpdate` triggers a registration update, waits for the new
+  worker to reach `waiting`, then takes it.
+
+Under `skipWaiting: false` the generated worker carries a `SKIP_WAITING`
+message handler, which is what `updateSW()` posts to it; `controlling` is then
+the event that means the handover happened, and the library performs the one
+reload. Do not add a second reload path.
+
+`pwa-update.ts` imports `virtual:pwa-register` **dynamically**, because that
+module exists only inside a Vite build and `test/pwa-update.test.js` loads the
+rest of the file directly under Node.
 
 The service worker precaches static shell assets (`js`/`css`/`html`/`svg`/
 `png`/`ico`/`woff2`). It does **not** add runtime caching for `/v0`,
@@ -1024,10 +1059,13 @@ register the PWA service worker or show its update and cache-reset actions;
 Check for updates asks the GitHub releases API for a newer APK instead, and
 hands it to the system installer, which confirms before installing anything
 from outside the Play Store.
-First launch requests one HTTPS Conduit server origin and checks `/healthz`.
-The same form then reveals the normal Conduit password field. The server
-origin stays in local storage because it is not secret; the bearer token stays
-in Android Keystore-backed storage. Change server clears both values.
+First launch lists any Conduit server found on this network over mDNS, then
+offers an address field, then checks `/healthz` and reveals the normal Conduit
+password field. The server origin stays in local storage because it is not
+secret; the bearer token stays in Android Keystore-backed storage. Change
+server clears both values. The plugin that browses the network lives in
+`android/app/src/main/java/com/jaskaran/conduit/ConduitDiscoveryPlugin.java`
+and is registered in `MainActivity`.
 
 Versioned tags build the Android app in
 `.github/workflows/publish-container.yml`. A tag such as `v0.6.0-rc.1`
@@ -1046,6 +1084,16 @@ npm run android:build  # produce android/app/build/outputs/apk/debug/app-debug.a
 npm run android:open   # open the generated project in Android Studio
 npm run android:run    # sync and select a connected device or emulator
 ```
+
+`android:build` produces a **development APK**, and it is a different
+application from the release: the debug build type carries
+`applicationIdSuffix ".dev"`, so it installs as `com.jaskaran.conduit.dev`
+beside the released `com.jaskaran.conduit` rather than over it. It is signed
+with the local debug key, not the release keystore, and has no update channel
+of its own — it reports version `0.0.0-dev`, so `Check for updates` always
+offers the latest published release, and taking that offer installs the
+released app alongside rather than updating this one. Sideload a new build to
+replace it. `docs/testing.md` has the four builds side by side.
 
 Capacitor 8 requires Node 22 or newer, Android Studio 2025.2.1 or newer, and an
 installed Android SDK.
