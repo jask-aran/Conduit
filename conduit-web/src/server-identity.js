@@ -109,8 +109,12 @@ export class ServerIdentity {
 
   async load() {
     let saved = null;
-    try { saved = JSON.parse(await fs.readFile(this.filePath, "utf8")); }
+    let text = null;
+    try { text = await fs.readFile(this.filePath, "utf8"); }
     catch (error) { if (error.code !== "ENOENT") throw error; }
+    // A file that will not parse is treated like a missing one: a new identity
+    // costs a re-pair, a server that cannot start costs everything.
+    try { saved = text == null ? null : JSON.parse(text); } catch { saved = null; }
     this.id = typeof saved?.id === "string" && /^[0-9a-f]{32}$/.test(saved.id) ? saved.id : crypto.randomBytes(16).toString("hex");
     for (const entry of Array.isArray(saved?.observed) ? saved.observed : []) {
       if (typeof entry?.origin === "string" && Number.isFinite(entry.seenAt)) this.observed.set(entry.origin, entry.seenAt);

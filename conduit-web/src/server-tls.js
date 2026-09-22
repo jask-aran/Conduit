@@ -240,9 +240,11 @@ export class ServerLeaf {
 
   async read() {
     let saved = null;
-    try { saved = JSON.parse(await fs.readFile(this.filePath, "utf8")); }
+    let text;
+    try { text = await fs.readFile(this.filePath, "utf8"); }
     catch (error) { if (error.code !== "ENOENT") throw error; return null; }
     try {
+      saved = JSON.parse(text);
       // Parsed rather than trusted: the file is the only thing standing
       // between a corrupted line and a server that cannot start, and a leaf
       // that will not parse is one we can simply mint again.
