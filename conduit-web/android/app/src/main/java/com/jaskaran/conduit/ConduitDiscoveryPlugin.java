@@ -46,6 +46,21 @@ public class ConduitDiscoveryPlugin extends Plugin {
     private static final long MIN_TIMEOUT_MS = 500;
     private static final long MAX_TIMEOUT_MS = 10_000;
 
+    /** The browse in progress, so it can be dropped when the activity goes. */
+    private Browse browse;
+
+    /*
+     * A browse holds a multicast socket. Left to the timeout it would keep it
+     * for up to ten seconds after the window it was asked from has gone, which
+     * is the sort of thing that reads as a leak on a phone.
+     */
+    @Override
+    protected void handleOnDestroy() {
+        if (browse != null) browse.abandon();
+        browse = null;
+        super.handleOnDestroy();
+    }
+
     @PluginMethod
     public void discover(PluginCall call) {
         long timeout = Math.max(MIN_TIMEOUT_MS, Math.min(MAX_TIMEOUT_MS, call.getInt("timeoutMs", 3000).longValue()));
@@ -56,7 +71,8 @@ public class ConduitDiscoveryPlugin extends Plugin {
             call.resolve(empty());
             return;
         }
-        new Browse(nsd, call).run(timeout);
+        browse = new Browse(nsd, call);
+        browse.run(timeout);
     }
 
     private static JSObject empty() {
@@ -167,6 +183,17 @@ public class ConduitDiscoveryPlugin extends Plugin {
             return value == null ? "" : new String(value, StandardCharsets.UTF_8);
         }
 
+        /**
+         * Settle the call on the main thread.
+         *
+         * The timeout fires on a scheduled executor and NsdManager answers on a
+         * binder thread, so without this the resolve reaches Capacitor from
+         * neither. The bridge hands the reply to `JavaScriptReplyProxy`, which
+         * Android documents as `@UiThread`; on a WebView that enforces it the
+         * throw is swallowed by Capacitor's message handler and the JavaScript
+         * promise never settles -- the add-server dialog would search forever
+         * rather than say nothing was found.
+         */
         private void finish() {
             if (!settled.compareAndSet(false, true)) return;
             try { nsd.stopServiceDiscovery(discovery); } catch (Exception ignored) {}
@@ -175,7 +202,14 @@ public class ConduitDiscoveryPlugin extends Plugin {
             synchronized (found) { for (JSObject entry : found.values()) servers.put(entry); }
             JSObject result = new JSObject();
             result.put("servers", servers);
-            call.resolve(result);
+            getActivity().runOnUiThread(() -> call.resolve(result));
+        }
+
+        /** Give up the browse without answering: the call is already gone. */
+        void abandon() {
+            if (!settled.compareAndSet(false, true)) return;
+            try { nsd.stopServiceDiscovery(discovery); } catch (Exception ignored) {}
+            clock.shutdownNow();
         }
     }
 }
