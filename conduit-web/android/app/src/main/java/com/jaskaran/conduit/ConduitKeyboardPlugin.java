@@ -196,17 +196,30 @@ public class ConduitKeyboardPlugin extends Plugin {
      */
     private void injectSafeArea(WindowInsetsCompat insets) {
         Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
-        boolean keyboard = insets.isVisible(WindowInsetsCompat.Type.ime());
+        /*
+         * The bottom inset as it stands with no keyboard, always, and never
+         * switched off because one arrived.
+         *
+         * The navigation bar is behind the keyboard while the keyboard is up,
+         * so nothing is owed room for it then -- but sending a 0 the moment
+         * the insets change makes that a step, and the keyboard's height is a
+         * curve. The composer's padding grew by a whole navigation bar on the
+         * first frame of a close and the composer jumped that far up the
+         * screen, while the shell it sits in had not started moving yet. So
+         * the resting value goes over as it is, under a name of its own, and
+         * the page takes the keyboard off it frame by frame on the same curve
+         * as everything else it draws.
+         */
         String script = String.format(
             Locale.US,
             "try{var s=document.documentElement.style;" +
-            "s.setProperty('--safe-area-inset-top','%dpx');" +
-            "s.setProperty('--safe-area-inset-right','%dpx');" +
-            "s.setProperty('--safe-area-inset-bottom','%dpx');" +
-            "s.setProperty('--safe-area-inset-left','%dpx');}catch(e){}",
+            "s.setProperty('--safe-area-inset-top','%1$dpx');" +
+            "s.setProperty('--safe-area-inset-right','%2$dpx');" +
+            "s.setProperty('--safe-area-inset-bottom-rest','%3$dpx');" +
+            "s.setProperty('--safe-area-inset-left','%4$dpx');}catch(e){}",
             Math.round(bars.top / density),
             Math.round(bars.right / density),
-            keyboard ? 0 : Math.round(bars.bottom / density),
+            Math.round(bars.bottom / density),
             Math.round(bars.left / density)
         );
         getBridge().getWebView().evaluateJavascript(script, null);

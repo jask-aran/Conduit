@@ -58,6 +58,17 @@ export function bindVisualViewportShell(): () => void {
    * them apart.
    */
   let shellKeyboard = 0;
+  /*
+   * How much room the navigation bar is owed with no keyboard in the way.
+   *
+   * The shell sends it under its own name and leaves it alone, so the amount
+   * still owed can be worked out here on the frame the keyboard is drawn --
+   * `rest - keyboard`, to nothing well before the keyboard is fully up. Read
+   * once a travel rather than once a frame: it only changes when the bars do,
+   * and reading a computed style inside the drawing costs a recalculation on
+   * every frame of it.
+   */
+  let restBottom = 0;
   let restingHeight = 0;
   let restingWidth = 0;
   let source = "viewport";
@@ -80,8 +91,13 @@ export function bindVisualViewportShell(): () => void {
     }
     if (!shellKeyboard) restingHeight = Math.max(restingHeight, viewport);
   };
+  const readRestBottom = () => {
+    const value = Number.parseFloat(getComputedStyle(root).getPropertyValue("--safe-area-inset-bottom-rest"));
+    if (Number.isFinite(value)) restBottom = value;
+  };
   const sync = () => {
     if (!isMobileLayout()) {
+      root.style.removeProperty("--safe-area-inset-bottom");
       root.style.removeProperty("--app-height");
       root.style.removeProperty("--vv-offset-top");
       root.removeAttribute("data-vv-shell");
@@ -124,6 +140,13 @@ export function bindVisualViewportShell(): () => void {
      * surface, and it cost two forced layouts a frame to be wrong in
      * parallel.
      */
+    // The navigation bar's room, given up to the keyboard as the keyboard
+    // takes it rather than the moment it is announced. Only where the
+    // keyboard's own position is known; everywhere else the stylesheet's
+    // resting value stands.
+    if (owned) {
+      root.style.setProperty("--safe-area-inset-bottom", `${Math.max(0, restBottom - shellKeyboard).toFixed(1)}px`);
+    }
     root.style.setProperty("--app-height", `${Math.round(height)}px`);
     root.style.setProperty("--vv-offset-top", `${Math.round(offsetTop)}px`);
     root.setAttribute("data-vv-shell", "true");
@@ -295,6 +318,7 @@ export function bindVisualViewportShell(): () => void {
         }
         const durationMs = described ? info.durationMs : lastDurationMs;
         const curve = described ? info.curve : lastCurve;
+        readRestBottom();
         logKeyboardEvent(described ? "ime-start" : "ime-nodur",
           `${Math.round(info.from)}->${Math.round(info.to)} ${Math.round(durationMs)}ms`);
         stopDrawing();
@@ -318,6 +342,7 @@ export function bindVisualViewportShell(): () => void {
         if (travelling && info.animating) return;
         travelling = false;
         stopDrawing();
+        if (!info.animating) readRestBottom();
         shellKeyboard = info.height;
         noteKeyboardFrame(!info.animating);
         if (!info.animating) logKeyboardEvent("ime-end", Math.round(info.height));
@@ -345,6 +370,7 @@ export function bindVisualViewportShell(): () => void {
     vv?.removeEventListener("scroll", sync);
     window.removeEventListener("resize", sync);
     media?.removeEventListener("change", sync);
+    root.style.removeProperty("--safe-area-inset-bottom");
     root.style.removeProperty("--app-height");
     root.style.removeProperty("--vv-offset-top");
     root.removeAttribute("data-vv-shell");

@@ -789,7 +789,13 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       syncComposerInset(blockSize);
       scheduleLatestButtonAnchor();
     });
-    if (composerStack) composerResizeObserver.observe(composerStack);
+    // Border box, because the only thing the keyboard changes about the stack
+    // is its padding. The pill inside it stays 46px tall whether or not the
+    // navigation bar is owed room underneath, so a content-box observation --
+    // the default -- reports once when it is attached and never again, and the
+    // thread goes on reserving the resting height while the composer sits a
+    // navigation bar higher. That gap was the one visible under the keyboard.
+    if (composerStack) composerResizeObserver.observe(composerStack, { box: "border-box" });
     const visualViewport = window.visualViewport;
     /*
      * The keyboard takes height from the bottom, so the transcript gives it
