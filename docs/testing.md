@@ -215,11 +215,13 @@ What it *can* answer, which no amount of looking at the phone will, is where
 a surface was on a given frame. `adb shell screenrecord` records the real
 composited screen, keyboard included, and the frames can be measured rather
 than described -- the keyboard's top edge against the composer's bottom edge
-is the lag between them, in pixels, per frame. `ffmpeg` is not installed;
-`imageio-ffmpeg` in a virtualenv provides a static binary without root.
+is the lag between them, in pixels, per frame. `ffmpeg` is not installed by
+default; `brew install ffmpeg` provides it without root.
 
-`screenrecord` manages about 7fps here and no lower-level setting changes
-that: it emits a frame per composition, and composition is what is slow.
+`screenrecord` manages about 7fps on the WSL emulator and no lower-level
+setting changes that: it emits a frame per composition, and composition is
+what is slow. On a hardware-accelerated host it is much better than its
+average suggests -- see below.
 `-gpu host` does not help, because WSL exposes no usable GPU to the
 emulator -- it falls back to `llvmpipe`, and the log says so plainly
 ("Your GPU cannot be used for hardware rendering"). The way to resolve an
@@ -228,6 +230,81 @@ animator_duration_scale 10` together with `window_animation_scale` turns a
 285ms travel into nearly three seconds and roughly seventy usable frames.
 Remember that this scales the app's animations and the system's alike, so
 compare shapes rather than trusting an apparent lag between them.
+
+#### A hardware-accelerated emulator on Windows
+
+The WSL emulator renders in software, so it can say what arrived and not what
+it looked like. An emulator run by Android Studio on the Windows host renders
+on the real GPU, and can be driven from here without touching Windows: the
+Windows `adb.exe` is callable across the mount, and WSL reaches the ports it
+opens on `127.0.0.1` directly.
+
+    A=/mnt/c/Users/<user>/AppData/Local/Android/Sdk/platform-tools/adb.exe
+    $A -s emulator-5556 shell ...
+
+Let Android Studio's Device Manager create the AVD and start it. Configuring
+one by hand and editing `config.ini` cost an afternoon: a blank `skin.name`
+refuses to boot, and a hand-built AVD on the same system image crash-looped
+SurfaceFlinger (`Assertion failed: !rcEnc->featureInfo()->hasReadColorBufferDma`
+in `GoldfishMapper::readFromHost`) while Studio's own AVD on that image was
+fine. The symptom is a white, flashing screen with `pm` and `window` services
+coming and going -- and an APK that installs but whose activity "does not
+exist", because the package database is being torn down mid-write.
+
+Everything else is a runtime setting, applied after boot, no config editing:
+
+    $A -s emulator-5556 shell wm size 1440x3120
+    $A -s emulator-5556 shell wm density 600
+    $A -s emulator-5556 shell cmd overlay enable com.android.internal.systemui.navbar.threebutton
+    $A -s emulator-5556 shell settings put secure stylus_handwriting_enabled 0
+
+The last one is the trap. **The emulator reports its mouse as a stylus**, so
+Gboard opens handwriting instead of the keyboard: a floating window, an IME
+inset of zero height, and a shell that correctly reports no keyboard. It looks
+exactly like a broken plugin. `dumpsys window displays | grep "type=ime"` tells
+the two apart -- `frame=[0,3120][1440,3120]` is a zero-height IME and nothing to
+track; `frame=[0,1984][1440,3120]` is a real docked keyboard.
+
+`hw.keyboard=no` is still required and Studio's wizard sets it the other way;
+that one key does have to be edited in the AVD's `config.ini`, and the emulator
+restarted. Its symptom is the same zero-height inset.
+
+A Play-image AVD may refuse adb until the debugging prompt is accepted. If the
+prompt cannot be reached, killing the Windows adb server and letting the next
+command restart it has cleared it. Do not kill that server casually, though:
+started from WSL it often fails to daemonize, and the fix is to run
+`adb.exe -a nodaemon server start` as a background process instead.
+
+#### Measuring the edges against each other
+
+This is what the GPU-backed emulator buys, and it is the only measurement that
+can say whether the composer is actually stuck to the keyboard. `screenrecord`
+there is variable-rate -- it emits a frame when the screen changes, so a still
+screen costs nothing and a travel yields 36-40fps, about 23 frames across an
+open and 37 across a close.
+
+    adb shell screenrecord --bit-rate 24M --time-limit 9 /sdcard/kbd.mp4
+    adb pull /sdcard/kbd.mp4
+    ffprobe -v error -select_streams v:0 -show_entries frame=pts_time -of csv=p=0 kbd.mp4
+    ffmpeg -v error -i kbd.mp4 -fps_mode passthrough frames/f_%04d.png
+
+`--fps_mode passthrough` rather than the removed `-vsync 0`, and read the real
+timestamps from `ffprobe`: the container claims 90000/1 and the frames are not
+evenly spaced.
+
+Make the composer findable before recording rather than trying to recognise it
+afterwards -- over CDP, `.composer-surface-shell` gets a flat red background,
+the probe panel is hidden, and the composer becomes one band a script can find
+by colour. Then per frame: the keyboard's top edge is the top of the bright
+block that runs to the bottom of the screen, the composer's is the red band,
+and the distance between them is the lag. At rest it is constant; if it opens
+up during the travel, the shell is behind the keyboard by that many pixels.
+Pillow is installed, so no decoder beyond `ffmpeg` is needed.
+
+Measured this way on the emulator, the composer sits still for ~150ms of every
+285ms travel and then covers the distance in ~80ms. **That number has not been
+reproduced on a phone** -- the device shows no such lag -- so treat it as the
+emulator's bridge latency until the same recording is made on hardware.
 
 #### What has already been ruled out
 
@@ -246,7 +323,17 @@ Recorded so the same ground is not covered again:
   exactly `lerp(from, to, interpolatedFraction)`. Six callbacks arrived
   across a 285ms animation, so the shell draws the curve itself rather than
   the samples. `getLowerBound`/`getUpperBound` are a range and not a
-  direction -- take the destination from whether the keyboard is arriving.
+  direction. Do not take the destination from whether the keyboard is
+  arriving: that answers a show and a hide, and answers a keyboard that
+  changes height while it stays visible by climbing back to the height it
+  just left. The insets have already been applied for the state being
+  animated to when `onStart` runs, so the end of the range nearest the
+  height they report is the destination.
+- **`getDurationMillis` can answer -1.** Gboard does it when the back button
+  dismisses it, and the keyboard still slides. No emulator IME seen so far
+  reproduces it, so it cannot be tested locally; the shell draws such a
+  travel with the shape of the one before it and the probe says `ime-nodur`
+  rather than `ime-start` when that path runs.
 - **`@capacitor/keyboard` cannot be installed** alongside any of this. It
   registers a `WindowInsetsAnimationCompat.Callback` on the root view with
   `DISPATCH_MODE_STOP`, which stops animation dispatch to every callback
