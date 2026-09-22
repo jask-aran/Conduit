@@ -150,8 +150,13 @@ The server side, as of 0.7.5 development.
   `conduit-leaf-spki-sha256.v1.<id>.<sha256 of SPKI>` with the Ed25519
   identity. The prefix is domain separation: an attestation must not be
   replayable as any other signature this key makes.
-- The server listens over TLS on `CONDUIT_TLS_PORT`, one above the plain
-  port. A port of its own rather than one socket serving both, because
+- The server listens over TLS on `CONDUIT_TLS_PORT`, nine above the plain
+  port -- 4319 by default, with 4311 through 4318 left to the development
+  servers that `port + 1` would otherwise collide with. Both numbers are
+  permanent from the first release that pins: a client that pinned a
+  certificate reached on 4319 cannot be moved off it, and 4310 cannot be
+  promoted onto TLS for the same reason. A port of its own rather than one
+  socket serving both, because
   telling TLS from HTTP on a shared socket means reading the first bytes of
   every connection and guessing, in front of everything. A port already in
   use warns rather than refusing to start: the plain listener is what every
