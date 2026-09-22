@@ -3,14 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <!--
-      No `interactive-widget=resizes-content`. It asks Chromium to shorten the
-      page by the keyboard's height, and in the Android shell something else is
-      already doing that -- so the window went to 183px for a frame on a 832px
-      screen (508 - 324, the keyboard subtracted twice) before settling, which
-      is the composer flashing to the top of the screen. One layer takes the
-      keyboard out of the window; `mobile-layout.ts` decides which.
+      `overlays-content`, so Chromium takes the keyboard out of nothing.
+      Dropping `resizes-content` was not enough: the default is
+      `resizes-visual`, which still subtracts the keyboard from the visual
+      viewport -- and in the Android shell Capacitor has already padded the
+      WebView for it, so the window measured 183px for a frame on an 832px
+      screen (508 - 324, the same keyboard twice) before settling back to 508.
+      That frame is the composer flashing to the top, and it is also two
+      resizes for the transcript to restore its scroll through instead of one.
+      One layer takes the keyboard out of the window; `mobile-layout.ts`
+      decides which, and Chromium is now never it.
     -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=overlays-content" />
     <meta name="theme-color" content="#18181b" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
