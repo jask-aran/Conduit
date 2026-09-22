@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { localPaths, originOfRequest, ServerIdentity, scopeForHost } from "../src/server-identity.js";
+import { issueLeafCertificate, verifyLeafAttestation } from "../src/server-tls.js";
 
 const temporaryFile = async () => path.join(await fs.mkdtemp(path.join(os.tmpdir(), "conduit-identity-")), "identity.json");
 const request = (headers, protocol = "http") => ({ headers, protocol });
@@ -90,4 +91,20 @@ test("a server offers the addresses it holds, and the ones it has answered on", 
   assert.equal(scopeForHost("conduit.example.com"), "public");
   assert.equal(originOfRequest(request({ host: "conduit.example.com" }, "https")), "https://conduit.example.com");
   assert.equal(originOfRequest(request({})), null);
+});
+
+test("an attested leaf is reported beside the paths, never among them", async () => {
+  const identity = await new ServerIdentity(await temporaryFile(), { port: 4310 }).load();
+  const leaf = issueLeafCertificate({ commonName: `Conduit ${identity.id}`, hosts: ["127.0.0.1"] });
+
+  assert.equal(identity.describe().secure, undefined, "a server with no TLS listener claims none");
+
+  identity.attestLeaf(leaf.spki, 4311);
+  const described = identity.describe();
+  assert.equal(described.secure.port, 4311);
+  assert.ok(verifyLeafAttestation(identity.id, leaf.spki, described.secure.attestation, identity.publicKey));
+
+  // No shell can pin a certificate yet, so an https origin in this list would
+  // be a route every client refuses.
+  assert.ok(described.paths.every((path) => path.origin.startsWith("http://")));
 });
