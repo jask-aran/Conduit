@@ -59,6 +59,7 @@ export function bindVisualViewportShell(): () => void {
    */
   let shellKeyboard = 0;
   let restingHeight = 0;
+  let appliedHeight = 0;
   let restingWidth = 0;
   let source = "viewport";
   /*
@@ -80,28 +81,6 @@ export function bindVisualViewportShell(): () => void {
     }
     if (!shellKeyboard) restingHeight = Math.max(restingHeight, viewport);
   };
-  /*
-   * Let the window take the keyboard's time rather than arriving before it.
-   *
-   * The height lands in one frame: Android resizes the WebView the moment the
-   * IME is committed, and `geometrychange` reports a finished number. The
-   * keyboard itself then slides up over a quarter of a second, so the content
-   * is already where it is going while the thing it is making room for is
-   * still moving -- which is the gap, and the sense of the keyboard sliding
-   * over a page that jumped out of its way early.
-   *
-   * Transitioning the shell's height puts the two on the same clock. For the
-   * span of the animation the shell is taller than the viewport it sits in,
-   * so the composer is briefly below the fold and rides up into place with
-   * the keyboard instead of waiting there for it.
-   */
-  const SHIFT_MS = 250;
-  let shiftTimer = 0;
-  const markKeyboardShift = () => {
-    root.setAttribute("data-keyboard-shift", "true");
-    clearTimeout(shiftTimer);
-    shiftTimer = window.setTimeout(() => root.removeAttribute("data-keyboard-shift"), SHIFT_MS + 60);
-  };
   const sync = () => {
     if (!isMobileLayout()) {
       root.style.removeProperty("--app-height");
@@ -114,16 +93,36 @@ export function bindVisualViewportShell(): () => void {
     noteResting(viewport);
     // A shrink of a few pixels is a toolbar, not a keyboard.
     const viewportShrank = viewport < restingHeight - 48;
-    const measured = shellKeyboard && !viewportShrank ? restingHeight - shellKeyboard : viewport;
-    // A keyboard taller than two thirds of the screen is a number that arrived
-    // at a bad moment, not a keyboard. Better to leave the window alone for a
-    // frame than to throw the composer up near the header.
-    const believable = measured >= restingHeight / 3;
-    const height = Math.max(0, believable ? measured : viewport);
+    // One of the two, never both: the viewport if something already took the
+    // keyboard out of it, otherwise the resting height less what the keyboard
+    // is covering.
+    const height = Math.max(0, shellKeyboard && !viewportShrank ? restingHeight - shellKeyboard : viewport);
     const offsetTop = vv?.offsetTop ?? 0;
+    /*
+     * Shortening the window is only half of getting out of the keyboard's way.
+     *
+     * A scroller keeps its `scrollTop` when it is resized, and `scrollTop` is
+     * measured from the top -- so taking height off the bottom holds the first
+     * visible line exactly where it was and drops everything below the new
+     * edge behind the composer. The window moves and the words do not, which
+     * is the whole of "the transcript doesn't move up with the keyboard": the
+     * shell was right all along, and the last thing anybody wanted to read had
+     * quietly gone under the keyboard.
+     *
+     * Pushing `scrollTop` by the same amount the window lost anchors the
+     * bottom instead. Everything rides up by exactly the height that was
+     * taken, which is what stays put means when the edge you are reading at
+     * is the one that moved.
+     */
+    const lost = appliedHeight ? appliedHeight - height : 0;
+    appliedHeight = height;
     root.style.setProperty("--app-height", `${Math.round(height)}px`);
     root.style.setProperty("--vv-offset-top", `${Math.round(offsetTop)}px`);
     root.setAttribute("data-vv-shell", "true");
+    if (lost) {
+      const scroller = document.querySelector<HTMLElement>(".message-scroller-viewport");
+      if (scroller) scroller.scrollTop += lost;
+    }
     reportKeyboardProbe({
       source,
       inner: window.innerHeight,
@@ -133,7 +132,6 @@ export function bindVisualViewportShell(): () => void {
       keyboard: Math.round(shellKeyboard),
       applied: Math.round(height),
       shrank: viewportShrank,
-      sane: believable,
       dpr: window.devicePixelRatio,
     });
   };
@@ -189,7 +187,6 @@ export function bindVisualViewportShell(): () => void {
     const onGeometry = () => {
       const next = virtualKeyboard.boundingRect.height;
       logKeyboardEvent("geometry", Math.round(next));
-      if (next !== shellKeyboard) markKeyboardShift();
       shellKeyboard = next;
       sync();
     };
@@ -210,13 +207,11 @@ export function bindVisualViewportShell(): () => void {
     void import("@capacitor/keyboard").then(async ({ Keyboard }) => {
       const shown = await Keyboard.addListener("keyboardWillShow", (info) => {
         logKeyboardEvent("kb-show", Math.round(info.keyboardHeight));
-        markKeyboardShift();
         shellKeyboard = info.keyboardHeight;
         sync();
       });
       const hidden = await Keyboard.addListener("keyboardWillHide", () => {
         logKeyboardEvent("kb-hide");
-        markKeyboardShift();
         shellKeyboard = 0;
         sync();
       });
@@ -241,8 +236,6 @@ export function bindVisualViewportShell(): () => void {
     root.style.removeProperty("--app-height");
     root.style.removeProperty("--vv-offset-top");
     root.removeAttribute("data-vv-shell");
-    root.removeAttribute("data-keyboard-shift");
-    clearTimeout(shiftTimer);
   };
 }
 
