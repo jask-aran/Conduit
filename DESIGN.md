@@ -218,7 +218,7 @@ Chat composition:
 - Assistant markdown is the full reading column. User messages are a right-aligned frosted glass bubble (~640px max, `{rounded.bubble}`).
 - Composer sits at the bottom of the pane, same column width as dashboard composer — frosted glass, the reference material for all floating chrome.
 
-Palettes (model picker is the reference):
+Menus and pane headers follow the component entries below. Palettes (model picker is the reference):
 
 - Centered solid popover, 11px radius, dim 55% behind.
 - Search row, hairline, close at right.
@@ -267,7 +267,11 @@ Icons are Lucide at 1.5 stroke, 13–16px, muted at rest.
 
 **User bubble** — frosted glass (`glass-bg` + blur), `{rounded.bubble}` radius, right-aligned. Assistant has no bubble. The bubble and composer are the same material family — keep them visually related.
 
-**Runtime dot** — 6–8px, live green / warn amber / danger red / muted. Color on the dot only. Never blue.
+**Dropdown menu** — the common case, more often than a palette: sessions, shortcuts, overflow. Solid `{colors.popover}`, `{rounded.pop}`, ~320px wide. A 9px uppercase group label, then rows: a leading mark (✓ for the current item, a drag grip, or nothing), a 12px/560 title over a muted mono meta line, and trailing 13px icon actions that stay muted and appear with the row on hover or keyboard focus (always shown on touch). The whole row takes the `{colors.accent}` wash, not just the part under the pointer. A single footer action row ("+ New …") sits under a hairline. Something edited in place opens as an inline form inside its row — bordered inputs, a two-state toggle with the selected state as the gray wash, Cancel/Done — and saves on Done; the list has no separate Save. Use a popover rather than a menu when the rows hold inputs, so typing is not taken as menu navigation. A one-field rename stays a dialog.
+
+**Pane header** — a hairline-bottomed strip across a pane (terminal today). Left: route buttons if any, then the status indicator, the name (semibold), and one muted mono context line joined with ` · `. Right: groups of quiet ghost controls separated by a 1px, ~14px hairline, in the order the person reaches for them, with anything that does not fit collapsing into a `⋯` menu rather than scrolling.
+
+**Runtime dot** — 6–8px, live green / warn amber / danger red / muted. Color on the dot only. Never blue. A healthy indicator is the dot alone; it gains a label only when it has something to say ("Updating", "Reconnecting", "Read only"), and a busy state is a small spinner in the dot's place. One indicator per surface: fold "server" and "this connection" into one, worst state first.
 
 **Keycap** — 16px square, hairline, muted mono.
 

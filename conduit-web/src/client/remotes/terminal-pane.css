@@ -70,15 +70,55 @@
   white-space: nowrap;
 }
 
-.terminal-pane-identity span {
-  overflow: hidden;
+/*
+ * Status first, then the name, then one muted line of context. The shared
+ * rule in styles.css draws every identity span as a bordered, muted tag, so
+ * the status is built from elements it does not reach, and the context line
+ * keeps its muted mono but loses the tag.
+ */
+.terminal-pane-identity .terminal-header-context {
+  padding-left: 0;
+  border-left: 0;
   letter-spacing: normal;
-  text-overflow: ellipsis;
   text-transform: none;
+}
+
+.terminal-status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3.2px;
+  color: var(--muted-foreground);
+  font-size: 8.8px;
   white-space: nowrap;
 }
 
-.terminal-header-scope { color: var(--muted-foreground); }
+.terminal-status[data-tone="danger"] { color: var(--destructive); }
+.terminal-status[data-tone="warn"] { color: oklch(0.75 0.15 75); }
+
+.terminal-status .runtime-indicator svg { color: var(--muted-foreground); }
+
+.terminal-header-context {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-header-divider {
+  width: 1px;
+  height: 14px;
+  flex: none;
+  background: var(--border);
+}
+
+/* Inline while there is room; one menu when there is not. */
+.terminal-shortcuts-overflow { display: none !important; }
+
+@container (max-width: 560px) {
+  .terminal-shortcuts { display: none !important; }
+  .terminal-shortcuts-overflow { display: flex !important; }
+}
 
 .terminal-shortcuts {
   display: flex;
@@ -112,160 +152,10 @@
   height: 11.2px;
 }
 
-.terminal-shortcut-dialog {
-  max-width: 640px;
-}
 
-.terminal-shortcut-editor {
-  display: grid;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  container-type: inline-size;
-}
-
-.terminal-shortcut-editor-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  min-width: 0;
-  align-items: stretch;
-  border-bottom: 1px solid var(--border);
-  background: color-mix(in oklch, var(--card), var(--background) 45%);
-}
-
-.terminal-shortcut-editor-row:focus-within {
-  background: color-mix(in oklch, var(--accent-cool), var(--card) 95%);
-}
-
-.terminal-shortcut-editor-copy {
-  display: grid;
-  min-width: 0;
-  gap: 1px;
-  padding: 8px 10px;
-}
-
-.terminal-shortcut-editor-copy input {
-  height: 24px;
-  min-width: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  padding: 0 5px;
-  box-shadow: none;
-}
-
-.terminal-shortcut-editor-copy input:focus {
-  background: color-mix(in oklch, var(--background), transparent 38%);
-  box-shadow: none;
-}
-
-.terminal-shortcut-editor-copy .terminal-shortcut-name {
-  color: var(--foreground);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.terminal-shortcut-command {
-  display: grid;
-  grid-template-columns: 12px minmax(0, 1fr);
-  align-items: center;
-  color: var(--muted-foreground);
-  font: 10px ui-monospace, SFMono-Regular, Consolas, monospace;
-}
-
-.terminal-shortcut-command > span {
-  text-align: center;
-}
-
-.terminal-shortcut-command input {
-  color: var(--muted-foreground);
-  font: inherit;
-}
-
-.terminal-shortcut-row-actions {
-  display: flex;
-  align-items: stretch;
-}
-
-.terminal-shortcut-row-actions [data-slot="button"] {
-  width: 32px;
-  min-width: 32px;
-  height: auto;
-  min-height: 52px;
-  border-radius: 0;
-  padding: 0;
-  color: var(--muted-foreground);
-}
-
-.terminal-shortcut-row-actions [data-slot="button"]:hover {
-  background: var(--accent);
-  color: var(--foreground);
-}
-
-.terminal-shortcut-row-actions .terminal-shortcut-target {
-  width: 88px;
-  gap: 5px;
-  padding-inline: 7px;
-  font-size: 10px;
-}
-
-.terminal-shortcut-row-actions .terminal-shortcut-target[data-active="true"] {
-  background: color-mix(in oklch, var(--accent-cool), transparent 84%);
-  color: var(--accent-cool);
-}
-
-.terminal-shortcut-row-actions svg {
-  width: 12px;
-  height: 12px;
-}
-
-.terminal-shortcut-add {
-  min-height: 34px;
-  justify-content: flex-start;
-  border-radius: 0;
-  padding-inline: 11px;
-  color: var(--muted-foreground);
-  font-size: 11px;
-}
-
-.terminal-shortcut-editor-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
-  padding: 10px;
-  background: var(--background);
-}
-
-@container (max-width: 620px) {
-  .terminal-header-command { display: none; }
-}
-
-.terminal-server-status {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: 4.8px;
-  padding-inline: 6.4px;
-  color: var(--muted-foreground);
-  font-size: 8.8px;
-  white-space: nowrap;
-}
-
-.terminal-server-status svg {
-  width: 11.2px;
-  height: 11.2px;
-}
-
-.terminal-server-status[data-tone="danger"] { color: var(--destructive); }
-.terminal-server-status[data-tone="warn"] { color: var(--warn); }
-
-/* The panel mount is narrow; the dot alone still carries the state there. */
-@container (max-width: 520px) {
-  .terminal-server-status small { display: none; }
-}
 
 .terminal-pane[data-terminal-focused="true"] .terminal-canvas[data-active="true"] {
-  outline: 1px solid color-mix(in oklch, var(--accent-cool), transparent 42%);
+  outline: 1px solid color-mix(in oklch, var(--ring), transparent 55%);
   outline-offset: -1px;
 }
 
@@ -364,27 +254,6 @@
   }
 }
 
-@container (max-width: 440px) {
-  .terminal-shortcut-editor-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .terminal-shortcut-row-actions {
-    min-height: 38px;
-    border-top: 1px solid color-mix(in oklch, var(--border), transparent 35%);
-  }
-
-  .terminal-shortcut-row-actions [data-slot="button"] {
-    min-height: 38px;
-  }
-
-  .terminal-shortcut-row-actions .terminal-shortcut-target {
-    width: auto;
-    flex: 1;
-    justify-content: flex-start;
-    padding-inline: 11px;
-  }
-}
 
 
 @media (pointer: coarse) {
@@ -430,9 +299,9 @@
 
   .terminal-mobile-keys button:active,
   .terminal-mobile-keys .terminal-mobile-modifier[data-active="true"] {
-    border-color: color-mix(in oklch, var(--accent-cool), transparent 30%);
-    background: color-mix(in oklch, var(--accent-cool), transparent 75%);
-    color: var(--accent-cool);
+    border-color: var(--ring);
+    background: color-mix(in oklch, var(--foreground), transparent 86%);
+    color: var(--foreground);
   }
 }
 
@@ -472,7 +341,7 @@
 }
 
 .terminal-pane[data-terminal-focused="true"] .terminal-canvas[data-active="true"] {
-  outline: 1px solid color-mix(in oklch, var(--accent-cool), transparent 42%);
+  outline: 1px solid color-mix(in oklch, var(--ring), transparent 55%);
   outline-offset: -1px;
 }
 
@@ -600,87 +469,321 @@
   height: 11px;
 }
 
-.terminal-sessions-menu {
-  width: min(300px, calc(100vw - 24px));
+/*
+ * The terminal's dropdowns: sessions, shortcuts, and the narrow-pane
+ * overflow. One row anatomy for all three -- a leading mark, a title over a
+ * muted mono line, actions that appear with the row -- so a menu and the
+ * editor that sits beside it read as the same thing.
+ */
+.terminal-menu {
+  width: min(320px, calc(100vw - 24px));
+  padding: 4px;
 }
 
-.terminal-session-row {
+.terminal-menu-label {
+  padding: 5px 6px 4px;
+  color: var(--muted-foreground);
+  font-size: 7.2px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.terminal-menu-list {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(3, 38px);
-  align-items: stretch;
-  overflow: hidden;
-  border-radius: 5px;
-}
-
-.terminal-session-item {
-  align-items: flex-start;
-  border-radius: 5px 0 0 5px;
-}
-
-.terminal-session-check {
-  width: 13px;
-  height: 13px;
-  margin-top: 2px;
-  flex: none;
-}
-
-.terminal-session-check-hidden {
-  visibility: hidden;
-}
-
-.terminal-session-copy {
-  display: grid;
-  min-width: 0;
   gap: 1px;
 }
 
-.terminal-session-copy strong {
+.terminal-menu-row {
+  position: relative;
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  border-radius: 6px;
+  padding-right: 3px;
+}
+
+.terminal-menu-row:hover,
+.terminal-menu-row:focus-within,
+.terminal-menu-row:has([data-highlighted]) {
+  background: var(--accent);
+}
+
+/* The whole row carries the wash; the item inside it does not add another. */
+.terminal-menu-row [data-highlighted] { background: transparent; }
+
+.terminal-menu-primary,
+[data-slot="menu-content"] .terminal-menu-row[role="menuitem"] {
+  min-width: 0;
+  flex: 1;
+  align-self: stretch;
+  gap: 6px;
+  padding: 4px 6px;
+}
+
+.terminal-menu-check {
+  color: var(--foreground);
+  visibility: hidden;
+}
+
+.terminal-menu-check[data-current="true"] { visibility: visible; }
+
+.terminal-menu-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 1px;
+}
+
+.terminal-menu-copy strong {
   overflow: hidden;
   color: var(--foreground);
-  font-size: 12px;
+  font-size: 9.6px;
   font-weight: 560;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.terminal-session-copy small {
+.terminal-menu-copy small {
+  overflow: hidden;
   color: var(--muted-foreground);
-  font: 10px ui-monospace, SFMono-Regular, Consolas, monospace;
+  font: 8px ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.terminal-session-action-wrap {
+.terminal-menu-tag {
+  flex: none;
+  color: var(--muted-foreground);
+  font: 8px ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+/* Present for the keyboard and on touch; revealed with the row for a mouse. */
+.terminal-menu-actions {
   display: flex;
-  align-self: stretch;
+  flex: none;
+  gap: 1px;
+  opacity: 0;
 }
 
-.terminal-session-action,
-.terminal-session-destroy {
-  align-self: stretch;
-  width: 38px;
-  min-width: 38px;
-  height: auto;
-  padding: 0;
+.terminal-menu-row:hover .terminal-menu-actions,
+.terminal-menu-row:focus-within .terminal-menu-actions,
+.terminal-menu-row:has([data-highlighted]) .terminal-menu-actions {
+  opacity: 1;
+}
+
+@media (pointer: coarse) {
+  .terminal-menu-actions { opacity: 1; }
+}
+
+.terminal-menu-action,
+[data-slot="menu-content"] .terminal-menu-action {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  align-items: center;
   justify-content: center;
-  border-radius: 0;
-}
-
-.terminal-session-destroy {
-  border-radius: 0 5px 5px 0;
-}
-
-.terminal-session-action svg,
-.terminal-session-destroy svg {
-  width: 12px;
-  height: 12px;
-}
-
-.terminal-session-empty {
-  padding: 7px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  padding: 0;
   color: var(--muted-foreground);
-  font-size: 11px;
+}
+
+.terminal-menu-action:hover,
+.terminal-menu-action:focus-visible,
+[data-slot="menu-content"] .terminal-menu-action[data-highlighted] {
+  background: var(--accent);
+  color: var(--foreground);
+  outline: none;
+}
+
+.terminal-menu-action[data-variant="destructive"]:hover,
+.terminal-menu-action[data-variant="destructive"]:focus-visible,
+[data-slot="menu-content"] .terminal-menu-action[data-variant="destructive"][data-highlighted] {
+  background: color-mix(in oklch, var(--destructive), transparent 85%);
+  color: var(--destructive);
+}
+
+.terminal-menu-action:disabled,
+.terminal-menu-action[data-disabled] {
+  opacity: .4;
+  pointer-events: none;
+}
+
+.terminal-menu .terminal-menu-action svg,
+.terminal-menu .terminal-menu-grip svg,
+.terminal-menu .terminal-menu-footer svg {
+  width: 10.4px;
+  height: 10.4px;
+}
+
+.terminal-menu-grip {
+  display: inline-flex;
+  width: 14px;
+  align-self: stretch;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--muted-foreground);
+  cursor: grab;
+  opacity: 0;
+}
+
+.terminal-shortcut-row {
+  padding-left: 2px;
+  cursor: default;
+}
+
+.terminal-shortcut-row .terminal-menu-copy { padding-block: 4px; }
+.terminal-shortcut-row:hover .terminal-menu-grip,
+.terminal-menu-grip:focus-visible { opacity: 1; outline: none; }
+.terminal-shortcut-row[data-dragging="true"] { opacity: .45; }
+.terminal-shortcut-row[data-drop-target="true"] { box-shadow: inset 0 1px 0 var(--foreground); }
+
+.terminal-menu-separator {
+  height: 1px;
+  margin: 4px -4px;
+  background: var(--border);
+}
+
+.terminal-menu-footer,
+[data-slot="menu-content"] .terminal-menu-footer {
+  display: flex;
+  width: 100%;
+  min-height: 26px;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 0 6px;
+  color: var(--muted-foreground);
+  font-size: 9.6px;
+  text-align: left;
+}
+
+.terminal-menu-footer:hover,
+.terminal-menu-footer:focus-visible,
+[data-slot="menu-content"] .terminal-menu-footer[data-highlighted] {
+  background: var(--accent);
+  color: var(--foreground);
+  outline: none;
+}
+
+.terminal-menu-footer:disabled { opacity: .45; pointer-events: none; }
+
+.terminal-menu-empty,
+.terminal-menu-error {
+  margin: 0;
+  padding: 6px;
+  color: var(--muted-foreground);
+  font-size: 9.6px;
   line-height: 1.4;
+}
+
+.terminal-menu-error { color: var(--destructive); }
+
+/* A shortcut open for editing: the row becomes its own small form. */
+.terminal-shortcut-form {
+  display: grid;
+  gap: 6px;
+  margin: 2px 0;
+  padding: 6px;
+  border-radius: 6px;
+  background: var(--accent);
+}
+
+.terminal-shortcut-form-line {
+  display: flex;
+  min-width: 0;
+  gap: 6px;
+}
+
+.terminal-shortcut-form input {
+  height: 26px;
+  min-width: 0;
+  border: 1px solid var(--input);
+  border-radius: 6px;
+  padding: 0 7px;
+  font-size: 9.6px;
+}
+
+.terminal-shortcut-form input:focus {
+  border-color: var(--ring);
+  box-shadow: none;
+}
+
+.terminal-shortcut-form .terminal-shortcut-name { flex: 1; font-weight: 560; }
+
+.terminal-shortcut-target {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border: 1px solid var(--input);
+  border-radius: 6px;
+}
+
+.terminal-shortcut-target button {
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  padding: 0 6px;
+  color: var(--muted-foreground);
+  font-size: 8.8px;
+  white-space: nowrap;
+}
+
+.terminal-shortcut-target button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.terminal-shortcut-command {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted-foreground);
+  font: 9.6px ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.terminal-shortcut-command input {
+  flex: 1;
+  font: inherit;
+}
+
+.terminal-shortcut-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.terminal-shortcut-form-actions [data-slot="button"] {
+  min-height: 22.4px;
+  height: 22.4px;
+  padding-inline: 8px;
+  font-size: 8.8px;
 }
 
 @media (--conduit-mobile-layout) {
   .terminal-sessions-trigger { min-height: 28px; height: 28px; padding-inline: 8px; font-size: 11px; }
+  .terminal-status { gap: 4px; font-size: 11px; }
+  .terminal-menu-label { font-size: 9px; }
+  .terminal-menu-row { min-height: 38px; }
+  .terminal-menu-copy strong { font-size: 12px; }
+  .terminal-menu-copy small, .terminal-menu-tag { font-size: 10px; }
+  .terminal-menu-action, [data-slot="menu-content"] .terminal-menu-action { width: 28px; height: 28px; }
+  .terminal-menu .terminal-menu-action svg, .terminal-menu .terminal-menu-grip svg, .terminal-menu .terminal-menu-footer svg { width: 13px; height: 13px; }
+  .terminal-menu-footer, [data-slot="menu-content"] .terminal-menu-footer { min-height: 34px; font-size: 12px; }
+  .terminal-menu-empty, .terminal-menu-error { font-size: 12px; }
+  .terminal-shortcut-form input { height: 34px; font-size: 12px; }
+  .terminal-shortcut-target button { font-size: 11px; }
+  .terminal-shortcut-form-actions [data-slot="button"] { min-height: 30px; height: 30px; padding-inline: 12px; font-size: 12px; }
+  .terminal-shortcut-command { font-size: 12px; }
+  .terminal-header-divider { height: 18px; }
 }
