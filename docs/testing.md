@@ -218,6 +218,17 @@ than described -- the keyboard's top edge against the composer's bottom edge
 is the lag between them, in pixels, per frame. `ffmpeg` is not installed;
 `imageio-ffmpeg` in a virtualenv provides a static binary without root.
 
+`screenrecord` manages about 7fps here and no lower-level setting changes
+that: it emits a frame per composition, and composition is what is slow.
+`-gpu host` does not help, because WSL exposes no usable GPU to the
+emulator -- it falls back to `llvmpipe`, and the log says so plainly
+("Your GPU cannot be used for hardware rendering"). The way to resolve an
+animation is to stretch it instead: `settings put global
+animator_duration_scale 10` together with `window_animation_scale` turns a
+285ms travel into nearly three seconds and roughly seventy usable frames.
+Remember that this scales the app's animations and the system's alike, so
+compare shapes rather than trusting an apparent lag between them.
+
 #### What has already been ruled out
 
 Recorded so the same ground is not covered again:
@@ -230,6 +241,12 @@ Recorded so the same ground is not covered again:
 - **Chromium's scroll anchoring was not the cause** of the drift on close.
   It was measured with `overflow-anchor: none` and the drift was unchanged.
   The cause was the browser clamping `scrollTop` as the scroller grew.
+- **The inset API is self-consistent, just sparse.** `onStart` gives the
+  bounds, the duration and the interpolator, and each `onProgress` value is
+  exactly `lerp(from, to, interpolatedFraction)`. Six callbacks arrived
+  across a 285ms animation, so the shell draws the curve itself rather than
+  the samples. `getLowerBound`/`getUpperBound` are a range and not a
+  direction -- take the destination from whether the keyboard is arriving.
 - **`@capacitor/keyboard` cannot be installed** alongside any of this. It
   registers a `WindowInsetsAnimationCompat.Callback` on the root view with
   `DISPATCH_MODE_STOP`, which stops animation dispatch to every callback
