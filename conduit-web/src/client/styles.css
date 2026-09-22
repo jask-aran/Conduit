@@ -5,6 +5,11 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /* The Android shell sends the navigation bar's resting height and leaves it
+     alone; the mobile shell overrides this inline, frame by frame, with what
+     is still owed once the keyboard has covered part of it. Everywhere else
+     the resting value is the answer. */
+  --safe-area-inset-bottom: var(--safe-area-inset-bottom-rest, env(safe-area-inset-bottom, 0px));
   /* Type and rem chrome scale from the root. Explicit px does not. Viewport
      geometry stays in real CSS pixels so scroll, fixed overlays, and popovers
      share one coordinate space. */
