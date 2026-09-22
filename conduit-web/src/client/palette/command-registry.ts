@@ -70,6 +70,7 @@ export interface PaletteActions {
   reload: () => void;
   updateApp: () => void;
   resetAppCache: () => void;
+  keyboardProbe: () => void;
   delete: () => void;
   deleteFolder: () => void;
   settings: (section: string) => void;
@@ -221,6 +222,9 @@ const paletteCommandRuntime: Record<string, PaletteCommandRuntime> = {
   [COMMAND_IDS.reload]: { isAvailable: (context) => context.connectivity === "offline", run: (actions) => actions.reload() },
   [COMMAND_IDS.updateApp]: { isAvailable: (context) => !context.nativeApp, run: (actions) => actions.updateApp() },
   [COMMAND_IDS.resetAppCache]: { isAvailable: (context) => !context.nativeApp, run: (actions) => actions.resetAppCache() },
+  // Available everywhere, including the shell: it is the client without an
+  // address bar that the numbers are hardest to get out of.
+  [COMMAND_IDS.keyboardProbe]: { isAvailable: () => true, run: (actions) => actions.keyboardProbe() },
   [COMMAND_IDS.deleteChat]: { isAvailable: hasChat, run: (actions) => actions.delete() },
   [COMMAND_IDS.deleteFolder]: { isAvailable: isNamedFolder, run: (actions) => actions.deleteFolder() },
 };

@@ -53,6 +53,7 @@ export const COMMAND_IDS = {
   reload: "reload",
   updateApp: "update-app",
   resetAppCache: "reset-app-cache",
+  keyboardProbe: "keyboard-probe",
   deleteChat: "delete",
   deleteFolder: "delete-folder",
   logout: "logout",
@@ -515,6 +516,18 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     group: "commands",
     icon: "reload",
     keywords: ["update", "refresh", "pwa", "service worker", "cache", "stale"],
+    contexts: ["palette.root"],
+    palette: true,
+  }),
+  command({
+    id: COMMAND_IDS.keyboardProbe,
+    label: "Show keyboard measurements",
+    // Reachable from the palette because the Android shell has no address bar
+    // to put a flag in, and this is the one client the numbers are needed from.
+    description: "Overlay the viewport numbers behind the on-screen keyboard",
+    group: "commands",
+    icon: "reload",
+    keywords: ["keyboard", "viewport", "diagnostic", "probe", "debug"],
     contexts: ["palette.root"],
     palette: true,
   }),
