@@ -38,13 +38,23 @@ authenticated because an open version of it would let anything on the network
 say "I am the server you already hold a token for", which is the whole reason
 addresses were kept apart before this existed.
 
-**"Prove you are the server I already paired with."** — `POST /v0/server/prove`,
-which does **not** require a session, and that is the point. A client asks it
-*before* it sends a token, so moving to a new address cannot be the thing that
-hands a credential to whatever happened to answer there. The caller picks the
-nonce and the server signs `<id>.<nonce>`, so a reply recorded off the wire is
-worthless for the next question, and a caller holding no public half for this
-server learns nothing it can act on.
+**"Prove you can answer for the server I paired with."** — `POST
+/v0/server/prove`, which does **not** require a session, and that is the point.
+A client asks it *before* it sends a token, so moving to a new address cannot
+be the thing that hands a credential to whatever happened to answer there. The
+caller picks the nonce and the server signs `<id>.<nonce>`, so a reply recorded
+off the wire is worthless for the next question, and a caller holding no public
+half for this server learns nothing it can act on.
+
+**It does not prove the address.** The signature covers the id and the nonce
+and nothing else, so it says the private key exists somewhere reachable rather
+than that the thing at this address holds it. Something on a hostile network
+can forward a client's nonce to the real server over any route it has and relay
+the answer, and the client will accept the address. Closing that means binding
+the proof to the connection, which cleartext HTTP cannot do —
+[`pinned-tls-plan.md`](pinned-tls-plan.md) is the plan for 0.7.5. Until then,
+treat a cleartext route as checked against a passive impostor and not against
+an active one.
 
 ### Where the routes come from
 

@@ -16,13 +16,20 @@ import path from "node:path";
  * secret, not a credential, and grants nothing. It exists so two addresses can
  * be recognised as one server rather than kept apart forever.
  *
- * The key pair is what makes an address safe to move to. A client that has
+ * The key pair is what lets an address be checked at all. A client that has
  * signed in once holds the public half; afterwards it can hand any address a
- * random nonce and ask for it back signed, and only this server can answer.
- * That settles "is the thing at 192.168.0.128 the server I paired with" before
- * a token is sent to it rather than after -- which is the whole difficulty,
- * since the usual way to check is to authenticate, and authenticating is the
- * thing that would give a stranger the credential.
+ * random nonce and ask for it back signed. That is asked before a token is
+ * sent rather than after, which is the whole difficulty -- the usual way to
+ * check is to authenticate, and authenticating is the thing that would give a
+ * stranger the credential.
+ *
+ * It is weaker than it looks, and the limit is worth stating where somebody
+ * will read it. The signature covers `<id>.<nonce>` and says nothing about the
+ * address, so it proves the private key exists somewhere reachable, not that
+ * the thing that answered holds it. Something on a hostile network can forward
+ * the nonce to the real server over any route it has and relay the answer
+ * back. A relay is stopped by binding the proof to the channel, and cleartext
+ * HTTP has no channel to bind to -- see `docs/pinned-tls-plan.md`.
  *
  * The private half never leaves the machine and is not a login: possessing it
  * proves identity and grants nothing.
