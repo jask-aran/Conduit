@@ -46,7 +46,7 @@ export function registerChatRoutes(app, {
   const defaultDiscovery = () => backends.where((manifest) => manifest.discovery !== "none")[0] || "";
   const profileFor = (profileId) => agentProfiles(config.piTemplates, {
     available: new Set([...backends.adapters.keys()]),
-  }).find((profile) => profile.id === profileId && profile.agent?.protocol === "native_api");
+  }).find((profile) => profile.id === profileId && profile.management === "agent");
   const completeCreation = (request, response, chat, project) => {
     response.status(201).json(chatView(chat));
     if (request.body?.start !== true) return;
