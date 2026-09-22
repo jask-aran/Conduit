@@ -112,12 +112,12 @@ const serverIdentity = await new ServerIdentity(config.identityFile, { port: con
  * routinely. See `docs/pinned-tls-plan.md` for why the connection has to carry
  * the proof at all.
  */
-const serverLeaf = config.tlsPort
-  ? await new ServerLeaf(config.leafFile).ensure({
-      commonName: `Conduit ${serverIdentity.id}`,
-      hosts: localPaths(config.port).map((origin) => new URL(origin).hostname),
-    })
-  : null;
+const leafStore = config.tlsPort ? new ServerLeaf(config.leafFile) : null;
+const leafFor = () => ({
+  commonName: `Conduit ${serverIdentity.id}`,
+  hosts: localPaths(config.port).map((origin) => new URL(origin).hostname),
+});
+let serverLeaf = leafStore ? await leafStore.ensure(leafFor()) : null;
 if (serverLeaf) serverIdentity.attestLeaf(serverLeaf.spki, config.tlsPort);
 const lanAdvertisement = new LanAdvertisement({
   identity: serverIdentity,
@@ -894,6 +894,25 @@ const secureServer = serverLeaf
   ? https.createServer({ cert: serverLeaf.certificate, key: serverLeaf.privateKey }, app)
   : null;
 secureServer?.on("upgrade", handleUpgrade);
+/*
+ * Checked again as the machine's addresses move, and near expiry: `ensure`
+ * hands back the same leaf until one of those makes it unfit, and only then
+ * is a new one attested and swapped in under the listener.
+ */
+const LEAF_CHECK_MS = 15_000;
+const leafTimer = secureServer ? setInterval(async () => {
+  try {
+    const next = await leafStore.ensure(leafFor());
+    if (next === serverLeaf) return;
+    serverLeaf = next;
+    serverIdentity.attestLeaf(next.spki, config.tlsPort);
+    secureServer.setSecureContext({ cert: next.certificate, key: next.privateKey });
+    console.log(JSON.stringify({ type: "conduit.tls-leaf", state: "reissued", hosts: next.hosts, fingerprint: serverIdentity.leaf.fingerprint }));
+  } catch (error) {
+    console.warn("Conduit could not re-issue its TLS leaf", error.message);
+  }
+}, LEAF_CHECK_MS) : null;
+leafTimer?.unref?.();
 
 async function shutdown(signal) {
   if (shuttingDown) return;
@@ -908,6 +927,7 @@ async function shutdown(signal) {
   const closed = new Promise((resolve) => server.close(resolve));
   server.closeIdleConnections?.();
   server.closeAllConnections?.();
+  clearInterval(leafTimer);
   secureServer?.close();
   secureServer?.closeAllConnections?.();
   const stoppedProcesses = await manager.shutdown();

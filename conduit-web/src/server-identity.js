@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { attestLeaf, leafFingerprint } from "./server-tls.js";
+import { PRIVATE_HOST } from "./network-hosts.js";
 
 /*
  * Who this server is, and where it answers.
@@ -37,8 +38,6 @@ import { attestLeaf, leafFingerprint } from "./server-tls.js";
  * proves identity and grants nothing.
  */
 
-const PRIVATE_ADDRESS = /^(10(\.\d{1,3}){3}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2}|192\.168(\.\d{1,3}){2}|169\.254(\.\d{1,3}){2})$/;
-
 /** What a path costs to establish, and where it can be reached from. */
 export const PATH_SCOPES = Object.freeze({
   loopback: "loopback",
@@ -49,7 +48,7 @@ export const PATH_SCOPES = Object.freeze({
 export function scopeForHost(hostname) {
   const host = String(hostname || "").replace(/^\[|\]$/g, "");
   if (host === "localhost" || host === "::1" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) return PATH_SCOPES.loopback;
-  if (PRIVATE_ADDRESS.test(host)) return PATH_SCOPES.private;
+  if (PRIVATE_HOST.test(host)) return PATH_SCOPES.private;
   return PATH_SCOPES.public;
 }
 
@@ -70,7 +69,7 @@ export function localPaths(port, interfaces = os.networkInterfaces()) {
       // address. It is a private address by the rules above, and almost never
       // a path anything can reach -- offering it would put a row in every
       // client's menu that only ever fails to answer.
-      if (!PRIVATE_ADDRESS.test(entry.address) || entry.address.startsWith("169.254.")) continue;
+      if (!PRIVATE_HOST.test(entry.address) || entry.address.startsWith("169.254.")) continue;
       const origin = `http://${entry.address}:${port}`;
       if (!origins.includes(origin)) origins.push(origin);
     }

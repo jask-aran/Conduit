@@ -107,6 +107,11 @@ export function startPathSelection(deps: PathSelectorDeps) {
     try {
       const routes = pathsOf(entry);
       const current = activePath();
+      // Counts for routes that were forgotten or absorbed would otherwise wait
+      // around to fast-track the same address if it ever came back.
+      for (const origin of agree.keys()) {
+        if (origin !== current && !routes.some((path) => path.origin === origin)) agree.delete(origin);
+      }
       const currentIndex = routes.findIndex((path) => path.origin === current);
 
       const candidates = nearerThan(routes, current);
