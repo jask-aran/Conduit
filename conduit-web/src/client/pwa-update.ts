@@ -20,6 +20,8 @@
  * the library's `controlling` listener, the only one left.
  */
 
+import { createSignal } from "solid-js";
+
 let registeredServiceWorker: ServiceWorkerRegistration | null = null;
 let updateRequest: Promise<boolean> | null = null;
 let resetRequest: Promise<void> | null = null;
@@ -30,6 +32,18 @@ let announce: (() => void) | null = null;
 
 /** Whether a new build is installed and waiting for a quiet moment. */
 export const pwaUpdateWaiting = () => waiting;
+
+/*
+ * Whether a check is still deciding if this page is about to be replaced.
+ *
+ * True from the moment a check starts until it finds nothing, or a found
+ * build fails to install. When a build does install it stays true through
+ * the reload, so anything that would reconnect only to be torn down a second
+ * later -- a terminal coming back from a server restart -- can wait it out
+ * behind the screen it is already showing.
+ */
+const [updateImpending, setUpdateImpending] = createSignal(false);
+export const pwaUpdateImpending = updateImpending;
 
 /*
  * Taking an update ends this document, so nothing here can report that it
@@ -82,6 +96,7 @@ export function startPwaUpdates({ hold, onUpdateReady }: { hold: () => boolean; 
         // straight away if there was nothing on screen worth interrupting.
         announce?.();
         if (!hold()) void applyPwaUpdate();
+        else setUpdateImpending(false);
       },
     });
     takeUpdate = () => update();
@@ -118,8 +133,20 @@ async function takeWaiting(takeUpdate: () => Promise<void>): Promise<boolean> {
 
 export async function checkForPwaUpdate() {
   if (!("serviceWorker" in navigator)) return;
-  const registration = registeredServiceWorker || await navigator.serviceWorker.getRegistration();
-  await registration?.update();
+  setUpdateImpending(true);
+  let installing: ServiceWorker | null = null;
+  try {
+    const registration = registeredServiceWorker || await navigator.serviceWorker.getRegistration();
+    await registration?.update();
+    // `update()` settles once the new script is fetched; a changed one is
+    // already installing by then, and `onNeedRefresh` takes it from here.
+    installing = registration?.installing ?? null;
+  } finally {
+    if (!installing || waiting) setUpdateImpending(false);
+    else installing.addEventListener("statechange", () => {
+      if (installing?.state === "redundant") setUpdateImpending(false);
+    });
+  }
 }
 
 /**

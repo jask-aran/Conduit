@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Index, on, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Index, on, onCleanup, onMount, Show } from "solid-js";
 import { ArrowDownIcon, ArrowLeftIcon, CableIcon, ArrowUpIcon, CheckIcon, ChevronDownIcon, FocusIcon, KeyboardIcon, Maximize2Icon, Minimize2Icon, PencilIcon, PlusIcon, Settings2Icon, TerminalIcon, Trash2Icon, UnplugIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
 import {
@@ -24,8 +24,9 @@ import { api } from "../api/client";
 import type { Connectivity } from "../state/runtime";
 import { onPathChange } from "../platform/servers";
 import { terminalSocketUrl } from "../api/transport";
+import { pwaUpdateImpending } from "../pwa-update";
 import { clipboardPasteText, createTerminalRenderer, type TerminalPasteFiles, type TerminalRenderer } from "./terminal-renderer";
-import { terminalRecoveryView, type TerminalConnectionState } from "./terminal-recovery";
+import { terminalRecoveryView, type TerminalConnectionState, type TerminalRecoveryView } from "./terminal-recovery";
 import { LEGACY_TERMINAL_SHORTCUTS_STORAGE_KEY, normalizeTerminalShortcuts, readLegacyTerminalShortcuts, type TerminalShortcut } from "./terminal-shortcuts";
 
 export type Pty = {
@@ -79,6 +80,11 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
   const [sessions, setSessions] = createSignal<Pty[]>([]);
   const [error, setError] = createSignal("");
   const [starting, setStarting] = createSignal(false);
+  // Whether this pane has asked the server what is running yet. Until it has,
+  // "start or reattach" is a guess -- and after a reload it is the wrong one,
+  // flashed for as long as the session list takes to arrive.
+  const [looked, setLooked] = createSignal(false);
+  createEffect(() => { if (pty()) setLooked(true); });
   const [sessionBusy, setSessionBusy] = createSignal("");
   const [renameSession, setRenameSession] = createSignal<Pty | null>(null);
   const [renameValue, setRenameValue] = createSignal("");
@@ -345,6 +351,10 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     setConnectionState(waiting ? "offline" : "reconnecting");
     reconnectTimer = window.setTimeout(() => {
       reconnectTimer = undefined;
+      // While the server is away, or back with a build that is about to
+      // replace this page, the retry would only attach to be torn down. The
+      // effect on `serverReady` picks it up the moment neither is true.
+      if (props.connectivity && !serverReady()) return;
       // The renderer is deliberately kept across attempts: tmux repaints the
       // pane on attach, so rebuilding it only costs a visible flash on every
       // retry and throws away the screen the user was reading.
@@ -591,6 +601,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
       if (projectId === activeProjectId) setError((cause as Error).message);
     } finally {
       if (projectId === activeProjectId) setStarting(false);
+      setLooked(true);
     }
   };
 
@@ -831,7 +842,17 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     return "Idle";
   };
 
-  const recovery = () => terminalRecoveryView(connectionState(), error());
+  /*
+   * Each retry passes through "connecting", which has no recovery view of its
+   * own. Showing nothing there uncovered the stale screen underneath for the
+   * length of every attempt, so a restart flashed it on and off. The view on
+   * screen is held until the attempt settles one way or the other.
+   */
+  const recovery = createMemo<TerminalRecoveryView | null>((previous) => {
+    const state = connectionState();
+    if (state === "connecting" && previous) return previous;
+    return terminalRecoveryView(state, error());
+  }, null);
 
   // Mirrors the sidebar footer indicator so both terminal surfaces say the same
   // thing about the server the pane depends on.
@@ -851,13 +872,17 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     return "muted";
   };
   const serverBusy = () => serverState() === "connecting" || serverState() === "reconnecting";
+  // Back, and not about to reload into a new build. Reattaching before the
+  // update check finished put the terminal on screen for the few seconds the
+  // new build took to install, then pulled it away again for the reload.
+  const serverReady = () => serverState() === "online" && !pwaUpdateImpending();
 
   // The runtime stream notices Conduit returning long before a backed-off
   // terminal retry would. Collapse the wait: reattach at once, and when the
   // terminal did not survive, refresh the list so the recovery button offers a
   // new one that can actually be spawned.
-  createEffect(on(serverState, (state, previous) => {
-    if (state !== "online" || previous === undefined || previous === "online") return;
+  createEffect(on(serverReady, (ready, previous) => {
+    if (!ready || previous === undefined || previous) return;
     if (!mounted || props.active === false || activeProjectId !== props.projectId) return;
     const record = pty();
     const recoverable = connectionState() === "offline" || connectionState() === "reconnecting";
@@ -1150,7 +1175,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
         onFocusIn={handleTerminalFocusIn}
         onFocusOut={handleTerminalFocusOut}
       />
-      <Show when={!pty()}>
+      <Show when={!pty() && looked()}>
         <div class="terminal-pane-empty">
           <TerminalIcon />
           <strong>Start or reattach a terminal</strong>
