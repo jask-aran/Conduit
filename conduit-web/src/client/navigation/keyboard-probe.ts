@@ -47,6 +47,10 @@ let runFrames = 0;
 let runStart = 0;
 let runLast = 0;
 let runGap = 0;
+let runMoving = false;
+let runFirst = 0;
+let runMin = 0;
+let runMax = 0;
 let runSummary = "";
 
 export function noteKeyboardFrame(final: boolean): void {
@@ -56,18 +60,32 @@ export function noteKeyboardFrame(final: boolean): void {
     runStart = now;
     runFrames = 0;
     runGap = 0;
+    runMoving = false;
+    runFirst = 0;
   } else {
     runGap = Math.max(runGap, now - runLast);
   }
   runLast = now;
   runFrames += 1;
-  if (final) {
-    const span = Math.round(now - runStart);
-    const fps = span > 0 ? Math.round((runFrames / span) * 1000) : 0;
-    runSummary = `${runFrames}f / ${span}ms / ${fps}fps / gap ${Math.round(runGap)}ms`;
-    runStart = 0;
-    draw();
+  if (!final) {
+    runMoving = true;
+    return;
   }
+  /*
+   * The shell settles twice: the animation's own end, and the insets that
+   * arrive behind it saying the same thing. Without this the second one
+   * starts a run of its own, finishes it in the same breath and overwrites
+   * the travel that just happened with `1f / 0ms`.
+   */
+  if (!runMoving) return;
+  const span = Math.round(now - runStart);
+  const fps = span > 0 ? Math.round((runFrames / span) * 1000) : 0;
+  const overshoot = runMin < Math.min(runFirst, runMax) ? ` UNDER ${runMin}` : "";
+  runSummary = `${runFrames}f / ${span}ms / ${fps}fps / gap ${Math.round(runGap)}ms`
+    + `\n          ${runFirst}->${runMax === runFirst ? runMin : runMax}${overshoot}`;
+  runStart = 0;
+  runMoving = false;
+  draw();
 }
 
 export function logKeyboardEvent(name: string, detail: unknown = ""): void {
@@ -126,6 +144,18 @@ export function keyboardRunSummary(): string {
 
 export function reportKeyboardProbe(lines: Record<string, unknown>): void {
   if (!keyboardProbeOn()) return;
+  /*
+   * The height each frame landed on, kept as a range rather than a list.
+   * A travel that leaves the window shorter than either end of it went the
+   * wrong way first, which is the jump at the start of a close, and a single
+   * number says so where nine rows of a ring buffer had already lost it.
+   */
+  const applied = Number(lines.applied);
+  if (runStart && Number.isFinite(applied)) {
+    if (!runFirst) { runFirst = applied; runMin = applied; runMax = applied; }
+    runMin = Math.min(runMin, applied);
+    runMax = Math.max(runMax, applied);
+  }
   numbers = Object.entries(lines)
     .map(([key, value]) => `${key.padEnd(9)} ${String(value)}`)
     .join("\n");
