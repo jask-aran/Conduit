@@ -157,12 +157,50 @@ on the phone is a nine-row ring because it has to fit on a phone; nothing
 run from here has that constraint, and two keyboard bugs survived several
 rounds because they were looked for through the phone-sized window anyway.
 
-It needs a chat with enough history to scroll, which is the harness's real
-gap: a throwaway server with no model credentials cannot be seeded, because
-a send fails before anything is persisted, and a transcript that does not
+It needs a chat with enough history to scroll. A transcript that does not
 scroll cannot tell a thread following its tail apart from one scrolled away
-from it. Point the shell at a server that can answer before trusting
-anything this says about scrolling.
+from it, and those are different code paths -- one of them was broken for
+weeks because the emulator only ever had the first. Log the shell into a
+server that has real chats (below) rather than seeding one: a throwaway
+server with no model credentials cannot be seeded at all, because a send
+fails before anything is persisted.
+
+#### Pointing the shell at the development server
+
+The emulator's `127.0.0.1` is the emulator. `adb reverse` maps its loopback
+back to this machine, after which the shell's own "Use the server on this
+computer" button appears and the ordinary add-server flow works:
+
+    adb reverse tcp:4310 tcp:4310
+
+Then log in with the Conduit password. That is currently the only way to get
+an authenticated shell, and it is worth knowing why before reaching for
+`conduit-auth.mjs`: `mint-session` issues browser-kind sessions, the shells
+send `Authorization: Bearer`, and `validateNativeSession`
+(`conduit-web/src/auth-middleware.js`) rejects any session whose `kind` is
+not `native`. A minted token therefore authenticates a browser (200) and a
+shell not at all (401). Issue #69 tracks closing that.
+
+The Agent Browser mints and installs its own session and is authenticated
+against the same server, but its command policy withholds `eval`, so it
+gives a view and not instrumentation -- no reading `scrollTop` back, no
+driving `--app-height`.
+
+#### The on-screen probe
+
+`src/client/navigation/keyboard-probe.ts` draws the live numbers on the
+device itself, off by default and switched on by the "Show keyboard
+measurements" command. It is the only instrument that works on a real phone,
+so it stays in the build.
+
+It shows every input to the height decision, a one-line summary of the last
+keyboard travel -- `38f / 343ms / 111fps / gap 25ms` and the range the
+heights covered -- and a nine-row ring of events. The summary exists because
+a tail of a decelerating curve is its least informative part; the range
+exists because a travel that ends shorter than it started went the wrong way
+first. Individual animation frames are deliberately kept out of the ring:
+a hundred of them push out the focus and scroll rows that are the only
+reason it is there.
 
 #### What the emulator cannot tell you
 
@@ -172,6 +210,31 @@ frame pacing or dropped frames is the emulator describing itself. Measure
 either side of the interaction: `LayoutDuration` and `RecalcStyleDuration`
 divided by the number of frames say whether the work fits in a frame budget
 on any hardware. Watching an animation on the emulator says nothing.
+
+What it *can* answer, which no amount of looking at the phone will, is where
+a surface was on a given frame. `adb shell screenrecord` records the real
+composited screen, keyboard included, and the frames can be measured rather
+than described -- the keyboard's top edge against the composer's bottom edge
+is the lag between them, in pixels, per frame. `ffmpeg` is not installed;
+`imageio-ffmpeg` in a virtualenv provides a static binary without root.
+
+#### What has already been ruled out
+
+Recorded so the same ground is not covered again:
+
+- **Frame delivery is not the bottleneck.** The device reports ~38 frames
+  over ~340ms, about 111fps, worst gap 25ms, in both directions.
+- **Layout cost is not the bottleneck.** 0.30ms `LayoutDuration` and 0.56ms
+  `RecalcStyleDuration` per frame, against 8.3ms at 120Hz. The transcript is
+  virtualised, so this holds for long threads.
+- **Chromium's scroll anchoring was not the cause** of the drift on close.
+  It was measured with `overflow-anchor: none` and the drift was unchanged.
+  The cause was the browser clamping `scrollTop` as the scroller grew.
+- **`@capacitor/keyboard` cannot be installed** alongside any of this. It
+  registers a `WindowInsetsAnimationCompat.Callback` on the root view with
+  `DISPATCH_MODE_STOP`, which stops animation dispatch to every callback
+  beneath it, for every inset type. It is why per-frame tracking appeared
+  impossible for several rounds.
 
 ## Which client build you are testing
 
