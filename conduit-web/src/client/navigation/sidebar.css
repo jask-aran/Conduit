@@ -355,3 +355,41 @@
  * everything that is not sliding.
  */
 .sidebar-content:has(.sidebar-project-body) { overflow-anchor: none; }
+
+/* What the app is doing about its own version, sat above the server it is
+   talking to. Hairline and near-monochrome like every other tile: an update
+   is a state worth seeing, not an alarm. */
+.sidebar-update {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 5px 7px;
+  gap: 6px;
+  color: var(--muted-foreground);
+  font-size: 10.4px;
+}
+.sidebar-update > svg { width: 12px; height: 12px; flex: none; }
+.sidebar-update > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A build waiting on a person is the one state that is not background noise,
+   so it is the one that reads at full strength. */
+.sidebar-update[data-kind="ready"] { border-color: color-mix(in oklch, var(--foreground), transparent 78%); color: var(--foreground); }
+.sidebar-update > button {
+  flex: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 2px 7px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font: inherit;
+  font-weight: 560;
+  cursor: pointer;
+}
+.sidebar-update > button:hover { background: color-mix(in oklch, var(--primary), var(--background) 12%); }
+
+@media (--conduit-phone-layout) {
+  .sidebar-update { padding: 7px 9px; gap: 8px; font-size: 12px; }
+  .sidebar-update > svg { width: 14px; height: 14px; }
+  .sidebar-update > button { padding: 4px 10px; }
+}

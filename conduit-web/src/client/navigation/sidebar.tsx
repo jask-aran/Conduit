@@ -7,6 +7,7 @@ import {
   CableIcon,
   ChevronRightIcon,
   ClipboardCopyIcon,
+  DownloadIcon,
   ExternalLinkIcon,
   FolderIcon,
   FolderInputIcon,
@@ -58,6 +59,7 @@ import {
   TooltipTrigger,
 } from "@/components/primitives";
 import type { ChatSummary, ComputerLocation, HarnessSummary, Project, RuntimeProcess, WorkspacePolicy, WorkspaceSuggestion } from "../api/contracts";
+import type { UpdateState } from "../main";
 import { api } from "../api/client";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import type { Pty } from "../remotes/terminal-pane";
@@ -96,6 +98,32 @@ type DeleteTarget = { type: "chat"; chat: ChatSummary; project: Project }
 const COLLAPSED_PROJECTS_KEY = "conduit.sidebar.collapsed-projects";
 /** How long a folder takes to open or close; matches the CSS transition. */
 const SIDEBAR_FOLDER_MS = 240;
+
+/**
+ * What the app is doing about its own version.
+ *
+ * Nothing at all when there is nothing to say: an empty row would be one more
+ * thing between the list and the server it belongs to. "Ready" is the only
+ * state carrying an action, because it is the only one waiting on a person.
+ */
+function UpdateNotice(props: { state?: UpdateState; onTake?: () => void }) {
+  const state = () => props.state ?? { kind: "idle" as const };
+  const words = () => {
+    const current = state();
+    if (current.kind === "checking") return "Checking for updates…";
+    if (current.kind === "ready") return "New version ready";
+    return current.kind === "working" ? current.label : "";
+  };
+  return <Show when={state().kind !== "idle"}>
+    <div class="sidebar-update" data-kind={state().kind} role="status">
+      <Show when={state().kind === "ready"} fallback={<Spinner class="size-3" />}><DownloadIcon /></Show>
+      <span>{words()}</span>
+      <Show when={state().kind === "ready"}>
+        <button type="button" onClick={() => props.onTake?.()}>Restart</button>
+      </Show>
+    </div>
+  </Show>;
+}
 
 function SidebarChatTitle(props: { title: string; animate: boolean }) {
   let element!: HTMLSpanElement;
@@ -208,6 +236,8 @@ export function Sidebar(props: {
   onOpenPalette: (page?: string | null, initialQuery?: string | null) => void;
   onUpdatePwa: () => void;
   pwaUpdating: boolean;
+  updateState?: UpdateState;
+  onTakeUpdate?: () => void;
   onAddServer?: () => void;
   onLogout?: () => void;
   sidebarPins: string[];
@@ -1168,11 +1198,24 @@ export function Sidebar(props: {
             <Group label="Chats" projects={[]} chatRoot={chats()} />
           </Show>
         </div>
-        <div data-sidebar="footer"><ServerSwitcher connectivity={props.connectivity} pwaUpdating={props.pwaUpdating}
-          onOpenSettings={() => { closeMobile(); props.onOpenSettings("models"); }}
+        <div data-sidebar="footer">
+          {/*
+            * Above the server row rather than inside the menu, because the menu
+            * is shut whenever this matters. A build waiting to be taken can
+            * wait for minutes, and an install runs while somebody is looking
+            * elsewhere -- so it gets a place rather than a notification.
+            *
+            * Settings opens with no section named, which on a phone is the list
+            * of sections. Naming "models" here made that list unreachable and
+            * landed every client on the same tab.
+            */}
+          <UpdateNotice state={props.updateState} onTake={props.onTakeUpdate} />
+          <ServerSwitcher connectivity={props.connectivity} pwaUpdating={props.pwaUpdating}
+          onOpenSettings={() => { closeMobile(); props.onOpenSettings(); }}
           onUpdatePwa={() => { closeMobile(); props.onUpdatePwa(); }}
           onAddServer={() => { closeMobile(); props.onAddServer?.(); }}
-          onLogout={() => props.onLogout?.()} /></div>
+          onLogout={() => props.onLogout?.()} />
+        </div>
       </div>
     </aside>
 

@@ -114,6 +114,18 @@ applyTranscriptAppearance({
 });
 
 type SettingsSection = "ui" | "shortcuts" | "models" | "prompts" | "runtime" | "servers" | "workspaces" | "voice" | "search";
+/**
+ * Idle says nothing and shows nothing. "ready" is a build installed and
+ * waiting for a quiet moment, which is a state that can last minutes and has
+ * to survive being ignored. "working" carries its own words because the three
+ * clients have different ones -- a download percentage, an APK handed to the
+ * system installer, a worker taking over.
+ */
+export type UpdateState =
+  | { kind: "idle" }
+  | { kind: "checking" }
+  | { kind: "ready" }
+  | { kind: "working"; label: string };
 type WorkspaceView = "files" | "diff" | "chat" | "terminal";
 const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field";
 const selectedMeteorField = () => localStorage.getItem(METEOR_FIELD_STORAGE_KEY) !== "false";
@@ -535,7 +547,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [sidebarPins, setSidebarPins] = createSignal<string[]>([]);
   const [settingsLoaded, setSettingsLoaded] = createSignal(false);
-  const [settingsSection, setSettingsSection] = createSignal<SettingsSection>("models");
+  const [settingsSection, setSettingsSection] = createSignal<SettingsSection>("ui");
   /** Whether a caller asked for that section, or merely opened Settings. */
   const [settingsNamedSection, setSettingsNamedSection] = createSignal(false);
   const [settingsWorkspaceId, setSettingsWorkspaceId] = createSignal<string | null>(null);
@@ -591,7 +603,19 @@ function App() {
       action: { label: "Ask Runtime", onClick: () => void askRuntimeForError(diagnostic) },
     });
   };
-  const [pwaUpdating, setPwaUpdating] = createSignal(false);
+  /*
+   * What the app is doing about its own version, said out loud.
+   *
+   * Updating used to be visible only as a spinner inside a menu nobody has
+   * open, and a toast whose button reloaded so fast it read as doing nothing.
+   * Neither survives the moment it happens in. This is durable: it sits above
+   * the server footer for as long as it is true, so a build waiting to be
+   * taken, or an install in progress, is a thing on screen rather than an
+   * event you had to be watching for.
+   */
+  const [updateState, setUpdateState] = createSignal<UpdateState>({ kind: "idle" });
+  const pwaUpdating = () => { const state = updateState().kind; return state === "checking" || state === "working"; };
+  const setPwaUpdating = (busy: boolean) => setUpdateState(busy ? { kind: "checking" } : { kind: "idle" });
   const [addingServer, setAddingServer] = createSignal(false);
   const runPwaUpdate = async () => {
     if (pwaUpdating()) return;
@@ -607,9 +631,11 @@ function App() {
         const notice = toast.loading("Checking for updates…");
         const updated = await desktopShell.update((progress) => {
           const share = progress.total ? Math.round((progress.downloaded / progress.total) * 100) : 0;
-          toast.loading(progress.phase === "installing"
+          const label = progress.phase === "installing"
             ? `Installing ${progress.version}…`
-            : `Downloading ${progress.version}… ${share}%`, { id: notice });
+            : `Downloading ${progress.version}… ${share}%`;
+          setUpdateState({ kind: "working", label });
+          toast.loading(label, { id: notice });
         });
         if (!updated) {
           setPwaUpdating(false);
@@ -621,13 +647,15 @@ function App() {
       // Android this is a question about releases rather than about caches.
       if (androidShell) {
         const version = await androidShell.update();
-        setPwaUpdating(false);
+        setUpdateState(version ? { kind: "working", label: `Conduit ${version} is downloading` } : { kind: "idle" });
         if (version) toast.success(`Conduit ${version} is downloading. Open it to install.`);
         else toast.success("Conduit is up to date");
         return;
       }
+      // Stays "checking" until it resolves: a true return is followed by the
+      // reload, so there is no install to narrate.
       if (!await forcePwaUpdate()) {
-        setPwaUpdating(false);
+        setUpdateState({ kind: "idle" });
         toast.success("Conduit is up to date");
       }
     } catch (error) {
@@ -758,18 +786,18 @@ function App() {
       || !drafts.settled();
     startPwaUpdates({
       hold: composerDirty,
-      onUpdateReady: () => toast.info("A new version of Conduit is ready. It will load once the composer is empty.", {
-        id: "pwa-update-ready",
-        duration: Infinity,
-        action: { label: "Load now", onClick: () => void applyPwaUpdate() },
-      }),
+      // No toast. It said a version was ready in a thing that disappears, and
+      // its button reloaded so quickly that it read as having done nothing.
+      onUpdateReady: () => setUpdateState({ kind: "ready" }),
     });
     // Tracks the composer, not the update: `pwaUpdateWaiting` is a plain read.
     // That is the right way round -- the update arriving while the composer is
     // empty is already handled by `hold`, and what this waits for is the
     // composer emptying afterwards.
     createEffect(() => {
-      if (!composerDirty() && pwaUpdateWaiting()) void applyPwaUpdate();
+      if (composerDirty() || !pwaUpdateWaiting()) return;
+      setUpdateState({ kind: "working", label: "Updating Conduit…" });
+      void applyPwaUpdate();
     });
   }
   const selectedProject = createMemo(() => catalogue.projects().find((project) => project.id === catalogue.projectId()));
@@ -1446,7 +1474,7 @@ function App() {
    * list could never be the thing you arrived at.
    */
   const openSettings = (section: string | null = null, workspaceId: string | null = null) => {
-    setSettingsSection((section || "models") as SettingsSection);
+    setSettingsSection((section || "ui") as SettingsSection);
     setSettingsNamedSection(Boolean(section));
     setSettingsWorkspaceId(workspaceId);
     setSettingsLoaded(true);
@@ -2169,6 +2197,7 @@ function App() {
       onOpenDashboard={() => openDashboard()}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
       onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating()}
+      updateState={updateState()} onTakeUpdate={() => { setUpdateState({ kind: "working", label: "Updating Conduit…" }); void applyPwaUpdate(); }}
       onAddServer={() => setAddingServer(true)}
       onLogout={() => void logout()} />
     <Modal open={addingServer()} title="Add server" closeButton onClose={() => setAddingServer(false)} class="add-server-dialog">

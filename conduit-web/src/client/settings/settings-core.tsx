@@ -229,7 +229,7 @@ export function Settings(props: {
   onOpenModelSelector: () => void;
   shortcuts: ShortcutManager;
 }) {
-  const [section, setSection] = createSignal<Section>(props.initialSection || "models");
+  const [section, setSection] = createSignal<Section>(props.initialSection || "ui");
   /*
    * On a phone, Settings is two screens rather than a rail beside a pane.
    *
@@ -408,7 +408,7 @@ export function Settings(props: {
     }
     setVoiceDraft({ ...props.voiceSettings });
     setVoiceSettingsSaved(false);
-    const initial = props.initialSection || "models";
+    const initial = props.initialSection || "ui";
     setSection(initial);
     // Asked for a section by name -- from a command, or a link out of the app
     // -- so that is what was wanted, not a list with it somewhere in it.
