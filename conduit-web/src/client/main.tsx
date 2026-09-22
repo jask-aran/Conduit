@@ -46,6 +46,7 @@ import { CommandMenu } from "./navigation/command-menu";
 import { LeaderPalette } from "./navigation/leader-palette";
 import type { PaletteActions, PaletteContext } from "./palette/command-registry";
 import { bindVisualViewportShell, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobileOverlayKind } from "./navigation/mobile-layout";
+import { toggleKeyboardProbe } from "./navigation/keyboard-probe.ts";
 import { mobileSwipeAction } from "./navigation/mobile-swipe";
 import { bindOverlayScrollbars } from "./navigation/overlay-scrollbars";
 import { Modal, Sidebar, type SidebarCommand } from "./navigation/sidebar";
@@ -1757,6 +1758,9 @@ function App() {
     reload: () => location.reload(),
     updateApp: () => void runPwaUpdate(),
     resetAppCache: () => void runPwaCacheReset(),
+    keyboardProbe: () => toast.success(toggleKeyboardProbe()
+      ? "Keyboard measurements on. Open a chat and tap the composer."
+      : "Keyboard measurements off."),
     delete: () => runSidebar("delete-chat"),
     deleteFolder: () => runSidebar("delete-project"),
     settings: (section) => openSettings(section),

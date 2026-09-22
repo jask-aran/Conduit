@@ -1,4 +1,5 @@
 import { installedClientKind } from "../platform/installed-client.ts";
+import { reportKeyboardProbe } from "./keyboard-probe.ts";
 import { PHONE_LAYOUT_QUERY } from "../layout-geometry";
 
 /** Shared phone-shell query. Narrow desktop windows keep desktop navigation. */
@@ -58,6 +59,27 @@ export function bindVisualViewportShell(): () => void {
    */
   let shellKeyboard = 0;
   let restingHeight = 0;
+  let restingWidth = 0;
+  let source = "viewport";
+  /*
+   * The tallest this viewport has been at this width, not the last height seen
+   * without a keyboard.
+   *
+   * They are not the same, and the difference is a screen flash. The shell
+   * reports the keyboard *after* the window has begun to change, so a resting
+   * height sampled on the way down records a viewport that has already lost
+   * part of the keyboard -- and then loses all of it again by subtraction,
+   * leaving the composer somewhere near the top of the screen for a frame.
+   * A maximum cannot be poisoned that way. Width standing in for orientation,
+   * since a turned phone is a different screen and keeps none of this.
+   */
+  const noteResting = (viewport: number) => {
+    if (window.innerWidth !== restingWidth) {
+      restingWidth = window.innerWidth;
+      restingHeight = 0;
+    }
+    if (!shellKeyboard) restingHeight = Math.max(restingHeight, viewport);
+  };
   const sync = () => {
     if (!isMobileLayout()) {
       root.style.removeProperty("--app-height");
@@ -67,16 +89,31 @@ export function bindVisualViewportShell(): () => void {
     }
     const vv = window.visualViewport;
     const viewport = vv?.height ?? window.innerHeight;
-    if (!shellKeyboard) restingHeight = viewport;
+    noteResting(viewport);
     // A shrink of a few pixels is a toolbar, not a keyboard.
     const viewportShrank = viewport < restingHeight - 48;
-    const height = Math.max(0, shellKeyboard && !viewportShrank
-      ? restingHeight - shellKeyboard
-      : viewport);
+    const measured = shellKeyboard && !viewportShrank ? restingHeight - shellKeyboard : viewport;
+    // A keyboard taller than two thirds of the screen is a number that arrived
+    // at a bad moment, not a keyboard. Better to leave the window alone for a
+    // frame than to throw the composer up near the header.
+    const believable = measured >= restingHeight / 3;
+    const height = Math.max(0, believable ? measured : viewport);
     const offsetTop = vv?.offsetTop ?? 0;
     root.style.setProperty("--app-height", `${Math.round(height)}px`);
     root.style.setProperty("--vv-offset-top", `${Math.round(offsetTop)}px`);
     root.setAttribute("data-vv-shell", "true");
+    reportKeyboardProbe({
+      source,
+      inner: window.innerHeight,
+      visual: Math.round(viewport),
+      offset: Math.round(offsetTop),
+      resting: Math.round(restingHeight),
+      keyboard: Math.round(shellKeyboard),
+      applied: Math.round(height),
+      shrank: viewportShrank,
+      sane: believable,
+      dpr: window.devicePixelRatio,
+    });
   };
   sync();
   const vv = window.visualViewport;
@@ -104,6 +141,7 @@ export function bindVisualViewportShell(): () => void {
   let dropVirtualKeyboard: (() => void) | null = null;
   if (virtualKeyboard && installedClientKind !== "android") {
     virtualKeyboard.overlaysContent = true;
+    source = "virtualkeyboard";
     const onGeometry = () => {
       shellKeyboard = virtualKeyboard.boundingRect.height;
       sync();
@@ -121,6 +159,7 @@ export function bindVisualViewportShell(): () => void {
   let dropKeyboard: (() => void) | null = null;
   let disposed = false;
   if (installedClientKind === "android") {
+    source = "capacitor";
     void import("@capacitor/keyboard").then(async ({ Keyboard }) => {
       const shown = await Keyboard.addListener("keyboardWillShow", (info) => {
         shellKeyboard = info.keyboardHeight;
