@@ -52,6 +52,7 @@ let runLast = 0;
 let runGap = 0;
 let runMoving = false;
 let runFirst = 0;
+let runEnd = 0;
 let runMin = 0;
 let runMax = 0;
 let runSummary = "";
@@ -65,6 +66,7 @@ export function noteKeyboardFrame(final: boolean): void {
     runGap = 0;
     runMoving = false;
     runFirst = 0;
+    runEnd = 0;
   } else {
     runGap = Math.max(runGap, now - runLast);
   }
@@ -83,9 +85,13 @@ export function noteKeyboardFrame(final: boolean): void {
   if (!runMoving) return;
   const span = Math.round(now - runStart);
   const fps = span > 0 ? Math.round((runFrames / span) * 1000) : 0;
-  const overshoot = runMin < Math.min(runFirst, runMax) ? ` UNDER ${runMin}` : "";
+  // Only a travel that went below both of its own ends went somewhere it
+  // should not have. A shell that is shortening is meant to end below where
+  // it started, and reporting that as an overshoot cried wolf on every open.
+  const wrongWay = runMin < Math.min(runFirst, runEnd) - 1 ? ` UNDER ${runMin}` : "";
+  const overshot = runMax > Math.max(runFirst, runEnd) + 1 ? ` OVER ${runMax}` : "";
   runSummary = `${runFrames}f / ${span}ms / ${fps}fps / gap ${Math.round(runGap)}ms`
-    + `\n          ${runFirst}->${runMax === runFirst ? runMin : runMax}${overshoot}`;
+    + `\n          ${runFirst}->${runEnd}${wrongWay}${overshot}`;
   runStart = 0;
   runMoving = false;
   draw();
@@ -156,6 +162,7 @@ export function reportKeyboardProbe(lines: Record<string, unknown>): void {
   const applied = Number(lines.applied);
   if (runStart && Number.isFinite(applied)) {
     if (!runFirst) { runFirst = applied; runMin = applied; runMax = applied; }
+    runEnd = applied;
     runMin = Math.min(runMin, applied);
     runMax = Math.max(runMax, applied);
   }
