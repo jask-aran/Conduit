@@ -7,7 +7,6 @@ import { androidShell, desktopShell, isInstalledClient } from "./platform/instal
 import {
   ArrowLeftIcon, EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ServerIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
 } from "lucide-solid";
-import { registerSW } from "virtual:pwa-register";
 import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
@@ -53,7 +52,7 @@ import { Modal, Sidebar, type SidebarCommand } from "./navigation/sidebar";
 import { clampSidebarChatLimit, selectedSidebarChatLimit, SIDEBAR_CHAT_LIMIT_STORAGE_KEY } from "./navigation/sidebar-preferences";
 import { CHAT_SORT_STORAGE_KEY, selectedChatSort, useChatSort } from "./preferences/chat-sort";
 import { WorkspaceAppearanceEditor } from "./project/workspace-appearance-editor";
-import { checkForPwaUpdate, forcePwaUpdate, rememberPwaRegistration, resetPwaAppCache } from "./pwa-update";
+import { applyPwaUpdate, checkForPwaUpdate, forcePwaUpdate, pwaUpdateWaiting, resetPwaAppCache, startPwaUpdates } from "./pwa-update";
 import { createActiveChat, type ActiveChatStore } from "./state/active-chat";
 import { createAttachments, DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
 import { createDrafts } from "./state/drafts";
@@ -113,24 +112,6 @@ applyTranscriptAppearance({
   codeWidth: selectedCodeBlockWidth(),
   userMessageCollapse: selectedUserMessageCollapse(),
 });
-if (import.meta.env.PROD && !nativeApp) {
-  // The new worker skips waiting and claims this page, but everything already
-  // on screen came from the worker it replaced, so without this a new build is
-  // fetched, installed, and then not shown until someone reloads past the
-  // cache. Taking control is the moment it can be.
-  //
-  // Only when there was a worker to replace: the first visit to an origin has
-  // no controller until registration finishes, and reloading there would be
-  // reloading onto what is already running.
-  const replacing = Boolean(navigator.serviceWorker?.controller);
-  let reloading = false;
-  navigator.serviceWorker?.addEventListener("controllerchange", () => {
-    if (!replacing || reloading) return;
-    reloading = true;
-    location.reload();
-  });
-  registerSW({ immediate: true, onRegisteredSW: (_url, registration) => rememberPwaRegistration(registration) });
-}
 
 type SettingsSection = "ui" | "shortcuts" | "models" | "prompts" | "runtime" | "servers" | "workspaces" | "voice" | "search";
 type WorkspaceView = "files" | "diff" | "chat" | "terminal";
@@ -696,7 +677,6 @@ function App() {
   const serviceLevels = createServiceLevelSettings(showError);
   const attachments = createAttachments(showError, maxAttachmentBytes);
   const drafts = createDrafts(showError);
-  void drafts.load();
 
 
   const saveWorkspaceDefault = async (workspaceId: string, templateId: string | null) => {
@@ -749,6 +729,38 @@ function App() {
     defaultTemplateId,
     saveWorkspaceDefault,
   });
+  // Not awaited: a round trip in front of first paint is a poor price for a
+  // race that asking again closes. A chat that opened before this landed is
+  // told to look once more, and a composer with something in it is left alone.
+  void drafts.load().then(() => chat.rehydrateDraft());
+
+  /*
+   * When a new build is allowed to replace this page.
+   *
+   * With nothing typed there is nothing to interrupt, so it is taken at once
+   * and the reload is invisible. With something in the composer the build is
+   * left waiting and the person is told, and the effect below takes it the
+   * moment the composer empties -- which is sending, discarding, or clearing
+   * it by hand, without any of those three having to know this exists.
+   */
+  if (import.meta.env.PROD && !nativeApp) {
+    const composerDirty = () => Boolean(chat.draft().trim());
+    startPwaUpdates({
+      hold: composerDirty,
+      onUpdateReady: () => toast.info("A new version of Conduit is ready. It will load once this draft is sent or cleared.", {
+        id: "pwa-update-ready",
+        duration: Infinity,
+        action: { label: "Load now", onClick: () => void applyPwaUpdate() },
+      }),
+    });
+    // Tracks the composer, not the update: `pwaUpdateWaiting` is a plain read.
+    // That is the right way round -- the update arriving while the composer is
+    // empty is already handled by `hold`, and what this waits for is the
+    // composer emptying afterwards.
+    createEffect(() => {
+      if (!composerDirty() && pwaUpdateWaiting()) void applyPwaUpdate();
+    });
+  }
   const selectedProject = createMemo(() => catalogue.projects().find((project) => project.id === catalogue.projectId()));
   const profiles = createMemo<Template[]>(() => {
     const ordinary = templates().filter((item) => item.defaultable !== false);

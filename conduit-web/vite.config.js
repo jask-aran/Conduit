@@ -69,10 +69,14 @@ export default defineConfig(() => {
       // Production-only installability: the client owns SW registration so
       // updates can reload the current page. Dev keeps HMR free of a worker.
       VitePWA({
-        registerType: "autoUpdate",
-        // Register through the application so autoUpdate can reload the page
-        // when a new worker takes control. The generated fallback script does
-        // not expose that update lifecycle to the current page.
+        // Prompt, not autoUpdate: autoUpdate attaches its own `activated`
+        // listener that reloads the page the moment a build installs, which is
+        // the decision `pwa-update.ts` exists to make. Under prompt it hands
+        // back the lever and reloads only once it is pulled.
+        registerType: "prompt",
+        // Registered by the application, because the generated fallback script
+        // does not expose the update lifecycle to the page that has to decide
+        // when it is replaced.
         injectRegister: false,
         includeAssets: ["favicon.svg", "pwa-192x192.png", "pwa-512x512.png"],
         manifest: {
@@ -92,7 +96,12 @@ export default defineConfig(() => {
         workbox: {
           // App shell only. Never add runtimeCaching for /v0 — those routes are
           // authenticated and mutable (catalogue, chat, runtime, live session).
-          skipWaiting: true,
+          // A new build installs and waits. Activating deletes the precached
+          // files the running page still needs, and this client loads Settings,
+          // the workspace panel, the terminal and the project dashboard on
+          // demand -- an old page left running past activation would 404 on
+          // the next one it opened.
+          skipWaiting: false,
           clientsClaim: true,
           globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
           navigateFallback: "/index.html",

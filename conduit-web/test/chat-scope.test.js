@@ -11,9 +11,16 @@ test("per-chat stores are selected from one place", () => {
   // why it is worth pinning structurally rather than trusting review. If you
   // are here because this failed, the fix is almost always to add the call to
   // chatScopes rather than to call the store from a second place.
+  //
+  // Counted inside the chatScopes list rather than across the file: what must
+  // not happen is a second *entry* into a chat that selects a store by itself.
+  // Asking a store again for the chat that is already open is a different
+  // thing -- `rehydrateDraft` does exactly that when the drafts load lands
+  // after the chat did -- and pinning the whole file would forbid it.
+  const list = source.slice(source.indexOf("const chatScopes"), source.indexOf("const reconcileChatScope"));
   for (const store of ["models.select(", "permissions?.select(", "attachments.select(", "hydrateDraft("]) {
-    const count = source.split(store).length - 1;
-    assert.equal(count, 1, `${store} is called from exactly one place, found ${count}`);
+    const count = list.split(store).length - 1;
+    assert.equal(count, 1, `${store} is selected from exactly one place, found ${count}`);
   }
 });
 
