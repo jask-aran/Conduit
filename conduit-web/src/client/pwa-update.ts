@@ -42,6 +42,9 @@ export const pwaUpdateWaiting = () => waiting;
  */
 const TOOK_UPDATE_KEY = "conduit:pwa-took-update";
 
+/** How long the worker gets to take over before the page reloads regardless. */
+const RELOAD_FALLBACK_MS = 4_000;
+
 /** Read once: the new build asks whether it arrived by an update, then forgets. */
 export function claimPwaUpdateArrival(): boolean {
   try {
@@ -90,6 +93,16 @@ export async function applyPwaUpdate(): Promise<boolean> {
   if (!waiting || !takeUpdate) return false;
   try { sessionStorage.setItem(TOOK_UPDATE_KEY, "1"); } catch { /* private mode; the notice is not worth failing the update over */ }
   await takeUpdate();
+  /*
+   * The reload is the library's `controlling` listener, and it only fires if
+   * the waiting worker actually takes over. It does not always: a worker that
+   * activated on its own between being announced and being accepted is no
+   * longer waiting, so SKIP_WAITING reaches nobody, nothing ever controls
+   * anew, and the page sits on "Updating Conduit..." with no way out. A hard
+   * reload fixed it by hand, which is the whole of this fallback -- by now the
+   * new build is installed, so an ordinary reload lands on it.
+   */
+  window.setTimeout(() => window.location.reload(), RELOAD_FALLBACK_MS);
   return true;
 }
 
