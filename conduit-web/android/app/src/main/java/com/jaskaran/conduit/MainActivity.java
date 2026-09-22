@@ -14,6 +14,7 @@ public class MainActivity extends BridgeActivity {
         // added to it.
         registerPlugin(ConduitDiscoveryPlugin.class);
         registerPlugin(ConduitKeyboardPlugin.class);
+        registerPlugin(ConduitTlsPlugin.class);
         super.onCreate(savedInstanceState);
         /*
          * Take the window out of legacy soft-input handling.

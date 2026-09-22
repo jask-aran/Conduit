@@ -17,7 +17,9 @@ import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl
 import { startPathSelection } from "./platform/path-selector";
 import { canDiscoverServers, discoverServers, type FoundServer } from "./platform/discovery";
 import { proveServer } from "./platform/server-proof";
-import { activeOrigin, addServer, forgetServer, learnIdentity, mergeServerDirectory, servers, setActiveServer, switchToServer } from "./platform/servers";
+import { activeOrigin, addServer, forgetServer, learnIdentity, mergeServerDirectory, pinnedFingerprints, servers, setActiveServer, switchToServer } from "./platform/servers";
+import { publishCertificatePins } from "./platform/certificate-pins.ts";
+import { verifyLeaf } from "./platform/server-proof.ts";
 import { publishServerDirectory } from "./platform/server-directory";
 import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
 import { manifestForChat, resolveCapability, resolveHistory } from "./chat-capabilities";
@@ -1970,8 +1972,20 @@ function App() {
       // may be believed about identity: an open endpoint saying "I am the
       // server you hold a token for" is the thing worth being unable to say.
       // A server too old to answer leaves the list exactly as it was.
-      void api<{ id?: string; paths?: unknown }>("/v0/server")
-        .then((identity) => { const origin = activeOrigin(); if (origin) learnIdentity(origin, identity); })
+      void api<{ id?: string; publicKey?: string; paths?: unknown; secure?: unknown }>("/v0/server")
+        .then(async (identity) => {
+          const origin = activeOrigin();
+          if (!origin) return;
+          /*
+           * The certificate claim is checked before it is kept, against the
+           * key this connection just authenticated with. An unverified
+           * fingerprint would be worse than none: it is what the shell then
+           * accepts on every network it meets that certificate on.
+           */
+          const secure = await verifyLeaf(String(identity.id || ""), String(identity.publicKey || ""), identity.secure);
+          learnIdentity(origin, identity, secure ?? undefined);
+          void publishCertificatePins(pinnedFingerprints());
+        })
         .catch(() => { /* an older server has no identity, and needs none */ });
       const migration: Partial<UiPreferences> = {};
       hydratingUiPreferences = true;
@@ -2425,6 +2439,14 @@ function App() {
     </Show>
   </>;
 }
+
+/*
+ * Arm the shell with what this client already verified, before anything is
+ * dialled. The set is re-sent after every `/v0/server`, but a cold start
+ * happens before the first of those, and a pin that arrives after the
+ * connection it was for is no pin at all.
+ */
+void publishCertificatePins(pinnedFingerprints());
 
 render(() => <ErrorBoundary fallback={(error) => <div class="crash-screen"><div class="crash-card"><h1>Conduit hit a UI error</h1><p>{error instanceof Error ? error.message : "Unknown interface error"}</p><Button onClick={() => location.reload()}>Reload Conduit</Button></div></div>}>
   {nativeApp ? <NativeRoot /> : <App />}
