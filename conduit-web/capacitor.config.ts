@@ -23,17 +23,24 @@ const config: CapacitorConfig = {
   },
   plugins: {
     /*
-     * The plugin reports the keyboard and resizes nothing: `--app-height` in
-     * `mobile-layout.ts` already sizes the shell, and two things moving the
-     * same surface is how the composer ends up fighting the transcript. What
-     * is missing on Android is only the number, which `resize: "none"` still
-     * delivers through `keyboardWillShow`.
+     * Resize nothing: `--app-height` in `mobile-layout.ts` sizes the shell, and
+     * two things moving the same surface is how the composer ends up fighting
+     * the transcript. The keyboard's height comes from `ConduitKeyboardPlugin`
+     * instead, which reports it every frame it is moving rather than once at
+     * the end.
      */
     Keyboard: {
       resize: "none" as never,
     },
     SystemBars: {
-      insetsHandling: "css",
+      /*
+       * `css` pads the WebView's parent by the keyboard's height when the
+       * keyboard settles, which is a second thing moving the shell and a
+       * discrete jump where the page is drawing a curve. Turning the listener
+       * off also turns off the `--safe-area-inset-*` variables it injected, so
+       * `ConduitKeyboardPlugin` injects them -- same names, same values.
+       */
+      insetsHandling: "disable",
       style: "DARK",
     },
   },

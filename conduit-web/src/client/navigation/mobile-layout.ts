@@ -200,25 +200,51 @@ export function bindVisualViewportShell(): () => void {
     };
   }
 
-  // Imported for its side effect of existing only in the Android shell: the
-  // package is a Capacitor bridge call, and asking for it anywhere else logs
-  // a missing-plugin warning for a question nothing was going to answer.
+  /*
+   * The Android shell's answer, and the only one that is a position rather
+   * than a destination.
+   *
+   * `@capacitor/keyboard` reports the keyboard once, after it has finished
+   * moving, so a shell sized from it snaps to where the keyboard is about to
+   * be and then waits for it -- the composer arriving early and the keyboard
+   * sliding up to meet it. `ConduitKeyboardPlugin` follows the IME inset
+   * animation instead and reports every frame of it, so the same height that
+   * draws the composer is the height the keyboard is actually at.
+   *
+   * A frame is a layout of the whole shell, so they are coalesced onto the
+   * frame that will draw them: several arriving inside one are the same
+   * answer asked repeatedly, and only the last of them is true.
+   */
   let dropKeyboard: (() => void) | null = null;
   let disposed = false;
   if (installedClientKind === "android") {
-    source = "capacitor";
-    void import("@capacitor/keyboard").then(async ({ Keyboard }) => {
-      const shown = await Keyboard.addListener("keyboardWillShow", (info) => {
-        logKeyboardEvent("kb-show", Math.round(info.keyboardHeight));
-        shellKeyboard = info.keyboardHeight;
-        sync();
+    source = "insets";
+    let frame = 0;
+    const settle = () => {
+      frame = 0;
+      sync();
+    };
+    void import("@capacitor/core").then(async ({ registerPlugin }) => {
+      const plugin = registerPlugin<{
+        addListener(
+          event: "keyboardGeometry",
+          handler: (info: { height: number; animating: boolean }) => void,
+        ): Promise<{ remove(): void }>;
+      }>("ConduitKeyboard");
+      const geometry = await plugin.addListener("keyboardGeometry", (info) => {
+        shellKeyboard = info.height;
+        logKeyboardEvent(info.animating ? "ime" : "ime-end", Math.round(info.height));
+        if (!info.animating) {
+          if (frame) cancelAnimationFrame(frame);
+          settle();
+          return;
+        }
+        if (!frame) frame = requestAnimationFrame(settle);
       });
-      const hidden = await Keyboard.addListener("keyboardWillHide", () => {
-        logKeyboardEvent("kb-hide");
-        shellKeyboard = 0;
-        sync();
-      });
-      dropKeyboard = () => { void shown.remove(); void hidden.remove(); };
+      dropKeyboard = () => {
+        void geometry.remove();
+        if (frame) cancelAnimationFrame(frame);
+      };
       if (disposed) dropKeyboard();
     }).catch(() => { /* no shell to ask; visualViewport is the whole answer */ });
   }
