@@ -22,6 +22,16 @@ const config: CapacitorConfig = {
     allowMixedContent: true,
   },
   plugins: {
+    /*
+     * The plugin reports the keyboard and resizes nothing: `--app-height` in
+     * `mobile-layout.ts` already sizes the shell, and two things moving the
+     * same surface is how the composer ends up fighting the transcript. What
+     * is missing on Android is only the number, which `resize: "none"` still
+     * delivers through `keyboardWillShow`.
+     */
+    Keyboard: {
+      resize: "none" as never,
+    },
     SystemBars: {
       insetsHandling: "css",
       style: "DARK",
