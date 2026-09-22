@@ -1,9 +1,5 @@
 # Contributing
 
-Conduit tracks product and implementation work in GitHub Issues. Issues are the
-source of truth; Projects and other GitHub views may organise them but should not
-carry a separate planning model.
-
 ## Issue types
 
 Every open issue should have exactly one type label:
