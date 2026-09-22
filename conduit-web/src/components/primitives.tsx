@@ -4,6 +4,7 @@ import { createSignal, onCleanup, onMount, Show, splitProps } from "solid-js";
 import * as KDialog from "@kobalte/core/dialog";
 import { DropdownMenu as KMenu } from "@kobalte/core/dropdown-menu";
 import { ContextMenu as KContextMenu } from "@kobalte/core/context-menu";
+import { Popover as KPopover } from "@kobalte/core/popover";
 import * as KTooltip from "@kobalte/core/tooltip";
 import { ChevronRightIcon, LoaderCircleIcon, XIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
@@ -97,6 +98,21 @@ export function MenuRadioItem(props: ParentProps<{ class?: string; value: string
 }
 export function MenuLabel(props: ParentProps<{ class?: string }>) { return <KMenu.GroupLabel class={cn("px-1.5 py-1.5 text-xs font-medium text-muted-foreground", props.class)}>{props.children}</KMenu.GroupLabel>; }
 export function MenuSeparator() { return <KMenu.Separator class="-mx-1 my-1 h-px bg-border" />; }
+
+/*
+ * A floating surface for something to be edited in place -- the menu's
+ * material and radius, without a menu's key handling, which would swallow
+ * typing into an input. Anchored to a trigger, or to `anchorRef` when the
+ * thing that opened it is not always the one on screen.
+ */
+export function Popover(props: ParentProps<{ open?: boolean; onOpenChange?: (open: boolean) => void; anchorRef?: () => HTMLElement | undefined; placement?: "bottom-start" | "bottom-end" }>) {
+  return <KPopover open={props.open} onOpenChange={props.onOpenChange} anchorRef={props.anchorRef} placement={props.placement || "bottom-end"} gutter={4} fitViewport overflowPadding={8}>{props.children}</KPopover>;
+}
+export const PopoverTrigger = KPopover.Trigger;
+export function PopoverContent(props: ParentProps<{ class?: string; "aria-label"?: string; onPointerDownOutside?: (event: Event & { target: EventTarget | null }) => void }>) {
+  const portalMount = createFullscreenPortalMount();
+  return <KPopover.Portal mount={portalMount()}><KPopover.Content data-slot="popover-content" aria-label={props["aria-label"]} onPointerDownOutside={props.onPointerDownOutside} class={cn(menuContentClass, props.class)}>{props.children}</KPopover.Content></KPopover.Portal>;
+}
 
 export function ContextMenu(props: ParentProps<{ onOpenChange?: (open: boolean) => void; placement?: "bottom-start" | "right-start" }>) {
   return <KContextMenu modal={false} fitViewport overflowPadding={8} placement={props.placement || "right-start"} onOpenChange={props.onOpenChange}>{props.children}</KContextMenu>;
