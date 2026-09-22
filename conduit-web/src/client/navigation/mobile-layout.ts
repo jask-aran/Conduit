@@ -28,13 +28,19 @@ export function setMobileOverlayKind(kind: MobileOverlayKind | null): void {
  * whatever the transcript is doing on its own, which is the same surface
  * being moved by two things at once.
  *
- * `visualViewport` alone is not enough in the Android shell. The page asks
- * for `interactive-widget=resizes-content` and Capacitor's SystemBars pads
- * the WebView's parent when the keyboard opens -- but only behind two gates
- * (a recent WebView with `viewport-fit=cover`, or Android 15 and up). Off
- * both of them nothing resizes, `visualViewport.height` stays the full screen
- * and the transcript sits behind the keyboard with nothing able to say
- * otherwise. So on Android the shell is asked directly.
+ * `visualViewport` alone is not enough on a phone, in either client and for
+ * two unrelated reasons. The page asks for
+ * `interactive-widget=resizes-content`, which is a request: a browser may
+ * leave both viewports alone and let the keyboard overlay the page, and
+ * Capacitor's SystemBars pads the WebView's parent only behind two gates (a
+ * recent WebView with `viewport-fit=cover`, or Android 15 and up). Off either
+ * path nothing resizes, `visualViewport.height` stays the full screen, and
+ * the transcript sits behind the keyboard with nothing able to say otherwise.
+ *
+ * So the keyboard is measured rather than inferred, from whichever layer
+ * knows: Chromium's VirtualKeyboard API in a browser, the Capacitor plugin in
+ * the Android shell. Where neither exists -- iOS, which pans instead of
+ * resizing -- `visualViewport` and `--vv-offset-top` are already the answer.
  */
 export function bindVisualViewportShell(): () => void {
   const root = document.documentElement;
@@ -80,6 +86,35 @@ export function bindVisualViewportShell(): () => void {
   const media = typeof matchMedia === "function" ? matchMedia(MOBILE_LAYOUT_QUERY) : null;
   media?.addEventListener("change", sync);
 
+  /*
+   * Chromium's own answer, for every client that is not the Android shell.
+   *
+   * `interactive-widget=resizes-content` in the page's viewport tag asks the
+   * browser to shorten the window itself, and it does not always: a phone
+   * browser is free to leave both viewports alone and let the keyboard sit on
+   * top, which is a transcript that never moves for the same reason as in the
+   * WebView, arrived at differently. `overlaysContent` stops asking. It says
+   * this app will do its own resizing, and in exchange `geometrychange`
+   * reports exactly how much room the keyboard is taking -- the same number
+   * the shell hands over on Android, from the layer that actually knows.
+   */
+  const virtualKeyboard = (navigator as Navigator & {
+    virtualKeyboard?: EventTarget & { overlaysContent: boolean; boundingRect: DOMRect };
+  }).virtualKeyboard;
+  let dropVirtualKeyboard: (() => void) | null = null;
+  if (virtualKeyboard && installedClientKind !== "android") {
+    virtualKeyboard.overlaysContent = true;
+    const onGeometry = () => {
+      shellKeyboard = virtualKeyboard.boundingRect.height;
+      sync();
+    };
+    virtualKeyboard.addEventListener("geometrychange", onGeometry);
+    dropVirtualKeyboard = () => {
+      virtualKeyboard.removeEventListener("geometrychange", onGeometry);
+      virtualKeyboard.overlaysContent = false;
+    };
+  }
+
   // Imported for its side effect of existing only in the Android shell: the
   // package is a Capacitor bridge call, and asking for it anywhere else logs
   // a missing-plugin warning for a question nothing was going to answer.
@@ -103,6 +138,7 @@ export function bindVisualViewportShell(): () => void {
   return () => {
     disposed = true;
     dropKeyboard?.();
+    dropVirtualKeyboard?.();
     vv?.removeEventListener("resize", sync);
     vv?.removeEventListener("scroll", sync);
     window.removeEventListener("resize", sync);
