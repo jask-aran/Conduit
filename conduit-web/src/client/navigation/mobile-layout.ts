@@ -105,23 +105,26 @@ export function bindVisualViewportShell(): () => void {
      * measured from the top -- so taking height off the bottom holds the first
      * visible line exactly where it was and drops everything below the new
      * edge behind the composer. The window moves and the words do not, which
-     * is the whole of "the transcript doesn't move up with the keyboard": the
-     * shell was right all along, and the last thing anybody wanted to read had
-     * quietly gone under the keyboard.
+     * is the whole of "the transcript doesn't move up with the keyboard".
      *
-     * Pushing `scrollTop` by the same amount the window lost anchors the
-     * bottom instead. Everything rides up by exactly the height that was
-     * taken, which is what stays put means when the edge you are reading at
-     * is the one that moved.
+     * So the distance from the bottom is what is held, measured before the
+     * height lands and restored after. Adding the difference to `scrollTop`
+     * instead is right on the way down and wrong on the way back: growing the
+     * scroller lowers its maximum scroll, the browser quietly clamps for that
+     * itself, and subtracting the same amount again on top of the clamp
+     * scrolls off the bottom -- which is a keyboard that closes and leaves the
+     * transcript stranded halfway up. A distance cannot be applied twice.
      */
-    const lost = appliedHeight ? appliedHeight - height : 0;
+    const scroller = document.querySelector<HTMLElement>(".message-scroller-viewport");
+    const fromBottom = scroller && appliedHeight
+      ? scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
+      : null;
     appliedHeight = height;
     root.style.setProperty("--app-height", `${Math.round(height)}px`);
     root.style.setProperty("--vv-offset-top", `${Math.round(offsetTop)}px`);
     root.setAttribute("data-vv-shell", "true");
-    if (lost) {
-      const scroller = document.querySelector<HTMLElement>(".message-scroller-viewport");
-      if (scroller) scroller.scrollTop += lost;
+    if (scroller && fromBottom !== null) {
+      scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight - fromBottom;
     }
     reportKeyboardProbe({
       source,

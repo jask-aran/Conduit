@@ -1039,7 +1039,14 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         }}</For>
         </div>
       </div>
-      <Show when={!following()}><Button ref={(element) => { latestButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="icon-sm" class="message-scroller-button composer-surface-material" data-composer-surface={composerSurface()} aria-label="Scroll to latest" title="Scroll to latest" onClick={() => { if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("user-scroll-to-latest"); else { setFollowing(true); scrollBottom(); } }}><ArrowDownIcon /></Button></Show>
+      {/*
+        * `mousedown` is cancelled so pressing this does not take focus off the
+        * composer: on a phone that closes the keyboard, and jumping to the
+        * latest message is exactly what somebody does mid-sentence to check
+        * what they are replying to. The click still lands -- only the focus
+        * change is refused.
+        */}
+      <Show when={!following()}><Button ref={(element) => { latestButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="icon-sm" class="message-scroller-button composer-surface-material" data-composer-surface={composerSurface()} aria-label="Scroll to latest" title="Scroll to latest" onMouseDown={(event) => event.preventDefault()} onClick={() => { if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("user-scroll-to-latest"); else { setFollowing(true); scrollBottom(); } }}><ArrowDownIcon /></Button></Show>
     </div>
   </div>;
 }
