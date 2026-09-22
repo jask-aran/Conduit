@@ -252,7 +252,6 @@ export function bindVisualViewportShell(): () => void {
   let dropKeyboard: (() => void) | null = null;
   let disposed = false;
   if (installedClientKind === "android") {
-    source = "insets";
     let drawing = 0;
     /*
      * Whether a travel has been described and not yet reported finished.
@@ -266,6 +265,17 @@ export function bindVisualViewportShell(): () => void {
      * the drawing is the only account of it that is listened to.
      */
     let travelling = false;
+    /*
+     * When the travel being drawn is taken to have started, and how long it
+     * runs. Held out here because the per-frame events correct the first of
+     * them: the description is written in `onStart` and read here whenever the
+     * bridge delivers it, so the clock starts late by however long that took
+     * and the shell runs that far behind the keyboard for the whole travel.
+     * Each frame the shell reports carries the system's own progress through
+     * the animation, which says where the clock should have been.
+     */
+    let began = 0;
+    let travelDuration = 0;
     /*
      * The shape of the last travel the platform described in full.
      *
@@ -295,7 +305,7 @@ export function bindVisualViewportShell(): () => void {
       const plugin = registerPlugin<{
         addListener(
           event: "keyboardGeometry",
-          handler: (info: { height: number; animating: boolean }) => void,
+          handler: (info: { height: number; animating: boolean; fraction: number }) => void,
         ): Promise<{ remove(): void }>;
         addListener(
           event: "keyboardAnimation",
@@ -318,12 +328,13 @@ export function bindVisualViewportShell(): () => void {
         }
         const durationMs = described ? info.durationMs : lastDurationMs;
         const curve = described ? info.curve : lastCurve;
+        began = performance.now();
+        travelDuration = durationMs;
         readRestBottom();
         logKeyboardEvent(described ? "ime-start" : "ime-nodur",
           `${Math.round(info.from)}->${Math.round(info.to)} ${Math.round(durationMs)}ms`);
         stopDrawing();
         travelling = true;
-        const began = performance.now();
         const draw = () => {
           const t = (performance.now() - began) / durationMs;
           shellKeyboard = info.from + (info.to - info.from) * along(curve, t);
@@ -334,12 +345,29 @@ export function bindVisualViewportShell(): () => void {
         drawing = requestAnimationFrame(draw);
       });
       const geometry = await plugin.addListener("keyboardGeometry", (info) => {
-        // The drawing is the system's curve reproduced, so while it is running
-        // it is the better account of where the keyboard is -- it has a value
-        // for every frame and these arrive a handful of times. They are the
-        // authority only once it has stopped, which is also how a cancelled
-        // animation gets put right.
-        if (travelling && info.animating) return;
+        /*
+         * The drawing is the system's curve reproduced, so while it is running
+         * it is the better account of where the keyboard is -- it has a value
+         * for every frame and these arrive a handful of times. They are the
+         * authority on where along that curve the keyboard has got to, though,
+         * and the clock drawing it started when the description crossed the
+         * bridge rather than when the animation did.
+         *
+         * So the clock is wound back towards where the system says it should
+         * be, and only ever forwards through the travel: a shell that jumped
+         * back down the curve to meet a late frame is the stutter this whole
+         * arrangement exists to remove. A few milliseconds a frame closes a
+         * bridge's worth of lag inside a dozen frames without any of them
+         * being visible as a step.
+         */
+        if (travelling && info.animating) {
+          const fraction = Math.min(1, Math.max(0, info.fraction));
+          if (info.fraction >= 0 && travelDuration > 0) {
+            const shouldHaveBegun = performance.now() - fraction * travelDuration;
+            if (shouldHaveBegun < began) began -= Math.min(2, began - shouldHaveBegun);
+          }
+          return;
+        }
         travelling = false;
         stopDrawing();
         if (!info.animating) readRestBottom();
@@ -352,7 +380,18 @@ export function bindVisualViewportShell(): () => void {
         void animation.remove();
         void geometry.remove();
         stopDrawing();
+        // Back to measuring, or the shell goes on subtracting a keyboard
+        // nothing is reporting any more from a height nothing is updating.
+        source = "viewport";
+        sync();
       };
+      // Only now is the keyboard's position actually being reported. Claiming
+      // it up front meant a shell whose plugin failed to register went on
+      // believing `innerHeight` was the window -- the full screen, keyboard
+      // and all, with the composer behind it -- and never fell back to the
+      // viewport the comment promised.
+      source = "insets";
+      sync();
       if (disposed) dropKeyboard();
     }).catch(() => { /* no shell to ask; visualViewport is the whole answer */ });
   }
