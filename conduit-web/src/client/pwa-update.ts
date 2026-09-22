@@ -31,6 +31,28 @@ let announce: (() => void) | null = null;
 /** Whether a new build is installed and waiting for a quiet moment. */
 export const pwaUpdateWaiting = () => waiting;
 
+/*
+ * Taking an update ends this document, so nothing here can report that it
+ * worked -- the page that would say so is the page being replaced. A tab that
+ * blinks and comes back looking identical is indistinguishable from a button
+ * that did nothing, which is exactly how it read: "why did it reload if there
+ * was no update?" There was one. This is the note the old page leaves for the
+ * new one, in session storage because it belongs to this tab and to this
+ * reload alone.
+ */
+const TOOK_UPDATE_KEY = "conduit:pwa-took-update";
+
+/** Read once: the new build asks whether it arrived by an update, then forgets. */
+export function claimPwaUpdateArrival(): boolean {
+  try {
+    if (sessionStorage.getItem(TOOK_UPDATE_KEY) !== "1") return false;
+    sessionStorage.removeItem(TOOK_UPDATE_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function rememberPwaRegistration(registration: ServiceWorkerRegistration | undefined) {
   registeredServiceWorker = registration || null;
 }
@@ -66,6 +88,7 @@ export function startPwaUpdates({ hold, onUpdateReady }: { hold: () => boolean; 
 /** Take the waiting build now. The page reloads, so nothing after this runs. */
 export async function applyPwaUpdate(): Promise<boolean> {
   if (!waiting || !takeUpdate) return false;
+  try { sessionStorage.setItem(TOOK_UPDATE_KEY, "1"); } catch { /* private mode; the notice is not worth failing the update over */ }
   await takeUpdate();
   return true;
 }
@@ -109,6 +132,7 @@ function untilWaiting(timeoutMs = 10_000) {
  */
 async function performPwaUpdate(reloadPage: () => void) {
   if (!("serviceWorker" in navigator)) {
+    try { sessionStorage.setItem(TOOK_UPDATE_KEY, "1"); } catch { /* as above */ }
     reloadPage();
     return true;
   }
@@ -116,6 +140,7 @@ async function performPwaUpdate(reloadPage: () => void) {
 
   const registration = registeredServiceWorker || await navigator.serviceWorker.getRegistration();
   if (!registration) {
+    try { sessionStorage.setItem(TOOK_UPDATE_KEY, "1"); } catch { /* as above */ }
     reloadPage();
     return true;
   }

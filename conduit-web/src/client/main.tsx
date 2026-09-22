@@ -52,7 +52,7 @@ import { Modal, Sidebar, type SidebarCommand } from "./navigation/sidebar";
 import { clampSidebarChatLimit, selectedSidebarChatLimit, SIDEBAR_CHAT_LIMIT_STORAGE_KEY } from "./navigation/sidebar-preferences";
 import { CHAT_SORT_STORAGE_KEY, selectedChatSort, useChatSort } from "./preferences/chat-sort";
 import { WorkspaceAppearanceEditor } from "./project/workspace-appearance-editor";
-import { applyPwaUpdate, checkForPwaUpdate, forcePwaUpdate, pwaUpdateWaiting, resetPwaAppCache, startPwaUpdates } from "./pwa-update";
+import { applyPwaUpdate, checkForPwaUpdate, claimPwaUpdateArrival, forcePwaUpdate, pwaUpdateWaiting, resetPwaAppCache, startPwaUpdates } from "./pwa-update";
 import { createActiveChat, type ActiveChatStore } from "./state/active-chat";
 import { createAttachments, DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
 import { createDrafts } from "./state/drafts";
@@ -125,6 +125,7 @@ export type UpdateState =
   | { kind: "idle" }
   | { kind: "checking" }
   | { kind: "current" }
+  | { kind: "updated" }
   | { kind: "ready" }
   | { kind: "working"; label: string };
 type WorkspaceView = "files" | "diff" | "chat" | "terminal";
@@ -622,11 +623,15 @@ function App() {
    * they pressed it, and then owed their sidebar back.
    */
   let settleTimer = 0;
-  const sayUpToDate = () => {
-    setUpdateState({ kind: "current" });
+  const saySettled = (kind: "current" | "updated") => {
+    setUpdateState({ kind });
     clearTimeout(settleTimer);
-    settleTimer = window.setTimeout(() => setUpdateState((state) => state.kind === "current" ? { kind: "idle" } : state), 4_000);
+    // Long enough to be read by somebody who pressed the button and then looked
+    // away: a check can sit silent for several seconds while the worker is
+    // asked, and a four-second answer landed while the menu was still open.
+    settleTimer = window.setTimeout(() => setUpdateState((state) => state.kind === kind ? { kind: "idle" } : state), 8_000);
   };
+  const sayUpToDate = () => saySettled("current");
   const setPwaUpdating = (busy: boolean) => setUpdateState(busy ? { kind: "checking" } : { kind: "idle" });
   const [addingServer, setAddingServer] = createSignal(false);
   const runPwaUpdate = async () => {
@@ -800,6 +805,10 @@ function App() {
     const composerDirty = () => Boolean(chat.draft().trim())
       || attachments.items().length > 0
       || !drafts.settled();
+    // Said by the document that arrived, because the one that asked for it is
+    // gone. Without this a hand-pressed check that found something looked like
+    // a reload for no reason -- the update was the reason.
+    if (claimPwaUpdateArrival()) saySettled("updated");
     startPwaUpdates({
       hold: composerDirty,
       // No toast. It said a version was ready in a thing that disappears, and
