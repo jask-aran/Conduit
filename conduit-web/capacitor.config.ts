@@ -22,16 +22,6 @@ const config: CapacitorConfig = {
     allowMixedContent: true,
   },
   plugins: {
-    /*
-     * Resize nothing: `--app-height` in `mobile-layout.ts` sizes the shell, and
-     * two things moving the same surface is how the composer ends up fighting
-     * the transcript. The keyboard's height comes from `ConduitKeyboardPlugin`
-     * instead, which reports it every frame it is moving rather than once at
-     * the end.
-     */
-    Keyboard: {
-      resize: "none" as never,
-    },
     SystemBars: {
       /*
        * `css` pads the WebView's parent by the keyboard's height when the

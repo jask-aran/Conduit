@@ -204,12 +204,14 @@ export function bindVisualViewportShell(): () => void {
    * The Android shell's answer, and the only one that is a position rather
    * than a destination.
    *
-   * `@capacitor/keyboard` reports the keyboard once, after it has finished
-   * moving, so a shell sized from it snaps to where the keyboard is about to
-   * be and then waits for it -- the composer arriving early and the keyboard
-   * sliding up to meet it. `ConduitKeyboardPlugin` follows the IME inset
-   * animation instead and reports every frame of it, so the same height that
-   * draws the composer is the height the keyboard is actually at.
+   * `@capacitor/keyboard` reported the keyboard once, after it had finished
+   * moving, so a shell sized from it snapped to where the keyboard was about
+   * to be and then waited for it -- the composer arriving early and the
+   * keyboard sliding up to meet it. Worse, it took the frames in between away
+   * from everyone else: its own animation callback sits on the root view with
+   * `DISPATCH_MODE_STOP`, so nothing below could follow the keyboard even
+   * knowing how. `ConduitKeyboardPlugin` replaces it and reports every frame,
+   * so the height that draws the composer is where the keyboard is now.
    *
    * A frame is a layout of the whole shell, so they are coalesced onto the
    * frame that will draw them: several arriving inside one are the same

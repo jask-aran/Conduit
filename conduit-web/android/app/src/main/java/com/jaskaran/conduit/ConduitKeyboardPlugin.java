@@ -25,25 +25,29 @@ import java.util.Locale;
  * difference between a composer that sticks to the keyboard and one that jumps
  * to where the keyboard is about to be.
  *
- * Two things have to be true of the window before a frame can arrive. It must
- * be out of legacy soft-input handling, where the framework resizes the window
- * itself in one pass and runs no animation to follow -- hence
+ * Three things have to be true before a frame arrives, and the third is the
+ * one that cost the time.
+ *
+ * The window must be out of legacy soft-input handling, where the framework
+ * resizes it in one pass and runs no animation to follow -- hence
  * `SOFT_INPUT_ADJUST_NOTHING` here and `setDecorFitsSystemWindows(false)` in
  * `MainActivity`, which together leave the keyboard to overlay the page and the
- * page's height to the page. And nothing else may be moving the same surface:
- * Capacitor's SystemBars pads the WebView's parent by the keyboard's height
- * when the keyboard settles, which is the discrete jump this replaces, so
- * `insetsHandling` is `disable` and the safe-area variables it injected are
- * injected here instead -- the same names, so the stylesheets do not know the
- * difference, and the same rule that the bottom inset is the keyboard's
- * business while the keyboard is up.
+ * page's height to the page. Nothing else may be moving the same surface, so
+ * SystemBars' `insetsHandling` is `disable` and the safe-area variables it
+ * injected are injected here instead -- the same names, so the stylesheets do
+ * not know the difference, and the same rule that the bottom inset is the
+ * keyboard's business while the keyboard is up.
  *
- * Whether any frames arrive is still the platform's to decide, and some
- * keyboards show without a curve at all: the emulator's raises the IME in one
- * frame and dispatches no animation, through this callback or through the
- * framework's own on the decor view. So the insets listener reports the
- * settled height too, and a keyboard that does not animate lands exactly where
- * it always did rather than nowhere.
+ * And `@capacitor/keyboard` must not be installed. It registers an animation
+ * callback of its own, on the root view, with `DISPATCH_MODE_STOP` -- which
+ * means precisely that the animation is not dispatched to anything beneath it.
+ * It keeps `onStart` and `onEnd`, to report the keyboard's height once it has
+ * settled, and discards the `onProgress` frames in between. So every callback
+ * below the root, on any view, for any inset, silently receives nothing: the
+ * plugin loads, the listener attaches, and no frame ever comes. That is the
+ * whole of why the keyboard moved in one step, and removing the package is the
+ * whole of the fix. Its one remaining job, reporting the height, is this
+ * plugin's now.
  */
 @CapacitorPlugin(name = "ConduitKeyboard")
 public class ConduitKeyboardPlugin extends Plugin {
