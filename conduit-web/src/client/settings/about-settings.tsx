@@ -5,7 +5,7 @@ import { authorizedFetch } from "../api/native-auth-client.ts";
 import {
   buildLabel, clientBuild, serverBuild, shellVersion, type ServerBuild,
 } from "../platform/build-info.ts";
-import { installedClientKind } from "../platform/installed-client.ts";
+import { installedClientKind, isStandaloneBrowser } from "../platform/installed-client.ts";
 
 const SHELL_LABELS: Record<string, string> = { desktop: "Desktop app", android: "Android app" };
 
@@ -22,6 +22,11 @@ const formatBuiltAt = (value: string) => {
  *
  * It is also the only way to see that an update took: the shell's version
  * changes, and the interface's commit changes with it.
+ *
+ * And how it is running, which decides what the app can do -- an installed
+ * browser is fixed to the address it was installed from, so its route list is
+ * a set of facts rather than a set of choices. That is a property of this
+ * client, so it is said here once instead of on top of the route menu.
  */
 export function AboutSettingsTile() {
   const [server, setServer] = createSignal<ServerBuild | null | "pending">("pending");
@@ -32,6 +37,9 @@ export function AboutSettingsTile() {
     void shellVersion().then(setShell);
   });
 
+  const runningAs = () => SHELL_LABELS[installedClientKind]
+    || (isStandaloneBrowser() ? "Installed to the home screen" : "Browser tab");
+
   const row = (label: string, value: string, detail?: string) =>
     <div class="settings-row"><span>{label}</span>
       <span class="settings-build">{value}{detail ? <small> {detail}</small> : null}</span>
@@ -41,6 +49,7 @@ export function AboutSettingsTile() {
     <summary><span><strong>About</strong><small>{buildLabel(clientBuild)}</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
     <div class="settings-rows">
       {row("Interface", buildLabel(clientBuild), formatBuiltAt(clientBuild.builtAt))}
+      {row("Running as", runningAs())}
       <Show when={installedClientKind !== "browser"}>
         {row(SHELL_LABELS[installedClientKind] || "App shell", shell() || "Not reported")}
       </Show>
