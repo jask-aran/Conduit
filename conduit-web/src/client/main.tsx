@@ -632,6 +632,17 @@ function App() {
     settleTimer = window.setTimeout(() => setUpdateState((state) => state.kind === kind ? { kind: "idle" } : state), 8_000);
   };
   const sayUpToDate = () => saySettled("current");
+  /*
+   * Taking the waiting build. "Updating" is a promise that the page is about
+   * to go, so it must not outlive the attempt: a build that was announced and
+   * then activated on its own is no longer waiting, `applyPwaUpdate` declines,
+   * and the strip would otherwise sit on "Updating Conduit..." forever with
+   * the one state that has no timer and no button.
+   */
+  const takePwaUpdate = async () => {
+    setUpdateState({ kind: "working", label: "Updating Conduit…" });
+    if (!await applyPwaUpdate()) sayUpToDate();
+  };
   const setPwaUpdating = (busy: boolean) => setUpdateState(busy ? { kind: "checking" } : { kind: "idle" });
   const [addingServer, setAddingServer] = createSignal(false);
   const runPwaUpdate = async () => {
@@ -821,8 +832,7 @@ function App() {
     // composer emptying afterwards.
     createEffect(() => {
       if (composerDirty() || !pwaUpdateWaiting()) return;
-      setUpdateState({ kind: "working", label: "Updating Conduit…" });
-      void applyPwaUpdate();
+      void takePwaUpdate();
     });
   }
   const selectedProject = createMemo(() => catalogue.projects().find((project) => project.id === catalogue.projectId()));
@@ -2222,7 +2232,7 @@ function App() {
       onOpenDashboard={() => openDashboard()}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
       onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating()}
-      updateState={updateState()} onTakeUpdate={() => { setUpdateState({ kind: "working", label: "Updating Conduit…" }); void applyPwaUpdate(); }}
+      updateState={updateState()} onTakeUpdate={() => void takePwaUpdate()}
       onAddServer={() => setAddingServer(true)}
       onLogout={() => void logout()} />
     <Modal open={addingServer()} title="Add server" closeButton onClose={() => setAddingServer(false)} class="add-server-dialog">
