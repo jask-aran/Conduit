@@ -1,5 +1,5 @@
 import { buildHttpUrl } from "../api/transport.js";
-import { canVerifyInPage, verifyEd25519 } from "./signatures.ts";
+import { verifyEd25519 } from "./signatures.ts";
 
 /*
  * Check that the thing answering at an address is the server we paired with,
@@ -22,22 +22,6 @@ const PROOF_TIMEOUT_MS = 4000;
 
 const bytesToBase64Url = (bytes: Uint8Array) =>
   btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-
-/**
- * Whether this client can check a signature at all.
- *
- * Ed25519 arrived in WebCrypto later than the rest of it -- Chromium 137 --
- * so a shell on an older webview does not have it in the page. The Android
- * shell can check from API 33 and is asked instead, which is why this is no
- * longer only a question about `crypto.subtle`; see `signatures.ts`.
- *
- * Where neither can, that is reported rather than worked around: a client
- * that cannot verify must not pretend it did, and the caller's job is then to
- * leave the address to a person to choose rather than move to it on its own.
- */
-export function canVerify(): Promise<boolean> {
-  return canVerifyInPage();
-}
 
 export interface ServerProof {
   /** The address answered, and it is the server this public key belongs to. */
@@ -83,12 +67,12 @@ export async function proveServer(origin: string, id: string, publicKey: string)
     return { ok: false, reason: "mismatch" };
   }
 
-  const verified = await verifyEd25519(publicKey, `${id}.${nonce}`, answer.signature);
-  // Told apart on purpose. A client with no way to check has learned nothing
-  // about this address; one that checked and got a bad signature has learned
-  // that something else answered.
-  if (verified === null) return { ok: false, reason: "unverifiable" };
-  return verified ? { ok: true } : { ok: false, reason: "mismatch" };
+  // `unverifiable` is left for a caller that handed over no key at all. It
+  // used to mean "this webview has no Ed25519" as well, which was most of
+  // them, and which is why the verifier is now in the bundle.
+  return await verifyEd25519(publicKey, `${id}.${nonce}`, answer.signature)
+    ? { ok: true }
+    : { ok: false, reason: "mismatch" };
 }
 
 /** Domain separation, matching `server-tls.js`: an attestation is only that. */
@@ -129,9 +113,6 @@ export async function verifyLeaf(id: string, publicKey: string, claim: unknown):
   const fingerprint = typeof secure.fingerprint === "string" ? secure.fingerprint : "";
   const attestation = typeof secure.attestation === "string" ? secure.attestation : "";
   if (!Number.isInteger(port) || port < 1 || port > 65535 || !fingerprint || !attestation) return null;
-  // Here the two failures are the same answer: a certificate that was not
-  // checked is not pinned, whether because it did not verify or because this
-  // client had no way to try.
   const verified = await verifyEd25519(publicKey, `${ATTESTATION_PREFIX}.${id}.${fingerprint}`, attestation);
-  return verified === true ? { port, fingerprint } : null;
+  return verified ? { port, fingerprint } : null;
 }
