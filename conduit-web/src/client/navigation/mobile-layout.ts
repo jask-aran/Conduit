@@ -1,5 +1,5 @@
 import { installedClientKind } from "../platform/installed-client.ts";
-import { reportKeyboardProbe } from "./keyboard-probe.ts";
+import { logKeyboardEvent, reportKeyboardProbe } from "./keyboard-probe.ts";
 import { PHONE_LAYOUT_QUERY } from "../layout-geometry";
 
 /** Shared phone-shell query. Narrow desktop windows keep desktop navigation. */
@@ -139,6 +139,28 @@ export function bindVisualViewportShell(): () => void {
   };
   sync();
   const vv = window.visualViewport;
+  /*
+   * Watched only so the probe can say what arrived and in what order. The two
+   * questions left are whether the shell's keyboard event fires at all on the
+   * runs where nothing moves, and whether focus leaves the composer just
+   * before a scroll closes the keyboard -- neither visible in a height.
+   */
+  const named = (name: string) => () => logKeyboardEvent(name, Math.round(vv?.height ?? window.innerHeight));
+  const onVvResize = named("vv-resize");
+  const onWinResize = named("win-resize");
+  const tagOf = (node: EventTarget | null) => {
+    const el = node as HTMLElement | null;
+    return el?.tagName ? `${el.tagName.toLowerCase()}.${(el.className || "").toString().split(" ")[0] || "-"}`.slice(0, 22) : "-";
+  };
+  const onFocusIn = (event: FocusEvent) => logKeyboardEvent("focusin", tagOf(event.target));
+  const onFocusOut = (event: FocusEvent) => logKeyboardEvent("focusout", tagOf(event.target));
+  const onAnyScroll = (event: Event) => logKeyboardEvent("scroll", tagOf(event.target));
+  vv?.addEventListener("resize", onVvResize);
+  window.addEventListener("resize", onWinResize);
+  document.addEventListener("focusin", onFocusIn, true);
+  document.addEventListener("focusout", onFocusOut, true);
+  document.addEventListener("scroll", onAnyScroll, { capture: true, passive: true });
+
   vv?.addEventListener("resize", sync);
   vv?.addEventListener("scroll", sync);
   window.addEventListener("resize", sync);
@@ -166,6 +188,7 @@ export function bindVisualViewportShell(): () => void {
     source = "virtualkeyboard";
     const onGeometry = () => {
       const next = virtualKeyboard.boundingRect.height;
+      logKeyboardEvent("geometry", Math.round(next));
       if (next !== shellKeyboard) markKeyboardShift();
       shellKeyboard = next;
       sync();
@@ -186,11 +209,13 @@ export function bindVisualViewportShell(): () => void {
     source = "capacitor";
     void import("@capacitor/keyboard").then(async ({ Keyboard }) => {
       const shown = await Keyboard.addListener("keyboardWillShow", (info) => {
+        logKeyboardEvent("kb-show", Math.round(info.keyboardHeight));
         markKeyboardShift();
         shellKeyboard = info.keyboardHeight;
         sync();
       });
       const hidden = await Keyboard.addListener("keyboardWillHide", () => {
+        logKeyboardEvent("kb-hide");
         markKeyboardShift();
         shellKeyboard = 0;
         sync();
@@ -204,6 +229,11 @@ export function bindVisualViewportShell(): () => void {
     disposed = true;
     dropKeyboard?.();
     dropVirtualKeyboard?.();
+    vv?.removeEventListener("resize", onVvResize);
+    window.removeEventListener("resize", onWinResize);
+    document.removeEventListener("focusin", onFocusIn, true);
+    document.removeEventListener("focusout", onFocusOut, true);
+    document.removeEventListener("scroll", onAnyScroll, { capture: true } as EventListenerOptions);
     vv?.removeEventListener("resize", sync);
     vv?.removeEventListener("scroll", sync);
     window.removeEventListener("resize", sync);
