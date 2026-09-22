@@ -178,7 +178,15 @@ export function createActiveChat(options: ActiveChatOptions) {
   const setDraft: typeof setDraftSignal = ((value: Parameters<typeof setDraftSignal>[0]) => {
     const next = setDraftSignal(value);
     const chatId = loadedId();
-    if (chatId) options.drafts?.save(chatId, next, attachments.pendingIds());
+    if (!chatId) return next;
+    const pending = attachments.pendingIds();
+    // Emptying the composer goes through `clear`, not through a save of
+    // nothing. Sending is the common way it empties, and the debounce would
+    // leave the server holding the sent text for another 400ms -- long enough
+    // for a reload to land in the gap and restore a prompt that was already
+    // sent, ready to be sent again.
+    if (!next.trim() && !pending.length) options.drafts?.clear(chatId);
+    else options.drafts?.save(chatId, next, pending);
     return next;
   }) as typeof setDraftSignal;
   const hydrateDraft = (chatId: string) => {

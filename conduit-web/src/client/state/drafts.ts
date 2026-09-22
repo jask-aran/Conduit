@@ -3,6 +3,19 @@ import { api, asList } from "../api/client";
 import { activeOrigin } from "../platform/servers";
 
 export interface DraftEntry { text: string; attachmentIds: string[]; savedAt: string }
+/**
+ * A local copy, and whether the server has it yet.
+ *
+ * `unflushed` is the whole of the merge rule, and it is deliberately not a
+ * timestamp. The local `savedAt` comes from this device's clock and the server
+ * replaces it with its own on every save, so comparing them compares two
+ * machines: a client running five minutes slow loses text it just typed, and
+ * one running five minutes fast overwrites a newer draft from another device
+ * with a stale one. What actually matters is not which is later but whether
+ * this copy is a save that never completed -- which is the only reason the
+ * local copy exists.
+ */
+interface LocalDraft extends DraftEntry { unflushed: boolean }
 export interface StashEntry extends DraftEntry { id: string; chatId: string }
 
 const SAVE_DEBOUNCE_MS = 400;
@@ -44,13 +57,30 @@ function storage(): Storage | null {
   catch { return null; }
 }
 
-function writeLocal(chatId: string, entry: DraftEntry | null) {
+function writeLocal(chatId: string, entry: DraftEntry | null, unflushed = true) {
   const store = storage();
   if (!store) return;
   try {
-    if (entry) store.setItem(localKey(chatId), JSON.stringify(entry));
+    if (entry) store.setItem(localKey(chatId), JSON.stringify({ ...entry, unflushed }));
     else store.removeItem(localKey(chatId));
   } catch { /* quota, or a profile that refuses to store anything */ }
+}
+
+/**
+ * Mark a local copy as one the server now has.
+ *
+ * Only if it is still the same copy: a keystroke between the PUT leaving and
+ * its answer arriving has already written a newer one, and calling that
+ * flushed would lose exactly the text this is here to protect.
+ */
+function markFlushed(chatId: string, entry: DraftEntry) {
+  const store = storage();
+  if (!store) return;
+  try {
+    const held = validEntry(JSON.parse(store.getItem(localKey(chatId)) || "null"));
+    if (!held || held.savedAt !== entry.savedAt) return;
+    store.setItem(localKey(chatId), JSON.stringify({ ...held, unflushed: false }));
+  } catch { /* the copy is gone, or unreadable; nothing to mark */ }
 }
 
 function validEntry(value: unknown): DraftEntry | null {
@@ -62,8 +92,8 @@ function validEntry(value: unknown): DraftEntry | null {
 }
 
 /** Every local draft for the server being talked to, the stale ones dropped. */
-function readLocal(): Map<string, DraftEntry> {
-  const found = new Map<string, DraftEntry>();
+function readLocal(): Map<string, LocalDraft> {
+  const found = new Map<string, LocalDraft>();
   const store = storage();
   if (!store) return found;
   const prefix = `${LOCAL_PREFIX}${activeOrigin() || ""}:`;
@@ -74,17 +104,24 @@ function readLocal(): Map<string, DraftEntry> {
     if (!key.startsWith(prefix)) continue;
     const chatId = key.slice(prefix.length);
     let entry: DraftEntry | null = null;
-    try { entry = validEntry(JSON.parse(store.getItem(key) || "null")); } catch { entry = null; }
+    let unflushed = false;
+    try {
+      const raw = JSON.parse(store.getItem(key) || "null");
+      entry = validEntry(raw);
+      // Absent on a copy written before this flag existed. Treated as flushed,
+      // which is the safe reading: it defers to the server rather than
+      // overwriting it from a device that may have been off for a while.
+      unflushed = (raw as { unflushed?: unknown } | null)?.unflushed === true;
+    } catch { entry = null; }
     if (!entry || Date.parse(entry.savedAt) < cutoff) {
       try { store.removeItem(key); } catch { /* nothing to do about it */ }
       continue;
     }
-    found.set(chatId, entry);
+    found.set(chatId, { ...entry, unflushed });
   }
   return found;
 }
 
-const newer = (left: DraftEntry, right: DraftEntry) => Date.parse(left.savedAt) >= Date.parse(right.savedAt) ? left : right;
 
 /**
  * Composer drafts, kept per chat on the server so leaving a chat no longer
@@ -101,21 +138,37 @@ export function createDrafts(onError: (error: unknown) => void) {
   const entryFor = (text: string, attachmentIds: string[]): DraftEntry | null =>
     text.trim() || attachmentIds.length ? { text, attachmentIds, savedAt: new Date().toISOString() } : null;
 
+  /*
+   * Writes that have left but not landed.
+   *
+   * Something replacing the page has to be able to ask whether a draft is
+   * still in flight, or it will reload between a send and its clear and bring
+   * the sent text back on the next load.
+   */
+  const [inFlight, setInFlight] = createSignal(0);
+
   const flush = async (chatId: string, entry: DraftEntry | null) => {
+    setInFlight((value) => value + 1);
     try {
       await api(`/v0/chats/${encodeURIComponent(chatId)}/draft`, {
         method: "PUT",
         body: JSON.stringify({ text: entry?.text ?? "", attachmentIds: entry?.attachmentIds ?? [] }),
       });
+      if (entry) markFlushed(chatId, entry);
     } catch (error) { onError(error); }
+    finally { setInFlight((value) => Math.max(0, value - 1)); }
   };
 
+  /** Whether anything is unsaved: a debounce still counting, or a PUT in the air. */
+  const settled = () => timers.size === 0 && inFlight() === 0;
+
   /*
-   * Take the newer of the two copies, per chat.
+   * Reconcile the two copies, per chat.
    *
-   * The local one wins when the last thing that happened was typing that the
-   * debounce never got to send -- which is exactly the case this is for. When
-   * it wins the server is told, so the recovery is not stranded on one device.
+   * The local copy wins only when it is a save that never completed, which is
+   * the one case it exists for. A local copy the server acknowledged is not
+   * evidence of anything -- the server has it, and may have had something
+   * newer from another device since -- so it defers.
    *
    * A chat with a timer pending is skipped outright: something has been typed
    * in this session and is already on its way, and neither stored copy knows
@@ -126,6 +179,9 @@ export function createDrafts(onError: (error: unknown) => void) {
     for (const [chatId, entry] of local) {
       if (!timers.has(chatId)) drafts.set(chatId, entry);
     }
+    // Shown from the local copy first, then reconciled below: a draft the
+    // person can see while the request is in the air beats a correct one they
+    // cannot.
     try {
       const payload = await api<{ drafts?: Record<string, DraftEntry>; stash?: StashEntry[] }>("/v0/drafts");
       for (const [chatId, raw] of Object.entries(payload.drafts || {})) {
@@ -133,18 +189,24 @@ export function createDrafts(onError: (error: unknown) => void) {
         const saved = validEntry(raw);
         if (!saved) continue;
         const mine = local.get(chatId);
-        const winner = mine ? newer(mine, saved) : saved;
-        drafts.set(chatId, winner);
+        const recovered = mine?.unflushed ? mine : null;
+        drafts.set(chatId, recovered ?? saved);
         // Written back rather than left local: the server copy is the one
         // every other client reads, and a recovered draft that only exists
         // here would be lost again by the next device to save over it.
-        if (winner === mine) void flush(chatId, winner);
+        if (recovered) void flush(chatId, recovered);
+        else writeLocal(chatId, saved, false);
       }
       // A local draft the server has never heard of is a save that never
       // completed. It is already in the map above; this is what makes it
       // durable.
       for (const [chatId, entry] of local) {
-        if (!timers.has(chatId) && !(chatId in (payload.drafts || {}))) void flush(chatId, entry);
+        if (timers.has(chatId) || chatId in (payload.drafts || {})) continue;
+        if (entry.unflushed) void flush(chatId, entry);
+        // Acknowledged once and now absent from the server means it was
+        // cleared or its chat was deleted elsewhere. Sending it back would
+        // undo that.
+        else { drafts.delete(chatId); writeLocal(chatId, null); }
       }
       setStash(asList<StashEntry>(payload.stash));
     } catch (error) { onError(error); }
@@ -181,6 +243,18 @@ export function createDrafts(onError: (error: unknown) => void) {
     void flush(chatId, null);
   };
 
+  /**
+   * The chat is gone, so both copies go with it -- without a PUT, which would
+   * write a draft for a chat that no longer exists.
+   */
+  const forget = (chatId: string) => {
+    if (!chatId) return;
+    const pending = timers.get(chatId);
+    if (pending) { clearTimeout(pending); timers.delete(chatId); }
+    drafts.delete(chatId);
+    writeLocal(chatId, null);
+  };
+
   const park = async (chatId: string, text: string, attachmentIds: string[]) => {
     const pending = timers.get(chatId);
     if (pending) { clearTimeout(pending); timers.delete(chatId); }
@@ -212,7 +286,7 @@ export function createDrafts(onError: (error: unknown) => void) {
     } catch (error) { onError(error); return false; }
   };
 
-  return { load, stash, draftFor, save, clear, park, restore, discard };
+  return { load, stash, draftFor, save, clear, forget, settled, park, restore, discard };
 }
 
 export type DraftsStore = ReturnType<typeof createDrafts>;

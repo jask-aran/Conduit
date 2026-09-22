@@ -569,7 +569,7 @@ for (const adapter of adapterInstances()) {
   });
   adapter.on?.("removed", ({ id, chatId }) => runtimeHub.publishProcessRemoved(id, chatId));
 }
-registerDraftRoutes(app, { drafts });
+registerDraftRoutes(app, { drafts, knownChat: async (chatId) => Boolean(await findChatContext(chatId)) });
 registerRuntimeRoutes(app, {
   attachments,
   config,
@@ -660,6 +660,7 @@ registerSessionRoutes(app, {
   backends,
   chatLogs,
   config,
+  drafts,
   findChatContext,
   findRegisteredSession,
   lifecycle,

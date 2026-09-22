@@ -744,10 +744,21 @@ function App() {
    * it by hand, without any of those three having to know this exists.
    */
   if (import.meta.env.PROD && !nativeApp) {
-    const composerDirty = () => Boolean(chat.draft().trim());
+    /*
+     * Anything the reload would destroy.
+     *
+     * Text is the obvious one. An attachment is the one that actually cannot
+     * be recovered: the file being uploaded is a local `File` that no server
+     * draft holds, so a reload mid-upload loses the thing itself rather than a
+     * copy of it. And a draft write still in the air has to land before the
+     * document goes, or the page comes back to a state neither copy agrees on.
+     */
+    const composerDirty = () => Boolean(chat.draft().trim())
+      || attachments.items().length > 0
+      || !drafts.settled();
     startPwaUpdates({
       hold: composerDirty,
-      onUpdateReady: () => toast.info("A new version of Conduit is ready. It will load once this draft is sent or cleared.", {
+      onUpdateReady: () => toast.info("A new version of Conduit is ready. It will load once the composer is empty.", {
         id: "pwa-update-ready",
         duration: Infinity,
         action: { label: "Load now", onClick: () => void applyPwaUpdate() },
@@ -1369,7 +1380,15 @@ function App() {
     }
   };
   const deleteChat = async (target: ChatSummary, project: Project) => {
-    try { await api(`/v0/sessions/${target.id}`, { method: "DELETE" }); dropScope(target.id); if (catalogue.selectedId() === target.id) await createChat(project); await refresh(); }
+    try {
+      await api(`/v0/sessions/${target.id}`, { method: "DELETE" });
+      // Local copy too: the server drops its own with the chat, but this one
+      // lives in storage on every device that ever opened it.
+      drafts.forget(target.id);
+      dropScope(target.id);
+      if (catalogue.selectedId() === target.id) await createChat(project);
+      await refresh();
+    }
     catch (error) { showError(error); }
   };
   const deleteChats = async (targets: Array<{ chat: ChatSummary; project: Project }>) => {
@@ -1378,6 +1397,7 @@ function App() {
     const results = await Promise.all(targets.map(async (target) => {
       try {
         await api(`/v0/sessions/${target.chat.id}`, { method: "DELETE" });
+        drafts.forget(target.chat.id);
         dropScope(target.chat.id);
         return null;
       } catch (error) {

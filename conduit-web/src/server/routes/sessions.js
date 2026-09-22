@@ -26,6 +26,7 @@ export function registerSessionRoutes(app, {
   backends,
   chatLogs,
   config,
+  drafts,
   findChatContext,
   findRegisteredSession,
   lifecycle,
@@ -227,6 +228,10 @@ export function registerSessionRoutes(app, {
             .filter((chat) => chat.id === context.chat.id
               || (conduitPiSessionFile(chat) && familyFiles.has(path.resolve(conduitPiSessionFile(chat)))));
           await Promise.all(relatedChats.map((chat) => registry.remove(chat.id, context.project)));
+          // The draft goes with the chat. Nothing else ever removes one, so a
+          // chat deleted with something unsent left its text and its
+          // attachments held for as long as the store kept them.
+          await Promise.all(relatedChats.map((chat) => drafts.dropChat(chat.id)));
           return true;
         });
       });
