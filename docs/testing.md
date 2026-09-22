@@ -109,6 +109,54 @@ Wrapper and `cli` commands:
 - Memory: `take_heapsnapshot`, `get_heapsnapshot_summary`, `get_heapsnapshot_details`, `compare_heapsnapshots`
 - Reference: `chrome-devtools --help` or `chrome-devtools <command> --help`
 
+### Android shell on an emulator
+
+A headless AVD driven over ADB, with Chrome DevTools into the Capacitor
+WebView. It is the only way to see the Android shell without a round trip
+through somebody's phone, and it answers questions about *what arrives* --
+events, order, geometry, inset dispatch -- not about how something looks.
+
+    /usr/bin/sg kvm -c "$ANDROID_HOME/emulator/emulator -avd conduit-kbd36 \
+      -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot"
+
+`sg` is shadowed by `ast-grep`, hence the absolute path. `hw.keyboard = no` in
+`config.ini` forces the soft keyboard; without it the AVD takes input from the
+host and no IME ever appears. Reach the WebView with:
+
+    adb forward tcp:9333 localabstract:webview_devtools_remote_$(adb shell pidof com.jaskaran.conduit.dev)
+
+#### Matching the device
+
+`conduit-kbd36` is shaped like the phone this was reported on, because a
+layout bug is a bug about a particular number of CSS pixels at a particular
+density, and the default AVD is neither:
+
+| | phone (SM-S936B) | AVD |
+| --- | --- | --- |
+| OS | Android 16 | Android 16 (`android-36;google_apis`) |
+| screen | 1440x3120 | `hw.lcd.width/height` 1440x3120 |
+| density | 600dpi | `hw.lcd.density = 600` |
+| CSS viewport | 384x832 | 384x832 |
+| `devicePixelRatio` | 3.75 | 3.75 |
+| WebView | 153 | **133** |
+
+The WebView version is the one thing that cannot be matched. A system image
+bundles the WebView of its build date; updating it needs either a Play sign-in
+on a `google_apis_playstore` image or an APK from somewhere that is not
+Google. Neither is worth doing for a layout question, but it is worth knowing
+before concluding anything about behaviour that Chromium has changed --
+`interactive-widget=overlays-content` is honoured on 133 and not on the
+phone's 153, which is exactly the kind of difference that will not reproduce.
+
+#### What the emulator cannot tell you
+
+It renders through SwiftShader at around 30fps. Anything about smoothness,
+frame pacing or dropped frames is the emulator describing itself. Measure
+*cost* instead, which does carry across, via CDP `Performance.getMetrics`
+either side of the interaction: `LayoutDuration` and `RecalcStyleDuration`
+divided by the number of frames say whether the work fits in a frame budget
+on any hardware. Watching an animation on the emulator says nothing.
+
 ## Which client build you are testing
 
 Four installed builds exist, two per platform, and each pair installs **beside**
