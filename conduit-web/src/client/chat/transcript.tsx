@@ -795,26 +795,38 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
      * The keyboard takes height from the bottom, so the transcript gives it
      * back from the top.
      *
-     * The shell already shrinks to the visual viewport, which moves the
-     * composer up but leaves the thread's scroll position where it was --
-     * so the lines somebody was reading went behind the keyboard and the
-     * window onto the transcript slid backwards through the conversation.
-     * Shifting the scroll by exactly what the viewport lost keeps the same
-     * text against the composer, which is what "the keyboard pushed it up"
-     * means. A thread that is following its tail needs none of this: it is
-     * already pinned to the bottom, wherever the bottom now is.
+     * The shell shrinks for the keyboard, which moves the composer up but
+     * leaves the thread's scroll position where it was -- so the lines
+     * somebody was reading went behind the keyboard and the window onto the
+     * transcript slid backwards through the conversation. Shifting the scroll
+     * by exactly what the scroller lost keeps the same text against the
+     * composer, which is what "the keyboard pushed it up" means. A thread
+     * that is following its tail needs none of this: it is already pinned to
+     * the bottom, wherever the bottom now is.
+     *
+     * What it must not be driven by is the visual viewport. That is the
+     * keyboard's destination, not its position: Chromium takes the whole
+     * keyboard out of it on the first frame, so a correction made from it
+     * shoves the transcript the entire distance at once while the shell is
+     * still interpolating -- the lurch at the start of the animation. The
+     * scroller's own height is the honest signal, because it is the thing
+     * being corrected, and a `ResizeObserver` reports it once per frame,
+     * already measured, without reading layout back.
      */
-    let lastViewportHeight = visualViewport?.height ?? 0;
-    const holdAgainstKeyboard = () => {
-      const height = visualViewport?.height ?? 0;
-      const lost = lastViewportHeight - height;
-      lastViewportHeight = height;
-      if (!Number.isFinite(lost) || Math.abs(lost) < 1) return;
+    let lastScrollerHeight = 0;
+    const holdAgainstKeyboard = (height: number) => {
+      const lost = lastScrollerHeight - height;
+      lastScrollerHeight = height;
+      if (!lost || !Number.isFinite(lost) || Math.abs(lost) < 1) return;
       if (following()) return;
       setViewportScrollTop(Math.max(0, Math.min(viewportMaxScrollTop(), viewport.scrollTop + lost)), false);
     };
+    const scrollerResizeObserver = new ResizeObserver((entries) => {
+      const box = entries[0]?.contentRect;
+      if (box) holdAgainstKeyboard(box.height);
+    });
+    scrollerResizeObserver.observe(viewport);
     window.addEventListener("resize", scheduleLatestButtonAnchor);
-    visualViewport?.addEventListener("resize", holdAgainstKeyboard);
     visualViewport?.addEventListener("resize", scheduleLatestButtonAnchor);
     scheduleLatestButtonAnchor();
     panelMotion = mountTranscriptPanelMotion(
@@ -933,7 +945,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface);
       composerResizeObserver.disconnect();
       window.removeEventListener("resize", scheduleLatestButtonAnchor);
-      visualViewport?.removeEventListener("resize", holdAgainstKeyboard);
+      scrollerResizeObserver.disconnect();
       visualViewport?.removeEventListener("resize", scheduleLatestButtonAnchor);
       if (latestButtonAnchorFrame != null) cancelAnimationFrame(latestButtonAnchorFrame);
       latestButton?.style.removeProperty("--message-scroller-button-bottom");
