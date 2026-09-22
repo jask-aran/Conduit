@@ -93,6 +93,11 @@ export class LanAdvertisement {
       type: SERVICE_TYPE,
       protocol: SERVICE_PROTOCOL,
       port: this.port,
+      // No AAAA records. The responder builds its address records by walking
+      // the interfaces itself, and a client only ever takes the private IPv4
+      // one, so every IPv6 address it would otherwise put on the wire is a
+      // fact about this machine published to the whole network for nothing.
+      disableIPv6: true,
       txt: {
         // Short keys because a TXT record is a handful of bytes per string,
         // and these are read by machines.
@@ -101,7 +106,12 @@ export class LanAdvertisement {
         key: this.identity.publicKeyValue(),
       },
     });
-    this.log({ type: "conduit.lan-advertisement", state: "published", instance: this.instance, port: this.port, addresses });
+    // `addresses` is what made the advertisement worth making, not the whole
+    // of what it carries: the responder enumerates the interfaces for its own
+    // A records, so a link-local IPv4 this list excludes still goes out. The
+    // client drops it at the other end, and there is no hook here to stop the
+    // library sending it.
+    this.log({ type: "conduit.lan-advertisement", state: "published", instance: this.instance, port: this.port, reachableOn: addresses });
   }
 
   unpublish() {

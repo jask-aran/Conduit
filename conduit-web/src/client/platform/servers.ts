@@ -283,6 +283,15 @@ export const pathGeneration = pathEpoch;
  */
 export const pathIsPinned = pinned;
 
+/*
+ * Every caller has proved this address first -- `path-selector.ts` before it
+ * takes a route, the switcher before it offers one. There was once a console
+ * helper on `window` that skipped that, from the days before anything chose a
+ * path on its own; it survived into builds that did, where it was a way for
+ * any script on the page to send a token the secure store would not hand it
+ * anywhere it liked. Do not put it back outside `import.meta.env.DEV`, and not
+ * without the proof.
+ */
 export function setActivePath(origin: string, { manual = false } = {}) {
   const next = normalizeServerOrigin(origin);
   if (manual) setPinned(true);
@@ -303,30 +312,6 @@ export function setActivePath(origin: string, { manual = false } = {}) {
  */
 export function onPathChange(handler: () => void) {
   createEffect(on(pathGeneration, () => handler(), { defer: true }));
-}
-
-/*
- * A way to move the path by hand, until a server can say which addresses are
- * it and something starts choosing between them.
- *
- * The reconnect is the part of this that can fail ugly, and it cannot be
- * proved by a unit test: what has to hold is that a live terminal repaints
- * instead of erroring and a running generation keeps streaming, in a real
- * client, over a real network. So the move is reachable from the console
- * before there is a UI for it:
- *
- *   conduitPath.set("http://192.168.0.128:4310")   // same server, new route
- *   conduitPath.clear()                            // back to its own address
- *
- * Removed once something chooses paths on its own.
- */
-if (typeof window !== "undefined") {
-  (window as unknown as { conduitPath: unknown }).conduitPath = {
-    get current() { return activePath(); },
-    get server() { return active(); },
-    set: (origin: string) => { setActivePath(origin); return activePath(); },
-    clear: () => { clearActivePath(); return activePath(); },
-  };
 }
 
 /**
