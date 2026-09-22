@@ -238,7 +238,10 @@ export function bindVisualViewportShell(): () => void {
       const geometry = await plugin.addListener("keyboardGeometry", (info) => {
         shellKeyboard = info.height;
         noteKeyboardFrame(!info.animating);
-        logKeyboardEvent(info.animating ? "ime" : "ime-end", Math.round(info.height));
+        // Only the end of a travel. Every frame of one is in the summary, and
+        // a hundred of them in the ring buffer push out the focus and scroll
+        // rows that are the only reason the ring buffer is there.
+        if (!info.animating) logKeyboardEvent("ime-end", Math.round(info.height));
         if (!info.animating) {
           if (frame) cancelAnimationFrame(frame);
           settle();

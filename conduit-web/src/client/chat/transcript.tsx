@@ -800,9 +800,16 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
      * somebody was reading went behind the keyboard and the window onto the
      * transcript slid backwards through the conversation. Shifting the scroll
      * by exactly what the scroller lost keeps the same text against the
-     * composer, which is what "the keyboard pushed it up" means. A thread
-     * that is following its tail needs none of this: it is already pinned to
-     * the bottom, wherever the bottom now is.
+     * composer, which is what "the keyboard pushed it up" means.
+     *
+     * A thread following its tail needs the same thing said differently, and
+     * not saying it at all was a bug: "pinned to the bottom" is a fact about
+     * a scroll position, not a promise the browser keeps. Shortening the
+     * scroller leaves `scrollTop` where it was and moves the bottom up to
+     * meet it, so the newest lines -- the whole reason for being down there
+     * -- end up behind the composer, and only a thread scrolled *away* from
+     * the bottom appeared to work. It is put back on the bottom instead,
+     * wherever the bottom now is.
      *
      * What it must not be driven by is the visual viewport. That is the
      * keyboard's destination, not its position: Chromium takes the whole
@@ -818,7 +825,10 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       const lost = lastScrollerHeight - height;
       lastScrollerHeight = height;
       if (!lost || !Number.isFinite(lost) || Math.abs(lost) < 1) return;
-      if (following()) return;
+      if (following()) {
+        setViewportScrollTop(viewportMaxScrollTop(), false);
+        return;
+      }
       setViewportScrollTop(Math.max(0, Math.min(viewportMaxScrollTop(), viewport.scrollTop + lost)), false);
     };
     const scrollerResizeObserver = new ResizeObserver((entries) => {
