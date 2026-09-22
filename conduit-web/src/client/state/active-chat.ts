@@ -185,6 +185,19 @@ export function createActiveChat(options: ActiveChatOptions) {
     const saved = options.drafts?.draftFor(chatId);
     if (saved?.text && !untrack(draft)) setDraftSignal(saved.text);
   };
+  /*
+   * Ask again for the open chat's draft.
+   *
+   * The drafts load is a request, and a chat can open before it answers --
+   * whereupon `hydrateDraft` finds nothing and nothing ever asks again, so a
+   * draft sitting on the server is simply never shown. This is what the load
+   * calls when it lands. Safe at any moment: it refuses a composer that
+   * already has something in it, so it cannot overwrite typing.
+   */
+  const rehydrateDraft = () => {
+    const chatId = loadedId();
+    if (chatId) hydrateDraft(chatId);
+  };
   const [generation, setGeneration] = createSignal<GenerationState>("idle");
   const [editingEntryId, setEditingEntryId] = createSignal<string | null>(null);
   const [contextUsage, setContextUsage] = createSignal<ContextUsage | null>(null);
@@ -1329,7 +1342,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     live, messages, setMessages, tools, loadedId, pageBefore, loadingOlder, draft, setDraft,
     generation, editingEntryId, contextUsage, sessionStats, cacheStats, compacting, hostUiRequests, queue, pendingMessages, capabilities, harnessCommands, activeGeneration, activeGenerationChange, turnArtifacts,
     navigatingId, presentation, interactionReady: () => presentation().kind === "ready" && Boolean(loadedId()), streaming, stopping, activity,
-    initialize, select, prefetch, loadDetail, ensureAgent, reset, send, stop, regenerate,
+    initialize, select, prefetch, loadDetail, ensureAgent, reset, send, stop, regenerate, rehydrateDraft,
     continueResponse, compact, loadHarnessCommands, loadOlder, edit, respondHostUi, clearQueue, interruptAndSend, editQueued, discardQueued,
   };
 }
