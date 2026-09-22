@@ -19,6 +19,7 @@ import { AttachmentStore } from "./attachment-store.js";
 import { RuntimeHub } from "./runtime-hub.js";
 import { defaultsFromEnv, RuntimeSettingsStore } from "./runtime-settings.js";
 import { ServerIdentity } from "./server-identity.js";
+import { LanAdvertisement } from "./lan-advertisement.js";
 import { DraftStore } from "./draft-store.js";
 import { PreferencesStore } from "./preferences-store.js";
 import { SessionNameService } from "./session-name-service.js";
@@ -99,6 +100,12 @@ const terminalPastes = new TerminalPasteStore({ root: config.terminalPasteRoot }
 const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, defaultsFromEnv(process.env));
 await runtimeSettings.load();
 const serverIdentity = await new ServerIdentity(config.identityFile, { port: config.port }).load();
+const lanAdvertisement = new LanAdvertisement({
+  identity: serverIdentity,
+  port: config.port,
+  enabled: config.advertiseOnLan,
+  log: (event) => console.log(JSON.stringify(event)),
+}).start();
 const searchSettings = new SearchSettingsStore({ filePath: config.searchConfigFile, environment: process.env });
 await searchSettings.initialize();
 const voiceSettings = new VoiceSettingsStore({ filePath: config.voiceConfigFile, catalog: VOICE_EXECUTION_CATALOG });
@@ -847,6 +854,7 @@ async function shutdown(signal) {
   shuttingDown = true;
   console.log(`Conduit received ${signal}; stopping`);
   runtimeHub.close();
+  await lanAdvertisement.stop();
   await dictationStream.shutdown?.({ timeoutMs: 1_000 });
   await terminalStream.shutdown?.({ timeoutMs: 1_000 });
   for (const socket of wss.clients) socket.close(1012, "Conduit is restarting");
