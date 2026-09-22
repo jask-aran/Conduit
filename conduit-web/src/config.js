@@ -87,17 +87,28 @@ export function loadConfig(env = process.env) {
     identityFile: absolute(env.CONDUIT_IDENTITY_FILE || path.join(dataRoot, "identity.json")),
     leafFile: absolute(env.CONDUIT_LEAF_FILE || path.join(dataRoot, "leaf.json")),
     /*
-     * The port the same server answers on over TLS, one above the plain one.
+     * The port the same server answers on over TLS.
      *
      * A second port rather than one that serves both, because telling HTTP
      * from TLS on a shared socket means sniffing the first bytes of every
      * connection, and a listener that guesses wrong is a class of bug worth
      * more than the port number saves.
      *
+     * Nine above rather than one above, which is where it started and where
+     * it collided immediately: `port + 1` is the universal convention for a
+     * second instance of anything, so the TLS listener and a development
+     * server want the same number. 4311 through 4318 are left to them, and a
+     * development server on 4311 gets 4320 by the same rule.
+     *
+     * Once a client has pinned a certificate reached here, this cannot move
+     * without breaking it, and the plain port cannot be promoted onto TLS for
+     * the same reason. Both numbers are permanent from the first release that
+     * pins.
+     *
      * Off when the plain port is zero -- a kernel-picked port is for a test,
-     * and `port + 1` there is whatever happened to be next.
+     * and a fixed second port there would collide with the next test.
      */
-    tlsPort: Number(env.CONDUIT_TLS_PORT ?? (port ? port + 1 : 0)),
+    tlsPort: Number(env.CONDUIT_TLS_PORT ?? (port ? port + 9 : 0)),
     // On by default: a server that cannot be found on the network it is on is
     // the whole reason somebody ends up typing an IP address. Off is for a
     // machine whose network is not the owner's -- a shared VPS, a work LAN --
