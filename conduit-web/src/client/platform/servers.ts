@@ -1,5 +1,6 @@
 import { createEffect, createSignal, on } from "solid-js";
 import { isInstalledClient } from "./installed-client.ts";
+import { publishCertificatePins } from "./certificate-pins.ts";
 
 /**
  * The Conduit servers this client knows how to reach.
@@ -397,6 +398,9 @@ export function renameServer(origin: string, name: string) {
 export function forgetServer(origin: string) {
   const list = serverList().filter((entry) => entry.origin !== origin);
   persist(list, active() === origin ? list[0]?.origin ?? null : active());
+  // The shell keeps accepting a pinned certificate until it is sent a set
+  // without it, so a forgotten server has to take its pin with it here.
+  void publishCertificatePins(pinnedFingerprints());
 }
 
 /**

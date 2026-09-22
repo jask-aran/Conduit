@@ -89,8 +89,18 @@ export function startPwaUpdates({ hold, onUpdateReady }: { hold: () => boolean; 
 }
 
 /** Take the waiting build now. The page reloads, so nothing after this runs. */
-export async function applyPwaUpdate(): Promise<boolean> {
-  if (!waiting || !takeUpdate) return false;
+export function applyPwaUpdate(): Promise<boolean> {
+  if (!waiting || !takeUpdate) return Promise.resolve(false);
+  // Both the arrival and a hand-pressed check can ask for the same build; the
+  // second gets the first's answer rather than a second SKIP_WAITING and a
+  // second reload timer.
+  taking ??= takeWaiting(takeUpdate).catch((cause) => { taking = null; throw cause; });
+  return taking;
+}
+
+let taking: Promise<boolean> | null = null;
+
+async function takeWaiting(takeUpdate: () => Promise<void>): Promise<boolean> {
   try { sessionStorage.setItem(TOOK_UPDATE_KEY, "1"); } catch { /* private mode; the notice is not worth failing the update over */ }
   await takeUpdate();
   /*
