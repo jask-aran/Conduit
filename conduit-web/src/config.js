@@ -57,9 +57,10 @@ export function loadConfig(env = process.env) {
     conduitAgentDir: piAgentDir,
     conduitCommand: env.CONDUIT_PI_COMMAND || "",
   });
+  const port = Number(env.CONDUIT_PORT || env.PORT || 4310);
   return {
     host: env.CONDUIT_HOST || env.HOST || "127.0.0.1",
-    port: Number(env.CONDUIT_PORT || env.PORT || 4310),
+    port,
     release: String(env.CONDUIT_RELEASE || "development"),
     piCommand: installations.get("conduit-pinned").command,
     repositoryRoot,
@@ -84,6 +85,19 @@ export function loadConfig(env = process.env) {
     bridgeSkill: path.join(templatesRoot, "conduit-workspace", "SKILL.md"),
     runtimeSettingsFile: absolute(env.CONDUIT_RUNTIME_SETTINGS_FILE || path.join(dataRoot, "runtime.json")),
     identityFile: absolute(env.CONDUIT_IDENTITY_FILE || path.join(dataRoot, "identity.json")),
+    leafFile: absolute(env.CONDUIT_LEAF_FILE || path.join(dataRoot, "leaf.json")),
+    /*
+     * The port the same server answers on over TLS, one above the plain one.
+     *
+     * A second port rather than one that serves both, because telling HTTP
+     * from TLS on a shared socket means sniffing the first bytes of every
+     * connection, and a listener that guesses wrong is a class of bug worth
+     * more than the port number saves.
+     *
+     * Off when the plain port is zero -- a kernel-picked port is for a test,
+     * and `port + 1` there is whatever happened to be next.
+     */
+    tlsPort: Number(env.CONDUIT_TLS_PORT ?? (port ? port + 1 : 0)),
     // On by default: a server that cannot be found on the network it is on is
     // the whole reason somebody ends up typing an IP address. Off is for a
     // machine whose network is not the owner's -- a shared VPS, a work LAN --

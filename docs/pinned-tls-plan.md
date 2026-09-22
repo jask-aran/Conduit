@@ -1,6 +1,7 @@
 # Proving a server by the connection, not beside it
 
-Status: plan for 0.7.5. Nothing here is built. This records an investigation
+Status: in progress for 0.7.5. The server half is built -- see "What is built"
+at the end; the shell half is not. This records an investigation
 run on 2026-09-22, the attack it found, the two cheaper fixes that were
 considered and rejected, and the shape of the one that works — so the next
 attempt does not re-derive any of it.
@@ -131,3 +132,36 @@ route switching was never something a browser did.
   a server that moved networks.
 - Whether the loopback route is worth a certificate at all, or stays plain
   HTTP on the grounds that it cannot leave the machine.
+
+## What is built
+
+The server side, as of 0.7.5 development.
+
+- `src/server-tls.js` issues the leaf: self-signed ECDSA P-256, IP SANs for
+  the addresses `localPaths` reports, 398 days, re-issued when that set
+  changes or expiry is within a month. The X.509 is written as DER here
+  rather than by a library, because nothing chains to this certificate and
+  the only question asked of it is whether its key is the attested one.
+- The leaf is kept in `data/leaf.json`, 0600, and reused across restarts. A
+  client pins the key it was attested, so a server minting a fresh one every
+  boot would turn the re-check into an event that happens constantly, which
+  is an event nobody reads as a warning.
+- `attestLeaf` / `verifyLeafAttestation` sign and check
+  `conduit-leaf-spki-sha256.v1.<id>.<sha256 of SPKI>` with the Ed25519
+  identity. The prefix is domain separation: an attestation must not be
+  replayable as any other signature this key makes.
+- The server listens over TLS on `CONDUIT_TLS_PORT`, one above the plain
+  port. A port of its own rather than one socket serving both, because
+  telling TLS from HTTP on a shared socket means reading the first bytes of
+  every connection and guessing, in front of everything. A port already in
+  use warns rather than refusing to start: the plain listener is what every
+  client uses today.
+- `/v0/server` reports `secure: { port, fingerprint, attestation }` beside
+  `paths`, and deliberately not among them. No shell can pin a certificate
+  yet, so an `https` origin in `paths()` today would be a route every client
+  refuses to take.
+
+Still open, in the order it has to happen: the two shells' certificate
+callbacks, then `https` origins in `paths()`, then the candidate-list
+rework this unlocks. The `disableIPv6` revert and the mDNS field for the
+attestation both wait on the first of those.

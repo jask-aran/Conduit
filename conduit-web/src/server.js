@@ -1,4 +1,5 @@
 import http from "node:http";
+import https from "node:https";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,7 +19,8 @@ import { ChatStore, chatView, isChatId } from "./chat-store.js";
 import { AttachmentStore } from "./attachment-store.js";
 import { RuntimeHub } from "./runtime-hub.js";
 import { defaultsFromEnv, RuntimeSettingsStore } from "./runtime-settings.js";
-import { ServerIdentity } from "./server-identity.js";
+import { localPaths, ServerIdentity } from "./server-identity.js";
+import { ServerLeaf } from "./server-tls.js";
 import { LanAdvertisement } from "./lan-advertisement.js";
 import { DraftStore } from "./draft-store.js";
 import { PreferencesStore } from "./preferences-store.js";
@@ -100,6 +102,23 @@ const terminalPastes = new TerminalPasteStore({ root: config.terminalPasteRoot }
 const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, defaultsFromEnv(process.env));
 await runtimeSettings.load();
 const serverIdentity = await new ServerIdentity(config.identityFile, { port: config.port }).load();
+/*
+ * The certificate this server answers on over TLS, and the identity's word
+ * that it is this server's.
+ *
+ * Issued for the addresses the machine holds right now, because a client's own
+ * TLS stack refuses a certificate that does not name the address it dialled
+ * before any of our code is consulted -- a laptop changing networks does this
+ * routinely. See `docs/pinned-tls-plan.md` for why the connection has to carry
+ * the proof at all.
+ */
+const serverLeaf = config.tlsPort
+  ? await new ServerLeaf(config.leafFile).ensure({
+      commonName: `Conduit ${serverIdentity.id}`,
+      hosts: localPaths(config.port).map((origin) => new URL(origin).hostname),
+    })
+  : null;
+if (serverLeaf) serverIdentity.attestLeaf(serverLeaf.spki, config.tlsPort);
 const lanAdvertisement = new LanAdvertisement({
   identity: serverIdentity,
   enabled: config.advertiseOnLan,
@@ -164,7 +183,7 @@ const harnessConfig = {
   logs: chatLogs,
   codexCommand: process.env.CONDUIT_CODEX_COMMAND || "codex",
   fxCommand: process.env.CONDUIT_FX_COMMAND || "fx",
-  opencodeCommand: process.env.CONDUIT_OPENCODE_COMMAND || "opencode",
+  opencodeCommand: process.env.CONDUIT_OPENCODE_COMMAND || "opencode2",
   chatgptWebPython: process.env.CONDUIT_CHATGPT_WEB_PYTHON
     || path.join(config.repositoryRoot, "working-files/.venv/bin/python"),
   chatgptWebScript: process.env.CONDUIT_CHATGPT_WEB_SIDECAR
@@ -820,7 +839,13 @@ const liveSessionStream = createLiveSessionStream({
   },
 });
 
-server.on("upgrade", async (request, socket, head) => {
+/*
+ * One handler, both listeners. A socket arriving over TLS is the same socket
+ * with the same ticket; nothing about which port it came in on changes who is
+ * allowed to open it, and a second copy of this is a second place for an
+ * authentication check to drift.
+ */
+const handleUpgrade = async (request, socket, head) => {
   const requestUrl = new URL(request.url, "http://localhost");
   const pathname = requestUrl.pathname;
   const match = pathname.match(/^\/v0\/live-sessions\/([a-f0-9-]{24,36})\/stream$/);
@@ -849,7 +874,26 @@ server.on("upgrade", async (request, socket, head) => {
   if (ptyMatch) return terminalStream.handleUpgrade(ptyMatch[1], request, socket, head);
   if (!backends.get(match[1])) return socket.destroy();
   return liveSessionStream.handleUpgrade(match[1], request, socket, head);
-});
+};
+server.on("upgrade", handleUpgrade);
+
+/*
+ * The same server, over a connection that can prove whose it is.
+ *
+ * On a port of its own rather than sharing 4310: telling TLS from HTTP on one
+ * socket means reading the first bytes of every connection and guessing, and
+ * the guess is in front of everything.
+ *
+ * Nothing is told about this address yet. `paths()` still offers only `http`
+ * origins, because a shell that cannot pin a certificate would meet a
+ * self-signed one and refuse it -- the pinning lives in `onReceivedSslError`
+ * and `ServerCertificateErrorDetected`, neither of which is written. Until
+ * then this listens so the attestation can be checked against something real.
+ */
+const secureServer = serverLeaf
+  ? https.createServer({ cert: serverLeaf.certificate, key: serverLeaf.privateKey }, app)
+  : null;
+secureServer?.on("upgrade", handleUpgrade);
 
 async function shutdown(signal) {
   if (shuttingDown) return;
@@ -864,6 +908,8 @@ async function shutdown(signal) {
   const closed = new Promise((resolve) => server.close(resolve));
   server.closeIdleConnections?.();
   server.closeAllConnections?.();
+  secureServer?.close();
+  secureServer?.closeAllConnections?.();
   const stoppedProcesses = await manager.shutdown();
   const codexAdapter = backends.adapters.get("codex");
   let stoppedCodexProcesses = 0;
@@ -924,3 +970,14 @@ server.listen(config.port, config.host, () => {
   lanAdvertisement.start(server.address().port);
   void warmModelCatalogue();
 });
+
+if (secureServer) {
+  secureServer.listen(config.tlsPort, config.host, () => {
+    console.log(`Conduit also listening on https://${config.host}:${secureServer.address().port} (leaf ${serverIdentity.leaf.fingerprint})`);
+  });
+  // A port already in use is not worth refusing to start over: the plain
+  // listener is what every client uses today, and a server that will not come
+  // up because something else holds 4311 is a worse failure than one whose
+  // certificate nobody can reach yet.
+  secureServer.on("error", (error) => console.warn("Conduit could not listen over TLS", error.message));
+}
