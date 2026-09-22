@@ -106,6 +106,10 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
   let shortcutGear: HTMLButtonElement | undefined;
   let shortcutOverflow: HTMLButtonElement | undefined;
   let openEditorAfterMenu = false;
+  // Settles once the saved shortcuts are known, so a shell spawned on arrival
+  // does not start before its on-start commands have loaded.
+  let shortcutsLoaded!: () => void;
+  const shortcutsReady = new Promise<void>((resolve) => { shortcutsLoaded = resolve; });
   let host: HTMLDivElement | undefined;
   let pane: HTMLElement | undefined;
   let terminal: TerminalRenderer | undefined;
@@ -464,6 +468,8 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
               setConnectionState("stopped");
               void refreshSessions(activeProjectId).catch(() => {});
               notifyPtyChange();
+              // /terminal is meant to always hold a shell; bring one back.
+              if (props.autoStart) void restart();
             } else if (message.code === "pty_in_use") {
               setWritable(false);
               setTerminalFocused(false);
@@ -597,7 +603,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
       if (projectId !== activeProjectId || pty()) return;
       const record = running.find((item) => item.id === props.terminalId) || running[0];
       if (!record) {
-        if (props.autoStart) queueMicrotask(() => void start());
+        if (props.autoStart) queueMicrotask(() => void spawnOnStart());
         return;
       }
       setPty(record);
@@ -756,6 +762,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     setConnectionState("idle");
     setError("");
     toast.info(message, { duration: 6_000 });
+    if (props.autoStart) void spawnOnStart();
   };
 
   const removeSession = async (record: Pty) => {
@@ -841,14 +848,29 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     }
   };
 
+  /*
+   * A shell nobody asked for by hand: /terminal arriving with none live, or
+   * replacing one a restart took. Those are the moments the shortcuts marked
+   * "on start" exist for -- a workspace pane's "New terminal" is not one.
+   */
+  const spawnOnStart = async () => {
+    await shortcutsReady;
+    const commands = shortcuts().filter((shortcut) => shortcut.onStart).map((shortcut) => shortcut.command);
+    await start(commands.length ? commands.join("\r") : undefined);
+  };
+
   const restart = async () => {
+    // Lost to the server rather than exited, on /terminal: recovery, so it
+    // brings the on-start commands back with it. On-start is /terminal's
+    // alone; a workspace pane's replacement is an ordinary shell.
+    const recovering = terminalGone && props.autoStart === true;
     connectionGeneration += 1;
     closeConnection();
     disposeRenderer();
     setPty(null);
     setConnectionState("idle");
     setError("");
-    await start();
+    await (recovering ? spawnOnStart() : start());
   };
 
   /*
@@ -896,6 +918,11 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
         value={editingShortcut()?.command || ""} onInput={(event) => updateEditingShortcut({ command: event.currentTarget.value })} />
     </label>
     <div class="terminal-shortcut-form-actions">
+      <button type="button" class="terminal-shortcut-onstart" aria-pressed={editingShortcut()?.onStart === true}
+        title="Also run it in the shell /terminal opens on its own: when you arrive with none live, or after a restart"
+        onClick={() => updateEditingShortcut({ onStart: editingShortcut()?.onStart !== true })}>
+        <CheckIcon data-on={editingShortcut()?.onStart === true ? "true" : undefined} />Run on start
+      </button>
       <Button type="button" variant="ghost" size="sm" onClick={() => setEditingShortcut(null)}>Cancel</Button>
       <Button type="submit" size="sm" disabled={shortcutSaving() || !editingShortcut()?.label.trim() || !editingShortcut()?.command.trim()}>
         {shortcutSaving() ? "Saving…" : "Done"}
@@ -973,7 +1000,8 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
         setShortcuts(normalizeTerminalShortcuts(migrated.terminalShortcuts));
         localStorage.removeItem(LEGACY_TERMINAL_SHORTCUTS_STORAGE_KEY);
       })
-      .catch((cause) => setError((cause as Error).message));
+      .catch((cause) => setError((cause as Error).message))
+      .finally(() => shortcutsLoaded());
     if (props.active !== false) void attachExisting(activeProjectId);
   });
 
@@ -1085,7 +1113,9 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
                       moveShortcut(index(), index() + (event.key === "ArrowUp" ? -1 : 1));
                     }}><GripVerticalIcon /></button>
                   <span class="terminal-menu-copy"><strong>{shortcut.label}</strong><small>$ {shortcut.command}</small></span>
-                  <span class="terminal-menu-tag" title={shortcut.target === "new" ? "Runs in a new shell" : "Runs in this shell"}>{shortcut.target === "new" ? "new" : "this"}</span>
+                  <span class="terminal-menu-tag" title={`${shortcut.target === "new" ? "Runs in a new shell" : "Runs in this shell"}${shortcut.onStart ? "; also when /terminal starts or recovers a shell" : ""}`}>
+                    {shortcut.target === "new" ? "new" : "this"}{shortcut.onStart ? " · start" : ""}
+                  </span>
                   <span class="terminal-menu-actions">
                     <button type="button" class="terminal-menu-action" aria-label={`Edit ${shortcut.label}`} title="Edit"
                       onClick={(event) => { event.stopPropagation(); setEditingShortcut({ ...shortcut }); }}><PencilIcon /></button>
