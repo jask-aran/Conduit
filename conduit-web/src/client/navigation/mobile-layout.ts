@@ -1,5 +1,5 @@
 import { installedClientKind } from "../platform/installed-client.ts";
-import { logKeyboardEvent, reportKeyboardProbe } from "./keyboard-probe.ts";
+import { logKeyboardEvent, noteKeyboardFrame, reportKeyboardProbe } from "./keyboard-probe.ts";
 import { PHONE_LAYOUT_QUERY } from "../layout-geometry";
 
 /** Shared phone-shell query. Narrow desktop windows keep desktop navigation. */
@@ -237,6 +237,7 @@ export function bindVisualViewportShell(): () => void {
       }>("ConduitKeyboard");
       const geometry = await plugin.addListener("keyboardGeometry", (info) => {
         shellKeyboard = info.height;
+        noteKeyboardFrame(!info.animating);
         logKeyboardEvent(info.animating ? "ime" : "ime-end", Math.round(info.height));
         if (!info.animating) {
           if (frame) cancelAnimationFrame(frame);
