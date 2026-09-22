@@ -1760,6 +1760,44 @@ svg { stroke-width: 1.5; }
   background: var(--background);
 }
 .native-server-card .native-server-error { color: var(--destructive); }
+/* What was found on the network: a tile of rows, which is what a list of
+   things to pick is everywhere else in Conduit. */
+.native-server-hint { color: var(--muted-foreground); font-size: 11px; }
+.native-server-found {
+  display: flex;
+  margin: 0;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 4px;
+  gap: 2px;
+  list-style: none;
+}
+.native-server-found > li > button {
+  display: grid;
+  width: 100%;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  border: 0;
+  border-radius: var(--radius-md);
+  padding: 7px 8px;
+  gap: 8px;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.native-server-found > li > button:hover:not(:disabled) { background: var(--accent); }
+.native-server-found > li > button:disabled { cursor: default; opacity: 0.6; }
+.native-server-found svg { width: 15px; height: 15px; color: var(--muted-foreground); }
+.native-server-found code {
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* The same form, minus the page it owns on first launch. */
 .add-server-dialog { width: min(92vw, 420px); }
 .add-server-dialog .native-server-card { width: 100%; gap: 10px; }

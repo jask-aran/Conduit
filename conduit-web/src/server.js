@@ -102,10 +102,9 @@ await runtimeSettings.load();
 const serverIdentity = await new ServerIdentity(config.identityFile, { port: config.port }).load();
 const lanAdvertisement = new LanAdvertisement({
   identity: serverIdentity,
-  port: config.port,
   enabled: config.advertiseOnLan,
   log: (event) => console.log(JSON.stringify(event)),
-}).start();
+});
 const searchSettings = new SearchSettingsStore({ filePath: config.searchConfigFile, environment: process.env });
 await searchSettings.initialize();
 const voiceSettings = new VoiceSettingsStore({ filePath: config.voiceConfigFile, catalog: VOICE_EXECUTION_CATALOG });
@@ -916,5 +915,9 @@ server.listen(config.port, config.host, () => {
     // it, and announcing the request would announce a zero.
     `Conduit ${config.release} listening on http://${config.host}:${server.address().port}`,
   );
+  // Started here rather than at construction because the port is the one the
+  // kernel handed over: with CONDUIT_PORT=0 the requested port is a zero, and
+  // an address nothing listens on is worse than no advertisement at all.
+  lanAdvertisement.start(server.address().port);
   void warmModelCatalogue();
 });

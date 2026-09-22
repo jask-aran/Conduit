@@ -46,9 +46,9 @@ function privateAddresses(port) {
 }
 
 export class LanAdvertisement {
-  constructor({ identity, port, enabled = true, hostname = os.hostname(), log = () => {} }) {
+  constructor({ identity, enabled = true, hostname = os.hostname(), log = () => {} }) {
     this.identity = identity;
-    this.port = port;
+    this.port = 0;
     this.enabled = enabled;
     // The instance name is what a person picks from a list, so it names the
     // machine rather than the software: every one of these is a Conduit.
@@ -68,8 +68,10 @@ export class LanAdvertisement {
    * because it is not on one -- so the advertisement simply is not made, and
    * appears if an interface later does.
    */
-  start() {
-    if (!this.enabled || this.timer) return this;
+  start(port) {
+    this.port = Number(port) || 0;
+    // Nothing to say without a port somebody could connect to.
+    if (!this.enabled || this.timer || !this.port) return this;
     this.sync();
     this.timer = setInterval(() => this.sync(), INTERFACE_POLL_MS);
     this.timer.unref?.();
