@@ -1,241 +1,280 @@
 # Harness adapters implementation plan
 
-> **Status (2026-09-22): half landed.** The registration refactor this plan
-> argues for is done — `src/harnesses/index.js` holds the manifests and
-> `SUPPORTED` is derived from them, so the "hard-coded today" table below
-> describes code that no longer exists. What did **not** land is the point of
-> the exercise: Claude Code, opencode and native Pi are still not harnesses.
-> `src/harnesses/` ships `pi`, `codex`, `chatgpt-web` and `unsupported`.
-> Read the table as history, not as a survey of the tree.
+> **Status (2026-09-22): foundation landed; adapters remain.**
+> `src/harnesses/index.js` owns registration, detection, catalogue entries,
+> profile selection and discovery policy. `SessionRecords`, `unsupported()` and
+> the session-store scanner are present. Conduit still ships no fx, OpenCode or
+> Claude Code adapter. This plan targets fx 0.0.10, OpenCode 2.0.8 and Claude
+> Code 2.1.278, which are installed on the development machine.
 
-Adds Claude Code, opencode, and native Pi as Conduit harnesses, and makes
-harness registration and detection data-driven so a fourth backend costs one
-file instead of seven edits.
+Add fx, OpenCode and Claude Code as Conduit harnesses. The first scope is
+**discovery + drive**: list this machine's threads, open one in `/computer`
+with full history, and prompt it. Keep `profile: false` until each driven
+harness proves restore, live streaming, cancellation and permission handling.
 
-Scope per harness is **discovery + drive**: list the threads on this machine,
-open one in `/computer` with full history, prompt it. Being a selectable profile
-for Conduit-owned chats is deliberately out of scope and tracked as follow-up.
+Native Pi is not part of this plan. Its existing `PiRpcAdapter` remains the
+right live transport, but host-Pi discovery can land separately.
 
-## Why this shape
+## The boundary that already exists
 
-The event contract (`src/chat-backend-contract.d.ts`) is settled. Codex proved a
-foreign protocol maps onto it, and the transcript work proved the client renders
-it without knowing the backend. What is not settled is how an adapter *plugs in*:
-the typedef declares 12 methods, `CodexAppServerAdapter` implements ~45, and two
-backend names are spelled out in seven places.
-
-| Site | Hard-coded today |
-| --- | --- |
-| `src/server.js:149-160` | a `spawnSync` probe per backend, positional constructor args |
-| `src/pi-rpc-adapter.js:137` | `ChatBackendRegistry(manager, codex, additional)` - codex is a positional parameter |
-| `src/chat-backend.js:44` | `agentProfiles()` returns a literal array |
-| `src/chat-backend.js:79` | `["codex", "chatgpt-web"]` literal in `profileSelection` |
-| `src/server/routes/harnesses.js:7` | `SUPPORTED = new Set(["codex", "chatgpt-web"])` |
-| `src/server/routes/harnesses.js:13` | `harnessCatalog()` literal array |
-| `src/server/routes/chats.js:43,61` | `implementation !== "codex"` guards |
-
-Three more backends on that base is ~21 edits and four more copies of the record
-store. Phase 1 removes the tax before incurring it.
-
-## Protocol findings
-
-Probed on this machine: `claude` 2.1.267, `opencode` 1.18.30, `pi` 0.85.0,
-`codex` 0.154.0.
-
-| Harness | Live transport | History source | Resume handle |
-| --- | --- | --- | --- |
-| Codex (built) | app-server JSON-RPC over stdio | `thread/items/list` | `thread/resume` |
-| opencode | HTTP + SSE (`opencode serve`) | `GET /session/{id}/message` | durable session id |
-| Claude Code | stream-json over stdio | `~/.claude/projects/<cwd-slug>/<uuid>.jsonl` | `--resume <uuid>` |
-| native Pi | `pi --mode rpc` | `~/.pi/agent/sessions/<cwd-slug>/<ts>_<uuid>.jsonl` | `--session <path>` |
-
-Notes that drive the per-harness phases:
-
-- **opencode is the closest fit to the contract we have.** It exposes real
-  permission endpoints (`GET /permission`, `POST /permission/{requestID}/reply`,
-  and per-session variants), so it is the first non-Pi backend that can honestly
-  advertise `permissions: true`. It also has `/session/{id}/abort`,
-  `/session/{id}/summarize`, `/session/{id}/fork`, `POST /session/{id}/model`,
-  and both global (`GET /event`) and per-session (`GET /session/{id}/event`)
-  SSE. Its capability set lands near Pi's, not Codex's. The server prints
-  `OPENCODE_SERVER_PASSWORD is not set; server is unsecured` - Conduit must set
-  one and bind loopback.
-- **native Pi is nearly free.** `--mode rpc` is the protocol
-  `normalizePiBackendEvent` already maps losslessly, so the live path reuses
-  `PiRpcAdapter` unchanged. Only discovery is new code, and each session JSONL
-  opens with `{"type":"session","cwd":...}`, so cwd is a first-line read.
-- **Claude Code has the cleanest transcript mapping and the two worst traps.**
-  `message.content` is native Anthropic blocks, so text / thinking / tool_use map
-  1:1 onto `AssistantBlock`. But history is a **tree** (`parentUuid`), not a
-  list, so it must be walked back from the leaf; and `isSidechain: true` records
-  are **subagent transcripts interleaved into the same file** and must be
-  filtered out of the main transcript. Records also carry `cwd`, `gitBranch`,
-  `sessionId`, `timestamp` and `aiTitle`, which fills the `repository.branch`
-  slot `groupThreadsByFolder` leaves null for Codex.
-
-## Phase 1 - manifest, helpers, detection
-
-No new backend lands in this phase. It exists to make phases 2-4 one file each.
-
-### 1.1 Manifest
-
-New `src/harnesses/`, one module per backend exporting:
+No registration refactor is required. A new harness supplies one manifest and
+one adapter:
 
 ```js
 export const manifest = {
-  id: "opencode",
-  label: "opencode",
-  protocol: "native_api",          // AgentProtocol, already in the contract
-  installationId: "host-opencode",
-  capabilities: OPENCODE_CAPABILITIES,
-  discovery: "machine",            // "machine" | "folder" | "none"
-  drive: true,                     // can /computer open a thread?
-  profile: false,                  // selectable for Conduit-owned chats
-  probe,                           // () => { available, version, status, detail }
-  build,                           // (config) => adapter instance
+  id: "fx",
+  label: "fx",
+  protocol: "acp",
+  installationId: "host-fx",
+  capabilities: FX_CAPABILITIES,
+  discovery: "machine",
+  drive: true,
+  profile: false,
+  probe,
+  build,
 };
 ```
 
-`src/harnesses/index.js` exports the array. Every site in the table above reads
-from it:
+The adapter implements `ChatBackendAdapter` and translates its native protocol
+once into Conduit's neutral events. It composes `SessionRecords`,
+`SocketDelivery` and `unsupported()`; it does not inherit from a shared base
+class. The three transports and lifetimes are different enough that a base
+class would hide the important work.
 
-| Site | Becomes |
-| --- | --- |
-| `server.js` | `ChatBackendRegistry.fromManifests(await detect(manifests), { manager })` |
-| `ChatBackendRegistry` ctor | takes a map; the positional `codex` parameter is deleted |
-| `agentProfiles()` | templates plus manifests where `profile` is true |
-| `profileSelection()` | accepted ids derived from manifests where `profile` is true |
-| `harnesses.js SUPPORTED` | ids where `discovery !== "none"` |
-| `harnessCatalog()` | mapped from manifests |
-| `chats.js:43,61` | `implementation !== "codex"` becomes `manifest.discovery === "machine"` |
+The existing routes already derive supported harnesses and drive behavior from
+the manifest. The browser already renders neutral transcript operations,
+assistant content, tool activity, permissions and runtime state. Do not add a
+backend-specific browser path.
 
-### 1.2 Composed helpers
+## Current protocol findings
 
-Three helpers adapters *use*. Deliberately not a base class: Codex is
-process-per-record, opencode is one server for every session, and native Pi
-delegates its live path to `PiManager`. Inheritance would fight all three.
+| Harness | Control interface | Discovery and history | Live lifetime |
+| --- | --- | --- | --- |
+| fx 0.0.10 | ACP v1 over stdio | `fx sessions --all --json`; `fx session --id <id> --json`; ACP `session/load` replays history | one `fx acp` process per driven record |
+| OpenCode 2.0.8 | V2 loopback HTTP API through `@opencode/client` | V2 session and message APIs on the shared local service | one user service, many sessions |
+| Claude Code 2.1.278 | `@anthropic-ai/claude-agent-sdk` | `listSessions`, `getSessionInfo`, `getSessionMessages`, `forkSession` | one SDK `query()` runtime per driven record |
 
-- **`SessionRecords`** (`src/harnesses/session-records.js`) - the record map,
-  socket set and event array, plus the eight methods each adapter hand-rolls
-  identically today: `get`, `getByChatId`, `list`, `stop`, `view`, `publish`,
-  `attach`, `runtimeState`. `CodexAppServerAdapter` and `ChatGptWebAdapter` are
-  effectively byte-identical here; both migrate onto it as the proof.
-- **`unsupported(capabilities)`** (`src/harnesses/unsupported.js`) - derives the
-  throwing stubs from the capability flags rather than hand-writing `fork()`,
-  `queue()`, `respondHostUi()`, `sendPi()` per adapter. Makes `ChatCapabilities`
-  enforced rather than decorative.
-- **`scanSessionStore({ root, parse })`** (`src/harnesses/session-store.js`) -
-  the cwd-slug-directory-of-JSONL walk Claude Code and native Pi both need.
-  Codex and opencode skip it; they have APIs.
+### fx: use ACP for drive
 
-### 1.3 Detection
+fx can be integrated without ACP, but neither alternative represents the
+installed fx harness as completely:
 
-Today detection is one `spawnSync(codex, ["--version"])` at boot, frozen for the
-process lifetime: installing Claude Code needs a Conduit restart to be seen.
+- `libfx` is an embedding API. It creates a separate agent core. The host must
+  supply credentials, tools, permissions and checkpoint storage. It does not
+  inherit the installed CLI's session store, login, shell, filesystem tools,
+  skills or permission rules. That would make Conduit a new fx host rather
+  than a client of the user's fx installation.
+- `fx ask --json` can create or resume a saved session, but it is a
+  non-interactive command. It buffers structured final output, writes progress
+  to stderr, and can ask a person only through a TTY. It cannot carry
+  Conduit's asynchronous permission dialog or a long-lived live session.
+- `createFxTerminal()` preserves terminal behavior but embeds the terminal UI
+  and its storage adapters. It is not a neutral chat transport.
 
-`probe()` per manifest, in three kinds already required:
+ACP preserves the installed fx configuration and exposes the required control
+surface: `session/new`, `session/list`, `session/load`, `session/resume`,
+`session/prompt`, `session/cancel`, `session/close`, model/config changes,
+streamed messages, tool updates and permission requests. Each connection has
+one active session and one active prompt. Use one child per driven record so
+two open threads cannot replace each other's active session.
 
-- `command` - spawn `--version`, capture the version string (codex, claude, pi)
-- `http` - `GET /global/health` against a spawned or existing server (opencode)
-- `import` - the `python -c "import curl_cffi"` check (chatgpt-web)
+Use the JSON CLI only for machine-wide discovery. ACP is launched under one
+primary workspace, while `fx sessions --all --json` explicitly enumerates all
+workspaces. Inspect a selected thread with `fx session --id <id> --json`, then
+load it into ACP for drive. Do not parse `~/.fx/sessions` directly.
 
-Probes run **in parallel** at boot (four sequential 3s timeouts would add up to
-12s of startup), are cached, and are **re-probed on `GET /v0/harnesses?refresh=1`**.
+ACP does not currently expose fx's interactive compaction command, steering
+or a follow-up queue. Declare those capabilities false. Confirm usage,
+thinking and attachment event shapes against a captured fx 0.0.10 exchange
+before advertising them.
 
-Every probe returns the shape `ChatGptWebAdapter` already invented and nothing
-else uses: `{ available, version, status, detail }` with status
-`ready | authentication_required | unavailable`. "Installed but not logged in"
-becomes a first-class state for all backends instead of a chatgpt-web special
-case, and it fills the `version` slot `harnessCatalog` already declares and
-never populates.
+### OpenCode: target V2, not the V1 API in the old plan
 
-### 1.4 Verification
+OpenCode 2 uses one authenticated loopback service for the user account. The
+installed `opencode serve` confirms the V2 surface at `/api/info`; the V1
+`/global/health` and `/doc` paths fall through to the web application. Do not
+use the old `@opencode-ai/sdk/v2` package, V1 endpoints, or the former
+`permission.reply` shapes.
 
-- New node test: for every manifest, assert it yields a registry entry, a
-  catalog row, a `profileSelection` acceptance, and `SUPPORTED` membership
-  consistent with its `discovery`. This is the test that would have caught all
-  seven sites drifting.
-- Unit tests for `SessionRecords` and `unsupported()`.
-- **The existing Codex and chatgpt-web tests must pass unchanged.** They are the
-  regression net for the migration; changing them to fit the refactor defeats
-  the point.
-- Full node suite green (baseline: 699/699).
+Use the released V2 packages:
 
-## Phase 2 - native Pi
+- `@opencode/client/service` discovers or ensures the registered local
+  service and supplies its authentication headers.
+- `@opencode/client` supplies generated request and event types for the V2
+  API. Derive the adapter's boundary parsers from these types rather than
+  copying a second protocol schema.
+- Scope session operations with the V2 location/directory input. The service
+  owns sessions across projects.
 
-Smallest real backend, so it validates the manifest first.
+Conduit must not stop a shared service that it did not start. Let the official
+service helper own discovery, compatibility checks, authentication and
+startup. A private `opencode serve` process remains a later isolation option,
+not the default.
 
-- `src/harnesses/native-pi.js`: manifest with `discovery: "machine"`,
-  `drive: true`, `protocol: "pi_rpc"`, capabilities `PI_CAPABILITIES`.
-- `listThreads({ cwd, limit })` via `scanSessionStore` over
-  `~/.pi/agent/sessions`, reading the first-line `{"type":"session","cwd":...}`
-  header for cwd, id and timestamp. Honour `--session-dir` / config overrides
-  rather than hard-coding the path.
-- Drive delegates to the existing `PiRpcAdapter` with
-  `sessionFile: <resolved path>`; no new event mapping, no new transcript code.
-- Verification: a discovered host-Pi thread appears in `/computer` grouped by
-  folder, opens with full history, and accepts a prompt. Confirm the existing
-  `native_pi` chat path is unaffected.
+The local T3 Code adapter is useful for behavior, not for package names or
+process topology: it targets the V1 SDK. Retain these proven rules from it:
 
-## Phase 3 - opencode
+- A resume cursor is the native session ID. A confirmed missing session can
+  become a new session; authentication and transport failures must not.
+- Reapply the selected permission policy when a session resumes.
+- Live event subscriptions have no replay guarantee. After disconnect, reread
+  the session, messages, status and pending permission/question state before
+  continuing the live fold.
+- Recover pending requests by listing them after reconnect; do not assume a
+  missed live event resolved them.
+- Treat an allow-for-this-session reply as session-scoped. Do not persist a
+  workspace-wide grant by accident.
 
-- `src/harnesses/opencode.js` plus `src/opencode-server-adapter.js`.
-- Lifecycle: **one server, many sessions.** Spawn `opencode serve --port 0
-  --hostname 127.0.0.1` once with `OPENCODE_SERVER_PASSWORD` set to a
-  per-process random secret, read the chosen port from stdout, reference-count
-  it the way `CodexAppServerAdapter.discovery()` does, and shut it down when the
-  last record closes.
-- Discovery: `GET /session` for the list, `GET /project` for folder grouping.
-- Restore: `GET /session/{id}/message` into the same `{messages, tools}`
-  transcript shape `CodexAppServerAdapter.threadTranscript` produces, so the
-  client renders it through the shared transcript with no client change.
-- Drive: `POST /session/{id}/prompt_async`, stream `GET /session/{id}/event`
-  (SSE) mapped to `assistant_content` / `tool_activity` / `status`,
-  `POST /session/{id}/abort` for cancel.
-- Capabilities: this is the first backend to set `permissions: true` - wire
-  `GET /permission` and `POST /permission/{requestID}/reply` to
-  `permission_request` / `permission_resolved`. Also `modelSwitch` via
-  `POST /session/{id}/model`, `compaction` via `/session/{id}/summarize`.
-- Verification: an opencode session opened in `/computer` renders history,
-  streams a live turn, cancels, and surfaces a permission prompt end to end.
+OpenCode V2 renamed permission configuration and changed the client API. Read
+the installed generated client types during implementation. Do not translate
+V1 action names such as `bash` or `task` into the new adapter.
 
-## Phase 4 - Claude Code
+### Claude Code: use the Agent SDK
 
-- `src/harnesses/claude-code.js` plus `src/claude-code-adapter.js`.
-- Discovery via `scanSessionStore` over `~/.claude/projects`. Do **not** trust
-  the directory slug for cwd - it is lossy; read `cwd` and `gitBranch` from the
-  records. Use `aiTitle` for the thread title.
-- History: walk the `parentUuid` chain back from the newest leaf rather than
-  reading the file in order, and **drop `isSidechain: true` records** so
-  subagent transcripts do not appear as main-thread turns.
-- Transcript: map `message.content` blocks straight onto `AssistantBlock`
-  (`text`, `thinking`, `tool_use` -> `tool_call`); pair `tool_use` with its
-  `toolUseResult` for `tool_activity`.
-- Drive: `claude -p --input-format stream-json --output-format stream-json
-  --include-partial-messages --resume <uuid>` over stdio; map the stream-json
-  frames to the neutral events.
-- Verification: a Claude Code thread opens with history matching what
-  `claude --resume` shows for the same session, including a turn that used
-  subagents (which must not leak into the transcript).
+The Claude Agent SDK is more complete than raw CLI `stream-json` for this
+integration. It uses the installed Claude Code executable and configuration,
+but adds typed control and local session operations:
 
-## Risks
+- `query()` streams SDK messages and partial content and supports resume,
+  model, effort, permission mode, settings, MCP servers and additional
+  directories.
+- `canUseTool` and `onUserDialog` let Conduit answer approvals and user
+  questions without a terminal.
+- The live query can change model and permission mode and can be closed for a
+  hard cancellation boundary.
+- `listSessions`, `getSessionInfo` and `getSessionMessages` replace Conduit's
+  proposed JSONL directory scanner and hand-written `parentUuid` walk.
+- `forkSession` creates a native fork at a message boundary. Resume the new ID
+  through `query()`.
 
-- **The migration is the risk, not the new backends.** Codex and chatgpt-web
-  moving onto `SessionRecords` touches working code. Mitigation: their existing
-  tests pass unchanged, and the migration is its own commit, separate from the
-  helper introduction.
-- **Browser suite baseline is red** - 23 passing / 15 failing, all clustered in
-  the workspace panel area, unrelated to harnesses but easy to misattribute.
-  Establish the count before starting each phase.
-- **opencode server security.** Unsecured by default. Loopback bind plus a
-  per-process password is a requirement, not a nicety.
-- **Claude Code's stream-json frames are not a stable published contract** the
-  way Codex's app-server JSON-RPC is. Expect this adapter to need version
-  pinning or tolerant parsing.
+This is also the shape used by the local T3 Code Claude adapter. Its important
+lesson is to isolate `CLAUDE_CONFIG_DIR`: SDK history helpers read process
+environment, so a non-default Claude account must run history operations in a
+small child process with that account's environment. Never mutate the Conduit
+server's `process.env` while other adapters are active.
+
+Raw `claude -p --input-format stream-json --output-format stream-json` remains
+a useful diagnostic and fixture source. Do not make it the production
+transport: the SDK already owns that subprocess protocol and exposes session
+history, forks, permissions, user dialogs and dynamic settings that a raw
+parser would have to rebuild.
+
+Claude Code 2.1.278 has no documented ACP agent server. Its other server-like
+interfaces do not replace the SDK:
+
+- The background daemon and `claude agents --json` manage Claude-owned
+  background jobs. `attach` is a terminal client, and the listing is not the
+  complete saved-session browser.
+- Remote Control is for Claude's web and mobile clients. It is not a documented
+  local third-party session API.
+- `claude gateway` fronts model access and enterprise policy. It does not
+  expose local Claude Code sessions.
+- Claude Managed Agents is an Anthropic-hosted product with different session
+  ownership. It does not drive the user's local Claude Code installation.
+
+## Phase 1 - fx
+
+Add `src/harnesses/fx.js`, `src/fx-acp-adapter.js` and a small ACP stdio
+client. Do not add a general ACP framework until a second ACP harness needs
+one.
+
+1. Probe `fx --version` and require the ACP/session methods used by the
+   adapter during initialization.
+2. Discover with paged `fx sessions --all --json`; inspect a chosen session
+   with `fx session --id <id> --json`.
+3. Spawn `fx acp` in the thread's cwd, initialize it, and load or create the
+   exact session.
+4. Map ACP updates to transcript operations, assistant paint, tool activity,
+   permission requests and settled status.
+5. Implement cancel and close. Kill only the child process owned by the
+   record.
+
+Verification: discover an existing fx session, open its complete history,
+run one tool-using prompt, answer one permission request, cancel one prompt,
+and resume the same session after the ACP child restarts.
+
+## Phase 2 - OpenCode 2
+
+Add `src/harnesses/opencode.js` and `src/opencode-adapter.js` against the V2
+client and service helper.
+
+1. Ensure the compatible local service and retain its authenticated endpoint.
+2. List sessions with their native project locations for machine-wide folder
+   grouping.
+3. Load the selected session and messages into Conduit's transcript shape.
+4. Subscribe to V2 live events and filter them by session and location.
+5. Send prompts, cancel, fork and answer permission/question requests through
+   generated client methods.
+6. On subscription loss, resubscribe and reconcile authoritative session,
+   message, status and pending-request state before emitting more live events.
+7. Advertise compaction or model switching only after the installed V2 client
+   exposes and a focused live probe proves the operation.
+
+Verification: open a session created by the OpenCode 2 TUI, render its full
+history, stream a tool-using turn, recover across a forced event disconnect,
+answer a permission and a question, cancel, then reopen the same native
+session. Confirm Conduit neither changes the shared service configuration nor
+stops it.
+
+## Phase 3 - Claude Code
+
+Add `src/harnesses/claude-code.js`, `src/claude-code-adapter.js` and the
+official `@anthropic-ai/claude-agent-sdk` dependency.
+
+1. Probe the installed CLI and SDK compatibility without creating a session or
+   starting authentication.
+2. Discover with `listSessions` and read with `getSessionMessages`; do not scan
+   transcript JSONL directly.
+3. Start or resume `query()` with the selected cwd, model, effort, permission
+   mode and Claude config environment.
+4. Map partial assistant blocks, thinking, tools, subagent/task activity,
+   usage, compaction, rate limits and result messages to neutral events.
+5. Route `canUseTool` and `onUserDialog` through Conduit's host-UI request
+   surface. Preserve native option IDs in replies.
+6. Use SDK session helpers for native forks and history reads. Isolate history
+   helper environment for non-default `CLAUDE_CONFIG_DIR` values.
+
+Verification: open an existing Claude Code session with tools and subagents,
+compare its history with the SDK result, stream a live turn, answer an approval
+and an `AskUserQuestion`, cancel, switch model, compact, fork at a message, and
+resume after process restart.
+
+## Cross-adapter verification
+
+Keep validation surgical:
+
+- The manifest contract test must cover each new registration and catalogue
+  row.
+- Give each native protocol one captured transcript-pipeline test through the
+  real adapter translation and browser projection.
+- Keep existing Codex and ChatGPT Web tests unchanged. They prove that adding
+  manifests did not alter working adapters.
+- Perform one manual `/computer` discovery-and-drive check per completed phase.
+
+Do not run the broad browser or setpiece suites during these phases.
+
+## Risks and limits
+
+- **fx maturity:** 0.0.10 is experimental. Validate the ACP initialize result
+  and fail unavailable on an incompatible protocol instead of accepting the
+  binary from `--version` alone.
+- **OpenCode shared state:** the V2 service belongs to the user's other clients.
+  Conduit may create and drive sessions but must not rewrite service settings,
+  stop the service, or assume it owns all live events.
+- **Live-event loss:** OpenCode's V2 subscription is live-only. Reconciliation
+  is part of correctness, not an optional reconnect improvement.
+- **Claude SDK drift:** pin the Agent SDK to a reviewed range compatible with
+  the installed CLI. Keep parsing tolerant at the external boundary and
+  exhaustive after validation.
+- **Capability honesty:** a native command's existence does not make it safe to
+  advertise. Enable a capability only after create, restore and restart paths
+  all preserve it.
 
 ## Out of scope
 
-- Making the new harnesses selectable profiles for Conduit-owned chats
-  (`profile: true`). Per-backend follow-up once discovery and drive prove out.
-- Attachment support for driven sessions (`attachmentsSupported={false}`).
-- Setpiece suite runtime (~20 minutes), deferred separately.
+- Selectable Conduit-owned profiles for these harnesses.
+- Attachment upload from the driven-session composer.
+- Host-Pi discovery.
+- A reusable ACP abstraction before another ACP adapter proves the shared
+  shape.
+- Managing or updating OpenCode or Claude Code installations from Conduit.

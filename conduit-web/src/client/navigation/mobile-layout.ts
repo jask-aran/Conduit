@@ -80,6 +80,28 @@ export function bindVisualViewportShell(): () => void {
     }
     if (!shellKeyboard) restingHeight = Math.max(restingHeight, viewport);
   };
+  /*
+   * Let the window take the keyboard's time rather than arriving before it.
+   *
+   * The height lands in one frame: Android resizes the WebView the moment the
+   * IME is committed, and `geometrychange` reports a finished number. The
+   * keyboard itself then slides up over a quarter of a second, so the content
+   * is already where it is going while the thing it is making room for is
+   * still moving -- which is the gap, and the sense of the keyboard sliding
+   * over a page that jumped out of its way early.
+   *
+   * Transitioning the shell's height puts the two on the same clock. For the
+   * span of the animation the shell is taller than the viewport it sits in,
+   * so the composer is briefly below the fold and rides up into place with
+   * the keyboard instead of waiting there for it.
+   */
+  const SHIFT_MS = 250;
+  let shiftTimer = 0;
+  const markKeyboardShift = () => {
+    root.setAttribute("data-keyboard-shift", "true");
+    clearTimeout(shiftTimer);
+    shiftTimer = window.setTimeout(() => root.removeAttribute("data-keyboard-shift"), SHIFT_MS + 60);
+  };
   const sync = () => {
     if (!isMobileLayout()) {
       root.style.removeProperty("--app-height");
@@ -143,7 +165,9 @@ export function bindVisualViewportShell(): () => void {
     virtualKeyboard.overlaysContent = true;
     source = "virtualkeyboard";
     const onGeometry = () => {
-      shellKeyboard = virtualKeyboard.boundingRect.height;
+      const next = virtualKeyboard.boundingRect.height;
+      if (next !== shellKeyboard) markKeyboardShift();
+      shellKeyboard = next;
       sync();
     };
     virtualKeyboard.addEventListener("geometrychange", onGeometry);
@@ -162,10 +186,12 @@ export function bindVisualViewportShell(): () => void {
     source = "capacitor";
     void import("@capacitor/keyboard").then(async ({ Keyboard }) => {
       const shown = await Keyboard.addListener("keyboardWillShow", (info) => {
+        markKeyboardShift();
         shellKeyboard = info.keyboardHeight;
         sync();
       });
       const hidden = await Keyboard.addListener("keyboardWillHide", () => {
+        markKeyboardShift();
         shellKeyboard = 0;
         sync();
       });
@@ -185,6 +211,8 @@ export function bindVisualViewportShell(): () => void {
     root.style.removeProperty("--app-height");
     root.style.removeProperty("--vv-offset-top");
     root.removeAttribute("data-vv-shell");
+    root.removeAttribute("data-keyboard-shift");
+    clearTimeout(shiftTimer);
   };
 }
 
