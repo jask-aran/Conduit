@@ -1765,9 +1765,19 @@ svg { stroke-width: 1.5; }
 .add-server-dialog .native-server-card { width: 100%; gap: 10px; }
 .add-server-dialog .native-server-card label { margin-top: 6px; }
 .server-row-latency { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-variant-numeric: tabular-nums; }
-.settings-server-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto auto; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); }
-.settings-server-row:first-of-type { border-top: 0; }
-.settings-server-row > code { overflow: hidden; color: var(--muted-foreground); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+/* A sentence inside a menu: it explains the rows rather than labelling them,
+   so it wraps and is not shouted like a group heading. */
+.server-route-note { max-width: 260px; text-transform: none; font-weight: 400; letter-spacing: 0; white-space: normal; line-height: 1.35; }
+.server-route-error { color: var(--destructive); text-transform: none; font-weight: 400; letter-spacing: 0; white-space: normal; line-height: 1.35; }
+.settings-server-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; }
+/* The routes sit under the name they belong to, indented so the hierarchy is
+   in the layout rather than in a heading. */
+.settings-server-paths { display: flex; margin: 8px 0 0; flex-direction: column; gap: 2px; padding: 0 0 0 2px; list-style: none; }
+.settings-server-paths > li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; border-radius: var(--radius-sm); padding: 4px 6px; }
+.settings-server-paths > li[data-current] { background: var(--muted); }
+.settings-server-paths code { overflow: hidden; color: var(--muted-foreground); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.settings-server-paths span { color: var(--muted-foreground); font-size: 11px; white-space: nowrap; }
+.settings-server-paths em { color: var(--foreground); font-size: 11px; font-style: normal; white-space: nowrap; }
 .settings-server-current { color: var(--muted-foreground); font-size: 11px; }
 .settings-server-share { display: inline-flex; align-items: center; gap: 5px; color: var(--muted-foreground); font-size: 11px; white-space: nowrap; }
 .settings-note { margin: 0 0 8px; color: var(--muted-foreground); font-size: 11px; }
@@ -2043,7 +2053,8 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .settings-dialog .settings-section-block > [data-slot="field-group"] > [data-slot="field"] { padding: 12px 14px; }
 .settings-dialog .settings-section-block > [data-slot="field-group"] > [data-slot="field"] + [data-slot="field"] { border-top: 1px solid var(--border); }
 /* A server is a row of the tile like any other, so it is inset like one. */
-.settings-dialog .settings-section-block > .settings-server-row { padding: 12px 14px; }
+.settings-dialog .settings-section-block > .settings-server { padding: 12px 14px; }
+.settings-dialog .settings-section-block > .settings-server + .settings-server { border-top: 1px solid var(--border); }
 
 /*
  * Selected is a wash, not an outline. The bright box was the leftover
@@ -2259,14 +2270,16 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
    * width, and sharing it between them left a name box too narrow to read a
    * name in and an address truncated to nothing.
    */
-  .settings-server-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 12px 0; align-items: center; }
-  .settings-dialog .settings-section-block > .settings-server-row { padding: 12px; }
+  .settings-server-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+  .settings-dialog .settings-section-block > .settings-server { padding: 12px; }
   .settings-server-row > [data-slot="input"],
   .settings-server-row > input { grid-column: 1 / -1; }
-  .settings-server-row > code { grid-column: 1; white-space: normal; overflow-wrap: anywhere; }
   .settings-server-row > .settings-server-share { grid-column: 1; }
   .settings-server-row > [data-slot="button"],
-  .settings-server-row > .settings-server-current { grid-column: 2; grid-row: 3; justify-self: end; }
+  .settings-server-row > .settings-server-current { grid-column: 2; grid-row: 2; justify-self: end; }
+  /* No room for three columns beside an address, so the reach follows it. */
+  .settings-server-paths > li { grid-template-columns: minmax(0, 1fr) auto; }
+  .settings-server-paths code { grid-column: 1 / -1; white-space: normal; overflow-wrap: anywhere; }
   .settings-dialog .settings-disclosure-content { padding: 12px; }
   .settings-dialog .settings-note { margin: 0 0 10px; font-size: 11px; line-height: 1.5; }
 

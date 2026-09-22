@@ -29,6 +29,31 @@ export const installedClientKind: InstalledClientKind = detect();
 
 export const isInstalledClient = () => installedClientKind !== "browser";
 
+/**
+ * A browser that was installed to the home screen, which is a different thing
+ * from an installed client.
+ *
+ * It has no shell and no secure store -- it is a page, with a page's cookie,
+ * storage and service worker, all belonging to the one origin that served it.
+ * That is the whole difficulty: a tab can be sent to another address and come
+ * back, but this cannot. Navigating away from a standalone window either
+ * leaves the app or opens a browser on top of it, and either way the person
+ * has been ejected from the thing they opened.
+ *
+ * So it is asked about separately from `isInstalledClient`, and only ever to
+ * say that a route cannot be changed from here, never to offer the move.
+ */
+export const isStandaloneBrowser = (): boolean => {
+  if (installedClientKind !== "browser" || typeof matchMedia !== "function") return false;
+  // iOS answers the second and not the first.
+  return matchMedia("(display-mode: standalone)").matches
+    || matchMedia("(display-mode: fullscreen)").matches
+    || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+};
+
+/** Whether this client can move to another address at all, by any means. */
+export const canReachOtherOrigins = () => isInstalledClient() || !isStandaloneBrowser();
+
 /** Where the bearer token lives. Never `localStorage`, on any installed shell. */
 export interface SecureTokenStore {
   get(key: string): Promise<string | null>;

@@ -6,8 +6,11 @@ import { proveServer } from "../platform/server-proof";
 
 /** Not an address: the row that hands the choice back to the client. */
 const AUTOMATIC = "automatic";
-import { isInstalledClient } from "../platform/installed-client.ts";
+import { canReachOtherOrigins, isInstalledClient, isStandaloneBrowser } from "../platform/installed-client.ts";
 import { activePath, activeOrigin, activeServer, clearActivePath, pathIsPinned, pathsOf, servers, setActivePath, switchToServer, type ServerEntry, type ServerPath } from "../platform/servers.ts";
+
+/** An origin as somebody would say it aloud: no scheme, no default port. */
+export const shortOrigin = (origin: string) => origin.replace(/^https?:\/\//, "");
 
 const PROBE_TIMEOUT_MS = 4000;
 const PROBE_INTERVAL_MS = 5000;
@@ -116,15 +119,6 @@ export function ServerSwitcher(props: {
    * Offering the route anyway is the point -- the addresses were collapsed
    * into one server, and without this a browser would lose the only way it had
    * to reach the others.
-   */
-  /*
-   * An installed client changes route in place. A browser navigates, for the
-   * same reason it navigates between servers: its cookie, its storage and its
-   * worker belong to the origin that served it, so another address is another
-   * installation of this app however much it is the same machine behind it.
-   * Offering the route anyway is the point -- the addresses were collapsed
-   * into one server, and without this a browser would lose the only way it had
-   * to reach the others.
    *
    * The address is made to prove itself first. Choosing a route is what sends
    * this client's token somewhere new, so "is that really the server" has to
@@ -137,6 +131,10 @@ export function ServerSwitcher(props: {
     const entry = activeServer();
     if (!entry) return;
     if (!isInstalledClient()) {
+      // A standalone window cannot be sent anywhere and brought back. Nothing
+      // offers this there, so reaching it means something went wrong; saying
+      // nothing is better than ejecting somebody out of the app.
+      if (isStandaloneBrowser()) return;
       if (origin !== location.origin) location.assign(origin);
       return;
     }
@@ -153,7 +151,9 @@ export function ServerSwitcher(props: {
         : "That address answered, but it is not this server.");
   };
 
-  const away = (entry: ServerEntry) => !isInstalledClient() && entry.origin !== location.origin;
+  // The arrow says "this opens elsewhere". A standalone window has no
+  // elsewhere to open, so it is not offered the move and not shown the mark.
+  const away = (entry: ServerEntry) => !isInstalledClient() && !isStandaloneBrowser() && entry.origin !== location.origin;
 
   return <Menu onOpenChange={onOpenChange}>
     <MenuTrigger class="sidebar-user" aria-label={`${serverName()} · ${triggerDetail()}`} title={`${activeOrigin() || "No server"} — ${triggerDetail()}`}>
@@ -168,7 +168,7 @@ export function ServerSwitcher(props: {
           <MenuLabel>Servers</MenuLabel>
           <MenuRadioGroup value={activeOrigin() || ""} onChange={(origin) => switchToServer(origin, isInstalledClient())}>
             <For each={servers()}>{(entry) =>
-              <MenuRadioItem value={entry.origin}>
+              <MenuRadioItem value={entry.origin} disabled={!canReachOtherOrigins() && entry.origin !== location.origin}>
                 <span class="truncate">{entry.name}</span>
                 <Show when={away(entry)}><ExternalLinkIcon class="size-3 text-muted-foreground" /></Show>
                 <span class="server-row-latency ml-auto text-xs text-muted-foreground">{latencyLabel(entry.origin)}</span>
@@ -184,6 +184,17 @@ export function ServerSwitcher(props: {
       <Show when={activeServerPaths().length > 1}>
         <MenuGroup>
           <MenuLabel>Route to {serverName()}</MenuLabel>
+          {/*
+            * An installed-to-home-screen browser is shown the routes and
+            * offered none of them: it is one origin, and the only way it could
+            * take another is to navigate, which would put the person in a
+            * browser instead of the app they opened. Better to say that the
+            * other addresses exist than to pretend they do not, or to offer a
+            * move that ends somewhere else.
+            */}
+          <Show when={isStandaloneBrowser()}>
+            <MenuLabel class="server-route-note">Installed to the home screen, so this stays on {shortOrigin(activeOrigin() || "")}. Open one of the others in a browser to use it.</MenuLabel>
+          </Show>
           <MenuRadioGroup value={pathIsPinned() ? activePath() || "" : AUTOMATIC} onChange={(origin) => void chooseRoute(origin)}>
             {/*
               * Left to itself, the client takes the nearest route that answers
@@ -201,9 +212,9 @@ export function ServerSwitcher(props: {
               </MenuRadioItem>
             </Show>
             <For each={activeServerPaths()}>{(path) =>
-              <MenuRadioItem value={path.origin}>
+              <MenuRadioItem value={path.origin} disabled={!canReachOtherOrigins() && path.origin !== location.origin}>
                 <span class="truncate">{scopeLabel(path)}</span>
-                <Show when={!isInstalledClient() && path.origin !== location.origin}><ExternalLinkIcon class="size-3 text-muted-foreground" /></Show>
+                <Show when={!isInstalledClient() && !isStandaloneBrowser() && path.origin !== location.origin}><ExternalLinkIcon class="size-3 text-muted-foreground" /></Show>
                 <span class="server-row-latency ml-auto text-xs text-muted-foreground">
                   {checking() === path.origin ? "Checking…" : latencyLabel(path.origin)}
                 </span>
