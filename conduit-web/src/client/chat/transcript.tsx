@@ -842,28 +842,68 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
      * been asked for yet.
      */
     let intendedScrollTop = -1;
+    /*
+     * The thread's own height changes during a keyboard travel too, one frame
+     * behind the scroller's.
+     *
+     * The thread reserves the composer's height so the last output is not
+     * covered by it, and the composer is a navigation bar shorter while the
+     * keyboard is over it. So `scrollHeight` falls by that much as the
+     * keyboard arrives and climbs back as it leaves -- and a correction made
+     * from the scroller's height alone misses it entirely, leaving the thread
+     * a navigation bar from where it started every time. Measured: the gap
+     * from the bottom went 151 to 103 opening and 103 to 150 closing.
+     *
+     * It cannot simply be compensated whenever it happens: content arriving at
+     * the bottom of a thread also makes it taller, and holding the distance
+     * from the bottom then would scroll the reader down to chase it. The two
+     * are told apart by when they happen -- the thread's height follows the
+     * scroller's inside the same travel -- so a change is only taken as part
+     * of one for as long as a travel lasts.
+     */
+    const TRAVEL_MS = 500;
+    let lastContentHeight = 0;
+    let travellingUntil = 0;
+    /** The distance from the bottom being held, or -1 for nothing yet. */
+    let heldGap = -1;
     const holdAgainstKeyboard = (height: number) => {
-      const lost = lastScrollerHeight - height;
+      const content = viewport.scrollHeight;
+      const boxMoved = Math.abs(height - lastScrollerHeight) >= 1;
+      const contentMoved = Math.abs(content - lastContentHeight) >= 1;
       lastScrollerHeight = height;
-      if (!lost || !Number.isFinite(lost) || Math.abs(lost) < 1) return;
+      lastContentHeight = content;
+      if (boxMoved) travellingUntil = performance.now() + TRAVEL_MS;
+      if (!boxMoved && !(contentMoved && performance.now() < travellingUntil)) return;
       if (following()) {
         setViewportScrollTop(viewportMaxScrollTop(), false);
         intendedScrollTop = -1;
+        heldGap = -1;
         return;
       }
+      const max = Math.max(0, content - height);
       // Anything that moved the thread other than the last correction -- a
       // finger, a fold, a new message -- is where the thread actually is now,
       // and what was asked for before it is no longer worth holding.
       const clamped = Math.max(0, Math.min(viewportMaxScrollTop(), intendedScrollTop));
-      if (intendedScrollTop < 0 || Math.abs(viewport.scrollTop - clamped) > 1) intendedScrollTop = viewport.scrollTop;
-      intendedScrollTop += lost;
+      if (heldGap < 0 || intendedScrollTop < 0 || Math.abs(viewport.scrollTop - clamped) > 1) {
+        heldGap = max - viewport.scrollTop;
+      }
+      // Held as a distance from the bottom, because that is the one quantity
+      // both changes leave alone: the scroller losing height and the thread
+      // losing the same height move the maximum together.
+      intendedScrollTop = max - heldGap;
       setViewportScrollTop(Math.max(0, Math.min(viewportMaxScrollTop(), intendedScrollTop)), false);
     };
-    const scrollerResizeObserver = new ResizeObserver((entries) => {
-      const box = entries[0]?.contentRect;
-      if (box) holdAgainstKeyboard(box.height);
+    // Both boxes, because a travel changes both: the scroller's height as the
+    // shell shortens, and the thread's as the composer it reserves room for
+    // loses the navigation bar's padding. Either entry is enough; the sizes
+    // are read from the scroller itself rather than the entry, so it does not
+    // matter which one arrived.
+    const scrollerResizeObserver = new ResizeObserver(() => {
+      holdAgainstKeyboard(viewport.clientHeight);
     });
     scrollerResizeObserver.observe(viewport);
+    scrollerResizeObserver.observe(thread);
     window.addEventListener("resize", scheduleLatestButtonAnchor);
     visualViewport?.addEventListener("resize", scheduleLatestButtonAnchor);
     scheduleLatestButtonAnchor();
