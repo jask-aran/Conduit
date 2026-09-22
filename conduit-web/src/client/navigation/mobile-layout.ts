@@ -385,6 +385,21 @@ export function bindVisualViewportShell(): () => void {
         source = "viewport";
         sync();
       };
+      /*
+       * The resting inset is written by the shell whenever the bars change,
+       * which is not only when a keyboard moves: the navigation bar itself
+       * can be swapped between gestures and three buttons while the app is
+       * open, and on a cold start it is written once before any keyboard has
+       * ever travelled. Reading it only at the ends of a travel left the
+       * composer with no room for the navigation bar until the first time
+       * somebody typed. Watching the attribute the shell writes catches both.
+       */
+      readRestBottom();
+      new MutationObserver(() => {
+        const held = restBottom;
+        readRestBottom();
+        if (restBottom !== held) sync();
+      }).observe(root, { attributes: true, attributeFilter: ["style"] });
       // Only now is the keyboard's position actually being reported. Claiming
       // it up front meant a shell whose plugin failed to register went on
       // believing `innerHeight` was the window -- the full screen, keyboard
