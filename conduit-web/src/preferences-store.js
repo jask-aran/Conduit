@@ -187,7 +187,7 @@ export function normalizeTerminalShortcuts(input) {
     const label = typeof item?.label === "string" ? item.label.trim().slice(0, 32) : "";
     const command = typeof item?.command === "string" ? item.command.trim().slice(0, 2048) : "";
     const target = item?.target === "current" || item?.target === "new" ? item.target : null;
-    return id && label && command && target ? [{ id, label, command, target }] : [];
+    return id && label && command && target ? [{ id, label, command, target, ...(item.onStart === true ? { onStart: true } : {}) }] : [];
   });
 }
 
@@ -197,7 +197,8 @@ export function validTerminalShortcuts(input) {
     && input.every((item) => typeof item?.id === "string" && item.id.trim().length > 0 && item.id.length <= 80
       && typeof item.label === "string" && item.label.trim().length > 0 && item.label.length <= 32
       && typeof item.command === "string" && item.command.trim().length > 0 && item.command.length <= 2048
-      && (item.target === "current" || item.target === "new"));
+      && (item.target === "current" || item.target === "new")
+      && (item.onStart === undefined || typeof item.onStart === "boolean"));
 }
 
 export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTemplateIds = null) {

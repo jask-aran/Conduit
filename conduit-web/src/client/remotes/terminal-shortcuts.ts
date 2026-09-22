@@ -3,6 +3,8 @@ export type TerminalShortcut = {
   label: string;
   command: string;
   target: "current" | "new";
+  /** Typed into a shell /terminal spawns on its own: on arrival with none live, or to replace one a restart lost. */
+  onStart?: boolean;
 };
 
 export const LEGACY_TERMINAL_SHORTCUTS_STORAGE_KEY = "conduit:terminal-shortcuts:v1";
@@ -14,7 +16,7 @@ export function normalizeTerminalShortcuts(value: unknown): TerminalShortcut[] {
     const label = typeof item?.label === "string" ? item.label.trim().slice(0, 32) : "";
     const command = typeof item?.command === "string" ? item.command.trim().slice(0, 2048) : "";
     const target = item?.target === "new" ? "new" : item?.target === "current" ? "current" : null;
-    return id && label && command && target ? [{ id, label, command, target }] : [];
+    return id && label && command && target ? [{ id, label, command, target, ...(item.onStart === true ? { onStart: true } : {}) }] : [];
   });
 }
 
