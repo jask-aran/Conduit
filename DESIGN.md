@@ -263,7 +263,7 @@ Motion explains a change of place: where something went, and what took its place
 - **One leaves, then the other arrives.** The outgoing surface goes first and the incoming one starts ~150ms later, so they never cross-fade in place.
 - **Quick out, gentle in.** Leaving is ~200ms and accelerates (`cubic-bezier(.4, 0, 1, 1)`); arriving is ~300ms and settles (`cubic-bezier(.2, .8, .2, 1)`), rising ~32px with a fade.
 - **Hold the reading position.** A surface that is swapped keeps its room while it is away, so the swap itself moves nothing. The transcript moves only through its tail spring, when what replaced the surface is taller.
-- **Transform and opacity only.** Animate `transform`/`translate` and `opacity`; never width, height, or layout. A panel slides over its neighbour rather than squeezing it (the maximised workspace panel is the reference).
+- **Transform and opacity only.** Animate `transform`/`translate` and `opacity`; never width, height, or layout. A panel slides over its neighbour rather than squeezing it (the maximised workspace panel is the reference). The one exception is an answer discarded while on screen: it has to give its room back, so it folds once into its "Stopped · not kept" row (~320ms), and an answer loaded already discarded is simply the row.
 - **Floating controls follow.** Anything anchored to a surface — scroll-to-latest over the composer — is re-measured when that surface is swapped or lands, never left behind.
 - `prefers-reduced-motion` removes these transitions; the end state is identical.
 
