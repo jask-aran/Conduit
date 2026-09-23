@@ -30,9 +30,9 @@
 .attachment-strip-scroller::-webkit-scrollbar { display: none; }
 .attachment-strip-scroller[data-fade-start] { --fade-start: 24px; }
 .attachment-strip-scroller[data-fade-end] { --fade-end: 24px; }
-.attachment-strip-expand { flex: none; }
-.attachment-strip .attachment-strip-expand { width: 24px; height: 24px; border-radius: 8px; color: var(--muted-foreground); }
-.attachment-strip .attachment-strip-expand svg { width: 13px; height: 13px; }
+.attachment-strip-actions { display: flex; flex: none; flex-direction: column; gap: 2px; }
+.attachment-strip-actions [data-slot="button"] { width: 22px; height: 22px; border-radius: 7px; color: var(--muted-foreground); }
+.attachment-strip-actions [data-slot="button"] svg { width: 12px; height: 12px; }
 
 /* A chip: an image is its 48px thumbnail, cropped to fill; a file is its
    type mark, name and size. */
@@ -51,20 +51,23 @@
   cursor: pointer;
   overflow: hidden;
 }
-.attachment-chip[data-kind="file"] .attachment-chip-body { padding-right: 12px; }
+.attachment-chip[data-kind="file"] .attachment-chip-body { height: 36px; gap: 6px; padding: 0 10px 0 8px; }
+.attachment-chip[data-kind="file"] .attachment-chip-media { width: auto; height: auto; background: none; }
 .attachment-chip-body:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 .attachment-chip-media { position: relative; display: grid; width: 46px; height: 46px; flex: none; place-items: center; background: var(--muted); color: var(--muted-foreground); }
-.attachment-chip-media > svg:not(.attachment-chip-ring):not(.attachment-chip-retry) { width: 18px; height: 18px; }
+.attachment-chip-media :is(.workspace-file-icon, .workspace-file-icon-generic, svg:not(.attachment-chip-ring):not(.attachment-chip-retry)) { display: block; width: 16px; height: 16px; }
 .attachment-chip-media img { width: 100%; height: 100%; object-fit: cover; }
-.attachment-chip-copy { display: grid; min-width: 0; max-width: 160px; gap: 1px; }
-.attachment-chip-copy strong { overflow: hidden; font-size: 12px; font-weight: 560; text-overflow: ellipsis; white-space: nowrap; }
-.attachment-chip-copy small { overflow: hidden; color: var(--muted-foreground); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-chip-copy { display: grid; min-width: 0; max-width: 144px; gap: 0; line-height: 1.3; }
+.attachment-chip-copy strong { overflow: hidden; font-size: 10.4px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-chip-copy small { overflow: hidden; color: var(--muted-foreground); font-size: 8.8px; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Uploading, it is dimmed under a thin progress ring until done. */
 .attachment-chip:is([data-status="uploading"], [data-status="queued"]) .attachment-chip-media img { opacity: 0.55; }
 .attachment-chip-ring { position: absolute; width: 24px; height: 24px; transform: rotate(-90deg); fill: none; stroke-width: 2.5; filter: drop-shadow(0 0 2px rgb(0 0 0 / 60%)); }
 .attachment-chip-ring circle:first-child { stroke: oklch(1 0 0 / 25%); }
 .attachment-chip-ring circle:last-child { stroke: oklch(1 0 0 / 92%); stroke-linecap: round; transition: stroke-dashoffset 150ms linear; }
+.attachment-chip[data-kind="file"] .attachment-chip-ring { width: 20px; height: 20px; }
+.attachment-chip[data-kind="file"]:is([data-status="uploading"], [data-status="queued"]) .attachment-chip-media > :not(.attachment-chip-ring) { opacity: 0.4; }
 /* Failed, a red outline, and a retry mark where the ring was. */
 .attachment-chip[data-status="error"] .attachment-chip-body { border-color: var(--destructive); }
 .attachment-chip[data-status="error"] .attachment-chip-media img { opacity: 0.4; }
@@ -105,15 +108,19 @@
 .attachment-dialog-row[data-status="error"] { border-color: var(--destructive); }
 .attachment-dialog-preview { display: grid; flex: none; place-items: center; overflow: hidden; border-radius: 7px; background: var(--muted); color: var(--muted-foreground); }
 .attachment-dialog-preview[data-kind="image"] { width: 200px; max-width: 45%; }
-.attachment-dialog-preview[data-kind="file"] { width: 48px; height: 48px; }
+.attachment-dialog-preview[data-kind="file"] { width: 40px; height: 40px; }
+.attachment-dialog-preview :is(.workspace-file-icon, .workspace-file-icon-generic, svg) { display: block; width: 20px; height: 20px; }
 .attachment-dialog-preview img { display: block; max-width: 100%; max-height: 160px; object-fit: contain; }
 .attachment-dialog-copy { display: grid; min-width: 0; flex: 1; gap: 2px; }
-.attachment-dialog-copy strong { overflow-wrap: anywhere; font-size: 13px; font-weight: 560; }
-.attachment-dialog-copy small { color: var(--muted-foreground); font-size: 12px; }
+.attachment-dialog-copy strong { overflow-wrap: anywhere; font-size: 10.4px; font-weight: 600; }
+.attachment-dialog-copy small { color: var(--muted-foreground); font-size: 8.8px; }
 .attachment-dialog-actions { display: flex; justify-content: space-between; gap: 8px; }
 
 @media (--conduit-phone-layout) {
   .attachment-strip-scroller { padding: 4px; scroll-padding-inline: 4px; }
+  .attachment-chip[data-kind="file"] .attachment-chip-body { height: 40px; }
+  .attachment-chip-copy strong, .attachment-dialog-copy strong { font-size: 12px; }
+  .attachment-chip-copy small, .attachment-dialog-copy small { font-size: 11px; }
   /* A bottom sheet, rising from the edge the composer sits on. */
   .attachment-dialog.conduit-modal { place-items: end center; padding: 0; }
   .attachment-dialog .attachment-dialog-card { width: 100%; max-height: 85dvh; padding-bottom: calc(16px + env(safe-area-inset-bottom)); border-radius: 16px 16px 0 0; }
