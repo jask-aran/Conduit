@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { spawn, execFile as execFileCallback } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { promisify } from "node:util";
@@ -34,8 +36,20 @@ const failure = (message, code = "backend_unavailable", status = 409) =>
 const outputText = (content) => (Array.isArray(content) ? content : [])
   .map((item) => item?.content?.text || item?.text || "").filter(Boolean).join("\n");
 
+// fx saves a turn by its place in the history, with no id. The names Conduit
+// streamed it under are kept beside the chat by that place, so the saved copy
+// and the chat log name each message once.
+// The chat store is loaded on use: it reaches this module through the harness list.
+const turnIdsFile = async (project, chatId) => {
+  const { chatDirectory } = await import("./chat-store.js");
+  try { return path.join(chatDirectory(project, chatId), "fx-turn-ids.json"); } catch { return null; }
+};
+const readTurnIds = async (file) => {
+  try { return file ? JSON.parse(await fs.readFile(file, "utf8")) : {}; } catch { return {}; }
+};
+
 class AcpClient {
-  constructor(command, cwd, onNotification, onRequest) {
+  constructor(command, cwd, onNotification, onRequest, onExit = () => {}) {
     this.child = spawn(command, ["acp"], { cwd, stdio: ["pipe", "pipe", "pipe"] });
     this.pending = new Map();
     this.nextId = 1;
@@ -51,8 +65,11 @@ class AcpClient {
     // A write racing the child's exit fails with EPIPE on stdin; unheard, that
     // error would take the whole server down with it.
     this.child.stdin.on("error", (cause) => this.fail(cause));
-    this.child.once("exit", (code, signal) => this.fail(failure(
-      this.stderr.trim() || `fx ACP exited (${signal || code})`, "backend_unavailable")));
+    this.child.once("exit", (code, signal) => {
+      const cause = failure(this.stderr.trim() || `fx ACP exited (${signal || code})`, "backend_unavailable");
+      this.fail(cause);
+      onExit(cause);
+    });
   }
 
   read(chunk) {
@@ -169,7 +186,9 @@ export class FxAcpAdapter extends EventEmitter {
     });
     record.client = new AcpClient(this.command, record.cwd,
       (message) => this.notification(record, message),
-      (message) => this.requestFromAgent(record, message));
+      (message) => this.requestFromAgent(record, message),
+      (cause) => this.processExited(record, cause));
+    record.turnIdsFile = await turnIdsFile(project, chatId);
     try {
       await record.client.request("initialize", {
         protocolVersion: 1,
@@ -240,7 +259,15 @@ export class FxAcpAdapter extends EventEmitter {
     record.answer = { id, text: "", blocks: [], tools: new Set() };
     this.publish(record, messageOpen({ id, role: "assistant", generationId: record.generation?.id || null,
       answers: record.answering || null, timestamp: new Date().toISOString() }));
+    this.publish(record, { type: "assistant_content", phase: "start", generationId: record.generation?.id || null,
+      seq: ++record.generationSeq, messageId: id });
     return record.answer;
+  }
+
+  answerBlocks(record, answer) {
+    const tools = [...answer.tools].map((id) => record.tools.get(id)).filter(Boolean)
+      .map((tool, index) => ({ kind: "tool_call", contentIndex: index + 1, toolCallId: tool.id, name: tool.name, input: tool.input }));
+    return [...(answer.text ? [{ kind: "text", contentIndex: 0, text: answer.text }] : []), ...tools];
   }
 
   startTraceMessage(record, kind) {
@@ -309,6 +336,10 @@ export class FxAcpAdapter extends EventEmitter {
         messageId: answer.id, generationId }));
       this.publish(record, { type: "tool_activity", phase: "start", generationId,
         seq: ++record.generationSeq, toolCallId: tool.id, name: tool.name, input: tool.input });
+      // The turn being painted places a running tool by its block, so the
+      // answer says it is calling one now, not when the turn ends.
+      this.publish(record, { type: "assistant_content", phase: "final", generationId, seq: ++record.generationSeq,
+        messageId: answer.id, stopReason: "toolUse", errorMessage: null, blocks: this.answerBlocks(record, answer) });
       return;
     }
     if (update.sessionUpdate === "tool_call_update") {
@@ -386,6 +417,7 @@ export class FxAcpAdapter extends EventEmitter {
         const turn = data.history?.at(-1);
         if (typeof turn?.assistant !== "string") throw failure("fx completed without a saved reply");
         this.ensureAnswer(record).text = turn.assistant;
+        await this.recordTurnIds(record, data.history.length - 1);
       } catch (cause) {
         error = cause;
         stopReason = "error";
@@ -395,11 +427,17 @@ export class FxAcpAdapter extends EventEmitter {
       }
     }
     this.finishTraceMessages(record, stopReason, record.answer?.text);
+    // An ended turn answers nothing more: its prompts and running tools end with it.
+    this.cancelRequests(record);
+    for (const tool of record.tools.values()) {
+      if (tool.closed) continue;
+      tool.closed = true;
+      this.publish(record, toolClose({ toolCallId: tool.id, output: tool.output, isError: true,
+        generationId: record.generation.id }));
+    }
     const answer = record.answer;
     if (answer) {
-      const toolBlocks = [...answer.tools].map((id) => record.tools.get(id)).filter(Boolean)
-        .map((tool) => ({ kind: "tool_call", toolCallId: tool.id, name: tool.name, input: tool.input }));
-      const blocks = [{ kind: "text", text: answer.text }, ...toolBlocks];
+      const blocks = this.answerBlocks(record, answer);
       this.publish(record, { type: "assistant_content", phase: "final", generationId: record.generation.id,
         seq: ++record.generationSeq, messageId: answer.id, stopReason, errorMessage: error?.message || null, blocks });
       this.publish(record, messageClose({ messageId: answer.id, stopReason, blocks,
@@ -428,7 +466,43 @@ export class FxAcpAdapter extends EventEmitter {
     record.stopping = true;
     record.activity = "stopping";
     record.client.notify("session/cancel", { sessionId: record.sessionId });
+    // ACP has a cancelled turn's open permission requests answered `cancelled`.
+    this.cancelRequests(record);
     return true;
+  }
+
+  cancelRequests(record) {
+    for (const [requestId, rpcId] of record.requests) {
+      try { record.client.respond(rpcId, { outcome: { outcome: "cancelled" } }); } catch { /* fx has gone. */ }
+      this.resolveRequest(record, requestId);
+    }
+  }
+
+  resolveRequest(record, requestId) {
+    record.requests.delete(requestId);
+    record.hostUiRequests = record.hostUiRequests.filter((item) => item.id !== requestId);
+    record.activity = record.active ? "working" : "idle";
+    this.publish(record, { type: "permission_resolved", generationId: record.generation?.id || null, requestId });
+  }
+
+  async recordTurnIds(record, index) {
+    if (!record.turnIdsFile || index < 0) return;
+    const ids = await readTurnIds(record.turnIdsFile);
+    ids[`${record.sessionId}:${index}`] = { user: record.answering, assistant: record.answer?.id };
+    try {
+      await fs.mkdir(path.dirname(record.turnIdsFile), { recursive: true });
+      await fs.writeFile(record.turnIdsFile, JSON.stringify(ids));
+    } catch (cause) { console.warn(`fx turn ids were not saved: ${cause.message}`); }
+  }
+
+  /** A process that exits on its own takes its session with it, so the next prompt starts a new one. */
+  processExited(record, cause) {
+    if (this.get(record.id) !== record) return;
+    this.failPrompt(record, cause);
+    record.ready = false;
+    record.status = "stopped";
+    this.sessions.remove(record.id);
+    this.emit("removed", { id: record.id, chatId: record.chatId });
   }
 
   async respondHostUi(id, response) {
@@ -439,10 +513,7 @@ export class FxAcpAdapter extends EventEmitter {
     const selected = response.cancelled || response.dismissed ? "reject_once"
       : String(response.value || response.optionId || "reject_once");
     record.client.respond(rpcId, { outcome: { outcome: "selected", optionId: selected } });
-    record.requests.delete(requestId);
-    record.hostUiRequests = record.hostUiRequests.filter((item) => item.id !== requestId);
-    record.activity = record.active ? "working" : "idle";
-    this.publish(record, { type: "permission_resolved", generationId: record.generation?.id || null, requestId });
+    this.resolveRequest(record, requestId);
     return null;
   }
 
@@ -482,12 +553,13 @@ export class FxAcpAdapter extends EventEmitter {
 
   listSessions(options) { return this.listThreads(options); }
 
-  static transcript(data) {
+  static transcript(data, turnIds = {}) {
     const messages = [];
     const tools = [];
     for (const [index, turn] of (data.history || []).entries()) {
-      const userId = `${data.id}:user:${index}`;
-      const assistantId = `${data.id}:assistant:${index}`;
+      const streamed = turnIds[`${data.id}:${index}`] || {};
+      const userId = streamed.user || `${data.id}:user:${index}`;
+      const assistantId = streamed.assistant || `${data.id}:assistant:${index}`;
       messages.push({ id: userId, role: "user", content: turn.user?.text || "" });
       const blocks = [{ kind: "text", text: turn.assistant || "" }];
       for (const step of turn.execution?.tool_steps || []) {
@@ -506,12 +578,13 @@ export class FxAcpAdapter extends EventEmitter {
     return { messages, tools };
   }
 
-  async readTranscript({ liveSessionId, opaqueSession }) {
+  async readTranscript({ liveSessionId, opaqueSession, chatId, project }) {
     const record = liveSessionId ? this.get(liveSessionId) : null;
     const sessionId = record?.sessionId || (typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId);
     if (!sessionId) return { messages: [], tools: [], page: { before: null } };
-    const data = await this.json(["session", "--id", sessionId, "--json"]);
-    return { ...FxAcpAdapter.transcript(data), page: { before: null } };
+    const [data, turnIds] = await Promise.all([this.json(["session", "--id", sessionId, "--json"]),
+      turnIdsFile(project, chatId).then((file) => readTurnIds(record?.turnIdsFile || file))]);
+    return { ...FxAcpAdapter.transcript(data, turnIds), page: { before: null } };
   }
 
   async readHistory(options) {

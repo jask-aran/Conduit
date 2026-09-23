@@ -42,7 +42,9 @@ export function registerSessionRoutes(app, {
    * nothing to say about, and folding the tail's statements into it would put
    * them in the wrong place.
    */
-  const upToDate = (context, projection, page) => (page?.before
+  // Only the newest page is overlaid with the live log; an older page is
+  // asked for with a cursor even when it turns out to be the last.
+  const upToDate = (context, projection, page, requestedBefore = "") => (page?.before || requestedBefore
     ? projection
     : { ...projection, ...applyTranscriptOps(projection, chatLogs?.peek(context.chat.id)?.entries || []) });
 
@@ -78,7 +80,7 @@ export function registerSessionRoutes(app, {
         // as the transcript itself. This used to answer `null` for every backend
         // but Pi, which told the browser a long thread was all of it.
         return response.json({ ...chatView(context.chat),
-          ...upToDate(context, projection, projection.page), attachments: [],
+          ...upToDate(context, projection, projection.page, request.query.before), attachments: [],
           page: projection.page || { before: null } });
       }
       const sessionFile = conduitPiSessionFile(context.chat);
@@ -99,7 +101,7 @@ export function registerSessionRoutes(app, {
         await attachments.decorateMessages(context.project, context.chat.id, projection.messages,
           { fromStart: !session.page?.before }),
         await messageIds.resolver(context.project, context.chat));
-      const current = upToDate(context, projection, session.page);
+      const current = upToDate(context, projection, session.page, request.query.before);
       response.json({
         ...chatView(context.chat),
         model: session.model,
