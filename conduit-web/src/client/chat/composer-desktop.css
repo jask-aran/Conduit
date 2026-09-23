@@ -40,3 +40,8 @@
 .composer-options-value > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .composer-options-value > .menu-chevron, .composer-options-value > svg:last-child { width: 14px; height: 14px; flex: none; margin-left: auto; color: var(--muted-foreground); }
 .composer-options-model > span { font-weight: 580; }
+/* Stop reads as Send does -- no fill of its own, just its mark: a small solid
+   square in the text colour, the ghost wash on hover. */
+.composer-actions .composer-stop-trigger:not(:hover) { background: transparent; }
+.composer-actions .composer-stop-trigger { color: var(--foreground); }
+.composer-stop-trigger > .lucide-square, .composer-stop-aside > .lucide-square { width: 11px; height: 11px; fill: currentColor; stroke-width: 0; }
