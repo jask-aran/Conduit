@@ -20,9 +20,3 @@
 .step-slider-ticks { display: flex; justify-content: space-between; margin-top: -4px; padding-inline: 7px; }
 .step-slider-ticks i { width: 2px; height: 4px; border-radius: 1px; background: var(--border); }
 .step-slider-ticks i[data-reached="true"] { background: var(--muted-foreground); }
-
-.step-slider-list { display: grid; gap: 1px; }
-.step-slider-list button { display: flex; min-height: 28px; align-items: center; gap: 6px; border: 0; border-radius: 6px; background: transparent; padding: 4px 6px; color: var(--foreground); font-size: 12px; text-align: left; }
-.step-slider-list button:hover, .step-slider-list button:focus-visible { background: var(--accent); outline: 0; }
-.step-slider-check { display: grid; width: 14px; height: 14px; place-items: center; }
-.step-slider-check svg { width: 12px; height: 12px; }

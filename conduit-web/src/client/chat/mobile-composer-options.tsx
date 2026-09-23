@@ -5,7 +5,7 @@ import { For, Show, createSignal, createUniqueId, onCleanup } from "solid-js";
 // @ts-expect-error Kobalte does not publish declarations for this internal chunk.
 import { useMenuContext } from "../../../node_modules/@kobalte/core/dist/chunk/L544S5A4.jsx";
 import type { FocusOutsideEvent } from "@kobalte/core";
-import { PaperclipIcon, PlusIcon, ShieldCheckIcon, SlidersHorizontalIcon, UserRoundIcon } from "lucide-solid";
+import { ChevronRightIcon, PaperclipIcon, PlusIcon, SearchIcon, ShieldCheckIcon, SlidersHorizontalIcon } from "lucide-solid";
 import {
   Menu,
   MenuContent,
@@ -23,9 +23,10 @@ import type { ComposerPermissions } from "./composer-permissions";
 import type { ServiceLevelSettings } from "../state/service-level-settings";
 import { HarnessMark } from "../harness-brand";
 import { StepSlider } from "./step-slider";
+import { contextUsagePercent } from "./context-metrics";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
-type MobileOptionsPanel = "root" | "models" | "profiles" | "permissions";
+type MobileOptionsPanel = "root" | "models" | "effort" | "profiles" | "permissions";
 
 export function MobileComposerOptions(props: {
   composer: {
@@ -38,6 +39,7 @@ export function MobileComposerOptions(props: {
     serverOnline: boolean;
     onChooseProfile: (id: string) => void;
     onOpenSettings: (section: string) => void;
+    onOpenModelSelector?: () => void;
     onOpenAttachments: () => void;
   };
 }) {
@@ -49,6 +51,10 @@ export function MobileComposerOptions(props: {
   const levels = () => selectedModel()?.thinkingLevels || ["off"];
   const profileLocked = () => composer.chat.status() !== "draft";
   const [panel, setPanel] = createSignal<MobileOptionsPanel>("root");
+  const context = () => contextUsagePercent(composer.chat.contextUsage());
+  /* A choice in a submenu returns to the options rather than closing them:
+     the next thing is often beside it -- a new model's effort. */
+  const chosen = (apply: () => void) => { apply(); setPanel("root"); };
   let composerFocusBeforeOpen: HTMLTextAreaElement | null = null;
   let keyboardOpenBeforeOpen = false;
   let restoreFocusOnClose = false;
@@ -136,18 +142,21 @@ export function MobileComposerOptions(props: {
       <MenuContent class="composer-options-menu" onOpenAutoFocus={preserveComposerFocus} onCloseAutoFocus={preserveComposerFocusOnClose} onFocusOutside={keepMenuOpenOnFocusOutside} onPointerDown={preserveComposerFocusOnPointerDown} onClick={restoreComposerFocusAfterInteraction}>
         <div class="composer-options-parent" data-panel-open={panel() !== "root"} onPointerDown={returnToRoot}>
          <MenuGroup>
-          <MenuLabel class="composer-options-label">Message options</MenuLabel>
+          <MenuLabel class="composer-options-label composer-options-header"><span>Message options</span>
+            <Show when={context() != null}><span class="composer-options-context">{Math.round(context()!)}% context</span></Show></MenuLabel>
           <MenuItem disabled={!composer.serverOnline} closeOnSelect={false} onSelect={() => setPanel("models")} class="composer-options-subtrigger">
               <SlidersHorizontalIcon /><span>Model</span><span class="composer-options-preview ml-auto max-w-28 truncate text-right text-xs italic text-muted-foreground">{selectedModelLabel()}</span>
           </MenuItem>
           <MenuSeparator />
           <StepSlider label="Effort" value={composer.models.effort()} disabled={!composer.serverOnline || levels().length < 2}
             options={levels().map((level) => ({ value: level, label: thinkingLabel(level) }))}
+            valueControl={(label) => <button type="button" class="step-slider-value" disabled={!composer.serverOnline || levels().length < 2}
+              onClick={() => setPanel("effort")}>{label()}<ChevronRightIcon /></button>}
             onChange={(value) => void composer.models.chooseEffort(value)} />
           <Show when={composer.profiles.length}>
             <MenuSeparator />
             <MenuItem closeOnSelect={false} onSelect={() => setPanel("profiles")} class="composer-options-subtrigger">
-                <UserRoundIcon /><span>Profile</span><span class="composer-options-preview ml-auto max-w-28 truncate text-right text-xs italic text-muted-foreground">{selectedProfileLabel()}</span>
+                <HarnessMark id={composer.activeProfile?.implementation || "conduit"} class="size-4" /><span>Profile</span><span class="composer-options-preview ml-auto max-w-28 truncate text-right text-xs italic text-muted-foreground">{selectedProfileLabel()}</span>
             </MenuItem>
           </Show>
           <Show when={composer.permissions?.profiles().length}>
@@ -165,42 +174,51 @@ export function MobileComposerOptions(props: {
         <Show when={panel() === "models"}>
           <div class="composer-options-submenu composer-model-menu">
             <MenuGroup>
+              <Show when={composer.onOpenModelSelector}>
+                <MenuItem onSelect={() => composer.onOpenModelSelector?.()}><SearchIcon /><span>Search all models…</span></MenuItem>
+                <MenuSeparator />
+              </Show>
               <MenuLabel class="composer-options-label">Model</MenuLabel>
-              <Show when={composer.models.notice()}><div class="composer-option-note">{composer.models.notice()}</div></Show>
-              <MenuRadioGroup value={composer.models.model()} onChange={(value) => void composer.models.chooseModel(value)}>
-                <For each={composer.models.models()}>{(item) => <MenuRadioItem value={item.spec} closeOnSelect={false}><span class="truncate">{item.label}</span><span class="ml-auto text-xs text-muted-foreground">{item.provider}</span></MenuRadioItem>}</For>
+              <MenuRadioGroup value={composer.models.model()} onChange={(value) => chosen(() => void composer.models.chooseModel(value))}>
+                <For each={composer.models.models()}>{(item) => <MenuRadioItem class="composer-model-option" value={item.spec} closeOnSelect={false}><span>{item.label}</span><small>{item.provider}</small></MenuRadioItem>}</For>
               </MenuRadioGroup>
             </MenuGroup>
-            <MenuSeparator />
-            <MenuItem onSelect={() => composer.onOpenSettings("models")}>Manage models…</MenuItem>
+          </div>
+        </Show>
+        <Show when={panel() === "effort"}>
+          <div class="composer-options-submenu composer-effort-menu">
+            <MenuGroup>
+              <MenuLabel class="composer-options-label">Effort</MenuLabel>
+              <MenuRadioGroup value={composer.models.effort()} onChange={(value) => chosen(() => void composer.models.chooseEffort(value))}>
+                <For each={levels()}>{(level) => <MenuRadioItem value={level} closeOnSelect={false}>{thinkingLabel(level)}</MenuRadioItem>}</For>
+              </MenuRadioGroup>
+            </MenuGroup>
           </div>
         </Show>
         <Show when={panel() === "profiles"}>
           <div class="composer-options-submenu composer-profile-menu">
             <MenuGroup>
               <MenuLabel class="composer-options-label">Profile</MenuLabel>
-              <Show when={profileLocked()}><div class="composer-option-note">Locked after the first message.</div></Show>
-              <MenuRadioGroup value={composer.activeProfile?.id || ""} onChange={composer.onChooseProfile}>
-                <For each={composer.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={profileLocked() || item.disabled} closeOnSelect={false}><HarnessMark id={item.implementation || "conduit"} class="size-4" /><span>{item.label}</span></MenuRadioItem>}</For>
+              <MenuRadioGroup value={composer.activeProfile?.id || ""} onChange={(value) => chosen(() => composer.onChooseProfile(value))}>
+                <For each={composer.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={(profileLocked() && item.id !== composer.activeProfile?.id) || item.disabled} closeOnSelect={false}>
+                  <HarnessMark id={item.implementation || "conduit"} class="size-4" /><span class="composer-profile-copy"><span>{item.label}</span><small>{item.implementation || "conduit"}</small></span></MenuRadioItem>}</For>
               </MenuRadioGroup>
             </MenuGroup>
-            <MenuSeparator />
-            <MenuItem onSelect={() => composer.onOpenSettings("profiles")}>Manage profiles…</MenuItem>
           </div>
         </Show>
         <Show when={panel() === "permissions"}>
           <div class="composer-options-submenu composer-permissions-menu">
             <MenuGroup>
               <MenuLabel class="composer-options-label">Permissions</MenuLabel>
-              <MenuRadioGroup value={composer.permissions?.selected() || ""} onChange={(value) => void composer.permissions?.choose(value)}>
-                <For each={composer.permissions?.profiles() || []}>{(profile) => <MenuRadioItem value={profile.id} disabled={!profile.allowed} closeOnSelect={false}><span>{profile.label}</span></MenuRadioItem>}</For>
+              <MenuRadioGroup value={composer.permissions?.selected() || ""} onChange={(value) => chosen(() => void composer.permissions?.choose(value))}>
+                <For each={composer.permissions?.profiles() || []}>{(profile) => <MenuRadioItem class="composer-model-option" value={profile.id} disabled={!profile.allowed} closeOnSelect={false}><span>{profile.label}</span><Show when={profile.description}><small>{profile.description}</small></Show></MenuRadioItem>}</For>
               </MenuRadioGroup>
             </MenuGroup>
             <Show when={composer.serviceLevels?.levels().length}>
               <MenuSeparator />
               <MenuGroup>
                 <MenuLabel class="composer-options-label">Service level</MenuLabel>
-                <MenuRadioGroup value={composer.serviceLevels?.selected() || ""} onChange={(value) => void composer.serviceLevels?.choose(value)}>
+                <MenuRadioGroup value={composer.serviceLevels?.selected() || ""} onChange={(value) => chosen(() => void composer.serviceLevels?.choose(value))}>
                   <For each={composer.serviceLevels?.levels() || []}>{(level) => <MenuRadioItem value={level.id} closeOnSelect={false}>{level.label}</MenuRadioItem>}</For>
                 </MenuRadioGroup>
               </MenuGroup>
