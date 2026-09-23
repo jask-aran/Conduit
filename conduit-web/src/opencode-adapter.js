@@ -39,8 +39,9 @@ const modelSpec = (model) => model?.providerID && (model.id || model.modelID)
   ? `${model.providerID}/${model.id || model.modelID}` : "";
 const splitModel = (spec, variant = "") => {
   const slash = String(spec || "").indexOf("/");
-  return slash > 0 ? { providerID: spec.slice(0, slash), modelID: spec.slice(slash + 1), ...(variant ? { variant } : {}) } : null;
+  return slash > 0 ? { providerID: spec.slice(0, slash), id: spec.slice(slash + 1), ...(variant ? { variant } : {}) } : null;
 };
+const stateRoot = () => process.env.XDG_STATE_HOME || path.join(os.homedir(), ".local", "state");
 const contentText = (content) => (Array.isArray(content) ? content : [])
   .map((item) => item?.text || item?.content?.map?.((part) => part?.text || "").join("") || "").join("");
 const POLL_FAILURE_LIMIT = 10;
@@ -76,13 +77,14 @@ export class OpenCodeAdapter extends EventEmitter {
     if (this.connection) return this.connection;
     if (this.connectionStart) return this.connectionStart;
     this.connectionStart = (async () => {
-      let baseUrl;
-      try { baseUrl = await this.commandOutput(["service", "status"]); }
-      catch {
+      // `service status` prints `stopped` and succeeds when there is no service.
+      const loopback = /^http:\/\/127\.0\.0\.1:\d+$/;
+      let baseUrl = await this.commandOutput(["service", "status"]).catch(() => "");
+      if (!loopback.test(baseUrl)) {
         await this.commandOutput(["service", "start"]);
         baseUrl = await this.commandOutput(["service", "status"]);
       }
-      if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(baseUrl)) throw failure("OpenCode service did not report a loopback URL");
+      if (!loopback.test(baseUrl)) throw failure("OpenCode service did not report a loopback URL");
       const configRoot = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
       let password = process.env.OPENCODE_SERVER_PASSWORD || "";
       if (!password) {
@@ -103,11 +105,18 @@ export class OpenCodeAdapter extends EventEmitter {
     const url = new URL(`/api${route}`, connection.baseUrl);
     if (directory) url.searchParams.set("directory", directory);
     for (const [key, value] of Object.entries(query)) if (value !== "" && value != null) url.searchParams.set(key, String(value));
-    const response = await fetch(url, {
-      method,
-      headers: { ...connection.headers, ...(body === undefined ? {} : { "content-type": "application/json" }) },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
+    let response;
+    try {
+      response = await fetch(url, {
+        method,
+        headers: { ...connection.headers, ...(body === undefined ? {} : { "content-type": "application/json" }) },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    } catch (cause) {
+      // The service may have stopped or moved; ask for it again next time.
+      this.connection = null;
+      throw failure(`OpenCode service is unreachable: ${cause.cause?.code || cause.message}`);
+    }
     if (!response.ok) {
       const detail = (await response.text()).trim();
       if (response.status === 401) this.connection = null;
@@ -155,9 +164,10 @@ export class OpenCodeAdapter extends EventEmitter {
     const existing = this.getByChatId(chatId);
     if (existing) return existing;
     const selected = splitModel(model, thinkingLevel);
+    // The service ignores `?directory=` here; a session without a location
+    // lands in the service's own directory.
     const session = await this.request("POST", "/session", {
-      directory: project.workingRoot,
-      body: { ...(selected ? { model: selected } : {}) },
+      body: { location: { directory: project.workingRoot }, ...(selected ? { model: selected } : {}) },
     });
     return this.record({ chatId, project, session });
   }
@@ -196,9 +206,7 @@ export class OpenCodeAdapter extends EventEmitter {
       status: "working", activity: "working", detail: null });
     try {
       await this.request("POST", `/session/${encodeURIComponent(record.sessionId)}/prompt`, { body: {
-        id: userMessageId,
-        prompt: { text: parseAttachmentEnvelope(message).message, files: [], agents: [] },
-        delivery: "immediate",
+        id: userMessageId, text: parseAttachmentEnvelope(message).message, files: [], agents: [],
       } });
       this.poll(record);
       return { generationId, attachmentIdentity: { messageId: clientUserMessageId } };
@@ -504,11 +512,23 @@ export class OpenCodeAdapter extends EventEmitter {
     return { mode: "linear", leafId, tree: child ? [child] : [] };
   }
 
+  /** The models starred in OpenCode's TUI, in its order; the API has no route for them. */
+  async favouriteModels() {
+    try {
+      const state = JSON.parse(await fs.readFile(path.join(stateRoot(), "opencode", "model.json"), "utf8"));
+      return (Array.isArray(state.favorite) ? state.favorite : []).map(modelSpec).filter(Boolean);
+    } catch { return []; }
+  }
+
   async listAvailableModels(cwd) {
-    const models = await this.request("GET", "/model", { directory: cwd });
+    const [all, favourites] = await Promise.all([this.request("GET", "/model", { directory: cwd }), this.favouriteModels()]);
+    // Favourites are the catalogue when there are any; otherwise every model.
+    const models = favourites.length
+      ? favourites.map((spec) => (all || []).find((model) => modelSpec(model) === spec)).filter(Boolean)
+      : all;
     return (models || []).map((model) => {
       const spec = modelSpec(model);
-      const thinkingLevels = Object.keys(model.variants || {});
+      const thinkingLevels = (Array.isArray(model.variants) ? model.variants : []).map((variant) => variant?.id).filter(Boolean);
       return { provider: model.providerID || "opencode", id: model.id || model.modelID, spec,
         label: model.name || spec, reasoning: thinkingLevels.length > 0,
         thinkingLevels, defaultThinkingLevel: model.variant || thinkingLevels[0] || "" };
