@@ -839,6 +839,11 @@ export class CodexAppServerAdapter extends EventEmitter {
       // answer that follows answers it rather than the prompt that opened the
       // turn: that prompt has been answered, and this is what Codex is
       // replying to now.
+      // The prompt it moved on from is over, and drawn as history from here.
+      if (this.states(record) && record.answering && record.prompts?.has(record.answering)) {
+        this.publish(record, turnSettle({ promptId: record.answering, outcome: "complete", generationId: turnId }));
+        record.prompts.delete(record.answering);
+      }
       record.answering = messageId;
       (record.prompts ||= new Set()).add(messageId);
       this.openMessage(record, messageId, "user", {
