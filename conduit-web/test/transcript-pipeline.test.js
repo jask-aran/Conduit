@@ -632,3 +632,40 @@ test("the prompt after a stop tells the model the user stopped it, and the reade
   const [reloaded] = projectSessionEntries([{ type: "message", id: "u2", message: { role: "user", content: prompts[1] } }]).messages;
   assert.equal(reloaded.content, "what happened?");
 });
+
+/**
+ * A stopped turn says so once, on its first row, and always leaves something
+ * to regenerate from. A turn stopped before it wrote anything had no row at
+ * all -- nothing said it was stopped and nothing offered to try again.
+ */
+test("a turn stopped before it wrote anything still has a row that says so", async () => {
+  const chat = harness();
+  await chat.send({ type: "prompt", message: "Tell me a long story" });
+  chat.pi({ type: "agent_start" });
+  chat.pi({ type: "message_end", message: { role: "user", content: "Tell me a long story" } });
+  chat.pi({ type: "message_start", message: { role: "assistant", content: [] } });
+  await chat.settle();
+  chat.dispatch({ type: "stop_generation" });
+  await chat.read("abort");
+  chat.pi({ type: "message_end", message: { role: "assistant", content: [], stopReason: "aborted", errorMessage: "Request was aborted" } });
+  chat.pi({ type: "agent_settled" });
+  await chat.accept("abort");
+  await chat.settle();
+
+  const rows = chat.rows();
+  assert.deepEqual(shape(rows), ["user: Tell me a long story", "assistant: "]);
+  assert.equal(rows[1].value.stopped, true);
+  assert.equal(rows[1].traced, false, "no trace above it says so already");
+});
+
+test("a discarded answer under a trace does not say it was interrupted a second time", () => {
+  const { messages, tools } = projectSessionEntries([
+    { type: "message", id: "u1", message: { role: "user", content: "Tell me a long story" } },
+    { type: "message", id: "a1", message: { role: "assistant", stopReason: "aborted", errorMessage: "Request was aborted",
+      content: [{ type: "thinking", thinking: "A story about maps." }, { type: "text", text: "Once, on the edge of the Map" }] } },
+  ]);
+  const rows = buildTurnRows(messages, tools);
+  assert.deepEqual(rows.map((row) => row.type === "trace" ? `trace(${row.value.status})` : row.value.role), ["user", "trace(interrupted)", "assistant"]);
+  assert.equal(rows[2].value.discarded, true);
+  assert.equal(rows[2].traced, true);
+});
