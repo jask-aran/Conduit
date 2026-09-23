@@ -5,7 +5,7 @@ import { For, Show, createSignal, createUniqueId, onCleanup } from "solid-js";
 // @ts-expect-error Kobalte does not publish declarations for this internal chunk.
 import { useMenuContext } from "../../../node_modules/@kobalte/core/dist/chunk/L544S5A4.jsx";
 import type { FocusOutsideEvent } from "@kobalte/core";
-import { ChevronRightIcon, PaperclipIcon, PlusIcon, SearchIcon, ShieldCheckIcon, SlidersHorizontalIcon } from "lucide-solid";
+import { ChevronRightIcon, PaperclipIcon, PlusIcon, SearchIcon, ShieldCheckIcon } from "lucide-solid";
 import {
   Menu,
   MenuContent,
@@ -144,8 +144,13 @@ export function MobileComposerOptions(props: {
          <MenuGroup>
           <MenuLabel class="composer-options-label composer-options-header"><span>Message options</span>
             <Show when={context() != null}><span class="composer-options-context">{Math.round(context()!)}% context</span></Show></MenuLabel>
-          <MenuItem disabled={!composer.serverOnline} closeOnSelect={false} onSelect={() => setPanel("models")} class="composer-options-subtrigger">
-              <SlidersHorizontalIcon /><span>Model</span><span class="composer-options-preview ml-auto max-w-28 truncate text-right text-xs italic text-muted-foreground">{selectedModelLabel()}</span>
+          <Show when={composer.profiles.length}>
+            <MenuItem closeOnSelect={false} onSelect={() => setPanel("profiles")} class="composer-options-value" aria-label={`Profile ${selectedProfileLabel()}`}>
+              <HarnessMark id={composer.activeProfile?.implementation || "conduit"} class="size-4" /><span>{selectedProfileLabel()}</span><ChevronRightIcon />
+            </MenuItem>
+          </Show>
+          <MenuItem disabled={!composer.serverOnline} closeOnSelect={false} onSelect={() => setPanel("models")} class="composer-options-value composer-options-model" aria-label={`Model ${selectedModelLabel()}`}>
+            <span>{selectedModelLabel()}</span><ChevronRightIcon />
           </MenuItem>
           <MenuSeparator />
           <StepSlider label="Effort" value={composer.models.effort()} disabled={!composer.serverOnline || levels().length < 2}
@@ -153,16 +158,11 @@ export function MobileComposerOptions(props: {
             valueControl={(label) => <button type="button" class="step-slider-value" disabled={!composer.serverOnline || levels().length < 2}
               onClick={() => setPanel("effort")}>{label()}<ChevronRightIcon /></button>}
             onChange={(value) => void composer.models.chooseEffort(value)} />
-          <Show when={composer.profiles.length}>
-            <MenuSeparator />
-            <MenuItem closeOnSelect={false} onSelect={() => setPanel("profiles")} class="composer-options-subtrigger">
-                <HarnessMark id={composer.activeProfile?.implementation || "conduit"} class="size-4" /><span>Profile</span><span class="composer-options-preview ml-auto max-w-28 truncate text-right text-xs italic text-muted-foreground">{selectedProfileLabel()}</span>
-            </MenuItem>
-          </Show>
           <Show when={composer.permissions?.profiles().length}>
             <MenuSeparator />
-            <MenuItem closeOnSelect={false} onSelect={() => setPanel("permissions")} class="composer-options-subtrigger">
-                <ShieldCheckIcon /><span>Permissions</span><span class="composer-options-preview ml-auto max-w-28 truncate text-right text-xs italic text-muted-foreground">{selectedPermissionLabel()}</span>
+            <MenuLabel class="composer-options-label">Permissions</MenuLabel>
+            <MenuItem closeOnSelect={false} onSelect={() => setPanel("permissions")} class="composer-options-value" aria-label={`Permissions ${selectedPermissionLabel()}`}>
+              <ShieldCheckIcon /><span>{selectedPermissionLabel()}</span><ChevronRightIcon />
             </MenuItem>
           </Show>
           <MenuSeparator />

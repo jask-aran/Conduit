@@ -859,7 +859,7 @@ function App() {
    */
   // With no chat yet, as on the dashboard, the composer is the chosen profile's.
   const chatManifest = createMemo(() => manifestForChat(harnessCapabilities(), catalogue.selected()?.chat)
-    || harnessCapabilities()[activeProfile()?.implementation || ""] || null);
+    || (activeProfile() ? harnessCapabilities()[activeProfile()!.implementation || "conduit_pi"] : null) || null);
   const chatCapability = (name: BooleanCapability, fallback = false): boolean =>
     resolveCapability(chatManifest(), chat.capabilities(), name, fallback);
   const chatHistory = createMemo(() => resolveHistory(chatManifest(), chat.capabilities()));
@@ -2275,6 +2275,7 @@ function App() {
             projects={catalogue.projects()}
             composer={<Composer
               chat={chat}
+              supports={chatCapability}
               attachments={attachments}
               attachmentsSupported={chatCapability("attachments", true)}
               models={models}
@@ -2380,6 +2381,7 @@ function App() {
           <ProjectDashboard project={selectedProject()!} runtime={runtime}
             composer={<Composer
               chat={chat}
+              supports={chatCapability}
               attachments={attachments}
               attachmentsSupported={chatCapability("attachments", true)}
               models={models}

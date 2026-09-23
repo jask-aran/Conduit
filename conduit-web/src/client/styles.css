@@ -823,7 +823,7 @@ svg { stroke-width: 1.5; }
   .composer-actions [data-slot="button"] svg { width: 14.4px; height: 14.4px; }
   .composer-desktop-attachment, .composer-desktop-setting { display: none; }
   .composer-options-menu, .composer-options-submenu {
-    width: min(190.4px, calc(100vw - 25.6px));
+    width: min(224px, calc(100vw - 25.6px));
     max-width: calc(100vw - 25.6px);
     border: 1px solid color-mix(in oklch, var(--border), white 7%);
     border-radius: 11.2px;
@@ -847,9 +847,6 @@ svg { stroke-width: 1.5; }
     border-radius: 7.2px;
     font-size: 10.4px;
   }
-  .composer-options-submenu [role="menuitemradio"] { padding-left: 24px; }
-  .composer-profile-menu [role="menuitemradio"] { padding-left: 7.2px; }
-  .composer-options-submenu [role="menuitemradio"] > .absolute { color: var(--muted-foreground); font-size: 8.8px; font-weight: 600; }
   [data-slot="menu-content"].composer-options-menu .composer-options-label,
   [data-slot="menu-content"].composer-options-submenu .composer-options-label {
     padding: 4.8px 6.4px 4px;
@@ -1635,7 +1632,7 @@ svg { stroke-width: 1.5; }
   .composer-actions [data-slot="button"] svg { width: 18px; height: 18px; }
   .composer-desktop-attachment, .composer-desktop-setting { display: none; }
   .composer-options-menu, .composer-options-submenu {
-    width: min(238px, calc(100vw - 32px));
+    width: min(280px, calc(100vw - 32px));
     max-width: calc(100vw - 32px);
     border: 1px solid color-mix(in oklch, var(--border), white 7%);
     border-radius: 14px;
@@ -1659,9 +1656,6 @@ svg { stroke-width: 1.5; }
     border-radius: 9px;
     font-size: 13px;
   }
-  .composer-options-submenu [role="menuitemradio"] { padding-left: 30px; }
-  .composer-profile-menu [role="menuitemradio"] { padding-left: 9px; }
-  .composer-options-submenu [role="menuitemradio"] > .absolute { color: var(--muted-foreground); font-size: 11px; font-weight: 600; }
   [data-slot="menu-content"].composer-options-menu .composer-options-label,
   [data-slot="menu-content"].composer-options-submenu .composer-options-label {
     padding: 6px 8px 5px;

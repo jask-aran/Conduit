@@ -15,7 +15,7 @@
   .composer-actions-right .chat-context-trigger { color: var(--muted-foreground); padding-inline: 3px; }
 }
 .composer-menu-shortcut { margin-left: auto; color: var(--muted-foreground); font-size: 10px; }
-.composer-quick-model-menu { width: min(380px, calc(100vw - 24px)); }
+.composer-quick-model-menu { width: max-content; min-width: 240px; max-width: min(380px, calc(100vw - 24px)); }
 .composer-model-option > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 560; }
 .composer-model-option > small { flex: none; margin-left: auto; color: var(--muted-foreground); font-size: 11px; white-space: nowrap; }
 .composer-profile-copy { display: flex; min-width: 0; flex: 1; align-items: center; gap: 12px; }
@@ -35,3 +35,8 @@
 @media (prefers-reduced-motion: reduce) {
   .composer-primary-slot > [data-slot="button"], .composer-stop-aside { animation: none; }
 }
+/* A phone option shows its value, not its name: the value takes the row and
+   truncates rather than being cut off, a chevron says it opens. */
+.composer-options-value > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composer-options-value > .menu-chevron, .composer-options-value > svg:last-child { width: 14px; height: 14px; flex: none; margin-left: auto; color: var(--muted-foreground); }
+.composer-options-model > span { font-weight: 580; }
