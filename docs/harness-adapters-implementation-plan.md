@@ -1,16 +1,16 @@
 # Harness adapters implementation plan
 
-> **Status (2026-09-22): foundation landed; adapters remain.**
+> **Status (2026-09-22): fx and OpenCode 2 adapters landed; Claude remains.**
 > `src/harnesses/index.js` owns registration, detection, catalogue entries,
 > profile selection and discovery policy. `SessionRecords`, `unsupported()` and
-> the session-store scanner are present. Conduit still ships no fx, OpenCode or
-> Claude Code adapter. This plan targets fx 0.0.10, OpenCode 2.0.8 and Claude
-> Code 2.1.278, which are installed on the development machine.
+> the session-store scanner are present. `FxAcpAdapter` uses fx 0.0.10 ACP.
+> `OpenCodeAdapter` uses the OpenCode 2.0.8 authenticated loopback service.
+> Both are selectable profiles and machine-wide drive targets. Claude Code
+> 2.1.278 remains planned.
 
-Add fx, OpenCode and Claude Code as Conduit harnesses. The first scope is
-**discovery + drive**: list this machine's threads, open one in `/computer`
-with full history, and prompt it. Keep `profile: false` until each driven
-harness proves restore, live streaming, cancellation and permission handling.
+Add fx, OpenCode and Claude Code as Conduit harnesses. fx and OpenCode now
+support discovery, drive, and normal Conduit chats. They use the shared generic
+harness dashboard; no backend-specific dashboard was added.
 
 Native Pi is not part of this plan. Its existing `PiRpcAdapter` remains the
 right live transport, but host-Pi discovery can land separately.
@@ -29,7 +29,7 @@ export const manifest = {
   capabilities: FX_CAPABILITIES,
   discovery: "machine",
   drive: true,
-  profile: false,
+  profile: true,
   probe,
   build,
 };
@@ -172,7 +172,7 @@ interfaces do not replace the SDK:
 - Claude Managed Agents is an Anthropic-hosted product with different session
   ownership. It does not drive the user's local Claude Code installation.
 
-## Phase 1 - fx
+## Phase 1 - fx (landed)
 
 Add `src/harnesses/fx.js`, `src/fx-acp-adapter.js` and a small ACP stdio
 client. Do not add a general ACP framework until a second ACP harness needs
@@ -193,22 +193,23 @@ Verification: discover an existing fx session, open its complete history,
 run one tool-using prompt, answer one permission request, cancel one prompt,
 and resume the same session after the ACP child restarts.
 
-## Phase 2 - OpenCode 2
+## Phase 2 - OpenCode 2 (landed)
 
-Add `src/harnesses/opencode.js` and `src/opencode-adapter.js` against the V2
-client and service helper.
+`src/harnesses/opencode.js` and `src/opencode-adapter.js` target the V2 shared
+loopback service. The adapter uses native `fetch` and the service discovery
+command, so it adds no SDK dependency and does not change the lockfile.
 
 1. Ensure the compatible local service and retain its authenticated endpoint.
 2. List sessions with their native project locations for machine-wide folder
    grouping.
 3. Load the selected session and messages into Conduit's transcript shape.
-4. Subscribe to V2 live events and filter them by session and location.
-5. Send prompts, cancel, fork and answer permission/question requests through
-   generated client methods.
-6. On subscription loss, resubscribe and reconcile authoritative session,
-   message, status and pending-request state before emitting more live events.
-7. Advertise compaction or model switching only after the installed V2 client
-   exposes and a focused live probe proves the operation.
+4. Reconcile the authoritative message list while a turn runs. A direct SSE
+   subscription remains a later latency improvement; correctness does not
+   depend on the live-only event stream.
+5. Send prompts, cancel, compact, switch models, and answer permission/form
+   requests through the V2 HTTP API.
+6. Reconcile authoritative session, message and pending-request state on each
+   live poll, so missed edge events cannot create transcript gaps.
 
 Verification: open a session created by the OpenCode 2 TUI, render its full
 history, stream a tool-using turn, recover across a forced event disconnect,
@@ -272,7 +273,6 @@ Do not run the broad browser or setpiece suites during these phases.
 
 ## Out of scope
 
-- Selectable Conduit-owned profiles for these harnesses.
 - Attachment upload from the driven-session composer.
 - Host-Pi discovery.
 - A reusable ACP abstraction before another ACP adapter proves the shared

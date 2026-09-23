@@ -148,8 +148,8 @@ const STRUCTURED_GENERATION_TYPES = new Set<StructuredGenerationType>(
  * rather than a dropped event. This is a check, not a rebuild: what passes is
  * the event as the server stated it.
  */
-/** The three kinds a block can be, per `AssistantBlock`. */
-const BLOCK_KINDS = new Set(["text", "thinking", "tool_call"]);
+/** The block kinds a live assistant message can carry, per `AssistantBlock`. */
+const BLOCK_KINDS = new Set(["text", "thinking", "narration", "tool_call"]);
 const GENERATION_REQUIREMENTS: Record<string, (source: UnknownRecord) => boolean> = {
   "assistant_content:start": (source) => typeof source.messageId === "string",
   "assistant_content:delta": (source) => typeof source.messageId === "string"

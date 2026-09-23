@@ -223,6 +223,7 @@ interface EventBase {
 export type AssistantBlock =
   | { kind: "text"; contentIndex: number; text: string }
   | { kind: "thinking"; contentIndex: number; text: string; redacted: boolean }
+  | { kind: "narration"; contentIndex: number; text: string }
   | { kind: "tool_call"; contentIndex: number; toolCallId: string; name: string; input: unknown };
 
 /** Paint: the answer being written. Mergeable, droppable, never the record. */

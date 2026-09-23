@@ -12,7 +12,7 @@ import type { ContentBlock, Message, ToolItem } from "./api/contracts";
  * one, before the turn finished.
  */
 type LiveBlock = {
-  kind: "thinking" | "text" | "tool_call";
+  kind: "thinking" | "narration" | "text" | "tool_call";
   identity: string;
   contentIndex: number;
   text?: string;
@@ -209,7 +209,8 @@ export function buildLiveProjectionIndex(
     const answerBlocks = new Set<string>();
     for (const block of assistant.blocks) {
       activeBlockCount += 1;
-      if (block.kind === "thinking" || (block.kind === "text" && classifications[block.identity] === "interim")) {
+      if (block.kind === "thinking" || block.kind === "narration"
+        || (block.kind === "text" && classifications[block.identity] === "interim")) {
         blockLocations.set(block.identity, { kind: "trace", rowKey: traceRowKey, segmentIndex });
         segmentIndex += 1;
       } else if (block.kind === "tool_call") {
@@ -360,6 +361,8 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null): Turn
     for (const block of assistant.blocks) {
       if (block.kind === "thinking") {
         segments.push({ kind: "thinking", id: block.identity, text: block.text || "", live: block.status === "streaming" });
+      } else if (block.kind === "narration") {
+        segments.push({ kind: "narration", id: block.identity, text: block.text || "", live: block.status === "streaming" });
       } else if (block.kind === "text" && classifications[block.identity] === "interim") {
         segments.push({ kind: "narration", id: block.identity, text: block.text || "", live: block.status === "streaming" });
       } else if (block.kind === "tool_call") {
