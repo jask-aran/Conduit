@@ -17,17 +17,14 @@ async function ensureDirectory(directory) {
 }
 
 export async function ensureChatTree(project, chatId) {
-  const root = path.resolve(project.workingRoot);
-  if (project.externalPath) await ensureDirectory(root);
-  else await fs.mkdir(root, { recursive: true });
-  await ensureDirectory(root);
   const conduitRoot = await ensureConduitRoot(project);
+  const chatRoot = path.join(conduitRoot.chats, chatId);
   const components = [
     conduitRoot.conduit,
     conduitRoot.chats,
-    path.join(root, ".conduit", "chats", chatId),
-    path.join(root, ".conduit", "chats", chatId, "attachments"),
-    path.join(root, ".conduit", "chats", chatId, ".partial"),
+    chatRoot,
+    path.join(chatRoot, "attachments"),
+    path.join(chatRoot, ".partial"),
   ];
   for (const component of components) await ensureDirectory(component);
   return {
