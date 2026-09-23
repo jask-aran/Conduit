@@ -223,7 +223,7 @@ Menus and pane headers follow the component entries below. Palettes (model picke
 - Centered solid popover, 11px radius, dim 55% behind.
 - Search row, hairline, close at right.
 - Uppercase 9px group labels.
-- Highlighted option = accent wash + 6–7px row radius. No left rail. Model id in muted mono, right-aligned.
+- Highlighted option = accent wash + 6–7px row radius. No left rail. Model id in muted mono, right-aligned. The current choice keeps a fainter standing wash and a heavier label while the cursor is elsewhere — never a tick.
 - Footer hint bar: keycaps + labels. Actionable hints use foreground; the rest stay muted.
 - Widths: commands 512px, models 576px, chat search 720px. Mobile: fill the visual viewport with a ~6px inset so it remains a dialog, not a new route.
 
@@ -279,7 +279,16 @@ Motion explains a change of place: where something went, and what took its place
 
 **User bubble** — frosted glass (`glass-bg` + blur), `{rounded.bubble}` radius, right-aligned. Assistant has no bubble. The bubble and composer are the same material family — keep them visually related.
 
-**Dropdown menu** — the common case, more often than a palette: sessions, shortcuts, overflow. Solid `{colors.popover}`, `{rounded.pop}`, ~320px wide. A 9px uppercase group label, then rows: a leading mark (✓ for the current item, a drag grip, or nothing), a 12px/560 title over a muted mono meta line, and trailing 13px icon actions that stay muted and appear with the row on hover or keyboard focus (always shown on touch). The whole row takes the `{colors.accent}` wash, not just the part under the pointer. A single footer action row ("+ New …") sits under a hairline. Something edited in place opens as an inline form inside its row — bordered inputs, a two-state toggle with the selected state as the gray wash, Cancel/Done — and saves on Done; the list has no separate Save. Use a popover rather than a menu when the rows hold inputs, so typing is not taken as menu navigation. A one-field rename stays a dialog.
+**Dropdown menu** — the common case, more often than a palette: sessions, shortcuts, overflow. Solid `{colors.popover}`, `{rounded.pop}`, ~320px wide. A 9px uppercase group label, then rows of **one line**: an optional leading mark (a harness mark, a drag grip, or nothing), a 12px/560 title, its muted mono meta inline and right-aligned, truncating before the title does, and trailing 13px icon actions that stay muted and appear with the row on hover or keyboard focus (always shown on touch). The whole row takes the `{colors.accent}` wash, not just the part under the pointer. A single footer action row ("+ New …") sits under a hairline. Something edited in place opens as an inline form inside its row — bordered inputs, a two-state toggle with the selected state as the gray wash, Cancel/Done — and saves on Done; the list has no separate Save. Use a popover rather than a menu when the rows hold inputs, so typing is not taken as menu navigation. A one-field rename stays a dialog.
+
+Choosing in a menu:
+
+- **The current choice is a wash, not a tick.** Its row keeps the `{colors.accent}` wash and a heavier label; hover and keyboard focus use the same wash. No ✓ column anywhere.
+- **No notes in menus.** A choice that is not available is greyed out, and that says enough — no "Locked after the first message" line.
+- **No Manage rows.** A menu is for choosing; settings are reached from Settings, not from a "Manage…" row at the foot of a picker.
+- **Search opens the palette.** A menu over a long list starts with a "Search all …" row, with its shortcut keycap, that opens the matching palette — not an inline search field.
+- **Stay open for the next choice.** Picking something whose follow-up sits in the same menu keeps it open: a model keeps the model menu open for Thinking, and a choice in a phone submenu returns to the options rather than closing them. A choice that ends the task closes the menu.
+- **Ordered choices are a slider.** Effort-like ordered levels are a step slider whose label shows the current level; the label opens a submenu listing the levels, never a list expanding in place.
 
 **Pane header** — a hairline-bottomed strip across a pane (terminal today). Left: route buttons if any, then the status indicator, the name (semibold), and one muted mono context line joined with ` · `. Right: groups of quiet ghost controls separated by a 1px, ~14px hairline, in the order the person reaches for them, with anything that does not fit collapsing into a `⋯` menu rather than scrolling.
 
