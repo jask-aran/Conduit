@@ -59,16 +59,38 @@ export function MobileComposerOptions(props: {
      under the finger -- but the same tap's compatibility mouse events follow,
      onto whatever is now beneath it: the effort slider took them as a second
      choice, a submenu row as a highlight that read as a second pick. The
-     whole menu stays inert until that tap is over. */
+     whole menu stays inert until that tap is over.
+     A timer alone lost the race on a slow re-render, so the tap's mouse events
+     are dropped outright until the next finger comes down; the timer only
+     keeps the new panel from being hit-tested in the meantime. */
   const go = (next: MobileOptionsPanel) => { setPanel(next); settle(); };
   const [settling, setSettling] = createSignal(false);
   let settleTimer: number | undefined;
+  let ghostTimer: number | undefined;
+  let dropGhosts = false;
   const settle = () => {
     setSettling(true);
+    dropGhosts = true;
     window.clearTimeout(settleTimer);
+    window.clearTimeout(ghostTimer);
     settleTimer = window.setTimeout(() => setSettling(false), 400);
+    ghostTimer = window.setTimeout(() => { dropGhosts = false; }, 1500);
   };
-  onCleanup(() => window.clearTimeout(settleTimer));
+  const dropGhost = (event: Event) => {
+    if (!dropGhosts) return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  const nextTap = () => { dropGhosts = false; };
+  const ghostEvents = ["mousedown", "mouseup", "click"] as const;
+  window.addEventListener("pointerdown", nextTap, true);
+  for (const type of ghostEvents) window.addEventListener(type, dropGhost, true);
+  onCleanup(() => {
+    window.clearTimeout(settleTimer);
+    window.clearTimeout(ghostTimer);
+    window.removeEventListener("pointerdown", nextTap, true);
+    for (const type of ghostEvents) window.removeEventListener(type, dropGhost, true);
+  });
   let composerFocusBeforeOpen: HTMLTextAreaElement | null = null;
   let keyboardOpenBeforeOpen = false;
   let restoreFocusOnClose = false;
