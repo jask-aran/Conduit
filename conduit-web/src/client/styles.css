@@ -447,12 +447,6 @@ svg { stroke-width: 1.5; }
 .slash-completion { position: absolute; inset: 0; z-index: 1; overflow: hidden; padding: 8.8px 9.6px 1.6px; color: var(--muted-foreground); line-height: 1.45; pointer-events: none; white-space: pre; }
 .slash-completion span { color: transparent; }
 .slash-completion small { font-size: 9.6px; }
-.host-ui-card { width: min(var(--composer-desktop-reference-width), 100%); margin-inline: auto; padding: 6.4px 8px; border: 0.8px solid var(--border); border-radius: 8px; background: var(--card); }
-.host-ui-card { display: flex; flex-direction: column; gap: 6.4px; padding: 9.6px; }
-.host-ui-card p { margin: 0; color: var(--muted-foreground); font-size: 10.4px; }
-.host-ui-options, .host-ui-actions { display: flex; flex-wrap: wrap; gap: 6.4px; }
-.host-ui-actions { justify-content: flex-end; }
-.host-ui-editor { min-height: 89.6px; font: 9.6px/1.5 ui-monospace, monospace; }
 
 .attachment-tray { display: flex; width: min(var(--composer-desktop-reference-width), 100%); max-height: min(256px, 40dvh); flex-direction: column; gap: 6.4px; margin: 0 auto 8px; overflow-y: auto; }
 .attachment-card { display: flex; width: min(320px, 100%); align-items: center; gap: 7.2px; padding: 4.8px; border: 0.8px solid var(--border); border-radius: 8px; background: var(--card); }
@@ -670,7 +664,6 @@ svg { stroke-width: 1.5; }
   border: 1px solid var(--border);
   box-shadow: 0 19.2px 56px rgb(0 0 0 / 45%);
 }
-.host-ui-card,
 .composer-queue,
 .workspace-warning,
 .tool-card-content,
@@ -1255,12 +1248,6 @@ svg { stroke-width: 1.5; }
 .slash-completion { position: absolute; inset: 0; z-index: 1; overflow: hidden; padding: 11px 12px 2px; color: var(--muted-foreground); line-height: 1.45; pointer-events: none; white-space: pre; }
 .slash-completion span { color: transparent; }
 .slash-completion small { font-size: 12px; }
-.host-ui-card { width: min(var(--composer-desktop-reference-width), 100%); margin-inline: auto; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
-.host-ui-card { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
-.host-ui-card p { margin: 0; color: var(--muted-foreground); font-size: 13px; }
-.host-ui-options, .host-ui-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.host-ui-actions { justify-content: flex-end; }
-.host-ui-editor { min-height: 112px; font: 12px/1.5 ui-monospace, monospace; }
 
 .attachment-tray { display: flex; width: min(var(--composer-desktop-reference-width), 100%); max-height: min(320px, 40dvh); flex-direction: column; gap: 8px; margin: 0 auto 10px; overflow-y: auto; }
 .attachment-card { display: flex; width: min(400px, 100%); align-items: center; gap: 9px; padding: 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
@@ -1487,7 +1474,6 @@ svg { stroke-width: 1.5; }
   border: 1px solid var(--border);
   box-shadow: 0 24px 70px rgb(0 0 0 / 45%);
 }
-.host-ui-card,
 .composer-queue,
 .workspace-warning,
 .tool-card-content,

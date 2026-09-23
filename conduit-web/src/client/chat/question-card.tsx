@@ -23,10 +23,10 @@ const typingIn = (target: EventTarget | null) => target instanceof HTMLInputElem
  * keyboard while it is up -- arrows move, a number or Enter chooses, Tab turns
  * the page, Esc dismisses -- and touch has the same through taps and Next.
  */
-export function QuestionCard(props: { request: HostUiRequest; onRespond: (response: QuestionResponse) => void }) {
+export function QuestionCard(props: { request: HostUiRequest; dismissLabel?: string; onRespond: (response: QuestionResponse) => void }) {
   const questions = () => props.request.questions || [];
   const [drafts, setDrafts] = createStore<Record<string, Draft>>(
-    Object.fromEntries(questions().map((question) => [question.id, { ...EMPTY }])));
+    Object.fromEntries(questions().map((question) => [question.id, { ...EMPTY, freeform: (question.freeform && question.freeform.initial) || "" }])));
   const draft = (question: Question): Draft => drafts[question.id] ?? EMPTY;
   const review = createMemo(() => questions().length > 1 || Boolean(questions()[0]?.multiSelect) || Boolean(props.request.notes));
   const [page, setPage] = createSignal(0);
@@ -130,7 +130,7 @@ export function QuestionCard(props: { request: HostUiRequest; onRespond: (respon
   const hints = () => [
     ...(pages() > 1 ? [["⇥", "tab"]] : []),
     ...(current() ? [["↑↓", "select"], ["↵", current()!.multiSelect ? "toggle" : "confirm"]] : [["↵", "submit"]]),
-    ["esc", "dismiss"],
+    ["esc", props.dismissLabel || "dismiss"],
   ];
   const preview = () => current()?.options[cursor()]?.preview;
 
@@ -148,7 +148,7 @@ export function QuestionCard(props: { request: HostUiRequest; onRespond: (respon
             onClick={() => go(questions().length)}>Submit</button></Show>
         </div>
       </Show>
-      <button type="button" class="question-close" tabIndex={-1} aria-label="Dismiss" onClick={dismiss}><XIcon /></button>
+      <button type="button" class="question-close" tabIndex={-1} aria-label={props.dismissLabel === "deny" ? "Deny" : "Dismiss"} onClick={dismiss}><XIcon /></button>
     </div>
 
     <Show when={current()} keyed fallback={
