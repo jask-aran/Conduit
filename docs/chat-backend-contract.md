@@ -258,7 +258,7 @@ or adopts the ones it is given.
 | `permissionModes` | ○ | ● | ○ | ● | ● | ○ |
 | `usage` | ● | ○ | ○ | ○ | ● | ● |
 | `replay` | ● | ○ | ○ | ○ | ○ | ● |
-| `attachments` | ● | ● | ○ | ○ | ○ | ● |
+| `attachments` | ● | ● | ○ | ○ | ● | ● |
 | `interruptKeepsPartial` | ○ | ○ | ○ | ○ | ○ | ● |
 
 And from the manifest, which decides how a chat on it is made ready:
