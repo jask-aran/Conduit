@@ -195,7 +195,19 @@ async function performPwaUpdate(reloadPage: () => void) {
     return true;
   }
   await registration.update();
-  if (!await untilWaiting()) return false;
+  // Nothing new was fetched: up to date. A new build precaches the whole
+  // client before it waits, which over a phone connection takes well past a
+  // few seconds -- so a build that is installing gets the time it needs, and
+  // one already waiting from before this page (never announced to it) is
+  // taken directly.
+  if (!registration.installing && !registration.waiting) return false;
+  if (!waiting && registration.waiting && !registration.installing) {
+    try { sessionStorage.setItem(TOOK_UPDATE_KEY, "1"); } catch { /* as above */ }
+    registration.waiting.postMessage({ type: "SKIP_WAITING" });
+    window.setTimeout(() => window.location.reload(), RELOAD_FALLBACK_MS);
+    return true;
+  }
+  if (!await untilWaiting(120_000)) return false;
   return applyPwaUpdate();
 }
 

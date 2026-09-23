@@ -142,12 +142,13 @@ export function MobileComposerOptions(props: {
       <MenuContent class="composer-options-menu" onOpenAutoFocus={preserveComposerFocus} onCloseAutoFocus={preserveComposerFocusOnClose} onFocusOutside={keepMenuOpenOnFocusOutside} onPointerDown={preserveComposerFocusOnPointerDown} onClick={restoreComposerFocusAfterInteraction}>
         <div class="composer-options-parent" data-panel-open={panel() !== "root"} onPointerDown={returnToRoot}>
          <MenuGroup>
-          <MenuLabel class="composer-options-label composer-options-header"><span>Message options</span>
+          <MenuLabel class="composer-options-label composer-options-header"><span>{composer.profiles.length ? "Profile" : "Model"}</span>
             <Show when={context() != null}><span class="composer-options-context">{Math.round(context()!)}% context</span></Show></MenuLabel>
           <Show when={composer.profiles.length}>
             <MenuItem closeOnSelect={false} onSelect={() => setPanel("profiles")} class="composer-options-value" aria-label={`Profile ${selectedProfileLabel()}`}>
               <HarnessMark id={composer.activeProfile?.implementation || "conduit"} class="size-4" /><span>{selectedProfileLabel()}</span><ChevronRightIcon />
             </MenuItem>
+            <MenuLabel class="composer-options-label">Model</MenuLabel>
           </Show>
           <MenuItem disabled={!composer.serverOnline} closeOnSelect={false} onSelect={() => setPanel("models")} class="composer-options-value composer-options-model" aria-label={`Model ${selectedModelLabel()}`}>
             <span>{selectedModelLabel()}</span><ChevronRightIcon />
