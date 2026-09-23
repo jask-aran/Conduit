@@ -4,8 +4,9 @@
 This document is the architecture it describes: what a harness adapter owns,
 what Conduit owns, and the two channels every turn travels on.
 
-Four harnesses are behind this contract — Pi (`conduit_pi`), Codex
-(app-server), ChatGPT Web (sidecar), and the in-process Test stream. The
+Six harnesses are behind this contract — Pi (`conduit_pi`), Codex
+(app-server), ChatGPT Web (sidecar), fx (ACP over stdio), OpenCode 2 (its
+background service), and the in-process Test stream. The
 browser cannot tell which one it is talking to except by the capabilities it
 was given.
 
@@ -21,30 +22,30 @@ crosses that function, including into the chat log. A stored log entry is a
 neutral event, and translating one again is a no-op, which is what lets replay
 send log entries back through the same path as live ones.
 
-### Four adapters, one shape
+### Six adapters, one shape
 
 The adapters are parallel, not layered. Nothing routes through Pi, and no
 adapter knows another exists — each one takes its own harness's transport and
 puts Conduit's vocabulary on the other side, where a single delivery,
-numbering and socket path serves all four.
+numbering and socket path serves all six.
 
 ```text
-  conduit_pi           codex              chatgpt-web         test-stream
-  resident process     app-server         python sidecar      in-process
-  Pi JSONL file        daemon, JSON-RPC   account cursor      own journal
-       │                    │                    │                  │
-       ▼                    ▼                    ▼                  ▼
- ┌────────────┐     ┌──────────────┐     ┌──────────────┐   ┌──────────────┐
- │PiRpcAdapter│     │CodexAppServer│     │ ChatGptWeb   │   │  TestStream  │
- │            │     │   Adapter    │     │   Adapter    │   │   Adapter    │
- └────────────┘     └──────────────┘     └──────────────┘   └──────────────┘
-       │                    │                    │                  │
- ══════╪════════════════════╪════════════════════╪══════════════════╪══════
-       │     the translation line — no harness word crosses it      │
- ══════╪════════════════════╪════════════════════╪══════════════════╪══════
-       │                    │                    │                  │
-       └──────────┬─────────┴────────────────────┴──────────────────┘
-                  ▼
+ conduit_pi    codex         chatgpt-web   fx            opencode2     test-stream
+ resident      app-server    python        `fx acp`      background    in-process
+ Pi JSONL      JSON-RPC      sidecar       ACP, stdio    service, SSE  own journal
+     │             │             │             │             │             │
+     ▼             ▼             ▼             ▼             ▼             ▼
+┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
+│  PiRpc   │  │ CodexApp │  │ ChatGpt  │  │  FxAcp   │  │ OpenCode │  │TestStream│
+│ Adapter  │  │  Server  │  │   Web    │  │ Adapter  │  │ Adapter  │  │ Adapter  │
+└──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘
+     │             │             │             │             │             │
+═════╪═════════════╪═════════════╪═════════════╪═════════════╪═════════════╪═════
+     │           the translation line — no harness word crosses it         │
+═════╪═════════════╪═════════════╪═════════════╪═════════════╪═════════════╪═════
+     │             │             │             │             │             │
+     └──────┬──────┴─────────────┴─────────────┴─────────────┴─────────────┘
+            ▼
         ┌──────────────────────┐   the record is numbered here, per chat.
         │  ChatLog.stamp       │   A client that finds a gap in log.seq
         │  record only         │   asks for what it missed by resume_log.
@@ -73,24 +74,24 @@ answer.
 
 ```text
                          ┌──────────────────────────────────┐
-                         │            THE RECORD            │
-                         │  transcript_op   message.open    │
-  ┌──────────────────┐   │                  message.close   │
-  │ Pi: toolCall,    │ ─┐│                  message.drop    │
-  │     thinking     │  ││                  tool.open/close │
+  ┌──────────────────┐   │            THE RECORD            │
+  │ Pi: toolCall,    │ ─┐│  transcript_op   message.open    │
+  │     thinking     │  ││                  message.close   │
+  ├──────────────────┤  ││                  message.drop    │
+  │ Codex: item/…    │ ─┤│                  tool.open/close │
   ├──────────────────┤  ├┤  status          started         │
-  │ Codex: item/…    │ ─┤│                  stopping        │──┐
+  │ ChatGPT: frames  │ ─┤│                  stopping        │──┐
   ├──────────────────┤  ││                  stopped         │  │
-  │ ChatGPT: frames  │ ─┤│                  settled         │  │
+  │ fx: ACP updates  │ ─┤│                  settled         │  │
   ├──────────────────┤  ││  error           (runtime)       │  │
-  │ Test: synthetic  │ ─┘│  transcript_sync                 │  │
-  └──────────────────┘   │  session_checkpoint              │  │
-       adapter           │                                  │  │   ┌──────────┐
-   translates ONCE       │  ordered · exactly once ·        │  ├──▶│  client  │
-   (harness words stop   │  numbered in the chat's log      │  │   │  folds   │
-    at this line)        └──────────────────────────────────┘  │   │  as-is   │
-                         ┌──────────────────────────────────┐  │   └──────────┘
-                         │              PAINT               │  │
+  │ OpenCode: events │ ─┤│  transcript_sync                 │  │
+  ├──────────────────┤  ││  session_checkpoint              │  │
+  │ Test: synthetic  │ ─┘│                                  │  │   ┌──────────┐
+  └──────────────────┘   │  ordered · exactly once ·        │  ├──▶│  client  │
+       adapter           │  numbered in the chat's log      │  │   │  folds   │
+   translates ONCE       └──────────────────────────────────┘  │   │  as-is   │
+   (harness words stop   ┌──────────────────────────────────┐  │   └──────────┘
+    at this line)        │              PAINT               │  │
                          │  assistant_content  start        │  │
                          │                     delta        │──┘
                          │                     final        │
@@ -124,13 +125,22 @@ reconnect.
 Dropping paint is safe because `message.close` restates the message in full.
 Who wrote it, with what, when, and what went wrong travel on the close when
 the adapter has them: Pi copies them off the reduced generation; Codex,
-ChatGPT Web and Test stream state the turn's `model` from the live record.
-They do not invent a provider or a write-time they were never given.
+ChatGPT Web, fx and Test stream state the turn's `model` from the live record;
+OpenCode closes each step from its saved message, which carries the provider,
+model, write-time and error. They do not invent a provider or a write-time
+they were never given.
+
+Two adapters close from something other than what they streamed. fx sends its
+own notices and the answer as the same ACP update, so its streamed text goes to
+the trace and the answer is closed from fx's saved reply once the turn ends.
+OpenCode streams from its event stream, but a step's close restates the
+message OpenCode saved, so the record is OpenCode's own and not the adapter's
+reading of the stream.
 
 A socket that reconnects is restated from a server-side fold of the generation
-on harnesses that declare `replay` (Pi, Test stream). Codex and ChatGPT Web do
-not; a reconnecting browser is caught up from the record buffer and the chat's
-log. When a record's buffer is full, paint is evicted before the record.
+on harnesses that declare `replay` (Pi, Test stream). Codex, ChatGPT Web, fx
+and OpenCode do not; a reconnecting browser is caught up from the record
+buffer and the chat's log. When a record's buffer is full, paint is evicted before the record.
 
 ### Vocabulary
 
@@ -202,7 +212,7 @@ published, whatever the backlog.
   recovers it by restating the running generation, which it can do because it
   holds one.
 
-The two implementations are named under "Four adapters, one shape" above.
+The two implementations are named under "Six adapters, one shape" above.
 
 ## Capabilities
 
@@ -232,43 +242,50 @@ or adopts the ones it is given.
 
 ● declared, ○ not. Every adapter states every flag; there is no "unset".
 
-| | Pi | Codex | ChatGPT Web | Test stream |
-| --- | :---: | :---: | :---: | :---: |
-| `history` | tree | linear | linear | tree |
-| `fork` | ● | ● | ○ | ● |
-| `regenerate` | ● | ● | ○ | ● |
-| `steer` | ● | ● | ○ | ● |
-| `followUpQueue` | ● | ● | ○ | ● |
-| `cancel` | ● | ● | ● | ● |
-| `compaction` | ● | ● | ○ | ● |
-| `thinkingLevels` | ● | ● | ● | ● |
-| `modelSwitch` | ● | ● | ● | ● |
-| `toolUse` | ● | ● | ○ | ● |
-| `approvals` | ● | ● | ○ | ● |
-| `permissionModes` | ○ | ● | ○ | ○ |
-| `usage` | ● | ○ | ○ | ● |
-| `replay` | ● | ○ | ○ | ● |
-| `attachments` | ● | ● | ○ | ● |
-| `interruptKeepsPartial` | ○ | ○ | ○ | ● |
+| | Pi | Codex | ChatGPT Web | fx | OpenCode | Test stream |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: |
+| `history` | tree | linear | linear | linear | linear | tree |
+| `fork` | ● | ● | ○ | ○ | ○ | ● |
+| `regenerate` | ● | ● | ○ | ○ | ○ | ● |
+| `steer` | ● | ● | ○ | ○ | ○ | ● |
+| `followUpQueue` | ● | ● | ○ | ○ | ○ | ● |
+| `cancel` | ● | ● | ● | ● | ● | ● |
+| `compaction` | ● | ● | ○ | ○ | ● | ● |
+| `thinkingLevels` | ● | ● | ● | ● | ● | ● |
+| `modelSwitch` | ● | ● | ● | ● | ● | ● |
+| `toolUse` | ● | ● | ○ | ● | ● | ● |
+| `approvals` | ● | ● | ○ | ● | ● | ● |
+| `permissionModes` | ○ | ● | ○ | ● | ○ | ○ |
+| `usage` | ● | ○ | ○ | ○ | ● | ● |
+| `replay` | ● | ○ | ○ | ○ | ○ | ● |
+| `attachments` | ● | ● | ○ | ○ | ○ | ● |
+| `interruptKeepsPartial` | ○ | ○ | ○ | ○ | ○ | ● |
 
 And from the manifest, which decides how a chat on it is made ready:
 
-| | Pi | Codex | ChatGPT Web | Test stream |
-| --- | :---: | :---: | :---: | :---: |
-| `protocol` | `pi_rpc` | `native_api` | `native_api` | `native_api` |
-| `warm` | process | process | none | none |
-| `discovery` | none | machine | none | none |
-| `suppliesMessageIds` | ○ | ● | ● | ● |
-| `nameGeneration` | conduit | conduit | backend | conduit |
+| | Pi | Codex | ChatGPT Web | fx | OpenCode | Test stream |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: |
+| `protocol` | `pi_rpc` | `native_api` | `native_api` | `acp` | `native_api` | `native_api` |
+| `warm` | process | process | none | process | process | none |
+| `discovery` | none | machine | none | machine | machine | none |
+| `suppliesMessageIds` | ○ | ● | ● | ● | ● | ● |
+| `nameGeneration` | conduit | conduit | backend | backend | backend | conduit |
 
 Reading down a column is the whole of what that profile can do, and reading
-across a row is the whole of what differs. Three entries are worth naming.
+across a row is the whole of what differs. Four entries are worth naming.
 
-`permissionModes` is Codex alone: it offers profiles to answer an approval
-*under*, where the others answer an approval and nothing more. `usage` and
-`replay` are false for Codex because its `replay` returns runtime state rather
-than a generation in progress, so a browser reconnecting mid-turn is caught up
-from the record and the log instead.
+`permissionModes` is Codex and fx: Codex offers profiles to answer an approval
+*under*, and fx offers its ACP session modes the same way, where the others
+answer an approval and nothing more. `replay` is false for Codex, fx and
+OpenCode because their `replay` returns runtime state from the record buffer
+rather than a generation in progress, so a browser reconnecting mid-turn is
+caught up from the record and the log instead; `usage` is false for Codex
+too.
+
+OpenCode's service is not Conduit's to run. The adapter joins it as another
+client, the way OpenCode's own TUI does — one loopback event stream for every
+session, the service's password from its config — and never stops it on
+shutdown, because the TUI may be using it.
 
 `interruptKeepsPartial` is true only for the Test stream, and that is not a
 gap in the others. Every real harness drops an interrupted partial, because
