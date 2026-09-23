@@ -25,7 +25,7 @@ export const OPENCODE_CAPABILITIES = Object.freeze({
   modelSwitch: true,
   toolUse: true,
   approvals: true,
-  permissionModes: false,
+  permissionModes: true,
   usage: true,
   replay: false,
   attachments: false,
@@ -51,6 +51,33 @@ const stopReasonOf = (row) => row.error?.type === "aborted" ? "aborted"
   : row.finish === "tool-calls" ? "toolUse" : row.finish || (row.time?.completed ? "stop" : null);
 const errorOf = (row) => row.error?.type === "aborted" ? null : row.error?.message || null;
 const toolOutput = (part) => contentText(part?.state?.content) || String(part?.state?.output || part?.state?.error || "");
+// OpenCode's TUI setting of the same name, offered the same way: its client
+// either shows each permission or answers it `once`.
+const PERMISSION_MODES = Object.freeze([
+  { id: "prompt", label: "Prompt", description: "Ask before each action OpenCode holds for approval", allowed: true },
+  { id: "autoaccept", label: "Auto accept", description: "Allow each action once without asking; questions are still asked", allowed: true },
+]);
+const PERMISSION_DECISIONS = [["Allow once", "once"], ["Always allow", "always"], ["Reject", "reject"]];
+const promptBase = { placeholder: "", prefill: "", timeoutMs: null };
+const permissionPrompt = (request) => ({
+  kind: "permission", decisions: new Map(PERMISSION_DECISIONS),
+  host: { ...promptBase, id: request.id, kind: "select", nativeKind: "permission",
+    title: `Allow ${request.action || "this action"}?`,
+    message: request.message || (request.resources || []).join(", ") || "OpenCode is waiting for approval.",
+    options: PERMISSION_DECISIONS.map(([label]) => label) },
+});
+// A question arrives as a form of one field per question. The card asks one;
+// a form of several waits for the general question tool.
+const formPrompt = (form) => {
+  const field = form.fields?.[0] || {};
+  const options = Array.isArray(field.options) ? field.options : [];
+  return {
+    kind: "form", key: field.key, values: new Map(options.map((option) => [option.label, option.value])),
+    host: { ...promptBase, id: form.id, kind: options.length ? "select" : "input", nativeKind: "form",
+      title: field.title || form.title || "OpenCode question",
+      message: field.description || form.title || "", options: options.map((option) => option.label) },
+  };
+};
 // A prompt is saved in OpenCode under the name the browser already drew it
 // with, in the `msg_` form OpenCode requires, so the live row, the chat log and
 // the saved copy are one message. OpenCode's own ids are hex after `msg_`, so a
@@ -76,7 +103,7 @@ export class OpenCodeAdapter extends EventEmitter {
     this.sessions = new SessionRecords({
       capabilities: OPENCODE_CAPABILITIES,
       backend: { protocol: "native_api", implementation: "opencode", installationId: "host-opencode" },
-      extras: (record) => ({ thinkingLevel: record.thinkingLevel }),
+      extras: (record) => ({ thinkingLevel: record.thinkingLevel, permissionMode: record.permissionMode }),
       logs,
     });
     this.records = this.sessions.records;
@@ -157,7 +184,8 @@ export class OpenCodeAdapter extends EventEmitter {
     const selectedThinkingLevel = (forceModel ? String(thinkingLevel).trim() : "")
       || String(context.chat.modelThinkingLevels?.[selectedModel] || "").trim();
     const options = { chatId: context.chat.id, project: context.project,
-      model: selectedModel, thinkingLevel: selectedThinkingLevel };
+      model: selectedModel, thinkingLevel: selectedThinkingLevel,
+      permissionMode: String(context.chat.backend.permissionMode || "").trim() };
     const live = context.chat.backend.opaqueSession
       ? await this.restore(context.chat.backend.opaqueSession, options) : await this.create(options);
     return { live, mapping: {
@@ -168,9 +196,10 @@ export class OpenCodeAdapter extends EventEmitter {
     }, modelRecovery: null };
   }
 
-  record({ chatId, project, session }) {
+  record({ chatId, project, session, permissionMode = "" }) {
     const spec = modelSpec(session.model);
     return this.sessions.add({
+      permissionMode: PERMISSION_MODES.some((mode) => mode.id === permissionMode) ? permissionMode : "prompt",
       id: crypto.randomUUID(), chatId, projectId: project?.id || null,
       cwd: session.location?.directory || project?.workingRoot, sessionId: session.id,
       status: "running", ready: true, activity: "idle", active: false, stopping: false,
@@ -180,7 +209,7 @@ export class OpenCodeAdapter extends EventEmitter {
     });
   }
 
-  async create({ chatId, project, model = "", thinkingLevel = "" }) {
+  async create({ chatId, project, model = "", thinkingLevel = "", permissionMode = "" }) {
     const existing = this.getByChatId(chatId);
     if (existing) return existing;
     const selected = splitModel(model, thinkingLevel);
@@ -189,16 +218,16 @@ export class OpenCodeAdapter extends EventEmitter {
     const session = await this.request("POST", "/session", {
       body: { location: { directory: project.workingRoot }, ...(selected ? { model: selected } : {}) },
     });
-    return this.record({ chatId, project, session });
+    return this.record({ chatId, project, session, permissionMode });
   }
 
-  async restore(opaqueSession, { chatId, project, model = "", thinkingLevel = "" }) {
+  async restore(opaqueSession, { chatId, project, model = "", thinkingLevel = "", permissionMode = "" }) {
     const existing = this.getByChatId(chatId);
     if (existing) return existing;
     const sessionId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!sessionId) throw failure("OpenCode session identity is missing");
     const session = await this.request("GET", `/session/${encodeURIComponent(sessionId)}`);
-    const record = this.record({ chatId, project, session });
+    const record = this.record({ chatId, project, session, permissionMode });
     if (model && model !== record.model) await this.setModel(record.id, model, thinkingLevel);
     return record;
   }
@@ -327,7 +356,11 @@ export class OpenCodeAdapter extends EventEmitter {
     // every pending prompt.
     const [permissions, forms] = await Promise.all(["permission", "form"].map((kind) =>
       this.request("GET", `/session/${encodeURIComponent(record.sessionId)}/${kind}`).catch(() => null)));
-    if (permissions && forms && record.active) this.syncRequests(record, [...permissions, ...forms]);
+    // Which list a request came from is what it is; its shape is not asked.
+    if (permissions && forms && record.active) this.syncRequests(record, [
+      ...permissions.map((request) => ({ kind: "permission", request })),
+      ...forms.map((request) => ({ kind: "form", request })),
+    ]);
   }
 
   dispatch(event) {
@@ -527,34 +560,49 @@ export class OpenCodeAdapter extends EventEmitter {
       timestamp: iso(row.time?.created), errorMessage: errorOf(row) }));
   }
 
+  /**
+   * OpenCode's pending permissions and forms, as the prompts on screen.
+   *
+   * A card offers words and hands back the one chosen, so each prompt keeps
+   * what those words mean to OpenCode: a permission's decision, or a form
+   * option's value under its field's key. In auto accept a permission is
+   * answered `once` instead, as OpenCode's TUI does; a question never is.
+   */
   syncRequests(record, requests) {
     const current = new Set();
-    for (const request of requests) {
+    for (const { kind, request } of requests) {
       if (request.sessionID && request.sessionID !== record.sessionId) continue;
-      const id = request.id || request.requestID;
+      const id = request.id;
       if (!id) continue;
       current.add(id);
       if (record.requests.has(id)) continue;
-      const isForm = Array.isArray(request.questions) || request.type === "form";
-      const question = request.questions?.[0];
-      const options = isForm ? (question?.options || []).map((item) => ({ id: item.label, label: item.label }))
-        : [{ id: "once", label: "Allow once" }, { id: "always", label: "Always allow" }, { id: "reject", label: "Reject" }];
-      const host = { id, kind: options.length ? "select" : "confirm",
-        title: question?.header || request.action || request.permission || "OpenCode permission",
-        message: question?.question || request.description || request.action || "Allow this action?",
-        options, placeholder: "", prefill: "", timeoutMs: null, nativeKind: isForm ? "form" : "permission" };
-      record.requests.set(id, host);
-      record.hostUiRequests.push(host);
+      if (kind === "permission" && record.permissionMode === "autoaccept") {
+        this.autoAccept(record, id);
+        continue;
+      }
+      const pending = kind === "permission" ? permissionPrompt(request) : formPrompt(request);
+      record.requests.set(id, pending);
+      record.hostUiRequests.push(pending.host);
       record.activity = "waiting_for_user";
       this.publish(record, { type: "permission_request", generationId: record.generation?.id || null,
-        requestId: id, ...host });
+        requestId: id, ...pending.host });
     }
     for (const id of record.requests.keys()) {
-      if (current.has(id)) continue;
-      record.requests.delete(id);
-      record.hostUiRequests = record.hostUiRequests.filter((item) => item.id !== id);
-      this.publish(record, { type: "permission_resolved", generationId: record.generation?.id || null, requestId: id });
+      if (!current.has(id)) this.resolveRequest(record, id);
     }
+  }
+
+  resolveRequest(record, id) {
+    if (!record.requests.delete(id)) return;
+    record.hostUiRequests = record.hostUiRequests.filter((item) => item.id !== id);
+    if (!record.requests.size && record.active) record.activity = "working";
+    this.publish(record, { type: "permission_resolved", generationId: record.generation?.id || null, requestId: id });
+  }
+
+  autoAccept(record, id) {
+    record.requests.set(id, { kind: "permission", host: null, auto: true });
+    void this.request("POST", `/session/${encodeURIComponent(record.sessionId)}/permission/${encodeURIComponent(id)}/reply`,
+      { body: { decision: "once" } }).catch(() => record.requests.delete(id));
   }
 
   settle(record, outcome) {
@@ -595,23 +643,47 @@ export class OpenCodeAdapter extends EventEmitter {
   async respondHostUi(id, response) {
     const record = this.get(id);
     const requestId = String(response?.id || response?.requestId || "");
-    const request = record?.requests.get(requestId);
-    if (!request) throw failure("OpenCode request is no longer pending", "host_ui_request_missing", 404);
-    const rejected = response.cancelled || response.dismissed || response.confirmed === false
-      || String(response.value || "").toLowerCase() === "reject";
-    if (request.nativeKind === "form") {
-      const route = `/session/${encodeURIComponent(record.sessionId)}/form/${encodeURIComponent(requestId)}`;
-      if (rejected) await this.request("POST", `${route}/reply`, { body: { response: { type: "rejected" } } });
-      else await this.request("POST", `${route}/reply`, { body: { response: { answers: [[String(response.value || "")]] } } });
-    } else {
-      await this.request("POST", `/session/${encodeURIComponent(record.sessionId)}/permission/${encodeURIComponent(requestId)}/reply`, {
-        body: { reply: rejected ? "reject" : String(response.value || "once") },
-      });
+    const pending = record?.requests.get(requestId);
+    if (!pending?.host) throw failure("OpenCode request is no longer pending", "host_ui_request_missing", 404);
+    const dismissed = Boolean(response.cancelled || response.dismissed || response.confirmed === false);
+    const session = `/session/${encodeURIComponent(record.sessionId)}`;
+    try {
+      if (pending.kind === "form") {
+        const route = `${session}/form/${encodeURIComponent(requestId)}`;
+        if (dismissed) await this.request("DELETE", route);
+        else {
+          const chosen = String(response.value ?? "");
+          // A typed answer is sent as typed; OpenCode's questions allow one.
+          await this.request("POST", `${route}/reply`, { body: { answer: { [pending.key]: pending.values.get(chosen) ?? chosen } } });
+        }
+      } else {
+        const decision = dismissed ? "reject" : pending.decisions.get(String(response.value ?? "")) || "reject";
+        await this.request("POST", `${session}/permission/${encodeURIComponent(requestId)}/reply`, { body: { decision } });
+      }
+    } catch (cause) {
+      // Answered or withdrawn somewhere else; OpenCode's lists say which.
+      void this.refreshRequests(record);
+      throw cause;
     }
-    record.requests.delete(requestId);
-    record.hostUiRequests = record.hostUiRequests.filter((item) => item.id !== requestId);
-    this.publish(record, { type: "permission_resolved", generationId: record.generation?.id || null, requestId });
+    this.resolveRequest(record, requestId);
     return null;
+  }
+
+  listAvailablePermissionModes() { return Promise.resolve(PERMISSION_MODES.map((mode) => ({ ...mode }))); }
+  listPermissionModes() { return this.listAvailablePermissionModes(); }
+  async setPermissionMode(id, mode) {
+    const record = this.get(id);
+    if (!record) throw failure("OpenCode session is not running");
+    record.permissionMode = mode?.id || String(mode || "");
+    // Switching to auto accept answers what is already waiting, too.
+    if (record.permissionMode === "autoaccept") {
+      for (const [requestId, pending] of record.requests) {
+        if (pending.kind !== "permission" || pending.auto) continue;
+        this.resolveRequest(record, requestId);
+        this.autoAccept(record, requestId);
+      }
+    }
+    return record.permissionMode;
   }
 
   async close(id) {
