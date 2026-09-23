@@ -1,7 +1,8 @@
 # UI polish sketch
 
-Status: section 2 (composer hierarchy) is built and recorded below as built;
-the other sections are proposals for separate, bounded changes.
+Status: sections 1 (interrupted turns) and 2 (composer hierarchy) are built
+and recorded below as built; the others are proposals for separate, bounded
+changes.
 
 These proposals cover transcript density, composer hierarchy, mobile file
 browsing, useful empty states, and interaction feedback. A separate autosave
@@ -27,6 +28,27 @@ Review with consecutive interruptions, an interruption after partial output,
 and a turn with no answer. The compact view must preserve the distinction
 between kept output and discarded content. This is a presentation change,
 not a change to stored transcripts or backend turn states.
+
+Status: built. A stopped turn says so once, leading its actions row:
+
+```
+kept, stopped part-way        …the answer so far, in full
+                              Stopped   ▷ Continue   ⧉ ↻
+
+discarded                     Stopped · not kept   T̶h̶e̶ ̶V̶i̶l̶l̶a̶g̶e̶ ̶T̶h̶a̶t̶…  ⌄   ↻
+
+stopped before any answer     Stopped before answering   ↻
+
+while stopping                Stopping…
+```
+
+- Kept text is always shown in full; discarded text is always folded to its
+  struck-through preview. Opened, it is muted text under the row, no rail.
+- Continue carries on the latest turn, so it appears only there, and only
+  when the agent kept what it wrote. Older stopped turns and discarded answers
+  offer Regenerate.
+- Copy appears only where there is text the agent kept.
+- No mark leads the row; the strike-through says enough.
 
 ## 2. Clarify composer hierarchy
 
@@ -376,8 +398,8 @@ misbehave at a narrow width.
 
 ## Suggested order
 
-Composer hierarchy is done, and was the first interaction-feedback pass.
-Interrupted turns are next. Mobile file browsing, dashboard empty states, and
+Interrupted turns and composer hierarchy are done; the composer was the first
+interaction-feedback pass. Mobile file browsing, dashboard empty states, and
 the autosave pilot can follow as separate changes.
 
 Approvals on the takeover is the cheapest of section 7 and the most
