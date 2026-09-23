@@ -44,7 +44,11 @@ const splitModel = (spec, variant = "") => {
 const stateRoot = () => process.env.XDG_STATE_HOME || path.join(os.homedir(), ".local", "state");
 const contentText = (content) => (Array.isArray(content) ? content : [])
   .map((item) => item?.text || item?.content?.map?.((part) => part?.text || "").join("") || "").join("");
-const POLL_FAILURE_LIMIT = 10;
+const STREAM_RETRY_LIMIT = 10;
+// A stopped step is saved as finish "error" with an "aborted" error; it is a stop, not a failure.
+const stopReasonOf = (row) => row.error?.type === "aborted" ? "aborted"
+  : row.finish === "tool-calls" ? "toolUse" : row.finish || (row.time?.completed ? "stop" : null);
+const errorOf = (row) => row.error?.type === "aborted" ? null : row.error?.message || null;
 const toolOutput = (part) => contentText(part?.state?.content) || String(part?.state?.output || part?.state?.error || "");
 
 export class OpenCodeAdapter extends EventEmitter {
@@ -53,6 +57,7 @@ export class OpenCodeAdapter extends EventEmitter {
     this.command = command;
     this.connection = null;
     this.connectionStart = null;
+    this.stream = null;
     this.sessions = new SessionRecords({
       capabilities: OPENCODE_CAPABILITIES,
       backend: { protocol: "native_api", implementation: "opencode", installationId: "host-opencode" },
@@ -156,7 +161,7 @@ export class OpenCodeAdapter extends EventEmitter {
       status: "running", ready: true, activity: "idle", active: false, stopping: false,
       model: spec, thinkingLevel: session.model?.variant || "", generation: null, generationSeq: 0,
       clients: new Set(), events: [], hostUiRequests: [], requests: new Map(),
-      liveMessages: new Map(), polling: null, promptStartedAt: 0,
+      liveMessages: new Map(), promptStartedAt: 0,
     });
   }
 
@@ -205,10 +210,11 @@ export class OpenCodeAdapter extends EventEmitter {
     this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.generationSeq,
       status: "working", activity: "working", detail: null });
     try {
+      // Listen before asking, so the turn's first events are not missed.
+      await this.ensureStream();
       await this.request("POST", `/session/${encodeURIComponent(record.sessionId)}/prompt`, { body: {
         id: userMessageId, text: parseAttachmentEnvelope(message).message, files: [], agents: [],
       } });
-      this.poll(record);
       return { generationId, attachmentIdentity: { messageId: clientUserMessageId } };
     } catch (cause) {
       // "started" already went out, so the generation has to be settled too.
@@ -217,55 +223,224 @@ export class OpenCodeAdapter extends EventEmitter {
     }
   }
 
-  poll(record) {
-    clearTimeout(record.polling);
-    record.pollFailures = 0;
-    const tick = async () => {
-      if (!record.active) return;
-      try {
-        // A failed request read is unknown, not empty: treating it as empty
-        // would resolve every pending prompt until the next tick.
-        const [messages, permissions, forms] = await Promise.all([
-          this.messageRows(record.sessionId, { limit: 100 }),
-          this.request("GET", `/session/${encodeURIComponent(record.sessionId)}/permission`).catch(() => null),
-          this.request("GET", `/session/${encodeURIComponent(record.sessionId)}/form`).catch(() => null),
-        ]);
-        record.pollFailures = 0;
-        this.syncMessages(record, messages);
-        if (permissions && forms) this.syncRequests(record, [...permissions, ...forms]);
-        const latest = messages[0];
-        if (latest?.type === "idle" && Number(latest.time?.created || 0) >= record.promptStartedAt) {
-          this.settle(record, latest.outcome || "succeeded");
-          return;
-        }
-      } catch (cause) {
-        // Retry briefly; a service that stays unreachable ends the turn.
-        if (++record.pollFailures >= POLL_FAILURE_LIMIT) {
-          this.publish(record, { type: "error", generationId: record.generation?.id || null, scope: "runtime",
-            error: { code: "backend_unavailable", message: cause.message || String(cause) } });
-          this.settle(record, "failed");
-          return;
+  /**
+   * One `/api/event` stream serves every session, as it does for OpenCode's
+   * own TUI. It opens before the first prompt and is reopened while a turn is
+   * running; a turn that ran across the gap is caught up from saved messages.
+   */
+  ensureStream() {
+    if (this.stream) return this.stream.ready;
+    const stream = { controller: new AbortController(), ready: null };
+    this.stream = stream;
+    stream.ready = this.openStream(stream).catch((cause) => {
+      if (this.stream === stream) this.stream = null;
+      throw cause;
+    });
+    return stream.ready;
+  }
+
+  async openStream(stream) {
+    const connection = await this.connect();
+    let response;
+    try {
+      response = await fetch(new URL("/api/event", connection.baseUrl), {
+        headers: { ...connection.headers, accept: "text/event-stream" }, signal: stream.controller.signal,
+      });
+    } catch (cause) {
+      this.connection = null;
+      throw failure(`OpenCode service is unreachable: ${cause.cause?.code || cause.message}`);
+    }
+    if (!response.ok || !response.body) {
+      if (response.status === 401) this.connection = null;
+      throw failure(`OpenCode event stream returned HTTP ${response.status}`);
+    }
+    void this.readStream(stream, response.body);
+  }
+
+  async readStream(stream, body) {
+    const decoder = new TextDecoder();
+    let buffer = "";
+    try {
+      for await (const chunk of body) {
+        buffer += decoder.decode(chunk, { stream: true });
+        for (let newline = buffer.indexOf("\n"); newline >= 0; newline = buffer.indexOf("\n")) {
+          const line = buffer.slice(0, newline).trim();
+          buffer = buffer.slice(newline + 1);
+          if (!line.startsWith("data:")) continue;
+          let event;
+          try { event = JSON.parse(line.slice(5)); } catch { continue; }
+          try { this.dispatch(event); }
+          catch (cause) { console.warn(`OpenCode event ${event?.type} was not applied: ${cause.message}`); }
         }
       }
-      record.polling = setTimeout(tick, 300);
-      record.polling.unref?.();
-    };
-    void tick();
+    } catch { /* the stream ended; recovered below unless it was closed on purpose */ }
+    if (this.stream !== stream) return;
+    this.stream = null;
+    this.connection = null;
+    void this.recoverStream();
+  }
+
+  async recoverStream(attempt = 1) {
+    const active = this.rawRecords().filter((record) => record.active);
+    if (!active.length || this.stream) return;
+    try {
+      await this.ensureStream();
+      for (const record of active) void this.catchUp(record);
+    } catch (cause) {
+      if (attempt < STREAM_RETRY_LIMIT) {
+        setTimeout(() => void this.recoverStream(attempt + 1), 1000).unref?.();
+        return;
+      }
+      for (const record of active) {
+        this.publish(record, { type: "error", generationId: record.generation?.id || null, scope: "runtime",
+          error: { code: "backend_unavailable", message: cause.message || String(cause) } });
+        this.settle(record, "failed");
+      }
+    }
+  }
+
+  /** Bring a running turn up to date from saved messages, after a gap in the stream. */
+  async catchUp(record) {
+    const rows = await this.messageRows(record.sessionId, { limit: 100 }).catch(() => null);
+    if (!rows || !record.active) return;
+    this.syncMessages(record, rows);
+    void this.refreshRequests(record);
+    const latest = rows[0];
+    if (latest?.type === "idle" && Number(latest.time?.created || 0) >= record.promptStartedAt) {
+      this.settle(record, latest.outcome || "succeeded");
+    }
+  }
+
+  async refreshRequests(record) {
+    // A failed read is unknown, not empty: treating it as empty would resolve
+    // every pending prompt.
+    const [permissions, forms] = await Promise.all(["permission", "form"].map((kind) =>
+      this.request("GET", `/session/${encodeURIComponent(record.sessionId)}/${kind}`).catch(() => null)));
+    if (permissions && forms && record.active) this.syncRequests(record, [...permissions, ...forms]);
+  }
+
+  dispatch(event) {
+    const type = String(event?.type || "");
+    const data = event?.data || {};
+    // Prompt events are reread rather than decoded: the lists are the record.
+    if (/^(permission|form)\./.test(type)) {
+      for (const record of this.rawRecords()) if (record.active) void this.refreshRequests(record);
+      return;
+    }
+    const record = data.sessionID ? this.rawRecords().find((item) => item.sessionId === data.sessionID) : null;
+    if (!record?.active) return;
+    if (type.startsWith("session.execution.") && type !== "session.execution.started") {
+      const outcome = type.slice("session.execution.".length);
+      if (outcome === "failed" && data.error) this.publish(record, { type: "error", generationId: record.generation?.id || null,
+        scope: "runtime", error: { code: "backend_unavailable", message: data.error.message || String(data.error) } });
+      void this.finishTurn(record, outcome);
+      return;
+    }
+    if (!data.assistantMessageID) return;
+    const state = this.liveMessage(record, data.assistantMessageID, event.created);
+    if (state.closed) return;
+    const [, part, phase] = type.split(".");
+    if (part === "text" || part === "reasoning") {
+      const index = this.blockIndex(state, `${part}:${data.ordinal ?? 0}`, part);
+      const current = state.text.get(index) || "";
+      const delta = phase === "delta" ? String(data.delta || "")
+        : phase === "ended" && String(data.text || "").startsWith(current) ? String(data.text).slice(current.length) : "";
+      if (delta) this.appendText(record, state, index, delta);
+    } else if (part === "tool") {
+      this.applyTool(record, state, type.slice("session.tool.".length), data);
+    } else if (part === "step" && (phase === "ended" || phase === "failed")) {
+      void this.closeFromSaved(record, state, data);
+    }
+  }
+
+  /** The live state of an assistant message, opened on first sight. */
+  liveMessage(record, id, created) {
+    let state = record.liveMessages.get(id);
+    if (state) return state;
+    state = { id, row: null, text: new Map(), kinds: new Map(), tools: new Map(), indexes: new Map(), closed: false };
+    record.liveMessages.set(id, state);
+    this.publish(record, messageOpen({ id, role: "assistant", generationId: record.generation?.id || null,
+      answers: record.answering || null, timestamp: iso(created) }));
+    return state;
+  }
+
+  // Blocks are numbered in the order they start, which is the order of the
+  // saved message's content, so a saved message restates the same indexes.
+  blockIndex(state, key, kind) {
+    if (!state.indexes.has(key)) {
+      state.indexes.set(key, state.indexes.size);
+      state.kinds.set(state.indexes.size - 1, kind);
+    }
+    return state.indexes.get(key);
+  }
+
+  appendText(record, state, index, delta) {
+    state.text.set(index, (state.text.get(index) || "") + delta);
+    this.publish(record, { type: "assistant_content", phase: "delta", generationId: record.generation?.id || null,
+      seq: ++record.generationSeq, messageId: state.id, contentIndex: index,
+      blockKind: state.kinds.get(index) === "reasoning" ? "thinking" : "text", delta });
+  }
+
+  applyTool(record, state, phase, data) {
+    const generationId = record.generation?.id || null;
+    let tool = state.tools.get(data.id);
+    if (!tool) {
+      this.blockIndex(state, `tool:${data.id}`, "tool");
+      tool = { id: data.id, name: data.name || "tool", input: data.input ?? null, output: "", status: "running", closed: false };
+      state.tools.set(tool.id, tool);
+      this.publish(record, toolOpen({ toolCallId: tool.id, name: tool.name, input: tool.input, messageId: state.id, generationId }));
+      this.publish(record, { type: "tool_activity", phase: "start", generationId, seq: ++record.generationSeq,
+        toolCallId: tool.id, name: tool.name, input: tool.input });
+    }
+    if (tool.closed) return;
+    if (phase === "called") tool.input = data.input ?? tool.input;
+    const output = contentText(data.content) || (data.error ? String(data.error.message || data.error) : "");
+    if (output) tool.output = output;
+    const done = phase === "success" || phase === "failed";
+    if (!done && phase !== "called" && phase !== "progress") return;
+    this.publish(record, { type: "tool_activity", phase: done ? "end" : "update", generationId, seq: ++record.generationSeq,
+      toolCallId: tool.id, name: tool.name, input: tool.input, output: tool.output, isError: phase === "failed" });
+    if (!done) return;
+    tool.closed = true;
+    tool.status = phase === "failed" ? "error" : "completed";
+    this.publish(record, toolClose({ toolCallId: tool.id, output: tool.output, isError: phase === "failed", generationId }));
+  }
+
+  /** Close a finished step from its saved message, which is the record. */
+  async closeFromSaved(record, state, data) {
+    const row = await this.request("GET",
+      `/session/${encodeURIComponent(record.sessionId)}/message/${encodeURIComponent(state.id)}`).catch(() => null);
+    if (state.closed || !record.active) return;
+    if (row?.content) state.row = row;
+    this.closeLiveMessage(record, state.row || this.rowFromState(state, data), state);
+  }
+
+  /** What the stream showed of a message, for when its saved copy cannot be read. */
+  rowFromState(state, { finish = null } = {}) {
+    const content = [...state.kinds.entries()].sort(([a], [b]) => a - b).map(([index, kind]) => {
+      if (kind !== "tool") return { type: kind, text: state.text.get(index) || "" };
+      const tool = [...state.tools.values()].find((item) => state.indexes.get(`tool:${item.id}`) === index);
+      return { type: "tool", id: tool?.id, name: tool?.name, state: { input: tool?.input ?? null } };
+    });
+    return { id: state.id, content, finish, time: {} };
+  }
+
+  async finishTurn(record, outcome) {
+    const rows = await this.messageRows(record.sessionId, { limit: 100 }).catch(() => null);
+    if (!record.active) return;
+    if (rows) this.syncMessages(record, rows);
+    this.settle(record, outcome);
   }
 
   syncMessages(record, rows) {
     for (const row of [...rows].reverse()) {
       if (row.type !== "assistant" || Number(row.time?.created || 0) < record.promptStartedAt) continue;
-      let state = record.liveMessages.get(row.id);
-      if (!state) {
-        state = { id: row.id, row, text: new Map(), tools: new Map(), closed: false };
-        record.liveMessages.set(row.id, state);
-        this.publish(record, messageOpen({ id: row.id, role: "assistant", generationId: record.generation?.id || null,
-          answers: record.answering || null, timestamp: iso(row.time?.created) }));
-      }
+      const state = this.liveMessage(record, row.id, row.time?.created);
+      if (state.closed) continue;
       state.row = row;
       for (const [index, part] of (row.content || []).entries()) {
         if (["text", "reasoning"].includes(part.type)) {
+          state.kinds.set(index, part.type);
           const previous = state.text.get(index) || "";
           const current = String(part.text || "");
           const delta = current.startsWith(previous) ? current.slice(previous.length) : current;
@@ -287,7 +462,7 @@ export class OpenCodeAdapter extends EventEmitter {
           this.publish(record, { type: "tool_activity", phase: "start", generationId: record.generation?.id || null,
             seq: ++record.generationSeq, toolCallId: tool.id, name: tool.name, input: tool.input });
         }
-        // Every tick re-reads every row; only a change is news.
+        // A catch-up rereads every row; only a change is news.
         const output = toolOutput(part);
         const status = String(part.state?.status || "");
         if (tool.closed || (output === tool.output && status === tool.status)) continue;
@@ -317,14 +492,14 @@ export class OpenCodeAdapter extends EventEmitter {
         toolCallId: part.id || part.callID, name: part.name || part.tool || "tool", input: part.state?.input ?? null }];
       return [];
     });
-    const stopReason = finalStopReason || (row.finish === "tool-calls" ? "toolUse" : row.finish || "stop");
+    const stopReason = finalStopReason || stopReasonOf(row) || "stop";
     this.publish(record, { type: "assistant_content", phase: "final", generationId: record.generation?.id || null,
-      seq: ++record.generationSeq, messageId: row.id, stopReason, errorMessage: row.error?.message || null, blocks,
+      seq: ++record.generationSeq, messageId: row.id, stopReason, errorMessage: errorOf(row), blocks,
       provider: row.model?.providerID || null, model: modelSpec(row.model) || null, timestamp: iso(row.time?.created) });
     this.publish(record, messageClose({ messageId: row.id, stopReason, blocks,
       interim: stopReason === "toolUse", generationId: record.generation?.id || null,
       provider: row.model?.providerID || null, model: modelSpec(row.model) || null,
-      timestamp: iso(row.time?.created), errorMessage: row.error?.message || null }));
+      timestamp: iso(row.time?.created), errorMessage: errorOf(row) }));
   }
 
   syncRequests(record, requests) {
@@ -358,8 +533,7 @@ export class OpenCodeAdapter extends EventEmitter {
   }
 
   settle(record, outcome) {
-    clearTimeout(record.polling);
-    record.polling = null;
+    if (!record.generation || record.generation.settled) return;
     // An interrupted or failed turn leaves its last message and tools open;
     // OpenCode never completes them, so they are closed here.
     const stopReason = outcome === "succeeded" ? "stop" : outcome === "failed" ? "error" : "aborted";
@@ -370,7 +544,7 @@ export class OpenCodeAdapter extends EventEmitter {
         this.publish(record, toolClose({ toolCallId: tool.id, output: tool.output,
           isError: stopReason !== "stop", generationId: record.generation?.id || null }));
       }
-      if (!state.closed) this.closeLiveMessage(record, state.row, state, stopReason);
+      if (!state.closed) this.closeLiveMessage(record, state.row || this.rowFromState(state), state, stopReason);
     }
     record.active = false;
     record.stopping = false;
@@ -418,7 +592,6 @@ export class OpenCodeAdapter extends EventEmitter {
   async close(id) {
     const record = this.get(id);
     if (!record) return false;
-    clearTimeout(record.polling);
     record.status = "stopped";
     record.active = false;
     this.sessions.remove(id);
@@ -429,6 +602,9 @@ export class OpenCodeAdapter extends EventEmitter {
   async shutdown() {
     const records = this.rawRecords();
     await Promise.all(records.map((record) => this.close(record.id)));
+    const stream = this.stream;
+    this.stream = null;
+    stream?.controller.abort();
     // The background service belongs to OpenCode and may serve its TUI and
     // other clients. Conduit never stops it.
     return records.length;
@@ -480,11 +656,11 @@ export class OpenCodeAdapter extends EventEmitter {
         return [];
       });
       const text = blocks.filter((block) => block.kind === "text").map((block) => block.text).join("\n");
-      const stopReason = row.finish === "tool-calls" ? "toolUse" : row.finish || (row.time?.completed ? "stop" : null);
+      const stopReason = stopReasonOf(row);
       messages.push({ id: row.id, role: "assistant", content: text, blocks, answers: lastUser,
         stopReason, interim: stopReason === "toolUse", timestamp: iso(row.time?.created),
         provider: row.model?.providerID || null, model: modelSpec(row.model) || null,
-        ...(row.error?.message ? { errorMessage: row.error.message } : {}) });
+        ...(errorOf(row) ? { errorMessage: errorOf(row) } : {}) });
     }
     return { messages, tools };
   }
