@@ -22,3 +22,6 @@
 .composer-profile-copy > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 560; }
 .composer-profile-copy small { flex: none; margin-left: auto; color: var(--muted-foreground); font: 10px ui-monospace, monospace; }
 .composer-context-label { padding: 5px; color: var(--muted-foreground); font-size: 11px; }
+/* The phone's options menu: its header carries the context readout the row has no room for. */
+.composer-options-header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.composer-options-context { color: var(--muted-foreground); font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0; text-transform: none; }

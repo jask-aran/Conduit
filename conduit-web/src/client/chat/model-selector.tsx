@@ -62,14 +62,14 @@ export function ModelSelector(props: {
       <Show when={selected() && levels().length > 1}><MenuSeparator />
         <StepSlider label="Thinking" value={props.thinkingLevel}
           options={levels().map((level) => ({ value: level, label: thinkingLabel(level) }))}
-          valueControl={props.onSearchModels ? (label) => <MenuSub>
+          valueControl={(label) => <MenuSub>
             <MenuSubTrigger class="step-slider-value">{label()}</MenuSubTrigger>
             <MenuSubContent>
               <MenuGroup><MenuLabel>Thinking</MenuLabel><MenuRadioGroup value={props.thinkingLevel} onChange={props.onThinkingLevelChange}>
                 <For each={levels()}>{(level) => <MenuRadioItem value={level}>{thinkingLabel(level)}</MenuRadioItem>}</For>
               </MenuRadioGroup></MenuGroup>
             </MenuSubContent>
-          </MenuSub> : undefined}
+          </MenuSub>}
           onChange={props.onThinkingLevelChange} />
       </Show>
       <Show when={props.onManageModels}><MenuSeparator /><MenuItem onSelect={props.onManageModels}>Manage models…</MenuItem></Show>
