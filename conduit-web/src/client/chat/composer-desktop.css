@@ -69,3 +69,9 @@
   .composer .composer-actions .composer-actions-right { gap: 0; }
   .composer .composer-actions:not([data-mobile-actions-stacked="true"]) .dictation-trigger { width: auto; padding-inline: 6px; }
 }
+
+/* A phone's empty draft names the model on one line; a long name is cut short
+   rather than wrapping into a line the collapsed draft does not show. */
+@media (--conduit-phone-layout) {
+  .composer textarea::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}

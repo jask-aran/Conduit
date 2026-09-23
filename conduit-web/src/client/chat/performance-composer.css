@@ -47,6 +47,8 @@
   .chat-main-empty .composer-stack { background: transparent; }
   .chat-main:not(.chat-main-empty) .composer-stack {
     padding: 8px 9.6px calc(9.6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+    background: linear-gradient(to top, var(--background) calc(9.6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))),
+      transparent calc(27.2px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))));
   }
   .composer-content { display: contents; }
 }
@@ -95,6 +97,8 @@
   .chat-main-empty .composer-stack { background: transparent; }
   .chat-main:not(.chat-main-empty) .composer-stack {
     padding: 10px 12px calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+    background: linear-gradient(to top, var(--background) calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))),
+      transparent calc(34px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))));
   }
   .composer-content { display: contents; }
 }

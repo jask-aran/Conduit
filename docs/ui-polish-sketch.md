@@ -200,7 +200,7 @@ third line of a draft:
   the draft is a button wider and may rewrap to two lines, so they stay
   stacked until it fits on one -- the row never flips back and forth.
 
-The empty draft names the model -- "Message Grok 4.7…" -- which keeps it in
+The empty draft is the model's name -- "Grok 4.7", cut short on one line -- which keeps it in
 view at no cost in height.
 
 The options menu shows each setting's value, not its name, as the desktop row

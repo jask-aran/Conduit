@@ -92,7 +92,7 @@ export function Composer(props: {
   // it stays in view at no cost in height.
   const placeholder = () => {
     const model = phoneLayout() && (props.models.models().find((item) => item.spec === props.models.model())?.label || props.models.model());
-    return model ? `Message ${model}…` : "Send a message...";
+    return model || "Send a message...";
   };
   const [mobileActionsStacked, setMobileActionsStacked] = createSignal(false);
   const dictationWaveform = createVoiceWaveformController(MAX_RESPONSIVE_BAR_COUNT);
