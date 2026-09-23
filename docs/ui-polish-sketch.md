@@ -384,30 +384,97 @@ reviewed surface; similarity alone is not enough reason to migrate the app.
 The question tool established the rules now in `DESIGN.md` under Motion: leave
 the way you came, one leaves before the other arrives, quick out and gentle in,
 and a swapped surface keeps its room. These are the other places the same
-treatment would explain something. Each is its own change; none is a pass over
-the app.
+treatment would explain something. Each is its own change, built in this
+order and checked before the next; none is a pass over the app.
 
-- **Approvals as a composer takeover.** A permission prompt is the same moment
-  as a question -- the agent is blocked on the user -- but still sits above the
-  composer in the old card. Moving it onto the takeover gives Approve, Approve
-  for session and Deny as numbered rows with keys, and one pattern for "the
-  agent is waiting on you". The dock and the motion already exist.
-- **Dashboard to chat.** Sending from the dashboard composer cuts to the chat.
-  The composer could travel to its place at the bottom of the chat, with the
-  first message rising out of it -- a shared-element move the View Transitions
-  API is built for. The most visible of these, and the most delicate: it
-  crosses a route change, and must not delay the send.
-- **Trace rows.** "1 tool call · Executing tool" opens and closes in one frame.
-  A height reveal with a short fade, and new steps sliding in as they stream,
-  would make a working turn read as working. It must not move the reading
-  position -- the tail spring owns that.
-- **Cards that belong to the composer.** Queued messages and attachment cards
-  appear and vanish. They could rise out of the composer and drop back into it
-  when sent or removed.
+Status: steps 1 and 2 are built. The attachment strip (7a below) came up while
+checking step 2 and is built next, before step 3.
+
+1. **Approvals as a composer takeover.** Built. Every approval, choice or
+   typed request a harness makes is drawn as one question of one answer on the
+   takeover: Approve / Approve for session / Deny as numbered rows with keys,
+   choosing is answering, and Esc reads "deny" where a dismissed approval is a
+   denial. The old card above the composer is gone. Each adapter still turns
+   its harness's native request into Conduit's request kinds and the answer
+   back; the browser draws those kinds as the question.
+2. **Cards that belong to the composer.** Built. Queued messages and
+   attachment cards rise out of the composer (~8px and a fade, ~300ms, gentle),
+   drop back into it when it takes them (sent, or put back to edit; ~200ms,
+   quick), and fade in place when removed by hand (~150ms). A failed removal
+   puts the card back. Reduced motion is instant.
+3. **Trace rows.** "1 tool call · Executing tool" opens and closes in one
+   frame. Opening or closing, the body unfolds in height (~200ms) with a short
+   fade -- a second exception to "transform and opacity only", beside the
+   discarded-answer fold, because pushing what is below is what the reader
+   asked for. Steps arriving in an open trace fade in with a 4px rise and no
+   height change. At the tail the tail spring keeps the reader there;
+   otherwise nothing above them moves.
+4. **Dashboard to chat.** Sending from the dashboard composer cuts to the chat.
+   A View Transition gives the dashboard composer and the chat's composer one
+   identity, so the browser moves one into the other; the first message rises
+   into the list and the rest cross-fades. The send happens first and the
+   transition only draws the route change after it. Browsers without View
+   Transitions, and reduced motion, keep today's cut. The most delicate of
+   these, so it is last.
 
 Not proposed: the Workspace panel. It already slides in, and maximising slides
 over the chat on purpose rather than squeezing it, because the chat's contents
 misbehave at a narrow width.
+
+### 7a. Attachment strip (side piece, from step 2)
+
+Checking step 2 showed two things. Each attachment card flashed three times:
+an upload's progress replaces its item with a new object, the card list is
+keyed by object, so the card is rebuilt and its rise replays -- on paste, on
+the first progress update and on done. And several attachments stack as full
+cards with no bound, climbing over the transcript.
+
+Sketch: every attachment for the draft sits in **one strip above the
+composer** -- the queued pill's width and material, about twice its height
+(~64px desktop, ~56px phone), never taller. More attachments scroll sideways.
+
+```
+╭────────────────────────────────────────────────────────────────╮
+│ ┌──────┐ ┌──────┐ ┌──────┐ ┌─────────────────────┐ ┌──────┐  ⤢ │
+│ │ ▓▓▓▓ │ │ ▓▓▓▓ │ │ ▓◔▓▓ │ │ 📄 notes.md          │ │ ▓▓▓▓ │›   │
+│ │ ▓▓▓▓ │ │ ▓▓▓▓ │ │ ▓▓▓▓ │ │    4 KB              │ │ ▓▓▓▓ │    │
+│ └──────┘ └──────┘ └──────┘ └─────────────────────┘ └──────┘    │
+╰────────────────────────────────────────────────────────────────╯
+╭────────────────────────────────────────────────────────────────╮
+│ Send a message…                                                 │
+╰────────────────────────────────────────────────────────────────╯
+```
+
+- **Chips.** An image is a 48px square thumbnail, cropped to fill, 8px radius
+  -- legible enough to tell screenshots apart; its name is the tooltip and is
+  in the dialog. A file is a 48px-tall chip: type icon, name cut short at
+  ~160px, size muted beneath. Remove is a small × at the chip's top-right,
+  shown on hover or keyboard focus and always on touch. Uploading, a thin
+  progress ring sits over the chip and it is slightly dimmed until done; a
+  failed upload is a red outline with a retry mark where the ring was, and
+  tapping retries.
+- **The strip.** Scrolls sideways with snap to chips, with a soft fade at an
+  edge that has more; on desktop a vertical wheel scrolls it sideways. New
+  chips go on the end and the strip scrolls to show them, which is what
+  pasting several screenshots needs. A quiet expand button (⤢) at the right
+  end opens the dialog; it is always there.
+- **Place.** Directly above the composer, because it belongs to the message
+  being written. A queued-message pill, already sent, sits above the strip.
+- **The dialog.** Centred on desktop, a bottom sheet on a phone. A list, one
+  row per attachment: a large preview (images up to ~160px tall, not
+  cropped), name, size and type, remove. The heading gives the count and total
+  size; the footer has Remove all, and Done closes it. An image opens in the
+  transcript's existing image viewer.
+- **Motion** (step 2's rules). The first attachment raises the strip out of
+  the composer; an added chip fades and scales in at the end; a removed chip
+  fades, then the chips after it slide over to close the gap by transform
+  (FLIP), not by animating width; sending drops the whole strip into the
+  composer. Chips are keyed by attachment id, so an upload's progress never
+  replays an entrance -- which fixes the flash.
+- **Not in this change.** Opening the workspace panel on the chat's
+  attachments folder needs that folder exposed first -- separate work, and it
+  could replace the dialog later. Attachments already sent, under a prompt in
+  the transcript, keep today's cards; they could become read-only chips after.
 
 ## Suggested order
 
