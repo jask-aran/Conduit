@@ -46,6 +46,6 @@ function HostUiCard(props: { request: HostUiRequest; onRespond: (response: HostU
 
 export function HostUiRequests(props: { requests: HostUiRequest[]; onRespond: (response: HostUiResponse) => void }) {
   return <For each={props.requests.slice(0, 1)}>{(request) => request.kind === "question"
-    ? <QuestionCard request={request} onRespond={props.onRespond} />
+    ? <div class="question-dock"><QuestionCard request={request} onRespond={props.onRespond} /></div>
     : <HostUiCard request={request} onRespond={props.onRespond} />}</For>;
 }

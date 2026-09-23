@@ -44,10 +44,9 @@ export function QuestionCard(props: { request: HostUiRequest; onRespond: (respon
     const changed = (event: Event) => setSurface((event as CustomEvent<ComposerSurfaceMode>).detail);
     window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, changed);
     onCleanup(() => window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, changed));
-    // The agent is waiting on this, so it takes the keyboard -- unless a
-    // message is half typed, which would lose its focus mid-word.
-    const active = document.activeElement;
-    if (!(typingIn(active) && (active as HTMLInputElement).value)) root?.focus({ preventScroll: true });
+    // The card stands in for the composer while it is up, so it takes the
+    // keyboard; a half-typed message waits in the composer for its return.
+    root?.focus({ preventScroll: true });
   });
 
   const respond = (response: QuestionResponse) => {
