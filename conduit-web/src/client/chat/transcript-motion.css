@@ -1,0 +1,8 @@
+/* A discarded answer folding into its row: the text it was fades and closes
+   upward while the row settles in above it. The one height animation in the
+   transcript -- the answer has to give its room back, and it does so once. */
+.discarded-answer-collapse { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows 320ms cubic-bezier(.4, 0, .2, 1), opacity 220ms cubic-bezier(.4, 0, 1, 1); }
+.discarded-answer-collapse > div { min-height: 0; overflow: hidden; }
+.discarded-answer-collapse[data-collapsed="true"] { grid-template-rows: 0fr; opacity: 0; }
+.discarded-answer[data-collapsing="true"] > .response-actions { animation: discarded-row-in 260ms 120ms cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes discarded-row-in { from { opacity: 0; transform: translateY(6px); } }

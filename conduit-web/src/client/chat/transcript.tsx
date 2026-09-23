@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createRenderEffect, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, type JSX } from "solid-js";
+import { createEffect, createMemo, createRenderEffect, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from "solid-js";
 import { ArrowDownIcon, CheckIcon, ChevronDownIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, TriangleAlertIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { BooleanCapability, Message } from "../api/contracts";
@@ -8,6 +8,7 @@ import { AttachmentCards } from "./attachments";
 import { ReviewCommentCards } from "./review-comment-cards";
 import { parseReviewComments } from "./review-comments";
 import { TurnTrace } from "./turn-trace";
+import "./transcript-motion.css";
 import { createTimelineStore } from "../state/timeline-store";
 import type { MarkdownRendererId } from "./markdown-settings";
 import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_OPTIONS, saveComposerSurface, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
@@ -200,19 +201,40 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Tran
  * model has no idea what you mean -- so it is folded down to a line and says
  * why. Opening it is for reading what was lost, not for carrying on from it.
  */
-function DiscardedAnswer(props: { message: Message; renderer?: MarkdownRendererId; pacing?: IncremarkPacingMode; row: (preview: JSX.Element) => JSX.Element }) {
+function DiscardedAnswer(props: { message: Message; renderer?: MarkdownRendererId; pacing?: IncremarkPacingMode; row: (preview: JSX.Element) => JSX.Element; collapse?: boolean }) {
   const [open, setOpen] = createSignal(false);
+  /* An answer discarded while it was on screen folds down into its row, so the
+     reader sees where it went; one that arrives discarded is simply the row. */
+  const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const [collapsing, setCollapsing] = createSignal(Boolean(props.collapse) && !reduced);
+  const [collapsed, setCollapsed] = createSignal(false);
+  onMount(() => {
+    if (!collapsing()) return;
+    requestAnimationFrame(() => requestAnimationFrame(() => setCollapsed(true)));
+    const done = window.setTimeout(() => setCollapsing(false), 700);
+    onCleanup(() => window.clearTimeout(done));
+  });
   const preview = () => {
     const text = String(props.message.content || "").replace(/\s+/g, " ").trim();
     return text.length > 110 ? `${text.slice(0, 110)}…` : text;
   };
-  return <div class="discarded-answer" data-open={open() ? "true" : "false"}>
+  return <div class="discarded-answer" data-open={open() ? "true" : "false"} data-collapsing={collapsing() ? "true" : undefined}>
     {props.row(<button type="button" class="discarded-answer-header" aria-expanded={open()}
       title="Interrupted before it finished. The agent kept no record of this, so it cannot be referred to."
       onClick={() => setOpen(!open())}>
       <span class="discarded-answer-preview">{preview()}</span>
       <ChevronDownIcon class="discarded-answer-chevron" data-open={open() ? "true" : "false"} />
     </button>)}
+    <Show when={collapsing() && !open()}>
+      <div class="discarded-answer-collapse" data-collapsed={collapsed() ? "true" : "false"}
+        onTransitionEnd={(event) => { if (event.target === event.currentTarget && event.propertyName === "grid-template-rows") setCollapsing(false); }}>
+        <div>
+          <Suspense fallback={<div class="markdown-skeleton" />}>
+            <ChatMarkdown renderer={props.renderer} pacing={props.pacing}>{props.message.content || ""}</ChatMarkdown>
+          </Suspense>
+        </div>
+      </div>
+    </Show>
     <Show when={open()}>
       <div class="discarded-answer-body">
         <Suspense fallback={<div class="markdown-skeleton" />}>
@@ -1116,6 +1138,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             return userId ? artifactSummaries().get(userId) : undefined;
           });
           let row!: HTMLDivElement;
+          const discardedWhenShown = untrack(() => Boolean(message().discarded));
           return <div ref={row} data-slot="message-scroller-item" data-message-id={message().id}>
             <article data-slot="message" data-align={user() ? "end" : "start"} class={user() ? "message-user" : "message-assistant"}>
               <div data-slot="message-content">
@@ -1127,7 +1150,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
                         <Show when={message().discarded} fallback={<Suspense fallback={<div class="markdown-skeleton" />}>
                           <ChatMarkdown renderer={markdownRenderer()} pacing={incremarkPacing()} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={() => settleAfterMarkdown(row)}>{message().content || ""}</ChatMarkdown>
                         </Suspense>}>
-                          <DiscardedAnswer message={message()} renderer={markdownRenderer()} pacing={incremarkPacing()}
+                          <DiscardedAnswer message={message()} renderer={markdownRenderer()} pacing={incremarkPacing()} collapse={!discardedWhenShown}
                             row={(preview) => <Actions message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} partialContinue={props.partialContinue} artifact={artifact()} lead={preview} />} />
                         </Show>
                       </Show>

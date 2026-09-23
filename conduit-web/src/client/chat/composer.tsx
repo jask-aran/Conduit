@@ -104,6 +104,10 @@ export function Composer(props: {
   const comments = createMemo(() => reviewComments(props.chat.loadedId() ?? ""));
   const hasText = createMemo(() => Boolean(props.chat.draft().trim()));
   const stoppable = createMemo(() => (busy() || props.chat.stopping()) && supports("cancel"));
+  /* A first send holds its text in the draft while the agent starts, so
+     "working with a draft typed" would put Stop beside Send for that moment.
+     The draft being sent is not a new one. */
+  const newDraft = createMemo(() => hasPayload() && props.chat.generation() !== "submitting");
   const hasPayload = createMemo(() => hasText() || comments().length > 0 || props.attachments.pendingIds().length > 0);
   const dictating = createMemo(() => ["starting", "listening", "finishing", "waiting", "transcribing"].includes(dictationState()));
   const recording = createMemo(() => dictationState() === "listening");
@@ -534,11 +538,11 @@ export function Composer(props: {
                   works it is Stop; once a draft is typed it is Send again --
                   which queues the message for the agent -- and Stop steps to
                   its left. Each change scales the new action in. */}
-              <Show when={stoppable() && hasPayload()}>
+              <Show when={stoppable() && newDraft()}>
                 <Button variant="ghost" size="icon-sm" class="composer-stop-aside" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button>
               </Show>
               <span class="composer-primary-slot">
-                <Show when={stoppable() && !hasPayload()} fallback={
+                <Show when={stoppable() && !newDraft()} fallback={
                   <Button variant="ghost" size="icon-sm" class="composer-send-trigger" aria-label={busy() ? "Send to the agent" : "Send message"} title={busy() ? "Send — the agent takes it when the current step finishes" : undefined} disabled={!canSend()} onClick={() => sendMessage()}><ArrowUpIcon /></Button>}>
                   <Button variant="ghost" size="icon-sm" class="composer-stop-trigger" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button>
                 </Show>
