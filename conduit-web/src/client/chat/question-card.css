@@ -1,0 +1,26 @@
+.question-card-body { display: grid; gap: 14px; max-height: min(56dvh, 520px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.question-block { display: grid; gap: 6px; }
+.question-header { color: var(--muted-foreground); font: 9px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .07em; text-transform: uppercase; }
+.host-ui-card .question-prompt { color: var(--foreground); font-size: 13px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.question-options { display: grid; gap: 1px; }
+.question-option { display: flex; min-height: 36px; align-items: flex-start; gap: 9px; border: 0; border-radius: 7px; background: transparent; padding: 8px; color: var(--foreground); text-align: left; cursor: pointer; }
+.question-option:hover, .question-option:focus-visible, .question-option[aria-checked="true"] { background: var(--accent); outline: 0; }
+.question-option:focus-visible { box-shadow: 0 0 0 2px var(--ring); }
+/* A circle for one answer, a square for several; filled when chosen. */
+.question-mark { width: 14px; height: 14px; flex: none; margin-top: 2px; border: 1.5px solid var(--muted-foreground); border-radius: 50%; }
+.question-option[data-multi="true"] .question-mark { border-radius: 4px; }
+.question-option[aria-checked="true"] .question-mark { border-color: var(--foreground); background: radial-gradient(circle, var(--foreground) 0 45%, transparent 50%); }
+.question-option[data-multi="true"][aria-checked="true"] .question-mark { background: var(--foreground); box-shadow: inset 0 0 0 2px var(--card); }
+.question-option-text { display: grid; min-width: 0; gap: 2px; }
+.question-option-label { font-size: 12px; font-weight: 560; line-height: 1.35; }
+.question-option-description { color: var(--muted-foreground); font-size: 11px; line-height: 1.4; }
+
+.question-preview { max-height: 240px; margin: 0; overflow: auto; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--foreground); font: 11px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre; }
+.question-preview[data-format="markdown"] { font-family: inherit; white-space: pre-wrap; }
+.question-freeform, .question-note { font-size: 12px; }
+.question-note { height: 30px; }
+
+@media (--conduit-phone-layout) {
+  .question-option { min-height: 40px; }
+}

@@ -1,4 +1,4 @@
-import type { CacheStats, ChatCapabilities, ChatSummary, ContextUsage, HostUiRequest, QueueState, RetryState, SessionStats } from "./contracts";
+import type { CacheStats, ChatCapabilities, ChatSummary, ContextUsage, HostUiRequest, Question, QueueState, RetryState, SessionStats } from "./contracts";
 import type { ProtocolMessage } from "../timeline-order";
 
 type UnknownRecord = Record<string, unknown>;
@@ -224,7 +224,7 @@ const retry = (value: unknown): RetryState | null | undefined => {
 export function normalizeHostUiRequest(value: unknown): HostUiRequest | null {
   const source = record(value);
   const kind = text(source.kind);
-  if (!["confirm", "select", "input", "editor"].includes(kind)) return null;
+  if (!["confirm", "select", "input", "editor", "question"].includes(kind)) return null;
   const id = text(source.id || source.requestId);
   if (!id) return null;
   // Checked, then carried. The fields below are the ones something reads
@@ -244,7 +244,24 @@ export function normalizeHostUiRequest(value: unknown): HostUiRequest | null {
     placeholder: text(source.placeholder),
     prefill: text(source.prefill),
     timeoutMs: number(source.timeoutMs) ?? null,
+    ...(kind === "question" ? { questions: list(source.questions).map(question), notes: source.notes === true } : {}),
   } as HostUiRequest;
+}
+
+function question(value: unknown): Question {
+  const source = record(value);
+  const freeform = source.freeform && typeof source.freeform === "object" ? record(source.freeform) : null;
+  return {
+    id: text(source.id), header: text(source.header), prompt: text(source.prompt),
+    multiSelect: source.multiSelect === true, secret: source.secret === true, required: source.required === true,
+    options: list(source.options).map((item) => {
+      const option = record(item);
+      const preview = record(option.preview);
+      return { id: text(option.id), label: text(option.label), description: text(option.description),
+        ...(preview.text ? { preview: { format: preview.format === "markdown" ? "markdown" : "monospace", text: text(preview.text) } } : {}) };
+    }),
+    freeform: freeform ? { placeholder: text(freeform.placeholder), multiline: freeform.multiline === true, numeric: freeform.numeric === true } : false,
+  } as Question;
 }
 
 function generation(value: unknown): GenerationHandle | null {

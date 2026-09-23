@@ -134,9 +134,10 @@ function harness() {
     errors,
     /** The prompts on screen, as the card is handed them. */
     asked: () => asked,
-    /** Click one of a prompt's options, the way the card does. */
+    /** Click one of a prompt's options, or submit a question card's answers, the way the card does. */
     answer: async (request, option) => {
-      ws.emit("message", JSON.stringify({ type: "extension_ui_response", id: request.id, value: option }));
+      const response = typeof option === "string" ? { value: option } : option;
+      ws.emit("message", JSON.stringify({ type: "extension_ui_response", id: request.id, ...response }));
       await settle();
     },
     /** Send a prompt the way the browser does, under the name it already drew it with. */
@@ -284,6 +285,9 @@ const EDIT_PERMISSION = { id: "per_1", sessionID: "ses_1", action: "edit", resou
 const QUESTION_FORM = { id: "frm_1", sessionID: "ses_1", title: "Questions", metadata: { kind: "question" },
   fields: [{ key: "q0", title: "Drink Preference", description: "Do you prefer tea or coffee?", type: "string", custom: true,
     options: [{ value: "Tea", label: "Tea", description: "Hot brewed tea" }, { value: "Coffee", label: "Coffee", description: "Hot brewed coffee" }] }] };
+// A second question, stated as OpenCode's Form.MultiselectField schema states one.
+const SNACK_FIELD = { key: "q1", title: "Snacks", description: "Which snacks?", type: "multiselect", custom: true,
+  options: [{ value: "Biscuits", label: "Biscuits" }, { value: "Cake", label: "Cake" }] };
 
 async function waiting(chat) {
   await chat.send("make the edit");
@@ -304,17 +308,21 @@ test("an edit held for approval offers words, and the choice reaches OpenCode", 
   assert.deepEqual(chat.errors, []);
 });
 
-test("a question is asked as a question, and answered with the option OpenCode offered", async () => {
+test("a form is asked as questions, and each answer reaches OpenCode under its field's key", async () => {
   const chat = harness();
   await waiting(chat);
-  chat.service.forms.push(QUESTION_FORM);
+  chat.service.forms.push({ ...QUESTION_FORM, fields: [...QUESTION_FORM.fields, SNACK_FIELD] });
   chat.oc("form.created", { id: "frm_1" });
   await chat.settle();
   const [request] = chat.asked();
-  assert.equal(request.message, "Do you prefer tea or coffee?");
-  assert.deepEqual(request.options, ["Tea", "Coffee"]);
-  await chat.answer(request, "Coffee");
-  assert.deepEqual(chat.service.replies, [{ id: "frm_1", answer: { q0: "Coffee" } }]);
+  assert.equal(request.kind, "question");
+  assert.deepEqual(request.questions.map((question) => [question.id, question.prompt, question.multiSelect,
+    question.options.map((option) => option.label), Boolean(question.freeform)]), [
+    ["q0", "Do you prefer tea or coffee?", false, ["Tea", "Coffee"], true],
+    ["q1", "Which snacks?", true, ["Biscuits", "Cake"], true]]);
+  await chat.answer(request, { answers: [{ questionId: "q0", optionIds: ["1"] },
+    { questionId: "q1", optionIds: ["0"], freeform: "Scones" }] });
+  assert.deepEqual(chat.service.replies, [{ id: "frm_1", answer: { q0: "Coffee", q1: ["Biscuits", "Scones"] } }]);
   assert.deepEqual(chat.errors, []);
 });
 

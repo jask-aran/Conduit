@@ -1,8 +1,20 @@
 # Question tool plan
 
-**Status (2026-09-23): rough plan, not started.** A later piece of work, recorded
-so each harness's native question tool can be mapped onto one Conduit shape
-instead of being squeezed through the permission card.
+**Status (2026-09-23): built for OpenCode and Codex.** The shape lives in
+`conduit-web/src/harnesses/questions.js`, the card in
+`src/client/chat/question-card.tsx`. OpenCode forms and Codex's
+`request_user_input` are asked through it; Claude Code and Pi are still to move.
+Two decisions differ from the plan below, and are marked where they apply:
+
+- **One path, a new kind.** A question is a request of kind `question` on the
+  approval's path (`permission_request`, the session's `hostUiRequests`, the
+  `extension_ui_response` command) rather than a new pair of events. Reloading,
+  "waiting for you" and answering all come with that path, and the card stays
+  separate because the client picks `QuestionCard` by kind.
+- **No manifest entry.** Each question says what it can take back --
+  `freeform`, `multiSelect`, `secret`, `required` -- and the request says
+  whether `notes` reach the model, so the client offers only what that one
+  request can send on. A harness-wide flag would say less, and could disagree.
 
 ## Problem
 
@@ -70,7 +82,7 @@ free-form answer that replaces the offered ones.
 
 ## Channel
 
-A new pair of events beside `permission_request` / `permission_resolved`:
+*Superseded: see "One path, a new kind" above.* A new pair of events beside `permission_request` / `permission_resolved`:
 `question_request` and `question_resolved`, neither record nor paint, stated
 flat like the permission pair. A question is not an approval, and keeping them
 apart lets the card stay simple for approvals.
@@ -80,7 +92,7 @@ translates it back into its harness's reply.
 
 ## Harness declaration
 
-A manifest entry says what the harness's question tool can express, so the
+*Superseded: see "No manifest entry" above.* A manifest entry says what the harness's question tool can express, so the
 client offers only that and the adapter never receives an answer it cannot
 send back:
 
@@ -103,21 +115,23 @@ To be confirmed against a recording of each, as was done for OpenCode's events.
 | Harness | Native tool | Maps to |
 | --- | --- | --- |
 | Claude Code | AskUserQuestion: 1–4 questions, each with a header, 2–4 options (label, description, optional preview), multiSelect; an "Other" answer is always offered; answers can carry notes | All of the shape, including previews and notes |
-| OpenCode 2 | Forms (`form.created` event, `/session/{id}/form`): `questions[]` with header, question and options (label, description); reply `answers: [[...]]` per question | multiQuestion, optionDescriptions; confirm multiSelect and custom answers |
-| Codex | App-server user-input request; confirm the method and shape | To confirm |
+| OpenCode 2 | Forms (`form.created`, `/session/{id}/form`): `fields[]`, each `string` (options with descriptions, `custom`), `multiselect` (`custom`, min/max items), `boolean`, `number`, `integer` or `external` (a URL), with `required`, `hidden` and `when`; reply `{ answer: { [key]: value } }` | Built: one question per field; `boolean` as Yes/No, numbers typed, `external` as a link with Done, `hidden` left to its default, a field its `when` rules out left unanswered |
+| Codex | `item/tool/requestUserInput` (experimental): `questions[]` of `id`, `header`, `question`, `options[]` (label, description) or null, `isOther`, `isSecret`; reply `{ answers: { [id]: { answers: string[] } } }` | Built: labels chosen plus anything typed; a dismissal replies with no answers |
 | Pi | Extension UI `select` / `confirm` / `input` / `editor` | One question per request; keep on the permission card until moved |
 | fx | ACP `session/request_permission` only; no question tool seen | `questions: null` |
 
 ## Steps
 
-1. Record a real question request from each harness that has one (OpenCode
-   form, Claude Code, Codex) and fill in the table.
-2. Add the types and `question_request` / `question_resolved` to
-   `chat-backend-contract.d.ts` and the client boundary in `live-events.ts`.
-3. Build the question card: one question at a time or all at once, offered
-   answers as buttons (checkboxes when multiSelect), a free-form field, an
-   optional note, monospace previews shown beside the selected option.
-4. Add the `questions` manifest declaration and move OpenCode forms onto it
-   first, since its adapter currently loses every question after the first.
-5. Then Claude Code and Codex; move Pi's `select` over only if it gains
-   anything.
+1. ~~Record each harness's question request.~~ OpenCode's and Codex's
+   schemas are in the table, read from OpenCode 2.0.14's binary and
+   `codex app-server generate-json-schema` (0.156.1).
+2. ~~Add the types.~~ `question` kind in `chat-backend-contract.d.ts`,
+   `contracts.ts` and `live-events.ts`.
+3. ~~Build the question card.~~ All questions at once; offered answers as rows
+   (a circle for one, a square for several), a typed answer where allowed,
+   notes when the request takes them, previews under the pointed-at option. A
+   single question of offered answers alone is answered by the tap.
+4. ~~Move OpenCode forms and Codex onto it.~~
+5. Claude Code, when it is a harness: all of the shape, previews and notes
+   included. Pi's `select` / `input` / `editor` map onto one question each;
+   move them only if it gains anything.

@@ -8,6 +8,7 @@ import { EventEmitter } from "node:events";
 import { promisify } from "node:util";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { formatHistoryTool } from "./harnesses/history-tool.js";
+import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageOpen, toolClose, toolOpen } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
@@ -67,17 +68,50 @@ const permissionPrompt = (request) => ({
     message: request.message || (request.resources || []).join(", ") || "OpenCode is waiting for approval.",
     options: PERMISSION_DECISIONS.map(([label]) => label) },
 });
-// A question arrives as a form of one field per question. The card asks one;
-// a form of several waits for the general question tool.
-const formPrompt = (form) => {
-  const field = form.fields?.[0] || {};
-  const options = Array.isArray(field.options) ? field.options : [];
+// A form -- the question tool's, or a plugin's -- is one question per field.
+// A hidden field keeps its default and an external one is a link to follow;
+// the rest are asked as OpenCode states them.
+const fieldQuestion = (field) => {
+  const listed = Array.isArray(field.options) ? field.options : [];
+  const options = field.type === "boolean"
+    ? [{ id: "true", label: "Yes", value: true }, { id: "false", label: "No", value: false }]
+    : field.type === "external" ? [{ id: "done", label: "Done", value: undefined }]
+    : listed.map((option, index) => ({ id: String(index), label: option.label, description: option.description || "", value: option.value }));
+  const typed = ["number", "integer"].includes(field.type) || (field.type === "string" && (field.custom || !listed.length));
+  const custom = field.type === "multiselect" && field.custom;
   return {
-    kind: "form", key: field.key, values: new Map(options.map((option) => [option.label, option.value])),
-    host: { ...promptBase, id: form.id, kind: options.length ? "select" : "input", nativeKind: "form",
-      title: field.title || form.title || "OpenCode question",
-      message: field.description || form.title || "", options: options.map((option) => option.label) },
+    id: field.key, header: field.title || "", prompt: field.type === "external"
+      ? [field.description, field.url].filter(Boolean).join("\n") : field.description || field.title || "",
+    multiSelect: field.type === "multiselect", required: Boolean(field.required), options,
+    freeform: typed || custom ? { placeholder: field.placeholder || "", numeric: field.type !== "string" && !custom } : false,
   };
+};
+const formPrompt = (form) => {
+  const fields = (form.fields || []).filter((field) => field?.key && !field.hidden);
+  const host = questionRequest({ id: form.id, title: form.title || "OpenCode question",
+    questions: fields.map(fieldQuestion) });
+  return { kind: "form", form: { fields: form.fields || [] }, fields, host: { ...host, nativeKind: "form" } };
+};
+// OpenCode's reply is one value per field key. A field whose `when` the other
+// answers rule out is left unanswered, as OpenCode's own form leaves it.
+const formAnswer = (pending, response) => {
+  const answer = {};
+  pending.fields.forEach((field, index) => {
+    const { options, freeform } = answerTo(response, pending.host.questions[index]);
+    let value;
+    if (field.type === "multiselect") value = [...options.map((option) => option.value), ...(freeform ? [freeform] : [])];
+    else if (["number", "integer"].includes(field.type)) value = freeform === "" ? undefined : Number(freeform);
+    else value = options[0] ? options[0].value : freeform || undefined;
+    if (value === undefined || (Array.isArray(value) && !value.length) || Number.isNaN(value)) return;
+    answer[field.key] = value;
+  });
+  const defaults = new Map(pending.form.fields.map((field) => [field.key, field.default]));
+  const valueOf = (key) => key in answer ? answer[key] : defaults.get(key);
+  for (const field of pending.fields) {
+    const shown = (field.when || []).every(({ key, op, value }) => (valueOf(key) === value) === (op === "eq"));
+    if (!shown) delete answer[field.key];
+  }
+  return answer;
 };
 // A prompt is saved in OpenCode under the name the browser already drew it
 // with, in the `msg_` form OpenCode requires, so the live row, the chat log and
@@ -607,9 +641,9 @@ export class OpenCodeAdapter extends EventEmitter {
   /**
    * OpenCode's pending permissions and forms, as the prompts on screen.
    *
-   * A card offers words and hands back the one chosen, so each prompt keeps
-   * what those words mean to OpenCode: a permission's decision, or a form
-   * option's value under its field's key. In auto accept a permission is
+   * A permission is a card of words, and keeps the decision each word means to
+   * OpenCode; a form is a question request, and keeps its fields so the
+   * answers go back as values under their keys. In auto accept a permission is
    * answered `once` instead, as OpenCode's TUI does; a question never is.
    */
   syncRequests(record, requests) {
@@ -691,17 +725,13 @@ export class OpenCodeAdapter extends EventEmitter {
     const requestId = String(response?.id || response?.requestId || "");
     const pending = record?.requests.get(requestId);
     if (!pending?.host) throw failure("OpenCode request is no longer pending", "host_ui_request_missing", 404);
-    const dismissed = Boolean(response.cancelled || response.dismissed || response.confirmed === false);
+    const dismissed = isDismissal(response);
     const session = `/session/${encodeURIComponent(record.sessionId)}`;
     try {
       if (pending.kind === "form") {
         const route = `${session}/form/${encodeURIComponent(requestId)}`;
         if (dismissed) await this.request("DELETE", route);
-        else {
-          const chosen = String(response.value ?? "");
-          // A typed answer is sent as typed; OpenCode's questions allow one.
-          await this.request("POST", `${route}/reply`, { body: { answer: { [pending.key]: pending.values.get(chosen) ?? chosen } } });
-        }
+        else await this.request("POST", `${route}/reply`, { body: { answer: formAnswer(pending, response) } });
       } else {
         const decision = dismissed ? "reject" : pending.decisions.get(String(response.value ?? "")) || "reject";
         await this.request("POST", `${session}/permission/${encodeURIComponent(requestId)}/reply`, { body: { decision } });

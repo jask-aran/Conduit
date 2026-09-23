@@ -388,6 +388,25 @@ test("a command approval becomes a permission prompt and its answer reaches Code
   assert.equal(live.activity, "working", "the turn resumes once the prompt clears");
 });
 
+test("request_user_input is asked as questions, and the labels chosen or typed reach Codex", () => {
+  const { adapter, live, written } = approvalHarness();
+  adapter.receive(live, JSON.stringify({ id: 9, method: "item/tool/requestUserInput", params: {
+    threadId: "thread-1", turnId: "turn-1", itemId: "ask-1", isBlocking: true, questions: [
+      { id: "db", header: "Database", question: "Which database?", isOther: true,
+        options: [{ label: "Postgres", description: "Relational" }, { label: "SQLite", description: "One file" }] },
+      { id: "name", header: "Name", question: "What should it be called?", options: null }] } }));
+
+  const prompt = live.events.find((event) => event.type === "permission_request");
+  assert.equal(prompt.kind, "question");
+  assert.deepEqual(prompt.questions.map((question) => [question.id, question.options.map((option) => option.label), Boolean(question.freeform)]),
+    [["db", ["Postgres", "SQLite"], true], ["name", [], true]]);
+  assert.deepEqual(adapter.view(live).hostUiRequests.map((request) => request.id), ["ask-1"], "a reload finds it still asked");
+
+  adapter.respondHostUi(live.id, { id: "ask-1", answers: [{ questionId: "db", optionIds: ["1"] }, { questionId: "name", optionIds: [], freeform: "notes" }] });
+  assert.deepEqual(written, [{ id: 9, result: { answers: { db: { answers: ["SQLite"] }, name: { answers: ["notes"] } } } }]);
+  assert.ok(live.events.some((event) => event.type === "permission_resolved" && event.requestId === "ask-1"));
+});
+
 test("a permission prompt fails closed", () => {
   for (const [response, expected] of [
     [{ id: "ap-1", value: "Deny" }, "decline"],
