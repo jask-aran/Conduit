@@ -43,6 +43,7 @@ const splitModel = (spec, variant = "") => {
 };
 const contentText = (content) => (Array.isArray(content) ? content : [])
   .map((item) => item?.text || item?.content?.map?.((part) => part?.text || "").join("") || "").join("");
+const POLL_FAILURE_LIMIT = 10;
 const toolOutput = (part) => contentText(part?.state?.content) || String(part?.state?.output || part?.state?.error || "");
 
 export class OpenCodeAdapter extends EventEmitter {
@@ -210,24 +211,33 @@ export class OpenCodeAdapter extends EventEmitter {
 
   poll(record) {
     clearTimeout(record.polling);
+    record.pollFailures = 0;
     const tick = async () => {
       if (!record.active) return;
       try {
+        // A failed request read is unknown, not empty: treating it as empty
+        // would resolve every pending prompt until the next tick.
         const [messages, permissions, forms] = await Promise.all([
           this.messageRows(record.sessionId, { limit: 100 }),
-          this.request("GET", `/session/${encodeURIComponent(record.sessionId)}/permission`).catch(() => []),
-          this.request("GET", `/session/${encodeURIComponent(record.sessionId)}/form`).catch(() => []),
+          this.request("GET", `/session/${encodeURIComponent(record.sessionId)}/permission`).catch(() => null),
+          this.request("GET", `/session/${encodeURIComponent(record.sessionId)}/form`).catch(() => null),
         ]);
+        record.pollFailures = 0;
         this.syncMessages(record, messages);
-        this.syncRequests(record, [...(permissions || []), ...(forms || [])]);
+        if (permissions && forms) this.syncRequests(record, [...permissions, ...forms]);
         const latest = messages[0];
         if (latest?.type === "idle" && Number(latest.time?.created || 0) >= record.promptStartedAt) {
           this.settle(record, latest.outcome || "succeeded");
           return;
         }
       } catch (cause) {
-        this.publish(record, { type: "error", generationId: record.generation?.id || null, scope: "runtime",
-          error: { code: "backend_unavailable", message: cause.message || String(cause) } });
+        // Retry briefly; a service that stays unreachable ends the turn.
+        if (++record.pollFailures >= POLL_FAILURE_LIMIT) {
+          this.publish(record, { type: "error", generationId: record.generation?.id || null, scope: "runtime",
+            error: { code: "backend_unavailable", message: cause.message || String(cause) } });
+          this.settle(record, "failed");
+          return;
+        }
       }
       record.polling = setTimeout(tick, 300);
       record.polling.unref?.();
@@ -240,11 +250,12 @@ export class OpenCodeAdapter extends EventEmitter {
       if (row.type !== "assistant" || Number(row.time?.created || 0) < record.promptStartedAt) continue;
       let state = record.liveMessages.get(row.id);
       if (!state) {
-        state = { id: row.id, text: new Map(), tools: new Map(), closed: false };
+        state = { id: row.id, row, text: new Map(), tools: new Map(), closed: false };
         record.liveMessages.set(row.id, state);
         this.publish(record, messageOpen({ id: row.id, role: "assistant", generationId: record.generation?.id || null,
           answers: record.answering || null, timestamp: iso(row.time?.created) }));
       }
+      state.row = row;
       for (const [index, part] of (row.content || []).entries()) {
         if (["text", "reasoning"].includes(part.type)) {
           const previous = state.text.get(index) || "";
@@ -261,15 +272,20 @@ export class OpenCodeAdapter extends EventEmitter {
         let tool = state.tools.get(toolId);
         if (!tool) {
           tool = { id: toolId, name: part.name || part.tool || "tool", input: part.state?.input ?? null,
-            output: "", closed: false };
+            output: "", status: "", closed: false };
           state.tools.set(toolId, tool);
           this.publish(record, toolOpen({ toolCallId: tool.id, name: tool.name, input: tool.input,
             messageId: row.id, generationId: record.generation?.id || null }));
           this.publish(record, { type: "tool_activity", phase: "start", generationId: record.generation?.id || null,
             seq: ++record.generationSeq, toolCallId: tool.id, name: tool.name, input: tool.input });
         }
-        tool.output = toolOutput(part);
-        const done = ["completed", "error"].includes(part.state?.status);
+        // Every tick re-reads every row; only a change is news.
+        const output = toolOutput(part);
+        const status = String(part.state?.status || "");
+        if (tool.closed || (output === tool.output && status === tool.status)) continue;
+        tool.output = output;
+        tool.status = status;
+        const done = ["completed", "error"].includes(status);
         this.publish(record, { type: "tool_activity", phase: done ? "end" : "update",
           generationId: record.generation?.id || null, seq: ++record.generationSeq,
           toolCallId: tool.id, name: tool.name, input: tool.input, output: tool.output,
@@ -284,7 +300,7 @@ export class OpenCodeAdapter extends EventEmitter {
     }
   }
 
-  closeLiveMessage(record, row, state) {
+  closeLiveMessage(record, row, state, finalStopReason = null) {
     state.closed = true;
     const blocks = (row.content || []).flatMap((part, index) => {
       if (part.type === "text") return [{ kind: "text", contentIndex: index, text: part.text || "" }];
@@ -293,7 +309,7 @@ export class OpenCodeAdapter extends EventEmitter {
         toolCallId: part.id || part.callID, name: part.name || part.tool || "tool", input: part.state?.input ?? null }];
       return [];
     });
-    const stopReason = row.finish === "tool-calls" ? "toolUse" : row.finish || "stop";
+    const stopReason = finalStopReason || (row.finish === "tool-calls" ? "toolUse" : row.finish || "stop");
     this.publish(record, { type: "assistant_content", phase: "final", generationId: record.generation?.id || null,
       seq: ++record.generationSeq, messageId: row.id, stopReason, errorMessage: row.error?.message || null, blocks,
       provider: row.model?.providerID || null, model: modelSpec(row.model) || null, timestamp: iso(row.time?.created) });
@@ -336,6 +352,18 @@ export class OpenCodeAdapter extends EventEmitter {
   settle(record, outcome) {
     clearTimeout(record.polling);
     record.polling = null;
+    // An interrupted or failed turn leaves its last message and tools open;
+    // OpenCode never completes them, so they are closed here.
+    const stopReason = outcome === "succeeded" ? "stop" : outcome === "failed" ? "error" : "aborted";
+    for (const state of record.liveMessages.values()) {
+      for (const tool of state.tools.values()) {
+        if (tool.closed) continue;
+        tool.closed = true;
+        this.publish(record, toolClose({ toolCallId: tool.id, output: tool.output,
+          isError: stopReason !== "stop", generationId: record.generation?.id || null }));
+      }
+      if (!state.closed) this.closeLiveMessage(record, state.row, state, stopReason);
+    }
     record.active = false;
     record.stopping = false;
     record.activity = outcome === "failed" ? "failed" : "idle";
