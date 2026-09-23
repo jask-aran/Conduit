@@ -48,16 +48,16 @@
 .composer-actions .composer-stop-trigger { color: var(--foreground); }
 .composer-stop-trigger > .lucide-square, .composer-stop-aside > .lucide-square { width: 11px; height: 11px; fill: currentColor; stroke-width: 0; }
 /* Dictating: no filled squircle -- Stop is its mark alone, and so is the
-   microphone. It breathes in the text colour over a faint wash that swells
-   with it; audio chrome stays monochrome. */
-.composer-actions .dictation-trigger[aria-pressed="true"] { color: var(--foreground); box-shadow: none; animation: dictation-wash 1.4s ease-in-out infinite; }
-.composer-actions .dictation-trigger[aria-pressed="true"] > svg { animation: dictation-breathe 1.4s ease-in-out infinite; }
-@keyframes dictation-wash { 0%, 100% { background: transparent; } 50% { background: oklch(1 0 0 / 12%); } }
-@keyframes dictation-breathe { 50% { opacity: .35; scale: .86; } }
+   microphone. It breathes from the text colour to muted and back. */
+.composer-actions .dictation-trigger[aria-pressed="true"] { color: var(--foreground); box-shadow: none; animation: dictation-breathe 1.6s ease-in-out infinite; }
+@keyframes dictation-breathe { 50% { color: var(--muted-foreground); } }
 @media (prefers-reduced-motion: reduce) {
-  .composer-actions .dictation-trigger[aria-pressed="true"], .composer-actions .dictation-trigger[aria-pressed="true"] > svg { animation: none; }
-  .composer-actions .dictation-trigger[aria-pressed="true"] { background: oklch(1 0 0 / 10%); }
+  .composer-actions .dictation-trigger[aria-pressed="true"] { animation: none; }
 }
+/* The composer's own actions carry a heavier stroke than the app's 1.5
+   hairline: they are the row's weight. */
+.composer .composer-desktop-attachment svg, .composer .composer-plus-trigger svg,
+.composer .dictation-trigger svg, .composer .composer-send-trigger svg { stroke-width: 2; }
 /* The up arrow fills less of its box than the microphone does of its own; it
    is drawn a size up so the row reads as one height. */
 .composer-actions .composer-send-trigger > svg { scale: 1.15; }
