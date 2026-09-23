@@ -1,0 +1,26 @@
+/* Desktop hierarchy; mobile keeps its existing layout. */
+@media (--conduit-wide-layout) {
+  .composer-actions-left { flex: 1; }
+  .composer-actions-left > .composer-desktop-setting { min-width: 0; }
+  .composer-actions-right { flex: none; }
+  .composer-profile-trigger, .composer-permission-trigger,
+  .composer-desktop-attachment, .composer-actions-right .dictation-trigger { color: var(--muted-foreground); }
+  .composer-profile-trigger { flex: none; gap: 3px; }
+  .composer-profile-trigger > svg:first-child { width: 14px; height: 14px; }
+  .composer-model-trigger { color: var(--foreground); font-weight: 580; }
+  .composer-model-trigger > span:first-child { max-width: 160px; }
+  .composer-model-trigger > span:nth-child(2) { flex: none; }
+  .composer-permission-trigger > span { max-width: 72px; }
+  .composer-actions-status { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .composer-actions-right .chat-context-trigger { color: var(--muted-foreground); padding-inline: 3px; }
+}
+.composer-menu-shortcut { margin-left: auto; color: var(--muted-foreground); font-size: 10px; }
+.composer-quick-model-menu { width: min(380px, calc(100vw - 24px)); }
+.composer-model-option > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 560; }
+.composer-model-option > small { flex: none; margin-left: auto; color: var(--muted-foreground); font-size: 11px; white-space: nowrap; }
+.composer-profile-copy { display: flex; min-width: 0; flex: 1; align-items: center; gap: 12px; }
+.composer-profile-copy > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 560; }
+.composer-profile-copy small { flex: none; margin-left: auto; color: var(--muted-foreground); font: 10px ui-monospace, monospace; }
+.composer-effort-menu { z-index: 100; min-width: 128px; padding: 4px; border-radius: var(--radius-md); background: var(--popover); color: var(--popover-foreground); box-shadow: 0 0 0 1px var(--border), 0 8px 24px rgb(0 0 0 / 25%); outline: none; }
+.composer-context-details { z-index: 120; border-radius: var(--radius-md); background: var(--popover); color: var(--popover-foreground); box-shadow: 0 0 0 1px var(--border), 0 8px 24px rgb(0 0 0 / 25%); }
+.composer-context-label { padding: 5px; color: var(--muted-foreground); font-size: 11px; }

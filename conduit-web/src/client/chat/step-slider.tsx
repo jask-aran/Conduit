@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createSignal, createUniqueId } from "solid-js";
+import { For, Show, createEffect, createSignal, createUniqueId, type JSX } from "solid-js";
 import { CheckIcon, ChevronDownIcon } from "lucide-solid";
 import "./step-slider.css";
 
@@ -15,6 +15,7 @@ export type StepOption = { value: string; label: string };
  */
 export function StepSlider(props: {
   label: string;
+  valueControl?: (label: () => string) => JSX.Element;
   options: StepOption[];
   value: string;
   disabled?: boolean;
@@ -39,10 +40,10 @@ export function StepSlider(props: {
     onKeyDown={(event) => { if (event.key !== "Escape" && event.key !== "Tab") event.stopPropagation(); }}>
     <div class="step-slider-header">
       <label for={id}>{props.label}</label>
-      <button type="button" class="step-slider-value" aria-expanded={listOpen()} aria-controls={`${id}-list`} disabled={props.disabled}
+      <Show when={props.valueControl} fallback={<button type="button" class="step-slider-value" aria-expanded={listOpen()} aria-controls={`${id}-list`} disabled={props.disabled}
         onClick={() => setListOpen(!listOpen())}>
         <span>{shown()?.label}</span><ChevronDownIcon data-open={listOpen() ? "true" : undefined} />
-      </button>
+      </button>}>{(control) => control()(() => shown()?.label || "")}</Show>
     </div>
     <Show when={!listOpen()}>
       <input id={id} class="step-slider-input" type="range" min={0} max={Math.max(0, props.options.length - 1)} step={1}

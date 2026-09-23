@@ -1,5 +1,5 @@
 import { createMemo, For, Show } from "solid-js";
-import { ChevronDownIcon } from "lucide-solid";
+import { ChevronDownIcon, SearchIcon } from "lucide-solid";
 import {
   Menu,
   MenuContent,
@@ -26,6 +26,8 @@ export function ModelSelector(props: {
   disabled?: boolean;
   onModelChange: (spec: string) => void;
   onThinkingLevelChange: (level: string) => void;
+  onSearchModels?: () => void;
+  searchShortcut?: string | null;
   onManageModels?: () => void;
 }) {
   const selected = createMemo(() => props.models.find((item) => item.spec === props.model));
@@ -38,24 +40,33 @@ export function ModelSelector(props: {
   const pending = createMemo(() => Boolean(props.loading) && !label());
 
   return <Menu>
-    <MenuTrigger class="model-trigger" aria-label={pending() ? "Connecting to model" : `${label() || "Model"} ${props.thinkingLevel || "off"}`} disabled={props.disabled || pending()}>
+    <MenuTrigger class="model-trigger" classList={{ "composer-model-trigger": Boolean(props.onSearchModels) }} aria-label={pending() ? "Connecting to model" : `${label() || "Model"} ${props.thinkingLevel || "off"}`} disabled={props.disabled || pending()}>
       <Show when={!pending()} fallback={<><Spinner /><span>Connecting…</span></>}>
         <span>{label() || "Model"}</span>
         <span class="text-muted-foreground">{props.thinkingLevel || "off"}</span>
         <ChevronDownIcon />
       </Show>
     </MenuTrigger>
-    <MenuContent class="w-72">
-      <MenuGroup>
-        <MenuLabel>Model</MenuLabel>
-        <Show when={props.notice}><div class="px-2 pb-2 text-xs text-muted-foreground">{props.notice}</div></Show>
-        <MenuRadioGroup value={props.model} onChange={props.onModelChange}>
-          <For each={selectableModels()}>{(item) => <MenuRadioItem value={item.spec}><span class="truncate">{item.label}</span><span class="ml-auto text-xs text-muted-foreground">{item.provider}</span></MenuRadioItem>}</For>
-        </MenuRadioGroup>
-      </MenuGroup>
+    <MenuContent class={props.onSearchModels ? "composer-quick-model-menu" : "w-72"}>
+      <Show when={props.onSearchModels}>
+        <MenuItem onSelect={() => props.onSearchModels?.()}><SearchIcon class="size-3.5" /><span>Search all models…</span><Show when={props.searchShortcut}><kbd class="composer-menu-shortcut">{props.searchShortcut}</kbd></Show></MenuItem>
+        <MenuSeparator />
+      </Show>
+      <Show when={!props.onSearchModels && props.notice}><div class="px-2 pb-2 text-xs text-muted-foreground">{props.notice}</div></Show>
+      <MenuRadioGroup value={props.model} onChange={props.onModelChange}>
+        <For each={selectableModels()}>{(item) => <MenuRadioItem class="composer-model-option" value={item.spec} indicator="highlight" closeOnSelect={false}><span title={item.label}>{item.label}</span><small>{item.provider}</small></MenuRadioItem>}</For>
+      </MenuRadioGroup>
       <Show when={selected() && levels().length > 1}><MenuSeparator />
         <StepSlider label="Thinking" value={props.thinkingLevel}
           options={levels().map((level) => ({ value: level, label: thinkingLabel(level) }))}
+          valueControl={props.onSearchModels ? (label) => <Menu placement="right-start">
+            <MenuTrigger class="step-slider-value">{label()}<ChevronDownIcon /></MenuTrigger>
+            <MenuContent class="composer-effort-menu">
+              <MenuGroup><MenuLabel>Thinking</MenuLabel><MenuRadioGroup value={props.thinkingLevel} onChange={props.onThinkingLevelChange}>
+                <For each={levels()}>{(level) => <MenuRadioItem value={level} indicator="highlight" closeOnSelect={false}>{thinkingLabel(level)}</MenuRadioItem>}</For>
+              </MenuRadioGroup></MenuGroup>
+            </MenuContent>
+          </Menu> : undefined}
           onChange={props.onThinkingLevelChange} />
       </Show>
       <Show when={props.onManageModels}><MenuSeparator /><MenuItem onSelect={props.onManageModels}>Manage models…</MenuItem></Show>
