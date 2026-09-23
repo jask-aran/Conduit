@@ -255,7 +255,7 @@ or adopts the ones it is given.
 | `modelSwitch` | ● | ● | ● | ● | ● | ● |
 | `toolUse` | ● | ● | ○ | ● | ● | ● |
 | `approvals` | ● | ● | ○ | ● | ● | ● |
-| `permissionModes` | ○ | ● | ○ | ● | ○ | ○ |
+| `permissionModes` | ○ | ● | ○ | ● | ● | ○ |
 | `usage` | ● | ○ | ○ | ○ | ● | ● |
 | `replay` | ● | ○ | ○ | ○ | ○ | ● |
 | `attachments` | ● | ● | ○ | ○ | ○ | ● |
@@ -274,9 +274,12 @@ And from the manifest, which decides how a chat on it is made ready:
 Reading down a column is the whole of what that profile can do, and reading
 across a row is the whole of what differs. Four entries are worth naming.
 
-`permissionModes` is Codex and fx: Codex offers profiles to answer an approval
-*under*, and fx offers its ACP session modes the same way, where the others
-answer an approval and nothing more. `replay` is false for Codex, fx and
+`permissionModes` is Codex, fx and OpenCode: Codex offers profiles to answer an
+approval *under*, fx offers its ACP session modes the same way, and OpenCode
+offers its TUI's own two — prompt, or auto accept, where the client answers each
+permission `once` and still asks every question. The others answer an approval
+and nothing more. A prompt's options are words; the adapter keeps what each one
+means to its harness and translates the one chosen back. `replay` is false for Codex, fx and
 OpenCode because their `replay` returns runtime state from the record buffer
 rather than a generation in progress, so a browser reconnecting mid-turn is
 caught up from the record and the log instead; `usage` is false for Codex

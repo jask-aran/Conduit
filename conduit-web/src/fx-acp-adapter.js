@@ -563,7 +563,12 @@ export class FxAcpAdapter extends EventEmitter {
 
   listPermissionModes(id) { return Promise.resolve(this.permissionModes(this.get(id))); }
   listAvailablePermissionModes() { return Promise.resolve(this.permissionModes(null)); }
-  async setPermissionMode(id, mode) { const record = this.get(id); await this.configure(record, { permissionMode: mode }); return mode; }
+  // Handed the mode the routes chose, as Codex is, not its id.
+  async setPermissionMode(id, mode) {
+    const record = this.get(id);
+    await this.configure(record, { permissionMode: mode?.id || String(mode || "") });
+    return record.permissionMode;
+  }
 
   getCapabilities() { return FX_CAPABILITIES; }
   toClientEvent(event) { return event; }

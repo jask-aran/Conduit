@@ -520,7 +520,9 @@ export function createLiveSessionStream({
       return adapter.prompt(record.id, CONTINUE_PROMPT, { continuationBase: partial });
     }
     if (command.type === "extension_ui_response" || command.type === "host_ui_response") {
-      adapter.respondHostUi(record.id, command);
+      // Awaited: a harness that answers over the network can refuse, and a
+      // refusal belongs to this command, not to the process.
+      await adapter.respondHostUi(record.id, command);
       return null;
     }
     if (command.type === "refresh_context") return adapter.refreshContext(record.id);

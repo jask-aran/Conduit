@@ -29,7 +29,24 @@ const ledger = () => ({
 /** The OpenCode service: what it has saved, and the routes Conduit reads it through. */
 function service() {
   const rows = [];
+  const permissions = [];
+  const forms = [];
+  const replies = [];
+  const refuse = (message) => Object.assign(new Error(message), { code: "backend_unavailable", status: 400 });
   const route = async (method, path, { body, query = {}, whole = false } = {}) => {
+    // Checked as OpenCode checks it: a `per_` id that is still pending, and a decision it knows.
+    const reply = path.match(/\/permission\/([^/]+)\/reply$/);
+    if (method === "POST" && reply) {
+      const id = decodeURIComponent(reply[1]);
+      if (!id.startsWith("per")) throw refuse('Expected a string starting with "per" at ["requestID"]');
+      if (!["once", "always", "reject"].includes(body?.decision)) throw refuse('Missing key at ["decision"]');
+      const index = permissions.findIndex((item) => item.id === id);
+      if (index < 0) throw Object.assign(new Error("PermissionNotFoundError"), { code: "backend_session_not_found", status: 404 });
+      permissions.splice(index, 1);
+      replies.push({ id, decision: body.decision });
+      return null;
+    }
+    if (method === "GET" && path.endsWith("/permission")) return [...permissions];
     if (method === "POST" && path.endsWith("/prompt")) {
       rows.push({ id: body.id, type: "user", text: body.text, files: [], agents: [], time: { created: Date.now() } });
       return null;
@@ -41,11 +58,21 @@ function service() {
     }
     const one = path.match(/\/message\/([^/]+)$/);
     if (method === "GET" && one) return rows.find((row) => row.id === decodeURIComponent(one[1])) || null;
-    if (method === "GET" && /\/(permission|form)$/.test(path)) return [];
+    const form = path.match(/\/form\/([^/]+)\/reply$/);
+    if (method === "POST" && form) {
+      const id = decodeURIComponent(form[1]);
+      const index = forms.findIndex((item) => item.id === id);
+      if (index < 0) throw Object.assign(new Error("FormNotFoundError"), { code: "backend_session_not_found", status: 404 });
+      if (!body?.answer || typeof body.answer !== "object") throw refuse('Missing key at ["answer"]');
+      forms.splice(index, 1);
+      replies.push({ id, answer: body.answer });
+      return null;
+    }
+    if (method === "GET" && path.endsWith("/form")) return [...forms];
     if (method === "GET") return { id: "ses_1", title: "Story" };
     return null;
   };
-  return { rows, route };
+  return { rows, permissions, forms, replies, route };
 }
 
 function harness() {
@@ -65,6 +92,7 @@ function harness() {
   let tools = [];
   let generation = null;
   const errors = [];
+  let asked = [];
   const ws = new EventEmitter();
   ws.readyState = 1;
   ws.send = (frame) => {
@@ -76,6 +104,8 @@ function harness() {
       else messages = applyTranscriptOp(messages, wire);
     }
     if (isStructuredGenerationEvent(wire)) generation = reduceActiveGeneration(generation, wire);
+    if (wire.type === "permission_request" && wire.request) asked = [...asked, wire.request];
+    if (wire.type === "permission_resolved") asked = asked.filter((request) => request.id !== raw.requestId);
   };
   const stream = createLiveSessionStream({
     wss: { handleUpgrade: (_request, _socket, _head, accept) => accept(ws) },
@@ -97,7 +127,18 @@ function harness() {
   let messageCount = 0;
   return {
     saved: saved.rows,
+    service: saved,
+    adapter,
+    record,
     settle,
+    errors,
+    /** The prompts on screen, as the card is handed them. */
+    asked: () => asked,
+    /** Click one of a prompt's options, the way the card does. */
+    answer: async (request, option) => {
+      ws.emit("message", JSON.stringify({ type: "extension_ui_response", id: request.id, value: option }));
+      await settle();
+    },
     /** Send a prompt the way the browser does, under the name it already drew it with. */
     send: async (message) => {
       ws.emit("message", JSON.stringify({ type: "prompt", message, messageId: `m_00000000-0000-4000-8000-00000000000${++messageCount}` }));
@@ -235,4 +276,71 @@ test("History lists each tool call as a step of its own, as it does for Pi", asy
   const chat = harness();
   await toolTurn(chat);
   assert.deepEqual(await chat.history(), ["user: read haiku.txt", "[read: haiku.txt]", "assistant: Haikus."]);
+});
+
+/** Recorded from OpenCode 2.0.14: an edit held for approval, and the question tool's form. */
+const EDIT_PERMISSION = { id: "per_1", sessionID: "ses_1", action: "edit", resources: ["perm2.txt"], save: ["*"],
+  metadata: {}, source: { type: "tool", messageID: "msg_x", id: "call_x" } };
+const QUESTION_FORM = { id: "frm_1", sessionID: "ses_1", title: "Questions", metadata: { kind: "question" },
+  fields: [{ key: "q0", title: "Drink Preference", description: "Do you prefer tea or coffee?", type: "string", custom: true,
+    options: [{ value: "Tea", label: "Tea", description: "Hot brewed tea" }, { value: "Coffee", label: "Coffee", description: "Hot brewed coffee" }] }] };
+
+async function waiting(chat) {
+  await chat.send("make the edit");
+  chat.oc("session.execution.started");
+}
+
+test("an edit held for approval offers words, and the choice reaches OpenCode", async () => {
+  const chat = harness();
+  await waiting(chat);
+  chat.service.permissions.push(EDIT_PERMISSION);
+  chat.oc("permission.asked", { id: "per_1" });
+  await chat.settle();
+  const [request] = chat.asked();
+  assert.deepEqual(request.options, ["Allow once", "Always allow", "Reject"]);
+  await chat.answer(request, "Always allow");
+  assert.deepEqual(chat.service.replies, [{ id: "per_1", decision: "always" }]);
+  assert.deepEqual(chat.asked(), []);
+  assert.deepEqual(chat.errors, []);
+});
+
+test("a question is asked as a question, and answered with the option OpenCode offered", async () => {
+  const chat = harness();
+  await waiting(chat);
+  chat.service.forms.push(QUESTION_FORM);
+  chat.oc("form.created", { id: "frm_1" });
+  await chat.settle();
+  const [request] = chat.asked();
+  assert.equal(request.message, "Do you prefer tea or coffee?");
+  assert.deepEqual(request.options, ["Tea", "Coffee"]);
+  await chat.answer(request, "Coffee");
+  assert.deepEqual(chat.service.replies, [{ id: "frm_1", answer: { q0: "Coffee" } }]);
+  assert.deepEqual(chat.errors, []);
+});
+
+test("a reply OpenCode refuses is reported to the browser, and the server keeps running", async () => {
+  const chat = harness();
+  await waiting(chat);
+  chat.service.permissions.push(EDIT_PERMISSION);
+  chat.oc("permission.asked", { id: "per_1" });
+  await chat.settle();
+  const [request] = chat.asked();
+  // Answered elsewhere -- OpenCode's own TUI -- before this reply arrived.
+  chat.service.permissions.length = 0;
+  await chat.answer(request, "Allow once");
+  assert.equal(chat.errors.length, 1);
+});
+
+test("auto accept answers each edit once, as OpenCode's TUI does, and still asks questions", async () => {
+  const chat = harness();
+  const modes = await chat.adapter.listAvailablePermissionModes();
+  assert.deepEqual(modes.map((mode) => mode.id), ["prompt", "autoaccept"]);
+  await chat.adapter.setPermissionMode(chat.record.id, modes[1]);
+  await waiting(chat);
+  chat.service.permissions.push(EDIT_PERMISSION);
+  chat.service.forms.push(QUESTION_FORM);
+  chat.oc("permission.asked", { id: "per_1" });
+  await chat.settle();
+  assert.deepEqual(chat.service.replies, [{ id: "per_1", decision: "once" }]);
+  assert.deepEqual(chat.asked().map((request) => request.id), ["frm_1"]);
 });
