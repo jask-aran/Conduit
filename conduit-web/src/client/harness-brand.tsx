@@ -19,6 +19,7 @@ const MARKS: Record<string, Mark> = {
   codex: { src: "/brand/codex-mark.svg" },
   "chatgpt-web": BLOSSOM,
   "claude-code": { src: "/brand/claude-code-mark.svg", tint: true },
+  fx: { src: "/brand/fx-mark.svg", tint: true },
   opencode: { src: "/brand/opencode-mark.svg", tint: true },
   pi: { src: "/brand/pi-mark.svg", tint: true },
 };
@@ -42,6 +43,7 @@ const HARNESS_LABELS: Record<string, string> = {
   codex: "Codex",
   "chatgpt-web": "ChatGPT Web",
   "claude-code": "Claude Code",
+  fx: "fx",
   opencode: "OpenCode",
 };
 

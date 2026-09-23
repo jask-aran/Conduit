@@ -91,10 +91,10 @@ export function MenuContent(props: ParentProps<{ class?: string; onOpenAutoFocus
 export function MenuItem(props: ParentProps<{ class?: string; disabled?: boolean; closeOnSelect?: boolean; variant?: "destructive"; onSelect?: () => void; textValue?: string; "aria-label"?: string }>) {
   return <KMenu.Item disabled={props.disabled} closeOnSelect={props.closeOnSelect} onSelect={props.onSelect} textValue={props.textValue} aria-label={props["aria-label"]} data-variant={props.variant} class={cn(menuItemClass, props.class)}>{props.children}</KMenu.Item>;
 }
-export function MenuRadioItem(props: ParentProps<{ class?: string; value: string; disabled?: boolean; closeOnSelect?: boolean; onSelect?: () => void }>) {
+export function MenuRadioItem(props: ParentProps<{ class?: string; value: string; disabled?: boolean; closeOnSelect?: boolean; onSelect?: () => void; indicator?: "check" | "highlight" }>) {
   /* Conduit menus close after a selection by default; persistent pickers can
      opt out so the user can change several values before clicking away. */
-  return <KMenu.RadioItem value={props.value} disabled={props.disabled} closeOnSelect={props.closeOnSelect ?? true} onSelect={props.onSelect} class={cn(menuItemClass, "pl-8", props.class)}><KMenu.ItemIndicator class="absolute left-2">✓</KMenu.ItemIndicator>{props.children}</KMenu.RadioItem>;
+  return <KMenu.RadioItem value={props.value} disabled={props.disabled} closeOnSelect={props.closeOnSelect ?? true} onSelect={props.onSelect} class={cn(menuItemClass, props.indicator === "highlight" ? "data-[checked]:bg-accent data-[checked]:text-accent-foreground" : "pl-8", props.class)}>{props.indicator === "highlight" ? null : <KMenu.ItemIndicator class="absolute left-2">✓</KMenu.ItemIndicator>}{props.children}</KMenu.RadioItem>;
 }
 export function MenuLabel(props: ParentProps<{ class?: string }>) { return <KMenu.GroupLabel class={cn("px-1.5 py-1.5 text-xs font-medium text-muted-foreground", props.class)}>{props.children}</KMenu.GroupLabel>; }
 export function MenuSeparator() { return <KMenu.Separator class="-mx-1 my-1 h-px bg-border" />; }

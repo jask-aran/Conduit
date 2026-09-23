@@ -2125,7 +2125,7 @@ function App() {
       .then((payload) => {
         setHarnessCapabilities(payload.harnesses || {});
         setExternalProfiles((Array.isArray(payload.profiles) ? payload.profiles : [])
-          .filter((profile) => profile.management === "agent" && profile.agent?.protocol === "native_api")
+          .filter((profile) => profile.management === "agent" && Boolean(profile.agent?.implementation))
           .map((profile) => ({ id: profile.id, label: profile.label, description: profile.description,
             disabled: profile.disabled, implementation: profile.agent?.implementation, drive: profile.drive })));
       })
