@@ -1212,9 +1212,8 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
               <Show when={sessions().length > 0} fallback={<div class="terminal-menu-empty">No active terminals in {props.projectName || "Chats"}.</div>}>
                 <For each={sessions()}>{(session) => {
                   const name = () => session.title || "Shell";
-                  return <div class="terminal-menu-row">
+                  return <div class="terminal-menu-row" data-current={pty()?.id === session.id ? "true" : undefined}>
                     <MenuItem class="terminal-menu-primary" onSelect={() => void attachSession(session)}>
-                      <CheckIcon class="terminal-menu-check" data-current={pty()?.id === session.id ? "true" : undefined} />
                       <span class="terminal-menu-copy"><strong>{name()}</strong><small>{sessionMetadata(session)}</small></span>
                     </MenuItem>
                     <span class="terminal-menu-actions">

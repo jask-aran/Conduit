@@ -9,6 +9,9 @@ import {
   MenuRadioGroup,
   MenuRadioItem,
   MenuSeparator,
+  MenuSub,
+  MenuSubContent,
+  MenuSubTrigger,
   MenuTrigger,
   Spinner,
 } from "@/components/primitives";
@@ -54,19 +57,19 @@ export function ModelSelector(props: {
       </Show>
       <Show when={!props.onSearchModels && props.notice}><div class="px-2 pb-2 text-xs text-muted-foreground">{props.notice}</div></Show>
       <MenuRadioGroup value={props.model} onChange={props.onModelChange}>
-        <For each={selectableModels()}>{(item) => <MenuRadioItem class="composer-model-option" value={item.spec} indicator="highlight" closeOnSelect={false}><span title={item.label}>{item.label}</span><small>{item.provider}</small></MenuRadioItem>}</For>
+        <For each={selectableModels()}>{(item) => <MenuRadioItem class="composer-model-option" value={item.spec} closeOnSelect={false}><span title={item.label}>{item.label}</span><small>{item.provider}</small></MenuRadioItem>}</For>
       </MenuRadioGroup>
       <Show when={selected() && levels().length > 1}><MenuSeparator />
         <StepSlider label="Thinking" value={props.thinkingLevel}
           options={levels().map((level) => ({ value: level, label: thinkingLabel(level) }))}
-          valueControl={props.onSearchModels ? (label) => <Menu placement="right-start">
-            <MenuTrigger class="step-slider-value">{label()}<ChevronDownIcon /></MenuTrigger>
-            <MenuContent class="composer-effort-menu">
+          valueControl={props.onSearchModels ? (label) => <MenuSub>
+            <MenuSubTrigger class="step-slider-value">{label()}</MenuSubTrigger>
+            <MenuSubContent>
               <MenuGroup><MenuLabel>Thinking</MenuLabel><MenuRadioGroup value={props.thinkingLevel} onChange={props.onThinkingLevelChange}>
-                <For each={levels()}>{(level) => <MenuRadioItem value={level} indicator="highlight" closeOnSelect={false}>{thinkingLabel(level)}</MenuRadioItem>}</For>
+                <For each={levels()}>{(level) => <MenuRadioItem value={level}>{thinkingLabel(level)}</MenuRadioItem>}</For>
               </MenuRadioGroup></MenuGroup>
-            </MenuContent>
-          </Menu> : undefined}
+            </MenuSubContent>
+          </MenuSub> : undefined}
           onChange={props.onThinkingLevelChange} />
       </Show>
       <Show when={props.onManageModels}><MenuSeparator /><MenuItem onSelect={props.onManageModels}>Manage models…</MenuItem></Show>

@@ -91,10 +91,19 @@ export function MenuContent(props: ParentProps<{ class?: string; onOpenAutoFocus
 export function MenuItem(props: ParentProps<{ class?: string; disabled?: boolean; closeOnSelect?: boolean; variant?: "destructive"; onSelect?: () => void; textValue?: string; "aria-label"?: string }>) {
   return <KMenu.Item disabled={props.disabled} closeOnSelect={props.closeOnSelect} onSelect={props.onSelect} textValue={props.textValue} aria-label={props["aria-label"]} data-variant={props.variant} class={cn(menuItemClass, props.class)}>{props.children}</KMenu.Item>;
 }
-export function MenuRadioItem(props: ParentProps<{ class?: string; value: string; disabled?: boolean; closeOnSelect?: boolean; onSelect?: () => void; indicator?: "check" | "highlight" }>) {
+/* The current choice is the row's wash and a heavier weight -- never a tick,
+   which costs a column the label could use. */
+const checkedItemClass = "data-[checked]:bg-accent data-[checked]:font-medium data-[checked]:text-accent-foreground";
+export function MenuRadioItem(props: ParentProps<{ class?: string; value: string; disabled?: boolean; closeOnSelect?: boolean; onSelect?: () => void }>) {
   /* Conduit menus close after a selection by default; persistent pickers can
      opt out so the user can change several values before clicking away. */
-  return <KMenu.RadioItem value={props.value} disabled={props.disabled} closeOnSelect={props.closeOnSelect ?? true} onSelect={props.onSelect} class={cn(menuItemClass, props.indicator === "highlight" ? "data-[checked]:bg-accent data-[checked]:text-accent-foreground" : "pl-8", props.class)}>{props.indicator === "highlight" ? null : <KMenu.ItemIndicator class="absolute left-2">✓</KMenu.ItemIndicator>}{props.children}</KMenu.RadioItem>;
+  return <KMenu.RadioItem value={props.value} disabled={props.disabled} closeOnSelect={props.closeOnSelect ?? true} onSelect={props.onSelect} class={cn(menuItemClass, checkedItemClass, props.class)}>{props.children}</KMenu.RadioItem>;
+}
+export const MenuSub = KMenu.Sub;
+export function MenuSubTrigger(props: ParentProps<{ class?: string; disabled?: boolean }>) { return <KMenu.SubTrigger disabled={props.disabled} class={cn(menuItemClass, "data-[expanded]:bg-accent", props.class)}>{props.children}<ChevronRightIcon class="menu-chevron" /></KMenu.SubTrigger>; }
+export function MenuSubContent(props: ParentProps<{ class?: string }>) {
+  const portalMount = createFullscreenPortalMount();
+  return <KMenu.Portal mount={portalMount()}><KMenu.SubContent data-slot="menu-sub-content" class={cn(menuSubContentClass, props.class)}>{props.children}</KMenu.SubContent></KMenu.Portal>;
 }
 export function MenuLabel(props: ParentProps<{ class?: string }>) { return <KMenu.GroupLabel class={cn("px-1.5 py-1.5 text-xs font-medium text-muted-foreground", props.class)}>{props.children}</KMenu.GroupLabel>; }
 export function MenuSeparator() { return <KMenu.Separator class="-mx-1 my-1 h-px bg-border" />; }
@@ -105,13 +114,13 @@ export function MenuSeparator() { return <KMenu.Separator class="-mx-1 my-1 h-px
  * typing into an input. Anchored to a trigger, or to `anchorRef` when the
  * thing that opened it is not always the one on screen.
  */
-export function Popover(props: ParentProps<{ open?: boolean; onOpenChange?: (open: boolean) => void; anchorRef?: () => HTMLElement | undefined; placement?: "bottom-start" | "bottom-end" }>) {
+export function Popover(props: ParentProps<{ open?: boolean; onOpenChange?: (open: boolean) => void; anchorRef?: () => HTMLElement | undefined; placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end" }>) {
   return <KPopover open={props.open} onOpenChange={props.onOpenChange} anchorRef={props.anchorRef} placement={props.placement || "bottom-end"} gutter={4} fitViewport overflowPadding={8}>{props.children}</KPopover>;
 }
 export const PopoverTrigger = KPopover.Trigger;
-export function PopoverContent(props: ParentProps<{ class?: string; "aria-label"?: string; onPointerDownOutside?: (event: Event & { target: EventTarget | null }) => void }>) {
+export function PopoverContent(props: ParentProps<{ class?: string; "aria-label"?: string; onPointerDownOutside?: (event: Event & { target: EventTarget | null }) => void; onOpenAutoFocus?: (event: Event) => void; onCloseAutoFocus?: (event: Event) => void }>) {
   const portalMount = createFullscreenPortalMount();
-  return <KPopover.Portal mount={portalMount()}><KPopover.Content data-slot="popover-content" aria-label={props["aria-label"]} onPointerDownOutside={props.onPointerDownOutside} class={cn(menuContentClass, props.class)}>{props.children}</KPopover.Content></KPopover.Portal>;
+  return <KPopover.Portal mount={portalMount()}><KPopover.Content data-slot="popover-content" aria-label={props["aria-label"]} onPointerDownOutside={props.onPointerDownOutside} onOpenAutoFocus={props.onOpenAutoFocus} onCloseAutoFocus={props.onCloseAutoFocus} class={cn(menuContentClass, props.class)}>{props.children}</KPopover.Content></KPopover.Portal>;
 }
 
 export function ContextMenu(props: ParentProps<{ onOpenChange?: (open: boolean) => void; placement?: "bottom-start" | "right-start" }>) {
@@ -125,7 +134,7 @@ export const ContextMenuSub = KContextMenu.Sub;
 export function ContextMenuSubTrigger(props: ParentProps<{ disabled?: boolean }>) { return <KContextMenu.SubTrigger disabled={props.disabled} class={cn(menuItemClass, "data-[expanded]:bg-accent")}>{props.children}<ChevronRightIcon class="menu-chevron" /></KContextMenu.SubTrigger>; }
 export function ContextMenuSubContent(props: ParentProps<{ class?: string }>) { return <KContextMenu.Portal><KContextMenu.SubContent data-slot="context-menu-sub-content" class={cn(menuSubContentClass, "pointer-events-auto", props.class)}>{props.children}</KContextMenu.SubContent></KContextMenu.Portal>; }
 export const ContextMenuRadioGroup = KContextMenu.RadioGroup;
-export function ContextMenuRadioItem(props: ParentProps<{ value: string }>) { return <KContextMenu.RadioItem value={props.value} closeOnSelect={true} class={cn(menuItemClass, "pl-8")}><KContextMenu.ItemIndicator class="absolute left-2">✓</KContextMenu.ItemIndicator>{props.children}</KContextMenu.RadioItem>; }
+export function ContextMenuRadioItem(props: ParentProps<{ value: string }>) { return <KContextMenu.RadioItem value={props.value} closeOnSelect={true} class={cn(menuItemClass, checkedItemClass)}>{props.children}</KContextMenu.RadioItem>; }
 export function ContextMenuSeparator() { return <KContextMenu.Separator class="-mx-1 my-1 h-px bg-border" />; }
 
 export function Tooltip(props: ParentProps) { return <KTooltip.Root placement="right" openDelay={350}>{props.children}</KTooltip.Root>; }
