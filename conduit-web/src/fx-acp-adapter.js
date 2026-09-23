@@ -243,6 +243,35 @@ export class FxAcpAdapter extends EventEmitter {
     return record.answer;
   }
 
+  startTraceMessage(record, kind) {
+    const trace = { id: crypto.randomUUID(), kind, text: "" };
+    record.traceMessages.push(trace);
+    this.publish(record, messageOpen({ id: trace.id, role: "assistant", generationId: record.generation?.id || null,
+      answers: record.answering || null, timestamp: new Date().toISOString() }));
+    this.publish(record, { type: "assistant_content", phase: "start", generationId: record.generation?.id || null,
+      seq: ++record.generationSeq, messageId: trace.id });
+    return trace;
+  }
+
+  appendTraceText(record, trace, delta) {
+    trace.text += delta;
+    this.publish(record, { type: "assistant_content", phase: "delta", generationId: record.generation?.id || null,
+      seq: ++record.generationSeq, messageId: trace.id, contentIndex: 0, blockKind: trace.kind, delta });
+  }
+
+  finishTraceMessages(record, stopReason, answerText = "") {
+    for (const trace of record.traceMessages) {
+      // The saved reply is the answer; its live copy in the trace would repeat it.
+      const text = trace.kind === "narration" && answerText.trim() && trace.text.trim() === answerText.trim() ? "" : trace.text;
+      const blocks = [{ kind: trace.kind, contentIndex: 0, text }];
+      this.publish(record, { type: "assistant_content", phase: "final", generationId: record.generation?.id || null,
+        seq: ++record.generationSeq, messageId: trace.id, stopReason, errorMessage: null, blocks });
+      this.publish(record, messageClose({ messageId: trace.id, stopReason,
+        blocks: trace.kind === "narration" ? [{ kind: "text", contentIndex: 0, text }] : blocks,
+        interim: true, generationId: record.generation?.id || null, keepsPartial: false }));
+    }
+  }
+
   notification(record, message) {
     if (message.method !== "session/update" || message.params?.sessionId !== record.sessionId) return;
     const update = message.params.update || {};
@@ -252,12 +281,22 @@ export class FxAcpAdapter extends EventEmitter {
     }
     if (record.loading || update.sessionUpdate === "user_message_chunk") return;
     const generationId = record.generation?.id || null;
-    if (update.sessionUpdate === "agent_message_chunk" && update.content?.type === "text") {
-      const answer = this.ensureAnswer(record, update.messageId);
-      const delta = String(update.content.text || "");
-      answer.text += delta;
-      this.publish(record, { type: "assistant_content", phase: "delta", generationId,
-        seq: ++record.generationSeq, messageId: answer.id, contentIndex: 0, blockKind: "text", delta });
+    if (update.sessionUpdate === "agent_thought_chunk") {
+      const delta = outputText([update.content]);
+      if (!delta) return;
+      const trace = record.reasoningMessage || (record.reasoningMessage = this.startTraceMessage(record, "thinking"));
+      this.appendTraceText(record, trace, delta);
+      return;
+    }
+    if (update.sessionUpdate === "agent_message_chunk") {
+      const delta = outputText([update.content]);
+      if (!delta) return;
+      record.liveMessageText += delta;
+      if (record.currentFxMessageId !== update.messageId) {
+        record.currentFxMessageId = update.messageId;
+        record.currentActivity = this.startTraceMessage(record, "narration");
+      }
+      this.appendTraceText(record, record.currentActivity, delta);
       return;
     }
     if (update.sessionUpdate === "tool_call") {
@@ -316,46 +355,71 @@ export class FxAcpAdapter extends EventEmitter {
     record.stopping = false;
     record.generation = { id: generationId, closed: false, settled: false };
     record.answering = userMessageId;
+    record.promptText = parseAttachmentEnvelope(message).message;
     record.answer = null;
+    record.traceMessages = [];
+    record.reasoningMessage = null;
+    record.currentFxMessageId = null;
+    record.currentActivity = null;
+    record.liveMessageText = "";
     record.tools.clear();
     this.publish(record, messageOpen({ id: userMessageId, role: "user", generationId,
-      content: parseAttachmentEnvelope(message).message, timestamp: new Date().toISOString() }));
+      content: record.promptText, timestamp: new Date().toISOString() }));
     this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.generationSeq,
       status: "working", activity: "working", detail: null });
     const request = record.client.request("session/prompt", {
       sessionId: record.sessionId,
-      prompt: [{ type: "text", text: parseAttachmentEnvelope(message).message }],
+      prompt: [{ type: "text", text: record.promptText }],
     });
     void request.then((result) => this.finish(record, result?.stopReason || "stop"), (cause) => this.failPrompt(record, cause));
     return { generationId, attachmentIdentity: { messageId: userMessageId } };
   }
 
-  finish(record, stopReason) {
+  async finish(record, stopReason) {
     if (!record.active) return;
+    let error = null;
+    if (stopReason !== "cancelled" && stopReason !== "error") {
+      try {
+        const data = await this.json(["session", "--id", record.sessionId, "--json"]);
+        if (!record.active) return;
+        // The latest saved turn is the reply; fx may store the prompt text differently.
+        const turn = data.history?.at(-1);
+        if (typeof turn?.assistant !== "string") throw failure("fx completed without a saved reply");
+        this.ensureAnswer(record).text = turn.assistant;
+      } catch (cause) {
+        error = cause;
+        stopReason = "error";
+        this.ensureAnswer(record).text = record.liveMessageText;
+        this.publish(record, { type: "error", generationId: record.generation?.id || null, scope: "runtime",
+          error: { code: "backend_unavailable", message: cause.message || String(cause) } });
+      }
+    }
+    this.finishTraceMessages(record, stopReason, record.answer?.text);
     const answer = record.answer;
     if (answer) {
       const toolBlocks = [...answer.tools].map((id) => record.tools.get(id)).filter(Boolean)
         .map((tool) => ({ kind: "tool_call", toolCallId: tool.id, name: tool.name, input: tool.input }));
       const blocks = [{ kind: "text", text: answer.text }, ...toolBlocks];
       this.publish(record, { type: "assistant_content", phase: "final", generationId: record.generation.id,
-        seq: ++record.generationSeq, messageId: answer.id, stopReason, errorMessage: null, blocks });
+        seq: ++record.generationSeq, messageId: answer.id, stopReason, errorMessage: error?.message || null, blocks });
       this.publish(record, messageClose({ messageId: answer.id, stopReason, blocks,
-        generationId: record.generation.id, keepsPartial: false, model: record.model || null }));
+        generationId: record.generation.id, keepsPartial: false, model: record.model || null,
+        errorMessage: error?.message || null }));
     }
     record.active = false;
     record.stopping = false;
-    record.activity = "idle";
+    record.activity = stopReason === "error" ? "failed" : "idle";
     Object.assign(record.generation, { closed: true, settled: true });
     this.publish(record, { type: "status", generationId: record.generation.id, phase: "settled",
-      seq: ++record.generationSeq, status: "idle", activity: "idle", detail: null });
-    this.emit("settled", { record, completed: stopReason !== "cancelled" });
+      seq: ++record.generationSeq, status: record.activity, activity: record.activity, detail: null });
+    this.emit("settled", { record, completed: stopReason !== "cancelled" && stopReason !== "error" });
   }
 
   failPrompt(record, cause) {
     if (!record.active) return;
     this.publish(record, { type: "error", generationId: record.generation?.id || null, scope: "runtime",
       error: { code: "backend_unavailable", message: cause.message || String(cause) } });
-    this.finish(record, "error");
+    void this.finish(record, "error");
   }
 
   async cancel(id) {
