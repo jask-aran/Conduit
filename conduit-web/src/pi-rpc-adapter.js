@@ -2,6 +2,7 @@ import { wasAborted, wasDiscarded } from "./abort-signature.js";
 import { normalizeHostUiRequest } from "./pi-activity.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { assertChatBackendAdapter } from "./chat-backend-contract.js";
+import { formatHistoryTool } from "./harnesses/history-tool.js";
 import { detect } from "./harnesses/probe.js";
 import { PI_CAPABILITIES } from "./pi-capabilities.js";
 import { launchConduitPi } from "./pi-launch.js";
@@ -20,15 +21,6 @@ const historyText = (content) => {
   return parseAttachmentEnvelope(text).message.replace(/\s+/g, " ").trim().slice(0, 240);
 };
 
-const formatHistoryTool = (name, args = {}) => {
-  const path = String(args.path || args.file_path || "").replace(/^\/home\/[^/]+/, "~");
-  if (["read", "write", "edit"].includes(name)) return `[${name}: ${path}]`;
-  if (name === "bash") {
-    const command = String(args.command || "").replace(/\s+/g, " ").trim();
-    return `[bash: ${command.slice(0, 50)}${command.length > 50 ? "..." : ""}]`;
-  }
-  return `[${name}]`;
-};
 
 const historyTreeView = (tree) => {
   const tools = new Map();

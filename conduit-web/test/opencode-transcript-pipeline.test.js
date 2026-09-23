@@ -115,6 +115,14 @@ function harness() {
       return buildTurnRows(messages, tools);
     },
     /** What a reload shows: the saved transcript, with the chat log's tail folded over it, as GET /v0/sessions/:id does. */
+    /** The History pane's steps, oldest first, without the hidden ones. */
+    history: async () => {
+      const lines = [];
+      for (let node = (await adapter.readHistory({ liveSessionId: record.id })).tree[0]; node; node = node.children[0]) {
+        if (!node.entry.hidden) lines.push(node.entry.display);
+      }
+      return lines;
+    },
     reload: async ({ log = true } = {}) => {
       const projection = await adapter.readTranscript({ liveSessionId: record.id });
       const view = log ? { ...projection, ...applyTranscriptOps(projection, chatLogs.peek("chat-1")?.entries || []) } : projection;
@@ -221,4 +229,10 @@ test("a tool shows in the turn's trace while it runs", async () => {
   const trace = chat.screen().find((row) => row.type === "trace");
   assert.ok(trace, "no trace on screen while the tool runs");
   assert.deepEqual(trace.value.segments.map((segment) => `${segment.kind}: ${segment.tool?.name || ""}`), ["tool: bash"]);
+});
+
+test("History lists each tool call as a step of its own, as it does for Pi", async () => {
+  const chat = harness();
+  await toolTurn(chat);
+  assert.deepEqual(await chat.history(), ["user: read haiku.txt", "[read: haiku.txt]", "assistant: Haikus."]);
 });

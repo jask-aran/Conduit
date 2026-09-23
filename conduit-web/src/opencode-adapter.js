@@ -6,6 +6,7 @@ import { execFile as execFileCallback } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { promisify } from "node:util";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
+import { formatHistoryTool } from "./harnesses/history-tool.js";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageOpen, toolClose, toolOpen } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
@@ -712,12 +713,23 @@ export class OpenCodeAdapter extends EventEmitter {
 
   async readHistory(options) {
     const { messages } = await this.readTranscript(options);
+    // Each tool call is a step of its own, after the message that made it, as
+    // Pi lists them; a step that only called tools has nothing else to show.
+    const entries = messages.flatMap((message) => {
+      const text = String(message.content || "").replace(/\s+/g, " ").trim().slice(0, 240);
+      const tools = (message.blocks || []).filter((block) => block.kind === "tool_call");
+      return [
+        { id: message.id, timestamp: message.timestamp || null, display: `${message.role}: ${text}`, kind: message.role,
+          hidden: message.role === "assistant" && !text && !message.errorMessage && tools.length > 0 },
+        ...tools.map((block) => ({ id: block.toolCallId, timestamp: message.timestamp || null,
+          display: formatHistoryTool(block.name, block.input || {}), kind: "tool", hidden: false })),
+      ];
+    });
     let child = null;
     let leafId = null;
-    for (const message of [...messages].reverse()) {
-      const node = { entry: { id: message.id, parentId: null, timestamp: message.timestamp || null,
-        type: "message", display: `${message.role}: ${String(message.content || "").replace(/\s+/g, " ").trim().slice(0, 240)}`,
-        kind: message.role, hidden: false, forkable: false, regeneratable: false }, children: child ? [child] : [] };
+    for (const entry of [...entries].reverse()) {
+      const node = { entry: { ...entry, parentId: null, type: "message", forkable: false, regeneratable: false },
+        children: child ? [child] : [] };
       if (child) child.entry.parentId = node.entry.id;
       else leafId = node.entry.id;
       child = node;
