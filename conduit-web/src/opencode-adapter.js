@@ -50,6 +50,20 @@ const stopReasonOf = (row) => row.error?.type === "aborted" ? "aborted"
   : row.finish === "tool-calls" ? "toolUse" : row.finish || (row.time?.completed ? "stop" : null);
 const errorOf = (row) => row.error?.type === "aborted" ? null : row.error?.message || null;
 const toolOutput = (part) => contentText(part?.state?.content) || String(part?.state?.output || part?.state?.error || "");
+// A prompt is saved in OpenCode under the name the browser already drew it
+// with, in the `msg_` form OpenCode requires, so the live row, the chat log and
+// the saved copy are one message. OpenCode's own ids are hex after `msg_`, so a
+// prompt typed in its TUI never reads as one of Conduit's.
+const serviceMessageId = (conduitId) => `msg_${conduitId}`;
+const conduitMessageId = (id) => String(id || "").startsWith("msg_m_") ? id.slice(4) : id;
+/** The blocks of a saved assistant message, as Conduit states them live and on reload alike. */
+const blocksOf = (row) => (row.content || []).flatMap((part, index) => {
+  if (part.type === "text") return [{ kind: "text", contentIndex: index, text: part.text || "" }];
+  if (part.type === "reasoning") return [{ kind: "thinking", contentIndex: index, text: part.text || "", redacted: false }];
+  if (part.type === "tool") return [{ kind: "tool_call", contentIndex: index,
+    toolCallId: part.id || part.callID, name: part.name || part.tool || "tool", input: part.state?.input ?? null }];
+  return [];
+});
 
 export class OpenCodeAdapter extends EventEmitter {
   constructor({ command = "opencode2", logs = null } = {}) {
@@ -193,16 +207,12 @@ export class OpenCodeAdapter extends EventEmitter {
     if (!record?.sessionId) throw failure("OpenCode session is not ready");
     if (record.active) throw failure("OpenCode session is busy", "generation_limit", 409);
     const generationId = crypto.randomUUID();
-    // OpenCode owns its message IDs. The API accepts exact-retry IDs only in
-    // its own `msg_*` format, so Conduit's optimistic ID remains at the edge.
-    const userMessageId = `msg_${crypto.randomUUID().replaceAll("-", "")}`;
-    const clientUserMessageId = options.clientUserMessageId || userMessageId;
+    const clientUserMessageId = options.clientUserMessageId || `m_${crypto.randomUUID()}`;
     record.active = true;
     record.activity = "working";
     record.stopping = false;
     record.generation = { id: generationId, closed: false, settled: false };
     record.promptStartedAt = Date.now();
-    record.promptMessageId = userMessageId;
     record.answering = clientUserMessageId;
     record.liveMessages.clear();
     this.publish(record, messageOpen({ id: clientUserMessageId, role: "user", generationId,
@@ -213,7 +223,7 @@ export class OpenCodeAdapter extends EventEmitter {
       // Listen before asking, so the turn's first events are not missed.
       await this.ensureStream();
       await this.request("POST", `/session/${encodeURIComponent(record.sessionId)}/prompt`, { body: {
-        id: userMessageId, text: parseAttachmentEnvelope(message).message, files: [], agents: [],
+        id: serviceMessageId(clientUserMessageId), text: parseAttachmentEnvelope(message).message, files: [], agents: [],
       } });
       return { generationId, attachmentIdentity: { messageId: clientUserMessageId } };
     } catch (cause) {
@@ -353,14 +363,21 @@ export class OpenCodeAdapter extends EventEmitter {
     }
   }
 
-  /** The live state of an assistant message, opened on first sight. */
+  /**
+   * The live state of an assistant message, opened on first sight: a row in
+   * the record, and a message in the turn being painted, which is what its
+   * deltas are written into. Every route to a message comes through here.
+   */
   liveMessage(record, id, created) {
     let state = record.liveMessages.get(id);
     if (state) return state;
     state = { id, row: null, text: new Map(), kinds: new Map(), tools: new Map(), indexes: new Map(), closed: false };
     record.liveMessages.set(id, state);
-    this.publish(record, messageOpen({ id, role: "assistant", generationId: record.generation?.id || null,
+    const generationId = record.generation?.id || null;
+    this.publish(record, messageOpen({ id, role: "assistant", generationId,
       answers: record.answering || null, timestamp: iso(created) }));
+    this.publish(record, { type: "assistant_content", phase: "start", generationId,
+      seq: ++record.generationSeq, messageId: id });
     return state;
   }
 
@@ -485,13 +502,7 @@ export class OpenCodeAdapter extends EventEmitter {
 
   closeLiveMessage(record, row, state, finalStopReason = null) {
     state.closed = true;
-    const blocks = (row.content || []).flatMap((part, index) => {
-      if (part.type === "text") return [{ kind: "text", contentIndex: index, text: part.text || "" }];
-      if (part.type === "reasoning") return [{ kind: "thinking", contentIndex: index, text: part.text || "" }];
-      if (part.type === "tool") return [{ kind: "tool_call", contentIndex: index,
-        toolCallId: part.id || part.callID, name: part.name || part.tool || "tool", input: part.state?.input ?? null }];
-      return [];
-    });
+    const blocks = blocksOf(row);
     const stopReason = finalStopReason || stopReasonOf(row) || "stop";
     this.publish(record, { type: "assistant_content", phase: "final", generationId: record.generation?.id || null,
       seq: ++record.generationSeq, messageId: row.id, stopReason, errorMessage: errorOf(row), blocks,
@@ -647,25 +658,20 @@ export class OpenCodeAdapter extends EventEmitter {
     let lastUser = null;
     for (const row of [...rows].reverse()) {
       if (row.type === "user") {
-        const content = contentText(row.content);
-        messages.push({ id: row.id, role: "user", content, timestamp: iso(row.time?.created) });
-        lastUser = row.id;
+        // A prompt's words are saved as `text`, not as content parts.
+        const content = typeof row.text === "string" ? row.text : contentText(row.content);
+        lastUser = conduitMessageId(row.id);
+        messages.push({ id: lastUser, role: "user", content, timestamp: iso(row.time?.created) });
         continue;
       }
       if (row.type !== "assistant") continue;
-      const blocks = (row.content || []).flatMap((part) => {
-        if (part.type === "text") return [{ kind: "text", text: part.text || "" }];
-        if (part.type === "reasoning") return [{ kind: "thinking", text: part.text || "" }];
-        if (part.type === "tool") {
-          const toolCallId = part.id || part.callID;
-          const input = part.state?.input ?? null;
-          tools.push({ toolCallId, name: part.name || part.tool || "tool", input,
-            output: toolOutput(part), isError: part.state?.status === "error",
-            done: ["completed", "error"].includes(part.state?.status) });
-          return [{ kind: "tool_call", toolCallId, name: part.name || part.tool || "tool", input }];
-        }
-        return [];
-      });
+      const blocks = blocksOf(row);
+      for (const part of row.content || []) {
+        if (part.type !== "tool") continue;
+        tools.push({ toolCallId: part.id || part.callID, name: part.name || part.tool || "tool",
+          input: part.state?.input ?? null, output: toolOutput(part), isError: part.state?.status === "error",
+          done: ["completed", "error"].includes(part.state?.status) });
+      }
       const text = blocks.filter((block) => block.kind === "text").map((block) => block.text).join("\n");
       const stopReason = stopReasonOf(row);
       messages.push({ id: row.id, role: "assistant", content: text, blocks, answers: lastUser,

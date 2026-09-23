@@ -151,7 +151,7 @@ buffer and the chat's log. When a record's buffer is full, paint is evicted befo
 | `error` | record when `scope: "runtime"` | `scope: "request"` is Conduit refusing a command and belongs to that command. Codes: `generation_limit`, `live_process_limit`, `rpc_timeout`, `rate_limited` (with `retryAfterMs`), `auth_expired`, `backend_unavailable`, `invalid_request`. |
 | `transcript_sync` | record | A window of the transcript, or with `replace: true` the whole of it. |
 | `session_checkpoint` | record | The chat's durable identity and title. |
-| `assistant_content` | paint | `start` names the message; `delta` carries an addition with generation, message, block kind and content index; `final` carries the complete ordered blocks. |
+| `assistant_content` | paint | `start` names the message, and has to come first: the browser's fold only creates a streaming message on `start`, so deltas and a `final` for a message it never saw start are dropped and the row appears only when `message.close` lands; `delta` carries an addition with generation, message, block kind and content index; `final` carries the complete ordered blocks. |
 | `tool_activity` | paint | `start`, `update` and `end` under one `toolCallId`. Unknown tool names are valid. |
 | `generation_replay` | neither | The whole reduced generation, sent once on attach. |
 | `runtime_state` | neither | Adapter capabilities, queue, usage and what the session is busy with. Session state, not a turn transition. |
@@ -286,6 +286,13 @@ OpenCode's service is not Conduit's to run. The adapter joins it as another
 client, the way OpenCode's own TUI does — one loopback event stream for every
 session, the service's password from its config — and never stops it on
 shutdown, because the TUI may be using it.
+
+A prompt keeps the name the browser drew it with, even on a harness that names
+its own messages. OpenCode accepts any prompt id beginning `msg_`, so the
+adapter saves the prompt as `msg_` plus the browser's id and strips the prefix
+when it reads the saved copy back. The live row, the chat's log and OpenCode's
+own copy are then one message; with two names, a reload folded the log over
+the saved copy and read every prompt twice, out of order.
 
 `interruptKeepsPartial` is true only for the Test stream, and that is not a
 gap in the others. Every real harness drops an interrupted partial, because
