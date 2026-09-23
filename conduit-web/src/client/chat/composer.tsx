@@ -103,6 +103,7 @@ export function Composer(props: {
     ?? props.chat.capabilities()?.[capability] !== false;
   const comments = createMemo(() => reviewComments(props.chat.loadedId() ?? ""));
   const hasText = createMemo(() => Boolean(props.chat.draft().trim()));
+  const stoppable = createMemo(() => (busy() || props.chat.stopping()) && supports("cancel"));
   const hasPayload = createMemo(() => hasText() || comments().length > 0 || props.attachments.pendingIds().length > 0);
   const dictating = createMemo(() => ["starting", "listening", "finishing", "waiting", "transcribing"].includes(dictationState()));
   const recording = createMemo(() => dictationState() === "listening");
@@ -524,13 +525,19 @@ export function Composer(props: {
               <Show when={!recording() && (dictationLabel() || (activity()?.label && activity()?.label !== "Ready"))}><span class="composer-status-state composer-actions-status" role="status" aria-live="polite"><Show when={dictationLabel()} fallback={<><Show when={SPINNING_ACTIVITY.has(activity()?.kind || "")}><Spinner /></Show><Show when={["request_failed", "runtime_failed"].includes(activity()?.kind || "")}><TriangleAlertIcon aria-hidden="true" /></Show>{activity()?.label || "Ready"}</>}>{dictationLabel()}</Show></span></Show>
               <div class="composer-desktop-setting"><ContextGauge chat={props.chat} metrics={props.contextMetrics} compact /></div>
               <Button variant={recording() ? "default" : "ghost"} size="icon-sm" class="dictation-trigger" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || !interactive() || ["finishing", "waiting", "transcribing"].includes(dictationState())} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={["starting", "finishing", "waiting", "transcribing"].includes(dictationState())} fallback={<MicIcon />}><Spinner /></Show></Button>
-              {/* Send stays next to Stop while the agent works: sending during a
-                  turn queues the message for the agent, and that was reachable
-                  only from the keyboard. */}
-              <Button variant="ghost" size="icon-sm" class="composer-send-trigger" aria-label={busy() ? "Send to the agent" : "Send message"} title={busy() ? "Send — the agent takes it when the current step finishes" : undefined} disabled={!canSend()} onClick={() => sendMessage()}><ArrowUpIcon /></Button>
-              <Show when={(busy() || props.chat.stopping()) && supports("cancel")}>
-                <Button variant="default" size="icon-sm" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button>
+              {/* One primary slot, so nothing beside it moves. While the agent
+                  works it is Stop; once a draft is typed it is Send again --
+                  which queues the message for the agent -- and Stop steps to
+                  its left. Each change scales the new action in. */}
+              <Show when={stoppable() && hasPayload()}>
+                <Button variant="ghost" size="icon-sm" class="composer-stop-aside" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button>
               </Show>
+              <span class="composer-primary-slot">
+                <Show when={stoppable() && !hasPayload()} fallback={
+                  <Button variant="ghost" size="icon-sm" class="composer-send-trigger" aria-label={busy() ? "Send to the agent" : "Send message"} title={busy() ? "Send — the agent takes it when the current step finishes" : undefined} disabled={!canSend()} onClick={() => sendMessage()}><ArrowUpIcon /></Button>}>
+                  <Button variant="default" size="icon-sm" class="composer-stop-trigger" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button>
+                </Show>
+              </span>
             </div>
           </div>
         </div>
