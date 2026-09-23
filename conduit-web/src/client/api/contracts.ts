@@ -476,7 +476,7 @@ export interface Question {
   secret: boolean;
   required: boolean;
   options: QuestionOption[];
-  freeform: false | { placeholder?: string; multiline?: boolean; numeric?: boolean };
+  freeform: false | { placeholder?: string; multiline?: boolean; numeric?: boolean; initial?: string };
 }
 
 export interface QuestionOption {
