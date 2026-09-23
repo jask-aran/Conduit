@@ -8,7 +8,7 @@ function setup() {
   adapter.publish = (_record, event) => { events.push(event); };
   const record = {
     sessionId: "fx-session", loading: false, active: true, promptText: "hi", answering: "user-message",
-    generation: { id: "generation" }, generationSeq: 0, answer: null, tools: new Map(), model: "test",
+    generation: { id: "generation" }, generationSeq: 0, answer: null, tools: new Map(), requests: new Map(), hostUiRequests: [], model: "test",
     traceMessages: [], reasoningMessage: null, currentFxMessageId: null, currentActivity: null, liveMessageText: "",
   };
   return { adapter, events, record };

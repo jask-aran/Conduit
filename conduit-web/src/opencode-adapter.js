@@ -100,6 +100,8 @@ export class OpenCodeAdapter extends EventEmitter {
     this.connection = null;
     this.connectionStart = null;
     this.stream = null;
+    this.streamAttempts = 0;
+    this.recovering = false;
     this.sessions = new SessionRecords({
       capabilities: OPENCODE_CAPABILITIES,
       backend: { protocol: "native_api", implementation: "opencode", installationId: "host-opencode" },
@@ -245,6 +247,7 @@ export class OpenCodeAdapter extends EventEmitter {
     record.promptStartedAt = Date.now();
     record.answering = clientUserMessageId;
     record.liveMessages.clear();
+    this.streamAttempts = 0;
     this.publish(record, messageOpen({ id: clientUserMessageId, role: "user", generationId,
       content: parseAttachmentEnvelope(message).message, timestamp: new Date().toISOString() }));
     this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.generationSeq,
@@ -320,29 +323,55 @@ export class OpenCodeAdapter extends EventEmitter {
     void this.recoverStream();
   }
 
-  async recoverStream(attempt = 1) {
-    const active = this.rawRecords().filter((record) => record.active);
-    if (!active.length || this.stream) return;
+  /**
+   * Reopen the stream for turns still running. A stream that opens and closes
+   * again counts as a failed attempt, the same as one that never opened: only
+   * a running turn hearing news resets the count (in `dispatch`).
+   */
+  async recoverStream() {
+    if (!this.rawRecords().some((record) => record.active) || this.stream || this.recovering) return;
+    this.recovering = true;
+    const attempt = ++this.streamAttempts;
+    let retry = false;
     try {
-      await this.ensureStream();
-      for (const record of active) void this.catchUp(record);
-    } catch (cause) {
-      if (attempt < STREAM_RETRY_LIMIT) {
-        setTimeout(() => void this.recoverStream(attempt + 1), 1000).unref?.();
+      if (attempt > 1) await new Promise((resolve) => setTimeout(resolve, 1000).unref?.());
+      const active = this.rawRecords().filter((record) => record.active);
+      if (attempt > STREAM_RETRY_LIMIT) {
+        this.streamAttempts = 0;
+        for (const record of active) this.failTurn(record, "OpenCode event stream keeps closing");
         return;
       }
-      for (const record of active) {
-        this.publish(record, { type: "error", generationId: record.generation?.id || null, scope: "runtime",
-          error: { code: "backend_unavailable", message: cause.message || String(cause) } });
-        this.settle(record, "failed");
-      }
+      if (!active.length || this.stream) return;
+      await this.ensureStream();
+      for (const record of active) void this.catchUp(record);
+    } catch {
+      retry = true;
+    } finally {
+      this.recovering = false;
     }
+    if (retry) void this.recoverStream();
   }
 
-  /** Bring a running turn up to date from saved messages, after a gap in the stream. */
-  async catchUp(record) {
+  failTurn(record, message) {
+    this.publish(record, { type: "error", generationId: record.generation?.id || null, scope: "runtime",
+      error: { code: "backend_unavailable", message } });
+    this.settle(record, "failed");
+  }
+
+  /**
+   * Bring a running turn up to date from saved messages, after a gap in the
+   * stream. A read that fails is tried again: if the turn ended during the
+   * gap, this read is the only way left to hear it.
+   */
+  async catchUp(record, attempt = 1) {
+    const generation = record.generation;
     const rows = await this.messageRows(record.sessionId, { limit: 100 }).catch(() => null);
-    if (!rows || !record.active) return;
+    if (!record.active || record.generation !== generation) return;
+    if (!rows) {
+      if (attempt >= STREAM_RETRY_LIMIT) this.failTurn(record, "OpenCode's saved messages could not be read");
+      else setTimeout(() => void this.catchUp(record, attempt + 1), 1000).unref?.();
+      return;
+    }
     this.syncMessages(record, rows);
     void this.refreshRequests(record);
     const latest = rows[0];
@@ -373,6 +402,7 @@ export class OpenCodeAdapter extends EventEmitter {
     }
     const record = data.sessionID ? this.rawRecords().find((item) => item.sessionId === data.sessionID) : null;
     if (!record?.active) return;
+    this.streamAttempts = 0;
     if (type.startsWith("session.execution.") && type !== "session.execution.started") {
       const outcome = type.slice("session.execution.".length);
       if (outcome === "failed" && data.error) this.publish(record, { type: "error", generationId: record.generation?.id || null,
@@ -475,6 +505,7 @@ export class OpenCodeAdapter extends EventEmitter {
       `/session/${encodeURIComponent(record.sessionId)}/message/${encodeURIComponent(state.id)}`).catch(() => null);
     if (state.closed || !record.active) return;
     if (row?.content) state.row = row;
+    if (record.liveMessages.get(state.id) !== state) return;
     this.closeLiveMessage(record, state.row || this.rowFromState(state, data), state);
   }
 
@@ -489,8 +520,11 @@ export class OpenCodeAdapter extends EventEmitter {
   }
 
   async finishTurn(record, outcome) {
+    // The read is awaited, and a later turn may have begun by the time it
+    // lands: this ending is only this turn's.
+    const generation = record.generation;
     const rows = await this.messageRows(record.sessionId, { limit: 100 }).catch(() => null);
-    if (!record.active) return;
+    if (!record.active || record.generation !== generation) return;
     if (rows) this.syncMessages(record, rows);
     this.settle(record, outcome);
   }
@@ -501,9 +535,14 @@ export class OpenCodeAdapter extends EventEmitter {
       const state = this.liveMessage(record, row.id, row.time?.created);
       if (state.closed) continue;
       state.row = row;
+      // The saved message restates each block's place under the key the
+      // stream names it by, so a delta that follows lands in the same block.
+      const ordinals = {};
       for (const [index, part] of (row.content || []).entries()) {
+        const key = part.type === "tool" ? `tool:${part.id || part.callID}` : `${part.type}:${ordinals[part.type] = (ordinals[part.type] ?? -1) + 1}`;
+        if (!state.indexes.has(key)) state.indexes.set(key, index);
+        state.kinds.set(index, part.type === "tool" ? "tool" : part.type);
         if (["text", "reasoning"].includes(part.type)) {
-          state.kinds.set(index, part.type);
           const previous = state.text.get(index) || "";
           const current = String(part.text || "");
           const delta = current.startsWith(previous) ? current.slice(previous.length) : current;
@@ -610,6 +649,8 @@ export class OpenCodeAdapter extends EventEmitter {
     // An interrupted or failed turn leaves its last message and tools open;
     // OpenCode never completes them, so they are closed here.
     const stopReason = outcome === "succeeded" ? "stop" : outcome === "failed" ? "error" : "aborted";
+    // A prompt left on screen from an ended turn would hide the next turn's.
+    for (const id of [...record.requests.keys()]) this.resolveRequest(record, id);
     for (const state of record.liveMessages.values()) {
       for (const tool of state.tools.values()) {
         if (tool.closed) continue;
@@ -774,13 +815,23 @@ export class OpenCodeAdapter extends EventEmitter {
     if (!sessionId) return { messages: [], tools: [], page: { before: null } };
     // A page may start partway through a turn; read on to the prompt that
     // began it, so an older page never shows a reply without its question.
-    let { rows, next } = await this.messagePage(sessionId, { limit: 100, cursor: before || "" });
-    while (next && rows.at(-1)?.type !== "user") {
-      const older = await this.messagePage(sessionId, { limit: 100, cursor: next });
-      rows = [...rows, ...older.rows];
-      next = older.next;
+    // A page ends on its oldest prompt: read again only as far as that one,
+    // so OpenCode's own cursor starts the next page on a whole turn.
+    let rows = [];
+    let cursor = before || "";
+    for (;;) {
+      const page = await this.messagePage(sessionId, { limit: 100, cursor });
+      const oldestPrompt = page.rows.findLastIndex((row) => row.type === "user");
+      if (!page.next || oldestPrompt === page.rows.length - 1) {
+        return { ...OpenCodeAdapter.transcript([...rows, ...page.rows]), page: { before: page.next } };
+      }
+      if (oldestPrompt >= 0) {
+        const cut = await this.messagePage(sessionId, { limit: oldestPrompt + 1, cursor });
+        return { ...OpenCodeAdapter.transcript([...rows, ...cut.rows]), page: { before: cut.next } };
+      }
+      rows = [...rows, ...page.rows];
+      cursor = page.next;
     }
-    return { ...OpenCodeAdapter.transcript(rows), page: { before: next } };
   }
 
   async readHistory(options) {
