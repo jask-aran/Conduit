@@ -105,7 +105,7 @@ export class OpenCodeAdapter extends EventEmitter {
     finally { this.connectionStart = null; }
   }
 
-  async request(method, route, { directory = "", query = {}, body } = {}) {
+  async request(method, route, { directory = "", query = {}, body, whole = false } = {}) {
     const connection = await this.connect();
     const url = new URL(`/api${route}`, connection.baseUrl);
     if (directory) url.searchParams.set("directory", directory);
@@ -130,7 +130,7 @@ export class OpenCodeAdapter extends EventEmitter {
     }
     if (response.status === 204) return null;
     const result = await response.json();
-    return result?.data ?? result;
+    return whole ? result : result?.data ?? result;
   }
 
   health() {
@@ -624,10 +624,21 @@ export class OpenCodeAdapter extends EventEmitter {
 
   listSessions(options) { return this.listThreads(options); }
 
-  async messageRows(sessionId, { limit = 100, cursor = "" } = {}) {
-    return await this.request("GET", `/session/${encodeURIComponent(sessionId)}/message`, {
-      query: { limit, order: "desc", cursor },
-    }) || [];
+  async messageRows(sessionId, { limit = 100 } = {}) {
+    return (await this.messagePage(sessionId, { limit })).rows;
+  }
+
+  /**
+   * Newest first. A cursor carries its own order, and OpenCode refuses one
+   * sent with `order`. `next` is set on a short last page too, so only a full
+   * page says there may be more.
+   */
+  async messagePage(sessionId, { limit = 100, cursor = "" } = {}) {
+    const result = await this.request("GET", `/session/${encodeURIComponent(sessionId)}/message`, {
+      query: cursor ? { limit, cursor } : { limit, order: "desc" }, whole: true,
+    });
+    const rows = Array.isArray(result?.data) ? result.data : [];
+    return { rows, next: rows.length === limit ? result?.cursor?.next || null : null };
   }
 
   static transcript(rows) {
@@ -665,12 +676,19 @@ export class OpenCodeAdapter extends EventEmitter {
     return { messages, tools };
   }
 
-  async readTranscript({ liveSessionId, opaqueSession }) {
+  async readTranscript({ liveSessionId, opaqueSession, before = "" }) {
     const record = liveSessionId ? this.get(liveSessionId) : null;
     const sessionId = record?.sessionId || (typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId);
     if (!sessionId) return { messages: [], tools: [], page: { before: null } };
-    const rows = await this.messageRows(sessionId, { limit: 100 });
-    return { ...OpenCodeAdapter.transcript(rows), page: { before: null } };
+    // A page may start partway through a turn; read on to the prompt that
+    // began it, so an older page never shows a reply without its question.
+    let { rows, next } = await this.messagePage(sessionId, { limit: 100, cursor: before || "" });
+    while (next && rows.at(-1)?.type !== "user") {
+      const older = await this.messagePage(sessionId, { limit: 100, cursor: next });
+      rows = [...rows, ...older.rows];
+      next = older.next;
+    }
+    return { ...OpenCodeAdapter.transcript(rows), page: { before: next } };
   }
 
   async readHistory(options) {
