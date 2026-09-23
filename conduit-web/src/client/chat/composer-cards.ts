@@ -38,10 +38,10 @@ export function createLeaving<T>(source: () => T, present: (value: T) => boolean
  * Fade one card out in place before it is taken away. The animation is handed
  * back so a removal that fails can put the card back.
  */
-export async function fadeOut(element: Element | null | undefined): Promise<Animation | null> {
+export async function fadeOut(element: Element | null | undefined, duration: number = LEAVE_MS.fade): Promise<Animation | null> {
   if (!element || reduced() || typeof (element as HTMLElement).animate !== "function") return null;
   const animation = (element as HTMLElement).animate([{ opacity: 1 }, { opacity: 0 }],
-    { duration: LEAVE_MS.fade, easing: "cubic-bezier(.4, 0, 1, 1)", fill: "forwards" });
+    { duration, easing: "cubic-bezier(.4, 0, 1, 1)", fill: "forwards" });
   await animation.finished.catch(() => undefined);
   return animation;
 }
