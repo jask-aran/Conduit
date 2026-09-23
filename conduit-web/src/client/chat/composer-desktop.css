@@ -14,7 +14,7 @@
   .composer-model-trigger > span:nth-child(2) { flex: none; }
   .composer-permission-trigger > span { max-width: 72px; }
   .composer-actions-status { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .composer-actions-right .chat-context-trigger { color: var(--muted-foreground); padding-inline: 3px; }
+  .composer-actions-left .chat-context-trigger { color: var(--muted-foreground); padding-inline: 3px; }
 }
 .composer-menu-shortcut { margin-left: auto; color: var(--muted-foreground); font-size: 10px; }
 .composer-quick-model-menu { width: max-content; min-width: 240px; max-width: min(380px, calc(100vw - 24px)); }
