@@ -253,7 +253,7 @@ No stacked card shadows, no colored glows, no glass on tiled content, no glass o
 - Icon buttons in chrome: ~8–10px radius inside the frost pill.
 - Pills only for true pills (scope toggle, runtime dots). Do not pill section titles or metadata.
 
-Icons are Lucide at 1.5 stroke, 13–16px, muted at rest.
+Icons are Lucide at 1.5 stroke, 13–16px, muted at rest. The composer's own actions — attach, +, mic, Send — are the exception: stroke 2, in the text colour, because they are the row's weight.
 
 # Motion
 
@@ -289,6 +289,15 @@ Choosing in a menu:
 - **Search opens the palette.** A menu over a long list starts with a "Search all …" row, with its shortcut keycap, that opens the matching palette — not an inline search field.
 - **Stay open for the next choice.** Picking something whose follow-up sits in the same menu keeps it open: a model keeps the model menu open for Thinking, and a choice in a phone submenu returns to the options rather than closing them. A choice that ends the task closes the menu.
 - **Ordered choices are a slider.** Effort-like ordered levels are a step slider whose label shows the current level; the label opens a submenu listing the levels, never a list expanding in place.
+- **A tap ends where it lifts.** When a tap changes what a menu shows — opening a submenu, choosing in one — the mouse events a phone sends after it are dropped, so they cannot choose or highlight whatever the change left under the finger.
+
+**Composer row** — the controls under the draft, in three tiers by how often they are reached for mid-conversation. Nothing leaves the row; lower tiers get quieter, not hidden.
+
+- Desktop, left to right: attach, the context ring, the profile as its harness mark, the model-and-effort chip, permissions; then status, the dictation level while recording, the mic, and the primary slot. The chip and the slot are the only controls at full weight; settings show their value muted; attach and the mic are live actions in the text colour.
+- Phone: one row — +, the draft, mic, primary slot. Every setting lives in the + menu, which shows each value rather than its name. The mic and Send stack the moment a draft reaches its third line, and stay stacked until it fits on one.
+- The primary slot is one fixed-size button: Send (muted while there is nothing to send), Stop while the agent works, Send again once a draft is typed, with Stop stepping to its left. Its icon scales in ~150ms; the label changes at once.
+- Stop is its mark alone: a small solid rounded square in the text colour, no fill. Nothing in the row is a white filled button.
+- Recording, the mic breathes from the text colour to muted and back. No fill, ring, size change or wash; audio chrome stays monochrome.
 
 **Pane header** — a hairline-bottomed strip across a pane (terminal today). Left: route buttons if any, then the status indicator, the name (semibold), and one muted mono context line joined with ` · `. Right: groups of quiet ghost controls separated by a 1px, ~14px hairline, in the order the person reaches for them, with anything that does not fit collapsing into a `⋯` menu rather than scrolling.
 
