@@ -1171,7 +1171,7 @@ export function Sidebar(props: {
               <div class="sidebar-harness-tiles">
                 <For each={harnesses()}>{(harness) =>
                   <button type="button" class="sidebar-harness-tile" aria-current={props.selectedHarness === harness.id ? "page" : undefined} aria-label={`${harness.label} · ${harnessStatusLabel(harness.status)}`} title={`${harness.label} · ${harnessStatusLabel(harness.status)}`} onClick={() => { closeMobile(); props.onOpenHarness(harness.id); }}>
-                    <HarnessMark id={harness.id} class="sidebar-harness-mark" />
+                    <HarnessMark id={harness.id} class="sidebar-harness-mark" artwork />
                     <i class="sidebar-harness-status" data-status={harness.status || "ready"} aria-hidden="true" />
                   </button>
                 }</For>

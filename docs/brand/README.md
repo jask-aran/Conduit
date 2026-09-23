@@ -11,6 +11,8 @@ do not restyle them beyond the single-colour tinting described below.
 | --- | --- | --- |
 | ChatGPT Web | `public/brand/openai-blossom-mark.svg` | official OpenAI brand kit (`openai/SVGs/OAI_OpenAI-Blossom_Black.svg`) (`fill` swapped to `currentColor`) |
 | Codex | `public/brand/codex-mark.svg` | Codex glyph via [lobehub/lobe-icons](https://github.com/lobehub/lobe-icons) (`static-svg/icons/codex-color.svg`, MIT), with the white app-icon backing plate removed so the gradient mark sits on a clear background |
+| Codex (one colour) | `public/brand/codex-mono-mark.svg` | the Codex glyph above with its gradient fill swapped to `currentColor` |
+| Conduit | `public/brand/conduit-mark.svg` | Conduit's own: a heavy geometric C drawn as one stroked arc |
 | Claude Code | `public/brand/claude-code-mark.svg` | Claude glyph via [lobehub/lobe-icons](https://github.com/lobehub/lobe-icons) (`static-svg/icons/claude.svg`, MIT) |
 | fx | `public/brand/fx-mark.svg` | official glyph from the [fx site](https://fx.sh/) navigation SVG |
 | opencode | `public/brand/opencode-mark.svg` | opencode glyph via [lobehub/lobe-icons](https://github.com/lobehub/lobe-icons) (`static-svg/icons/opencode.svg`, MIT) |
@@ -24,5 +26,6 @@ its chip identically; the supplied files carry app-icon padding that would
 otherwise render them at 50-75% size.
 
 Single-colour marks are rendered as a CSS mask filled with `currentColor`, so
-they follow the theme. The Codex mark keeps its own gradient and is rendered as
-an image — never tint or invert it.
+they follow the theme. Codex is shown in one colour everywhere but its tile in
+the Computer sidebar, which opens its dashboard; there the gradient artwork is
+rendered as an image — never tint or invert it.
