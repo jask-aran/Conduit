@@ -338,14 +338,17 @@ svg { stroke-width: 1.5; }
    never alarming -- nothing failed, it was interrupted on purpose. */
 .turn-trace-text[data-discarded="true"] .chat-markdown { text-decoration: line-through; text-decoration-thickness: 0.8px; opacity: 0.55; }
 .discarded-answer { display: flex; flex-direction: column; gap: 4.8px; }
-.discarded-answer-header { display: flex; align-items: center; gap: 6.4px; width: 100%; padding: 3.2px 1.6px; border: none; background: none; color: var(--muted-foreground); font-size: 10.4px; text-align: left; cursor: pointer; border-radius: 4.8px; }
+.response-status { flex: none; margin-right: 4.8px; white-space: nowrap; }
+.response-actions [data-slot="button"].response-continue { width: auto; gap: 4px; padding-inline: 6.4px 8px; font-size: 9.6px; }
+.discarded-answer .response-actions { min-width: 0; }
+.discarded-answer-header { display: flex; flex: 1; align-items: center; gap: 6.4px; min-width: 0; padding: 3.2px 1.6px; border: none; background: none; color: var(--muted-foreground); font-size: 10.4px; text-align: left; cursor: pointer; border-radius: 4.8px; }
 .discarded-answer-header:hover { color: var(--foreground); }
 .discarded-answer-header > svg { width: 11.2px; height: 11.2px; flex-shrink: 0; }
 .discarded-answer-preview { flex: 1; min-width: 0; overflow: hidden; text-decoration: line-through; text-decoration-thickness: 0.8px; text-overflow: ellipsis; white-space: nowrap; }
 .discarded-answer-status { flex: none; }
 .discarded-answer-chevron { transition: transform 0.15s ease; }
 .discarded-answer-chevron[data-open="true"] { transform: rotate(180deg); }
-.discarded-answer-body { margin-left: 5.6px; padding: 1.6px 0 4.8px 11.2px; border-left: 1px solid var(--border); }
+.discarded-answer-body { padding: 1.6px 0 4.8px 1.6px; }
 .discarded-answer-body .chat-markdown { color: var(--muted-foreground); font-size: 11.2px; }
 .tool-card-content { border: 0.8px solid var(--border); border-top: 0; border-radius: 0 0 var(--radius) var(--radius); background: var(--card); }
 .tool-card pre { max-height: 336px; margin: 0; overflow: auto; padding: 9.6px; white-space: pre-wrap; font: 9.6px/1.5 ui-monospace, monospace; }
@@ -1138,13 +1141,16 @@ svg { stroke-width: 1.5; }
 .turn-trace-error-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted-foreground); font-size: 11px; }
 .turn-trace-text[data-discarded="true"] .chat-markdown { text-decoration: line-through; opacity: 0.55; }
 .discarded-answer { display: flex; flex-direction: column; gap: 6px; }
-.discarded-answer-header { display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 2px; border: none; background: none; color: var(--muted-foreground); font-size: 13px; text-align: left; cursor: pointer; border-radius: 6px; }
+.response-status { flex: none; margin-right: 6px; white-space: nowrap; }
+.response-actions [data-slot="button"].response-continue { width: auto; gap: 5px; padding-inline: 8px 10px; font-size: 12px; }
+.discarded-answer .response-actions { min-width: 0; }
+.discarded-answer-header { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; padding: 4px 2px; border: none; background: none; color: var(--muted-foreground); font-size: 13px; text-align: left; cursor: pointer; border-radius: 6px; }
 .discarded-answer-header > svg { width: 14px; height: 14px; flex-shrink: 0; }
 .discarded-answer-preview { flex: 1; min-width: 0; overflow: hidden; text-decoration: line-through; text-overflow: ellipsis; white-space: nowrap; }
 .discarded-answer-status { flex: none; }
 .discarded-answer-chevron { transition: transform 0.15s ease; }
 .discarded-answer-chevron[data-open="true"] { transform: rotate(180deg); }
-.discarded-answer-body { margin-left: 7px; padding: 2px 0 6px 14px; border-left: 1px solid var(--border); }
+.discarded-answer-body { padding: 2px 0 6px 2px; }
 .discarded-answer-body .chat-markdown { color: var(--muted-foreground); font-size: 14px; }
 .turn-trace-error pre { max-height: 120px; margin: 0; overflow: auto; color: var(--foreground); font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; white-space: pre-wrap; }
 .tool-card-content { border: 1px solid var(--border); border-top: 0; border-radius: 0 0 var(--radius) var(--radius); background: var(--card); }
