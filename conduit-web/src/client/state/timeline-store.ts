@@ -82,6 +82,23 @@ export function createTimelineStore(
   activeGenerationChange: Accessor<LiveGenerationChange | null> = () => null,
 ) {
   const [rows, setRows] = createStore<TimelineRow[]>([]);
+  /*
+   * The store writes into whatever it holds. Handed the chat's own messages and
+   * tools, a row whose key passed to a different value -- a saved answer's key
+   * taken over by the live answer of the next send -- had that value merged
+   * over the saved message: its id became the live one and its `answers` was
+   * deleted, and the next projection stopped on the transcript contract. So the
+   * store is only ever given its own copies.
+   */
+  const owned = <T,>(value: T): T => {
+    if (Array.isArray(value)) return value.map(owned) as T;
+    if (value && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
+      const copy: Record<string, unknown> = {};
+      for (const key of Object.keys(value)) copy[key] = owned((value as Record<string, unknown>)[key]);
+      return copy as T;
+    }
+    return value;
+  };
   let previousProjectedRows: TurnRow[] = [];
   let previousMessages: Message[] | null = null;
   let previousTools: ToolItem[] | null = null;
@@ -165,7 +182,7 @@ export function createTimelineStore(
       if (current.type !== "message") return null;
       const next = buildLiveAnswerRow(inputGeneration, location.assistantId, liveIndex, liveIndex.messageIndex, current.precedingUserId);
       if (!next) return null;
-      setRows(index, "value", next.value);
+      setRows(index, "value", owned(next.value));
       previousProjectedRows[index] = next;
       return location.rowKey;
     }
@@ -182,7 +199,7 @@ export function createTimelineStore(
     const nextValue = updateTraceSegment(current, location.segmentIndex, nextSegment);
     if (!nextValue) return null;
     const nextRow = { ...current, value: nextValue };
-    setRows(index, "value", nextValue);
+    setRows(index, "value", owned(nextValue));
     previousProjectedRows[index] = nextRow;
     return location.rowKey;
   };
@@ -209,7 +226,7 @@ export function createTimelineStore(
     const nextValue = updateTraceSegment(current, location.segmentIndex, nextSegment);
     if (!nextValue) return null;
     const nextRow = { ...current, value: nextValue };
-    setRows(index, "value", nextValue);
+    setRows(index, "value", owned(nextValue));
     previousProjectedRows[index] = nextRow;
     return location.rowKey;
   };
@@ -255,7 +272,7 @@ export function createTimelineStore(
     // transcript, and the result is only ever a metric field. Every other
     // measurement here is already gated on the recorder; this one was not.
     const changed = recorder ? rowChanges(previousProjectedRows, projected) : [];
-    setRows(reconcile(projected, { key: "key" }));
+    setRows(reconcile(owned(projected), { key: "key" }));
     previousProjectedRows = projected;
     previousMessages = inputMessages;
     previousTools = inputTools;
