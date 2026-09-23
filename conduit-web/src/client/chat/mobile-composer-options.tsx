@@ -22,6 +22,7 @@ import type { ComposerModels } from "./composer-models";
 import type { ComposerPermissions } from "./composer-permissions";
 import type { ServiceLevelSettings } from "../state/service-level-settings";
 import { HarnessMark } from "../harness-brand";
+import { StepSlider } from "./step-slider";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
 type MobileOptionsPanel = "root" | "models" | "profiles" | "permissions";
@@ -140,12 +141,9 @@ export function MobileComposerOptions(props: {
               <SlidersHorizontalIcon /><span>Model</span><span class="composer-options-preview ml-auto max-w-28 truncate text-right text-xs italic text-muted-foreground">{selectedModelLabel()}</span>
           </MenuItem>
           <MenuSeparator />
-          <MenuGroup>
-            <MenuLabel class="composer-options-label">Effort</MenuLabel>
-            <MenuRadioGroup value={composer.models.effort()} onChange={(value) => void composer.models.chooseEffort(value)}>
-              <For each={levels()}>{(level) => <MenuRadioItem value={level} closeOnSelect={false}>{thinkingLabel(level)}</MenuRadioItem>}</For>
-            </MenuRadioGroup>
-          </MenuGroup>
+          <StepSlider label="Effort" value={composer.models.effort()} disabled={!composer.serverOnline || levels().length < 2}
+            options={levels().map((level) => ({ value: level, label: thinkingLabel(level) }))}
+            onChange={(value) => void composer.models.chooseEffort(value)} />
           <Show when={composer.profiles.length}>
             <MenuSeparator />
             <MenuItem closeOnSelect={false} onSelect={() => setPanel("profiles")} class="composer-options-subtrigger">
