@@ -1,105 +1,209 @@
-import { createMemo, createSignal, For, Show } from "solid-js";
+import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { createStore } from "solid-js/store";
-import { Button, Input, Textarea } from "@/components/primitives";
+import { CheckIcon, XIcon } from "lucide-solid";
+import { Button } from "@/components/primitives";
 import type { HostUiRequest, Question, QuestionAnswer } from "../api/contracts";
+import { COMPOSER_SURFACE_CHANGE_EVENT, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
 import "./question-card.css";
 
 export type QuestionResponse = { id: string; cancelled?: boolean; answers?: QuestionAnswer[] };
 
 type Draft = { optionIds: string[]; freeform: string; note: string };
 
+const EMPTY: Draft = { optionIds: [], freeform: "", note: "" };
 const answered = (draft: Draft) => draft.optionIds.length > 0 || draft.freeform.trim() !== "";
+const typingIn = (target: EventTarget | null) => target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
 
 /**
- * A harness's question tool: one or more questions, each with offered answers
- * and, where the harness takes one, a typed answer, sent back together.
+ * A harness's question tool, one question at a time.
  *
- * A single question of offered answers alone is answered by the tap, as an
- * approval is; anything more waits for Submit.
+ * The questions are tabs, answered in turn and then reviewed on a Submit page
+ * that sends them together. A single question of one answer is sent by
+ * choosing that answer; nothing then needs reviewing. The card keeps the
+ * keyboard while it is up -- arrows move, a number or Enter chooses, Tab turns
+ * the page, Esc dismisses -- and touch has the same through taps and Next.
  */
 export function QuestionCard(props: { request: HostUiRequest; onRespond: (response: QuestionResponse) => void }) {
   const questions = () => props.request.questions || [];
   const [drafts, setDrafts] = createStore<Record<string, Draft>>(
-    Object.fromEntries(questions().map((question) => [question.id, { optionIds: [], freeform: "", note: "" }])));
-  // The option whose preview is shown: the one last pointed at, else the chosen one.
-  const [previewed, setPreviewed] = createSignal<Record<string, string>>({});
-  const draft = (question: Question): Draft => drafts[question.id] ?? { optionIds: [], freeform: "", note: "" };
-  const oneTap = createMemo(() => {
-    const [only, ...rest] = questions();
-    return Boolean(only && !rest.length && !only.multiSelect && !only.freeform && !props.request.notes);
-  });
+    Object.fromEntries(questions().map((question) => [question.id, { ...EMPTY }])));
+  const draft = (question: Question): Draft => drafts[question.id] ?? EMPTY;
+  const review = createMemo(() => questions().length > 1 || Boolean(questions()[0]?.multiSelect) || Boolean(props.request.notes));
+  const [page, setPage] = createSignal(0);
+  const [cursor, setCursor] = createSignal(0);
+  const pages = () => questions().length + (review() ? 1 : 0);
+  const current = () => questions()[page()];
+  const lastQuestion = () => page() === questions().length - 1;
   const ready = createMemo(() => questions().every((question) => !question.required || answered(draft(question)))
     && questions().some((question) => answered(draft(question))));
+  const [surface, setSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
+  let root: HTMLElement | undefined;
+  let own: HTMLInputElement | HTMLTextAreaElement | undefined;
 
-  const answers = (): QuestionAnswer[] => questions().map((question) => ({ questionId: question.id,
-    optionIds: [...draft(question).optionIds], freeform: draft(question).freeform.trim() || undefined,
-    note: draft(question).note.trim() || undefined }));
-  const submit = () => { if (ready()) props.onRespond({ id: props.request.id, answers: answers() }); };
+  onMount(() => {
+    const changed = (event: Event) => setSurface((event as CustomEvent<ComposerSurfaceMode>).detail);
+    window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, changed);
+    onCleanup(() => window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, changed));
+    // The agent is waiting on this, so it takes the keyboard -- unless a
+    // message is half typed, which would lose its focus mid-word.
+    const active = document.activeElement;
+    if (!(typingIn(active) && (active as HTMLInputElement).value)) root?.focus({ preventScroll: true });
+  });
 
-  const choose = (question: Question, optionId: string) => {
-    setPreviewed((current) => ({ ...current, [question.id]: optionId }));
+  const respond = (response: QuestionResponse) => {
+    const hadFocus = root?.contains(document.activeElement);
+    props.onRespond(response);
+    if (hadFocus) document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus({ preventScroll: true });
+  };
+  const dismiss = () => respond({ id: props.request.id, cancelled: true });
+  const submit = () => {
+    if (!ready()) {
+      const missing = questions().findIndex((question) => question.required && !answered(draft(question)));
+      go(Math.max(0, missing));
+      return;
+    }
+    respond({ id: props.request.id, answers: questions().map((question) => ({ questionId: question.id,
+      optionIds: [...draft(question).optionIds], freeform: draft(question).freeform.trim() || undefined,
+      note: draft(question).note.trim() || undefined })) });
+  };
+
+  const go = (index: number) => {
+    const next = (index + pages()) % pages();
+    const question = questions()[next];
+    setPage(next);
+    setCursor(question ? Math.max(0, question.options.findIndex((option) => draft(question).optionIds.includes(option.id))) : 0);
+    root?.focus({ preventScroll: true });
+  };
+  const advance = () => {
+    if (!lastQuestion() && current()) go(page() + 1);
+    else if (review() && current()) go(questions().length);
+    else submit();
+  };
+  const choose = (question: Question, index: number) => {
+    setCursor(index);
+    const option = question.options[index];
+    if (!option) { own?.focus(); return; }
+    const chosen = draft(question).optionIds;
     if (question.multiSelect) {
-      const chosen = draft(question).optionIds;
-      setDrafts(question.id, "optionIds", chosen.includes(optionId) ? chosen.filter((id) => id !== optionId) : [...chosen, optionId]);
+      setDrafts(question.id, "optionIds", chosen.includes(option.id) ? chosen.filter((id) => id !== option.id) : [...chosen, option.id]);
       return;
     }
     // One answer: an offered one replaces anything typed.
-    setDrafts(question.id, { optionIds: [optionId], freeform: "" });
-    if (oneTap()) submit();
+    setDrafts(question.id, { optionIds: [option.id], freeform: "" });
+    advance();
   };
-  const type = (question: Question, value: string) => {
-    setDrafts(question.id, question.multiSelect ? { freeform: value } : { freeform: value, optionIds: value ? [] : draft(question).optionIds });
-  };
-  const preview = (question: Question) => {
-    const id = previewed()[question.id] || draft(question).optionIds[0];
-    return question.options.find((option) => option.id === id)?.preview;
+  const type = (question: Question, value: string) => setDrafts(question.id, question.multiSelect
+    ? { freeform: value } : { freeform: value, optionIds: value ? [] : draft(question).optionIds });
+  const rows = (question: Question) => question.options.length + (question.freeform ? 1 : 0);
+
+  const keydown = (event: KeyboardEvent) => {
+    if (event.isComposing || event.altKey || event.ctrlKey || event.metaKey) return;
+    const question = current();
+    const typing = typingIn(event.target);
+    const take = () => { event.preventDefault(); event.stopPropagation(); };
+    if (event.key === "Escape") { take(); if (typing) root?.focus(); else dismiss(); return; }
+    if (event.key === "Tab" && pages() > 1) { take(); go(page() + (event.shiftKey ? -1 : 1)); return; }
+    if (typing) {
+      if (event.key === "Enter" && !event.shiftKey) { take(); advance(); }
+      else if (event.key === "ArrowUp" && question) { take(); setCursor(Math.max(0, question.options.length - 1)); root?.focus(); }
+      return;
+    }
+    if (event.key === "ArrowLeft" && page() > 0) { take(); go(page() - 1); return; }
+    if (event.key === "ArrowRight" && page() < pages() - 1) { take(); go(page() + 1); return; }
+    if (!question) { if (event.key === "Enter") { take(); submit(); } return; }
+    const count = rows(question);
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      take();
+      const next = (cursor() + (event.key === "ArrowDown" ? 1 : -1) + count) % count;
+      setCursor(next);
+      if (next === question.options.length) own?.focus();
+      return;
+    }
+    const digit = Number(event.key);
+    if (Number.isInteger(digit) && digit >= 1 && digit <= count) { take(); choose(question, digit - 1); return; }
+    if (event.key === "Enter" || event.key === " ") { take(); choose(question, cursor()); }
   };
 
-  return <section class="host-ui-card question-card" aria-label={props.request.title || "The agent has a question"}>
-    <strong>{props.request.title || "The agent has a question"}</strong>
-    <div class="question-card-body">
-      <For each={questions()}>{(question) => <div class="question-block" role="group" aria-label={question.header || question.prompt}>
-        <Show when={question.header}><span class="question-header">{question.header}</span></Show>
-        <Show when={question.prompt}><p class="question-prompt">{question.prompt}</p></Show>
-        <Show when={question.options.length}>
-          <div class="question-options" role={question.multiSelect ? "group" : "radiogroup"}>
-            <For each={question.options}>{(option) => <button type="button" class="question-option"
-              role={question.multiSelect ? "checkbox" : "radio"}
-              aria-checked={draft(question).optionIds.includes(option.id)}
-              data-multi={question.multiSelect ? "true" : undefined}
-              onPointerEnter={() => option.preview && setPreviewed((current) => ({ ...current, [question.id]: option.id }))}
-              onFocus={() => option.preview && setPreviewed((current) => ({ ...current, [question.id]: option.id }))}
-              onClick={() => choose(question, option.id)}>
-              <span class="question-mark" aria-hidden="true" />
-              <span class="question-option-text">
-                <span class="question-option-label">{option.label}</span>
-                <Show when={option.description}><span class="question-option-description">{option.description}</span></Show>
-              </span>
-            </button>}</For>
-          </div>
-        </Show>
-        <Show when={preview(question)}>{(shown) =>
-          <pre class="question-preview" data-format={shown().format}>{shown().text}</pre>}</Show>
-        <Show when={question.freeform}>{(freeform) => {
-          const label = question.options.length ? "Other answer" : question.prompt || "Answer";
-          const placeholder = freeform().placeholder || (question.options.length ? "Something else…" : "Type your answer");
-          return freeform().multiline
-            ? <Textarea class="question-freeform" aria-label={label} placeholder={placeholder}
-              value={draft(question).freeform} onInput={(event) => type(question, event.currentTarget.value)} />
-            : <Input class="question-freeform" aria-label={label} placeholder={placeholder}
-              type={question.secret ? "password" : "text"} inputmode={freeform().numeric ? "decimal" : undefined}
-              value={draft(question).freeform} onInput={(event) => type(question, event.currentTarget.value)}
-              onKeyDown={(event) => { if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); submit(); } }} />;
-        }}</Show>
+  const answerText = (question: Question) => [
+    ...question.options.filter((option) => draft(question).optionIds.includes(option.id)).map((option) => option.label),
+    ...(draft(question).freeform.trim() ? [question.secret ? "••••" : draft(question).freeform.trim()] : []),
+  ].join(", ");
+  const hints = () => [
+    ...(pages() > 1 ? [["⇥", "tab"]] : []),
+    ...(current() ? [["↑↓", "select"], ["↵", current()!.multiSelect ? "toggle" : "confirm"]] : [["↵", "submit"]]),
+    ["esc", "dismiss"],
+  ];
+  const preview = () => current()?.options[cursor()]?.preview;
+
+  return <section ref={root} class="question-card composer-surface-material" data-composer-surface={surface()}
+    tabIndex={-1} aria-label={props.request.title || "The agent has a question"} onKeyDown={keydown}>
+    <div class="question-top">
+      <Show when={pages() > 1} fallback={<span class="question-title">{current()?.header || props.request.title}</span>}>
+        <div class="question-tabs" role="tablist">
+          <For each={questions()}>{(question, index) => <button type="button" role="tab" aria-selected={page() === index()}
+            tabIndex={-1} onClick={() => go(index())}>
+            <Show when={answered(draft(question))}><CheckIcon aria-label="Answered" /></Show>
+            {question.header || `Question ${index() + 1}`}
+          </button>}</For>
+          <Show when={review()}><button type="button" role="tab" tabIndex={-1} aria-selected={!current()}
+            onClick={() => go(questions().length)}>Submit</button></Show>
+        </div>
+      </Show>
+      <button type="button" class="question-close" tabIndex={-1} aria-label="Dismiss" onClick={dismiss}><XIcon /></button>
+    </div>
+
+    <Show when={current()} keyed fallback={
+      <div class="question-summary">
+        <For each={questions()}>{(question, index) => <button type="button" tabIndex={-1} onClick={() => go(index())}>
+          <span class="question-summary-header">{question.header || question.prompt}</span>
+          <span class="question-summary-answer" data-empty={answered(draft(question)) ? undefined : "true"}>
+            {answered(draft(question)) ? answerText(question) : question.required ? "Needs an answer" : "Not answered"}</span>
+        </button>}</For>
+      </div>}>
+      {(question) => <div class="question-page">
+        <p class="question-prompt">{question.prompt}<Show when={question.multiSelect}><span> · pick any</span></Show></p>
+        <div class="question-options" role="listbox" aria-multiselectable={question.multiSelect}>
+          <For each={question.options}>{(option, index) => {
+            const chosen = () => draft(question).optionIds.includes(option.id);
+            return <div role="option" class="question-option" aria-selected={chosen()} data-active={cursor() === index()}
+              title={option.description || undefined} onPointerMove={() => setCursor(index())} onClick={() => choose(question, index())}>
+              <span class="question-number">{index() + 1}</span>
+              <span class="question-option-label">{option.label}</span>
+              <Show when={option.description}><span class="question-option-description">{option.description}</span></Show>
+              <span class="question-check" data-multi={question.multiSelect ? "true" : undefined}><Show when={chosen()}><CheckIcon /></Show></span>
+            </div>;
+          }}</For>
+          <Show when={question.freeform}>{(freeform) => {
+            const placeholder = freeform().placeholder || (question.options.length ? "Type your own answer" : "Type your answer");
+            const input = (event: InputEvent & { currentTarget: HTMLInputElement | HTMLTextAreaElement }) => type(question, event.currentTarget.value);
+            return <div class="question-option question-own" data-active={cursor() === question.options.length}
+              onPointerMove={() => setCursor(question.options.length)} onClick={() => own?.focus()}>
+              <span class="question-number">{question.options.length + 1}</span>
+              {freeform().multiline
+                ? <textarea ref={(element) => { own = element; }} rows={2} class="question-own-input" placeholder={placeholder} aria-label={placeholder}
+                  value={draft(question).freeform} onInput={input} onFocus={() => setCursor(question.options.length)} />
+                : <input ref={(element) => { own = element; }} class="question-own-input" placeholder={placeholder} aria-label={placeholder}
+                  type={question.secret ? "password" : "text"} inputmode={freeform().numeric ? "decimal" : undefined}
+                  value={draft(question).freeform} onInput={input} onFocus={() => setCursor(question.options.length)} />}
+              <span class="question-check"><Show when={draft(question).freeform.trim()}><CheckIcon /></Show></span>
+            </div>;
+          }}</Show>
+        </div>
+        <Show when={preview()}>{(shown) => <pre class="question-preview" data-format={shown().format}>{shown().text}</pre>}</Show>
         <Show when={props.request.notes && answered(draft(question))}>
-          <Input class="question-note" aria-label="Note" placeholder="Add a note (optional)"
+          <input class="question-note" placeholder="Add a note (optional)" aria-label="Note"
             value={draft(question).note} onInput={(event) => setDrafts(question.id, "note", event.currentTarget.value)} />
         </Show>
-      </div>}</For>
-    </div>
-    <div class="host-ui-actions">
-      <Button size="sm" variant="ghost" onClick={() => props.onRespond({ id: props.request.id, cancelled: true })}>Dismiss</Button>
-      <Show when={!oneTap()}><Button size="sm" disabled={!ready()} onClick={submit}>Submit</Button></Show>
+      </div>}
+    </Show>
+
+    <div class="question-footer">
+      <div class="question-hints" aria-hidden="true">
+        <For each={hints()}>{([key, label]) => <span><kbd class="command-hint-key">{key}</kbd>{label}</span>}</For>
+      </div>
+      <Button size="sm" tabIndex={-1} disabled={!current() && !ready()} onClick={() => current() ? advance() : submit()}>
+        {!current() || (lastQuestion() && !review()) ? "Submit" : "Next"}
+      </Button>
     </div>
   </section>;
 }
