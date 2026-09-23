@@ -506,7 +506,7 @@ export function Composer(props: {
 
   return <div class="composer-wrap">
     <Show when={props.attachmentsSupported !== false}>
-      <AttachmentCards items={props.attachments.items()} chatId={props.chat.loadedId()} label="Attachments" removable onRemove={(item) => void props.attachments.remove(item)} />
+      <AttachmentCards items={props.attachments.items()} chatId={props.chat.loadedId()} label="Attachments" removable onRemove={(item) => props.attachments.remove(item)} />
     </Show>
     <ReviewCommentCards items={comments()} chatId={props.chat.loadedId() ?? ""} label="File references" onRemove={(comment) => removeReviewComment(comment.id)} onUpdate={(comment, note) => updateReviewComment(comment.id, note)} />
     <QueuedMessages
