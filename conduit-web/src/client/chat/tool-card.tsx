@@ -1,5 +1,5 @@
 import { createMemo, createSignal, Show } from "solid-js";
-import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-solid";
+import { CheckIcon, ChevronDownIcon, ChevronUpIcon, MinusIcon, XIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { ToolItem } from "../api/contracts";
 import { httpUrl } from "../api/transport";
@@ -27,7 +27,7 @@ function stringify(value: unknown) {
   return typeof value === "string" ? value : JSON.stringify(value ?? {}, null, 2);
 }
 
-export function ToolCard(props: { tool?: ToolItem; sessionId?: string | null; initialOpen?: boolean; onOpenChange?: (open: boolean) => void }) {
+export function ToolCard(props: { tool?: ToolItem; sessionId?: string | null; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; settled?: boolean }) {
   const [open, setOpen] = createSignal(Boolean(props.initialOpen));
   const [loaded, setLoaded] = createSignal<unknown>(undefined);
   const [loading, setLoading] = createSignal(false);
@@ -35,7 +35,9 @@ export function ToolCard(props: { tool?: ToolItem; sessionId?: string | null; in
   const tool = createMemo(() => props.tool);
   const status = createMemo(() => {
     const current = tool();
-    return current?.isError ? "Error" : current?.cancelled ? "Cancelled" : current?.done ? "Complete" : "Running";
+    // A tool its turn ended without answering is not still running: it was
+    // stopped with the turn, and nothing is going to finish it.
+    return current?.isError ? "Error" : current?.cancelled ? "Cancelled" : current?.done ? "Complete" : props.settled ? "Stopped" : "Running";
   });
   const source = createMemo(() => {
     const current = tool();
@@ -67,7 +69,7 @@ export function ToolCard(props: { tool?: ToolItem; sessionId?: string | null; in
 
   return <Show when={tool()}>{(current) => <div class="tool-card" data-status={status().toLowerCase()}>
     <Button variant="outline" class="w-full justify-start" aria-label={`${current().name || "Tool"} ${status()}`} aria-expanded={open()} onClick={toggle}>
-      <Show when={current().done && !current().isError} fallback={<Spinner data-icon="inline-start" />}><CheckIcon /></Show>
+      {status() === "Running" ? <Spinner data-icon="inline-start" /> : status() === "Complete" ? <CheckIcon /> : status() === "Error" ? <XIcon /> : <MinusIcon />}
       <span class="truncate">{current().name || "Tool"}<Show when={summary(current())}> · {summary(current())}</Show></span>
       <span class="ml-auto text-xs text-muted-foreground">{status()}</span>
       <Show when={open()} fallback={<ChevronDownIcon />}><ChevronUpIcon /></Show>
