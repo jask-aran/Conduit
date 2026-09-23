@@ -21,6 +21,7 @@ import type { ActiveChatStore } from "../state/active-chat";
 import type { ComposerModels } from "./composer-models";
 import type { ComposerPermissions } from "./composer-permissions";
 import type { ServiceLevelSettings } from "../state/service-level-settings";
+import { HarnessMark } from "../harness-brand";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
 type MobileOptionsPanel = "root" | "models" | "profiles" | "permissions";
@@ -182,7 +183,7 @@ export function MobileComposerOptions(props: {
               <MenuLabel class="composer-options-label">Profile</MenuLabel>
               <Show when={profileLocked()}><div class="composer-option-note">Locked after the first message.</div></Show>
               <MenuRadioGroup value={composer.activeProfile?.id || ""} onChange={composer.onChooseProfile}>
-                <For each={composer.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={profileLocked() || item.disabled} closeOnSelect={false}>{item.label}</MenuRadioItem>}</For>
+                <For each={composer.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={profileLocked() || item.disabled} closeOnSelect={false} indicator="highlight"><HarnessMark id={item.implementation || "conduit"} class="size-4" /><span>{item.label}</span></MenuRadioItem>}</For>
               </MenuRadioGroup>
             </MenuGroup>
             <MenuSeparator />
