@@ -13,6 +13,7 @@ import {
   Spinner,
 } from "@/components/primitives";
 import type { ModelOption } from "../api/contracts";
+import { StepSlider } from "./step-slider";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
 
@@ -52,13 +53,10 @@ export function ModelSelector(props: {
           <For each={selectableModels()}>{(item) => <MenuRadioItem value={item.spec}><span class="truncate">{item.label}</span><span class="ml-auto text-xs text-muted-foreground">{item.provider}</span></MenuRadioItem>}</For>
         </MenuRadioGroup>
       </MenuGroup>
-      <Show when={selected()}><MenuSeparator />
-        <MenuGroup>
-          <MenuLabel>Thinking</MenuLabel>
-          <MenuRadioGroup value={props.thinkingLevel} onChange={props.onThinkingLevelChange}>
-            <For each={levels()}>{(level) => <MenuRadioItem value={level}>{thinkingLabel(level)}</MenuRadioItem>}</For>
-          </MenuRadioGroup>
-        </MenuGroup>
+      <Show when={selected() && levels().length > 1}><MenuSeparator />
+        <StepSlider label="Thinking" value={props.thinkingLevel}
+          options={levels().map((level) => ({ value: level, label: thinkingLabel(level) }))}
+          onChange={props.onThinkingLevelChange} />
       </Show>
       <Show when={props.onManageModels}><MenuSeparator /><MenuItem onSelect={props.onManageModels}>Manage models…</MenuItem></Show>
     </MenuContent>

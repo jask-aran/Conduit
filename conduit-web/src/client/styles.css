@@ -835,6 +835,7 @@ svg { stroke-width: 1.5; }
   .composer-options-menu { position: relative; }
   .composer-options-parent { transition: opacity .16s ease, filter .16s ease; }
   .composer-options-parent[data-panel-open="true"] { opacity: .38; filter: saturate(.6); }
+  .composer-options-parent[data-panel-open="true"] > * { pointer-events: none; }
   .composer-options-submenu { position: absolute; bottom: 0; left: 51.2px; z-index: 1; width: min(206.4px, calc(100vw - 25.6px)); max-height: min(60dvh, 336px); overflow-y: auto; }
   [data-slot="menu-content"].composer-options-menu [role="menuitem"],
   [data-slot="menu-content"].composer-options-submenu [role="menuitem"],
@@ -1645,6 +1646,7 @@ svg { stroke-width: 1.5; }
   .composer-options-menu { position: relative; }
   .composer-options-parent { transition: opacity .16s ease, filter .16s ease; }
   .composer-options-parent[data-panel-open="true"] { opacity: .38; filter: saturate(.6); }
+  .composer-options-parent[data-panel-open="true"] > * { pointer-events: none; }
   .composer-options-submenu { position: absolute; bottom: 0; left: 64px; z-index: 1; width: min(258px, calc(100vw - 32px)); max-height: min(60dvh, 420px); overflow-y: auto; }
   [data-slot="menu-content"].composer-options-menu [role="menuitem"],
   [data-slot="menu-content"].composer-options-submenu [role="menuitem"],
