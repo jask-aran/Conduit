@@ -1,7 +1,7 @@
 /// <reference types="vite-plugin-pwa/client" />
 import { isConduitManagedProject } from "./navigation/sidebar-preferences";
 import type { ComputerLocation, ComputerPrefetchPayload } from "./api/contracts";
-import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, For, lazy, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, For, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { render } from "solid-js/web";
 import { androidShell, desktopShell, isInstalledClient } from "./platform/installed-client.ts";
 import {
@@ -866,6 +866,39 @@ function App() {
   const openingLiveChat = createMemo(() => chat.presentation().kind === "opening_live");
   const withheldLiveChat = createMemo(() => chat.presentation().kind !== "ready");
   const emptyChat = createMemo(() => !withheldLiveChat() && chat.loadedId() === catalogue.selectedId() && !chat.messages().length && !chat.tools().length && !isChatContentActivity(chat.activity()));
+  /*
+   * A new chat holds its composer in the middle of the pane; the first send
+   * moves it to the foot of the transcript. It travels there rather than
+   * cutting: where it sat is noted while the chat is empty, and when a send
+   * ends the empty state it starts from that spot and settles into its place.
+   * Leaving an empty chat any other way -- opening another chat -- just cuts.
+   */
+  let chatComposerStack: HTMLDivElement | undefined;
+  let emptyComposerTop: number | null = null;
+  const noteEmptyComposer = () => {
+    if (emptyChat() && chatComposerStack) emptyComposerTop = chatComposerStack.getBoundingClientRect().top;
+  };
+  createEffect(on(emptyChat, (empty, wasEmpty) => {
+    if (empty) {
+      requestAnimationFrame(noteEmptyComposer);
+      return;
+    }
+    const from = emptyComposerTop;
+    emptyComposerTop = null;
+    if (!wasEmpty || from == null || !["submitting", "active"].includes(chat.generation())) return;
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    requestAnimationFrame(() => {
+      if (!chatComposerStack) return;
+      const offset = from - chatComposerStack.getBoundingClientRect().top;
+      if (Math.abs(offset) < 4) return;
+      chatComposerStack.animate([{ transform: `translateY(${offset}px)` }, { transform: "none" }],
+        { duration: 420, easing: "cubic-bezier(.2, .8, .2, 1)" });
+    });
+  }));
+  onMount(() => {
+    window.addEventListener("resize", noteEmptyComposer);
+    onCleanup(() => window.removeEventListener("resize", noteEmptyComposer));
+  });
   diagnosticContext = () => {
     const identity = chat.runtimeIdentity();
     return {
@@ -2372,7 +2405,7 @@ function App() {
           <div class="work-area">
             <section class="work-area-conversation" aria-label="Conversation" aria-busy={openingLiveChat()}>
               <Transcript chat={chat} supports={chatCapability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} projectId={selectedProject()?.id} />
-              <div class="composer-stack" data-question={chat.hostUiRequests()[0]?.kind === "question" ? "true" : undefined}><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
+              <div ref={chatComposerStack} class="composer-stack" data-question={chat.hostUiRequests()[0]?.kind === "question" ? "true" : undefined}><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
                 <Composer chat={chat} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
             </section>
           </div>

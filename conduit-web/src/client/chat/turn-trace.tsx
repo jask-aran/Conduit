@@ -48,6 +48,7 @@ function TraceSegmentRow(props: {
   profileLabel?: string;
   toolOpen?: (id: string) => boolean;
   onToolOpenChange?: (id: string, open: boolean) => void;
+  settled?: boolean;
 }) {
   const tool = () => {
     const segment = props.segment();
@@ -83,7 +84,7 @@ function TraceSegmentRow(props: {
       {(message) => <TraceError message={message()} profileLabel={props.profileLabel} />}
     </Show>
   }>
-    {(item) => <ToolCard tool={item()} sessionId={props.sessionId} initialOpen={props.toolOpen?.(item().toolCallId)} onOpenChange={(open) => props.onToolOpenChange?.(item().toolCallId, open)} />}
+    {(item) => <ToolCard tool={item()} settled={props.settled} sessionId={props.sessionId} initialOpen={props.toolOpen?.(item().toolCallId)} onOpenChange={(open) => props.onToolOpenChange?.(item().toolCallId, open)} />}
   </Show>;
 }
 
@@ -141,7 +142,7 @@ export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | nul
     <Show when={open()}>
       <div class="turn-trace-body">
           <Index each={props.trace.segments}>{(segment) =>
-          <TraceSegmentRow segment={segment} sessionId={props.sessionId} renderer={props.renderer} pacing={props.pacing} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />
+          <TraceSegmentRow segment={segment} settled={!props.trace.active} sessionId={props.sessionId} renderer={props.renderer} pacing={props.pacing} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />
         }</Index>
       </div>
     </Show>
