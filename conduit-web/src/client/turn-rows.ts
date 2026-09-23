@@ -81,7 +81,9 @@ export type TurnRow =
   // The projection already knows which user message opened the turn; making
   // each row rediscover it meant a backwards scan of the whole message list
   // per assistant row, which is quadratic in a long chat.
-  | { key: string; type: "message"; value: Message; live?: boolean; streamVersion?: number; displayKey?: string; precedingUserId?: string }
+  // `traced` is whether a trace above this answer already speaks for its turn,
+  // so a stopped turn says "Interrupted" once, on whichever row comes first.
+  | { key: string; type: "message"; value: Message; live?: boolean; streamVersion?: number; displayKey?: string; precedingUserId?: string; traced?: boolean }
   | { key: string; type: "trace"; value: TurnTraceData; precedingUserId?: string; answerless?: boolean; unstated?: boolean };
 
 interface PersistedTurn {
@@ -504,7 +506,10 @@ function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById
   }
   const answer = answerAssistants.at(-1) || null;
   const answerText = answerAssistants.map((assistant) => String(assistant.content || "").trim()).filter(Boolean).join("\n\n");
-  const hasAnswerRow = Boolean(answer && (answerText || (answer === finalAssistant && answer.stopReason === "error")));
+  // A turn stopped before it wrote anything, with no trace to say so, keeps its
+  // empty answer as the row that does -- and that Regenerate hangs off.
+  const stoppedBare = answer === finalAssistant && Boolean(answer?.stopped) && segments.length === 0;
+  const hasAnswerRow = Boolean(answer && (answerText || (answer === finalAssistant && answer.stopReason === "error") || stoppedBare));
   if (segments.length > 0) {
     const outcome = turn.userMessage?.outcome;
     rows.push({
@@ -524,6 +529,7 @@ function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById
       type: "message",
       value: answerAssistants.length === 1 ? answer : { ...answer, content: answerText },
       precedingUserId: turn.userMessage?.id,
+      traced: segments.length > 0,
     });
   }
   return rows;

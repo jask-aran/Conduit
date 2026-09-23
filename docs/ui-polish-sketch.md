@@ -29,15 +29,27 @@ and a turn with no answer. The compact view must preserve the distinction
 between kept output and discarded content. This is a presentation change,
 not a change to stored transcripts or backend turn states.
 
-Status: built. A stopped turn says so once, leading its actions row:
+Status: built. A stopped turn says **Interrupted** once, as the tag on its
+first row -- the word the trace and the composer use, in the text colour at
+560. Rows that are not the trace carry the Stop mark where a trace has its
+brain, so the two line up. Regenerate is always in the actions row under them.
 
 ```
+stopped under a tool          🧠 Interrupted · 1 tool call              ⌄
+                                 ↻
+
+discarded, no trace           ■  Interrupted · not kept · T̶h̶e̶ ̶V̶i̶l̶l̶a̶g̶e̶…  ⌄
+                                 ↻
+
+discarded under a trace       🧠 Interrupted · 2 tool calls · Checking…  ⌄
+                              ■  Not kept · T̶h̶e̶ ̶V̶i̶l̶l̶a̶g̶e̶…               ⌄
+                                 ↻
+
+stopped before any answer     ■  Interrupted · before answering
+                                 ↻
+
 kept, stopped part-way        …the answer so far, in full
-                              Stopped   ▷ Continue   ⧉ ↻
-
-discarded                     Stopped · not kept   T̶h̶e̶ ̶V̶i̶l̶l̶a̶g̶e̶ ̶T̶h̶a̶t̶…  ⌄   ↻
-
-stopped before any answer     Stopped before answering   ↻
+                              Interrupted   ▷ Continue   ⧉ ↻
 
 while stopping                Stopping…
 ```
@@ -48,7 +60,8 @@ while stopping                Stopping…
   when the agent kept what it wrote. Older stopped turns and discarded answers
   offer Regenerate.
 - Copy appears only where there is text the agent kept.
-- No mark leads the row; the strike-through says enough.
+- A turn that ended with no answer -- stopped under a tool, or one that only
+  ran commands -- still has Regenerate under its trace.
 
 ## 2. Clarify composer hierarchy
 

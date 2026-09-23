@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createRenderEffect, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from "solid-js";
-import { ArrowDownIcon, CheckIcon, ChevronDownIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, TriangleAlertIcon } from "lucide-solid";
+import { ArrowDownIcon, CheckIcon, ChevronDownIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { BooleanCapability, Message } from "../api/contracts";
 import { isChatContentActivity, type TranscriptSource } from "./transcript-source";
@@ -141,17 +141,17 @@ function TurnArtifactButton(props: { artifact: TurnArtifactSummary; chatId: stri
   return <button type="button" class="turn-change-summary" title={range()} aria-label={`Open ${range()} in Agent changes: ${props.artifact.summary!.added} additions and ${props.artifact.summary!.removed} removals`} onClick={() => requestTurnArtifactNavigation({ chatId: props.chatId, checkpointId: props.artifact.id, path: props.artifact.summary!.preferredPath })}><span data-change="added">+{props.artifact.summary!.added}</span><span data-change="removed">−{props.artifact.summary!.removed}</span></button>;
 }
 
-function Actions(props: { message: Message; precedingUserId?: string; chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; partialContinue: boolean; artifact?: TurnArtifactSummary; lead?: JSX.Element }) {
+function Actions(props: { message: Message; precedingUserId?: string; chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; partialContinue: boolean; artifact?: TurnArtifactSummary; traced?: boolean }) {
   const [copied, setCopied] = createSignal(false);
   let copyButton: HTMLButtonElement | undefined;
   const assistant = () => props.message.role !== "user";
-  /* A stopped turn says so once, at the head of its actions, rather than on a
-     line of its own under a second "Interrupted" note. */
+  /* A stopped turn says "Interrupted" once, on its first row. A trace above
+     says it for the turn; a discarded or unwritten answer says it on its stop
+     row; a kept answer with nothing above it says it here. */
   const status = () => {
     if (!assistant() || !props.message.stopped) return undefined;
     if (props.message.status === "stopping") return "Stopping…";
-    if (props.message.discarded) return "Stopped · not kept";
-    return props.message.content ? "Stopped" : "Stopped before answering";
+    return props.message.content && !props.message.discarded && !props.traced ? "Interrupted" : undefined;
   };
   /* Nothing to copy from an answer that was never written, or one the agent
      was not given back. */
@@ -161,8 +161,7 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Tran
   const continuable = () => props.partialContinue && Boolean(props.message.stopped) && !props.message.discarded
     && Boolean(props.message.content) && !props.chat.streaming() && props.chat.messages().at(-1)?.id === props.message.id;
   return <div class="response-actions">
-    <Show when={status()}>{(label) => <span class="marker response-status">{label()}</span>}</Show>
-    {props.lead}
+    <Show when={status()}>{(label) => <span class="marker response-status turn-trace-status" data-status={label() === "Interrupted" ? "interrupted" : undefined}>{label()}</span>}</Show>
     {/* A prompt offers editing. Regenerating it is the same act as regenerating
         the answer below, which already has a button, so there is one way to ask
         for it rather than two that look like different things. */}
@@ -194,6 +193,22 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Tran
 }
 
 /**
+ * The line a stopped turn says so on when no trace above it does.
+ *
+ * It is drawn as a trace header is -- same size, same colour, same tag -- with
+ * the Stop mark where a trace has its brain, so the two ways a stop shows up
+ * read as one thing and line up with each other.
+ */
+function StopLabel(props: { traced?: boolean; detail: string }) {
+  return <>
+    <SquareIcon class="turn-stop-mark" aria-hidden="true" />
+    <span class="turn-stop-label"><Show when={!props.traced} fallback={`${props.detail[0]!.toUpperCase()}${props.detail.slice(1)}`}>
+      <span class="turn-trace-status" data-status="interrupted">Interrupted</span>{` · ${props.detail}`}
+    </Show></span>
+  </>;
+}
+
+/**
  * An answer the agent was interrupted writing, which it is not being given back.
  *
  * The text is real and the reader watched it arrive, so it is not taken away.
@@ -201,7 +216,7 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Tran
  * model has no idea what you mean -- so it is folded down to a line and says
  * why. Opening it is for reading what was lost, not for carrying on from it.
  */
-function DiscardedAnswer(props: { message: Message; renderer?: MarkdownRendererId; pacing?: IncremarkPacingMode; row: (preview: JSX.Element) => JSX.Element; collapse?: boolean }) {
+function DiscardedAnswer(props: { message: Message; renderer?: MarkdownRendererId; pacing?: IncremarkPacingMode; traced?: boolean; collapse?: boolean }) {
   const [open, setOpen] = createSignal(false);
   /* An answer discarded while it was on screen folds down into its row, so the
      reader sees where it went; one that arrives discarded is simply the row. */
@@ -219,12 +234,13 @@ function DiscardedAnswer(props: { message: Message; renderer?: MarkdownRendererI
     return text.length > 110 ? `${text.slice(0, 110)}…` : text;
   };
   return <div class="discarded-answer" data-open={open() ? "true" : "false"} data-collapsing={collapsing() ? "true" : undefined}>
-    {props.row(<button type="button" class="discarded-answer-header" aria-expanded={open()}
+    <button type="button" class="discarded-answer-header" aria-expanded={open()}
       title="Interrupted before it finished. The agent kept no record of this, so it cannot be referred to."
       onClick={() => setOpen(!open())}>
-      <span class="discarded-answer-preview">{preview()}</span>
+      <StopLabel traced={props.traced} detail="not kept" />
+      <span class="discarded-answer-preview">{` · `}<s>{preview()}</s></span>
       <ChevronDownIcon class="discarded-answer-chevron" data-open={open() ? "true" : "false"} />
-    </button>)}
+    </button>
     <Show when={collapsing() && !open()}>
       <div class="discarded-answer-collapse" data-collapsed={collapsed() ? "true" : "false"}
         onTransitionEnd={(event) => { if (event.target === event.currentTarget && event.propertyName === "grid-template-rows") setCollapsing(false); }}>
@@ -1121,7 +1137,15 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             let traceRow!: HTMLDivElement;
             const chatId = () => props.chat.loadedId();
             const artifact = () => item.answerless && item.precedingUserId ? artifactSummaries().get(item.precedingUserId) : undefined;
-            return <div ref={traceRow} data-slot="message-scroller-item"><TurnTrace trace={item.value} sessionId={chatId()} renderer={markdownRenderer()} pacing={incremarkPacing()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} /><Show when={artifact()}>{(entry) => <div class="response-actions"><TurnArtifactButton artifact={entry()} chatId={chatId()!} /></div>}</Show></div>;
+            return <div ref={traceRow} data-slot="message-scroller-item"><TurnTrace trace={item.value} sessionId={chatId()} renderer={markdownRenderer()} pacing={incremarkPacing()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
+              {/* A turn that ended without an answer -- stopped under a tool, or
+                  one that only ran commands -- still offers to try again. */}
+              <Show when={item.answerless && !item.value.active && ((props.supports("regenerate") && item.precedingUserId) || artifact())}>
+                <div class="response-actions">
+                  <Show when={props.supports("regenerate") && item.precedingUserId}><Button variant="ghost" size="icon-sm" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(item.precedingUserId!)}><RefreshCwIcon /></Button></Show>
+                  <Show when={artifact()}>{(entry) => <TurnArtifactButton artifact={entry()} chatId={chatId()!} />}</Show>
+                </div>
+              </Show></div>;
           }
           const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");
@@ -1150,9 +1174,11 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
                         <Show when={message().discarded} fallback={<Suspense fallback={<div class="markdown-skeleton" />}>
                           <ChatMarkdown renderer={markdownRenderer()} pacing={incremarkPacing()} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={() => settleAfterMarkdown(row)}>{message().content || ""}</ChatMarkdown>
                         </Suspense>}>
-                          <DiscardedAnswer message={message()} renderer={markdownRenderer()} pacing={incremarkPacing()} collapse={!discardedWhenShown}
-                            row={(preview) => <Actions message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} partialContinue={props.partialContinue} artifact={artifact()} lead={preview} />} />
+                          <DiscardedAnswer message={message()} renderer={markdownRenderer()} pacing={incremarkPacing()} traced={item.traced} collapse={!discardedWhenShown} />
                         </Show>
+                      </Show>
+                      <Show when={!message().content && message().stopped && !item.traced && !failed()}>
+                        <div class="discarded-answer-header turn-stop-row"><StopLabel detail="before answering" /></div>
                       </Show>
                       <Show when={failed()}>
                         <details class="assistant-error" open role="alert">
@@ -1172,9 +1198,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
 
                 <Show when={user() && message().attachments?.length}><AttachmentCards items={message().attachments!} chatId={props.chat.loadedId()} label="Message attachments" /></Show>
                 <Show when={user() && review().comments.length}><ReviewCommentCards items={review().comments} chatId={props.chat.loadedId() ?? ""} label="Code references" /></Show>
-                <Show when={!(message().discarded && message().content)}>
-                  <Actions message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} partialContinue={props.partialContinue} artifact={artifact()} />
-                </Show>
+                <Actions message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} partialContinue={props.partialContinue} artifact={artifact()} traced={item.traced} />
               </div>
             </article>
           </div>;
