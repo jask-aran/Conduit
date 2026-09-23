@@ -54,11 +54,13 @@ export function MobileComposerOptions(props: {
   const context = () => contextUsagePercent(composer.chat.contextUsage());
   /* A choice in a submenu returns to the options rather than closing them:
      the next thing is often beside it -- a new model's effort. */
-  const chosen = (apply: () => void) => { apply(); setPanel("root"); settle(); };
-  /* The pick lands on pointerup, and the submenu goes with it -- but the same
-     tap's compatibility mouse events follow, onto whatever is now beneath it:
-     the effort slider, which took them as a second choice. The options stay
-     inert until that tap is over. */
+  const chosen = (apply: () => void) => { apply(); go("root"); };
+  /* A tap that changes the panel lands on pointerup, and the panel changes
+     under the finger -- but the same tap's compatibility mouse events follow,
+     onto whatever is now beneath it: the effort slider took them as a second
+     choice, a submenu row as a highlight that read as a second pick. The
+     whole menu stays inert until that tap is over. */
+  const go = (next: MobileOptionsPanel) => { setPanel(next); settle(); };
   const [settling, setSettling] = createSignal(false);
   let settleTimer: number | undefined;
   const settle = () => {
@@ -135,7 +137,7 @@ export function MobileComposerOptions(props: {
     if (panel() === "root") return;
     event.preventDefault();
     event.stopPropagation();
-    setPanel("root");
+    go("root");
   };
 
   return <div class="composer-mobile-plus">
@@ -151,30 +153,30 @@ export function MobileComposerOptions(props: {
           }
         }}
       />
-      <MenuContent class="composer-options-menu" onOpenAutoFocus={preserveComposerFocus} onCloseAutoFocus={preserveComposerFocusOnClose} onFocusOutside={keepMenuOpenOnFocusOutside} onPointerDown={preserveComposerFocusOnPointerDown} onClick={restoreComposerFocusAfterInteraction}>
-        <div class="composer-options-parent" data-panel-open={panel() !== "root"} data-settling={settling()} onPointerDown={returnToRoot}>
+      <MenuContent class="composer-options-menu" data-settling={settling()} onOpenAutoFocus={preserveComposerFocus} onCloseAutoFocus={preserveComposerFocusOnClose} onFocusOutside={keepMenuOpenOnFocusOutside} onPointerDown={preserveComposerFocusOnPointerDown} onClick={restoreComposerFocusAfterInteraction}>
+        <div class="composer-options-parent" data-panel-open={panel() !== "root"} onPointerDown={returnToRoot}>
          <MenuGroup>
           <MenuLabel class="composer-options-label composer-options-header"><span>{composer.profiles.length ? "Profile" : "Model"}</span>
             <Show when={context() != null}><span class="composer-options-context">{Math.round(context()!)}% context</span></Show></MenuLabel>
           <Show when={composer.profiles.length}>
-            <MenuItem closeOnSelect={false} onSelect={() => setPanel("profiles")} class="composer-options-value" aria-label={`Profile ${selectedProfileLabel()}`}>
+            <MenuItem closeOnSelect={false} onSelect={() => go("profiles")} class="composer-options-value" aria-label={`Profile ${selectedProfileLabel()}`}>
               <HarnessMark id={composer.activeProfile?.implementation || "conduit"} class="size-4" /><span>{selectedProfileLabel()}</span><ChevronRightIcon />
             </MenuItem>
             <MenuLabel class="composer-options-label">Model</MenuLabel>
           </Show>
-          <MenuItem disabled={!composer.serverOnline} closeOnSelect={false} onSelect={() => setPanel("models")} class="composer-options-value composer-options-model" aria-label={`Model ${selectedModelLabel()}`}>
+          <MenuItem disabled={!composer.serverOnline} closeOnSelect={false} onSelect={() => go("models")} class="composer-options-value composer-options-model" aria-label={`Model ${selectedModelLabel()}`}>
             <span>{selectedModelLabel()}</span><ChevronRightIcon />
           </MenuItem>
           <MenuSeparator />
           <StepSlider label="Effort" value={composer.models.effort()} disabled={!composer.serverOnline || levels().length < 2}
             options={levels().map((level) => ({ value: level, label: thinkingLabel(level) }))}
             valueControl={(label) => <button type="button" class="step-slider-value" disabled={!composer.serverOnline || levels().length < 2}
-              onClick={() => setPanel("effort")}>{label()}<ChevronRightIcon /></button>}
+              onClick={() => go("effort")}>{label()}<ChevronRightIcon /></button>}
             onChange={(value) => void composer.models.chooseEffort(value)} />
           <Show when={composer.permissions?.profiles().length}>
             <MenuSeparator />
             <MenuLabel class="composer-options-label">Permissions</MenuLabel>
-            <MenuItem closeOnSelect={false} onSelect={() => setPanel("permissions")} class="composer-options-value" aria-label={`Permissions ${selectedPermissionLabel()}`}>
+            <MenuItem closeOnSelect={false} onSelect={() => go("permissions")} class="composer-options-value" aria-label={`Permissions ${selectedPermissionLabel()}`}>
               <ShieldCheckIcon /><span>{selectedPermissionLabel()}</span><ChevronRightIcon />
             </MenuItem>
           </Show>
