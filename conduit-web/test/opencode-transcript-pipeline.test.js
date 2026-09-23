@@ -108,6 +108,8 @@ function harness() {
     /** What is on screen now, including the answer still being written. */
     streaming: (messageId) => generation?.assistantMessages.find((message) => message.id === messageId)?.blocks
       .map((block) => `${block.kind}: ${block.text}`) || [],
+    /** The rows on screen now, with the turn being written laid over them. */
+    screen: () => buildTurnRows(messages, tools, { activeGeneration: generation }),
     rows: () => {
       assert.deepEqual(errors, [], "the server reported an error");
       return buildTurnRows(messages, tools);
@@ -206,4 +208,17 @@ test("OpenCode's saved copy alone keeps every prompt's words, after the chat log
   await storyTurn(chat);
   await toolTurn(chat);
   assert.deepEqual(shape(await chat.reload({ log: false })), TWO_TURNS);
+});
+
+test("a tool shows in the turn's trace while it runs", async () => {
+  const chat = harness();
+  await chat.send("run a foregrounded sleep for 20 seconds");
+  chat.oc("session.execution.started");
+  chat.oc("session.step.started", { assistantMessageID: "msg_c1" });
+  chat.oc("session.tool.input.started", { assistantMessageID: "msg_c1", id: "call_sleep", name: "bash" });
+  chat.oc("session.tool.called", { assistantMessageID: "msg_c1", id: "call_sleep", input: { command: "sleep 20" } });
+  await chat.settle();
+  const trace = chat.screen().find((row) => row.type === "trace");
+  assert.ok(trace, "no trace on screen while the tool runs");
+  assert.deepEqual(trace.value.segments.map((segment) => `${segment.kind}: ${segment.tool?.name || ""}`), ["tool: bash"]);
 });
