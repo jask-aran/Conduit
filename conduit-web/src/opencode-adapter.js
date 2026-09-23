@@ -408,6 +408,7 @@ export class OpenCodeAdapter extends EventEmitter {
       this.publish(record, toolOpen({ toolCallId: tool.id, name: tool.name, input: tool.input, messageId: state.id, generationId }));
       this.publish(record, { type: "tool_activity", phase: "start", generationId, seq: ++record.generationSeq,
         toolCallId: tool.id, name: tool.name, input: tool.input });
+      this.paintToolUse(record, state, this.rowFromState(state));
     }
     if (tool.closed) return;
     if (phase === "called") tool.input = data.input ?? tool.input;
@@ -421,6 +422,17 @@ export class OpenCodeAdapter extends EventEmitter {
     tool.closed = true;
     tool.status = phase === "failed" ? "error" : "completed";
     this.publish(record, toolClose({ toolCallId: tool.id, output: tool.output, isError: phase === "failed", generationId }));
+  }
+
+  /**
+   * A message that calls a tool is interim work, which is said at once rather
+   * than when the step ends: the turn being painted places a running tool by
+   * its `tool_call` block, so without this a step that is only a tool shows
+   * nothing until it finishes.
+   */
+  paintToolUse(record, state, row) {
+    this.publish(record, { type: "assistant_content", phase: "final", generationId: record.generation?.id || null,
+      seq: ++record.generationSeq, messageId: state.id, stopReason: "toolUse", errorMessage: null, blocks: blocksOf(row) });
   }
 
   /** Close a finished step from its saved message, which is the record. */
@@ -478,6 +490,7 @@ export class OpenCodeAdapter extends EventEmitter {
             messageId: row.id, generationId: record.generation?.id || null }));
           this.publish(record, { type: "tool_activity", phase: "start", generationId: record.generation?.id || null,
             seq: ++record.generationSeq, toolCallId: tool.id, name: tool.name, input: tool.input });
+          this.paintToolUse(record, state, row);
         }
         // A catch-up rereads every row; only a change is news.
         const output = toolOutput(part);
