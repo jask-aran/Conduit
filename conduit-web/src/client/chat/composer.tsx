@@ -104,11 +104,11 @@ export function Composer(props: {
   const comments = createMemo(() => reviewComments(props.chat.loadedId() ?? ""));
   const hasText = createMemo(() => Boolean(props.chat.draft().trim()));
   const stoppable = createMemo(() => (busy() || props.chat.stopping()) && supports("cancel"));
+  const hasPayload = createMemo(() => hasText() || comments().length > 0 || props.attachments.pendingIds().length > 0);
   /* A first send holds its text in the draft while the agent starts, so
      "working with a draft typed" would put Stop beside Send for that moment.
      The draft being sent is not a new one. */
   const newDraft = createMemo(() => hasPayload() && props.chat.generation() !== "submitting");
-  const hasPayload = createMemo(() => hasText() || comments().length > 0 || props.attachments.pendingIds().length > 0);
   const dictating = createMemo(() => ["starting", "listening", "finishing", "waiting", "transcribing"].includes(dictationState()));
   const recording = createMemo(() => dictationState() === "listening");
   const recorderMonitorState = createMemo(() => dictationState() === "starting" ? "connecting" : dictationState() === "listening" ? "listening" : "stopped");
