@@ -146,7 +146,7 @@ buffer and the chat's log. When a record's buffer is full, paint is evicted befo
 
 | Event | Channel | Contract |
 | --- | --- | --- |
-| `transcript_op` | record | `message.open` places a row and says what it answers; `message.close` states the finished message in full; `message.drop` cuts the history or takes one row back; `tool.open` / `tool.close` do the same for a tool row. |
+| `transcript_op` | record | `message.open` places a row and says what it answers; `message.close` states the finished message in full; `message.drop` cuts the history or takes one row back; `tool.open` / `tool.close` do the same for a tool row, and a tool the user's stop killed closes `cancelled`, never `isError`; `turn.settle` states how a turn ended -- `complete`, `interrupted` or `failed` -- on every prompt it answered, before the event that ends it. A reader states the same `outcome` on each prompt it reads back, and the browser refuses a finished turn that did not say. |
 | `status` | record | A transition: `started`, `stopping`, `stopped`, `settled`. `running` is also sent but not numbered — `started` has already said the turn began. |
 | `error` | record when `scope: "runtime"` | `scope: "request"` is Conduit refusing a command and belongs to that command. Codes: `generation_limit`, `live_process_limit`, `rpc_timeout`, `rate_limited` (with `retryAfterMs`), `auth_expired`, `backend_unavailable`, `invalid_request`. |
 | `transcript_sync` | record | A window of the transcript, or with `replace: true` the whole of it. |

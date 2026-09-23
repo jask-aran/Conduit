@@ -15,6 +15,7 @@ import {
   buildLiveProjectionIndex,
   buildLiveToolItem,
   buildLiveToolSegment,
+  assertStatedOutcomes,
   projectLiveTurn,
   projectPersistedTurns,
 } from "../turn-rows";
@@ -265,9 +266,9 @@ export function createTimelineStore(
       persistedMessages = inputMessages;
       persistedTools = inputTools;
     }
-    const projected = stableProjection(previousProjectedRows, inputGeneration
+    const projected = stableProjection(previousProjectedRows, assertStatedOutcomes(inputGeneration
       ? projectLiveTurn(persistedRows, inputMessages, inputGeneration)
-      : persistedRows);
+      : persistedRows));
     // Diffing the row sets allocates a Map and a Set the size of the whole
     // transcript, and the result is only ever a metric field. Every other
     // measurement here is already gated on the recorder; this one was not.

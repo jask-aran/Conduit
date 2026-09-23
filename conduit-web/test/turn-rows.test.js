@@ -89,7 +89,7 @@ test("reports an executing tool and a persisted interrupted trace", () => {
   assert.equal(liveTrace?.type === "trace" && liveTrace.value.status, "executing_tool");
 
   const persisted = buildTurnRows([
-    { id: "u1", role: "user", content: "Wait" },
+    { id: "u1", role: "user", content: "Wait", outcome: "interrupted" },
     {
       id: "a1", role: "assistant", content: "", stopReason: "toolUse",
       answers: "u1", interim: true,
@@ -150,7 +150,7 @@ test("keeps the answer display key across live and persisted projections", () =>
 
 test("keeps consecutive final assistant messages in the answer area", () => {
   const rows = buildTurnRows([
-    { id: "u1", role: "user", content: "Explain the pathway" },
+    { id: "u1", role: "user", content: "Explain the pathway", outcome: "complete" },
     {
       id: "a1",
       role: "assistant",
@@ -217,7 +217,7 @@ test("projects empty and partial assistant errors as highlighted message rows", 
 
 test("keeps a recovered assistant error inside the turn trace", () => {
   const rows = buildTurnRows([
-    { id: "u1", role: "user", content: "Try this request" },
+    { id: "u1", role: "user", content: "Try this request", outcome: "complete" },
     {
       id: "m_error",
       role: "assistant",
@@ -357,7 +357,7 @@ test("an answer stays an answer when a later message calls a tool", () => {
   // turn's shape would call the first answer narration and fold it into the
   // trace, which is how a finished story disappeared from the transcript.
   const messages = [
-    { id: "u1", role: "user", content: "tell me a long story" },
+    { id: "u1", role: "user", content: "tell me a long story", outcome: "complete" },
     { id: "a1", role: "assistant", content: "Once upon a time…", answers: "u1", interim: false },
     { id: "a2", role: "assistant", content: "", answers: "u1", interim: true,
       blocks: [{ kind: "tool_call", toolCallId: "call_1", name: "bash" }] },

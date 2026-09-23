@@ -49,7 +49,6 @@ function TraceSegmentRow(props: {
   toolOpen?: (id: string) => boolean;
   onToolOpenChange?: (id: string, open: boolean) => void;
   settled?: boolean;
-  cutOff?: boolean;
 }) {
   const tool = () => {
     const segment = props.segment();
@@ -85,7 +84,7 @@ function TraceSegmentRow(props: {
       {(message) => <TraceError message={message()} profileLabel={props.profileLabel} />}
     </Show>
   }>
-    {(item) => <ToolCard tool={item()} settled={props.settled} cutOff={props.cutOff} sessionId={props.sessionId} initialOpen={props.toolOpen?.(item().toolCallId)} onOpenChange={(open) => props.onToolOpenChange?.(item().toolCallId, open)} />}
+    {(item) => <ToolCard tool={item()} settled={props.settled} sessionId={props.sessionId} initialOpen={props.toolOpen?.(item().toolCallId)} onOpenChange={(open) => props.onToolOpenChange?.(item().toolCallId, open)} />}
   </Show>;
 }
 
@@ -152,7 +151,6 @@ export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | nul
     if (!list.length) list.push({ kind: "summary", text: "Thinking process" });
     return list;
   });
-  const lastTool = createMemo(() => props.trace.segments.findLastIndex((segment) => segment.kind === "tool"));
   return <div class="turn-trace" data-active={props.trace.active ? "true" : "false"}>
     <button type="button" class="turn-trace-header" aria-expanded={open()} onClick={toggle}>
       <BrainIcon />
@@ -168,8 +166,8 @@ export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | nul
     </button>
     <Show when={open()}>
       <div class="turn-trace-body">
-          <Index each={props.trace.segments}>{(segment, index) =>
-          <TraceSegmentRow segment={segment} settled={!props.trace.active} cutOff={props.trace.status === "interrupted" && index === lastTool()} sessionId={props.sessionId} renderer={props.renderer} pacing={props.pacing} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />
+          <Index each={props.trace.segments}>{(segment) =>
+          <TraceSegmentRow segment={segment} settled={!props.trace.active} sessionId={props.sessionId} renderer={props.renderer} pacing={props.pacing} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />
         }</Index>
       </div>
     </Show>

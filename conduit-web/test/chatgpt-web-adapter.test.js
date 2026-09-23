@@ -87,7 +87,7 @@ test("ChatGPT Web journals the statements that make up its transcript", async ()
     // are not written by anything here.
     assert.deepEqual([...new Set(journal.map((event) => event.type))], ["transcript_op"]);
     assert.deepEqual(journal.map((event) => `${event.type}:${event.op}`),
-      ["transcript_op:message.open", "transcript_op:message.open", "transcript_op:message.drop"]);
+      ["transcript_op:message.open", "transcript_op:message.open", "transcript_op:message.drop", "transcript_op:turn.settle"]);
     assert.equal(journal[0].message.role, "user");
     assert.equal(journal[0].message.content, "Hi");
     assert.equal(journal[1].message.role, "assistant");

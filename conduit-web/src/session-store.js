@@ -628,6 +628,20 @@ export function messagesFromEntries(entries) {
     if (role === "user") answers = message.id;
     messages.push(message);
   });
+  // How each turn ended, stated on its prompt the way the live stream states
+  // it. The file does not say, so it is read here, once: a turn with a stopped
+  // message was interrupted, one whose last message is an error failed.
+  const turns = new Map();
+  for (const message of messages) {
+    if (message.role === "user") turns.set(message.id, { prompt: message, assistants: [] });
+    else if (message.role === "assistant" && turns.has(message.answers)) turns.get(message.answers).assistants.push(message);
+  }
+  for (const { prompt, assistants } of turns.values()) {
+    if (!assistants.length) continue;
+    prompt.outcome = assistants.some((message) => message.stopped) ? "interrupted"
+      : assistants.at(-1).stopReason === "error" ? "failed"
+      : "complete";
+  }
   return messages;
 }
 
@@ -674,9 +688,16 @@ export function transcriptFromEntries(entries) {
 
 export function toolsFromEntries(entries) {
   const tools = new Map();
+  // A tool Pi killed because the turn was stopped is filed as a failure, and
+  // the entry after it is the stopped turn. That entry is what says which.
+  let failed = [];
   for (const entry of entries) {
     if (entry.type !== "message") continue;
     const message = entry.message;
+    if (message?.role === "assistant") {
+      if (wasAborted(message)) for (const id of failed) tools.set(id, { ...tools.get(id), isError: false, cancelled: true });
+      failed = [];
+    }
     if (message?.role === "assistant" && Array.isArray(message.content)) {
       for (const block of message.content) {
         if (block?.type !== "toolCall" || !block.id) continue;
@@ -699,8 +720,10 @@ export function toolsFromEntries(entries) {
         ...current,
         name: current.name || message.toolName,
         done: true,
+        isError: message.isError === true,
         output: textContent(message.content),
       });
+      if (message.isError === true) failed.push(message.toolCallId);
     }
   }
   return [...tools.values()];

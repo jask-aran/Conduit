@@ -9,7 +9,7 @@ import { wasDiscarded } from "./abort-signature.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { messageClose, messageDrop, messageOpen, toolClose, toolOpen } from "./harnesses/transcript-ops.js";
+import { messageClose, messageDrop, messageOpen, toolClose, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 export const CODEX_CAPABILITIES = Object.freeze({
@@ -360,6 +360,11 @@ export class CodexAppServerAdapter extends EventEmitter {
       // Older threads carry no `phase`, so nothing would read as the answer.
       // The turn's last message without commands is the closest thing to one.
       const turn = messages.slice(turnStart);
+      // How the turn ended is the thread's own status for it. One still in
+      // progress has not ended, and the live stream will say when it does.
+      const prompt = messages.find((message) => message.id === answering);
+      const outcome = { completed: "complete", interrupted: "interrupted", failed: "failed" }[turnStatus];
+      if (prompt && outcome && turn.some((message) => message.role === "assistant")) prompt.outcome = outcome;
       if (turnStatus === "interrupted") {
         const interrupted = turn.findLast((message) => message.role === "assistant");
         if (interrupted) {
@@ -418,8 +423,10 @@ export class CodexAppServerAdapter extends EventEmitter {
         interim = messages.at(-1);
       }
       interim.blocks.push({ kind: "tool_call", toolCallId: item.id, name: activity.name, input: activity.input });
+      // A command still running when the turn was interrupted went with it.
+      const cancelled = row.turnStatus === "interrupted" && item.status === "inProgress";
       tools.push({ toolCallId: item.id, name: activity.name, input: activity.input, done: true,
-        output: textResult(truncate(activity.output)), isError: activity.isError });
+        output: textResult(truncate(activity.output)), isError: activity.isError && !cancelled, ...(cancelled ? { cancelled } : {}) });
     }
     closeTurn();
     return { messages, tools };
@@ -833,6 +840,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       // turn: that prompt has been answered, and this is what Codex is
       // replying to now.
       record.answering = messageId;
+      (record.prompts ||= new Set()).add(messageId);
       this.openMessage(record, messageId, "user", {
         content: CodexAppServerAdapter.itemText(params.item), timestamp: new Date().toISOString(),
       });
@@ -913,7 +921,7 @@ export class CodexAppServerAdapter extends EventEmitter {
           toolCallId: params.item.id, name: activity.name, output: truncate(activity.output), isError: activity.isError });
         if (this.states(record)) {
           this.publish(record, toolClose({ toolCallId: params.item.id, output: truncate(activity.output),
-            isError: activity.isError, generationId: turnId }));
+            isError: activity.isError, cancelled: Boolean(activity.isError && record.stopping), generationId: turnId }));
         }
       }
     } else if (method === "serverRequest/resolved") {
@@ -953,6 +961,12 @@ export class CodexAppServerAdapter extends EventEmitter {
       // up if it wrote nothing -- so an interrupt leaves no row waiting for a
       // message that is never coming.
       this.dropUnwrittenMessages(record, failed || interrupted ? "aborted" : "stop");
+      // Every prompt the turn answered, a steer included, ended with it.
+      for (const promptId of this.states(record) ? record.prompts || [] : []) {
+        this.publish(record, turnSettle({ promptId, generationId: turnId,
+          outcome: failed ? "failed" : interrupted ? "interrupted" : "complete" }));
+      }
+      record.prompts = new Set();
       record.answering = null;
       this.publish(record, failed
         ? { type: "error", generationId: turnId, error: { code: "backend_unavailable", message: params.turn?.error?.message || "Codex turn failed" } }
@@ -1064,6 +1078,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     // whatever came before it, which is the previous turn.
     record.messageIds.add(clientUserMessageId);
     record.answering = clientUserMessageId;
+    record.prompts = new Set([clientUserMessageId]);
     this.openMessage(record, clientUserMessageId, "user", {
       content: parseAttachmentEnvelope(message).message,
       timestamp: new Date().toISOString(),

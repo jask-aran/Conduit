@@ -15,7 +15,7 @@ import {
 } from "./active-generation.js";
 import { createPiEventNormalizer } from "./pi-event-normalizer.js";
 import { projectSessionEntries, readSessionPage } from "./session-store.js";
-import { messageClose, messageDrop, messageOpen, toolClose, toolOpen } from "./harnesses/transcript-ops.js";
+import { messageClose, messageDrop, messageOpen, toolClose, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
 import { PI_CAPABILITIES } from "./pi-capabilities.js";
 import { PiCommandCatalog } from "./pi-command-catalog.js";
 import { ChatLogs, isLoggedEvent } from "./server/chat-log.js";
@@ -241,6 +241,7 @@ function traceHarness(direction, chatId, line) {
 }
 
 const ABORT_TERMINAL_EVENTS = new Set(["tool_execution_end", "message_end", "turn_end"]);
+const TURN_ENDINGS = new Set(["generation_stopped", "generation_settled", "generation_failed"]);
 /** An answer slower than this is worth a line in the log; it is what a slow chat feels like. */
 const SLOW_RPC_MS = 2_000;
 /** How long a request will wait for a freshly spawned Pi to say anything at all. */
@@ -1014,6 +1015,9 @@ export class PiManager extends EventEmitter {
     const events = record.generationNormalizer.normalize(source);
     for (const event of events) {
       record.activeGeneration = reduceActiveGeneration(record.activeGeneration, toNeutralPiEvent(event));
+      // How the turn ended goes out ahead of the event that ends it, so no
+      // browser draws a finished turn that has not yet said how it finished.
+      if (TURN_ENDINGS.has(event.type)) this.settleTurn(record, event.type);
       this.publishTransient(record, event);
       // The turn's own statements about the transcript, made from the state
       // just reduced: what the message it finished says, and which of the rows
@@ -1029,10 +1033,13 @@ export class PiManager extends EventEmitter {
           input: event.input, generationId: record.generation?.id || null }));
       }
       if (event.type === "tool_execution_completed" && this.logFor(record)) {
+        // Pi kills a running tool when the turn is stopped and reports it as
+        // failing ("Command aborted"). This process asked for the stop.
         this.publish(record, toolClose({ toolCallId: event.toolCallId, output: event.result,
-          isError: event.isError, generationId: record.generation?.id || null }));
+          isError: event.isError, cancelled: Boolean(event.isError && record.generation?.aborting),
+          generationId: record.generation?.id || null }));
       }
-      if (["generation_stopped", "generation_settled", "generation_failed"].includes(event.type)) {
+      if (TURN_ENDINGS.has(event.type)) {
         this.dropUnwrittenMessages(record);
       }
     }
@@ -1804,6 +1811,9 @@ export class PiManager extends EventEmitter {
     if (role === "assistant" && record.generation) {
       record.generation.openMessages = record.generation.openMessages || new Set();
       record.generation.openMessages.add(id);
+      // Every prompt the turn answered -- a steer taken mid-turn is one more --
+      // is settled with it.
+      if (answers) (record.generation.prompts ||= new Set()).add(answers);
     }
     this.publish(record, messageOpen({ id, role, ...fields,
       // The turn that is writing it, so a row holding a place for an answer
@@ -1853,6 +1863,27 @@ export class PiManager extends EventEmitter {
       errorMessage: written?.errorMessage || null,
     }));
     return id;
+  }
+
+  /**
+   * Say how the turn ended, once, on the prompt it answers.
+   *
+   * Stopped is known here rather than read off what Pi files: a stop under a
+   * running tool comes back as a failed tool and an empty entry that says
+   * `error`. The only failure is one Pi reports, or a turn whose last message
+   * is the provider's error.
+   */
+  settleTurn(record, ending) {
+    const generation = record.generation;
+    if (!generation || generation.outcome || !this.logFor(record)) return;
+    const prompts = new Set([generation.claims?.user, ...(generation.prompts || [])].filter(Boolean));
+    const last = record.activeGeneration?.assistantMessages?.at(-1);
+    generation.outcome = generation.aborting || ending === "generation_stopped" ? "interrupted"
+      : ending === "generation_failed" || last?.stopReason === "error" ? "failed"
+      : "complete";
+    for (const promptId of prompts) {
+      this.publish(record, turnSettle({ promptId, outcome: generation.outcome, generationId: generation.id }));
+    }
   }
 
   /**

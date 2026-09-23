@@ -6,7 +6,7 @@ import { EventEmitter } from "node:events";
 import { promisify } from "node:util";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { messageClose, messageOpen, toolClose, toolOpen } from "./harnesses/transcript-ops.js";
+import { messageClose, messageOpen, toolClose, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 const execFile = promisify(execFileCallback);
@@ -432,8 +432,8 @@ export class FxAcpAdapter extends EventEmitter {
     for (const tool of record.tools.values()) {
       if (tool.closed) continue;
       tool.closed = true;
-      this.publish(record, toolClose({ toolCallId: tool.id, output: tool.output, isError: true,
-        generationId: record.generation.id }));
+      this.publish(record, toolClose({ toolCallId: tool.id, output: tool.output,
+        isError: stopReason !== "cancelled", cancelled: stopReason === "cancelled", generationId: record.generation.id }));
     }
     const answer = record.answer;
     if (answer) {
@@ -443,6 +443,11 @@ export class FxAcpAdapter extends EventEmitter {
       this.publish(record, messageClose({ messageId: answer.id, stopReason, blocks,
         generationId: record.generation.id, keepsPartial: false, model: record.model || null,
         errorMessage: error?.message || null }));
+    }
+    // ACP's own word for a stopped turn is `cancelled`.
+    if (record.answering) {
+      this.publish(record, turnSettle({ promptId: record.answering, generationId: record.generation.id,
+        outcome: stopReason === "cancelled" ? "interrupted" : stopReason === "error" ? "failed" : "complete" }));
     }
     record.active = false;
     record.stopping = false;
@@ -560,7 +565,7 @@ export class FxAcpAdapter extends EventEmitter {
       const streamed = turnIds[`${data.id}:${index}`] || {};
       const userId = streamed.user || `${data.id}:user:${index}`;
       const assistantId = streamed.assistant || `${data.id}:assistant:${index}`;
-      messages.push({ id: userId, role: "user", content: turn.user?.text || "" });
+      messages.push({ id: userId, role: "user", content: turn.user?.text || "", outcome: "complete" });
       const blocks = [{ kind: "text", text: turn.assistant || "" }];
       for (const step of turn.execution?.tool_steps || []) {
         for (const call of step.tool_calls || []) {

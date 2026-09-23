@@ -35,6 +35,7 @@ test("restores completed tool calls from persisted messages", () => {
     name: "write",
     input: { path: "note.md" },
     done: true,
+    isError: false,
     output: "Successfully wrote note.md",
     timestamp: null,
   }]);

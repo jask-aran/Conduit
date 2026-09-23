@@ -16,6 +16,7 @@ import { PassThrough } from "node:stream";
 import test from "node:test";
 import { PiManager } from "../src/pi-manager.js";
 import { PiRpcAdapter, normalizePiBackendEvent } from "../src/pi-rpc-adapter.js";
+import { projectSessionEntries } from "../src/session-store.js";
 import { ChatLogs } from "../src/server/chat-log.js";
 import { createLiveSessionStream } from "../src/server/live-session-stream.js";
 import { normalizeLiveEvent } from "../src/client/api/live-events.ts";
@@ -546,4 +547,60 @@ test("stopping a turn a late browser is watching leaves the turn on screen", asy
 
   assert.equal(late.messages().length > 0, true, "the chat did not empty itself");
   assert.deepEqual(shape(late.rows()).map((row) => row.split(":")[0]), ["user", "assistant"]);
+});
+
+/**
+ * A stop that lands while a tool is running.
+ *
+ * Pi reports it as the tool failing -- "Command aborted" -- and then files an
+ * empty assistant entry with `stopReason: "error"`. Read off those shapes, the
+ * trace called the turn complete, the tool called it an error and the composer
+ * called it interrupted: three answers to one question. The turn states how it
+ * ended, once, on its prompt, and everything that shows it reads that -- live,
+ * and after a reload reads the session file instead.
+ */
+const toolCall = { id: "call_1", name: "bash", arguments: { command: "sleep 20" } };
+const calling = { role: "assistant", content: [{ type: "toolCall", ...toolCall }], stopReason: "toolUse" };
+const cutOff = { role: "assistant", content: [], stopReason: "error", errorMessage: "This operation was aborted" };
+
+const readsInterrupted = (messages, rows) => {
+  assert.equal(messages.find((message) => message.role === "user").outcome, "interrupted", "the turn states how it ended");
+  const trace = rows.find((row) => row.type === "trace");
+  assert.equal(trace.value.status, "interrupted", "the trace says so");
+  const { tool } = trace.value.segments.find((segment) => segment.kind === "tool");
+  assert.equal(tool.cancelled, true, "the tool was stopped");
+  assert.equal(tool.isError, false, "not failed");
+};
+
+test("a stop mid-tool reads as interrupted everywhere, live and after a reload", async () => {
+  const chat = harness();
+  await chat.send({ type: "prompt", message: "run a bash sleep 20s" });
+  chat.pi({ type: "agent_start" });
+  chat.pi({ type: "message_end", message: { role: "user", content: "run a bash sleep 20s" } });
+  chat.pi({ type: "message_start", message: { role: "assistant", content: [] } });
+  chat.pi({ type: "message_update", assistantMessageEvent: { type: "toolcall_end", contentIndex: 0, partial: calling, toolCall } });
+  chat.pi({ type: "message_end", message: calling });
+  chat.pi({ type: "tool_execution_start", toolCallId: "call_1", toolName: "bash", args: toolCall.arguments });
+  await chat.settle();
+
+  chat.dispatch({ type: "stop_generation" });
+  await chat.read("abort");
+  chat.pi({ type: "tool_execution_end", toolCallId: "call_1", toolName: "bash",
+    result: { content: [{ type: "text", text: "Command aborted" }] }, isError: true });
+  chat.pi({ type: "message_start", message: { role: "assistant", content: [] } });
+  chat.pi({ type: "message_end", message: cutOff });
+  chat.pi({ type: "agent_end" });
+  chat.pi({ type: "agent_settled" });
+  await chat.accept("abort");
+  await chat.settle();
+  readsInterrupted(chat.messages(), chat.rows());
+
+  const reloaded = projectSessionEntries([
+    { type: "message", id: "u1", message: { role: "user", content: "run a bash sleep 20s" } },
+    { type: "message", id: "a1", message: calling },
+    { type: "message", id: "t1", message: { role: "toolResult", toolCallId: "call_1", toolName: "bash",
+      content: [{ type: "text", text: "Command aborted" }], isError: true } },
+    { type: "message", id: "a2", message: cutOff },
+  ]);
+  readsInterrupted(reloaded.messages, buildTurnRows(reloaded.messages, reloaded.tools));
 });

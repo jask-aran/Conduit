@@ -82,7 +82,7 @@ export type TurnRow =
   // each row rediscover it meant a backwards scan of the whole message list
   // per assistant row, which is quadratic in a long chat.
   | { key: string; type: "message"; value: Message; live?: boolean; streamVersion?: number; displayKey?: string; precedingUserId?: string }
-  | { key: string; type: "trace"; value: TurnTraceData; precedingUserId?: string; answerless?: boolean };
+  | { key: string; type: "trace"; value: TurnTraceData; precedingUserId?: string; answerless?: boolean; unstated?: boolean };
 
 interface PersistedTurn {
   userMessage: Message | null;
@@ -160,6 +160,23 @@ const statedInterim = (message: Message): boolean =>
   (typeof message.interim === "boolean" ? message.interim : stateless(message, "interim"));
 const statedAnswers = (message: Message): string | null =>
   (message.answers !== undefined ? message.answers : stateless(message, "answers"));
+
+/**
+ * And how a turn ended, which is stated on its prompt by `turn.settle`.
+ *
+ * It was read off the turn's messages -- any of them stopped, the last one an
+ * error -- and Pi's stop under a running tool files an empty entry that says
+ * `error`, so the trace called that turn complete while the tool said error and
+ * the composer said interrupted. A finished turn that did not say how it ended
+ * is a harness that forgot to, and it stops here rather than being drawn as a
+ * clean finish. A turn still running has not ended, so its rows are the live
+ * overlay's and are checked once they are not.
+ */
+export function assertStatedOutcomes(rows: TurnRow[]): TurnRow[] {
+  const unstated = rows.find((row) => row.type === "trace" && row.unstated);
+  if (unstated) throw new Error(`transcript contract: the turn after prompt ${unstated.precedingUserId} ended without stating how. A backend must state \`turn.settle\` when a turn ends.`);
+  return rows;
+}
 
 /**
  * Which prompt the live turn is drawn under.
@@ -489,14 +506,14 @@ function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById
   const answerText = answerAssistants.map((assistant) => String(assistant.content || "").trim()).filter(Boolean).join("\n\n");
   const hasAnswerRow = Boolean(answer && (answerText || (answer === finalAssistant && answer.stopReason === "error")));
   if (segments.length > 0) {
-    const interrupted = turn.assistants.some((assistant) => assistant.stopped || assistant.stopReason === "aborted");
-    const failed = finalAssistant?.stopReason === "error" && !interrupted;
+    const outcome = turn.userMessage?.outcome;
     rows.push({
       key: `trace:${turn.userMessage ? turn.userMessage.id : turn.assistants[0]!.id}`,
       type: "trace",
-      value: { active: false, status: interrupted ? "interrupted" : failed ? "failed" : "complete", segments },
+      value: { active: false, status: outcome || "complete", segments },
       precedingUserId: turn.userMessage?.id,
       answerless: !hasAnswerRow,
+      ...(turn.userMessage && !outcome ? { unstated: true } : {}),
     });
   }
   if (hasAnswerRow && answer) {
@@ -583,5 +600,5 @@ export function buildTurnRows(
   } = {},
 ): TurnRow[] {
   const persisted = projectPersistedTurns(messages, tools).rows;
-  return opts.activeGeneration ? projectLiveTurn(persisted, messages, opts.activeGeneration) : persisted;
+  return assertStatedOutcomes(opts.activeGeneration ? projectLiveTurn(persisted, messages, opts.activeGeneration) : persisted);
 }

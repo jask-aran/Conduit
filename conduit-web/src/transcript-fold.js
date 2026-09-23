@@ -100,6 +100,9 @@ export function applyTranscriptOp(messages, event) {
       }
       : message));
   }
+  if (event.op === "turn.settle") {
+    return messages.map((message) => (message.id === event.promptId ? { ...message, outcome: event.outcome } : message));
+  }
   if (event.op === "message.drop" && event.messageId) {
     // Where the history now ends, or one row taken back. `keep` is a regenerate:
     // the prompt stands and its answers go, so the row the reader is looking at
@@ -137,7 +140,7 @@ export function applyToolOp(tools, event) {
   if (event.op === "tool.close") {
     if (!event.toolCallId) return tools;
     return tools.map((tool) => (tool.toolCallId === event.toolCallId
-      ? { ...tool, output: event.output, isError: Boolean(event.isError), done: true }
+      ? { ...tool, output: event.output, isError: Boolean(event.isError), cancelled: event.cancelled === true, done: true }
       : tool));
   }
   return tools;

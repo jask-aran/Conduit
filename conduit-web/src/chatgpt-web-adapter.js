@@ -8,7 +8,7 @@ import { EventEmitter } from "node:events";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { applyTranscriptOp } from "./transcript-fold.js";
-import { messageClose, messageDrop, messageOpen } from "./harnesses/transcript-ops.js";
+import { messageClose, messageDrop, messageOpen, turnSettle } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 export const CHATGPT_WEB_CAPABILITIES = Object.freeze({
@@ -151,7 +151,7 @@ export class ChatGptWebAdapter extends EventEmitter {
     record.active = true;
     record.activity = "working";
     record.stopping = false;
-    record.generation = { id: generationId, closed: false, settled: false };
+    record.generation = { id: generationId, closed: false, settled: false, prompt: userMessageId };
     record.abortController = new AbortController();
     // The prompt and the answer it will produce are both named before the
     // request goes out, so nothing arrives needing a place to be worked out.
@@ -235,7 +235,14 @@ export class ChatGptWebAdapter extends EventEmitter {
       blocks: [{ kind: "text", contentIndex: 0, text }] }));
   }
 
+  /** How the turn ended, on its prompt; the journal keeps it for a reload. */
+  settleTurn(record, outcome) {
+    if (!record.generation?.prompt) return;
+    this.publish(record, turnSettle({ promptId: record.generation.prompt, outcome, generationId: record.generation.id }));
+  }
+
   settle(record, detail) {
+    this.settleTurn(record, detail === "stopped" ? "interrupted" : "complete");
     record.active = false;
     record.stopping = false;
     record.activity = "idle";
@@ -248,6 +255,7 @@ export class ChatGptWebAdapter extends EventEmitter {
 
   failGeneration(record, cause, text = "") {
     this.closeTurn(record, "error", text);
+    this.settleTurn(record, "failed");
     record.active = false;
     record.stopping = false;
     record.activity = "failed";
