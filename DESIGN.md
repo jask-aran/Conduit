@@ -255,6 +255,18 @@ No stacked card shadows, no colored glows, no glass on tiled content, no glass o
 
 Icons are Lucide at 1.5 stroke, 13–16px, muted at rest.
 
+# Motion
+
+Motion explains a change of place: where something went, and what took its place. It is not decoration, and a surface that does not change place does not animate.
+
+- **Leave the way you came.** Something that belongs to the bottom edge leaves downward and returns upward; a panel leaves toward the edge its control sits on.
+- **One leaves, then the other arrives.** The outgoing surface goes first and the incoming one starts ~150ms later, so they never cross-fade in place.
+- **Quick out, gentle in.** Leaving is ~200ms and accelerates (`cubic-bezier(.4, 0, 1, 1)`); arriving is ~300ms and settles (`cubic-bezier(.2, .8, .2, 1)`), rising ~32px with a fade.
+- **Hold the reading position.** A surface that is swapped keeps its room while it is away, so the swap itself moves nothing. The transcript moves only through its tail spring, when what replaced the surface is taller.
+- **Transform and opacity only.** Animate `transform`/`translate` and `opacity`; never width, height, or layout. A panel slides over its neighbour rather than squeezing it (the maximised workspace panel is the reference).
+- **Floating controls follow.** Anything anchored to a surface — scroll-to-latest over the composer — is re-measured when that surface is swapped or lands, never left behind.
+- `prefers-reduced-motion` removes these transitions; the end state is identical.
+
 # Components
 
 **Frost chrome (signature, use more of it)** — composer, user bubbles, header search/terminal/workspace pill, scroll-to-latest, and future floating toolbars or hero surfaces like the dashboard launch row. Shared material: `frost-fill` / `glass-bg`, `frost-stroke` / `glass-border`, blur, no opaque `--background` slab. When something floats over content or marks the primary action area, default to frosted glass before reaching for a solid card. Do not frost lists, trees, settings pages, or palettes.
@@ -272,6 +284,13 @@ Icons are Lucide at 1.5 stroke, 13–16px, muted at rest.
 **Pane header** — a hairline-bottomed strip across a pane (terminal today). Left: route buttons if any, then the status indicator, the name (semibold), and one muted mono context line joined with ` · `. Right: groups of quiet ghost controls separated by a 1px, ~14px hairline, in the order the person reaches for them, with anything that does not fit collapsing into a `⋯` menu rather than scrolling.
 
 **Runtime dot** — 6–8px, live green / warn amber / danger red / muted. Color on the dot only. Never blue. A healthy indicator is the dot alone; it gains a label only when it has something to say ("Updating", "Reconnecting", "Read only"), and a busy state is a small spinner in the dot's place. One indicator per surface: fold "server" and "this connection" into one, worst state first.
+
+**Composer takeover** — for anything the agent is blocked on until the user answers (the question tool today). It replaces the composer rather than stacking above it: the composer slides down out of the pane, and the takeover rises into the same slot in the composer's material and width, `{rounded.xl}`. It never scrolls inside itself:
+
+- One step at a time. Several questions are tabs across the top — the current one a gray wash, an answered one a small check — ending in a Submit tab that summarises every answer (header muted, answer at 560, unanswered muted). Dismiss is a quiet × at the right of the tab row.
+- The prompt is 14px/560. Answers are one-line rows: muted mono number, 13px/560 label, 12px muted description inline (its own line on a phone), a check at the right — a filled box when several answers are allowed. The keyboard cursor is the row's gray wash. A typed answer is the last numbered row, typed in place.
+- It takes the keyboard while it is up: arrows move, a number or Enter chooses, Tab turns the page, Esc dismisses. One footer line explains the keys in keycaps; touch hides it and keeps the Next/Submit button.
+- A single question with a single answer skips tabs and Submit: choosing is answering.
 
 **Keycap** — 16px square, hairline, muted mono.
 
