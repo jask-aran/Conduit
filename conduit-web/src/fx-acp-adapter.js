@@ -23,7 +23,7 @@ export const FX_CAPABILITIES = Object.freeze({
   approvals: true,
   permissionModes: true,
   usage: false,
-  replay: true,
+  replay: false,
   attachments: false,
   interruptKeepsPartial: false,
 });

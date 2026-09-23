@@ -26,7 +26,7 @@ export const OPENCODE_CAPABILITIES = Object.freeze({
   approvals: true,
   permissionModes: false,
   usage: true,
-  replay: true,
+  replay: false,
   attachments: false,
   interruptKeepsPartial: false,
 });
