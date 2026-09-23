@@ -5,18 +5,19 @@ import type { HarnessSummary } from "./api/contracts";
  * Product marks for the coding harnesses, served from `public/brand/`.
  *
  * `tint: true` marks are single-colour artwork: they render as a mask filled
- * with `currentColor` so they follow the surrounding theme. The Codex mark is
- * the official gradient artwork and renders as an image; never tint or invert
- * it. Entries beyond the shipped adapters are staged for the ones that follow;
+ * with `currentColor` so they follow the surrounding theme. Codex is shown in
+ * one colour like the rest, except where a surface asks for `artwork`: its
+ * official gradient mark, rendered as an image and never tinted or inverted.
+ * Entries beyond the shipped adapters are staged for the ones that follow;
  * see `docs/brand/README.md` for provenance.
  */
-type Mark = { src: string; tint?: boolean };
+type Mark = { src: string; tint?: boolean; artwork?: string };
 
 const BLOSSOM: Mark = { src: "/brand/openai-blossom-mark.svg", tint: true };
 
 const MARKS: Record<string, Mark> = {
-  conduit: { src: "/favicon.svg" },
-  codex: { src: "/brand/codex-mark.svg" },
+  conduit: { src: "/brand/conduit-mark.svg", tint: true },
+  codex: { src: "/brand/codex-mono-mark.svg", tint: true, artwork: "/brand/codex-mark.svg" },
   "chatgpt-web": BLOSSOM,
   "claude-code": { src: "/brand/claude-code-mark.svg", tint: true },
   fx: { src: "/brand/fx-mark.svg", tint: true },
@@ -30,8 +31,11 @@ export function harnessStatusLabel(status: HarnessSummary["status"]): string {
   return status === "authentication_required" ? "Sign-in required" : status === "unavailable" ? "Unavailable" : "Ready";
 }
 
-export function HarnessMark(props: { id: string; class?: string }) {
-  const mark = (): Mark => MARKS[props.id] ?? FALLBACK;
+export function HarnessMark(props: { id: string; class?: string; artwork?: boolean }) {
+  const mark = (): Mark => {
+    const found = MARKS[props.id] ?? FALLBACK;
+    return props.artwork && found.artwork ? { src: found.artwork } : found;
+  };
   return <Show when={mark().tint} fallback={<img class={`harness-mark ${props.class || ""}`} src={mark().src} alt="" />}>
     <i class={`harness-mark harness-mark-tinted ${props.class || ""}`} style={{ "mask-image": `url("${mark().src}")`, "-webkit-mask-image": `url("${mark().src}")` }} aria-hidden="true" />
   </Show>;
