@@ -273,13 +273,21 @@ export type ToolActivityEvent = EventBase & {
 export interface PermissionRequestEvent extends EventBase {
   type: "permission_request";
   requestId: string;
-  kind: "confirm" | "select" | "input" | "editor";
+  /** `question` is a harness's question tool; see `src/harnesses/questions.js`. */
+  kind: "confirm" | "select" | "input" | "editor" | "question";
   title: string;
   message: string;
   options: string[];
   placeholder: string;
   prefill: string;
   timeoutMs: number | null;
+  questions?: Array<{
+    id: string; header: string; prompt: string; multiSelect: boolean; secret: boolean; required: boolean;
+    options: Array<{ id: string; label: string; description: string; preview?: { format: "monospace" | "markdown"; text: string } }>;
+    freeform: false | { placeholder?: string; multiline?: boolean; numeric?: boolean };
+  }>;
+  /** Whether a note on an answer reaches the model. */
+  notes?: boolean;
 }
 
 export interface PermissionResolvedEvent extends EventBase {

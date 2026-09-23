@@ -1318,7 +1318,8 @@ export function createActiveChat(options: ActiveChatOptions) {
       toolName: activeToolName(),
       retry: retry(),
     });
-    if (hostUiRequests().length) return { kind: "waiting_for_user", label: "Waiting for your confirmation" };
+    if (hostUiRequests().length) return { kind: "waiting_for_user",
+      label: hostUiRequests()[0]?.kind === "question" ? "Waiting for your answer" : "Waiting for your confirmation" };
     // We have asked for a process and the server has not answered yet, so it
     // has nothing to publish and the derived activity is idle by default. The
     // asking is worth showing: it is the whole of the gap between clicking a

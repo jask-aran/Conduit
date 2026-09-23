@@ -279,7 +279,10 @@ approval *under*, fx offers its ACP session modes the same way, and OpenCode
 offers its TUI's own two — prompt, or auto accept, where the client answers each
 permission `once` and still asks every question. The others answer an approval
 and nothing more. A prompt's options are words; the adapter keeps what each one
-means to its harness and translates the one chosen back. `replay` is false for Codex, fx and
+means to its harness and translates the one chosen back. A harness's question
+tool -- OpenCode's forms, Codex's `request_user_input` -- is a request of kind
+`question` on the same path: one or more questions, answered together with
+`answers`, in the shape `src/harnesses/questions.js` states. `replay` is false for Codex, fx and
 OpenCode because their `replay` returns runtime state from the record buffer
 rather than a generation in progress, so a browser reconnecting mid-turn is
 caught up from the record and the log instead; `usage` is false for Codex

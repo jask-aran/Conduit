@@ -446,13 +446,43 @@ export interface RetryState {
 
 export interface HostUiRequest {
   id: string;
-  kind: "confirm" | "select" | "input" | "editor";
+  kind: "confirm" | "select" | "input" | "editor" | "question";
   title?: string;
   message?: string;
   options?: string[];
   placeholder?: string;
   prefill?: string;
   timeoutMs?: number | null;
+  /** A `question` request's questions, answered together. */
+  questions?: Question[];
+  /** Whether a note on an answer reaches the model. */
+  notes?: boolean;
+}
+
+/** One question of a harness's question tool (`src/harnesses/questions.js`). */
+export interface Question {
+  id: string;
+  header: string;
+  prompt: string;
+  multiSelect: boolean;
+  secret: boolean;
+  required: boolean;
+  options: QuestionOption[];
+  freeform: false | { placeholder?: string; multiline?: boolean; numeric?: boolean };
+}
+
+export interface QuestionOption {
+  id: string;
+  label: string;
+  description: string;
+  preview?: { format: "monospace" | "markdown"; text: string };
+}
+
+export interface QuestionAnswer {
+  questionId: string;
+  optionIds: string[];
+  freeform?: string;
+  note?: string;
 }
 
 export interface RuntimeProcess {

@@ -7,6 +7,7 @@ import path from "node:path";
 import WebSocket from "ws";
 import { wasDiscarded } from "./abort-signature.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
+import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageDrop, messageOpen, toolClose, toolOpen } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
@@ -78,6 +79,21 @@ const approvalChoice = (response) => {
   const index = APPROVAL_OPTIONS.indexOf(String(response.value ?? ""));
   return ["approve", "session", "deny"][index] || "deny";
 };
+
+// Codex's request_user_input: questions of offered answers, a typed "other"
+// where it allows one, and a question with no options answered only by typing.
+// Its reply is the chosen labels and anything typed, per question id.
+const USER_INPUT = "item/tool/requestUserInput";
+const userInputRequest = (id, params) => questionRequest({ id, title: "Codex has a question",
+  questions: (params.questions || []).map((question) => ({
+    id: question.id, header: question.header || "", prompt: question.question || "", secret: Boolean(question.isSecret), required: true,
+    options: (question.options || []).map((option, index) => ({ id: String(index), label: option.label, description: option.description || "" })),
+    freeform: question.isOther || !question.options?.length ? { placeholder: "" } : false,
+  })) });
+const userInputAnswers = (host, response) => Object.fromEntries(isDismissal(response) ? [] : host.questions.map((question) => {
+  const { options, freeform } = answerTo(response, question);
+  return [question.id, { answers: [...options.map((option) => option.label), ...(freeform ? [freeform] : [])] }];
+}));
 
 const error = (message, code = "backend_unavailable", status = 409) => Object.assign(new Error(message), { code, status });
 const waitForClose = (socket, timeoutMs = 2_000) => {
@@ -587,6 +603,7 @@ export class CodexAppServerAdapter extends EventEmitter {
    * so the turn fails loudly instead of hanging.
    */
   serverRequest(record, message) {
+    if (message.method === USER_INPUT) return this.userInput(record, message);
     const descriptor = APPROVALS[message.method];
     if (!descriptor) {
       this.write(record, { id: message.id, error: { code: -32601,
@@ -596,13 +613,24 @@ export class CodexAppServerAdapter extends EventEmitter {
     const params = message.params || {};
     const requestId = params.approvalId || params.itemId || params.callId || `approval-${message.id}`;
     const generationId = params.turnId || record.generation?.id || null;
-    record.approvals.set(requestId, { requestId: message.id, decisions: descriptor.decisions, generationId });
+    const host = { id: requestId, kind: "select", title: descriptor.title(params), message: descriptor.message(params),
+      options: [...APPROVAL_OPTIONS], placeholder: "", prefill: "", timeoutMs: null };
+    record.approvals.set(requestId, { requestId: message.id, decisions: descriptor.decisions, generationId, host });
+    this.ask(record, host, generationId);
+  }
+
+  /** A question the model asked with request_user_input, asked as one. */
+  userInput(record, message) {
+    const params = message.params || {};
+    const generationId = params.turnId || record.generation?.id || null;
+    const host = userInputRequest(params.itemId || `question-${message.id}`, params);
+    record.approvals.set(host.id, { requestId: message.id, generationId, host });
+    this.ask(record, host, generationId);
+  }
+
+  ask(record, host, generationId) {
     record.activity = "waiting_for_user";
-    this.publish(record, {
-      type: "permission_request", generationId, requestId, kind: "select",
-      title: descriptor.title(params), message: descriptor.message(params),
-      options: [...APPROVAL_OPTIONS], placeholder: "", prefill: "", timeoutMs: null,
-    });
+    this.publish(record, { type: "permission_request", generationId, requestId: host.id, ...host });
     // What the session is busy with, not a transition the turn made. It used to
     // be published as a `status` with no phase, which is a shape neither fold
     // has a case for: it took a place in the turn's sequence and then changed
@@ -620,6 +648,11 @@ export class CodexAppServerAdapter extends EventEmitter {
     // Resolved already - answered in the Codex TUI, or a duplicate click.
     if (!pending) return null;
     record.approvals.delete(requestId);
+    if (pending.host.kind === "question") {
+      this.write(record, { id: pending.requestId, result: { answers: userInputAnswers(pending.host, response) } });
+      this.settleApproval(record, requestId, pending.generationId);
+      return null;
+    }
     const decision = pending.decisions[approvalChoice(response)];
     this.write(record, { id: pending.requestId, result: { decision } });
     this.settleApproval(record, requestId, pending.generationId);
@@ -1328,7 +1361,9 @@ export class CodexAppServerAdapter extends EventEmitter {
   }); }
   attach(id, socket) { return this.sessions.attach(id, socket); }
   setFrameInterval(id, socket, ms) { return this.sessions.setFrameInterval(socket, ms); }
-  view(record) { return this.sessions.view(record); }
+  view(record) {
+    return { ...this.sessions.view(record), hostUiRequests: [...(record?.approvals?.values() || [])].map((pending) => pending.host) };
+  }
   runtimeState(record) { return this.sessions.runtimeState(record); }
   publish(record, event) {
     const result = this.sessions.publish(record, event);

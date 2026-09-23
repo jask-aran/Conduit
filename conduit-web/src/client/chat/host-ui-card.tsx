@@ -1,8 +1,9 @@
 import { createSignal, For, Show } from "solid-js";
 import { Button, Input, Textarea } from "@/components/primitives";
 import type { HostUiRequest } from "../api/contracts";
+import { QuestionCard, type QuestionResponse } from "./question-card";
 
-type HostUiResponse = { id: string; cancelled?: boolean; confirmed?: boolean; value?: string };
+type HostUiResponse = { id: string; cancelled?: boolean; confirmed?: boolean; value?: string } | QuestionResponse;
 
 function HostUiCard(props: { request: HostUiRequest; onRespond: (response: HostUiResponse) => void }) {
   const [value, setValue] = createSignal(props.request.prefill || "");
@@ -44,5 +45,7 @@ function HostUiCard(props: { request: HostUiRequest; onRespond: (response: HostU
 }
 
 export function HostUiRequests(props: { requests: HostUiRequest[]; onRespond: (response: HostUiResponse) => void }) {
-  return <For each={props.requests.slice(0, 1)}>{(request) => <HostUiCard request={request} onRespond={props.onRespond} />}</For>;
+  return <For each={props.requests.slice(0, 1)}>{(request) => request.kind === "question"
+    ? <QuestionCard request={request} onRespond={props.onRespond} />
+    : <HostUiCard request={request} onRespond={props.onRespond} />}</For>;
 }
