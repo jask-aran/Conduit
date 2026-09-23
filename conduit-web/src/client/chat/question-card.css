@@ -1,4 +1,24 @@
-/* Floats over the transcript above the composer, in the composer's material. */
+/*
+ * A question takes the composer's place. Both share one cell of the stack,
+ * bottom-aligned: the composer slides down out of the pane but keeps its
+ * room, so its leaving moves nothing, and the card rises into the slot. A card
+ * taller than the composer grows the stack, and the transcript steps up to
+ * clear it the way it does for any composer growth.
+ */
+.composer-stack[data-question="true"] { display: grid; }
+.composer-stack[data-question="true"] > * { grid-area: 1 / 1; align-self: end; }
+.composer-stack > .composer-wrap { transition: transform 280ms cubic-bezier(.2, .8, .2, 1) 60ms, opacity 220ms ease 60ms; }
+.composer-stack[data-question="true"] > .composer-wrap { visibility: hidden; opacity: 0; pointer-events: none; transform: translateY(calc(100% + 48px));
+  transition: transform 200ms cubic-bezier(.4, 0, 1, 1), opacity 160ms ease, visibility 0s linear 200ms; }
+.question-dock { position: relative; z-index: 1; }
+.question-dock > .question-card { animation: question-rise 300ms cubic-bezier(.2, .8, .2, 1) 150ms backwards; }
+@keyframes question-rise { from { opacity: 0; transform: translateY(32px); } }
+@media (prefers-reduced-motion: reduce) {
+  .composer-stack > .composer-wrap, .composer-stack[data-question="true"] > .composer-wrap { transition: none; }
+  .question-dock > .question-card { animation: none; }
+}
+
+/* In the composer's material. */
 .question-card { display: grid; width: min(var(--composer-desktop-reference-width), 100%); gap: 6px; margin-inline: auto; border-radius: 16px; padding: 8px 8px 8px; color: var(--foreground); outline: 0; }
 
 .question-top { display: flex; min-height: 26px; align-items: center; gap: 6px; }
