@@ -1,0 +1,16 @@
+/*
+ * Cards that belong to the composer -- queued messages, attachments -- rise out
+ * of it and go back into it (DESIGN.md, Motion): in gently, ~8px and a fade;
+ * out quickly, down into the composer when it takes them, faded in place when
+ * the reader removes one. The transcript's inset follows the stack's height,
+ * so the reading position moves only through the tail spring.
+ */
+.composer-card { animation: composer-card-rise 300ms cubic-bezier(.2, .8, .2, 1) backwards; }
+@keyframes composer-card-rise { from { opacity: 0; transform: translateY(8px); } }
+.queued-float[data-leaving="drop"], .attachment-tray[data-leaving="drop"] { animation: composer-card-drop 200ms cubic-bezier(.4, 0, 1, 1) forwards; }
+@keyframes composer-card-drop { to { opacity: 0; transform: translateY(8px); } }
+.queued-float[data-leaving="fade"], .attachment-tray[data-leaving="fade"] { animation: composer-card-fade 150ms cubic-bezier(.4, 0, 1, 1) forwards; }
+@keyframes composer-card-fade { to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .composer-card, .queued-float[data-leaving], .attachment-tray[data-leaving] { animation: none; }
+}

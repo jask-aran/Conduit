@@ -2,6 +2,7 @@ import { createSignal, createEffect, For, Show } from "solid-js";
 import { Button } from "@/components/primitives";
 import { ChevronDownIcon, ChevronUpIcon, PencilIcon, SendHorizontalIcon, XIcon } from "lucide-solid";
 import type { Message } from "../api/contracts";
+import { createLeaving, type CardExit } from "./composer-cards";
 
 /**
  * One queued line, clamped to a single line. The expander appears only when the
@@ -55,17 +56,22 @@ export function QueuedMessages(props: {
 }) {
   const lines = () => props.messages.map((message) => message.content || "").filter((text) => text.trim());
   const hint = () => props.busy ? "Sent when the current step finishes" : "Sends next";
+  // Taken by the model or put back to edit, it drops into the composer;
+  // discarded, it fades where it is.
+  const [exit, setExit] = createSignal<CardExit>("drop");
+  createEffect(() => { if (lines().length) setExit("drop"); });
+  const shown = createLeaving(lines, (list) => list.length > 0, exit);
 
-  return <Show when={lines().length}>
-    <aside class="queued-float composer-surface-material" data-composer-surface={props.surface} aria-label="Messages waiting for the agent">
+  return <Show when={shown.value().length}>
+    <aside class="queued-float composer-surface-material composer-card" data-composer-surface={props.surface} data-leaving={shown.leaving() || undefined} aria-label="Messages waiting for the agent">
       <span class="queued-float-title" title={hint()}>{props.busy ? "Steering" : "Queued"}</span>
-      <ul class="queued-float-list"><For each={lines()}>{(text) => <QueuedLine text={text} />}</For></ul>
+      <ul class="queued-float-list"><For each={shown.value()}>{(text) => <QueuedLine text={text} />}</For></ul>
       <div class="queued-float-actions">
         <Show when={props.busy && props.canInterrupt}>
           <Button size="icon-sm" variant="ghost" aria-label="Interrupt and send now" title="Interrupt and send now" onClick={props.onInterruptAndSend}><SendHorizontalIcon /></Button>
         </Show>
         <Button size="icon-sm" variant="ghost" aria-label="Edit" title="Edit in the composer" onClick={props.onEdit}><PencilIcon /></Button>
-        <Button size="icon-sm" variant="ghost" aria-label="Discard" title="Discard" onClick={props.onDiscard}><XIcon /></Button>
+        <Button size="icon-sm" variant="ghost" aria-label="Discard" title="Discard" onClick={() => { setExit("fade"); props.onDiscard(); }}><XIcon /></Button>
       </div>
     </aside>
   </Show>;
