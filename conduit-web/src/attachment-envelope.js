@@ -34,8 +34,19 @@ export function serializeAttachmentEnvelope({ chatId, attachments, message }) {
   return `${header}\n${rows.join("\n")}\n${FOOTER}\n\n<user_message>\n${escapeText(message || "")}\n</user_message>`;
 }
 
+const NOTE = /^<conduit_note>\n[\s\S]*?\n<\/conduit_note>\n\n/;
+
+/**
+ * Something the model needs to know that the reader did not type -- that they
+ * stopped the last turn, say. It goes ahead of the prompt, and every reader of
+ * a prompt takes it back off, so it is in the conversation and not on screen.
+ */
+export function withConduitNote(note, message) {
+  return `<conduit_note>\n${escapeText(note)}\n</conduit_note>\n\n${message}`;
+}
+
 export function parseAttachmentEnvelope(value) {
-  const text = String(value || "");
+  const text = String(value || "").replace(NOTE, "");
   const headerMatch = text.match(/^<conduit_attachments version="([12])"(?: chat_id="([^"]+)")?>\n/);
   if (!headerMatch) return { message: text, attachments: [] };
   const header = headerMatch[0].slice(0, -1);

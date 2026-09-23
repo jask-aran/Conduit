@@ -572,8 +572,8 @@ const readsInterrupted = (messages, rows) => {
   assert.equal(tool.isError, false, "not failed");
 };
 
-test("a stop mid-tool reads as interrupted everywhere, live and after a reload", async () => {
-  const chat = harness();
+/** Start a `sleep 20` and stop it while it runs, the way Pi reports that. */
+const stopMidTool = async (chat) => {
   await chat.send({ type: "prompt", message: "run a bash sleep 20s" });
   chat.pi({ type: "agent_start" });
   chat.pi({ type: "message_end", message: { role: "user", content: "run a bash sleep 20s" } });
@@ -593,6 +593,11 @@ test("a stop mid-tool reads as interrupted everywhere, live and after a reload",
   chat.pi({ type: "agent_settled" });
   await chat.accept("abort");
   await chat.settle();
+};
+
+test("a stop mid-tool reads as interrupted everywhere, live and after a reload", async () => {
+  const chat = harness();
+  await stopMidTool(chat);
   readsInterrupted(chat.messages(), chat.rows());
 
   const reloaded = projectSessionEntries([
@@ -603,4 +608,27 @@ test("a stop mid-tool reads as interrupted everywhere, live and after a reload",
     { type: "message", id: "a2", message: cutOff },
   ]);
   readsInterrupted(reloaded.messages, buildTurnRows(reloaded.messages, reloaded.tools));
+});
+
+/**
+ * And the model is told who stopped it.
+ *
+ * Pi files the kill as the tool failing -- "Command aborted" -- and nothing in
+ * the history it sends next says a person did that, so the next turn explains
+ * that the system aborted the command. The prompt after a stop carries a note
+ * saying so. It is for the model: the reader sees what they typed, live and
+ * after a reload.
+ */
+test("the prompt after a stop tells the model the user stopped it, and the reader never sees the note", async () => {
+  const chat = harness();
+  await stopMidTool(chat);
+  await chat.send({ type: "prompt", message: "what happened?" });
+
+  const prompts = chat.sent.filter((command) => command.type === "prompt").map((command) => command.message);
+  assert.equal(prompts[0], "run a bash sleep 20s", "a turn after nothing unusual says nothing extra");
+  assert.match(prompts[1], /user stopped/i);
+  assert.match(prompts[1], /what happened\?$/);
+  assert.equal(chat.messages().findLast((message) => message.role === "user").content, "what happened?");
+  const [reloaded] = projectSessionEntries([{ type: "message", id: "u2", message: { role: "user", content: prompts[1] } }]).messages;
+  assert.equal(reloaded.content, "what happened?");
 });

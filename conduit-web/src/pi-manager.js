@@ -17,6 +17,7 @@ import { createPiEventNormalizer } from "./pi-event-normalizer.js";
 import { projectSessionEntries, readSessionPage } from "./session-store.js";
 import { messageClose, messageDrop, messageOpen, toolClose, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
 import { PI_CAPABILITIES } from "./pi-capabilities.js";
+import { withConduitNote } from "./attachment-envelope.js";
 import { PiCommandCatalog } from "./pi-command-catalog.js";
 import { ChatLogs, isLoggedEvent } from "./server/chat-log.js";
 import { normalizePiBackendEvent, toNeutralPiEvent } from "./pi-rpc-adapter.js";
@@ -242,6 +243,16 @@ function traceHarness(direction, chatId, line) {
 
 const ABORT_TERMINAL_EVENTS = new Set(["tool_execution_end", "message_end", "turn_end"]);
 const TURN_ENDINGS = new Set(["generation_stopped", "generation_settled", "generation_failed"]);
+/**
+ * What the model is told on the turn after a stop. Pi files a stopped tool as
+ * a failing one ("Command aborted") and nothing else in the history says a
+ * person did it, so without this the next turn blames the system.
+ */
+const STOPPED_NOTE = "The user stopped your previous response before it finished. "
+  + "Anything it was running was cancelled by that stop, not by an error or by the system.";
+/** A fresh prompt after a stopped turn says so; a steer or follow-up is part of the turn it joins. */
+const afterStop = (previous, message, streamingBehavior) =>
+  (previous?.outcome === "interrupted" && !streamingBehavior ? withConduitNote(STOPPED_NOTE, message) : message);
 /** An answer slower than this is worth a line in the log; it is what a slow chat feels like. */
 const SLOW_RPC_MS = 2_000;
 /** How long a request will wait for a freshly spawned Pi to say anything at all. */
@@ -1206,7 +1217,7 @@ export class PiManager extends EventEmitter {
     record.generation = generation;
     record.activity = "working";
     try {
-      const payload = { type: "prompt", message };
+      const payload = { type: "prompt", message: afterStop(previousGeneration, message, streamingBehavior) };
       if (streamingBehavior === "steer" || streamingBehavior === "followUp") {
         payload.streamingBehavior = streamingBehavior;
       }
@@ -1238,7 +1249,7 @@ export class PiManager extends EventEmitter {
     record.generation = generation;
     record.activity = "working";
     const afterMessageId = record.transcriptLeafId || null;
-    const prepared = await this.attachmentPrompt(message, attachments);
+    const prepared = await this.attachmentPrompt(afterStop(previousGeneration, message, streamingBehavior), attachments);
     const payload = { type: "prompt", message: prepared.message };
     if (prepared.images.length) payload.images = prepared.images;
     if (streamingBehavior === "steer" || streamingBehavior === "followUp") payload.streamingBehavior = streamingBehavior;
