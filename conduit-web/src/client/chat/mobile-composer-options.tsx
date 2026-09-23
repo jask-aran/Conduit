@@ -54,7 +54,19 @@ export function MobileComposerOptions(props: {
   const context = () => contextUsagePercent(composer.chat.contextUsage());
   /* A choice in a submenu returns to the options rather than closing them:
      the next thing is often beside it -- a new model's effort. */
-  const chosen = (apply: () => void) => { apply(); setPanel("root"); };
+  const chosen = (apply: () => void) => { apply(); setPanel("root"); settle(); };
+  /* The pick lands on pointerup, and the submenu goes with it -- but the same
+     tap's compatibility mouse events follow, onto whatever is now beneath it:
+     the effort slider, which took them as a second choice. The options stay
+     inert until that tap is over. */
+  const [settling, setSettling] = createSignal(false);
+  let settleTimer: number | undefined;
+  const settle = () => {
+    setSettling(true);
+    window.clearTimeout(settleTimer);
+    settleTimer = window.setTimeout(() => setSettling(false), 400);
+  };
+  onCleanup(() => window.clearTimeout(settleTimer));
   let composerFocusBeforeOpen: HTMLTextAreaElement | null = null;
   let keyboardOpenBeforeOpen = false;
   let restoreFocusOnClose = false;
@@ -140,7 +152,7 @@ export function MobileComposerOptions(props: {
         }}
       />
       <MenuContent class="composer-options-menu" onOpenAutoFocus={preserveComposerFocus} onCloseAutoFocus={preserveComposerFocusOnClose} onFocusOutside={keepMenuOpenOnFocusOutside} onPointerDown={preserveComposerFocusOnPointerDown} onClick={restoreComposerFocusAfterInteraction}>
-        <div class="composer-options-parent" data-panel-open={panel() !== "root"} onPointerDown={returnToRoot}>
+        <div class="composer-options-parent" data-panel-open={panel() !== "root"} data-settling={settling()} onPointerDown={returnToRoot}>
          <MenuGroup>
           <MenuLabel class="composer-options-label composer-options-header"><span>{composer.profiles.length ? "Profile" : "Model"}</span>
             <Show when={context() != null}><span class="composer-options-context">{Math.round(context()!)}% context</span></Show></MenuLabel>
