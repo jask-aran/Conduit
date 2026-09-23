@@ -387,8 +387,8 @@ and a swapped surface keeps its room. These are the other places the same
 treatment would explain something. Each is its own change, built in this
 order and checked before the next; none is a pass over the app.
 
-Status: steps 1 and 2 are built, and the attachment strip (7a below), which
-came up while checking step 2. Step 3 is next.
+Status: steps 1 to 3 are built, and the attachment strip (7a below), which
+came up while checking step 2. Step 4 is next.
 
 1. **Approvals as a composer takeover.** Built. Every approval, choice or
    typed request a harness makes is drawn as one question of one answer on the
@@ -402,7 +402,7 @@ came up while checking step 2. Step 3 is next.
    drop back into it when it takes them (sent, or put back to edit; ~200ms,
    quick), and fade in place when removed by hand (~150ms). A failed removal
    puts the card back. Reduced motion is instant.
-3. **Trace rows.** "1 tool call · Executing tool" opens and closes in one
+3. **Trace rows.** Built; tool-call rows unfold the same way. "1 tool call · Executing tool" opens and closes in one
    frame. Opening or closing, the body unfolds in height (~200ms) with a short
    fade -- a second exception to "transform and opacity only", beside the
    discarded-answer fold, because pushing what is below is what the reader

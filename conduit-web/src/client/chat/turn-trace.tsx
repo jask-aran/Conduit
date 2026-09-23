@@ -3,6 +3,7 @@ import { BrainIcon, ChevronDownIcon, TriangleAlertIcon } from "lucide-solid";
 import type { Message } from "../api/contracts";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
 import { ToolCard } from "./tool-card";
+import { createReveal } from "./reveal";
 import type { MarkdownRendererId } from "./markdown-settings";
 import type { IncremarkPacingMode } from "./incremark-pacing";
 
@@ -141,6 +142,7 @@ export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | nul
     setOpen(next);
     props.onOpenChange?.(next);
   };
+  const reveal = createReveal(open);
   const preview = createMemo(() => previewOf(props.trace));
   const parts = createMemo(() => {
     const { status, counters, summary } = preview();
@@ -164,12 +166,17 @@ export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | nul
       </div>
       <ChevronDownIcon class="turn-trace-chevron" data-open={open() ? "true" : "false"} />
     </button>
-    <Show when={open()}>
-      <div class="turn-trace-body">
-          <Index each={props.trace.segments}>{(segment) =>
-          <TraceSegmentRow segment={segment} settled={!props.trace.active} sessionId={props.sessionId} renderer={props.renderer} pacing={props.pacing} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />
+    <Show when={reveal.mounted()}>{(_) => {
+      // Steps there when the trace opens unfold with it; one that arrives while
+      // it is open fades in with a short rise, and moves nothing above it.
+      const opened = props.trace.segments.length;
+      return <div ref={reveal.ref} class="turn-trace-body">
+        <Index each={props.trace.segments}>{(segment, index) =>
+          <div class="turn-trace-step" data-arriving={index >= opened || undefined}>
+            <TraceSegmentRow segment={segment} settled={!props.trace.active} sessionId={props.sessionId} renderer={props.renderer} pacing={props.pacing} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />
+          </div>
         }</Index>
-      </div>
-    </Show>
+      </div>;
+    }}</Show>
   </div>;
 }
