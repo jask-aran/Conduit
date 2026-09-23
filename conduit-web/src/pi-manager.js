@@ -1822,9 +1822,13 @@ export class PiManager extends EventEmitter {
     if (role === "assistant" && record.generation) {
       record.generation.openMessages = record.generation.openMessages || new Set();
       record.generation.openMessages.add(id);
-      // Every prompt the turn answered -- a steer taken mid-turn is one more --
-      // is settled with it.
-      if (answers) (record.generation.prompts ||= new Set()).add(answers);
+      // Every prompt the turn answers is settled. One it has moved on from --
+      // Pi answers a queued message inside the same run -- is over now, and is
+      // drawn as history from here, so it says how it ended now.
+      if (answers && !record.generation.prompts?.has(answers)) {
+        this.settlePrompts(record, "complete", answers);
+        (record.generation.prompts ||= new Set()).add(answers);
+      }
     }
     this.publish(record, messageOpen({ id, role, ...fields,
       // The turn that is writing it, so a row holding a place for an answer
@@ -1887,13 +1891,22 @@ export class PiManager extends EventEmitter {
   settleTurn(record, ending) {
     const generation = record.generation;
     if (!generation || generation.outcome || !this.logFor(record)) return;
-    const prompts = new Set([generation.claims?.user, ...(generation.prompts || [])].filter(Boolean));
     const last = record.activeGeneration?.assistantMessages?.at(-1);
     generation.outcome = generation.aborting || ending === "generation_stopped" ? "interrupted"
       : ending === "generation_failed" || last?.stopReason === "error" ? "failed"
       : "complete";
-    for (const promptId of prompts) {
-      this.publish(record, turnSettle({ promptId, outcome: generation.outcome, generationId: generation.id }));
+    this.settlePrompts(record, generation.outcome);
+  }
+
+  /** State how the turn ended on each prompt it answered that has not said yet. */
+  settlePrompts(record, outcome, except = null) {
+    const generation = record.generation;
+    if (!generation || !this.logFor(record)) return;
+    generation.settledPrompts ||= new Set();
+    for (const promptId of new Set([generation.claims?.user, ...(generation.prompts || [])])) {
+      if (!promptId || promptId === except || generation.settledPrompts.has(promptId)) continue;
+      generation.settledPrompts.add(promptId);
+      this.publish(record, turnSettle({ promptId, outcome, generationId: generation.id }));
     }
   }
 

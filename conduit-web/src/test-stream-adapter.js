@@ -509,8 +509,12 @@ export class TestStreamAdapter extends EventEmitter {
     this.closeAnswer(record, "toolUse");
     this.publish(record, messageOpen({ id: queued.messageId, role: "user",
       generationId: turn.generationId, content: queued.message, timestamp: new Date().toISOString() }));
+    // The prompt the turn moves on from is over now.
+    for (const promptId of turn.prompts) {
+      this.publish(record, turnSettle({ promptId, outcome: "complete", generationId: turn.generationId }));
+    }
     turn.answers = queued.messageId;
-    turn.prompts.push(queued.messageId);
+    turn.prompts = [queued.messageId];
     // What is left of the answer now answers the steer, and it gets a fresh
     // budget so a message steered at the end still produces something.
     turn.steps = turn.steps.slice(0, turn.step).concat(planTurn(Math.max(40, Math.round(record.tokens / 4)), 0));

@@ -397,6 +397,38 @@ test("a queued message lands where the model took it, with its answer under it",
   ]);
 });
 
+/**
+ * Pi answers a queued message inside the run it was queued into, so one
+ * generation answers two prompts. The first prompt's turn is over the moment
+ * Pi takes the next one -- its rows are drawn as history from then on -- and
+ * it has to say how it ended then, not when the whole run does.
+ */
+test("a turn Pi moves on from to answer a queued message says how it ended at once", async () => {
+  const chat = harness();
+  await chat.send({ type: "prompt", message: "start a 90s bash timer" });
+  chat.pi({ type: "agent_start" });
+  chat.pi({ type: "message_end", message: { role: "user", content: "start a 90s bash timer" } });
+  const narration = {
+    role: "assistant",
+    content: [{ type: "text", text: "Planning the timer." }, { type: "toolCall", id: "call_1", name: "bash", arguments: { command: "sleep 90" } }],
+    stopReason: "toolUse",
+  };
+  chat.pi({ type: "message_start", message: { role: "assistant", content: [] } });
+  chat.pi({ type: "message_update", assistantMessageEvent: { type: "toolcall_end", contentIndex: 1, partial: narration, toolCall: { id: "call_1", name: "bash", arguments: { command: "sleep 90" } } } });
+  chat.pi({ type: "message_end", message: narration });
+  chat.pi({ type: "tool_execution_start", toolCallId: "call_1", toolName: "bash", args: { command: "sleep 90" } });
+  chat.pi({ type: "tool_execution_end", toolCallId: "call_1", toolName: "bash", result: "started", isError: false });
+  assistantText(chat.pi, "Timer started.");
+  await chat.send({ type: "follow_up", message: "now a 10s one" });
+  chat.pi({ type: "message_end", message: { role: "user", content: "now a 10s one" } });
+  chat.pi({ type: "message_start", message: { role: "assistant", content: [] } });
+  await chat.settle();
+
+  const trace = chat.rows().find((row) => row.type === "trace");
+  assert.equal(trace.value.status, "complete", "the first turn is history, and says it finished");
+  assert.equal(chat.messages().find((message) => message.role === "user").outcome, "complete");
+});
+
 test("interrupting with what was queued sends it once", async () => {
   // The shape that started all of this: a message typed while the agent works
   // is queued, then sent with the interrupt button on the queued bubble. The
