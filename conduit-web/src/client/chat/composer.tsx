@@ -150,10 +150,15 @@ export function Composer(props: {
     input.style.height = "auto";
     input.style.height = `${Math.min(input.scrollHeight, 192)}px`;
     if (!phoneLayout() || !mobileActions) return setMobileActionsStacked(false);
-    const buttons = [...mobileActions.querySelectorAll<HTMLButtonElement>('[data-slot="button"]')];
-    const gap = Number.parseFloat(getComputedStyle(mobileActions).rowGap) || 0;
-    const requiredHeight = buttons.reduce((total, button) => total + button.offsetHeight, 0) + gap * Math.max(0, buttons.length - 1);
-    setMobileActionsStacked(input.clientHeight >= requiredHeight);
+    /* The actions stack the moment the draft reaches its third line. Stacked,
+       the draft is a button wider and may rewrap to two lines; it stays
+       stacked until it fits on one, which at the narrower width is at most
+       two -- so the layout never flips back and forth. */
+    const style = getComputedStyle(input);
+    const lineHeight = Number.parseFloat(style.lineHeight) || Number.parseFloat(style.fontSize) * 1.4;
+    const padding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+    const lines = Math.round((input.scrollHeight - padding) / lineHeight);
+    setMobileActionsStacked(mobileActionsStacked() ? lines >= 2 : lines >= 3);
   };
 
   const keyboardWasOpen = (inputFocused: boolean) => {
@@ -524,7 +529,7 @@ export function Composer(props: {
             <div ref={mobileActions} class="composer-actions-right">
               <Show when={!recording() && (dictationLabel() || (activity()?.label && activity()?.label !== "Ready"))}><span class="composer-status-state composer-actions-status" role="status" aria-live="polite"><Show when={dictationLabel()} fallback={<><Show when={SPINNING_ACTIVITY.has(activity()?.kind || "")}><Spinner /></Show><Show when={["request_failed", "runtime_failed"].includes(activity()?.kind || "")}><TriangleAlertIcon aria-hidden="true" /></Show>{activity()?.label || "Ready"}</>}>{dictationLabel()}</Show></span></Show>
               <div class="composer-desktop-setting"><ContextGauge chat={props.chat} metrics={props.contextMetrics} compact /></div>
-              <Button variant={recording() ? "default" : "ghost"} size="icon-sm" class="dictation-trigger" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || !interactive() || ["finishing", "waiting", "transcribing"].includes(dictationState())} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={["starting", "finishing", "waiting", "transcribing"].includes(dictationState())} fallback={<MicIcon />}><Spinner /></Show></Button>
+              <Button variant={recording() && !phoneLayout() ? "default" : "ghost"} size="icon-sm" class="dictation-trigger" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || !interactive() || ["finishing", "waiting", "transcribing"].includes(dictationState())} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={["starting", "finishing", "waiting", "transcribing"].includes(dictationState())} fallback={<MicIcon />}><Spinner /></Show></Button>
               {/* One primary slot, so nothing beside it moves. While the agent
                   works it is Stop; once a draft is typed it is Send again --
                   which queues the message for the agent -- and Stop steps to
