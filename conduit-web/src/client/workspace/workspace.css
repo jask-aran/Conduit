@@ -620,44 +620,44 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
     bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
     height: auto;
   }
-  /* Sized for a finger, as the phone sidebar is: 44px rows, 36px controls. */
+  /* Sized for a finger: 36px rows, 32px controls. */
   .workspace-panel {
-    --workbench-bar-height: 44px;
-    --workbench-control-size: 36px;
+    --workbench-bar-height: 40px;
+    --workbench-control-size: 32px;
     --workbench-gap: 4px;
     --workbench-padding-block: 4px;
     --workbench-padding-inline: 8px;
-    --workbench-icon-size: 16px;
-    --workbench-font-size: 12px;
+    --workbench-icon-size: 15px;
+    --workbench-font-size: 11px;
   }
-  .workspace-panel-header { min-height: 48px; }
-  .workspace-panel-tabs button { min-width: 36px; min-height: 36px; }
-  .workspace-panel-tabs svg, .workspace-panel-header svg { width: 18px; height: 18px; }
-  .workspace-files[data-wide="false"] { grid-template-columns: 48px minmax(0, 1fr); }
+  .workspace-panel-header { min-height: 44px; }
+  .workspace-panel-tabs button { min-width: 32px; min-height: 32px; }
+  .workspace-panel-tabs svg, .workspace-panel-header svg { width: 16px; height: 16px; }
+  .workspace-files[data-wide="false"] { grid-template-columns: 40px minmax(0, 1fr); }
   .workspace-tree-collapsed-rail { gap: 4px; padding-block: 6px; }
-  .workspace-tree-collapsed-rail button { width: 40px; height: 40px; border-radius: 8px; }
-  .workspace-tree-collapsed-rail svg { width: 18px; height: 18px; }
-  .workspace-tree-tools { min-height: 48px; gap: 6px; padding: 6px 8px; }
-  .workspace-tree-tools > button { width: 36px; height: 36px; }
-  .workspace-tree-tools svg { width: 18px; height: 18px; }
+  .workspace-tree-collapsed-rail button { width: 32px; height: 32px; border-radius: 6px; }
+  .workspace-tree-collapsed-rail svg { width: 15px; height: 15px; }
+  .workspace-tree-tools { min-height: 42px; gap: 4px; padding: 5px 7px; }
+  .workspace-tree-tools > button { width: 32px; height: 32px; }
+  .workspace-tree-tools svg { width: 15px; height: 15px; }
   .workspace-tree-filter > svg { left: 10px; }
-  .workspace-tree-filter input { height: 36px; padding-left: 32px; font-size: 14px; }
-  .workspace-tree-row { min-height: 44px; gap: 8px; }
-  .workspace-tree-row svg, .workspace-tree-chevron-placeholder, .workspace-file-icon { width: 16px; height: 16px; }
-  .workspace-tree-row span { font-size: 14px; }
-  .workspace-preview-header { min-height: 44px; }
-  .workspace-preview-copy, .workspace-preview-action { width: 36px; height: 36px; }
-  .workspace-preview-copy svg, .workspace-preview-action svg { width: 16px; height: 16px; }
-  .workspace-change-row > button:first-child { min-height: 44px; font-size: 13px; }
-  .workspace-change-action { width: 36px; height: 36px; }
-  .workspace-chat-modes button { min-height: 36px; }
+  .workspace-tree-filter input { height: 32px; padding-left: 30px; font-size: 13px; }
+  .workspace-tree-row { min-height: 36px; gap: 7px; }
+  .workspace-tree-row svg, .workspace-tree-chevron-placeholder, .workspace-file-icon { width: 15px; height: 15px; }
+  .workspace-tree-row span { font-size: 13px; }
+  .workspace-preview-header { min-height: 40px; }
+  .workspace-preview-copy, .workspace-preview-action { width: 32px; height: 32px; }
+  .workspace-preview-copy svg, .workspace-preview-action svg { width: 15px; height: 15px; }
+  .workspace-change-row > button:first-child { min-height: 36px; font-size: 12px; }
+  .workspace-change-action { width: 32px; height: 32px; }
+  .workspace-chat-modes button { min-height: 32px; }
   .workspace-editor-status button { padding-inline: 8px; border-radius: 6px; }
   .workspace-editor-status .workspace-editor-picker { max-width: 112px; }
-  .workspace-search-controls { min-height: 44px; gap: 4px; padding: 4px 8px; }
-  .workspace-search-controls .workspace-search-field { height: 36px; flex-basis: 120px; border-radius: 6px; padding-inline: 8px; font-size: 14px; }
-  .workspace-search-actions { height: 36px; gap: 4px; }
-  .workspace-search-actions [data-slot="button"] { width: 36px; height: 36px; min-width: 36px; border-radius: 6px; }
-  .workspace-search-actions svg { width: 16px; height: 16px; }
+  .workspace-search-controls { min-height: 40px; gap: 4px; padding: 4px 7px; }
+  .workspace-search-controls .workspace-search-field { height: 32px; flex-basis: 120px; border-radius: 6px; padding-inline: 8px; font-size: 13px; }
+  .workspace-search-actions { height: 32px; gap: 4px; }
+  .workspace-search-actions [data-slot="button"] { width: 32px; height: 32px; min-width: 32px; border-radius: 6px; }
+  .workspace-search-actions svg { width: 15px; height: 15px; }
   html[data-vv-shell] .workspace-panel { height: var(--app-height, 100dvh); }
 }
 

@@ -1,3 +1,5 @@
+import { installedClientKind } from "../platform/installed-client.ts";
+
 export interface AudioInputDevice {
   deviceId: string;
   label: string;
@@ -98,7 +100,10 @@ export function formatMicrophoneError(reason: unknown) {
   switch (error?.name) {
     case "NotAllowedError":
     case "PermissionDeniedError":
-      return "Microphone access was denied. Allow Conduit in Chrome site settings, then try again.";
+      // The Android app holds the permission itself; there is no site setting to change.
+      return installedClientKind === "android"
+        ? "Microphone access was denied. Allow the microphone for Conduit in Android's app settings, then try again."
+        : "Microphone access was denied. Allow Conduit in Chrome site settings, then try again.";
     case "NotFoundError":
       return "Chrome could not find a microphone. Connect one or choose a different input device.";
     case "OverconstrainedError":
