@@ -2287,6 +2287,8 @@ function App() {
               voiceSettings={voiceSettings()}
               onChooseProfile={(id) => void switchProfile(id)}
               onOpenSettings={openSettings}
+              onOpenModelSelector={openModelSelector}
+              modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)}
               onOpenAttachments={() => attachFileInput?.click()}
               onStatusChange={setComposerStatus}
               onSendDraft={async (prompt) => {
@@ -2370,7 +2372,7 @@ function App() {
             <section class="work-area-conversation" aria-label="Conversation" aria-busy={openingLiveChat()}>
               <Transcript chat={chat} supports={chatCapability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} projectId={selectedProject()?.id} />
               <div class="composer-stack" data-question={chat.hostUiRequests()[0]?.kind === "question" ? "true" : undefined}><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-                <Composer chat={chat} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
+                <Composer chat={chat} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
             </section>
           </div>
         </>}>
@@ -2390,6 +2392,8 @@ function App() {
               voiceSettings={voiceSettings()}
               onChooseProfile={(id) => void switchProfile(id)}
               onOpenSettings={openSettings}
+              onOpenModelSelector={openModelSelector}
+              modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)}
               onOpenAttachments={() => attachFileInput?.click()}
               onStatusChange={setComposerStatus}
               onSendDraft={async (prompt) => {
