@@ -239,6 +239,8 @@ export interface ContentBlock {
   input?: unknown;
 }
 
+export type TurnOutcome = "complete" | "interrupted" | "failed";
+
 export interface Message {
   id: string;
   /** The live generation this message was frozen out of, until a sync names it. */
@@ -268,6 +270,12 @@ export interface Message {
    * and deciding which prompt a row appears to sit under.
    */
   answers?: string | null;
+  /**
+   * How the turn this prompt started ended, stated by the server once it was
+   * over. The trace, its tools and the composer read this, rather than each
+   * working it out from how the turn's messages happen to be shaped.
+   */
+  outcome?: TurnOutcome;
   /**
    * The turn talking as it works, rather than answering: stated by the server
    * when it finished the message, so the split between the trace and the answer

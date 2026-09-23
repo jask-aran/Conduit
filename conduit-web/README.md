@@ -920,7 +920,7 @@ because `message.close` restates the message in full.
 
 | Event | Channel | Fields | Meaning |
 |---|---|---|---|
-| `transcript_op` | record | `op`, `log`, op fields | `message.open` / `message.close` / `message.drop`, `tool.open` / `tool.close` |
+| `transcript_op` | record | `op`, `log`, op fields | `message.open` / `message.close` / `message.drop`, `tool.open` / `tool.close`, `turn.settle` |
 | `status` | record | `generationId`, `phase`, `seq`, `log` | `started`, `running`, `stopping`, `stopped`, `settled`; `running` is not numbered |
 | `error` | record when `scope: "runtime"` | `scope`, `code`, `message` | A failed turn, or with `scope: "request"` a refused command |
 | `transcript_sync` | record | `messages`, `tools`, optional `replace` | A window of the transcript, or the whole of it |

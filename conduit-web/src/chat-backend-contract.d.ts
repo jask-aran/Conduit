@@ -431,7 +431,14 @@ export type TranscriptOpEvent = EventBase & { type: "transcript_op" } & (
   /** One row taken back (`keep`), the history cut after it, or cut through it. */
   | { op: "message.drop"; messageId: string; keep?: boolean; inclusive?: boolean }
   | { op: "tool.open"; toolCallId: string; name: string; input: unknown }
-  | { op: "tool.close"; toolCallId: string; output: unknown; isError: boolean }
+  /** A tool the user's stop killed is `cancelled`, never `isError`. */
+  | { op: "tool.close"; toolCallId: string; output: unknown; isError: boolean; cancelled?: true }
+  /**
+   * How a turn ended, on the prompt it answers: stated by every harness when a
+   * turn ends, before the event that ends it. The browser refuses a finished
+   * turn that did not say, the same way it refuses a message without `answers`.
+   */
+  | { op: "turn.settle"; promptId: string; outcome: "complete" | "interrupted" | "failed" }
 );
 
 /**

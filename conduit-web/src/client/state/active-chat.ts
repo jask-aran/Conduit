@@ -565,7 +565,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     else if (next.status === "failed") setGeneration("failed")
     else if (next.status === "stopped") {
       stopPending = false;
-      setGeneration("interrupted");
+      setGeneration("idle");
       if (event.type === "status" && event.phase === "stopped" && Boolean(event.processTerminated)) {
         setLive(null);
         session.detach();
@@ -614,7 +614,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     const turnOpen = Boolean(session.generation && !session.generation.closed && !session.generation.settled);
     if (session.stopping) setGeneration("stopping");
     else if (turnOpen || session.active) setGeneration("active");
-    else setGeneration((current) => current === "interrupted" ? current : "idle");
+    else setGeneration("idle");
   };
 
   function applyLiveEvent(event: LiveEvent) {
@@ -1300,6 +1300,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (restored) setDraft((current) => current ? `${current}\n${restored}` : restored);
   };
 
+  const lastOutcome = createMemo(() => messages().findLast((message) => message.role === "user")?.outcome);
   const activity = createMemo(() => {
     const currentPresentation = presentation();
     if (currentPresentation.kind === "opening_live" && currentPresentation.chatId === selectedId()) {
@@ -1309,8 +1310,12 @@ export function createActiveChat(options: ActiveChatOptions) {
       return { kind: "runtime_failed", label: "Could not load chat" };
     }
     const process = options.runtime.getProcess(selectedId());
+    // A turn that was stopped says so on its prompt, and the composer reads the
+    // same statement the trace and its tools do -- live, after a reload, and on
+    // every harness, not only the one whose stop arrives as its own event.
+    const stopped = generation() === "idle" && lastOutcome() === "interrupted";
     const derived = deriveFineActivity({
-      generation: generation(),
+      generation: stopped ? "interrupted" : generation(),
       processStatus: process?.status || (live() ? "running" : "none"),
       coarse: typeof process?.activity === "string" ? process.activity : process?.activity?.kind || "idle",
       thinking: thinking(),

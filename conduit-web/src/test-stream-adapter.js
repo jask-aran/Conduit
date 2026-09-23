@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { EventEmitter } from "node:events";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { applyTranscriptOp } from "./transcript-fold.js";
-import { messageClose, messageDrop, messageOpen, toolClose, toolOpen } from "./harnesses/transcript-ops.js";
+import { messageClose, messageDrop, messageOpen, toolClose, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
 import { reduceActiveGeneration, snapshotActiveGeneration } from "./active-generation.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
@@ -296,6 +296,7 @@ export class TestStreamAdapter extends EventEmitter {
     record.turn = {
       generationId,
       answers: userMessageId,
+      prompts: [userMessageId],
       steps: planTurn(record.tokens, toolRunsFromPrompt(message)),
       step: 0,
       approvals: approvalFromPrompt(message),
@@ -509,6 +510,7 @@ export class TestStreamAdapter extends EventEmitter {
     this.publish(record, messageOpen({ id: queued.messageId, role: "user",
       generationId: turn.generationId, content: queued.message, timestamp: new Date().toISOString() }));
     turn.answers = queued.messageId;
+    turn.prompts.push(queued.messageId);
     // What is left of the answer now answers the steer, and it gets a fresh
     // budget so a message steered at the end still produces something.
     turn.steps = turn.steps.slice(0, turn.step).concat(planTurn(Math.max(40, Math.round(record.tokens / 4)), 0));
@@ -591,6 +593,10 @@ export class TestStreamAdapter extends EventEmitter {
     record.pendingApproval = null;
     record.hostUiRequests = [];
     Object.assign(record.generation, { closed: true, settled: true });
+    for (const promptId of turn.prompts) {
+      this.publish(record, turnSettle({ promptId, generationId: turn.generationId,
+        outcome: stopReason === "aborted" ? "interrupted" : "complete" }));
+    }
     this.publish(record, { type: "status", generationId: turn.generationId, seq: ++record.generationSeq,
       phase: stopReason === "aborted" ? "stopped" : "settled", status: "idle", activity: "idle", detail: null });
     this.publishUsage(record);

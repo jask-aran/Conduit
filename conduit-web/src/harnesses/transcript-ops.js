@@ -27,7 +27,9 @@ import { wasDiscarded } from "../abort-signature.js";
  * A block: `kind` (`text` | `thinking` | `tool_call`), `text`, `toolCallId`,
  * `name`, `input` -- plus `contentIndex`, `identity` and `status` while it is
  * still arriving, which are additions to these names and not alternatives.
- * A tool: `toolCallId`, `name`, `input`, `output`, `isError`, `done`.
+ * A tool: `toolCallId`, `name`, `input`, `output`, `isError`, `cancelled`, `done`.
+ * A turn: `outcome` -- `complete`, `interrupted` or `failed` -- stated on the
+ * prompt it answers, once the turn is over.
  * An event: `seq`.
  *
  * A harness's own names -- Pi's `type`/`toolCall`/`arguments`/`thinking`/
@@ -40,6 +42,7 @@ import { wasDiscarded } from "../abort-signature.js";
  */
 
 const ROLES = new Set(["user", "assistant"]);
+const OUTCOMES = new Set(["complete", "interrupted", "failed"]);
 const text = (value) => typeof value === "string" && value.length > 0;
 
 /**
@@ -72,6 +75,10 @@ export function assertTranscriptOp(event) {
     if (!text(event.toolCallId)) bad("no tool call id");
   } else if (event.op === "tool.close") {
     if (!text(event.toolCallId)) bad("no tool call id");
+    if (event.isError && event.cancelled) bad("a tool is stopped or it failed");
+  } else if (event.op === "turn.settle") {
+    if (!text(event.promptId)) bad("no prompt id");
+    if (!OUTCOMES.has(event.outcome)) bad(`outcome ${JSON.stringify(event.outcome)}`);
   } else bad("unknown op");
   return event;
 }
@@ -171,9 +178,32 @@ export const toolOpen = ({ toolCallId, name, input, messageId = null, generation
     ...(generationId ? { generationId } : {}),
   });
 
-/** And what it returned. */
-export const toolClose = ({ toolCallId, output, isError = false, generationId = null }) =>
+/**
+ * And what it returned. A tool the user's stop cut short was `cancelled`, not
+ * failed: harnesses report the kill as an error -- Pi's "Command aborted" -- and
+ * the adapter, which knows it asked for the stop, says which it was.
+ */
+export const toolClose = ({ toolCallId, output, isError = false, cancelled = false, generationId = null }) =>
   assertTranscriptOp({
-    type: "transcript_op", op: "tool.close", toolCallId, output, isError: Boolean(isError),
+    type: "transcript_op", op: "tool.close", toolCallId, output,
+    isError: Boolean(isError) && !cancelled,
+    ...(cancelled ? { cancelled: true } : {}),
+    ...(generationId ? { generationId } : {}),
+  });
+
+/**
+ * How a turn ended, stated once, on the prompt it answers.
+ *
+ * Every harness ends a turn in its own words -- Pi files an empty entry with
+ * `stopReason: "error"` under a killed tool, Codex reports the turn
+ * `interrupted`, a provider's cancellation arrives as a failure -- and reading
+ * those shapes back had the trace, the tool and the composer giving three
+ * answers to one question. The adapter knows whether it was asked to stop, so
+ * it says: `complete`, `interrupted` or `failed`. Everything that shows a
+ * turn's ending reads this and nothing else.
+ */
+export const turnSettle = ({ promptId, outcome, generationId = null }) =>
+  assertTranscriptOp({
+    type: "transcript_op", op: "turn.settle", promptId, outcome,
     ...(generationId ? { generationId } : {}),
   });

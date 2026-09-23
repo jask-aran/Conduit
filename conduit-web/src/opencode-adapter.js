@@ -10,7 +10,7 @@ import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { formatHistoryTool } from "./harnesses/history-tool.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { messageClose, messageOpen, toolClose, toolOpen } from "./harnesses/transcript-ops.js";
+import { messageClose, messageOpen, toolClose, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 const execFile = promisify(execFileCallback);
@@ -524,7 +524,8 @@ export class OpenCodeAdapter extends EventEmitter {
     if (!done) return;
     tool.closed = true;
     tool.status = phase === "failed" ? "error" : "completed";
-    this.publish(record, toolClose({ toolCallId: tool.id, output: tool.output, isError: phase === "failed", generationId }));
+    this.publish(record, toolClose({ toolCallId: tool.id, output: tool.output, isError: phase === "failed",
+      cancelled: phase === "failed" && record.stopping, generationId }));
   }
 
   /**
@@ -618,7 +619,8 @@ export class OpenCodeAdapter extends EventEmitter {
         if (done && !tool.closed) {
           tool.closed = true;
           this.publish(record, toolClose({ toolCallId: tool.id, output: tool.output,
-            isError: part.state?.status === "error", generationId: record.generation?.id || null }));
+            isError: part.state?.status === "error", cancelled: part.state?.status === "error" && record.stopping,
+            generationId: record.generation?.id || null }));
         }
       }
       if (row.time?.completed && !state.closed) this.closeLiveMessage(record, row, state);
@@ -695,9 +697,13 @@ export class OpenCodeAdapter extends EventEmitter {
         if (tool.closed) continue;
         tool.closed = true;
         this.publish(record, toolClose({ toolCallId: tool.id, output: tool.output,
-          isError: stopReason !== "stop", generationId: record.generation?.id || null }));
+          isError: stopReason === "error", cancelled: stopReason === "aborted", generationId: record.generation?.id || null }));
       }
       if (!state.closed) this.closeLiveMessage(record, state.row || this.rowFromState(state), state, stopReason);
+    }
+    if (record.answering) {
+      this.publish(record, turnSettle({ promptId: record.answering, generationId: record.generation.id,
+        outcome: { succeeded: "complete", failed: "failed" }[outcome] || "interrupted" }));
     }
     record.active = false;
     record.stopping = false;
@@ -818,29 +824,45 @@ export class OpenCodeAdapter extends EventEmitter {
     const messages = [];
     const tools = [];
     let lastUser = null;
+    const unfinished = new Set();
+    // How each turn ended, stated on its prompt: a stopped step is saved as an
+    // aborted error, a failed one as an error. A turn whose last step has not
+    // completed is still running, and the live stream will say.
+    const settle = () => {
+      const prompt = messages.find((message) => message.id === lastUser);
+      const turn = messages.filter((message) => message.answers === lastUser && message.role === "assistant");
+      if (!prompt || !turn.length || unfinished.has(turn.at(-1).id)) return;
+      prompt.outcome = turn.some((message) => message.stopReason === "aborted") ? "interrupted"
+        : turn.at(-1).stopReason === "error" ? "failed" : "complete";
+    };
     for (const row of [...rows].reverse()) {
       if (row.type === "user") {
         // A prompt's words are saved as `text`, not as content parts.
         const content = typeof row.text === "string" ? row.text : contentText(row.content);
+        settle();
         lastUser = conduitMessageId(row.id);
         messages.push({ id: lastUser, role: "user", content, timestamp: iso(row.time?.created) });
         continue;
       }
       if (row.type !== "assistant") continue;
       const blocks = blocksOf(row);
+      const stopReason = stopReasonOf(row);
       for (const part of row.content || []) {
         if (part.type !== "tool") continue;
+        // A step that was stopped took its unfinished commands with it.
+        const cancelled = stopReason === "aborted" && part.state?.status !== "completed";
         tools.push({ toolCallId: part.id || part.callID, name: part.name || part.tool || "tool",
-          input: part.state?.input ?? null, output: toolOutput(part), isError: part.state?.status === "error",
-          done: ["completed", "error"].includes(part.state?.status) });
+          input: part.state?.input ?? null, output: toolOutput(part), isError: part.state?.status === "error" && !cancelled,
+          ...(cancelled ? { cancelled } : {}), done: ["completed", "error"].includes(part.state?.status) });
       }
       const text = blocks.filter((block) => block.kind === "text").map((block) => block.text).join("\n");
-      const stopReason = stopReasonOf(row);
       messages.push({ id: row.id, role: "assistant", content: text, blocks, answers: lastUser,
         stopReason, interim: stopReason === "toolUse", timestamp: iso(row.time?.created),
         provider: row.model?.providerID || null, model: modelSpec(row.model) || null,
         ...(errorOf(row) ? { errorMessage: errorOf(row) } : {}) });
+      if (!row.time?.completed) unfinished.add(row.id);
     }
+    settle();
     return { messages, tools };
   }
 
