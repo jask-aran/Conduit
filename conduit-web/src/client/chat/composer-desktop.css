@@ -25,3 +25,13 @@
 /* The phone's options menu: its header carries the context readout the row has no room for. */
 .composer-options-header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .composer-options-context { color: var(--muted-foreground); font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0; text-transform: none; }
+/* The primary slot: its action scales in where the last one was; Stop steps
+   in beside it when a draft is typed during a turn. */
+.composer-primary-slot { display: inline-grid; flex: none; place-items: center; }
+.composer-primary-slot > [data-slot="button"] { animation: composer-slot-in 150ms cubic-bezier(.2, .8, .2, 1); }
+.composer-stop-aside { color: var(--muted-foreground); animation: composer-aside-in 200ms cubic-bezier(.2, .8, .2, 1); }
+@keyframes composer-slot-in { from { opacity: 0; transform: scale(.6); } }
+@keyframes composer-aside-in { from { opacity: 0; transform: translateX(10px); } }
+@media (prefers-reduced-motion: reduce) {
+  .composer-primary-slot > [data-slot="button"], .composer-stop-aside { animation: none; }
+}
