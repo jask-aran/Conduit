@@ -15,6 +15,7 @@ export interface ComposerAttachments {
   pendingIds: Accessor<string[]>;
   addFiles: (files: FileList | File[]) => void;
   remove: (item: UploadAttachment) => unknown;
+  retry: (item: UploadAttachment) => void;
 }
 
 export const NO_ATTACHMENTS: ComposerAttachments = {
@@ -22,4 +23,5 @@ export const NO_ATTACHMENTS: ComposerAttachments = {
   pendingIds: () => [],
   addFiles: () => {},
   remove: () => undefined,
+  retry: () => {},
 };

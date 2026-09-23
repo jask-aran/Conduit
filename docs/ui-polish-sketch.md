@@ -387,8 +387,8 @@ and a swapped surface keeps its room. These are the other places the same
 treatment would explain something. Each is its own change, built in this
 order and checked before the next; none is a pass over the app.
 
-Status: steps 1 and 2 are built. The attachment strip (7a below) came up while
-checking step 2 and is built next, before step 3.
+Status: steps 1 and 2 are built, and the attachment strip (7a below), which
+came up while checking step 2. Step 3 is next.
 
 1. **Approvals as a composer takeover.** Built. Every approval, choice or
    typed request a harness makes is drawn as one question of one answer on the
@@ -453,6 +453,8 @@ composer** -- the queued pill's width and material, about twice its height
   progress ring sits over the chip and it is slightly dimmed until done; a
   failed upload is a red outline with a retry mark where the ring was, and
   tapping retries.
+- **Retry.** A failed upload is sent again from the file still held for it;
+  one restored with the draft has no file, so it can only be removed.
 - **The strip.** Scrolls sideways with snap to chips, with a soft fade at an
   edge that has more; on desktop a vertical wheel scrolls it sideways. New
   chips go on the end and the strip scrolls to show them, which is what
@@ -463,8 +465,8 @@ composer** -- the queued pill's width and material, about twice its height
 - **The dialog.** Centred on desktop, a bottom sheet on a phone. A list, one
   row per attachment: a large preview (images up to ~160px tall, not
   cropped), name, size and type, remove. The heading gives the count and total
-  size; the footer has Remove all, and Done closes it. An image opens in the
-  transcript's existing image viewer.
+  size; the footer has Remove all, and Done closes it. There is no image
+  viewer to open one in yet; the dialog's preview is the large view.
 - **Motion** (step 2's rules). The first attachment raises the strip out of
   the composer; an added chip fades and scales in at the end; a removed chip
   fades, then the chips after it slide over to close the gap by transform

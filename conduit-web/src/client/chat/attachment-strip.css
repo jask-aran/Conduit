@@ -1,0 +1,125 @@
+/*
+ * The draft's attachments: one strip directly above the composer, in its
+ * material, never taller than one row of 48px chips. More scroll sideways, with
+ * a soft fade at an edge that has more. Material comes from
+ * .composer-surface-material; nothing about border, background or blur here.
+ */
+.attachment-strip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+  padding: 0 4px 0 0;
+  border-radius: var(--composer-radius, 12px);
+}
+.attachment-strip-scroller {
+  --fade-start: 0px;
+  --fade-end: 0px;
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  gap: 6px;
+  padding: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 8px;
+  scrollbar-width: none;
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%);
+}
+.attachment-strip-scroller::-webkit-scrollbar { display: none; }
+.attachment-strip-scroller[data-fade-start] { --fade-start: 24px; }
+.attachment-strip-scroller[data-fade-end] { --fade-end: 24px; }
+.attachment-strip-expand { flex: none; }
+.attachment-strip .attachment-strip-expand { width: 24px; height: 24px; border-radius: 8px; color: var(--muted-foreground); }
+.attachment-strip .attachment-strip-expand svg { width: 13px; height: 13px; }
+
+/* A chip: an image is its 48px thumbnail, cropped to fill; a file is its
+   type mark, name and size. */
+.attachment-chip { position: relative; flex: none; scroll-snap-align: start; }
+.attachment-chip-body {
+  display: flex;
+  height: 48px;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+.attachment-chip[data-kind="file"] .attachment-chip-body { padding-right: 12px; }
+.attachment-chip-body:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.attachment-chip-media { position: relative; display: grid; width: 46px; height: 46px; flex: none; place-items: center; background: var(--muted); color: var(--muted-foreground); }
+.attachment-chip-media > svg:not(.attachment-chip-ring):not(.attachment-chip-retry) { width: 18px; height: 18px; }
+.attachment-chip-media img { width: 100%; height: 100%; object-fit: cover; }
+.attachment-chip-copy { display: grid; min-width: 0; max-width: 160px; gap: 1px; }
+.attachment-chip-copy strong { overflow: hidden; font-size: 12px; font-weight: 560; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-chip-copy small { overflow: hidden; color: var(--muted-foreground); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Uploading, it is dimmed under a thin progress ring until done. */
+.attachment-chip:is([data-status="uploading"], [data-status="queued"]) .attachment-chip-media img { opacity: 0.55; }
+.attachment-chip-ring { position: absolute; width: 24px; height: 24px; transform: rotate(-90deg); fill: none; stroke-width: 2.5; filter: drop-shadow(0 0 2px rgb(0 0 0 / 60%)); }
+.attachment-chip-ring circle:first-child { stroke: oklch(1 0 0 / 25%); }
+.attachment-chip-ring circle:last-child { stroke: oklch(1 0 0 / 92%); stroke-linecap: round; transition: stroke-dashoffset 150ms linear; }
+/* Failed, a red outline, and a retry mark where the ring was. */
+.attachment-chip[data-status="error"] .attachment-chip-body { border-color: var(--destructive); }
+.attachment-chip[data-status="error"] .attachment-chip-media img { opacity: 0.4; }
+.attachment-chip-retry { position: absolute; width: 18px; height: 18px; color: var(--foreground); filter: drop-shadow(0 0 2px rgb(0 0 0 / 70%)); }
+
+/* Remove sits on the chip's corner: on hover or keyboard focus, always on touch. */
+.attachment-chip-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 62%);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.attachment-chip-remove svg { width: 11px; height: 11px; }
+.attachment-chip:is(:hover, :focus-within) .attachment-chip-remove { opacity: 1; }
+@media (hover: none) { .attachment-chip-remove { opacity: 1; } }
+
+/* An added chip fades and scales in at the end. */
+.attachment-chip[data-entering] { animation: attachment-chip-in 300ms cubic-bezier(.2, .8, .2, 1) backwards; }
+@keyframes attachment-chip-in { from { opacity: 0; transform: scale(.85); } }
+
+/* The dialog: every attachment, larger and uncropped. */
+.attachment-dialog-card { display: flex; width: min(520px, 100%); flex-direction: column; gap: 12px; }
+.attachment-dialog-head h2 { margin: 0; }
+.attachment-dialog-head p { margin: 0; color: var(--muted-foreground); font-size: 12px; }
+.attachment-dialog-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.attachment-dialog-row { display: flex; align-items: center; gap: 12px; padding: 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+.attachment-dialog-row[data-status="error"] { border-color: var(--destructive); }
+.attachment-dialog-preview { display: grid; flex: none; place-items: center; overflow: hidden; border-radius: 7px; background: var(--muted); color: var(--muted-foreground); }
+.attachment-dialog-preview[data-kind="image"] { width: 200px; max-width: 45%; }
+.attachment-dialog-preview[data-kind="file"] { width: 48px; height: 48px; }
+.attachment-dialog-preview img { display: block; max-width: 100%; max-height: 160px; object-fit: contain; }
+.attachment-dialog-copy { display: grid; min-width: 0; flex: 1; gap: 2px; }
+.attachment-dialog-copy strong { overflow-wrap: anywhere; font-size: 13px; font-weight: 560; }
+.attachment-dialog-copy small { color: var(--muted-foreground); font-size: 12px; }
+.attachment-dialog-actions { display: flex; justify-content: space-between; gap: 8px; }
+
+@media (--conduit-phone-layout) {
+  .attachment-strip-scroller { padding: 4px; scroll-padding-inline: 4px; }
+  /* A bottom sheet, rising from the edge the composer sits on. */
+  .attachment-dialog.conduit-modal { place-items: end center; padding: 0; }
+  .attachment-dialog .attachment-dialog-card { width: 100%; max-height: 85dvh; padding-bottom: calc(16px + env(safe-area-inset-bottom)); border-radius: 16px 16px 0 0; }
+  .attachment-dialog-preview[data-kind="image"] { width: 140px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .attachment-chip[data-entering] { animation: none; }
+}

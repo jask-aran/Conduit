@@ -164,6 +164,15 @@ export function createAttachments(
     return true;
   };
 
+  /** Send a failed upload again, from the file still held for it. */
+  const retry = (item: UploadAttachment) => {
+    const current = items().find((candidate) => candidate.id === item.id);
+    if (!current?.file || current.status !== "error") return;
+    update(current.id, { status: "queued", progress: 0, error: undefined });
+    queue.push(current);
+    drain();
+  };
+
   const pendingIds = createMemo(() => items().filter((item) => item.status === "done" && !item.announced).map((item) => item.id));
   const markAnnounced = (ids: string[]) => { const sent = new Set(ids); setItems((current) => current.filter((item) => !sent.has(item.id))); };
   const restore = (restored: Attachment[]) => {
@@ -181,7 +190,7 @@ export function createAttachments(
     for (const url of objectUrls) URL.revokeObjectURL(url);
   });
 
-  return { items, chatId, select, addFiles, remove, pendingIds, markAnnounced, clear, restore, restoreDraft };
+  return { items, chatId, select, addFiles, remove, retry, pendingIds, markAnnounced, clear, restore, restoreDraft };
 }
 
 export type AttachmentsStore = ReturnType<typeof createAttachments>;
