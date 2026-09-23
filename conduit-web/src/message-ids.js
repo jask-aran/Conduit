@@ -100,6 +100,12 @@ export class MessageIds {
     return this.writeQueue;
   }
 
+  /** Queue the claim before its row so a binding cannot pass an id still in flight. */
+  #recordClaim(state, messageId, role, after) {
+    state.unbound[role].push({ messageId, after });
+    return this.append(state, { messageId, role, ...(after ? { after } : {}) });
+  }
+
   /** Claim an id for a message about to exist, before any entry does. */
   async mint(project, chat, role = "user", after = null) {
     return this.claim(project, chat, role, null, after);
@@ -116,8 +122,7 @@ export class MessageIds {
     if (!this.owns(chat)) return null;
     const state = await this.load(project, chat.id);
     const messageId = offered && !state.byMessage.has(offered) ? offered : `m_${crypto.randomUUID()}`;
-    state.unbound[role].push({ messageId, after });
-    await this.append(state, { messageId, role, ...(after ? { after } : {}) });
+    await this.#recordClaim(state, messageId, role, after);
     return messageId;
   }
 
@@ -160,8 +165,7 @@ export class MessageIds {
     const state = this.chats.get(chat.id);
     if (!state) return null;
     const messageId = `m_${crypto.randomUUID()}`;
-    state.unbound[role].push({ messageId, after });
-    void this.append(state, { messageId, role, ...(after ? { after } : {}) });
+    void this.#recordClaim(state, messageId, role, after);
     return messageId;
   }
 
