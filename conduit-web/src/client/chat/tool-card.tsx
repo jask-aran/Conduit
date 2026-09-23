@@ -4,6 +4,7 @@ import { Button, Spinner } from "@/components/primitives";
 import type { ToolItem } from "../api/contracts";
 import { httpUrl } from "../api/transport";
 import { authorizedFetch } from "../api/native-auth-client";
+import { createReveal } from "./reveal";
 
 const MAX_PREVIEW = 8_000;
 const commandTools = new Set(["bash", "shell", "exec", "terminal", "run_command"]);
@@ -53,6 +54,7 @@ export function ToolCard(props: { tool?: ToolItem; sessionId?: string | null; in
     return commandTools.has(String(tool()?.name || "").toLowerCase()) ? text.slice(-MAX_PREVIEW) : text.slice(0, MAX_PREVIEW);
   });
 
+  const reveal = createReveal(open);
   const toggle = async () => {
     const current = tool();
     if (!current) return;
@@ -77,8 +79,8 @@ export function ToolCard(props: { tool?: ToolItem; sessionId?: string | null; in
       <span class="ml-auto text-xs text-muted-foreground">{status()}</span>
       <Show when={open()} fallback={<ChevronDownIcon />}><ChevronUpIcon /></Show>
     </Button>
-    <Show when={open()}>
-      <div class="tool-card-content">
+    <Show when={reveal.mounted()}>
+      <div ref={reveal.ref} class="tool-card-content">
         <pre>{loading() ? "Loading…" : preview()}</pre>
         <Show when={!loading() && output().length > MAX_PREVIEW}>
           <Button variant="ghost" size="sm" onClick={() => setFull((value) => !value)}>{full() ? "Show preview" : `Show full output · ${output().length - MAX_PREVIEW} hidden characters`}</Button>

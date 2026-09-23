@@ -1,0 +1,8 @@
+/* A step that arrives in an open trace fades in with a short rise; its height
+   arrives at once, so nothing above it moves (DESIGN.md, Motion). */
+.turn-trace-step { min-width: 0; }
+.turn-trace-step[data-arriving] { animation: turn-trace-step-in 300ms cubic-bezier(.2, .8, .2, 1) backwards; }
+@keyframes turn-trace-step-in { from { opacity: 0; transform: translateY(4px); } }
+@media (prefers-reduced-motion: reduce) {
+  .turn-trace-step[data-arriving] { animation: none; }
+}
