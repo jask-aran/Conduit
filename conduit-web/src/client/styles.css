@@ -633,7 +633,8 @@ svg { stroke-width: 1.5; }
 .command-model-spec { min-width: 0; margin-left: auto; overflow: hidden; color: var(--muted-foreground); font: 9.6px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .command-chevron { width: 12px; height: 12px; flex: none; color: var(--muted-foreground); }
 .command-shortcut { flex: none; color: var(--muted-foreground); font-size: 8.8px; font-family: inherit; }
-.command-option[data-checked] .command-label::after { content: "✓"; margin-left: 6.4px; color: var(--primary); }
+.command-option[data-checked]:not([data-highlighted]) { background: color-mix(in oklch, var(--accent), transparent 45%); }
+.command-option[data-checked] .command-label { font-weight: 620; }
 .command-select-mark { display: grid; width: 13.6px; height: 13.6px; flex: none; place-items: center; border: 0.8px solid var(--border); border-radius: 3.2px; color: var(--primary); }
 .command-select-mark svg { width: 10.4px; height: 10.4px; }
 .command-option[data-chat-selected="true"] { background: var(--accent); }
@@ -1444,7 +1445,8 @@ svg { stroke-width: 1.5; }
 .command-model-spec { min-width: 0; margin-left: auto; overflow: hidden; color: var(--muted-foreground); font: 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .command-chevron { width: 15px; height: 15px; flex: none; color: var(--muted-foreground); }
 .command-shortcut { flex: none; color: var(--muted-foreground); font-size: 11px; font-family: inherit; }
-.command-option[data-checked] .command-label::after { content: "✓"; margin-left: 8px; color: var(--primary); }
+.command-option[data-checked]:not([data-highlighted]) { background: color-mix(in oklch, var(--accent), transparent 45%); }
+.command-option[data-checked] .command-label { font-weight: 620; }
 .command-select-mark { display: grid; width: 17px; height: 17px; flex: none; place-items: center; border: 1px solid var(--border); border-radius: 4px; color: var(--primary); }
 .command-select-mark svg { width: 13px; height: 13px; }
 .command-option[data-chat-selected="true"] { background: var(--accent); }

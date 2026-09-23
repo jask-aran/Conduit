@@ -522,19 +522,20 @@
   padding: 4px 6px;
 }
 
-.terminal-menu-check {
-  color: var(--foreground);
-  visibility: hidden;
-}
-
-.terminal-menu-check[data-current="true"] { visibility: visible; }
+/* The session on screen is the row's wash, not a tick. */
+.terminal-menu-row[data-current="true"] { background: var(--accent); }
+.terminal-menu-row[data-current="true"] .terminal-menu-copy strong { font-weight: 650; }
 
 .terminal-menu-copy {
-  display: grid;
+  display: flex;
   min-width: 0;
   flex: 1;
-  gap: 1px;
+  align-items: baseline;
+  gap: 8px;
 }
+
+.terminal-menu-copy strong { flex: none; max-width: 60%; }
+.terminal-menu-copy small { min-width: 0; flex: 1; }
 
 .terminal-menu-copy strong {
   overflow: hidden;

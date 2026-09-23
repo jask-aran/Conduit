@@ -37,7 +37,7 @@ export function StepSlider(props: {
   };
 
   return <div class="step-slider" data-disabled={props.disabled ? "true" : undefined}
-    onKeyDown={(event) => { if (event.key !== "Escape" && event.key !== "Tab") event.stopPropagation(); }}>
+    onKeyDown={(event) => { if (event.target instanceof HTMLInputElement && event.key !== "Escape" && event.key !== "Tab") event.stopPropagation(); }}>
     <div class="step-slider-header">
       <label for={id}>{props.label}</label>
       <Show when={props.valueControl} fallback={<button type="button" class="step-slider-value" aria-expanded={listOpen()} aria-controls={`${id}-list`} disabled={props.disabled}
