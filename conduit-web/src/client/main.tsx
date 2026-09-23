@@ -857,7 +857,9 @@ function App() {
    * honour. Capability-gated UI asks here rather than reaching for either
    * source, so there is one place to be right as more of it appears.
    */
-  const chatManifest = createMemo(() => manifestForChat(harnessCapabilities(), catalogue.selected()?.chat));
+  // With no chat yet, as on the dashboard, the composer is the chosen profile's.
+  const chatManifest = createMemo(() => manifestForChat(harnessCapabilities(), catalogue.selected()?.chat)
+    || harnessCapabilities()[activeProfile()?.implementation || ""] || null);
   const chatCapability = (name: BooleanCapability, fallback = false): boolean =>
     resolveCapability(chatManifest(), chat.capabilities(), name, fallback);
   const chatHistory = createMemo(() => resolveHistory(chatManifest(), chat.capabilities()));

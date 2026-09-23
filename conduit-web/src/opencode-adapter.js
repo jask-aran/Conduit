@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { execFile as execFileCallback } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { promisify } from "node:util";
@@ -28,7 +29,7 @@ export const OPENCODE_CAPABILITIES = Object.freeze({
   permissionModes: true,
   usage: true,
   replay: false,
-  attachments: false,
+  attachments: true,
   interruptKeepsPartial: false,
 });
 
@@ -256,7 +257,11 @@ export class OpenCodeAdapter extends EventEmitter {
       // Listen before asking, so the turn's first events are not missed.
       await this.ensureStream();
       await this.request("POST", `/session/${encodeURIComponent(record.sessionId)}/prompt`, { body: {
-        id: serviceMessageId(clientUserMessageId), text: parseAttachmentEnvelope(message).message, files: [], agents: [],
+        id: serviceMessageId(clientUserMessageId), text: parseAttachmentEnvelope(message).message,
+        // OpenCode reads a file it is pointed at itself, and keeps its name,
+        // type and contents with the prompt.
+        files: (options.attachments || []).filter((item) => item?.path).map((item) => ({ uri: pathToFileURL(item.path).href })),
+        agents: [],
       } });
       return { generationId, attachmentIdentity: { messageId: clientUserMessageId } };
     } catch (cause) {
