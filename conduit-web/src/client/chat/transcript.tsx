@@ -753,7 +753,10 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       // button rather than the inherited transcript root.
       if (!latestButton?.isConnected) return;
       const conversation = transcriptRoot.closest<HTMLElement>(".work-area-conversation");
-      const composerShell = conversation?.querySelector<HTMLElement>(".composer-surface-shell");
+      // A question stands in for the composer, which has slid out of the pane.
+      // Its dock is measured rather than the card, whose rise is a transform.
+      const composerShell = conversation?.querySelector<HTMLElement>(".question-dock")
+        || conversation?.querySelector<HTMLElement>(".composer-surface-shell");
       if (!conversation || !composerShell) return;
       const shellRect = motionShell.getBoundingClientRect();
       const composerRect = composerShell.getBoundingClientRect();
@@ -796,6 +799,12 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     // thread goes on reserving the resting height while the composer sits a
     // navigation bar higher. That gap was the one visible under the keyboard.
     if (composerStack) composerResizeObserver.observe(composerStack, { box: "border-box" });
+    // The composer slides back in as a transform, which no size change reports,
+    // and it is measured with that transform applied -- so again once it lands.
+    const composerLanded = (event: TransitionEvent) => {
+      if (event.propertyName === "transform" && (event.target as HTMLElement).classList.contains("composer-wrap")) scheduleLatestButtonAnchor();
+    };
+    composerStack?.addEventListener("transitionend", composerLanded);
     const visualViewport = window.visualViewport;
     /*
      * The keyboard takes height from the bottom, so the transcript gives it
@@ -1022,6 +1031,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       viewport.removeEventListener("keydown", onKeyDown);
       window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface);
       composerResizeObserver.disconnect();
+      composerStack?.removeEventListener("transitionend", composerLanded);
       window.removeEventListener("resize", scheduleLatestButtonAnchor);
       scrollerResizeObserver.disconnect();
       visualViewport?.removeEventListener("resize", scheduleLatestButtonAnchor);

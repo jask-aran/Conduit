@@ -272,17 +272,18 @@ svg { stroke-width: 1.5; }
 .composer-status-state > svg { width: 10.4px; height: 10.4px; flex: none; }
 .message-scroller-button[data-slot="button"] {
   position: absolute;
-  right: max(35.2px, calc((100% - min(var(--composer-desktop-reference-width), 100%)) / 2));
+  left: 50%;
   bottom: var(--message-scroller-button-bottom, 14.4px);
   z-index: 4;
-  width: 28.8px;
-  min-height: 28.8px;
-  height: 28.8px;
-  border-radius: 10.4px;
+  width: 32px;
+  min-height: 32px;
+  height: 32px;
+  border-radius: 11.2px;
+  translate: -50% 0;
   padding: 0;
   color: var(--foreground);
 }
-.message-scroller-button[data-slot="button"] svg { width: 12.8px; height: 12.8px; }
+.message-scroller-button[data-slot="button"] svg { width: 14.4px; height: 14.4px; }
 .message-scroller-button[data-slot="button"]:hover:not(:disabled) { filter: brightness(1.12); }
 /* A single class owns the material. Do not add material declarations to each
    component: the composer, Follow button, and desktop header pill must match. */
@@ -725,7 +726,6 @@ svg { stroke-width: 1.5; }
   /* Three renderer probes stack above the first message on a phone. Reserve
      their height so the controls never cover the streamed transcript. */
   .thread { width: 100%; padding: 89.6px 12.8px 16px; }
-  .message-scroller-button[data-slot="button"] { right: 9.6px; }
   .composer-stack {
     flex: none;
     padding: 8px 9.6px calc(9.6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
@@ -1078,17 +1078,18 @@ svg { stroke-width: 1.5; }
 .composer-status-state > svg { width: 13px; height: 13px; flex: none; }
 .message-scroller-button[data-slot="button"] {
   position: absolute;
-  right: max(44px, calc((100% - min(var(--composer-desktop-reference-width), 100%)) / 2));
+  left: 50%;
   bottom: var(--message-scroller-button-bottom, 18px);
   z-index: 4;
-  width: 36px;
-  min-height: 36px;
-  height: 36px;
-  border-radius: 13px;
+  width: 40px;
+  min-height: 40px;
+  height: 40px;
+  border-radius: 14px;
+  translate: -50% 0;
   padding: 0;
   color: var(--foreground);
 }
-.message-scroller-button[data-slot="button"] svg { width: 16px; height: 16px; }
+.message-scroller-button[data-slot="button"] svg { width: 18px; height: 18px; }
 .message-scroller-button[data-slot="button"]:hover:not(:disabled) { filter: brightness(1.12); }
 /* A single class owns the material. Do not add material declarations to each
    component: the composer, Follow button, and desktop header pill must match. */
@@ -1536,7 +1537,6 @@ svg { stroke-width: 1.5; }
   /* Three renderer probes stack above the first message on a phone. Reserve
      their height so the controls never cover the streamed transcript. */
   .thread { width: 100%; padding: 112px 16px 20px; }
-  .message-scroller-button[data-slot="button"] { right: 12px; }
   .composer-stack {
     flex: none;
     padding: 10px 12px calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
