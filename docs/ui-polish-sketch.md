@@ -200,8 +200,8 @@ third line of a draft:
   the draft is a button wider and may rewrap to two lines, so they stay
   stacked until it fits on one -- the row never flips back and forth.
 
-Not built, still to try: the placeholder names the model -- "Message Grok
-4.7…" -- which keeps it in view at no cost in height.
+The empty draft names the model -- "Message Grok 4.7…" -- which keeps it in
+view at no cost in height.
 
 The options menu shows each setting's value, not its name, as the desktop row
 does: Profile heads it with context beside, then the model under its own

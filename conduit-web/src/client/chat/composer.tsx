@@ -88,6 +88,12 @@ export function Composer(props: {
   const [dictationSelectionOwned, setDictationSelectionOwned] = createSignal(false);
   const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
   const [phoneLayout, setPhoneLayout] = createSignal(isMobileLayout());
+  // A phone has no model chip in its row, so the empty draft names the model --
+  // it stays in view at no cost in height.
+  const placeholder = () => {
+    const model = phoneLayout() && (props.models.models().find((item) => item.spec === props.models.model())?.label || props.models.model());
+    return model ? `Message ${model}…` : "Send a message...";
+  };
   const [mobileActionsStacked, setMobileActionsStacked] = createSignal(false);
   const dictationWaveform = createVoiceWaveformController(MAX_RESPONSIVE_BAR_COUNT);
   let dictationCancelled = false;
@@ -517,7 +523,7 @@ export function Composer(props: {
         <div class="composer-content">
           <MobileComposerOptions composer={props} />
           <div class="composer-input-shell">
-            <textarea ref={input} rows={1} aria-label="Message the agent" data-has-text={hasText() ? "true" : "false"} data-dictated-range={dictationSelectionOwned() && dictatedRange() ? "true" : undefined} placeholder={!props.serverOnline ? "Server unavailable" : !props.chat.loadedId() ? "New chat" : interactive() ? "Send a message..." : "Reconnecting..."} value={props.chat.draft()} disabled={!props.serverOnline || !interactive()} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} />
+            <textarea ref={input} rows={1} aria-label="Message the agent" data-has-text={hasText() ? "true" : "false"} data-dictated-range={dictationSelectionOwned() && dictatedRange() ? "true" : undefined} placeholder={!props.serverOnline ? "Server unavailable" : !props.chat.loadedId() ? "New chat" : interactive() ? placeholder() : "Reconnecting..."} value={props.chat.draft()} disabled={!props.serverOnline || !interactive()} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} />
             <Show when={slashOpen() && slashCommand()}>{(item) => <div class="slash-completion" aria-hidden="true"><span>{props.chat.draft()}</span>{item().command.slice(props.chat.draft().length)} <small>{item().description}</small></div>}</Show>
           </div>
           <div class="composer-actions" data-mobile-actions-stacked={mobileActionsStacked()}>
