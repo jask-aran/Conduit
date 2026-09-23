@@ -7,10 +7,10 @@
  */
 .composer-card { animation: composer-card-rise 300ms cubic-bezier(.2, .8, .2, 1) backwards; }
 @keyframes composer-card-rise { from { opacity: 0; transform: translateY(8px); } }
-.queued-float[data-leaving="drop"], .attachment-tray[data-leaving="drop"] { animation: composer-card-drop 200ms cubic-bezier(.4, 0, 1, 1) forwards; }
+.queued-float[data-leaving="drop"], .attachment-strip[data-leaving="drop"] { animation: composer-card-drop 200ms cubic-bezier(.4, 0, 1, 1) forwards; }
 @keyframes composer-card-drop { to { opacity: 0; transform: translateY(8px); } }
-.queued-float[data-leaving="fade"], .attachment-tray[data-leaving="fade"] { animation: composer-card-fade 150ms cubic-bezier(.4, 0, 1, 1) forwards; }
+.queued-float[data-leaving="fade"], .attachment-strip[data-leaving="fade"] { animation: composer-card-fade 150ms cubic-bezier(.4, 0, 1, 1) forwards; }
 @keyframes composer-card-fade { to { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .composer-card, .queued-float[data-leaving], .attachment-tray[data-leaving] { animation: none; }
+  .composer-card, .queued-float[data-leaving], .attachment-strip[data-leaving] { animation: none; }
 }

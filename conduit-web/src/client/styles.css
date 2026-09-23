@@ -1270,7 +1270,7 @@ svg { stroke-width: 1.5; }
 .chat-main-live-opening .composer-actions-left,
 .chat-main-live-opening .dictation-trigger,
 .chat-main-live-opening .composer-send-trigger,
-.chat-main-live-opening .composer-wrap > .attachment-tray,
+.chat-main-live-opening .composer-wrap > .attachment-strip,
 .chat-main-live-opening .composer-wrap > .review-comment-tray { visibility: hidden; }
 .chat-bootstrap { display: grid; min-height: 100%; place-items: center; color: var(--muted-foreground); font-size: 14px; }
 

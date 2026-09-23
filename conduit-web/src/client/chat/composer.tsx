@@ -22,7 +22,7 @@ import type { ServiceLevelSettings } from "../state/service-level-settings";
 import type { VoiceDictationSettings } from "./voice-dictation-types";
 import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../navigation/mobile-layout";
 import { QueuedMessages } from "./queued-messages";
-import { AttachmentCards } from "./attachments";
+import { AttachmentStrip } from "./attachment-strip";
 import { composerSlashCommands } from "./composer-slash-commands";
 import { fileFromPastedText, insertTextAt, shouldAttachPastedText } from "./large-paste";
 import { COMPOSER_SURFACE_CHANGE_EVENT, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
@@ -505,10 +505,6 @@ export function Composer(props: {
   });
 
   return <div class="composer-wrap">
-    <Show when={props.attachmentsSupported !== false}>
-      <AttachmentCards items={props.attachments.items()} chatId={props.chat.loadedId()} label="Attachments" removable onRemove={(item) => props.attachments.remove(item)} />
-    </Show>
-    <ReviewCommentCards items={comments()} chatId={props.chat.loadedId() ?? ""} label="File references" onRemove={(comment) => removeReviewComment(comment.id)} onUpdate={(comment, note) => updateReviewComment(comment.id, note)} />
     <QueuedMessages
       messages={props.chat.pendingMessages()}
       surface={composerSurface()}
@@ -518,6 +514,10 @@ export function Composer(props: {
       onEdit={props.chat.editQueued}
       onDiscard={props.chat.discardQueued}
     />
+    <ReviewCommentCards items={comments()} chatId={props.chat.loadedId() ?? ""} label="File references" onRemove={(comment) => removeReviewComment(comment.id)} onUpdate={(comment, note) => updateReviewComment(comment.id, note)} />
+    <Show when={props.attachmentsSupported !== false}>
+      <AttachmentStrip items={props.attachments.items()} chatId={props.chat.loadedId()} surface={composerSurface()} onRemove={(item) => props.attachments.remove(item)} onRetry={(item) => props.attachments.retry(item)} />
+    </Show>
     <div class="composer-surface-shell" data-composer-surface={composerSurface()}>
       <div class="composer composer-surface-material" data-composer-surface={composerSurface()}>
         <div class="composer-content">
