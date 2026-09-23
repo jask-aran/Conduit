@@ -103,7 +103,9 @@ active_generation_count() {
 }
 
 wait_for_generations() {
-  is_healthy || return
+  # A Conduit that is not answering has nothing to drain. A bare `return`
+  # would hand back curl's failure and, under `set -e`, end the restart.
+  is_healthy || return 0
   [[ "$DRAIN_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || {
     echo "CONDUIT_RESTART_DRAIN_TIMEOUT_SECONDS must be a non-negative integer." >&2
     return 1

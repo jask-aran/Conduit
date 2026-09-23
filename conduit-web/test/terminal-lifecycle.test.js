@@ -7,6 +7,7 @@ import {
   terminalCleanupMessage,
   terminalRegistryFile,
   terminalSocketName,
+  terminalSocketPath,
 } from "../../scripts/terminal-lifecycle.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
@@ -32,6 +33,25 @@ test("terminal lifecycle cleanup tolerates an absent tmux server or executable",
     Object.assign(new Error("missing socket"), { code: 1, stderr: "error connecting to /tmp/tmux-1000/conduit-test (No such file or directory)" }),
   ]) {
     assert.equal(await stopTerminalSessions({ run: async () => { throw error; } }), false);
+  }
+});
+
+test("terminal lifecycle cleanup drops the socket of a tmux server that stopped answering", async () => {
+  const filePath = "/tmp/conduit-terminal-lifecycle/remotes.json";
+  const tmuxTmpdir = await fs.mkdtemp("/tmp/conduit-tmux-");
+  const previous = process.env.TMUX_TMPDIR;
+  process.env.TMUX_TMPDIR = tmuxTmpdir;
+  try {
+    const socket = terminalSocketPath(terminalSocketName(filePath));
+    await fs.mkdir(path.dirname(socket), { recursive: true });
+    await fs.writeFile(socket, "");
+    const wedged = Object.assign(new Error("Command failed"), { code: 1, stderr: "server exited unexpectedly\n" });
+    assert.equal(await stopTerminalSessions({ filePath, run: async () => { throw wedged; } }), true);
+    await assert.rejects(fs.stat(socket), { code: "ENOENT" });
+  } finally {
+    if (previous === undefined) delete process.env.TMUX_TMPDIR;
+    else process.env.TMUX_TMPDIR = previous;
+    await fs.rm(tmuxTmpdir, { recursive: true, force: true });
   }
 });
 

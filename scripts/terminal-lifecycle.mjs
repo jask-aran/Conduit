@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { execFile as execFileCallback } from "node:child_process";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -10,6 +11,23 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 export function terminalSocketName(filePath) {
   const namespace = crypto.createHash("sha256").update(path.resolve(filePath)).digest("hex").slice(0, 12);
   return `conduit-${namespace}`;
+}
+
+/** Where tmux keeps a `-L` socket: `$TMUX_TMPDIR` (or /tmp), then one directory per user. */
+export function terminalSocketPath(name, env = process.env) {
+  return path.join(env.TMUX_TMPDIR || "/tmp", `tmux-${process.getuid()}`, name);
+}
+
+/**
+ * A tmux server that has stopped answering still holds its socket, and tmux
+ * then refuses every command with "server exited unexpectedly" -- `kill-server`
+ * included. The socket is Conduit's alone, so it is removed instead; the next
+ * command starts a fresh server.
+ */
+export async function removeUnresponsiveSocket(name, error) {
+  if (!/server exited unexpectedly/i.test(String(error?.stderr || error?.message || ""))) return false;
+  await fs.rm(terminalSocketPath(name), { force: true });
+  return true;
 }
 
 export function terminalRegistryFile(env = process.env) {
@@ -25,8 +43,9 @@ export async function stopTerminalSessions({
   const env = { ...process.env };
   delete env.TMUX;
   delete env.TMUX_PANE;
+  const name = terminalSocketName(filePath);
   try {
-    await run(tmuxPath, ["-L", terminalSocketName(filePath), "kill-server"], {
+    await run(tmuxPath, ["-L", name, "kill-server"], {
       env,
       maxBuffer: 64 * 1024,
     });
@@ -36,6 +55,7 @@ export async function stopTerminalSessions({
     if (error?.code === "ENOENT" || /no server running|no sessions|error connecting to .+ \(No such file or directory\)/i.test(detail)) {
       return false;
     }
+    if (await removeUnresponsiveSocket(name, error)) return true;
     throw error;
   }
 }

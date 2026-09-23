@@ -7,7 +7,7 @@ import { projectEnvironment } from "./project-environment.js";
 import { StringDecoder } from "node:string_decoder";
 import { promisify } from "node:util";
 import nodePty from "node-pty";
-import { terminalSocketName } from "../../scripts/terminal-lifecycle.mjs";
+import { removeUnresponsiveSocket, terminalSocketName } from "../../scripts/terminal-lifecycle.mjs";
 
 const execFileAsync = promisify(execFileCallback);
 
@@ -149,6 +149,19 @@ export class PtyManager extends EventEmitter {
     }
   }
 
+  /**
+   * End this manager's tmux server -- or, when it has stopped answering, drop
+   * its socket, which otherwise left Conduit able neither to stop nor start.
+   */
+  async killTmuxServer() {
+    try {
+      await this.invokeTmux(["kill-server"], { tolerateMissingServer: true });
+    } catch (error) {
+      if (!await removeUnresponsiveSocket(this.tmuxSocketName, error)) throw error;
+      console.warn(`Removed terminal tmux socket ${this.tmuxSocketName}; its server had stopped answering.`);
+    }
+  }
+
   async ensureTmux() {
     if (this.tmuxReady) return;
     let version;
@@ -178,7 +191,7 @@ export class PtyManager extends EventEmitter {
     // before projecting persisted rows as exited diagnostics.
     try {
       await this.ensureTmux();
-      await this.invokeTmux(["kill-server"], { tolerateMissingServer: true });
+      await this.killTmuxServer();
     } catch (error) {
       if (error?.code !== "pty_tmux_unavailable" && error?.code !== "pty_tmux_version") throw error;
       this.tmuxReady = false;
@@ -487,7 +500,7 @@ export class PtyManager extends EventEmitter {
     try {
       if (this.tmuxReady || runningCount > 0) {
         await this.ensureTmux();
-        await this.invokeTmux(["kill-server"], { tolerateMissingServer: true });
+        await this.killTmuxServer();
       }
     } catch (error) {
       if (error?.code !== "pty_tmux_unavailable" && error?.code !== "pty_tmux_version") throw error;
