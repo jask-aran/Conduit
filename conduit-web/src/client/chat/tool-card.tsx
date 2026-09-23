@@ -27,7 +27,7 @@ function stringify(value: unknown) {
   return typeof value === "string" ? value : JSON.stringify(value ?? {}, null, 2);
 }
 
-export function ToolCard(props: { tool?: ToolItem; sessionId?: string | null; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; settled?: boolean }) {
+export function ToolCard(props: { tool?: ToolItem; sessionId?: string | null; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; settled?: boolean; cutOff?: boolean }) {
   const [open, setOpen] = createSignal(Boolean(props.initialOpen));
   const [loaded, setLoaded] = createSignal<unknown>(undefined);
   const [loading, setLoading] = createSignal(false);
@@ -35,9 +35,12 @@ export function ToolCard(props: { tool?: ToolItem; sessionId?: string | null; in
   const tool = createMemo(() => props.tool);
   const status = createMemo(() => {
     const current = tool();
-    // A tool its turn ended without answering is not still running: it was
-    // stopped with the turn, and nothing is going to finish it.
-    return current?.isError ? "Error" : current?.cancelled ? "Cancelled" : current?.done ? "Complete" : props.settled ? "Stopped" : "Running";
+    // A tool its turn ended without answering is not still running, and the
+    // one a stop cut off did not fail: both were interrupted with the turn.
+    if (current?.isError) return props.cutOff ? "Interrupted" : "Error";
+    if (current?.cancelled) return "Interrupted";
+    if (current?.done) return "Complete";
+    return props.settled ? "Interrupted" : "Running";
   });
   const source = createMemo(() => {
     const current = tool();

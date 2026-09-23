@@ -1,4 +1,4 @@
-import { createSignal, Index, lazy, Show, Suspense } from "solid-js";
+import { createMemo, createSignal, For, Index, lazy, Show, Suspense } from "solid-js";
 import { BrainIcon, ChevronDownIcon, TriangleAlertIcon } from "lucide-solid";
 import type { Message } from "../api/contracts";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
@@ -49,6 +49,7 @@ function TraceSegmentRow(props: {
   toolOpen?: (id: string) => boolean;
   onToolOpenChange?: (id: string, open: boolean) => void;
   settled?: boolean;
+  cutOff?: boolean;
 }) {
   const tool = () => {
     const segment = props.segment();
@@ -84,41 +85,53 @@ function TraceSegmentRow(props: {
       {(message) => <TraceError message={message()} profileLabel={props.profileLabel} />}
     </Show>
   }>
-    {(item) => <ToolCard tool={item()} settled={props.settled} sessionId={props.sessionId} initialOpen={props.toolOpen?.(item().toolCallId)} onOpenChange={(open) => props.onToolOpenChange?.(item().toolCallId, open)} />}
+    {(item) => <ToolCard tool={item()} settled={props.settled} cutOff={props.cutOff} sessionId={props.sessionId} initialOpen={props.toolOpen?.(item().toolCallId)} onOpenChange={(open) => props.onToolOpenChange?.(item().toolCallId, open)} />}
   </Show>;
 }
 
-/** Header line: anchored on the latest text (thinking or narration) so the
-    preview doesn't flicker between tool names, with tool counters beside it —
-    calls since that text, plus the turn total when they differ ("3 tool calls
-    (5 total)"). Falls back to a neutral label before any text exists. */
-function previewOf(trace: TurnTraceData): { text: string; counters: string } {
-  let latestText: string | null = null;
+/*
+ * The header reads status, then tool calls, then a summary -- the summary last,
+ * because it is the only part that is ever cut short.
+ *
+ * Models reason in two shapes, whatever the provider: headed summaries (GPT's
+ * reasoning summaries, Gemini's thought summaries -- a bold line, perhaps a
+ * paragraph under it) and raw prose (Grok, DeepSeek, Muse). One rule each: the
+ * last heading if there is one, otherwise the last sentence, from its start.
+ * Muse runs its sentences together without a space, so a sentence ends at
+ * . ! or ? followed by a space or a capital.
+ */
+const HEADING = /^\s*\*\*(.+?)\*\*\s*$/gm;
+function summaryOf(text: string): string {
+  const headings = [...text.matchAll(HEADING)];
+  if (headings.length) return headings.at(-1)![1]!.trim();
+  const sentences = text.replace(/\s+/g, " ").trim().split(/(?<=[.!?])\s*(?=[A-Z])/);
+  return sentences.map((sentence) => sentence.trim()).filter(Boolean).at(-1) || "";
+}
+
+function previewOf(trace: TurnTraceData): { status: string | null; counters: string; summary: string } {
+  let summary = "";
   let callsAfterText = 0;
   let totalCalls = 0;
+  let latestTool: string | undefined;
   for (const segment of trace.segments) {
-    if (segment.kind === "tool") { totalCalls += 1; callsAfterText += 1; }
-    else if (segment.kind === "error") {
-      latestText = `Request failed · ${segment.message.errorMessage || "The model request failed."}`;
-      callsAfterText = 0;
-    }
-    else { latestText = segment.text; callsAfterText = 0; }
+    if (segment.kind === "tool") { totalCalls += 1; callsAfterText += 1; latestTool = segment.tool.name; }
+    else if (segment.kind === "error") { summary = segment.message.errorMessage || "The model request failed."; callsAfterText = 0; }
+    else if (segment.text.trim()) { summary = summaryOf(segment.text); callsAfterText = 0; }
   }
   const shown = callsAfterText || totalCalls;
   const counters = totalCalls > 0
     ? `${shown} tool call${shown === 1 ? "" : "s"}${totalCalls > shown ? ` (${totalCalls} total)` : ""}`
     : "";
-  if (!latestText) return { text: trace.active ? "Thinking…" : "Thinking process", counters };
-  const text = latestText.replace(/\s+/g, " ").trim();
-  const clipped = text.length > 120 ? `…${text.slice(-120)}` : text;
-  return { text: clipped, counters };
+  return { status: statusLabel(trace.status, latestTool), counters, summary };
 }
 
-const statusLabel = (status: TurnTraceData["status"]) => ({
+/* Only what is not the normal ending gets a word: a finished turn is just its
+   summary, so an interrupted or failed one stands out beside it. */
+const statusLabel = (status: TurnTraceData["status"], tool?: string) => ({
   thinking: "Thinking",
-  executing_tool: "Executing tool",
+  executing_tool: tool ? `Running ${tool}` : "Running a tool",
   interrupted: "Interrupted",
-  complete: "Complete",
+  complete: null,
   failed: "Failed",
 })[status];
 
@@ -129,20 +142,34 @@ export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | nul
     setOpen(next);
     props.onOpenChange?.(next);
   };
+  const preview = createMemo(() => previewOf(props.trace));
+  const parts = createMemo(() => {
+    const { status, counters, summary } = preview();
+    const list: { kind: "status" | "counter" | "summary"; text: string }[] = [];
+    if (status) list.push({ kind: "status", text: status });
+    if (counters) list.push({ kind: "counter", text: counters });
+    if (summary) list.push({ kind: "summary", text: summary });
+    if (!list.length) list.push({ kind: "summary", text: "Thinking process" });
+    return list;
+  });
+  const lastTool = createMemo(() => props.trace.segments.findLastIndex((segment) => segment.kind === "tool"));
   return <div class="turn-trace" data-active={props.trace.active ? "true" : "false"}>
     <button type="button" class="turn-trace-header" aria-expanded={open()} onClick={toggle}>
       <BrainIcon />
       <div class="turn-trace-preview">
-        <Suspense fallback={<span>{previewOf(props.trace).text}</span>}><ChatMarkdown inline renderer={props.renderer} pacing={props.pacing}>{previewOf(props.trace).text}</ChatMarkdown></Suspense>
-        <Show when={previewOf(props.trace).counters}><span class="turn-trace-counter"> · {previewOf(props.trace).counters}</span></Show>
-        <span class="turn-trace-status"> · {statusLabel(props.trace.status)}</span>
+        <For each={parts()}>{(part, index) => <span class={`turn-trace-${part.kind}`} data-status={part.kind === "status" ? props.trace.status : undefined}>
+          {index() ? " · " : ""}
+          <Show when={part.kind === "summary"} fallback={part.text}>
+            <Suspense fallback={part.text}><ChatMarkdown inline renderer={props.renderer} pacing={props.pacing}>{part.text}</ChatMarkdown></Suspense>
+          </Show>
+        </span>}</For>
       </div>
       <ChevronDownIcon class="turn-trace-chevron" data-open={open() ? "true" : "false"} />
     </button>
     <Show when={open()}>
       <div class="turn-trace-body">
-          <Index each={props.trace.segments}>{(segment) =>
-          <TraceSegmentRow segment={segment} settled={!props.trace.active} sessionId={props.sessionId} renderer={props.renderer} pacing={props.pacing} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />
+          <Index each={props.trace.segments}>{(segment, index) =>
+          <TraceSegmentRow segment={segment} settled={!props.trace.active} cutOff={props.trace.status === "interrupted" && index === lastTool()} sessionId={props.sessionId} renderer={props.renderer} pacing={props.pacing} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />
         }</Index>
       </div>
     </Show>
