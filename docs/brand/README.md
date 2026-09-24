@@ -12,7 +12,7 @@ do not restyle them beyond the single-colour tinting described below.
 | ChatGPT Web | `public/brand/openai-blossom-mark.svg` | official OpenAI brand kit (`openai/SVGs/OAI_OpenAI-Blossom_Black.svg`) (`fill` swapped to `currentColor`) |
 | Codex | `public/brand/codex-mark.svg` | Codex glyph via [lobehub/lobe-icons](https://github.com/lobehub/lobe-icons) (`static-svg/icons/codex-color.svg`, MIT), with the white app-icon backing plate removed so the gradient mark sits on a clear background |
 | Codex (one colour) | `public/brand/codex-mono-mark.svg` | the Codex glyph above with its gradient fill swapped to `currentColor` |
-| Conduit | `public/brand/conduit-mark.svg` | Conduit's own: a heavy geometric C drawn as one stroked arc |
+| Conduit | `public/brand/conduit-mark.svg` | Conduit's own: the capital C of Druk Wide Super, the wordmark's face (`src/client/assets/fonts/druk-wide-web-super.woff2`), converted to a path so it needs no font |
 | Claude Code | `public/brand/claude-code-mark.svg` | Claude glyph via [lobehub/lobe-icons](https://github.com/lobehub/lobe-icons) (`static-svg/icons/claude.svg`, MIT) |
 | fx | `public/brand/fx-mark.svg` | official glyph from the [fx site](https://fx.sh/) navigation SVG |
 | opencode | `public/brand/opencode-mark.svg` | opencode glyph via [lobehub/lobe-icons](https://github.com/lobehub/lobe-icons) (`static-svg/icons/opencode.svg`, MIT) |
