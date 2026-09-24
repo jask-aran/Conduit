@@ -26,8 +26,11 @@ const formatBuiltAt = (value: string) => {
  * browser is fixed to the address it was installed from, so its route list is
  * a set of facts rather than a set of choices. That is a property of this
  * client, so it is said here once instead of on top of the route menu.
+ *
+ * Nothing here is a setting, so it is not a section: it sits at the foot of
+ * the rail, as the connection does at the foot of the app sidebar.
  */
-export function AboutSettingsTile() {
+export function AboutSettingsFooter() {
   const [server, setServer] = createSignal<ServerBuild | null | "pending">("pending");
   const [shell, setShell] = createSignal<string | null>(null);
 
@@ -40,19 +43,19 @@ export function AboutSettingsTile() {
     || (isStandaloneBrowser() ? "Installed to the home screen" : "Browser tab");
 
   const row = (label: string, value: string, detail?: string) =>
-    <div class="settings-line" title={detail || undefined}><span>{label}</span>
-      <span class="settings-line-value" data-mono>{value}</span>
-    </div>;
+    <div title={detail ? `${value} · ${detail}` : value}><dt>{label}</dt><dd>{value}</dd></div>;
 
-  return <section class="settings-group" aria-label="About">
+  return <footer class="settings-rail-about" aria-label="About">
     <h3>About</h3>
-    {row("Interface", buildLabel(clientBuild), formatBuiltAt(clientBuild.builtAt))}
-    {row("Running as", runningAs())}
-    <Show when={installedClientKind !== "browser"}>
-      {row(SHELL_LABELS[installedClientKind] || "App shell", shell() || "Not reported")}
-    </Show>
-    <Show when={server() !== "pending"} fallback={row("Server", "Asking…")}>
-      {row("Server", (server() as ServerBuild | null)?.release || "Unreachable")}
-    </Show>
-  </section>;
+    <dl>
+      {row("Interface", buildLabel(clientBuild), formatBuiltAt(clientBuild.builtAt))}
+      {row("Running as", runningAs())}
+      <Show when={installedClientKind !== "browser"}>
+        {row(SHELL_LABELS[installedClientKind] || "App shell", shell() || "Not reported")}
+      </Show>
+      <Show when={server() !== "pending"} fallback={row("Server", "Asking…")}>
+        {row("Server", (server() as ServerBuild | null)?.release || "Unreachable")}
+      </Show>
+    </dl>
+  </footer>;
 }
