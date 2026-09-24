@@ -594,6 +594,23 @@ function App() {
       : null);
   const [routeBootstrap, setRouteBootstrap] = createSignal<"loading" | "ready" | "error">("loading");
   const [routeBootstrapError, setRouteBootstrapError] = createSignal("");
+  // The first open. Nothing but the frame shows until the route is ready;
+  // then the composer is simply there and everything around it fades in, once,
+  // rather than each part appearing as its data lands. A route that never
+  // settles is shown anyway after a moment.
+  {
+    const root = document.documentElement;
+    let settle: ReturnType<typeof setTimeout> | undefined;
+    const arrive = () => {
+      if (root.dataset.arrival !== "waiting") return;
+      root.dataset.arrival = "arriving";
+      settle = setTimeout(() => delete root.dataset.arrival, 400);
+    };
+    root.dataset.arrival = "waiting";
+    const fallback = setTimeout(arrive, 2500);
+    createEffect(() => { if (routeBootstrap() !== "loading") arrive(); });
+    onCleanup(() => { clearTimeout(fallback); clearTimeout(settle); delete root.dataset.arrival; });
+  }
   let dragDepth = 0;
   let attachFileInput: HTMLInputElement | undefined;
   let workspaceSuggestionsRequest: Promise<void> | null = null;
