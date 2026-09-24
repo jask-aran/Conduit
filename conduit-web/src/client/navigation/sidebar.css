@@ -390,7 +390,6 @@
 .sidebar-downloads > span { flex: 1; }
 .sidebar-downloads > a { display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--radius-md); color: inherit; }
 .sidebar-downloads > a:hover { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
-.sidebar-downloads > a:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .sidebar-downloads svg { width: 16px; height: 16px; }
 .conduit-sidebar[data-visual-state="collapsed"]:not([data-mobile-open="true"]) .sidebar-downloads { display: none; }
 .conduit-sidebar[data-visual-state="collapsed"]:not([data-mobile-open="true"]) .sidebar-downloads > span { display: none; }
@@ -446,7 +445,10 @@
 /* The wash is the only cursor in the list: a focused row draws no ring, from
    the browser or anywhere else. The chevron is not a stop -- → and ← press it
    -- so it is out of the tab order. */
-.conduit-sidebar :is(.sidebar-row, .sidebar-project-link, .sidebar-rail-action, .sidebar-view-more, .sidebar-harness-tile):focus-visible { outline: none; box-shadow: none; }
+.conduit-sidebar :is(.sidebar-row, .sidebar-project-link, .sidebar-rail-action, .sidebar-view-more, .sidebar-harness-tile, .sidebar-user, .sidebar-downloads > a):focus-visible { outline: none; box-shadow: none; }
+/* The server row and the download links take the same wash -- focus comes
+   back to the server row when its menu closes, and that is a cursor, not a ring. */
+.conduit-sidebar :is(.sidebar-user, .sidebar-downloads > a):is(:hover, :focus-visible, [data-expanded]) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 .conduit-sidebar .sidebar-harness-tile:focus-visible {
   border-color: color-mix(in oklch, var(--border), transparent 20%);
   background: color-mix(in oklch, var(--sidebar-foreground), transparent 93%);
