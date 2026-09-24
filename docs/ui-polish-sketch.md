@@ -650,9 +650,10 @@ the go-to chords are shown as the way out.
    dashboard around the composer leaves (~200ms, quick), and the chat arrives
    at once -- its composer travels from the dashboard's spot to the foot in
    one move (~420ms) as the rest fades in. The agent starting is not waited
-   on: until the message is in the chat it is held out of the empty layout,
-   so the composer waits at the foot holding the message beside "Starting
-   agent…", which is usually done by the time it gets there. A View Transition was not needed.
+   on: a send leaves the empty layout at once, so the composer waits at the
+   foot holding the message beside "Starting agent…", which is usually done
+   by the time it gets there. The same rule moves a new chat's composer from
+   the middle to the foot on its first send. A View Transition was not needed.
    Focus: entering the main pane with nothing more specific in mind goes to
    its composer, else the pane -- what is wanted nine times in ten. That is
    opening any page from the sidebar (chat, pinned row, project, dashboard,

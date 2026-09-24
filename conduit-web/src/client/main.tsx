@@ -930,49 +930,52 @@ function App() {
   const openingLiveChat = createMemo(() => chat.presentation().kind === "opening_live");
   const withheldLiveChat = createMemo(() => chat.presentation().kind !== "ready");
   const emptyChat = createMemo(() => !withheldLiveChat() && chat.loadedId() === catalogue.selectedId() && !chat.messages().length && !chat.tools().length && !isChatContentActivity(chat.activity()));
+  // A send leaves the empty layout at once, not when the agent has started
+  // and the message is in the transcript: the composer goes to the foot and
+  // holds the message there, beside "Starting agent…", until it lands.
+  const sendingOut = () => ["submitting", "active"].includes(chat.generation());
+  const emptyLayout = createMemo(() => emptyChat() && !sendingOut());
   /*
    * A new chat holds its composer in the middle of the pane; the first send
-   * moves it to the foot of the transcript. It travels there rather than
-   * cutting: where it sat is noted while the chat is empty, and when a send
-   * ends the empty state it starts from that spot and settles into its place.
+   * moves it to the foot of the transcript, straight away. It travels there
+   * rather than cutting: where it sat is noted while the chat is empty, and
+   * when a send ends the empty layout it starts from that spot and settles
+   * into its place.
    * Leaving an empty chat any other way -- opening another chat -- just cuts.
    */
   let chatComposerStack: HTMLDivElement | undefined;
   let emptyComposerTop: number | null = null;
   const noteEmptyComposer = () => {
-    if (emptyChat() && chatComposerStack) emptyComposerTop = chatComposerStack.getBoundingClientRect().top;
+    if (emptyLayout() && chatComposerStack) emptyComposerTop = chatComposerStack.getBoundingClientRect().top;
   };
-  createEffect(on(emptyChat, (empty, wasEmpty) => {
+  createEffect(on(emptyLayout, (empty, wasEmpty) => {
     if (empty) {
       requestAnimationFrame(noteEmptyComposer);
       return;
     }
     const from = emptyComposerTop;
     emptyComposerTop = null;
-    if (!wasEmpty || from == null || !["submitting", "active"].includes(chat.generation())) return;
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    requestAnimationFrame(() => {
-      if (!chatComposerStack) return;
-      const offset = from - chatComposerStack.getBoundingClientRect().top;
-      if (Math.abs(offset) < 4) return;
-      chatComposerStack.animate([{ transform: `translateY(${offset}px)` }, { transform: "none" }],
-        { duration: 420, easing: "cubic-bezier(.2, .8, .2, 1)" });
-    });
+    if (!wasEmpty || from == null || !sendingOut() || routeKind() !== "chat") return;
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches || !chatComposerStack) return;
+    // Measured and started in the same frame as the layout change, so the
+    // docked composer is never painted before it sets off.
+    const offset = from - chatComposerStack.getBoundingClientRect().top;
+    if (Math.abs(offset) < 4) return;
+    chatComposerStack.animate([{ transform: `translateY(${offset}px)` }, { transform: "none" }],
+      { duration: 420, easing: "cubic-bezier(.2, .8, .2, 1)" });
   }));
   /*
    * Sending from a dashboard. The send goes at once; then the dashboard
    * around the composer leaves, quick and accelerating, and the chat arrives
    * as soon as it has gone: its composer starts where the dashboard's sat and
    * settles into its place at the foot, and the rest of the pane fades in.
-   * The agent starting is not waited on. Until the message is in the chat it
-   * is held out of the empty layout (the centred composer, the welcome line),
-   * so the composer makes one move and waits at the foot, holding the message
-   * beside "Starting agent…" until it lands in the transcript. The sidebar
+   * The agent starting is not waited on: the send has already left the empty
+   * layout (emptyLayout), so the composer makes one move and waits at the
+   * foot, holding the message until it lands in the transcript. The sidebar
    * and workspace panel are not changing place, so they stay. The composer
    * moved is the inner wrap, so the stack's own rect -- which the empty-chat
    * travel measures -- is never read mid-flight. Focus goes with the composer.
    */
-  const [dashboardArrival, setDashboardArrival] = createSignal(false);
   const DASHBOARD_LEAVE_MS = 200;
   const leaveDashboard = (): Promise<DOMRect | null> => {
     const wrap = document.querySelector<HTMLElement>('.chat-main [data-part="composer"]');
@@ -984,11 +987,9 @@ function App() {
   const sendFromDashboard = async () => {
     const sending = chat.send().catch(() => undefined);
     const from = await leaveDashboard();
-    setDashboardArrival(true);
     setRouteKind("chat");
     arriveInChat(from);
     await sending;
-    setDashboardArrival(false);
   };
   const arriveInChat = (from: DOMRect | null) => {
     const root = document.documentElement;
@@ -2505,7 +2506,7 @@ function App() {
       }} />
     </Modal>
     <div class="workspace-layout">
-    <main data-slot="sidebar-inset" data-region={routeKind() === "chat" ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} class={`chat-main${routeKind() === "chat" && emptyChat() && !dashboardArrival() ? " chat-main-empty" : ""}${dashboardArrival() ? " chat-main-arriving" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
+    <main data-slot="sidebar-inset" data-region={routeKind() === "chat" ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
         : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : "Loading chat…"}</div>}>
