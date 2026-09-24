@@ -262,8 +262,8 @@ export function Sidebar(props: {
   onOpenPalette: (page?: string | null, initialQuery?: string | null) => void;
   /** Esc from the top of the sidebar: back to the main pane. */
   onFocusMainPane: () => void;
-  /** A chat opened from the keyboard is opened to write in. */
-  onHandToComposer: () => void;
+  /** A page opened from the sidebar is entered: its composer, else the pane. */
+  onEnterMainPane: () => void;
   onUpdatePwa: () => void;
   pwaUpdating: boolean;
   updateState?: UpdateState;
@@ -613,10 +613,15 @@ export function Sidebar(props: {
     });
   };
   const closeMobile = () => props.onMobileOpenChange(false);
+  // Opening a page from the sidebar -- by click or Enter, and even the page
+  // already open -- enters it: focus goes to its composer, else the pane.
+  // Actions with a target of their own (a dialog, the palette, a terminal)
+  // do not.
+  const enterPane = () => props.onEnterMainPane();
   const startNewChat = (project?: Project) => {
     closeMobile();
     const target = project || chats();
-    if (target) void props.onNewChat(target);
+    if (target) void props.onNewChat(target).then(enterPane);
   };
 
   /** Live process map wins while SSE is online; fall back to the catalogue's live snapshot when offline. */
@@ -880,9 +885,7 @@ export function Sidebar(props: {
         }
         clearSelection();
         closeMobile();
-        // A click the keyboard made (Enter, Space) carries no pointer detail.
-        const fromKeyboard = event.detail === 0;
-        void props.onOpenChat(menuProps.chat, menuProps.project).then(() => { if (fromKeyboard) props.onHandToComposer(); });
+        void props.onOpenChat(menuProps.chat, menuProps.project).then(enterPane);
       }}
     >
       <Show when={props.navigatingId === menuProps.chat.id} fallback={<RuntimeIndicator process={processFor(menuProps.chat)} stale={props.runtime.stale()} unread={menuProps.chat.unread} fallback={<ThreadHarnessMark id={menuProps.chat.harnessId} lively />} />}>
@@ -1011,7 +1014,7 @@ export function Sidebar(props: {
           <button class="sidebar-project-link" onClick={() => {
             if (guard.suppressClick) { guard.suppressClick = false; return; }
             closeMobile();
-            void props.onOpenProject(blockProps.project);
+            void props.onOpenProject(blockProps.project).then(enterPane);
           }}>
             <Show when={isWorkspace()} fallback={<FolderIcon />}><WorkspaceGlyph appearance={blockProps.project.workspaceAppearance} /></Show>
             <ProjectActivityIndicator sessions={blockProps.project.sessions} />
@@ -1065,11 +1068,10 @@ export function Sidebar(props: {
 
   const PinnedRow = (rowProps: { item: PinnedItem }) => {
     const item = rowProps.item;
-    const open = (event: MouseEvent) => {
+    const open = () => {
       closeMobile();
-      const fromKeyboard = event.detail === 0;
-      if (item.type === "chat") void props.onOpenChat(item.chat, item.project).then(() => { if (fromKeyboard) props.onHandToComposer(); });
-      else if (item.type === "project") void props.onOpenProject(item.project);
+      if (item.type === "chat") void props.onOpenChat(item.chat, item.project).then(enterPane);
+      else if (item.type === "project") void props.onOpenProject(item.project).then(enterPane);
       else props.onOpenPty(item.terminal);
     };
     const label = () => item.type === "chat" ? chatTitle(item.chat)
@@ -1167,7 +1169,7 @@ export function Sidebar(props: {
       <div ref={sidebarSurface} data-slot="sidebar-container" class="sidebar-container">
         <div data-sidebar="header">
           <Button variant="ghost" size="icon-sm" data-sidebar="trigger" aria-label="Toggle Sidebar" aria-expanded={isMobileLayout() ? props.mobileOpen : !collapsed()} onClick={onSidebarTrigger}><PanelLeftIcon /></Button>
-          <button data-sidebar="brand" aria-label="Conduit" onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); }}><span>Conduit</span></button>
+          <button data-sidebar="brand" aria-label="Conduit" onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }}><span>Conduit</span></button>
           <div class="sidebar-area-toggle" data-area={area()} role="group" aria-label="Sidebar section">
             <button type="button" aria-label="Conduit" title="Conduit" aria-pressed={area() === "conduit"} onClick={() => setArea("conduit")}><LayoutDashboardIcon /></button>
             <button type="button" aria-label="Computer" title="Computer" aria-pressed={area() === "computer"} onClick={() => setArea("computer")}><MonitorIcon /></button>
@@ -1176,7 +1178,7 @@ export function Sidebar(props: {
         <div ref={sidebarList} data-sidebar="content" class="sidebar-content">
           <div data-sidebar="rail-actions" class="sidebar-rail-actions" aria-label="Quick navigation">
             <Show when={area() === "computer"}>
-            <RailAction label="Computer" current={props.computer} onClick={() => { setArea("computer"); closeMobile(); props.onOpenComputer(); }}><MonitorIcon /></RailAction>
+            <RailAction label="Computer" current={props.computer} onClick={() => { setArea("computer"); closeMobile(); props.onOpenComputer(); enterPane(); }}><MonitorIcon /></RailAction>
             <RailAction label="New workspace" onClick={() => openNewDialog("workspace")}><FolderPlusIcon /></RailAction>
             <RailAction label="Terminal View" current={props.terminal} onClick={() => { setArea("computer"); closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /></RailAction>
             <Show when={railWorkspaces().length}>
@@ -1185,13 +1187,13 @@ export function Sidebar(props: {
                   label={project.name}
                   current={railProjectIsActive(project)}
                   live={railProjectIsLive(project)}
-                  onClick={() => { setArea("computer"); closeMobile(); void props.onOpenProject(project); }}
+                  onClick={() => { setArea("computer"); closeMobile(); void props.onOpenProject(project).then(enterPane); }}
                 ><WorkspaceGlyph appearance={project.workspaceAppearance} /></RailAction>}</For>
               </div>
             </Show>
             </Show>
             <Show when={area() === "conduit"}>
-            <RailAction label="Conduit Dashboard" current={props.dashboard} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); }}><LayoutDashboardIcon /></RailAction>
+            <RailAction label="Conduit Dashboard" current={props.dashboard} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }}><LayoutDashboardIcon /></RailAction>
             <RailAction label="New chat" onClick={() => startNewChat()}><MessageSquarePlusIcon /></RailAction>
             <RailAction label="New project" onClick={() => openNewDialog("folder")}><FolderPlusIcon /></RailAction>
             <Show when={railFolders().length}>
@@ -1200,7 +1202,7 @@ export function Sidebar(props: {
                   label={`Project: ${project.name}`}
                   current={railProjectIsActive(project)}
                   live={railProjectIsLive(project)}
-                  onClick={() => { setArea("conduit"); closeMobile(); void props.onOpenProject(project); }}
+                  onClick={() => { setArea("conduit"); closeMobile(); void props.onOpenProject(project).then(enterPane); }}
                 ><FolderIcon /></RailAction>}</For>
               </div>
             </Show>
@@ -1209,19 +1211,19 @@ export function Sidebar(props: {
                 label={`Chat: ${chatTitle(item.chat)}`}
                 current={props.selectedId === item.chat.id}
                 live={Boolean(processFor(item.chat))}
-                onClick={() => { setArea("conduit"); closeMobile(); void props.onOpenChat(item.chat, item.project); }}
+                onClick={() => { setArea("conduit"); closeMobile(); void props.onOpenChat(item.chat, item.project).then(enterPane); }}
               ><MessageSquareIcon /></RailAction>}</For>
             </div>
             </Show>
           </div>
           <Show when={area() === "computer"}>
-            <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.computer ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenComputer(); }}><MonitorIcon /><span>Files</span></button>
+            <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.computer ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenComputer(); enterPane(); }}><MonitorIcon /><span>Files</span></button>
             <button type="button" class="sidebar-row sidebar-dashboard" onClick={() => openNewDialog("workspace")}><FolderPlusIcon /><span>New workspace</span></button>
             <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.terminal ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /><span>Terminal View</span><span class="sidebar-action-slot"><ExternalLinkIcon class="sidebar-route-indicator" /></span></button>
             <Show when={harnesses().length}>
               <div class="sidebar-harness-tiles">
                 <For each={harnesses()}>{(harness) =>
-                  <button type="button" class="sidebar-harness-tile" aria-current={props.selectedHarness === harness.id ? "page" : undefined} aria-label={`${harness.label} · ${harnessStatusLabel(harness.status)}`} title={`${harness.label} · ${harnessStatusLabel(harness.status)}`} onClick={() => { closeMobile(); props.onOpenHarness(harness.id); }}>
+                  <button type="button" class="sidebar-harness-tile" aria-current={props.selectedHarness === harness.id ? "page" : undefined} aria-label={`${harness.label} · ${harnessStatusLabel(harness.status)}`} title={`${harness.label} · ${harnessStatusLabel(harness.status)}`} onClick={() => { closeMobile(); props.onOpenHarness(harness.id); enterPane(); }}>
                     <HarnessMark id={harness.id} class="sidebar-harness-mark" artwork />
                     <i class="sidebar-harness-status" data-status={harness.status || "ready"} aria-hidden="true" />
                   </button>
@@ -1236,7 +1238,7 @@ export function Sidebar(props: {
             </section>
           </Show>
           <Show when={area() === "conduit"}>
-            <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.dashboard ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenDashboard(); }}>
+            <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.dashboard ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenDashboard(); enterPane(); }}>
               <LayoutDashboardIcon />
               <span>Conduit Dashboard</span>
             </button>
