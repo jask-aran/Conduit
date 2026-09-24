@@ -1494,6 +1494,13 @@ function App() {
     if (document.querySelector(".composer textarea") && attempt < 20) setTimeout(() => settleFocus(attempt + 1), 100);
   };
   createEffect(on([routeKind, () => catalogue.selectedId()], () => requestAnimationFrame(() => settleFocus()), { defer: true }));
+  // Enter on a sidebar chat opens it to write in: focus follows to its
+  // composer once the composer can take it, unless something else has moved it.
+  const handToComposer = (from = document.activeElement, attempt = 0) => {
+    if (isMobileLayout() || document.activeElement !== from) return;
+    if (hasComposer()) return focusComposer();
+    if (attempt < 20) setTimeout(() => handToComposer(from, attempt + 1), 100);
+  };
   // Ctrl+Shift+1: open a collapsed sidebar and focus it; never close it --
   // Ctrl+B stays the toggle.
   const goToSidebar = () => {
@@ -2413,7 +2420,7 @@ function App() {
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
-      onNewChat={async (project) => { await createChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={openChat} onOpenProject={openProject} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
+      onNewChat={async (project) => { await createChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={openChat} onFocusMainPane={focusMainPane} onHandToComposer={() => handToComposer()} onOpenProject={openProject} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
       onOpenProjectMaximized={openProjectWithMaximizedWorkspace}
       onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}

@@ -660,7 +660,15 @@ the go-to chords are shown as the way out.
 4. **Cursor navigation per surface:** sidebar, then dashboard lists, then
    transcript turns. First, because it is what gives regions actions of
    their own -- rename, pin, move on a row -- and without them the leader
-   has little to show.
+   has little to show. The sidebar is built (`navigation/sidebar-cursor.ts`):
+   the cursor is the focused row; ↑/↓, Home/End; → opens a project then
+   steps in, ← steps out then closes; Esc clears a selection, steps out,
+   then goes home to the composer; Shift+↑/↓ selects chats as washes; Menu
+   or Shift+F10 opens the row's menu; Enter on a chat opens it with focus in
+   its composer. The pointer moving over a row takes the cursor there; while
+   the keyboard leads, a row under a still pointer draws at rest. Tab still
+   visits every row; roving focus, so Tab leaves the list in one press, is
+   left to decide in use.
 5. **The leader redesign.** The popup takes the question and permission
    takeover's material and row shape, and where it sits is decided per
    screen: over the composer when there is one, else anchored to the focused
