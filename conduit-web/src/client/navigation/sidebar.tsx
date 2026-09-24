@@ -1018,7 +1018,7 @@ export function Sidebar(props: {
             <span>{blockProps.project.name}</span>
             <Show when={cloning()}><span class="workspace-cloning-badge"><LoaderCircleIcon />Cloning</span></Show>
           </button>
-          <button class="sidebar-project-toggle" aria-label={`${open() ? "Collapse" : "Expand"} chat list`} title={`${open() ? "Collapse" : "Expand"} ${blockProps.project.name}`} aria-expanded={open()} onClick={(event) => {
+          <button class="sidebar-project-toggle" tabIndex={-1} aria-label={`${open() ? "Collapse" : "Expand"} chat list`} title={`${open() ? "Collapse" : "Expand"} ${blockProps.project.name}`} aria-expanded={open()} onClick={(event) => {
             event.stopPropagation();
             toggleProject(blockProps.project.id);
           }}>
