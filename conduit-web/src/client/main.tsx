@@ -68,6 +68,8 @@ import { createRuntimeStore } from "./state/runtime";
 import { VoiceWaveform } from "./chat/voice-waveform";
 import { browserShortcutEnvironmentProvider } from "./shortcuts/shortcut-environment";
 import { ShortcutManager } from "./shortcuts/shortcut-manager";
+import { isShortcutRegion } from "./shortcuts/shortcut-types";
+import { acknowledgeRegion } from "./shortcuts/region-cue";
 import { globalShortcuts } from "./shortcuts/global-shortcuts";
 import { dropScope, migrateWorkspacePanelStorage, readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace/workspace-panel-storage";
 import { publishUiPreference, saveUiPreference, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
@@ -1359,7 +1361,7 @@ function App() {
     document.querySelector<HTMLTextAreaElement>(".composer textarea:not([disabled])")?.focus({ preventScroll: true });
   };
   const focusChatPane = () => {
-    const target = document.querySelector<HTMLElement>('.chat-main[data-shortcut-scope="chat"]');
+    const target = document.querySelector<HTMLElement>(".chat-main");
     if (target) {
       target.focus({ preventScroll: true });
       return;
@@ -1373,7 +1375,7 @@ function App() {
     setWorkspaceFocusRequest((request) => request + 1);
   };
   const toggleChatWorkspaceFocus = () => {
-    const inWorkspacePanel = document.activeElement instanceof Element && Boolean(document.activeElement.closest('[data-shortcut-scope="workspace-panel"]'));
+    const inWorkspacePanel = document.activeElement instanceof Element && Boolean(document.activeElement.closest('[data-region="workspace-panel"]'));
     if (inWorkspacePanel) focusChatPane();
     else if (panelOpen()) focusWorkspacePanel();
     else focusChatPane();
@@ -2065,29 +2067,49 @@ function App() {
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "chat", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "composer", toggleChatWorkspaceFocus),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "workspace-panel", toggleChatWorkspaceFocus),
+      // A dashboard is the chat's sibling region and keeps what the main pane
+      // could do there before regions had names.
+      shortcutManager.registerHandler(COMMAND_IDS.stashPrompt, "dashboard", stashPrompt),
+      shortcutManager.registerHandler(COMMAND_IDS.focusComposer, "dashboard", focusComposer, { when: hasComposer }),
+      shortcutManager.registerHandler(COMMAND_IDS.focusWorkspacePanel, "dashboard", focusWorkspacePanel, { when: () => Boolean(workspacePanelScope()) }),
+      shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "dashboard", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
     ];
     const uninstallShortcuts = shortcutManager.install(window);
     window.addEventListener("keydown", dismissOpenLayer, { capture: true });
-    let releaseFocusedContext: (() => void) | undefined;
+    // The regions around focus, innermost first, each an active context: focus
+    // in the composer makes composer, chat and application active in that
+    // order (SHORTCUT_REGION_PARENTS). A closed workspace panel is not a place.
+    let releaseFocusedContexts: Array<() => void> = [];
+    let enteredRegion: Element | null = null;
+    let keyboardLed = false;
     const syncFocusedShortcutContext = (target: EventTarget | null) => {
-      releaseFocusedContext?.();
-      releaseFocusedContext = undefined;
-      if (!(target instanceof Element)) return;
-      if (target.closest('[data-shortcut-scope="workspace-panel"]') && panelOpen()) {
-        releaseFocusedContext = shortcutManager.activateContext("workspace-panel");
-      } else if (target.closest(".composer")) {
-        releaseFocusedContext = shortcutManager.activateContext("composer");
-      } else if (target.closest('[data-shortcut-scope="chat"]')) {
-        releaseFocusedContext = shortcutManager.activateContext("chat");
+      for (const release of releaseFocusedContexts) release();
+      releaseFocusedContexts = [];
+      const regions: Array<{ name: string; element: Element }> = [];
+      for (let node = target instanceof Element ? target.closest("[data-region]") : null; node; node = node.parentElement?.closest("[data-region]") ?? null) {
+        const name = node.getAttribute("data-region");
+        if (isShortcutRegion(name) && (name !== "workspace-panel" || panelOpen())) regions.push({ name, element: node });
       }
+      releaseFocusedContexts = regions.map((region) => shortcutManager.activateContext(region.name));
+      // Arriving in another top-level region from the keyboard, the region
+      // says so; a click already shows where it went.
+      const outermost = regions.at(-1)?.element ?? null;
+      if (outermost !== enteredRegion && outermost && keyboardLed) acknowledgeRegion(outermost);
+      enteredRegion = outermost;
     };
     const onFocusIn = (event: FocusEvent) => syncFocusedShortcutContext(event.target);
+    const onKeyLead = () => { keyboardLed = true; };
+    const onPointerLead = () => { keyboardLed = false; };
     window.addEventListener("focusin", onFocusIn);
+    window.addEventListener("keydown", onKeyLead, { capture: true });
+    window.addEventListener("pointerdown", onPointerLead, { capture: true });
     syncFocusedShortcutContext(document.activeElement);
     onCleanup(() => {
       window.removeEventListener("keydown", dismissOpenLayer, true);
       window.removeEventListener("focusin", onFocusIn);
-      releaseFocusedContext?.();
+      window.removeEventListener("keydown", onKeyLead, true);
+      window.removeEventListener("pointerdown", onPointerLead, true);
+      for (const release of releaseFocusedContexts) release();
       uninstallShortcuts();
       for (const release of releaseShortcutHandlers) release();
       releaseApplicationContext();
@@ -2298,7 +2320,7 @@ function App() {
       }} />
     </Modal>
     <div class="workspace-layout">
-    <main data-slot="sidebar-inset" data-shortcut-scope="chat" tabIndex={-1} onPointerDown={focusChatSurface} class={`chat-main${routeKind() === "chat" && emptyChat() ? " chat-main-empty" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
+    <main data-slot="sidebar-inset" data-region={routeKind() === "chat" ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} class={`chat-main${routeKind() === "chat" && emptyChat() ? " chat-main-empty" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
         : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : "Loading chat…"}</div>}>
