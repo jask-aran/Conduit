@@ -271,23 +271,22 @@ test("dispatches registry commands from their focused scopes", () => {
     const binding = getCommandDefinition(commandId).defaultBindings[0];
     for (const stroke of binding.strokes) assert.equal(manager.handleKeydown(keyEventForStroke(stroke)), true);
   };
-  // Both forms of each surface toggle -- the conventional key and the
-  // numbered chord -- reach it from inside another region.
-  const runEveryBinding = (commandId) => {
-    for (const binding of getCommandDefinition(commandId).defaultBindings) {
-      for (const stroke of binding.strokes) assert.equal(manager.handleKeydown(keyEventForStroke(stroke)), true);
-    }
-  };
+  // The toggles and the numbered go-to chords reach their surface from
+  // inside another region.
   const composerRelease = manager.activateContext("composer");
   runFromBinding(COMMAND_IDS.openCommandPalette);
   runFromBinding(COMMAND_IDS.maximizeWorkspacePanel);
-  runEveryBinding(COMMAND_IDS.toggleSidebar);
-  runEveryBinding(COMMAND_IDS.toggleWorkspacePanel);
+  runFromBinding(COMMAND_IDS.toggleSidebar);
+  runFromBinding(COMMAND_IDS.toggleWorkspacePanel);
+  runFromBinding(COMMAND_IDS.focusSidebar);
+  runFromBinding(COMMAND_IDS.focusMainPane);
+  runFromBinding(COMMAND_IDS.focusWorkspacePanel);
   composerRelease();
 
-  // The leader acts within a region: it no longer moves between them.
-  for (const id of [COMMAND_IDS.focusComposer, COMMAND_IDS.focusWorkspacePanel, COMMAND_IDS.focusTranscript, COMMAND_IDS.toggleChatWorkspaceFocus]) {
-    assert.deepEqual(getCommandDefinition(id).defaultBindings, [], `${id} has no default leader key`);
+  // The leader acts within a region: nothing that moves between them has a
+  // leader key.
+  for (const id of [COMMAND_IDS.focusComposer, COMMAND_IDS.focusSidebar, COMMAND_IDS.focusMainPane, COMMAND_IDS.focusWorkspacePanel, COMMAND_IDS.focusTranscript, COMMAND_IDS.toggleChatWorkspaceFocus]) {
+    assert.ok(getCommandDefinition(id).defaultBindings.every((binding) => binding.strokes.length === 1), `${id} has no leader key`);
   }
 
   const workspaceRelease = manager.activateContext("workspace-panel");
@@ -303,9 +302,10 @@ test("dispatches registry commands from their focused scopes", () => {
     `application:${COMMAND_IDS.openCommandPalette}`,
     `application:${COMMAND_IDS.maximizeWorkspacePanel}`,
     `application:${COMMAND_IDS.toggleSidebar}`,
-    `application:${COMMAND_IDS.toggleSidebar}`,
     `application:${COMMAND_IDS.toggleWorkspacePanel}`,
-    `application:${COMMAND_IDS.toggleWorkspacePanel}`,
+    `application:${COMMAND_IDS.focusSidebar}`,
+    `application:${COMMAND_IDS.focusMainPane}`,
+    `composer:${COMMAND_IDS.focusWorkspacePanel}`,
     `workspace-panel:${COMMAND_IDS.workspaceFiles}`,
     `workspace-panel:${COMMAND_IDS.workspaceSourceControl}`,
     `workspace-panel:${COMMAND_IDS.workspaceArtifacts}`,
