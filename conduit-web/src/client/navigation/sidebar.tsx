@@ -1189,6 +1189,7 @@ export function Sidebar(props: {
           </div>
           <Show when={area() === "computer"}>
             <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.computer ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenComputer(); }}><MonitorIcon /><span>Files</span></button>
+            <button type="button" class="sidebar-row sidebar-dashboard" onClick={() => openNewDialog("workspace")}><FolderPlusIcon /><span>New workspace</span></button>
             <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.terminal ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /><span>Terminal View</span><span class="sidebar-action-slot"><ExternalLinkIcon class="sidebar-route-indicator" /></span></button>
             <Show when={harnesses().length}>
               <div class="sidebar-harness-tiles">
@@ -1200,7 +1201,7 @@ export function Sidebar(props: {
                 }</For>
               </div>
             </Show>
-            <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" addLabel="New workspace" onAdd={() => openNewDialog("workspace")} />
+            <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" />
             <section class="sidebar-group">
               <div class="sidebar-group-header"><div data-sidebar="group-label">Terminals</div></div>
               <For each={terminals()}>{(terminal) => <TerminalRow terminal={terminal} />}</For>
@@ -1216,13 +1217,17 @@ export function Sidebar(props: {
               <MessageSquarePlusIcon />
               <span>New chat</span>
             </button>
+            <button type="button" class="sidebar-row sidebar-dashboard" onClick={() => openNewDialog("folder")}>
+              <FolderPlusIcon />
+              <span>New project</span>
+            </button>
             <Show when={pinnedItems().length}>
               <section class="sidebar-group">
                 <div class="sidebar-group-header"><div data-sidebar="group-label">Pinned</div></div>
                 <For each={pinnedItems()}>{(item) => <PinnedRow item={item} />}</For>
               </section>
             </Show>
-            <Group label="Projects" projects={folders()} emptyLabel="No projects" addLabel="New folder" onAdd={() => openNewDialog("folder")} />
+            <Group label="Projects" projects={folders()} emptyLabel="No projects" />
             <Group label="Chats" projects={[]} chatRoot={chats()} />
           </Show>
         </div>
