@@ -1477,8 +1477,21 @@ function App() {
     }
     focusComposer();
   };
+  // Only the go-to-region shortcuts light a region (its bottom line, and the
+  // arrival cue). Focus moving any other way -- a click, Tab, a menu handing
+  // it back -- says nothing, so nothing lights by accident.
+  let regionJumpAt = -Infinity;
+  let regionJumpTo: readonly string[] = [];
+  let heldRegionSync: ((target: EventTarget | null) => void) | undefined;
+  const markRegionJump = (to: readonly string[]) => {
+    regionJumpAt = performance.now();
+    regionJumpTo = to;
+    // Already there, focus may not move at all; look again once it has settled.
+    requestAnimationFrame(() => requestAnimationFrame(() => heldRegionSync?.(document.activeElement)));
+  };
   const focusWorkspacePanel = () => {
     if (!workspacePanelScope()) return;
+    markRegionJump(["workspace-panel"]);
     if (isMobileLayout()) setMobileSidebarOpen(false);
     if (!panelOpen()) setPanelOpenForChat(true);
     setWorkspaceFocusRequest((request) => request + 1);
@@ -1516,6 +1529,7 @@ function App() {
     if (document.querySelector(".composer textarea") && attempt < 20) setTimeout(() => enterMainPane(attempt + 1, pane), 100);
   };
   const focusMainPane = () => {
+    markRegionJump(["chat", "dashboard", "terminal"]);
     if (isMobileLayout()) setMobileSidebarOpen(false);
     enterMainPane();
   };
@@ -1533,6 +1547,7 @@ function App() {
   // Ctrl+Shift+1: open a collapsed sidebar and focus it; never close it --
   // Ctrl+B stays the toggle.
   const goToSidebar = () => {
+    markRegionJump(["sidebar"]);
     const collapsed = document.querySelector('[data-region="sidebar"]')?.getAttribute("data-state") === "collapsed";
     if (!isMobileLayout() && collapsed) runSidebar("toggle-sidebar");
     focusSidebar();
@@ -2260,7 +2275,6 @@ function App() {
     // order (SHORTCUT_REGION_PARENTS). A closed workspace panel is not a place.
     let releaseFocusedContexts: Array<() => void> = [];
     let enteredRegion: Element | null = null;
-    let keyboardLed = false;
     const syncFocusedShortcutContext = (target: EventTarget | null) => {
       for (const release of releaseFocusedContexts) release();
       releaseFocusedContexts = [];
@@ -2270,29 +2284,29 @@ function App() {
         if (isShortcutRegion(name) && (name !== "workspace-panel" || panelOpen())) regions.push({ name, element: node });
       }
       releaseFocusedContexts = regions.map((region) => shortcutManager.activateContext(region.name));
-      // The top-level region holding focus is marked (its bottom edge lit),
-      // and kept while focus is somewhere no region is -- a menu, a dialog --
-      // so it does not flicker away and back. Arriving in another from the
-      // keyboard, the region says so; a click already shows where it went.
+      // The top-level region reached by a go-to-region shortcut is marked (its
+      // bottom edge lit) and the arrival cued; the mark stays while focus is
+      // somewhere no region is -- a menu, a dialog -- or elsewhere in it, and
+      // goes when focus reaches another region any other way.
       const outermost = regions.at(-1)?.element ?? null;
-      if (!outermost || outermost === enteredRegion) return;
+      if (!outermost) return;
+      const jumped = performance.now() - regionJumpAt < 1500 && regionJumpTo.includes(regions.at(-1)!.name);
+      if (outermost === enteredRegion && !jumped) return;
       enteredRegion?.removeAttribute("data-focus-held");
-      outermost.setAttribute("data-focus-held", "");
-      if (keyboardLed) acknowledgeRegion(outermost);
       enteredRegion = outermost;
+      if (!jumped) return;
+      regionJumpAt = -Infinity;
+      outermost.setAttribute("data-focus-held", "");
+      acknowledgeRegion(outermost);
     };
+    heldRegionSync = syncFocusedShortcutContext;
     const onFocusIn = (event: FocusEvent) => syncFocusedShortcutContext(event.target);
-    const onKeyLead = () => { keyboardLed = true; };
-    const onPointerLead = () => { keyboardLed = false; };
     window.addEventListener("focusin", onFocusIn);
-    window.addEventListener("keydown", onKeyLead, { capture: true });
-    window.addEventListener("pointerdown", onPointerLead, { capture: true });
     syncFocusedShortcutContext(document.activeElement);
     onCleanup(() => {
+      heldRegionSync = undefined;
       window.removeEventListener("keydown", dismissOpenLayer, true);
       window.removeEventListener("focusin", onFocusIn);
-      window.removeEventListener("keydown", onKeyLead, true);
-      window.removeEventListener("pointerdown", onPointerLead, true);
       for (const release of releaseFocusedContexts) release();
       uninstallShortcuts();
       for (const release of releaseShortcutHandlers) release();
