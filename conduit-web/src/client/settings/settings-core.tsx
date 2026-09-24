@@ -38,6 +38,8 @@ import {
 } from "../chat/transcript-appearance";
 import type { CodeBlockCollapseMode } from "../chat/code-block";
 import { ShortcutsSettings } from "./shortcuts-settings";
+import { createAutosave, type SaveState } from "./autosave";
+import { SaveStatus } from "./save-status";
 
 const sectionGroups = [
   { label: "Personal", sections: [{ id: "ui", label: "Appearance", icon: MonitorIcon }, { id: "shortcuts", label: "Shortcuts", icon: KeyboardIcon }] },
@@ -159,10 +161,21 @@ const sameVoiceDraft = (left: VoiceDictationSettings, right: VoiceDictationSetti
   && left.inputDeviceId === right.inputDeviceId
   && left.captureProfile === right.captureProfile
   && left.warmMicrophone === right.warmMicrophone;
-const sameRuntime = (left: RuntimeSettings | null, right: RuntimeSettings | null) => Boolean(left && right
-  && left.maxLiveProcesses === right.maxLiveProcesses
-  && left.maxGeneratingProcesses === right.maxGeneratingProcesses
-  && left.idleProcessTtlMs === right.idleProcessTtlMs);
+// The runtime fields as typed, checked against the ranges the server keeps
+// them in (runtime-settings.js), which it would otherwise clamp to silently.
+type RuntimeDraft = { live: string; generating: string; ttl: string };
+const RUNTIME_LIMITS = { live: [1, 32], generating: [1, 8], ttl: [30, 3600] } as const;
+const runtimeDraftOf = (settings: RuntimeSettings): RuntimeDraft => ({
+  live: String(settings.maxLiveProcesses),
+  generating: String(settings.maxGeneratingProcesses),
+  ttl: String(Math.round(settings.idleProcessTtlMs / 1000)),
+});
+const runtimeFieldError = (draft: RuntimeDraft, field: keyof RuntimeDraft) => {
+  const [min, max] = RUNTIME_LIMITS[field];
+  const text = draft[field].trim();
+  const value = Number(text);
+  return text && Number.isInteger(value) && value >= min && value <= max ? "" : `A whole number from ${min} to ${max}`;
+};
 const preserveVoiceServerDraft = (loaded: VoiceServerSettings, previous: VoiceServerSettings, preserveDraft: boolean): VoiceServerSettings => ({
   ...loaded,
   localModelId: previous.localModelId,
@@ -251,11 +264,13 @@ export function Settings(props: {
   /** The list is a screen of its own only when there is no room for both. */
   const showingIndex = () => narrow() && browsingSections();
   const [runtime, setRuntime] = createSignal<RuntimeSettings | null>(null);
-  const [runtimeBaseline, setRuntimeBaseline] = createSignal<RuntimeSettings | null>(null);
+  const [runtimeDraft, setRuntimeDraft] = createSignal<RuntimeDraft>({ live: "", generating: "", ttl: "" });
   const [runtimeStatus, setRuntimeStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
   const [runtimeError, setRuntimeError] = createSignal("");
-  const [runtimeEdited, setRuntimeEdited] = createSignal(false);
-  const [runtimeSaving, setRuntimeSaving] = createSignal(false);
+  const runtimeAutosave = createAutosave<RuntimeSettings>({
+    save: (value) => api<RuntimeSettings>("/v0/runtime/settings", { method: "PATCH", body: JSON.stringify(value) }),
+    onSaved: (saved) => { setRuntime(saved); setRuntimeDraft(runtimeDraftOf(saved)); },
+  });
   const [sessionNameModel, setSessionNameModel] = createSignal("");
   const [sessionNameThinkingLevel, setSessionNameThinkingLevel] = createSignal("off");
   const [generalLoading, setGeneralLoading] = createSignal(false);
@@ -445,11 +460,12 @@ export function Settings(props: {
     setRuntimeStatus("loading");
     setRuntimeError("");
     try {
+      // A save sent on leaving lands first, so coming back shows it.
+      await runtimeAutosave.flush();
       const loaded = await api<RuntimeSettings>("/v0/runtime/settings");
       if (request !== runtimeRequest) return;
       setRuntime(loaded);
-      setRuntimeBaseline({ ...loaded });
-      setRuntimeEdited(false);
+      if (!runtimeAutosave.busy()) setRuntimeDraft(runtimeDraftOf(loaded));
       setRuntimeStatus("ready");
     } catch (error) {
       if (request !== runtimeRequest) return;
@@ -1010,20 +1026,24 @@ export function Settings(props: {
     props.onContextMetricsChange(next);
   };
 
-  const updateRuntime = (next: RuntimeSettings) => { setRuntime(next); setRuntimeEdited(true); setRuntimeError(""); };
-  const runtimeDirty = createMemo(() => runtimeEdited() && !sameRuntime(runtime(), runtimeBaseline()));
-  const saveRuntime = async () => {
-    if (!runtime()) return;
-    setRuntimeSaving(true);
-    setRuntimeError("");
-    try {
-      const saved = await api<RuntimeSettings>("/v0/runtime/settings", { method: "PATCH", body: JSON.stringify(runtime()) });
-      setRuntime(saved);
-      setRuntimeBaseline({ ...saved });
-      setRuntimeEdited(false);
-    } catch (error) { setRuntimeError((error as Error).message); }
-    finally { setRuntimeSaving(false); }
+  const editRuntime = (field: keyof RuntimeDraft, text: string) => {
+    const draft = { ...runtimeDraft(), [field]: text };
+    setRuntimeDraft(draft);
+    if ((["live", "generating", "ttl"] as const).some((key) => runtimeFieldError(draft, key))) return runtimeAutosave.hold();
+    runtimeAutosave.edit({ maxLiveProcesses: Number(draft.live), maxGeneratingProcesses: Number(draft.generating), idleProcessTtlMs: Number(draft.ttl) * 1000 });
   };
+  // Leaving the section or closing Settings sends what is waiting rather than
+  // dropping it; a failure nobody is looking at any more is said in a toast.
+  const flushRuntime = () => void runtimeAutosave.flush().then(() => {
+    const state = runtimeAutosave.state();
+    if (state.kind === "failed" && !(props.open && section() === "runtime")) toast.error(`Runtime settings not saved: ${state.message}`);
+  });
+  createEffect(on(() => props.open && section() === "runtime", (showing, wasShowing) => { if (wasShowing && !showing) flushRuntime(); }));
+  // The header says how the section's edits stand: saving, saved, or not
+  // saved with Retry. Sections that still have their own Save say nothing.
+  const saveState = (): { state: SaveState; retry: () => void } | null => section() === "runtime"
+    ? { state: runtimeAutosave.state(), retry: runtimeAutosave.retry }
+    : null;
 
   return <KDialog.Root open={props.open} onOpenChange={props.onOpenChange}>
     <KDialog.Portal><KDialog.Content data-state={props.open ? "open" : "closed"} class="settings-dialog" onEscapeKeyDown={dismissEscape} onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}>
@@ -1046,6 +1066,7 @@ export function Settings(props: {
               <Button variant="ghost" size="icon-sm" class="settings-back" aria-label="All settings" onClick={() => setBrowsingSections(true)}><ChevronLeftIcon aria-hidden="true" /></Button>
             </Show>
             <h2>{label(section())}</h2>
+            <SaveStatus status={saveState()} />
             <Button variant="ghost" size="icon-sm" class="settings-close" aria-label="Close" onClick={() => props.onOpenChange(false)}><XIcon aria-hidden="true" /></Button>
           </header>
           <Show when={section() === "models"}><Show when={!props.templatesLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading profiles…</span></div>}><section class="settings-section-block"><FieldGroup>
@@ -1202,11 +1223,9 @@ export function Settings(props: {
           <Show when={section() === "runtime"}>
             <Show when={runtimeStatus() === "ready" && runtime()} fallback={<Show when={runtimeStatus() === "error"} fallback={<div class="settings-loading"><Spinner /><span>Loading runtime settings…</span></div>}><div role="alert" class="settings-error"><span>{runtimeError() || "Runtime settings could not be loaded."}</span><Button variant="outline" size="sm" onClick={() => void loadRuntime()}>Retry</Button></div></Show>}>
               <FieldGroup class="settings-control-grid">
-                <Field><FieldLabel for="warm-processes">Warm processes</FieldLabel><Input id="warm-processes" type="number" value={runtime()!.maxLiveProcesses} onInput={(event) => updateRuntime({ ...runtime()!, maxLiveProcesses: Number(event.currentTarget.value) })} /><small>{runtime()!.liveCount || 0} live now</small></Field>
-                <Field><FieldLabel for="generations">Concurrent generations</FieldLabel><Input id="generations" type="number" value={runtime()!.maxGeneratingProcesses} onInput={(event) => updateRuntime({ ...runtime()!, maxGeneratingProcesses: Number(event.currentTarget.value) })} /><small>{runtime()!.generatingCount || 0} generating</small></Field>
-                <Field><FieldLabel for="idle-ttl">Idle TTL (seconds)</FieldLabel><Input id="idle-ttl" type="number" value={Math.round(runtime()!.idleProcessTtlMs / 1000)} onInput={(event) => updateRuntime({ ...runtime()!, idleProcessTtlMs: Number(event.currentTarget.value) * 1000 })} /></Field>
-                <Show when={runtimeError()}><p role="alert" class="settings-inline-error">{runtimeError()}</p></Show>
-                <Button variant="outline" disabled={!runtimeDirty() || runtimeSaving()} onClick={() => void saveRuntime()}>{runtimeSaving() ? <Spinner /> : null}Save runtime settings</Button>
+                <Field><FieldLabel for="warm-processes">Warm processes</FieldLabel><Input id="warm-processes" type="number" inputMode="numeric" value={runtimeDraft().live} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "live")) || undefined} onInput={(event) => editRuntime("live", event.currentTarget.value)} /><Show when={runtimeFieldError(runtimeDraft(), "live")} fallback={<small>{runtime()!.liveCount || 0} live now</small>}>{(message) => <small class="settings-inline-error">{message()}</small>}</Show></Field>
+                <Field><FieldLabel for="generations">Concurrent generations</FieldLabel><Input id="generations" type="number" inputMode="numeric" value={runtimeDraft().generating} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "generating")) || undefined} onInput={(event) => editRuntime("generating", event.currentTarget.value)} /><Show when={runtimeFieldError(runtimeDraft(), "generating")} fallback={<small>{runtime()!.generatingCount || 0} generating</small>}>{(message) => <small class="settings-inline-error">{message()}</small>}</Show></Field>
+                <Field><FieldLabel for="idle-ttl">Idle TTL (seconds)</FieldLabel><Input id="idle-ttl" type="number" inputMode="numeric" value={runtimeDraft().ttl} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "ttl")) || undefined} onInput={(event) => editRuntime("ttl", event.currentTarget.value)} /><Show when={runtimeFieldError(runtimeDraft(), "ttl")}>{(message) => <small class="settings-inline-error">{message()}</small>}</Show></Field>
               </FieldGroup>
             </Show>
             <details class="settings-disclosure"><summary><span><ActivityIcon /><strong>Pi installation</strong><small>{props.installations[0]?.available ? "Ready" : "Unavailable"}</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary><Show when={!props.installationsLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading Pi installation…</span></div>}><div class="installations"><For each={props.installations}>{(item) => <article><h3>{item.label}</h3><p>{item.available ? item.version ? `Pi ${item.version}` : "Available" : item.reason || (item as Installation & { error?: string }).error || "Unavailable"}</p></article>}</For></div></Show></details>

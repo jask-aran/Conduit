@@ -3,8 +3,8 @@
 Status: sections 1 (interrupted turns), 2 (composer hierarchy), 5 (empty
 states, reduced) and 7 (motion, but for the deferred dashboard transition)
 are built and recorded below as built, as is 8 (keyboard) but for what waits
-on the dashboard redesign and transcript mode; 3 and 4 remain proposals for
-separate, bounded changes, and 6 goes on surface by surface.
+on the dashboard redesign and transcript mode; 3 (autosave) is piloted on
+Runtime; 4 remains a proposal, and 6 goes on surface by surface.
 
 These proposals cover transcript density, composer hierarchy, mobile file
 browsing, useful empty states, and interaction feedback. A separate autosave
@@ -304,6 +304,28 @@ state, so nothing beside it moves:
   takeover in `DESIGN.md`, and the whole composer leaves.
 
 ## 3. Move settings towards autosave
+
+Status: piloted on **Runtime**, whose three number fields cover the hard
+cases -- typing, values out of range, a server that could refuse. Its Save
+button is gone. `settings/autosave.ts` holds the rules below: a valid edit
+is sent after a 600ms pause (a toggle or choice would go at once), one
+request at a time so an older value never lands after a newer one; "Saved"
+only once the latest edit is stored; a failure keeps the edit and waits for
+Retry. A value out of the server's range (which it would clamp silently) is
+held back with the range under the field, and nothing claims to be saved.
+The feedback sits in the section's own header, beside the close button
+(`settings/save-status.tsx`): a small spinner and "Saving", then "Saved",
+or "Not saved" and Retry in the danger colour. Leaving the section or
+closing Settings sends what is waiting; if that fails where nobody is
+looking, a toast says so. Checked in the browser: three quick edits sent one
+request with the last value; an out-of-range value sent nothing; leaving at
+once still saved. Not yet exercised: a failing save (the path is there).
+
+Next, in turn: the sections that already save on change with no feedback
+(default profile, session naming, context metrics, shortcuts, appearance)
+take the header status; then Voice and Prompts, which still have their own
+Save. The prompt editor is a document rather than a setting and may keep
+an explicit save. Credentials (API keys, sign-in) are actions, not settings.
 
 The desired direction is automatic saving whenever a setting changes, with
 feedback in the top bar. This replaces the narrower server-settings proposal.
