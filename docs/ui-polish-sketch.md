@@ -661,8 +661,10 @@ the go-to chords are shown as the way out.
    open), Ctrl+Shift+2, and a route change that drops focus. Actions with a
    target of their own -- a dialog, the palette, a terminal -- keep it. Not
    on a phone from a tap, where focusing the composer raises the keyboard.
-4. **Cursor navigation per surface:** sidebar, then dashboard lists, then
-   transcript turns. First, because it is what gives regions actions of
+4. **Cursor navigation per surface:** sidebar, then transcript turns.
+   Dashboard lists are deferred until the dashboards are redesigned; the
+   list cursor should come with the new design rather than be fitted to
+   the old one. First, because it is what gives regions actions of
    their own -- rename, pin, move on a row -- and without them the leader
    has little to show. The sidebar is built (`navigation/sidebar-cursor.ts`):
    the cursor is the focused row; ↑/↓, Home/End; → opens a project then
