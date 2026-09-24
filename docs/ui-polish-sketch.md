@@ -390,11 +390,15 @@ The sidebar is the second, built. Hover and the current page were the same
 grey wash, so the open chat and the one under the pointer looked alike. With
 keyboard navigation coming, the wash is now the cursor -- pointer, keyboard
 focus and a press share it, as in the palette and menus -- and the current
-page is white and semibold with no fill, its harness mark lit, against
-resting rows in grey; a current rail icon is white with a heavier stroke.
-Several selected chats are the wash on each, nothing more. The
-Conduit/Computer switch keeps its wash as a two-state toggle. Recorded in
-`DESIGN.md` under List row.
+page is white and semibold with no fill against resting rows in grey, at
+one resting weight for every row. Its Lucide icons take a heavier stroke;
+a harness mark lights rather than thickens. The folder or workspace holding
+the open chat is drawn as current with it, collapsed or not, and pinned rows
+look and behave exactly like their unpinned rows. A current rail icon is
+white with a heavier stroke. Several selected chats are the wash on each,
+nothing more -- the general rule for multi-selection. The Conduit/Computer
+switch keeps its wash as a two-state toggle. Both areas follow the same
+rules. Recorded in `DESIGN.md` under List row.
 
 Review that surface with the user before extending the treatment elsewhere.
 Record accepted choices in `DESIGN.md` when they are ready to become a rule.
