@@ -155,14 +155,17 @@ export function ServerSwitcher(props: {
   // elsewhere to open, so it is not offered the move and not shown the mark.
   const away = (entry: ServerEntry) => !isInstalledClient() && !isStandaloneBrowser() && entry.origin !== location.origin;
 
+  // The row is only a handle for its menu, not a place to stand: it is out of
+  // the tab order, a click does not focus it, and closing the menu does not
+  // hand focus back to it.
   return <Menu onOpenChange={onOpenChange}>
-    <MenuTrigger class="sidebar-user" aria-label={`${serverName()} · ${triggerDetail()}`} title={`${activeOrigin() || "No server"} — ${triggerDetail()}`}>
+    <MenuTrigger class="sidebar-user" tabIndex={-1} onMouseDown={(event: MouseEvent) => event.preventDefault()} aria-label={`${serverName()} · ${triggerDetail()}`} title={`${activeOrigin() || "No server"} — ${triggerDetail()}`}>
       <span class="sidebar-user-label"><strong>{serverName()}</strong><small>{triggerDetail()}</small></span>
       <span class={`server-status-indicator runtime-indicator runtime-indicator-${connectionTone()}`} aria-hidden="true">
         <Show when={props.connectivity === "connecting" || props.connectivity === "reconnecting"} fallback={<span class="runtime-indicator-dot" />}><Spinner class="size-3" /></Show>
       </span>
     </MenuTrigger>
-    <MenuContent>
+    <MenuContent onCloseAutoFocus={(event) => event.preventDefault()}>
       <Show when={servers().length > 0}>
         <MenuGroup>
           <MenuLabel>Servers</MenuLabel>
