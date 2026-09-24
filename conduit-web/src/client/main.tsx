@@ -1397,6 +1397,34 @@ function App() {
     if (hasComposer()) focusComposer();
     else document.querySelector<HTMLElement>(".chat-main")?.focus({ preventScroll: true });
   };
+  // Ctrl+B and Ctrl+Shift+1 for the sidebar, Ctrl+. and Ctrl+Shift+3 for the
+  // workspace panel: open it if it is closed, focus it either way, and from
+  // inside it close it and hand focus back to the main pane. A maximised
+  // panel steps down to its normal width first.
+  const inRegion = (region: string) => document.activeElement instanceof Element && Boolean(document.activeElement.closest(`[data-region="${region}"]`));
+  const sidebarShown = () => isMobileLayout()
+    ? mobileSidebarOpen()
+    : document.querySelector('[data-region="sidebar"]')?.getAttribute("data-state") !== "collapsed";
+  const cycleSidebar = () => {
+    if (sidebarShown() && inRegion("sidebar")) {
+      if (isMobileLayout()) setMobileSidebarOpen(false);
+      else runSidebar("toggle-sidebar");
+      focusMainPane();
+      return;
+    }
+    if (!sidebarShown() && !isMobileLayout()) runSidebar("toggle-sidebar");
+    focusSidebar();
+  };
+  const cycleWorkspacePanel = () => {
+    if (!workspacePanelScope()) return;
+    if (panelOpen() && inRegion("workspace-panel")) {
+      if (workspaceExpanded()) { setWorkspaceExpanded(false); return; }
+      closePanel();
+      focusMainPane();
+      return;
+    }
+    focusWorkspacePanel();
+  };
   const hasTranscript = () => Boolean(document.querySelector(".message-scroller-viewport"));
   const focusTranscript = () => {
     if (isMobileLayout()) setMobileSidebarOpen(false);
@@ -2081,8 +2109,8 @@ function App() {
         setMobileSidebarOpen(false);
         void createChat();
       }),
-      shortcutManager.registerHandler(COMMAND_IDS.toggleSidebar, "application", () => runSidebar("toggle-sidebar")),
-      shortcutManager.registerHandler(COMMAND_IDS.toggleWorkspacePanel, "application", togglePanel),
+      shortcutManager.registerHandler(COMMAND_IDS.toggleSidebar, "application", cycleSidebar),
+      shortcutManager.registerHandler(COMMAND_IDS.toggleWorkspacePanel, "application", cycleWorkspacePanel),
       shortcutManager.registerHandler(COMMAND_IDS.maximizeWorkspacePanel, "application", maximizeWorkspacePanel),
       shortcutManager.registerHandler(COMMAND_IDS.stashPrompt, "composer", stashPrompt),
       shortcutManager.registerHandler(COMMAND_IDS.stashPrompt, "chat", stashPrompt),
@@ -2091,8 +2119,6 @@ function App() {
         shortcutManager.registerHandler(COMMAND_IDS.focusComposer, context, focusComposer, { when: hasComposer })),
       ...getCommandDefinition(COMMAND_IDS.focusWorkspacePanel).contexts.map((context) =>
         shortcutManager.registerHandler(COMMAND_IDS.focusWorkspacePanel, context, focusWorkspacePanel, { when: () => Boolean(workspacePanelScope()) })),
-      ...getCommandDefinition(COMMAND_IDS.focusSidebar).contexts.map((context) =>
-        shortcutManager.registerHandler(COMMAND_IDS.focusSidebar, context, focusSidebar)),
       ...getCommandDefinition(COMMAND_IDS.focusTranscript).contexts.map((context) =>
         shortcutManager.registerHandler(COMMAND_IDS.focusTranscript, context, focusTranscript, { when: hasTranscript })),
       shortcutManager.registerHandler(COMMAND_IDS.focusMainPane, "application", focusMainPane),

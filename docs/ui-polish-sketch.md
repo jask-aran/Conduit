@@ -568,37 +568,34 @@ chain is step 4.
 
 ### Two kinds of move
 
-- **Go to a surface.** Global shortcuts that take you to a top-level surface
-  in whatever state it is in, and leave you there: sidebar, chat, workspace
-  panel, dashboard, and so on. They come in two forms over the same list: a
-  **number** for each surface, in a fixed order that follows the screen, and
-  a **letter** for each, for memory. They are direct shortcuts, not leader
-  sequences -- a modifier chord such as Ctrl+Shift+number is the likely
-  shape -- because moving between surfaces should be one gesture. F6 is not
-  relied on: laptops send media keys from the F-row, and browsers use F6
-  for the address bar.
-- **Act within a context.** The leader is for what can be done where you
-  are. It crosses between contexts only for specific, curated flows -- from
-  the chat to the file it is discussing in the workspace panel, and back --
-  rather than as the general way around. Inside a context, numbers mean
-  positions (the workspace panel's tabs today), never other surfaces.
+- **Go to a surface.** Direct shortcuts, one gesture each, that take you to
+  a top-level surface in whatever state it is in: a **number** for each, in
+  screen order, and the surface's **conventional toggle** (Ctrl+B, Ctrl+.),
+  behaving the same. F6 is not relied on: laptops send media keys from the
+  F-row, and browsers use F6 for the address bar.
+- **Act within a context.** The leader is only for what can be done where
+  you are. Curated flows across contexts may come back later; for now it
+  does not move between regions. Inside a context, numbers mean positions
+  (the workspace panel's tabs), never other surfaces.
 
-As built, a first estimate to tune:
+As built, a first estimate to tune. Each surface has one toggle, reached by
+a conventional key and by its number, and both behave the same: open it if
+it is closed, focus it either way, and from inside it close it and hand
+focus back to the main pane.
 
-| Number (Ctrl+Shift, ⌘⇧ on a Mac) | Letter (after Ctrl+X) | Goes to |
+| Number (Ctrl+Shift, ⌘⇧ on a Mac) | Conventional | Surface |
 |---|---|---|
-| 1 | S | Sidebar -- the current row, else the folder holding it, else the first row; the rail when collapsed; the drawer opens on a phone |
+| 1 | Ctrl+B | Sidebar -- entered at the current row, else the folder holding it, else the first row; on a phone, the drawer |
 | 2 | -- | Main pane -- its composer when it has one, else the pane |
-| 3 | W | Workspace panel, opened if closed |
-| -- | C | Composer |
-| -- | T | Transcript, to scroll it from the keyboard |
+| 3 | Ctrl+. | Workspace panel -- a maximised panel steps down to its normal width before it closes |
 
-Numbers are direct chords because moving between surfaces should be one
-gesture; letters live in the leader because Ctrl+Shift+T, W and N belong to
-the browser and Ctrl+Shift+C to its inspector. Every letter works from
-every region. Known to tune: ⌘⇧3 is the macOS screenshot key, and is shown
-as a conflict in shortcut settings. The one curated cross-context flow
-stays the leader's Tab, between the chat and the workspace panel.
+Ctrl+Shift+. still maximises the workspace panel. The leader no longer
+moves between regions at all -- no C, W, S, T or Tab -- and keeps only
+actions within one: today the workspace panel's tabs and split. Focus
+composer, go to transcript and the chat/workspace switch stay in the
+palette without a default key. Known to tune: ⌘⇧3 is the macOS screenshot
+key, shown as a conflict in shortcut settings; Ctrl+B and Ctrl+. may yet
+give way to more conventional choices.
 
 ### Knowing it happened
 
@@ -638,7 +635,9 @@ out.
    context is derived from focus, today's contexts map onto the tree, and
    saved shortcut preferences keep working. Little to see; the region cue
    comes with it.
-2. **The first jumps.** Built as a first estimate (above), tuned in use.
+2. **The first jumps.** Built as a first estimate (above), tuned in use:
+   one toggle per surface by number and conventional key; the leader lost
+   its region switching.
 3. **The whole-UI fade and context switching** (with section 7's
    dashboard-to-chat transition), built on the regions: what fades is every
    region but the composer, and a route change puts focus in the region it

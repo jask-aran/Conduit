@@ -11,9 +11,8 @@ const binding = (...strokes: ReturnType<typeof stroke>[]) => shortcutBinding(...
 const scopedBinding = (code: string, key: string, modifiers: ShortcutModifier[] = []) =>
   binding(stroke("KeyX", "X", ["primary"]), stroke(code, key, modifiers));
 // Go-to shortcuts: one chord per top-level surface, numbered in screen order.
+// The leader acts within a region; it does not move between them.
 const goTo = (digit: number) => binding(stroke(`Digit${digit}`, String(digit), ["primary", "shift"]));
-// Every region the leader can start from, so a leader jump works from anywhere
-// until the leader reads the whole chain of regions.
 const EVERY_REGION = ["application", "chat", "dashboard", "composer", "workspace-panel"];
 
 export const COMMAND_IDS = {
@@ -34,7 +33,6 @@ export const COMMAND_IDS = {
   toggleWorkspacePanel: "toggle-workspace-panel",
   maximizeWorkspacePanel: "maximize-workspace-panel",
   focusComposer: "focus-composer",
-  focusSidebar: "focus-sidebar",
   focusMainPane: "focus-main-pane",
   focusTranscript: "focus-transcript",
   focusWorkspacePanel: "focus-workspace-panel",
@@ -266,23 +264,23 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
   command({
     id: COMMAND_IDS.toggleSidebar,
     label: "Toggle sidebar",
-    description: "Show or hide the navigation sidebar",
+    description: "Open and focus the sidebar; from inside it, close it and go back to the main pane",
     group: "commands",
     icon: "sidebar",
-    keywords: ["panel", "nav", "menu"],
+    keywords: ["panel", "nav", "menu", "focus", "go to"],
     contexts: ["application", "palette.root"],
-    defaultBindings: [binding(stroke("KeyB", "B", ["primary"]))],
+    defaultBindings: [binding(stroke("KeyB", "B", ["primary"])), goTo(1)],
     palette: true,
   }),
   command({
     id: COMMAND_IDS.toggleWorkspacePanel,
     label: "Toggle workspace panel",
-    description: "Browse project files and working-tree changes",
+    description: "Open and focus the workspace panel; from inside it, close it and go back to the main pane",
     group: "commands",
     icon: "workspace-panel",
-    keywords: ["files", "diff", "inspector", "right panel"],
+    keywords: ["files", "diff", "inspector", "right panel", "focus", "go to"],
     contexts: ["application", "palette.root"],
-    defaultBindings: [binding(stroke("Period", ".", ["primary"]))],
+    defaultBindings: [binding(stroke("Period", ".", ["primary"])), goTo(3)],
     palette: true,
   }),
   command({
@@ -304,19 +302,6 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     icon: "chat",
     keywords: ["chat", "message", "input", "cursor"],
     contexts: EVERY_REGION,
-    defaultBindings: [scopedBinding("KeyC", "C")],
-    allowInExclusiveTarget: true,
-    palette: true,
-  }),
-  command({
-    id: COMMAND_IDS.focusSidebar,
-    label: "Go to sidebar",
-    description: "Move focus to the sidebar, at the current row",
-    group: "navigation",
-    icon: "sidebar",
-    keywords: ["sidebar", "focus", "navigate", "chats", "projects"],
-    contexts: EVERY_REGION,
-    defaultBindings: [goTo(1), scopedBinding("KeyS", "S")],
     allowInExclusiveTarget: true,
     palette: true,
   }),
@@ -340,7 +325,6 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     icon: "chat",
     keywords: ["transcript", "messages", "scroll", "focus", "read"],
     contexts: EVERY_REGION,
-    defaultBindings: [scopedBinding("KeyT", "T")],
     allowInExclusiveTarget: true,
     palette: true,
   }),
@@ -352,7 +336,6 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     icon: "workspace-panel",
     keywords: ["workspace", "panel", "focus", "files"],
     contexts: EVERY_REGION,
-    defaultBindings: [goTo(3), scopedBinding("KeyW", "W")],
     allowInExclusiveTarget: true,
     palette: true,
   }),
@@ -364,7 +347,6 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     icon: "workspace-panel",
     keywords: ["focus", "chat", "workspace", "panel", "switch"],
     contexts: ["application", "chat", "dashboard", "composer", "workspace-panel"],
-    defaultBindings: [scopedBinding("Tab", "Tab")],
     allowInExclusiveTarget: true,
     palette: true,
   }),
