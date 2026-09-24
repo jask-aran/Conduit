@@ -1,9 +1,9 @@
-import { createMemo, createSignal, For, Index, lazy, Show, Suspense } from "solid-js";
-import { BrainIcon, ChevronDownIcon, TriangleAlertIcon } from "lucide-solid";
+import { createMemo, For, Index, lazy, Show, Suspense } from "solid-js";
+import { BrainIcon, TriangleAlertIcon } from "lucide-solid";
 import type { Message } from "../api/contracts";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
 import { ToolCard } from "./tool-card";
-import { createReveal } from "./reveal";
+import { Disclosure } from "./disclosure";
 import type { MarkdownRendererId } from "./markdown-settings";
 import type { IncremarkPacingMode } from "./incremark-pacing";
 
@@ -136,13 +136,6 @@ const statusLabel = (status: TurnTraceData["status"], tool?: string) => ({
 })[status];
 
 export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | null; renderer?: MarkdownRendererId; pacing?: IncremarkPacingMode; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void }) {
-  const [open, setOpen] = createSignal(Boolean(props.initialOpen));
-  const toggle = () => {
-    const next = !open();
-    setOpen(next);
-    props.onOpenChange?.(next);
-  };
-  const reveal = createReveal(open);
   const preview = createMemo(() => previewOf(props.trace));
   const parts = createMemo(() => {
     const { status, counters, summary } = preview();
@@ -153,8 +146,9 @@ export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | nul
     if (!list.length) list.push({ kind: "summary", text: "Thinking process" });
     return list;
   });
-  return <div class="turn-trace" data-active={props.trace.active ? "true" : "false"}>
-    <button type="button" class="turn-trace-header" aria-expanded={open()} onClick={toggle}>
+  return <Disclosure class="turn-trace" data-active={props.trace.active ? "true" : "false"} headerClass="turn-trace-header" bodyClass="turn-trace-body"
+    initialOpen={props.initialOpen} onOpenChange={props.onOpenChange}
+    header={<>
       <BrainIcon />
       <div class="turn-trace-preview">
         <For each={parts()}>{(part, index) => <span class={`turn-trace-${part.kind}`} data-status={part.kind === "status" ? props.trace.status : undefined}>
@@ -164,19 +158,15 @@ export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | nul
           </Show>
         </span>}</For>
       </div>
-      <ChevronDownIcon class="turn-trace-chevron" data-open={open() ? "true" : "false"} />
-    </button>
-    <Show when={reveal.mounted()}>{(_) => {
+    </>}
+    body={() => {
       // Steps there when the trace opens unfold with it; one that arrives while
       // it is open fades in with a short rise, and moves nothing above it.
       const opened = props.trace.segments.length;
-      return <div ref={reveal.ref} class="turn-trace-body">
-        <Index each={props.trace.segments}>{(segment, index) =>
-          <div class="turn-trace-step" data-arriving={index >= opened || undefined}>
-            <TraceSegmentRow segment={segment} settled={!props.trace.active} sessionId={props.sessionId} renderer={props.renderer} pacing={props.pacing} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />
-          </div>
-        }</Index>
-      </div>;
-    }}</Show>
-  </div>;
+      return <Index each={props.trace.segments}>{(segment, index) =>
+        <div class="turn-trace-step" data-arriving={index >= opened || undefined}>
+          <TraceSegmentRow segment={segment} settled={!props.trace.active} sessionId={props.sessionId} renderer={props.renderer} pacing={props.pacing} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />
+        </div>
+      }</Index>;
+    }} />;
 }

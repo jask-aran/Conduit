@@ -1,11 +1,11 @@
 import { createEffect, createMemo, createRenderEffect, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from "solid-js";
-import { ArrowDownIcon, CheckIcon, ChevronDownIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
+import { ArrowDownIcon, CheckIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { BooleanCapability, Message } from "../api/contracts";
 import { isChatContentActivity, type TranscriptSource } from "./transcript-source";
 import type { TurnArtifactSummary } from "../api/live-events";
 import { AttachmentCards } from "./attachments";
-import { createReveal } from "./reveal";
+import { Disclosure } from "./disclosure";
 import { ReviewCommentCards } from "./review-comment-cards";
 import { parseReviewComments } from "./review-comments";
 import { TurnTrace } from "./turn-trace";
@@ -219,7 +219,6 @@ function StopLabel(props: { traced?: boolean; detail: string }) {
  */
 function DiscardedAnswer(props: { message: Message; renderer?: MarkdownRendererId; pacing?: IncremarkPacingMode; traced?: boolean; collapse?: boolean }) {
   const [open, setOpen] = createSignal(false);
-  const reveal = createReveal(open);
   /* An answer discarded while it was on screen folds down into its row, so the
      reader sees where it went; one that arrives discarded is simply the row. */
   const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -235,32 +234,24 @@ function DiscardedAnswer(props: { message: Message; renderer?: MarkdownRendererI
     const text = String(props.message.content || "").replace(/\s+/g, " ").trim();
     return text.length > 110 ? `${text.slice(0, 110)}…` : text;
   };
-  return <div class="discarded-answer" data-open={open() ? "true" : "false"} data-collapsing={collapsing() ? "true" : undefined}>
-    <button type="button" class="discarded-answer-header" aria-expanded={open()}
-      title="Interrupted before it finished. The agent kept no record of this, so it cannot be referred to."
-      onClick={() => setOpen(!open())}>
+  const answer = () => <Suspense fallback={<div class="markdown-skeleton" />}>
+    <ChatMarkdown renderer={props.renderer} pacing={props.pacing}>{props.message.content || ""}</ChatMarkdown>
+  </Suspense>;
+  return <Disclosure class="discarded-answer" data-collapsing={collapsing() ? "true" : undefined}
+    headerClass="discarded-answer-header" bodyClass="discarded-answer-body" onOpenChange={setOpen}
+    title="Interrupted before it finished. The agent kept no record of this, so it cannot be referred to."
+    header={<>
       <StopLabel traced={props.traced} detail="not kept" />
       <span class="discarded-answer-preview">{` · `}<s>{preview()}</s></span>
-      <ChevronDownIcon class="discarded-answer-chevron" data-open={open() ? "true" : "false"} />
-    </button>
+    </>}
+    body={answer}>
     <Show when={collapsing() && !open()}>
       <div class="discarded-answer-collapse" data-collapsed={collapsed() ? "true" : "false"}
         onTransitionEnd={(event) => { if (event.target === event.currentTarget && event.propertyName === "grid-template-rows") setCollapsing(false); }}>
-        <div>
-          <Suspense fallback={<div class="markdown-skeleton" />}>
-            <ChatMarkdown renderer={props.renderer} pacing={props.pacing}>{props.message.content || ""}</ChatMarkdown>
-          </Suspense>
-        </div>
+        <div>{answer()}</div>
       </div>
     </Show>
-    <Show when={reveal.mounted()}>
-      <div ref={reveal.ref} class="discarded-answer-body">
-        <Suspense fallback={<div class="markdown-skeleton" />}>
-          <ChatMarkdown renderer={props.renderer} pacing={props.pacing}>{props.message.content || ""}</ChatMarkdown>
-        </Suspense>
-      </div>
-    </Show>
-  </div>;
+  </Disclosure>;
 }
 
 export function Transcript(props: { chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; partialContinue: boolean; markdownRenderer: MarkdownRendererId; rendererControlsVisible: boolean; profileLabel?: string; projectId?: string }) {
