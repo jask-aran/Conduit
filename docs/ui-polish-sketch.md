@@ -439,7 +439,8 @@ of section 8, built on its regions.
    asked for. Steps arriving in an open trace fade in with a 4px rise and no
    height change. At the tail the tail spring keeps the reader there;
    otherwise nothing above them moves.
-4. **Dashboard to chat.** Deferred, see Status. Sending from the dashboard composer cuts to the chat.
+4. **Dashboard to chat.** Built with section 8 step 3 (see there); what
+   follows was the first sketch. Sending from the dashboard composer cut to the chat.
    A View Transition gives the dashboard composer and the chat's composer one
    identity, so the browser moves one into the other; the first message rises
    into the list and the rest cross-fades. The send happens first and the
@@ -641,10 +642,18 @@ out.
 3. **The whole-UI fade and context switching** (with section 7's
    dashboard-to-chat transition), built on the regions: what fades is every
    region but the composer, and a route change puts focus in the region it
-   should. The first open is built: only the frame until the page is laid
+   should. Built. The first open: only the frame until the page is laid
    out -- the workspace panel and route dashboards are fetched beside the
    route's data so they are in place -- then the composer is there and the
-   rest fades in once. Next, the reverse on a dashboard send.
+   rest fades in once. A dashboard send: the message goes at once, the
+   dashboard around the composer leaves (~200ms, quick), and the chat arrives
+   once the message is in it -- its composer travels from the dashboard's
+   spot to the foot in one move (~420ms) as the rest fades in. A harness slow
+   to start is waited on for 1.5s at most; the chat then arrives empty and
+   the empty-chat travel finishes the move. A View Transition was not needed.
+   Focus: a route change that takes the focused element with it puts focus
+   in the new page's composer, else its pane -- never on a phone, and never
+   taken from somewhere it still is.
 4. **The layered leader.**
 5. **Cursor navigation per surface:** sidebar, then dashboard lists, then
    transcript turns.

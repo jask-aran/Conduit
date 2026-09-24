@@ -613,6 +613,7 @@ function App() {
     const arrive = () => {
       if (root.dataset.arrival !== "waiting") return;
       root.dataset.arrival = "arriving";
+      settleFocus();
       settle = setTimeout(() => delete root.dataset.arrival, 400);
     };
     root.dataset.arrival = "waiting";
@@ -927,6 +928,52 @@ function App() {
         { duration: 420, easing: "cubic-bezier(.2, .8, .2, 1)" });
     });
   }));
+  /*
+   * Sending from a dashboard. The send goes at once; then the dashboard
+   * around the composer leaves, quick and accelerating, and the chat arrives
+   * once it has gone and the message is in it: its composer starts where the
+   * dashboard's sat and settles into its place at the foot, and the rest of
+   * the pane fades in. Waiting for the message is what makes that one move --
+   * arriving first shows the empty chat, whose composer sits mid-pane at
+   * another width, and then moves it again. A harness slow to start is not
+   * waited on for long; the chat then arrives empty and the empty-chat travel
+   * above takes the composer on down when the message lands. The sidebar and
+   * workspace panel are not changing place, so they stay. The composer moved
+   * is the inner wrap, so the stack's own rect -- which that travel measures
+   * -- is never read mid-flight. Focus goes with the composer.
+   */
+  const DASHBOARD_LEAVE_MS = 200;
+  const leaveDashboard = (): Promise<DOMRect | null> => {
+    const wrap = document.querySelector<HTMLElement>('.chat-main [data-region="composer"]');
+    if (!wrap || matchMedia("(prefers-reduced-motion: reduce)").matches) return Promise.resolve(null);
+    const from = wrap.getBoundingClientRect();
+    document.documentElement.dataset.routeMotion = "leaving";
+    return new Promise((resolve) => setTimeout(() => resolve(from), DASHBOARD_LEAVE_MS));
+  };
+  const DASHBOARD_SEND_WAIT_MS = 1500;
+  const sendFromDashboard = async () => {
+    const sending = chat.send().catch(() => undefined);
+    const from = await leaveDashboard();
+    if (from) await Promise.race([sending, new Promise((resolve) => setTimeout(resolve, DASHBOARD_SEND_WAIT_MS))]);
+    setRouteKind("chat");
+    arriveInChat(from);
+    await sending;
+  };
+  const arriveInChat = (from: DOMRect | null) => {
+    const root = document.documentElement;
+    if (!from) return void delete root.dataset.routeMotion;
+    requestAnimationFrame(noteEmptyComposer);
+    root.dataset.routeMotion = "arriving";
+    const wrap = chatComposerStack?.querySelector<HTMLElement>('[data-region="composer"]');
+    if (wrap) {
+      const to = wrap.getBoundingClientRect();
+      const dx = from.left + from.width / 2 - (to.left + to.width / 2);
+      const dy = from.top - to.top;
+      if (Math.abs(dx) + Math.abs(dy) >= 4) wrap.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }],
+        { duration: 420, easing: "cubic-bezier(.2, .8, .2, 1)" });
+    }
+    setTimeout(() => { if (root.dataset.routeMotion === "arriving") delete root.dataset.routeMotion; }, 450);
+  };
   onMount(() => {
     window.addEventListener("resize", noteEmptyComposer);
     onCleanup(() => window.removeEventListener("resize", noteEmptyComposer));
@@ -1427,6 +1474,23 @@ function App() {
     if (hasComposer()) focusComposer();
     else document.querySelector<HTMLElement>(".chat-main")?.focus({ preventScroll: true });
   };
+  // A route change that takes the focused element with it leaves focus on the
+  // body, where no key does anything. It goes to the new page's own place
+  // instead: its composer, else the pane. Never taken from somewhere it still
+  // is, as a clicked sidebar row; not on a phone, where focusing the composer
+  // raises the keyboard; and not on the terminal page, which focuses its own.
+  // A composer still connecting is disabled, so the pane holds focus until it
+  // can take it, unless something has moved it by then.
+  const settleFocus = (attempt = 0) => {
+    if (isMobileLayout() || routeKind() === "terminal") return;
+    const pane = document.querySelector<HTMLElement>(".chat-main");
+    const active = document.activeElement;
+    if (active && active !== document.body && active !== pane) return;
+    if (hasComposer()) return focusComposer();
+    if (active !== pane) pane?.focus({ preventScroll: true });
+    if (document.querySelector(".composer textarea") && attempt < 20) setTimeout(() => settleFocus(attempt + 1), 100);
+  };
+  createEffect(on([routeKind, () => catalogue.selectedId()], () => requestAnimationFrame(() => settleFocus()), { defer: true }));
   // Ctrl+Shift+1: open a collapsed sidebar and focus it; never close it --
   // Ctrl+B stays the toggle.
   const goToSidebar = () => {
@@ -2427,9 +2491,8 @@ function App() {
                   ? { ...item, sessions: [{ id, projectId: project.id, status: "active", title: chat.title() || "New chat", templateId: chat.templateId() || undefined }, ...item.sessions.filter((session) => session.id !== id)] }
                   : item));
                 history.pushState({}, "", `/chat/${id}`);
-                setRouteKind("chat");
                 chat.setDraft(prompt);
-                await chat.send();
+                await sendFromDashboard();
               }}
             />}
             runtime={runtime}
@@ -2533,9 +2596,8 @@ function App() {
                   ? { ...item, sessions: [{ id, projectId: project.id, status: "active", title: chat.title() || "New chat", templateId: chat.templateId() || undefined }, ...item.sessions.filter((session) => session.id !== id)] }
                   : item));
                 history.pushState({}, "", `/chat/${id}`);
-                setRouteKind("chat");
                 chat.setDraft(prompt);
-                await chat.send();
+                await sendFromDashboard();
               }}
             />}
             onOpenChat={(target: DashboardChat, project) => openChat(target, project)}

@@ -2437,6 +2437,16 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   :is(.chat-main, .chat-main :has([data-region="composer"])) > :not([data-region="composer"], :has([data-region="composer"]))
 ) { animation: ui-arrive 300ms cubic-bezier(.2, .8, .2, 1) both; }
 @keyframes ui-arrive { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ui-leave { to { opacity: 0; } }
+
+/* Sending from a dashboard (main.tsx): the main pane but its composer
+   leaves, then the chat's arrives around the composer as it travels. */
+:root[data-route-motion="leaving"] :is(.chat-main, .chat-main :has([data-region="composer"])) > :not([data-region="composer"], :has([data-region="composer"])) {
+  animation: ui-leave 200ms cubic-bezier(.4, 0, 1, 1) both;
+}
+:root[data-route-motion="arriving"] :is(.chat-main, .chat-main :has([data-region="composer"])) > :not([data-region="composer"], :has([data-region="composer"])) {
+  animation: ui-arrive 300ms cubic-bezier(.2, .8, .2, 1) both;
+}
 @media (prefers-reduced-motion: reduce) {
   :root[data-arrival="arriving"] :is(
     [data-region="sidebar"],
