@@ -524,8 +524,9 @@ composer** -- the queued pill's width and material, about twice its height
 
 ## 8. Keyboard: contexts, the leader, and navigation
 
-Status: step 1 is built -- regions and the context tree. The first jumps
-(step 2) are decided next, now that the regions exist. Keyboard navigation of the sidebar
+Status: steps 1 and 2 are built -- regions and the context tree, and a
+first estimate of the go-to jumps, to be tuned in use. Step 3, the whole-UI
+fade and context switching, is next. Keyboard navigation of the sidebar
 was the natural next step after its cursor (section 6), but moving a cursor
 is the last part of this, not the first: how shortcuts are scoped, and how
 one moves between surfaces, come first, or every surface grows its own keys.
@@ -582,6 +583,23 @@ chain is step 4.
   rather than as the general way around. Inside a context, numbers mean
   positions (the workspace panel's tabs today), never other surfaces.
 
+As built, a first estimate to tune:
+
+| Number (Ctrl+Shift, ⌘⇧ on a Mac) | Letter (after Ctrl+X) | Goes to |
+|---|---|---|
+| 1 | S | Sidebar -- the current row, else the folder holding it, else the first row; the rail when collapsed; the drawer opens on a phone |
+| 2 | -- | Main pane -- its composer when it has one, else the pane |
+| 3 | W | Workspace panel, opened if closed |
+| -- | C | Composer |
+| -- | T | Transcript, to scroll it from the keyboard |
+
+Numbers are direct chords because moving between surfaces should be one
+gesture; letters live in the leader because Ctrl+Shift+T, W and N belong to
+the browser and Ctrl+Shift+C to its inspector. Every letter works from
+every region. Known to tune: ⌘⇧3 is the macOS screenshot key, and is shown
+as a conflict in shortcut settings. The one curated cross-context flow
+stays the leader's Tab, between the chat and the workspace panel.
+
 ### Knowing it happened
 
 - **The cursor appears.** The sidebar's wash already means the cursor, so a
@@ -616,13 +634,11 @@ out.
 
 ### Order
 
-1. **Regions and the context tree.** Surfaces declare regions, the active
+1. **Regions and the context tree.** Built. Surfaces declare regions, the active
    context is derived from focus, today's contexts map onto the tree, and
    saved shortcut preferences keep working. Little to see; the region cue
    comes with it.
-2. **The first jumps.** Decide the go-to list, its numbers and letters and
-   their chord, once the regions exist, and which leader flows cross
-   contexts.
+2. **The first jumps.** Built as a first estimate (above), tuned in use.
 3. **The whole-UI fade and context switching** (with section 7's
    dashboard-to-chat transition), built on the regions: what fades is every
    region but the composer, and a route change puts focus in the region it

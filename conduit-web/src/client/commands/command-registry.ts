@@ -10,6 +10,11 @@ const stroke = (code: string, key: string, modifiers: ShortcutModifier[] = []) =
 const binding = (...strokes: ReturnType<typeof stroke>[]) => shortcutBinding(...strokes);
 const scopedBinding = (code: string, key: string, modifiers: ShortcutModifier[] = []) =>
   binding(stroke("KeyX", "X", ["primary"]), stroke(code, key, modifiers));
+// Go-to shortcuts: one chord per top-level surface, numbered in screen order.
+const goTo = (digit: number) => binding(stroke(`Digit${digit}`, String(digit), ["primary", "shift"]));
+// Every region the leader can start from, so a leader jump works from anywhere
+// until the leader reads the whole chain of regions.
+const EVERY_REGION = ["application", "chat", "dashboard", "composer", "workspace-panel"];
 
 export const COMMAND_IDS = {
   openCommandPalette: "open-command-palette",
@@ -29,6 +34,9 @@ export const COMMAND_IDS = {
   toggleWorkspacePanel: "toggle-workspace-panel",
   maximizeWorkspacePanel: "maximize-workspace-panel",
   focusComposer: "focus-composer",
+  focusSidebar: "focus-sidebar",
+  focusMainPane: "focus-main-pane",
+  focusTranscript: "focus-transcript",
   focusWorkspacePanel: "focus-workspace-panel",
   toggleChatWorkspaceFocus: "toggle-chat-workspace-focus",
   workspaceFiles: "workspace-panel.files",
@@ -295,8 +303,44 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     group: "navigation",
     icon: "chat",
     keywords: ["chat", "message", "input", "cursor"],
-    contexts: ["application", "chat", "dashboard"],
+    contexts: EVERY_REGION,
     defaultBindings: [scopedBinding("KeyC", "C")],
+    allowInExclusiveTarget: true,
+    palette: true,
+  }),
+  command({
+    id: COMMAND_IDS.focusSidebar,
+    label: "Go to sidebar",
+    description: "Move focus to the sidebar, at the current row",
+    group: "navigation",
+    icon: "sidebar",
+    keywords: ["sidebar", "focus", "navigate", "chats", "projects"],
+    contexts: EVERY_REGION,
+    defaultBindings: [goTo(1), scopedBinding("KeyS", "S")],
+    allowInExclusiveTarget: true,
+    palette: true,
+  }),
+  command({
+    id: COMMAND_IDS.focusMainPane,
+    label: "Go to main pane",
+    description: "Move focus to the chat or dashboard, at its composer",
+    group: "navigation",
+    icon: "chat",
+    keywords: ["chat", "dashboard", "main", "focus", "composer"],
+    contexts: ["application"],
+    defaultBindings: [goTo(2)],
+    allowInExclusiveTarget: true,
+    palette: true,
+  }),
+  command({
+    id: COMMAND_IDS.focusTranscript,
+    label: "Go to transcript",
+    description: "Move focus to the chat transcript, to scroll it from the keyboard",
+    group: "navigation",
+    icon: "chat",
+    keywords: ["transcript", "messages", "scroll", "focus", "read"],
+    contexts: EVERY_REGION,
+    defaultBindings: [scopedBinding("KeyT", "T")],
     allowInExclusiveTarget: true,
     palette: true,
   }),
@@ -307,8 +351,8 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     group: "navigation",
     icon: "workspace-panel",
     keywords: ["workspace", "panel", "focus", "files"],
-    contexts: ["application", "chat", "dashboard", "composer"],
-    defaultBindings: [scopedBinding("KeyW", "W")],
+    contexts: EVERY_REGION,
+    defaultBindings: [goTo(3), scopedBinding("KeyW", "W")],
     allowInExclusiveTarget: true,
     palette: true,
   }),

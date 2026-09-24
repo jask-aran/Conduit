@@ -1130,7 +1130,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       </div>
     </Show>
     <div ref={motionShell} class="transcript-motion-shell">
-      <div ref={viewport} class="message-scroller-viewport" data-slot="message-scroller-viewport">
+      <div ref={viewport} class="message-scroller-viewport" data-slot="message-scroller-viewport" tabIndex={-1} aria-label="Transcript">
         <div ref={thread} class="thread" data-slot="message-scroller-content">
         <Show when={props.chat.loadingOlder()}>
           <div data-slot="message-scroller-item" class="flex justify-center" role="status" aria-label="Loading earlier messages"><Spinner /></div>
