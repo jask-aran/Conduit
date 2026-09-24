@@ -51,8 +51,8 @@ available, not only the local development restart.
 4. Separate server compatibility from app installation. Desktop and Android
    can report their kind and build so the server can diagnose or reject an
    incompatible protocol. Their package downloads and installs must not hold
-   a server restart. Both installed clients should be able to obtain updates
-   from a Conduit server, subject to their platform install rules.
+   a server restart. Both installed clients should be able to download before
+   installation, subject to their platform install rules.
 5. Apply the chosen handoff to each supported deployment path. Check whether
    the local script and container replacement can expose the new browser
    assets while the old server still serves connections. If a path cannot,
@@ -64,11 +64,11 @@ available, not only the local development restart.
 Today the released Windows app fetches its updater manifest from GitHub
 Releases. Android looks up the latest GitHub Release and opens its APK URL.
 The server already has a development-only `/desktop-updates` route for local
-Windows builds. The future path should let a Conduit server publish an update
-manifest and serve the matching Windows and Android artifacts itself. A
-deployment may optionally redirect to another artifact host. GitHub Releases
-could remain a publishing input, but a client must be able to complete an
-update through its configured Conduit server without contacting GitHub.
+Windows builds. Released clients can keep using GitHub Releases directly,
+including for background downloads. A server-hosted update manifest and files
+are an optional distribution route if a concrete need appears, such as local
+network delivery or updates when GitHub is unavailable. Server caching is not
+required for a client to download an update before installing it.
 
 The manifest needs a channel, version, platform, artifact URL, and enough
 identity to avoid mixing a development build with a release build. The Windows
@@ -77,21 +77,26 @@ must still use an APK signed with the expected key and obtain system installer
 confirmation. A server-provided URL or version is an offer, not authority to
 run unverified code.
 
-A production server should fetch published release artifacts from GitHub in
-the background, store them across server/container restarts, verify that the
-manifest and all required files agree, and expose the new manifest only after
-the files are complete. It must not offer a half-downloaded release. A
-development server should publish its locally built Windows and Android
-artifacts through the same update API, under the development channel. Building
-and serving are separate steps: a running server must keep serving the last
-complete build while another is being built. Once a complete release is
-published, the server can notify connected installed clients to check the
-manifest. The manifest remains the source of truth for clients that reconnect
-after the notice.
+A server cache, if later justified, should fetch the exact published release
+artifacts from GitHub in the background, store them across server/container
+restarts, and expose a version only after its required files are complete. It
+must not offer a half-downloaded release. The development server can keep
+serving locally built development artifacts. Building and serving are separate
+steps: a running server must keep serving the last complete build while another
+is being built. An update notice can tell connected clients to check their
+chosen source; clients that reconnect check it without a prior notice.
+
+Windows local builds use the updater key at
+`~/.conduit/conduit-updater.key`; CI reads its copy from a secret. If those are
+the same key, both outputs are trusted by a Windows client carrying its public
+half, although the signatures and artifacts differ for different builds. The
+development Windows app is a separate installation and version channel.
+Android development APKs use a debug key, while CI release APKs use the release
+keystore; a development APK cannot replace the released Android app.
 
 Windows currently calls Tauri's `downloadAndInstall`, then relaunches. Tauri
 also supports `download` followed later by `install`. The client should check
-its chosen update server, download a signed package while it remains usable,
+its chosen update source, download a signed package while it remains usable,
 and report **ready** only after that download completes. A ready update can
 then be installed and the app relaunched without another network transfer.
 Windows exits the app during installation, so the install/relaunch still causes
@@ -99,34 +104,32 @@ a short interruption. Decide whether a ready package remains available after
 the app itself exits; Tauri's in-process downloaded update alone does not
 establish that guarantee. Do not tie this install to every server restart.
 
-Android can likewise download an APK from the chosen server and hold it ready
+Android can likewise download an APK from its chosen source and hold it ready
 without Google Play. A later install must still go through Android's package
 installer and may require approval to install from that source. Google Play
 distribution would enable a different Play-managed update flow; it is not a
-prerequisite for predownloading a server-hosted APK. The current Android path
-opens a remote APK URL, so local staging and installer handoff are new work.
+prerequisite for predownloading an APK. The current Android path opens a remote
+APK URL, so local staging and installer handoff are new work.
 
 An installed app can connect to several servers, which may run different
-releases or be controlled by different operators. Choose an explicit update
-source and trust rule: a configured home server, a fixed Conduit update server,
-or an opt-in update source on each server. Do not silently accept an app update
-from whichever server happens to be selected. Keep package update state
-(available, downloading, ready, installing) separate from the short-lived
-connection state used to decide when a server may restart.
+releases or be controlled by different operators. If server delivery is added,
+choose an explicit update source and trust rule: a configured home server, a
+fixed Conduit update server, or an opt-in source on each server. Do not silently
+accept an app update from whichever server happens to be selected. Keep package
+update state (available, downloading, ready, installing) separate from the
+short-lived connection state used to decide when a server may restart.
 
 ## Suggested order
 
 1. Split Windows update download from install using the current signed updater
    source. Show download progress and a ready-to-restart action. This proves the
    short install/relaunch path without changing server distribution first.
-2. Make the existing development artifact route serve a complete versioned
-   manifest and signed local build. Then add the production server's background
-   release fetch and atomic promotion. Ship a Windows client that selects its
-   trusted Conduit update server; older released clients still need their
-   current GitHub update path to obtain that bridge version.
-3. Let Android download the APK from that server into app-controlled storage,
-   then hand the local file to Android's installer on request. This shares the
-   server release catalog but needs a different client install path.
+2. Keep released clients on GitHub while Windows staging is proven. Use the
+   existing local route for development builds. Add a production server cache
+   only if direct GitHub delivery has a measured or product-level shortcoming.
+3. Let Android download an APK from its chosen source into app-controlled
+   storage, then hand the local file to Android's installer on request. This
+   needs a different client install path even if the source is shared.
 4. Add short-lived connection identities and browser worker readiness replies
    to shorten the server restart wait. Native package readiness can be reported
    for visibility, but must not become a condition for stopping the server.
@@ -154,9 +157,9 @@ the latest tag. Local Windows development builds also use the last tag only to
 derive their next development version; they build the current checkout. Keep
 this fast development channel independent of release tags. A future locally
 distributed development update should identify its exact committed source and
-not claim that a dirty checkout is the named commit. Production servers should
-mirror completed CI release artifacts, not rebuild release binaries with local
-keys. If a local tool is needed to inspect a release build from source, make
+not claim that a dirty checkout is the named commit. If production servers
+later cache releases, they should mirror completed CI artifacts, not rebuild
+release binaries. If a local tool is needed to inspect a release build, make
 the tag an explicit input and build an isolated checkout of that exact commit;
 do not silently choose the highest local tag.
 
@@ -178,9 +181,8 @@ changing that pipeline.
   per deployment? The server must still restart at the cap.
 - What is the compatibility contract between an installed client build and a
   server release, especially when one installed client visits several servers?
-- Which Conduit server may offer installed-client updates, and does it host
-  artifacts itself or redirect to a release host? How are channel and signing
-  identity selected?
+- Is there a concrete need for a production server cache? If so, which server
+  may offer updates, and how are channel and artifact identity selected?
 - When should a ready Windows package install: only on request, when the app
   becomes idle, or after a server announces a compatible new release? Which
   unsent work must delay relaunch?
