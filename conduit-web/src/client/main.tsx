@@ -962,17 +962,17 @@ function App() {
   /*
    * Sending from a dashboard. The send goes at once; then the dashboard
    * around the composer leaves, quick and accelerating, and the chat arrives
-   * once it has gone and the message is in it: its composer starts where the
-   * dashboard's sat and settles into its place at the foot, and the rest of
-   * the pane fades in. Waiting for the message is what makes that one move --
-   * arriving first shows the empty chat, whose composer sits mid-pane at
-   * another width, and then moves it again. A harness slow to start is not
-   * waited on for long; the chat then arrives empty and the empty-chat travel
-   * above takes the composer on down when the message lands. The sidebar and
-   * workspace panel are not changing place, so they stay. The composer moved
-   * is the inner wrap, so the stack's own rect -- which that travel measures
-   * -- is never read mid-flight. Focus goes with the composer.
+   * as soon as it has gone: its composer starts where the dashboard's sat and
+   * settles into its place at the foot, and the rest of the pane fades in.
+   * The agent starting is not waited on. Until the message is in the chat it
+   * is held out of the empty layout (the centred composer, the welcome line),
+   * so the composer makes one move and waits at the foot, holding the message
+   * beside "Starting agent…" until it lands in the transcript. The sidebar
+   * and workspace panel are not changing place, so they stay. The composer
+   * moved is the inner wrap, so the stack's own rect -- which the empty-chat
+   * travel measures -- is never read mid-flight. Focus goes with the composer.
    */
+  const [dashboardArrival, setDashboardArrival] = createSignal(false);
   const DASHBOARD_LEAVE_MS = 200;
   const leaveDashboard = (): Promise<DOMRect | null> => {
     const wrap = document.querySelector<HTMLElement>('.chat-main [data-part="composer"]');
@@ -981,14 +981,14 @@ function App() {
     document.documentElement.dataset.routeMotion = "leaving";
     return new Promise((resolve) => setTimeout(() => resolve(from), DASHBOARD_LEAVE_MS));
   };
-  const DASHBOARD_SEND_WAIT_MS = 1500;
   const sendFromDashboard = async () => {
     const sending = chat.send().catch(() => undefined);
     const from = await leaveDashboard();
-    if (from) await Promise.race([sending, new Promise((resolve) => setTimeout(resolve, DASHBOARD_SEND_WAIT_MS))]);
+    setDashboardArrival(true);
     setRouteKind("chat");
     arriveInChat(from);
     await sending;
+    setDashboardArrival(false);
   };
   const arriveInChat = (from: DOMRect | null) => {
     const root = document.documentElement;
@@ -2505,7 +2505,7 @@ function App() {
       }} />
     </Modal>
     <div class="workspace-layout">
-    <main data-slot="sidebar-inset" data-region={routeKind() === "chat" ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} class={`chat-main${routeKind() === "chat" && emptyChat() ? " chat-main-empty" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
+    <main data-slot="sidebar-inset" data-region={routeKind() === "chat" ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} class={`chat-main${routeKind() === "chat" && emptyChat() && !dashboardArrival() ? " chat-main-empty" : ""}${dashboardArrival() ? " chat-main-arriving" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
         : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : "Loading chat…"}</div>}>
