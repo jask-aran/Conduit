@@ -1377,6 +1377,8 @@ export function Settings(props: {
                     ]} />
                   </div>
                   <label class="settings-line" for="dictation-shortcut"><span>Shortcut</span><Input id="dictation-shortcut" class="settings-keycap-input" title="Focus and press a shortcut" value={voiceDraft().shortcut} readOnly onKeyDown={(event) => {
+                    // Tab and Esc still leave the field; every other key is recorded.
+                    if (event.key === "Tab" || event.key === "Escape") return;
                     event.preventDefault();
                     event.stopPropagation();
                     const shortcut = shortcutFromKeyboardEvent(event);

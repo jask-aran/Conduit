@@ -43,7 +43,6 @@
 .settings-segmented button:hover:not(:disabled) { color: var(--foreground); }
 .settings-segmented button[aria-checked="true"] { color: var(--foreground); }
 .settings-segmented button:focus-visible { outline: none; color: var(--foreground); }
-.settings-segmented:has(button:focus-visible) .settings-segmented-thumb { box-shadow: inset 0 0 0 1px var(--ring); }
 .settings-segmented button:disabled { cursor: default; opacity: .5; }
 
 .settings-switch {
@@ -71,7 +70,7 @@
 }
 .settings-switch[aria-checked="true"] { border-color: transparent; background: var(--primary); }
 .settings-switch[aria-checked="true"] > span { background: var(--primary-foreground); transform: translateX(12px); }
-.settings-switch:focus-visible { outline: 1px solid var(--ring); outline-offset: 2px; }
+.settings-switch:focus-visible { outline: none; }
 .settings-switch:disabled { cursor: default; opacity: .5; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -95,7 +94,11 @@
 .settings-line { display: grid; min-width: 0; min-height: 32px; grid-template-columns: minmax(0, 1fr) var(--settings-control); align-items: center; gap: 12px; border-radius: 8px; padding: 2px 4px 2px 8px; }
 .settings-line > :last-child { min-width: 0; max-width: 100%; }
 .settings-line > [data-slot="button"]:last-child, .settings-line > .settings-switch:last-child { justify-self: end; }
+/* The row's wash is the cursor, for the pointer and for focus alike; no
+   control draws a ring or an outline of its own. */
 @media (hover: hover) { .settings-line:hover { background: var(--accent); } }
+.settings-line:has(:focus-visible), .settings-line:has(input:focus) { background: var(--accent); }
+.settings-dialog .settings-line :is(input, select, button):focus { outline: none; box-shadow: none; }
 .settings-line > span, .settings-line > label { display: flex; min-width: 0; align-items: baseline; gap: 8px; overflow: hidden; color: var(--foreground); font-size: 12.5px; font-weight: 500; white-space: nowrap; }
 .settings-line em, .settings-line-wide em { overflow: hidden; color: var(--muted-foreground); font-size: 11px; font-style: normal; font-weight: 400; text-overflow: ellipsis; }
 .settings-line em[data-tone="error"], .settings-line-wide em[data-tone="error"] { color: var(--destructive); }
@@ -126,7 +129,6 @@
   cursor: pointer;
 }
 .settings-dialog .settings-line:hover select, .settings-dialog .settings-line select:focus-visible { color: var(--foreground); outline: none; }
-.settings-dialog .settings-line select:focus-visible { background-color: var(--accent); }
 .settings-dialog .settings-line select option { background: var(--popover); color: var(--foreground); }
 .settings-dialog .settings-line input:not([type="checkbox"]) { width: 100%; min-width: 0; height: 26px; min-height: 26px; margin: 0; border-radius: 6px; padding: 0 8px; font-size: 12px; }
 .settings-dialog .settings-line [data-slot="button"] { height: 26px; min-height: 26px; flex: none; border-radius: 6px; padding: 0 9px; font-size: 12px; }
