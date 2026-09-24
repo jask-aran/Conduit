@@ -99,6 +99,14 @@ export const BROWSER_SHORTCUT_CONFLICTS: BrowserShortcutConflictRecord[] = [
     binding: primary("KeyW", "W"),
   },
   {
+    id: "system-macos-screenshot",
+    owner: "macOS",
+    action: "Take a screenshot",
+    kind: "system",
+    platforms: ["macos"],
+    binding: primary("Digit3", "3", true),
+  },
+  {
     id: "system-close-window",
     owner: "Operating system",
     action: "Close the active window",

@@ -43,7 +43,7 @@ import {
 import { loadVoiceDictationSettings, saveVoiceDictationSettings, VOICE_DICTATION_STORAGE_KEY } from "./chat/voice-dictation";
 import { Transcript } from "./chat/transcript";
 import { isChatContentActivity } from "./chat/transcript-source";
-import { COMMAND_IDS, commandRegistry } from "./commands/command-registry";
+import { COMMAND_IDS, commandRegistry, getCommandDefinition } from "./commands/command-registry";
 import { CommandMenu } from "./navigation/command-menu";
 import { LeaderPalette } from "./navigation/leader-palette";
 import type { PaletteActions, PaletteContext } from "./palette/command-registry";
@@ -1374,6 +1374,34 @@ function App() {
     if (!panelOpen()) setPanelOpenForChat(true);
     setWorkspaceFocusRequest((request) => request + 1);
   };
+  // The go-to jumps. The sidebar is entered at the row for where you are --
+  // the current page, else the folder holding it -- or its first row; the
+  // main pane at its composer; the transcript at its scroller.
+  const focusSidebar = () => {
+    if (isMobileLayout()) setMobileSidebarOpen(true);
+    requestAnimationFrame(() => {
+      const sidebar = document.querySelector<HTMLElement>('[data-region="sidebar"]');
+      if (!sidebar) return;
+      const shown = (element: Element) => element.getClientRects().length > 0;
+      const row = [
+        ...sidebar.querySelectorAll('[aria-current="page"]'),
+        ...sidebar.querySelectorAll("[data-holds-current]"),
+        ...sidebar.querySelectorAll(".sidebar-row, .sidebar-rail-action"),
+      ].find(shown);
+      const target = row && (row.matches("button, a") ? row : row.querySelector("button, a"));
+      (target as HTMLElement | null | undefined)?.focus({ preventScroll: false });
+    });
+  };
+  const focusMainPane = () => {
+    if (isMobileLayout()) setMobileSidebarOpen(false);
+    if (hasComposer()) focusComposer();
+    else document.querySelector<HTMLElement>(".chat-main")?.focus({ preventScroll: true });
+  };
+  const hasTranscript = () => Boolean(document.querySelector(".message-scroller-viewport"));
+  const focusTranscript = () => {
+    if (isMobileLayout()) setMobileSidebarOpen(false);
+    document.querySelector<HTMLElement>(".message-scroller-viewport")?.focus({ preventScroll: true });
+  };
   const toggleChatWorkspaceFocus = () => {
     const inWorkspacePanel = document.activeElement instanceof Element && Boolean(document.activeElement.closest('[data-region="workspace-panel"]'));
     if (inWorkspacePanel) focusChatPane();
@@ -2058,11 +2086,16 @@ function App() {
       shortcutManager.registerHandler(COMMAND_IDS.maximizeWorkspacePanel, "application", maximizeWorkspacePanel),
       shortcutManager.registerHandler(COMMAND_IDS.stashPrompt, "composer", stashPrompt),
       shortcutManager.registerHandler(COMMAND_IDS.stashPrompt, "chat", stashPrompt),
-      shortcutManager.registerHandler(COMMAND_IDS.focusComposer, "application", focusComposer, { when: hasComposer }),
-      shortcutManager.registerHandler(COMMAND_IDS.focusComposer, "chat", focusComposer, { when: hasComposer }),
-      shortcutManager.registerHandler(COMMAND_IDS.focusWorkspacePanel, "application", focusWorkspacePanel, { when: () => Boolean(workspacePanelScope()) }),
-      shortcutManager.registerHandler(COMMAND_IDS.focusWorkspacePanel, "chat", focusWorkspacePanel, { when: () => Boolean(workspacePanelScope()) }),
-      shortcutManager.registerHandler(COMMAND_IDS.focusWorkspacePanel, "composer", focusWorkspacePanel),
+      // The go-to jumps, from every region the leader can start in.
+      ...getCommandDefinition(COMMAND_IDS.focusComposer).contexts.map((context) =>
+        shortcutManager.registerHandler(COMMAND_IDS.focusComposer, context, focusComposer, { when: hasComposer })),
+      ...getCommandDefinition(COMMAND_IDS.focusWorkspacePanel).contexts.map((context) =>
+        shortcutManager.registerHandler(COMMAND_IDS.focusWorkspacePanel, context, focusWorkspacePanel, { when: () => Boolean(workspacePanelScope()) })),
+      ...getCommandDefinition(COMMAND_IDS.focusSidebar).contexts.map((context) =>
+        shortcutManager.registerHandler(COMMAND_IDS.focusSidebar, context, focusSidebar)),
+      ...getCommandDefinition(COMMAND_IDS.focusTranscript).contexts.map((context) =>
+        shortcutManager.registerHandler(COMMAND_IDS.focusTranscript, context, focusTranscript, { when: hasTranscript })),
+      shortcutManager.registerHandler(COMMAND_IDS.focusMainPane, "application", focusMainPane),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "application", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "chat", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "composer", toggleChatWorkspaceFocus),
@@ -2070,8 +2103,6 @@ function App() {
       // A dashboard is the chat's sibling region and keeps what the main pane
       // could do there before regions had names.
       shortcutManager.registerHandler(COMMAND_IDS.stashPrompt, "dashboard", stashPrompt),
-      shortcutManager.registerHandler(COMMAND_IDS.focusComposer, "dashboard", focusComposer, { when: hasComposer }),
-      shortcutManager.registerHandler(COMMAND_IDS.focusWorkspacePanel, "dashboard", focusWorkspacePanel, { when: () => Boolean(workspacePanelScope()) }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "dashboard", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
     ];
     const uninstallShortcuts = shortcutManager.install(window);

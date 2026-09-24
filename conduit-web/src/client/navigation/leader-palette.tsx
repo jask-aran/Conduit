@@ -10,11 +10,14 @@ type LeaderTarget = {
   keys: string[];
 };
 
-const contextLabel = (context: ShortcutContext | undefined) => {
-  if (context === "workspace-panel") return "Workspace";
-  if (context === "application") return "Global";
-  return "Chat";
+const CONTEXT_LABELS: Record<string, string> = {
+  application: "Global",
+  chat: "Chat",
+  composer: "Composer",
+  dashboard: "Dashboard",
+  "workspace-panel": "Workspace",
 };
+const contextLabel = (context: ShortcutContext | undefined) => CONTEXT_LABELS[context ?? ""] ?? "Chat";
 
 export function LeaderPalette(props: { shortcuts: ShortcutManager }) {
   const [shortcutRevision, setShortcutRevision] = createSignal(0);
@@ -25,6 +28,7 @@ export function LeaderPalette(props: { shortcuts: ShortcutManager }) {
     const pending = props.shortcuts.pendingSequence();
     return pending?.context === "application"
       || pending?.context === "chat"
+      || pending?.context === "dashboard"
       || pending?.context === "composer"
       || pending?.context === "workspace-panel"
       ? pending

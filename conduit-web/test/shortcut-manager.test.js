@@ -284,14 +284,10 @@ test("dispatches registry commands from their focused scopes", () => {
   chatRelease();
 
   const workspaceRelease = manager.activateContext("workspace-panel");
-  assert.throws(
-    () => manager.registerHandler(COMMAND_IDS.focusComposer, "workspace-panel", () => {}),
-    /does not declare the workspace-panel context/,
-  );
-  assert.throws(
-    () => manager.registerHandler(COMMAND_IDS.focusWorkspacePanel, "workspace-panel", () => {}),
-    /does not declare the workspace-panel context/,
-  );
+  // The go-to jumps work from every region, the workspace panel included.
+  for (const id of [COMMAND_IDS.focusComposer, COMMAND_IDS.focusWorkspacePanel, COMMAND_IDS.focusSidebar, COMMAND_IDS.focusTranscript]) {
+    assert.ok(getCommandDefinition(id).contexts.includes("workspace-panel"), `${id} works from the workspace panel`);
+  }
   runFromBinding(COMMAND_IDS.toggleChatWorkspaceFocus);
   runFromBinding(COMMAND_IDS.workspaceFiles);
   runFromBinding(COMMAND_IDS.workspaceSourceControl);
