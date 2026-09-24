@@ -1,10 +1,10 @@
 import { createMemo, createSignal, Show } from "solid-js";
-import { CheckIcon, ChevronDownIcon, ChevronUpIcon, MinusIcon, XIcon } from "lucide-solid";
+import { CheckIcon, MinusIcon, XIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { ToolItem } from "../api/contracts";
 import { httpUrl } from "../api/transport";
 import { authorizedFetch } from "../api/native-auth-client";
-import { createReveal } from "./reveal";
+import { Disclosure } from "./disclosure";
 
 const MAX_PREVIEW = 8_000;
 const commandTools = new Set(["bash", "shell", "exec", "terminal", "run_command"]);
@@ -29,7 +29,6 @@ function stringify(value: unknown) {
 }
 
 export function ToolCard(props: { tool?: ToolItem; sessionId?: string | null; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; settled?: boolean }) {
-  const [open, setOpen] = createSignal(Boolean(props.initialOpen));
   const [loaded, setLoaded] = createSignal<unknown>(undefined);
   const [loading, setLoading] = createSignal(false);
   const [full, setFull] = createSignal(false);
@@ -54,14 +53,10 @@ export function ToolCard(props: { tool?: ToolItem; sessionId?: string | null; in
     return commandTools.has(String(tool()?.name || "").toLowerCase()) ? text.slice(-MAX_PREVIEW) : text.slice(0, MAX_PREVIEW);
   });
 
-  const reveal = createReveal(open);
-  const toggle = async () => {
+  // Output a reload left on the server is fetched the first time it is opened.
+  const load = async () => {
     const current = tool();
-    if (!current) return;
-    const next = !open();
-    setOpen(next);
-    props.onOpenChange?.(next);
-    if (!next || !current.outputDeferred || loaded() !== undefined || loading() || !props.sessionId) return;
+    if (!current?.outputDeferred || loaded() !== undefined || loading() || !props.sessionId) return;
     setLoading(true);
     try {
       const response = await authorizedFetch(httpUrl(`/v0/sessions/${encodeURIComponent(props.sessionId)}/tools/${encodeURIComponent(current.toolCallId)}`));
@@ -72,20 +67,19 @@ export function ToolCard(props: { tool?: ToolItem; sessionId?: string | null; in
     finally { setLoading(false); }
   };
 
-  return <Show when={tool()}>{(current) => <div class="tool-card" data-status={status().toLowerCase()}>
-    <Button variant="outline" class="w-full justify-start" aria-label={`${current().name || "Tool"} ${status()}`} aria-expanded={open()} onClick={toggle}>
+  return <Show when={tool()}>{(current) => <Disclosure class="tool-card" data-status={status().toLowerCase()}
+    trigger={Button} triggerProps={{ variant: "outline" }} headerClass="w-full justify-start" bodyClass="tool-card-content"
+    label={`${current().name || "Tool"} ${status()}`}
+    initialOpen={props.initialOpen} onOpenChange={(next) => { props.onOpenChange?.(next); if (next) void load(); }}
+    header={<>
       {status() === "Running" ? <Spinner data-icon="inline-start" /> : status() === "Complete" ? <CheckIcon /> : status() === "Error" ? <XIcon /> : <MinusIcon />}
       <span class="truncate">{current().name || "Tool"}<Show when={summary(current())}> · {summary(current())}</Show></span>
       <span class="ml-auto text-xs text-muted-foreground">{status()}</span>
-      <Show when={open()} fallback={<ChevronDownIcon />}><ChevronUpIcon /></Show>
-    </Button>
-    <Show when={reveal.mounted()}>
-      <div ref={reveal.ref} class="tool-card-content">
-        <pre>{loading() ? "Loading…" : preview()}</pre>
-        <Show when={!loading() && output().length > MAX_PREVIEW}>
-          <Button variant="ghost" size="sm" onClick={() => setFull((value) => !value)}>{full() ? "Show preview" : `Show full output · ${output().length - MAX_PREVIEW} hidden characters`}</Button>
-        </Show>
-      </div>
-    </Show>
-  </div>}</Show>;
+    </>}
+    body={() => <>
+      <pre>{loading() ? "Loading…" : preview()}</pre>
+      <Show when={!loading() && output().length > MAX_PREVIEW}>
+        <Button variant="ghost" size="sm" onClick={() => setFull((value) => !value)}>{full() ? "Show preview" : `Show full output · ${output().length - MAX_PREVIEW} hidden characters`}</Button>
+      </Show>
+    </>} />}</Show>;
 }

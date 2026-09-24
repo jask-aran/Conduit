@@ -1,3 +1,8 @@
+/* A disclosure's chevron turns as it opens. */
+.disclosure-chevron { transition: transform 150ms ease; }
+.disclosure-chevron[data-open="true"] { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .disclosure-chevron { transition: none; } }
+
 /* A step that arrives in an open trace fades in with a short rise; its height
    arrives at once, so nothing above it moves (DESIGN.md, Motion). */
 .turn-trace-step { min-width: 0; }

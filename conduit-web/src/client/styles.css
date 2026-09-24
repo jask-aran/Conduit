@@ -324,8 +324,6 @@ svg { stroke-width: 1.5; }
 .turn-trace-summary { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .turn-trace[data-active="true"] .turn-trace-preview { animation: trace-shimmer 1.6s ease-in-out infinite; }
 @keyframes trace-shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
-.turn-trace-chevron { transition: transform 0.15s ease; }
-.turn-trace-chevron[data-open="true"] { transform: rotate(180deg); }
 .turn-trace-body { display: flex; flex-direction: column; gap: 6.4px; margin-left: 5.6px; padding: 1.6px 0 4.8px 11.2px; border-left: 1px solid var(--border); }
 .turn-trace-body .tool-card { margin-left: 0; }
 .turn-trace-text .chat-markdown { color: var(--muted-foreground); font-size: 11.2px; }
@@ -352,8 +350,6 @@ svg { stroke-width: 1.5; }
 .turn-stop-mark { fill: currentColor; stroke-width: 0; scale: 0.78; }
 .turn-stop-row { cursor: default; }
 .turn-stop-row:hover { color: var(--muted-foreground); }
-.discarded-answer-chevron { transition: transform 0.15s ease; }
-.discarded-answer-chevron[data-open="true"] { transform: rotate(180deg); }
 .discarded-answer-body { padding: 1.6px 0 4.8px 1.6px; }
 .discarded-answer-body .chat-markdown { color: var(--muted-foreground); font-size: 11.2px; }
 .tool-card-content { border: 0.8px solid var(--border); border-top: 0; border-radius: 0 0 var(--radius) var(--radius); background: var(--card); }
@@ -1130,8 +1126,6 @@ svg { stroke-width: 1.5; }
 .turn-trace-summary { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .turn-trace[data-active="true"] .turn-trace-preview { animation: trace-shimmer 1.6s ease-in-out infinite; }
 @keyframes trace-shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
-.turn-trace-chevron { transition: transform 0.15s ease; }
-.turn-trace-chevron[data-open="true"] { transform: rotate(180deg); }
 .turn-trace-body { display: flex; flex-direction: column; gap: 8px; margin-left: 7px; padding: 2px 0 6px 14px; border-left: 1px solid var(--border); }
 .turn-trace-body .tool-card { margin-left: 0; }
 .turn-trace-text .chat-markdown { color: var(--muted-foreground); font-size: 14px; }
@@ -1152,8 +1146,6 @@ svg { stroke-width: 1.5; }
 .turn-stop-mark { fill: currentColor; stroke-width: 0; scale: 0.78; }
 .turn-stop-row { cursor: default; }
 .turn-stop-row:hover { color: var(--muted-foreground); }
-.discarded-answer-chevron { transition: transform 0.15s ease; }
-.discarded-answer-chevron[data-open="true"] { transform: rotate(180deg); }
 .discarded-answer-body { padding: 2px 0 6px 2px; }
 .discarded-answer-body .chat-markdown { color: var(--muted-foreground); font-size: 14px; }
 .turn-trace-error pre { max-height: 120px; margin: 0; overflow: auto; color: var(--foreground); font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; white-space: pre-wrap; }
