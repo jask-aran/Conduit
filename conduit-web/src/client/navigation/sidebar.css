@@ -50,6 +50,7 @@
 .sidebar-row { width: 100%; min-height: 24px; padding: 4px 6.4px; text-align: left; font-size: 10.4px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 32%); }
 .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible)) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 .sidebar-row[aria-current="page"] { color: var(--sidebar-accent-foreground); font-weight: 660; }
+.sidebar-row[aria-current="page"] svg { stroke-width: 2.6; }
 .sidebar-chat[data-selected="true"] { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 .sidebar-row > svg { width: 12px; height: 12px; flex: none; color: var(--muted-foreground); }
 .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"]) > svg, .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"]) .sidebar-project-link > svg { color: var(--sidebar-accent-foreground); }
@@ -58,7 +59,6 @@
 .sidebar-row span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-row span.runtime-indicator { min-width: 0; flex: none; width: 12.8px; overflow: visible; }
 .sidebar-row span.thread-harness-mark { min-width: 12.8px; width: 12.8px; flex: none; overflow: visible; }
-.sidebar-project { font-weight: 500; }
 .sidebar-project-link { display: flex; min-width: 0; min-height: 16px; flex: 1; align-items: center; gap: 6.4px; border: 0; background: transparent; padding: 0; color: inherit; text-align: left; }
 .sidebar-project-link > svg, .sidebar-project-link > .workspace-glyph { width: 12px; height: 12px; flex: none; color: var(--muted-foreground); }
 .sidebar-project-toggle { display: grid; width: 17.6px; height: 17.6px; flex: none; margin-right: -4.8px; cursor: pointer; place-items: center; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted-foreground); }
@@ -71,7 +71,7 @@
 .sidebar-terminal-status { width: 5px; height: 5px; min-width: 5px !important; flex: none !important; border-radius: 999px; background: var(--success, #56b870); overflow: visible !important; }
 .sidebar-terminal-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; line-height: 1.2; }
 .sidebar-terminal-copy strong, .sidebar-terminal-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sidebar-terminal-copy strong { font-size: inherit; font-weight: 600; }
+.sidebar-terminal-copy strong { font-size: inherit; font-weight: inherit; }
 .sidebar-terminal-copy small { color: var(--muted-foreground); font-size: .82em; }
 .workspace-cloning-badge { display: inline-flex; margin-left: auto; align-items: center; gap: 3.2px; color: var(--accent-cool); font-size: 8px; font-weight: 650; letter-spacing: .025em; }
 .workspace-cloning-badge svg { width: 9.6px; height: 9.6px; animation: clone-spin 1.1s linear infinite; }
@@ -188,6 +188,7 @@
 .sidebar-row { width: 100%; min-height: 34px; padding: 6px 9px; text-align: left; font-size: 14.5px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 32%); }
 .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible)) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 .sidebar-row[aria-current="page"] { color: var(--sidebar-accent-foreground); font-weight: 660; }
+.sidebar-row[aria-current="page"] svg { stroke-width: 2.6; }
 .sidebar-chat[data-selected="true"] { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 .sidebar-row > svg { width: 17px; height: 17px; flex: none; color: var(--muted-foreground); }
 .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"]) > svg, .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"]) .sidebar-project-link > svg { color: var(--sidebar-accent-foreground); }
@@ -196,7 +197,6 @@
 .sidebar-row span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-row span.runtime-indicator { min-width: 0; flex: none; width: 16px; overflow: visible; }
 .sidebar-row span.thread-harness-mark { min-width: 16px; width: 16px; flex: none; overflow: visible; }
-.sidebar-project { font-weight: 500; }
 .sidebar-project-link { display: flex; min-width: 0; min-height: 20px; flex: 1; align-items: center; gap: 8px; border: 0; background: transparent; padding: 0; color: inherit; text-align: left; }
 .sidebar-project-link > svg, .sidebar-project-link > .workspace-glyph { width: 17px; height: 17px; flex: none; color: var(--muted-foreground); }
 .sidebar-project-toggle { display: grid; width: 26px; height: 26px; flex: none; margin-right: -6px; cursor: pointer; place-items: center; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted-foreground); }
