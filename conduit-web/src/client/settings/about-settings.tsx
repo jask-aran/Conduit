@@ -1,5 +1,4 @@
 import { createSignal, onMount, Show } from "solid-js";
-import { ChevronRightIcon } from "lucide-solid";
 import { httpUrl } from "../api/transport.js";
 import { authorizedFetch } from "../api/native-auth-client.ts";
 import {
@@ -41,21 +40,19 @@ export function AboutSettingsTile() {
     || (isStandaloneBrowser() ? "Installed to the home screen" : "Browser tab");
 
   const row = (label: string, value: string, detail?: string) =>
-    <div class="settings-row"><span>{label}</span>
-      <span class="settings-build">{value}{detail ? <small> {detail}</small> : null}</span>
+    <div class="settings-line" title={detail || undefined}><span>{label}</span>
+      <span class="settings-line-value" data-mono>{value}</span>
     </div>;
 
-  return <details class="settings-tile">
-    <summary><span><strong>About</strong><small>{buildLabel(clientBuild)}</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
-    <div class="settings-rows">
-      {row("Interface", buildLabel(clientBuild), formatBuiltAt(clientBuild.builtAt))}
-      {row("Running as", runningAs())}
-      <Show when={installedClientKind !== "browser"}>
-        {row(SHELL_LABELS[installedClientKind] || "App shell", shell() || "Not reported")}
-      </Show>
-      <Show when={server() !== "pending"} fallback={row("Server", "Asking…")}>
-        {row("Server", (server() as ServerBuild | null)?.release || "Unreachable")}
-      </Show>
-    </div>
-  </details>;
+  return <section class="settings-group" aria-label="About">
+    <h3>About</h3>
+    {row("Interface", buildLabel(clientBuild), formatBuiltAt(clientBuild.builtAt))}
+    {row("Running as", runningAs())}
+    <Show when={installedClientKind !== "browser"}>
+      {row(SHELL_LABELS[installedClientKind] || "App shell", shell() || "Not reported")}
+    </Show>
+    <Show when={server() !== "pending"} fallback={row("Server", "Asking…")}>
+      {row("Server", (server() as ServerBuild | null)?.release || "Unreachable")}
+    </Show>
+  </section>;
 }
