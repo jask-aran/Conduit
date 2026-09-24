@@ -862,7 +862,7 @@ export function Sidebar(props: {
         void props.onOpenChat(menuProps.chat, menuProps.project);
       }}
     >
-      <Show when={props.navigatingId === menuProps.chat.id} fallback={<RuntimeIndicator process={processFor(menuProps.chat)} stale={props.runtime.stale()} unread={menuProps.chat.unread} fallback={<ThreadHarnessMark id={menuProps.chat.harnessId} />} />}>
+      <Show when={props.navigatingId === menuProps.chat.id} fallback={<RuntimeIndicator process={processFor(menuProps.chat)} stale={props.runtime.stale()} unread={menuProps.chat.unread} fallback={<ThreadHarnessMark id={menuProps.chat.harnessId} lively />} />}>
         <span class="runtime-indicator runtime-indicator-muted" role="status" aria-label="Opening chat"><Spinner class="size-3" /></span>
       </Show>
       <SidebarChatTitle title={title} animate={animateTitle} />
