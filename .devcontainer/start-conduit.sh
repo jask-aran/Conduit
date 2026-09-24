@@ -54,6 +54,8 @@ fi
 if [ -n "${CONDUIT_DESKTOP_UPDATE_DIR:-}" ]; then export CONDUIT_DESKTOP_UPDATE_DIR; fi
 HEALTH_URL="http://127.0.0.1:${CONDUIT_PORT}/healthz"
 DRAIN_TIMEOUT_SECONDS="${CONDUIT_RESTART_DRAIN_TIMEOUT_SECONDS:-600}"
+PWA_GRACE_SECONDS="${CONDUIT_PWA_RESTART_GRACE_SECONDS:-20}"
+PWA_GRACE_STARTED_AT=0
 
 usage() {
   cat <<EOF
@@ -66,7 +68,7 @@ Commands:
   dev                   Start the server watcher and Vite hot reload.
   stop                  Stop Vite, Conduit, and resident Pi. Preserve terminal sessions.
   restart [--force]     Rebuild, wait for assistant responses, then restart.
-                        --force skips the response drain.
+                        --force skips the response drain and client update grace.
   status                Report the managed process and health endpoint.
   logs [server|vite] [-f]
                         Show a managed log (follow with -f).
@@ -221,6 +223,33 @@ build_if_needed() {
   fi
 }
 
+worker_hash() {
+  if [[ -f "$WEB_DIR/dist/sw.js" ]]; then sha256sum "$WEB_DIR/dist/sw.js" | cut -d ' ' -f1; fi
+}
+
+prepare_client_restart() {
+  local previous_hash="$1"
+  local forced="${2:-false}"
+  [[ "$forced" == "false" && "$previous_hash" != "$(worker_hash)" ]] || return 0
+  [[ "$PWA_GRACE_SECONDS" =~ ^[0-9]+$ ]] || {
+    echo "CONDUIT_PWA_RESTART_GRACE_SECONDS must be a non-negative integer." >&2
+    return 1
+  }
+  (( PWA_GRACE_SECONDS > 0 )) || return 0
+  local pid
+  pid="$(managed_pid)" || return 0
+  is_healthy || return 0
+  kill -USR2 "$pid" || return 1
+  echo "Giving connected browsers ${PWA_GRACE_SECONDS}s to install the new client."
+  PWA_GRACE_STARTED_AT="$(date +%s)"
+}
+
+wait_for_client_restart_grace() {
+  (( PWA_GRACE_STARTED_AT > 0 )) || return 0
+  local remaining=$(( PWA_GRACE_SECONDS - ($(date +%s) - PWA_GRACE_STARTED_AT) ))
+  if (( remaining > 0 )); then sleep "$remaining"; fi
+}
+
 start_server() {
   local watch="${1:-false}"
   prepare_dirs || return
@@ -360,11 +389,16 @@ case "$COMMAND" in
   stop) stop ;;
   restart)
     guard_component_mode
+    previous_worker_hash="$(worker_hash)"
     build_if_needed
-    if [[ "${1:-}" == "--force" ]]; then shift
+    force_restart=false
+    if [[ "${1:-}" == "--force" ]]; then force_restart=true; shift
     elif [[ $# -gt 0 ]]; then echo "Unknown restart option: $1" >&2; usage >&2; exit 2
-    else wait_for_generations; fi
+    fi
     [[ $# -eq 0 ]] || { echo "Unknown restart option: $1" >&2; usage >&2; exit 2; }
+    prepare_client_restart "$previous_worker_hash" "$force_restart"
+    if [[ "$force_restart" == "false" ]]; then wait_for_generations; fi
+    wait_for_client_restart_grace
     stop
     start_server false
     ;;
@@ -372,8 +406,11 @@ case "$COMMAND" in
   logs) logs "$@" ;;
   deploy)
     guard_component_mode
+    previous_worker_hash="$(worker_hash)"
     setup
     build
+    prepare_client_restart "$previous_worker_hash"
+    wait_for_client_restart_grace
     stop
     start_server false
     ;;
