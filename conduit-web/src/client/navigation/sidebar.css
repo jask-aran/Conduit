@@ -49,11 +49,11 @@
 .sidebar-row, .sidebar-user { display: flex; min-width: 0; align-items: center; gap: 6.4px; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
 .sidebar-row { width: 100%; min-height: 24px; padding: 4px 6.4px; text-align: left; font-size: 10.4px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 32%); }
 .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible)) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
-.sidebar-row[aria-current="page"] { color: var(--sidebar-accent-foreground); font-weight: 660; }
-.sidebar-row[aria-current="page"] svg { stroke-width: 2.6; }
+.sidebar-row:is([aria-current="page"], [data-holds-current]) { color: var(--sidebar-accent-foreground); font-weight: 660; }
+.sidebar-row:is([aria-current="page"], [data-holds-current]) svg { stroke-width: 2.6; }
 .sidebar-chat[data-selected="true"] { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 .sidebar-row > svg { width: 12px; height: 12px; flex: none; color: var(--muted-foreground); }
-.sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"]) > svg, .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"]) .sidebar-project-link > svg { color: var(--sidebar-accent-foreground); }
+.sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"], [data-holds-current]) > svg, .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"], [data-holds-current]) .sidebar-project-link > svg { color: var(--sidebar-accent-foreground); }
 .sidebar-action-slot { display: grid; width: 17.6px; height: 17.6px; min-width: 17.6px !important; flex: none !important; margin-right: -4.8px; place-items: center; overflow: visible !important; }
 .sidebar-route-indicator { width: 10px; height: 10px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 35%); }
 .sidebar-row span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -187,11 +187,11 @@
 .sidebar-row, .sidebar-user { display: flex; min-width: 0; align-items: center; gap: 8px; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
 .sidebar-row { width: 100%; min-height: 34px; padding: 6px 9px; text-align: left; font-size: 14.5px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 32%); }
 .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible)) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
-.sidebar-row[aria-current="page"] { color: var(--sidebar-accent-foreground); font-weight: 660; }
-.sidebar-row[aria-current="page"] svg { stroke-width: 2.6; }
+.sidebar-row:is([aria-current="page"], [data-holds-current]) { color: var(--sidebar-accent-foreground); font-weight: 660; }
+.sidebar-row:is([aria-current="page"], [data-holds-current]) svg { stroke-width: 2.6; }
 .sidebar-chat[data-selected="true"] { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 .sidebar-row > svg { width: 17px; height: 17px; flex: none; color: var(--muted-foreground); }
-.sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"]) > svg, .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"]) .sidebar-project-link > svg { color: var(--sidebar-accent-foreground); }
+.sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"], [data-holds-current]) > svg, .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"], [data-holds-current]) .sidebar-project-link > svg { color: var(--sidebar-accent-foreground); }
 .sidebar-action-slot { display: grid; width: 24px; height: 24px; min-width: 24px !important; flex: none !important; margin-right: -6px; place-items: center; overflow: visible !important; }
 .sidebar-route-indicator { width: 12px; height: 12px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 35%); }
 .sidebar-row span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

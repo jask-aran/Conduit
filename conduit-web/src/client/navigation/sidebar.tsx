@@ -635,6 +635,10 @@ export function Sidebar(props: {
   // selection alone cannot say which row the reader is on -- without the route,
   // the project row went dark and New chat lit up in its place.
   const onProjectPage = (project: Project) => props.projectId === project.id && (props.project || props.selectedId == null);
+  // A folder or workspace holding the open chat is drawn as current with it,
+  // collapsed or not, wherever its row appears -- so where you are reads up
+  // the tree.
+  const holdsCurrentChat = (project: Project) => props.selectedId != null && project.sessions.some((chat) => chat.id === props.selectedId);
   const railProjectIsActive = (project: Project) => project.id === props.projectId || project.sessions.some((chat) => chat.id === props.selectedId);
   const railProjectIsLive = (project: Project) => project.sessions.some((chat) => Boolean(processFor(chat)));
   const RailAction = (railProps: { label: string; onClick: () => void; current?: boolean; live?: boolean; children: unknown }) => <Tooltip>
@@ -984,7 +988,7 @@ export function Sidebar(props: {
         : `Delete ${blockProps.workspace ? "workspace" : "folder"}`;
     return <div class="sidebar-project-block">
       <ContextMenu placement={phoneLayout() ? "bottom-start" : "right-start"} onOpenChange={(openMenu) => { if (openMenu) guard.suppressClick = true; else setTimeout(() => { guard.suppressClick = false; }); }}>
-        <ContextMenuTrigger as="div" class="sidebar-row sidebar-project" data-open={open()} aria-current={onProjectPage(blockProps.project) ? "page" : undefined}>
+        <ContextMenuTrigger as="div" class="sidebar-row sidebar-project" data-open={open()} aria-current={onProjectPage(blockProps.project) ? "page" : undefined} data-holds-current={holdsCurrentChat(blockProps.project) || undefined}>
           <button class="sidebar-project-link" onClick={() => {
             if (guard.suppressClick) { guard.suppressClick = false; return; }
             closeMobile();
@@ -1055,8 +1059,9 @@ export function Sidebar(props: {
       : item.type === "project" ? onProjectPage(item.project)
         : false;
     return <ContextMenu placement={phoneLayout() ? "bottom-start" : "right-start"}>
-      <ContextMenuTrigger as="button" type="button" class="sidebar-row sidebar-pinned" aria-current={current() ? "page" : undefined} onClick={open}>
-        <Show when={item.type === "chat"}><MessageSquareIcon /></Show>
+      <ContextMenuTrigger as="button" type="button" class="sidebar-row sidebar-pinned" aria-current={current() ? "page" : undefined} data-holds-current={item.type === "project" && holdsCurrentChat(item.project) || undefined} onClick={open}>
+        <Show when={item.type === "chat" ? item : false}>{(pinned) =>
+          <RuntimeIndicator process={processFor(pinned().chat)} stale={props.runtime.stale()} unread={pinned().chat.unread} fallback={<ThreadHarnessMark id={pinned().chat.harnessId} lively />} />}</Show>
         <Show when={item.type === "project"}>
           <Show when={item.type === "project" && workspaces().some((project) => project.id === item.project.id)} fallback={<FolderIcon />}>
             <WorkspaceGlyph appearance={item.type === "project" ? item.project.workspaceAppearance : undefined} />
