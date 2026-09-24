@@ -1280,7 +1280,7 @@ export function Settings(props: {
                   <div class="settings-line"><span>Source</span>
                     <Segmented label="Transcription source" value={voiceServerSettings()!.mode} disabled={voiceBusy()} onChange={(mode) => updateVoiceServer({ mode })} options={[
                       { value: "off", label: "Off", icon: <MicOffIcon /> },
-                      { value: "local", label: "This machine", icon: <CpuIcon /> },
+                      { value: "local", label: "Local", icon: <CpuIcon />, title: "This machine" },
                       { value: "remote", label: "Cloud", icon: <CloudIcon /> },
                     ]} />
                   </div>
@@ -1389,10 +1389,10 @@ export function Settings(props: {
                     ]} />
                   </div>
                   <div class="settings-line"><span>Send when done</span><Switch label="Send when done" checked={voiceDraft().autoSend} onChange={(autoSend) => updateVoiceDraft({ autoSend })} /></div>
-                  <div class="settings-line"><span>Keep microphone warm<Show when={warmMicrophoneActive()}><em>live</em></Show></span>
+                  <div class="settings-line"><span>Keep mic warm<Show when={warmMicrophoneActive()}><em>live</em></Show></span>
                     <div class="settings-line-control">
                       <Show when={warmMicrophoneActive()}><Button variant="ghost" size="sm" onClick={stopWarmMicrophone}>Release</Button></Show>
-                      <Switch label="Keep microphone warm" checked={voiceDraft().warmMicrophone} onChange={(warmMicrophone) => updateVoiceDraft({ warmMicrophone })} />
+                      <Switch label="Keep mic warm" checked={voiceDraft().warmMicrophone} onChange={(warmMicrophone) => updateVoiceDraft({ warmMicrophone })} />
                     </div>
                   </div>
                 </section>
