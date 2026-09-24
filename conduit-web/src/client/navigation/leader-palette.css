@@ -4,13 +4,22 @@
  * (.composer-surface-material) and the question card's row shape. It arrives
  * gently and leaves quickly the way it came when a choice or Esc ends it.
  */
+/* The scrim takes every press (the manager ends the leader on it) and draws
+   no colour itself: the dim is the shadow around the lit region, a cut-out
+   the size of the focused region that moves when the level shown changes. */
 .leader-menu-scrim {
   position: fixed;
   inset: 0;
   z-index: 74;
-  background: rgb(0 0 0 / 48%);
+  overflow: hidden;
   animation: leader-menu-dim 150ms ease-out both;
 }
+.leader-menu-lit {
+  position: absolute;
+  box-shadow: 0 0 0 200vmax rgb(0 0 0 / 48%);
+  transition: top 200ms cubic-bezier(.2, .8, .2, 1), left 200ms cubic-bezier(.2, .8, .2, 1), width 200ms cubic-bezier(.2, .8, .2, 1), height 200ms cubic-bezier(.2, .8, .2, 1);
+}
+.leader-menu-lit[data-whole] { top: 50%; left: 50%; width: 0; height: 0; }
 
 .leader-menu {
   position: fixed;
@@ -105,6 +114,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .leader-menu, .leader-menu-scrim { animation: none; }
+  .leader-menu-lit { transition: none; }
 }
 
 .leader-menu-empty { margin: 4px 8px 6px; color: var(--muted-foreground); font-size: 12px; }
