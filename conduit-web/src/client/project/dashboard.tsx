@@ -396,7 +396,7 @@ export function ProjectDashboard(props: {
                 </DashboardControlGroup>
                 <DashboardSearchButton aria-label={`Search chats in ${props.project.name}`} title="Search workspace chats" onClick={props.onSearchChats}><SearchIcon /></DashboardSearchButton>
               </div>}>
-            <Show when={visibleChats().length} fallback={<DashboardEmpty>No chats yet. Start one above.</DashboardEmpty>}>
+            <Show when={visibleChats().length} fallback={<DashboardEmpty>Nothing here yet.</DashboardEmpty>}>
               <DashboardScrollRegion class="project-chat-list">
                 <For each={visibleChats()}>{(item) =>
                   <ContextMenu><ContextMenuTrigger as={DashboardRow} element="button" onPointerEnter={() => props.onPrefetchChat(item)} onFocus={() => props.onPrefetchChat(item)} onClick={() => void props.onOpenChat(item, props.project)} leading={<RuntimeIndicator process={props.runtime.getProcess(item.id)} stale={props.runtime.stale()} unread={item.unread} fallback={<ThreadHarnessMark id={item.harnessId} />} />} content={<>

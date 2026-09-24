@@ -137,7 +137,7 @@ export function AppDashboard(props: {
               <SearchIcon />
             </DashboardSearchButton>
           </div>}>
-        <Show when={chats().length} fallback={<DashboardEmpty>No recent chats.</DashboardEmpty>}>
+        <Show when={chats().length} fallback={<DashboardEmpty>Nothing here yet.</DashboardEmpty>}>
           <DashboardScrollRegion class="project-chat-list">
             <For each={chats()}>{({ chat, project }) =>
               <ContextMenu><ContextMenuTrigger as={DashboardRow} element="button" onPointerEnter={() => props.onPrefetchChat(chat)} onFocus={() => props.onPrefetchChat(chat)} onClick={() => props.onOpenChat(chat, project)} leading={<RuntimeIndicator process={props.runtime.getProcess(chat.id)} stale={props.runtime.stale()} unread={chat.unread} fallback={<ThreadHarnessMark id={chat.harnessId} />} />} content={<>
@@ -155,7 +155,7 @@ export function AppDashboard(props: {
       </DashboardSection>} rail={<>
 
       <DashboardSection class="app-dashboard-workspaces" id="recent-workspaces-title" title="Recent Workspaces" description="Open a dashboard">
-        <Show when={workspaces().length} fallback={<DashboardEmpty>No Workspaces yet.</DashboardEmpty>}>
+        <Show when={workspaces().length} fallback={<DashboardEmpty>Nothing here yet.</DashboardEmpty>}>
           <div class="app-dashboard-list">
             <For each={workspaces()}>{(project) =>
               <ContextMenu><ContextMenuTrigger as={DashboardRow} element="a" href={projectPath(project)} onPointerEnter={() => props.onPrefetchProject(project)} onFocus={() => props.onPrefetchProject(project)} onClick={(event: MouseEvent) => { event.preventDefault(); props.onOpenProject(project); }} leading={<WorkspaceGlyph appearance={project.workspaceAppearance} />} content={<><strong>{project.name}</strong><small>{relativeActivity(latestActivity(project))}</small></>} trailing={<ArrowRightIcon />} /><ContextMenuContent class="w-60 sidebar-context-menu"><ContextMenuGroup>
