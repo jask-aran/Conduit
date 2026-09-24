@@ -85,13 +85,14 @@
    name, on the same line. */
 .settings-list { --settings-control: 240px; display: grid; min-width: 0; gap: 22px; max-width: 640px; }
 .settings-group { display: grid; gap: 1px; }
-.settings-group > h3 { margin: 0 0 4px; padding: 0 8px; color: color-mix(in oklch, var(--foreground), transparent 52%); font-size: 10.5px; font-weight: 700; letter-spacing: .02em; }
+/* Headings and names are the rail's: a group heading is its group label, a row's name its item. */
+.settings-group > h3 { margin: 0 0 2px; padding: 3.2px 6.4px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 52%); font-size: 9.6px; font-weight: 700; letter-spacing: .02em; }
 /* Every row's control sits in one column of one width, so the boxes line
    up: a segmented choice, an input or a select fills it; a lone button or
    switch sits at its right edge. The name gives way first on a narrow
    screen, and nothing is wider than the column, so the page never scrolls
    sideways. */
-.settings-line { display: grid; min-width: 0; min-height: 32px; grid-template-columns: minmax(0, 1fr) var(--settings-control); align-items: center; gap: 12px; border-radius: 8px; padding: 2px 4px 2px 8px; }
+.settings-line { display: grid; min-width: 0; min-height: 28px; grid-template-columns: minmax(0, 1fr) var(--settings-control); align-items: center; gap: 12px; border-radius: 6.4px; padding: 2px 4px 2px 6.4px; }
 .settings-line > :last-child { min-width: 0; max-width: 100%; }
 .settings-line > [data-slot="button"]:last-child, .settings-line > .settings-switch:last-child { justify-self: end; }
 /* The row's wash is the cursor, for the pointer and for focus alike; no
@@ -99,8 +100,8 @@
 @media (hover: hover) { .settings-line:hover { background: var(--accent); } }
 .settings-line:has(:focus-visible), .settings-line:has(input:focus) { background: var(--accent); }
 .settings-dialog .settings-line :is(input, select, button):focus { outline: none; box-shadow: none; }
-.settings-line > span, .settings-line > label { display: flex; min-width: 0; align-items: baseline; gap: 8px; overflow: hidden; color: var(--foreground); font-size: 12.5px; font-weight: 500; white-space: nowrap; }
-.settings-line em, .settings-line-wide em { overflow: hidden; color: var(--muted-foreground); font-size: 11px; font-style: normal; font-weight: 400; text-overflow: ellipsis; }
+.settings-line > span, .settings-line > label { display: flex; min-width: 0; align-items: baseline; gap: 8px; overflow: hidden; color: var(--foreground); font-size: 10.4px; font-weight: 400; white-space: nowrap; }
+.settings-line em, .settings-line-wide em { overflow: hidden; color: var(--muted-foreground); font-size: 9.6px; font-style: normal; font-weight: 400; text-overflow: ellipsis; }
 .settings-line em[data-tone="error"], .settings-line-wide em[data-tone="error"] { color: var(--destructive); }
 .settings-line em[data-tone="ok"] { color: var(--foreground); }
 .settings-line-control { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: 2px; }
@@ -115,29 +116,30 @@
 .settings-dialog .settings-line select {
   width: 100%;
   min-width: 0;
-  height: 26px;
-  min-height: 26px;
+  height: 24px;
+  min-height: 24px;
   appearance: none;
   border: 0;
   border-radius: 6px;
   background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 7px center;
   padding: 0 22px 0 8px;
   color: var(--muted-foreground);
-  font-size: 12px;
+  font-size: 10.4px;
   text-align: right;
   text-overflow: ellipsis;
   cursor: pointer;
 }
 .settings-dialog .settings-line:hover select, .settings-dialog .settings-line select:focus-visible { color: var(--foreground); outline: none; }
 .settings-dialog .settings-line select option { background: var(--popover); color: var(--foreground); }
-.settings-dialog .settings-line input:not([type="checkbox"]) { width: 100%; min-width: 0; height: 26px; min-height: 26px; margin: 0; border-radius: 6px; padding: 0 8px; font-size: 12px; }
-.settings-dialog .settings-line [data-slot="button"] { height: 26px; min-height: 26px; flex: none; border-radius: 6px; padding: 0 9px; font-size: 12px; }
-.settings-dialog .settings-line [data-slot="button"][data-size="icon-sm"], .settings-dialog .settings-line [data-slot="button"]:has(> svg:only-child) { width: 26px; padding: 0; }
-.settings-dialog .settings-line [data-slot="button"] svg { width: 13px; height: 13px; }
-.settings-dialog .settings-keycap-input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; text-align: center; caret-color: transparent; cursor: pointer; }
+.settings-dialog .settings-line input:not([type="checkbox"]) { width: 100%; min-width: 0; height: 24px; min-height: 24px; margin: 0; border-radius: 6px; padding: 0 8px; font-size: 10.4px; }
+.settings-dialog .settings-line [data-slot="button"] { height: 24px; min-height: 24px; flex: none; border-radius: 6px; padding: 0 8px; font-size: 10.4px; }
+.settings-dialog .settings-line [data-slot="button"][data-size="icon-sm"], .settings-dialog .settings-line [data-slot="button"]:has(> svg:only-child) { width: 24px; padding: 0; }
+.settings-dialog .settings-line [data-slot="button"] svg { width: 12px; height: 12px; }
+.settings-dialog .settings-keycap-input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; text-align: center; caret-color: transparent; cursor: pointer; }
 /* Equal segments, each as wide as the longest label, so none truncates. */
 .settings-line > .settings-segmented { width: 100%; grid-template-columns: repeat(var(--segments), minmax(0, 1fr)); }
-.settings-line > .settings-segmented button { min-height: 22px; padding: 0 6px; font-size: 11.5px; }
+.settings-line > .settings-segmented button { min-height: 20px; gap: 5px; padding: 0 6px; font-size: 10.4px; }
+.settings-line > .settings-segmented button svg { width: 12px; height: 12px; }
 .settings-progress { height: 3px; appearance: none; border: 0; border-radius: 999px; background: var(--input); overflow: hidden; }
 .settings-progress::-webkit-progress-bar { background: var(--input); }
 .settings-progress::-webkit-progress-value { border-radius: 999px; background: var(--foreground); }
@@ -146,9 +148,10 @@
 @media (max-width: 760px) {
   .settings-list { --settings-control: min(54%, 220px); gap: 20px; }
   .settings-line { gap: 10px; }
-  .settings-group > h3 { font-size: 12px; }
+  .settings-group > h3 { padding: 5px 9px; font-size: 13px; }
   .settings-line { min-height: 44px; }
-  .settings-line > span, .settings-line > label { font-size: 14px; }
+  .settings-line { padding-left: 9px; }
+  .settings-line > span, .settings-line > label { font-size: 14.5px; }
   .settings-line em { font-size: 12.5px; }
   .settings-dialog .settings-line select { height: 34px; font-size: 14px; }
   .settings-dialog .settings-line input:not([type="checkbox"]) { height: 34px; font-size: 14px; }
@@ -162,3 +165,37 @@
 }
 /* A backstop: a settings list never scrolls sideways, even if a value runs long. */
 .settings-dialog .settings-content:has(.settings-list) { overflow-x: hidden; }
+
+/* The dialog's two titles, "Settings" over the rail and the section's over
+   the page, are one size and weight and sit on one line. */
+@media (min-width: 761px) {
+  .settings-dialog .settings-shell .settings-rail h2,
+  .settings-dialog .settings-shell .settings-content > header h2 { font-size: 18px; font-weight: 600; letter-spacing: -.02em; line-height: 27px; }
+  .settings-dialog .settings-shell .settings-content { padding-top: 16px; }
+  .settings-dialog .settings-shell .settings-content > header { margin: 0 0 18px; }
+}
+
+/* The rail is drawn as the app sidebar is: group labels and rows at its
+   sizes, left edges on one line, 12px icons 6.4px from their label. The
+   current section is white and semibold with a heavier icon and no fill;
+   the wash is only the cursor, under the pointer or keyboard focus. */
+.settings-dialog .settings-shell .settings-rail h2 { margin-inline: 6.4px; }
+.settings-dialog .settings-shell .settings-nav-group { gap: 0; }
+.settings-dialog .settings-shell .settings-nav-group > h3 { text-transform: none; padding: 3.2px 6.4px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 52%); font-size: 9.6px; font-weight: 700; letter-spacing: .02em; }
+.settings-dialog .settings-shell .settings-nav-item > button { min-height: 24px; gap: 6.4px; border: 0; border-radius: 6.4px; padding: 4px 6.4px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 32%); font-size: 10.4px; font-weight: 400; }
+.settings-dialog .settings-shell .settings-nav-item > button svg { width: 12px; height: 12px; stroke-width: 1.5; color: var(--muted-foreground); }
+.settings-dialog .settings-shell .settings-nav-item > button[aria-selected="true"] { background: transparent; box-shadow: none; color: var(--accent-foreground); font-weight: 660; }
+.settings-dialog .settings-shell .settings-nav-item > button[aria-selected="true"] svg { color: var(--accent-foreground); stroke-width: 2.6; }
+.settings-dialog .settings-shell .settings-nav-item > button:hover, .settings-dialog .settings-shell .settings-nav-item > button:focus-visible { outline: none; background: var(--accent); }
+@media (max-width: 760px) {
+  .settings-dialog .settings-shell .settings-nav-group > h3 { padding: 5px 9px; font-size: 13px; }
+  .settings-dialog .settings-shell .settings-nav-item > button { min-height: 44px; gap: 8px; padding: 6px 9px; font-size: 14.5px; }
+  .settings-dialog .settings-shell .settings-nav-item > button svg { width: 17px; height: 17px; }
+  .settings-dialog .settings-shell .settings-nav-item > button[aria-selected="true"] { color: color-mix(in oklch, var(--sidebar-foreground), transparent 32%); font-weight: 400; }
+  .settings-dialog .settings-shell .settings-nav-item > button[aria-selected="true"] svg { color: var(--muted-foreground); stroke-width: 1.5; }
+}
+/* Titles line up with the rows under them, as "Settings" does with the rail. */
+.settings-dialog .settings-shell .settings-content:has(.settings-list) > header h2 { padding-left: 6.4px; }
+/* Focus on the dialog's own buttons is the wash too, never a ring. */
+.settings-dialog .settings-shell :is(.settings-rail-close, .settings-close, .settings-back):focus-visible { outline: none; box-shadow: none; background: var(--accent); }
+.settings-dialog .settings-shell :is(.settings-rail h2, .settings-content > header h2) { font-weight: 600; }
