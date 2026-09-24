@@ -2269,10 +2269,15 @@ function App() {
         if (isShortcutRegion(name) && (name !== "workspace-panel" || panelOpen())) regions.push({ name, element: node });
       }
       releaseFocusedContexts = regions.map((region) => shortcutManager.activateContext(region.name));
-      // Arriving in another top-level region from the keyboard, the region
-      // says so; a click already shows where it went.
+      // The top-level region holding focus is marked (its bottom edge lit),
+      // and kept while focus is somewhere no region is -- a menu, a dialog --
+      // so it does not flicker away and back. Arriving in another from the
+      // keyboard, the region says so; a click already shows where it went.
       const outermost = regions.at(-1)?.element ?? null;
-      if (outermost !== enteredRegion && outermost && keyboardLed) acknowledgeRegion(outermost);
+      if (!outermost || outermost === enteredRegion) return;
+      enteredRegion?.removeAttribute("data-focus-held");
+      outermost.setAttribute("data-focus-held", "");
+      if (keyboardLed) acknowledgeRegion(outermost);
       enteredRegion = outermost;
     };
     const onFocusIn = (event: FocusEvent) => syncFocusedShortcutContext(event.target);
