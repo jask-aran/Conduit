@@ -1152,6 +1152,7 @@ export function Sidebar(props: {
           <div data-sidebar="rail-actions" class="sidebar-rail-actions" aria-label="Quick navigation">
             <Show when={area() === "computer"}>
             <RailAction label="Computer" current={props.computer} onClick={() => { setArea("computer"); closeMobile(); props.onOpenComputer(); }}><MonitorIcon /></RailAction>
+            <RailAction label="New workspace" onClick={() => openNewDialog("workspace")}><FolderPlusIcon /></RailAction>
             <RailAction label="Terminal View" current={props.terminal} onClick={() => { setArea("computer"); closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /></RailAction>
             <Show when={railWorkspaces().length}>
               <div data-sidebar="rail-section" data-sidebar-section="workspaces" class="sidebar-rail-section">
@@ -1167,6 +1168,7 @@ export function Sidebar(props: {
             <Show when={area() === "conduit"}>
             <RailAction label="Conduit Dashboard" current={props.dashboard} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); }}><LayoutDashboardIcon /></RailAction>
             <RailAction label="New chat" onClick={() => startNewChat()}><MessageSquarePlusIcon /></RailAction>
+            <RailAction label="New project" onClick={() => openNewDialog("folder")}><FolderPlusIcon /></RailAction>
             <Show when={railFolders().length}>
               <div data-sidebar="rail-section" data-sidebar-section="projects" class="sidebar-rail-section">
                 <For each={railFolders()}>{(project) => <RailAction
