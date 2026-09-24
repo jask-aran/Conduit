@@ -524,8 +524,8 @@ composer** -- the queued pill's width and material, about twice its height
 
 ## 8. Keyboard: contexts, the leader, and navigation
 
-Status: proposal. Step 1, regions and the context tree, is next; the first
-jumps are decided once the regions exist. Keyboard navigation of the sidebar
+Status: step 1 is built -- regions and the context tree. The first jumps
+(step 2) are decided next, now that the regions exist. Keyboard navigation of the sidebar
 was the natural next step after its cursor (section 6), but moving a cursor
 is the last part of this, not the first: how shortcuts are scoped, and how
 one moves between surfaces, come first, or every surface grows its own keys.
@@ -551,6 +551,19 @@ around the focused element -- `App › Chat › Composer`,
 hand. A shortcut belongs to one node. The innermost binding wins, and keys
 only conflict between a node and its ancestors, so siblings can reuse them:
 R can rename on a sidebar row and regenerate on a transcript turn.
+
+As built: `SHORTCUT_REGION_PARENTS` in `shortcuts/shortcut-types.ts` is the
+tree -- sidebar, chat (transcript, composer), dashboard (composer),
+workspace panel and terminal, under the application -- and the context
+priority lists every region before the ones it sits inside. Surfaces mark
+themselves `data-region`; the main pane is `chat`, `dashboard` or
+`terminal` by route. On every focus change `main.tsx` walks the regions
+around focus and activates each, replacing the one context it used to pick.
+Arriving in another top-level region from the keyboard, the region's edge
+brightens and settles (`shortcuts/region-cue.ts`); the chat and workspace
+titles keep their focus colour as the standing sign. The leader still
+completes a sequence inside the context that started it; reading the whole
+chain is step 4.
 
 ### Two kinds of move
 

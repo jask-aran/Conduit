@@ -22,6 +22,7 @@ import {
   parseShortcutOverrides, readShortcutOverrides, SHORTCUT_PREFERENCES_STORAGE_KEY,
 } from "../src/client/shortcuts/shortcut-preferences.ts";
 import { paletteStableCommandIds } from "../src/client/commands/command-registry.ts";
+import { SHORTCUT_CONTEXT_PRIORITY, SHORTCUT_REGION_PARENTS } from "../src/client/shortcuts/shortcut-types.ts";
 
 const windowsChrome = { platform: "windows", browser: "chrome", displayMode: "browser-tab" };
 const windowsFirefox = { platform: "windows", browser: "firefox", displayMode: "browser-tab" };
@@ -216,6 +217,36 @@ test("dispatches the highest active context and completes two-stroke sequences",
   assert.equal(manager.handleKeydown(root), true);
   assert.deepEqual(ran, ["rename", "palette"]);
   releaseApplication();
+});
+
+test("every region is ranked before each region it sits inside, so the innermost wins", () => {
+  const rank = (context) => SHORTCUT_CONTEXT_PRIORITY.indexOf(context);
+  for (const [region, parents] of Object.entries(SHORTCUT_REGION_PARENTS)) {
+    assert.ok(rank(region) >= 0, `${region} is ranked`);
+    for (const parent of parents) assert.ok(rank(region) < rank(parent), `${region} before ${parent}`);
+  }
+});
+
+test("focus in the composer resolves through composer, then chat, then application", () => {
+  const manager = new ShortcutManager({ commands: commandRegistry, environment: windowsChrome, storage: null });
+  const ran = [];
+  // The chain main.tsx activates for focus in a chat's composer, outermost first.
+  const releases = ["application", "chat", "composer"].map((context) => manager.activateContext(context));
+  for (const context of ["application", "chat", "composer"]) {
+    manager.registerHandler(COMMAND_IDS.focusWorkspacePanel, context, () => ran.push(context));
+  }
+  const run = () => {
+    for (const stroke of getCommandDefinition(COMMAND_IDS.focusWorkspacePanel).defaultBindings[0].strokes) {
+      assert.equal(manager.handleKeydown(keyEventForStroke(stroke)), true);
+    }
+  };
+  run();
+  releases.pop()();
+  run();
+  releases.pop()();
+  run();
+  assert.deepEqual(ran, ["composer", "chat", "application"]);
+  releases.pop()();
 });
 
 test("dispatches registry commands from their focused scopes", () => {

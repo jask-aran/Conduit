@@ -5,8 +5,8 @@
    composer overlays its bottom edge without becoming part of the scroll or
    panel-motion subtree. */
 .work-area-conversation { position: relative; }
-.chat-main[data-shortcut-scope="chat"] { outline: none; }
-.chat-main[data-shortcut-scope="chat"]:focus-within .chat-header-title strong { color: var(--shortcut-focus); }
+.chat-main { outline: none; }
+.chat-main:focus-within .chat-header-title strong { color: var(--shortcut-focus); }
 .transcript { position: relative; z-index: 1; }
 /* The tail of the thread clears the composer stack. The fallbacks below are
    the resting heights; the transcript measures the stack and writes

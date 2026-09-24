@@ -1,3 +1,26 @@
+/**
+ * The surfaces focus can be in, as a tree: each region and the regions it can
+ * sit inside. A surface marks its element `data-region`, and while focus is
+ * inside it, its context and every region around it are active -- a chain
+ * such as application › chat › composer, worked out from focus. Only one
+ * branch is ever active, so listing every region before the regions it sits
+ * inside (below) is enough for the innermost to win and the rest to follow
+ * in order. A composer sits in a chat or on a dashboard.
+ */
+export const SHORTCUT_REGION_PARENTS = {
+  composer: ["chat", "dashboard"],
+  transcript: ["chat"],
+  "workspace-panel": ["application"],
+  sidebar: ["application"],
+  chat: ["application"],
+  dashboard: ["application"],
+  terminal: ["application"],
+} as const;
+
+export type ShortcutRegion = keyof typeof SHORTCUT_REGION_PARENTS;
+export const isShortcutRegion = (value: string | null | undefined): value is ShortcutRegion =>
+  value != null && Object.hasOwn(SHORTCUT_REGION_PARENTS, value);
+
 export const SHORTCUT_CONTEXT_PRIORITY = [
   "shortcut-recorder",
   "confirmation",
@@ -9,9 +32,14 @@ export const SHORTCUT_CONTEXT_PRIORITY = [
   "palette.page",
   "palette.root",
   "settings",
-  "workspace-panel",
+  // The regions, each before the ones it sits inside.
   "composer",
+  "transcript",
+  "workspace-panel",
+  "sidebar",
   "chat",
+  "dashboard",
+  "terminal",
   "application",
   // Not a context the window dispatches in: a command scoped here is handed to
   // the OS by the desktop shell and fires while Conduit is not focused. It sits

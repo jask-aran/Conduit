@@ -15,8 +15,8 @@
   --workbench-divider: var(--border);
 }
 .workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 0 6.4px 0; flex: none; overflow: visible; pointer-events: none; border-radius: 12.8px; transition: width 220ms var(--panel-motion-easing), margin-right 220ms var(--panel-motion-easing); }
-.workspace-panel[data-shortcut-scope="workspace-panel"]:focus-within .workspace-panel-header strong,
-body:has(.workspace-file-menu[data-expanded]) .workspace-panel[data-shortcut-scope="workspace-panel"] .workspace-panel-header strong { color: var(--shortcut-focus); }
+.workspace-panel[data-region="workspace-panel"]:focus-within .workspace-panel-header strong,
+body:has(.workspace-file-menu[data-expanded]) .workspace-panel[data-region="workspace-panel"] .workspace-panel-header strong { color: var(--shortcut-focus); }
 .workspace-panel.workspace-panel-open { pointer-events: auto; background: var(--background); }
 .workspace-panel[data-edge-instant="true"],
 body.workspace-resizing .workspace-panel { transition: none !important; }
