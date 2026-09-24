@@ -665,8 +665,9 @@ the go-to chords are shown as the way out.
    row is the wash alone, with no ring; Tab visits the same rows as ↓ (the
    chevron is not a stop). Roving focus, so Tab leaves the list in one
    press, is left to decide in use.
-5. **The leader redesign.** Built. A step back to look: the page dims and
-   one small card sits bottom-centre on every screen (desktop only), in the
+5. **The leader redesign.** Built. A step back to look: the page dims --
+   all but the focused region, which stays lit -- and one small card sits
+   bottom-centre on every screen (desktop only), in the
    composer's material and the question card's row shape -- one placement
    rather than a card rising from the composer where there is one and
    something else where there is not. Heading: the leader key and the path of

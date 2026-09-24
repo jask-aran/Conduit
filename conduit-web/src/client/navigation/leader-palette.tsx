@@ -29,8 +29,9 @@ const rank = (key: string) => /^\d$/.test(key) ? 0 : /^[a-z]$/i.test(key) ? 1 : 
 /**
  * The leader menu: what the leader (Ctrl+G) can do from where you are.
  *
- * A step back to look, so it dims the page and shows one small card at the
- * foot of the screen, in the composer's material and the question card's row
+ * A step back to look, so it dims the page -- all but the region it is
+ * about, which stays lit so where focus is reads at a glance -- and shows one
+ * small card at the foot of the screen, in the composer's material and the question card's row
  * shape. The path of regions around focus is the heading, outermost first;
  * the list is the innermost region with keys, and ←/→ or Tab -- or a click on
  * the path -- moves it out to the others. A key an inner region claims is not
@@ -102,6 +103,19 @@ export function LeaderPalette(props: { shortcuts: ShortcutManager }) {
       return keys.length ? [{ commandId, label: getCommandDefinition(commandId).label, keys }] : [];
     }).sort((left, right) => rank(left.keys[0]!) - rank(right.keys[0]!) || left.keys[0]!.localeCompare(right.keys[0]!, undefined, { numeric: true }));
   });
+  // The region the menu is about stays lit: the one on the path from focus
+  // named by the level shown, cut out of the dim with its own corners. The
+  // outermost level is the whole app, so nothing is cut out.
+  const hole = createMemo(() => {
+    const current = shown();
+    const context = current?.levels[current.shown]?.context;
+    if (!context || context === "application" || context === "global") return null;
+    let region = document.activeElement instanceof Element ? document.activeElement.closest("[data-region]") : null;
+    while (region && region.getAttribute("data-region") !== context) region = region.parentElement?.closest("[data-region]") ?? null;
+    if (!region) return null;
+    const box = region.getBoundingClientRect();
+    return { top: `${box.top}px`, left: `${box.left}px`, width: `${box.width}px`, height: `${box.height}px`, "border-radius": getComputedStyle(region).borderRadius };
+  });
   const browsable = () => (shown()?.levels.filter((level) => level.commandIds.length).length ?? 0) > 1;
   const goTo = () => [
     [COMMAND_IDS.focusSidebar, "Sidebar"],
@@ -113,7 +127,9 @@ export function LeaderPalette(props: { shortcuts: ShortcutManager }) {
   });
 
   return <Show when={(visible() || leaving()) && shown()}>
-    <div class="leader-menu-scrim" data-leaving={leaving() || undefined} aria-hidden="true" />
+    <div class="leader-menu-scrim" data-leaving={leaving() || undefined} aria-hidden="true">
+      <div class="leader-menu-lit" data-whole={hole() ? undefined : true} style={hole() ?? {}} />
+    </div>
     <aside
       class="leader-menu composer-surface-material"
       data-composer-surface={surface()}
