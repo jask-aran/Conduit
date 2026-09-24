@@ -1110,7 +1110,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     });
   });
 
-  return <div ref={transcriptRoot} class="transcript" data-region="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-incremark-pacing={rendererUsesTypewriter() ? incremarkPacing() : undefined}>
+  return <div ref={transcriptRoot} class="transcript" data-part="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-incremark-pacing={rendererUsesTypewriter() ? incremarkPacing() : undefined}>
     <Show when={props.rendererControlsVisible}>
       <div class="composer-renderer-switch">
         <label>Composer renderer<select aria-label="Composer renderer" title="Composer renderer" value={composerSurface()} onChange={(event) => switchComposerSurface(event.currentTarget.value as ComposerSurfaceMode)}>

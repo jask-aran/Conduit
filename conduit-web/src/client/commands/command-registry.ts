@@ -17,7 +17,7 @@ const scopedBinding = (code: string, key: string, modifiers: ShortcutModifier[] 
 // Ctrl+. stay the toggles. The leader acts within a region; it does not move
 // between them.
 const goTo = (digit: number) => binding(stroke(`Digit${digit}`, String(digit), ["primary", "shift"]));
-const EVERY_REGION = ["application", "chat", "dashboard", "composer", "workspace-panel"];
+const EVERY_REGION = ["application", "chat", "dashboard", "workspace-panel"];
 
 export const COMMAND_IDS = {
   openCommandPalette: "open-command-palette",
@@ -240,7 +240,7 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     group: "commands",
     icon: "attach",
     keywords: ["stash", "draft", "park", "save", "restore", "prompt"],
-    contexts: ["composer", "chat", "dashboard", "palette.root"],
+    contexts: ["chat", "dashboard", "palette.root"],
     // Plain mod+S is the browser's Save Page. Rebind it in Settings if you
     // would rather have the shorter key and can live with intercepting it.
     defaultBindings: [binding(stroke("KeyS", "S", ["primary", "shift"]))],
@@ -364,7 +364,7 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     group: "navigation",
     icon: "workspace-panel",
     keywords: ["focus", "chat", "workspace", "panel", "switch"],
-    contexts: ["application", "chat", "dashboard", "composer", "workspace-panel"],
+    contexts: ["application", "chat", "dashboard", "workspace-panel"],
     allowInExclusiveTarget: true,
     palette: true,
   }),

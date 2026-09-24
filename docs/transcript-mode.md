@@ -29,10 +29,13 @@ the transcript only scrolls, and the composer keeps every key it has today.
 - **Getting back.** Esc steps out a level at a time and, from the top,
   leaves the mode for the composer: pressing Esc enough always gets back to
   typing.
-- **A region already.** The transcript is a region (`data-region=
-  "transcript"`, inside the chat), so the mode's keys can be scoped to it.
-  Its viewport takes focus for scrolling from the keyboard; the Go to
-  transcript command has no default key.
+- **Not a region today.** The transcript was a shortcut region at first and
+  was folded into the chat's, whose pane is the unit the leader menu lights
+  (it is marked `data-part="transcript"`). The mode may bring a region back
+  for its own keys; if it does, its geometry needs care -- in an empty chat
+  the transcript fills the pane under the composer. Its viewport takes focus
+  for scrolling from the keyboard; the Go to transcript command has no
+  default key.
 
 ## To design
 

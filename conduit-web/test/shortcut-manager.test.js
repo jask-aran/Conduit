@@ -227,26 +227,24 @@ test("every region is ranked before each region it sits inside, so the innermost
   }
 });
 
-test("focus in the composer resolves through composer, then chat, then application", () => {
+test("focus in the workspace panel resolves through the panel, then application", () => {
   const probe = {
     id: "region-probe", label: "Probe", description: "", group: "commands", keywords: [], icon: "chat",
-    contexts: ["application", "chat", "composer"], configurable: true,
+    contexts: ["application", "workspace-panel"], configurable: true,
     defaultBindings: [shortcutBinding(shortcutStroke("F9", "F9"))],
   };
   const manager = new ShortcutManager({ commands: [probe], environment: windowsChrome, storage: null });
   const ran = [];
-  // The chain main.tsx activates for focus in a chat's composer, outermost first.
-  const releases = ["application", "chat", "composer"].map((context) => manager.activateContext(context));
-  for (const context of ["application", "chat", "composer"]) {
+  // The chain main.tsx activates for focus in the workspace panel, outermost first.
+  const releases = ["application", "workspace-panel"].map((context) => manager.activateContext(context));
+  for (const context of ["application", "workspace-panel"]) {
     manager.registerHandler(probe.id, context, () => ran.push(context));
   }
   const run = () => assert.equal(manager.handleKeydown(keyEvent("F9", "F9")), true);
   run();
   releases.pop()();
   run();
-  releases.pop()();
-  run();
-  assert.deepEqual(ran, ["composer", "chat", "application"]);
+  assert.deepEqual(ran, ["workspace-panel", "application"]);
   releases.pop()();
 });
 
@@ -258,7 +256,7 @@ test("dispatches registry commands from their focused scopes", () => {
   });
   const ran = [];
   const releaseApplication = manager.activateContext("application");
-  const scopedContexts = ["application", "chat", "composer", "workspace-panel"];
+  const scopedContexts = ["application", "chat", "workspace-panel"];
   const scopedCommands = commandRegistry.filter((command) => command.contexts.some((context) => scopedContexts.includes(context)));
   for (const command of scopedCommands) {
     for (const context of command.contexts.filter((value) => scopedContexts.includes(value))) {
@@ -273,7 +271,7 @@ test("dispatches registry commands from their focused scopes", () => {
   };
   // The toggles and the numbered go-to chords reach their surface from
   // inside another region.
-  const composerRelease = manager.activateContext("composer");
+  const chatRelease = manager.activateContext("chat");
   runFromBinding(COMMAND_IDS.openCommandPalette);
   runFromBinding(COMMAND_IDS.maximizeWorkspacePanel);
   runFromBinding(COMMAND_IDS.toggleSidebar);
@@ -281,7 +279,7 @@ test("dispatches registry commands from their focused scopes", () => {
   runFromBinding(COMMAND_IDS.focusSidebar);
   runFromBinding(COMMAND_IDS.focusMainPane);
   runFromBinding(COMMAND_IDS.focusWorkspacePanel);
-  composerRelease();
+  chatRelease();
 
   // The leader acts within a region: nothing that moves between them has a
   // leader key.
@@ -305,7 +303,7 @@ test("dispatches registry commands from their focused scopes", () => {
     `application:${COMMAND_IDS.toggleWorkspacePanel}`,
     `application:${COMMAND_IDS.focusSidebar}`,
     `application:${COMMAND_IDS.focusMainPane}`,
-    `composer:${COMMAND_IDS.focusWorkspacePanel}`,
+    `chat:${COMMAND_IDS.focusWorkspacePanel}`,
     `workspace-panel:${COMMAND_IDS.workspaceFiles}`,
     `workspace-panel:${COMMAND_IDS.workspaceSourceControl}`,
     `workspace-panel:${COMMAND_IDS.workspaceArtifacts}`,
@@ -441,21 +439,21 @@ test("a leader key works from inside every region below the one that owns it, in
     contexts: [context], defaultBindings: [shortcutBinding(leader, shortcutStroke(`Key${key}`, key.toLowerCase()))],
   });
   const manager = new ShortcutManager({
-    commands: [define("inner-a", "composer", "A"), define("outer-a", "application", "A"), define("outer-b", "application", "B")],
+    commands: [define("inner-a", "workspace-panel", "A"), define("outer-a", "application", "A"), define("outer-b", "application", "B")],
     environment: windowsChrome,
     storage: null,
   });
   const ran = [];
-  for (const [id, context] of [["inner-a", "composer"], ["outer-a", "application"], ["outer-b", "application"]]) {
+  for (const [id, context] of [["inner-a", "workspace-panel"], ["outer-a", "application"], ["outer-b", "application"]]) {
     manager.registerHandler(id, context, () => ran.push(id));
   }
-  const releases = ["application", "chat", "composer"].map((context) => manager.activateContext(context));
+  const releases = ["application", "chat", "workspace-panel"].map((context) => manager.activateContext(context));
   const press = (key) => manager.handleKeydown(keyEvent(key, key.length === 1 ? `Key${key.toUpperCase()}` : key));
 
   assert.equal(manager.handleKeydown(keyEventForStroke(leader)), true);
   const pending = manager.pendingSequence();
   assert.deepEqual(pending.levels.map((level) => [level.context, [...level.commandIds].sort()]),
-    [["composer", ["inner-a"]], ["chat", []], ["application", ["outer-a", "outer-b"]]]);
+    [["workspace-panel", ["inner-a"]], ["chat", []], ["application", ["outer-a", "outer-b"]]]);
   assert.equal(pending.shown, 0);
   assert.equal(press("ArrowRight"), true);
   assert.equal(manager.pendingSequence().shown, 2, "browsing skips a level with no keys");

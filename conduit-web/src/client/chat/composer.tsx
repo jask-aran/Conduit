@@ -504,7 +504,7 @@ export function Composer(props: {
     });
   });
 
-  return <div class="composer-wrap" data-region="composer">
+  return <div class="composer-wrap" data-part="composer">
     <QueuedMessages
       messages={props.chat.pendingMessages()}
       surface={composerSurface()}
