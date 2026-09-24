@@ -2419,10 +2419,13 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   .queued-float { gap: 6px; padding: 3px 4px 3px 8px; }
 }
 
-/* The first open (main.tsx): until the route is ready only the frame shows;
-   then the composer is simply there and every other region fades in around
-   it, once. The last selector takes, inside the main pane, each outermost
-   part that does not hold the composer. */
+/* The first open (main.tsx): until the route is ready and laid out only the
+   frame shows, composer included; then the composer is simply there and every
+   other region fades in around it, once. The last selector takes, inside the
+   main pane, each outermost part that does not hold the composer. */
+/* Hidden rather than transparent: the composer has an opacity transition of
+   its own, for the question takeover, that would fade it back in. */
+:root[data-arrival="waiting"] [data-region="composer"] { visibility: hidden; }
 :root[data-arrival="waiting"] :is(
   [data-region="sidebar"],
   [data-region="workspace-panel"],
