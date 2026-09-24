@@ -525,9 +525,9 @@ composer** -- the queued pill's width and material, about twice its height
 
 ## 8. Keyboard: contexts, the leader, and navigation
 
-Status: steps 1 and 2 are built -- regions and the context tree, and a
-first estimate of the go-to jumps, to be tuned in use. Step 3, the whole-UI
-fade and context switching, is next. Keyboard navigation of the sidebar
+Status: steps 1 to 3 are built -- regions and the context tree, a first
+estimate of the go-to jumps, and the whole-UI fade with context switching.
+Step 4, cursor navigation, is next, starting with the sidebar. Keyboard navigation of the sidebar
 was the natural next step after its cursor (section 6), but moving a cursor
 is the last part of this, not the first: how shortcuts are scoped, and how
 one moves between surfaces, come first, or every surface grows its own keys.
@@ -622,13 +622,16 @@ maximised, sit awkwardly on a VS Code-style toggle.
 
 ### The leader as the map
 
-Opened from anywhere, the leader lists what applies at each level of the
-path, innermost first -- "Sidebar row": rename, move, pin, delete; then
-"Sidebar"; then "App" -- with its curated cross-context flows marked as
-such. It is where you learn the shortcuts of the place you are in. Every
-scoped shortcut appears under its own context, so nothing is only
-discoverable from settings; the go-to shortcuts are listed too, as the way
-out.
+Two halves, decided separately. **Keys work up the tree, always:** after
+Ctrl+X, the second key is looked for in the innermost region first and then
+outward, so a Global leader key still works from inside the workspace panel
+(today the innermost region with any sequence takes it whole). **What it
+shows is the current region:** the popup lists the innermost region's keys,
+because that is what it was opened for, with the path above as a breadcrumb;
+the outer levels are one step away (←/→ or Tab moves the list out to "Chat",
+"Global") rather than listed every time. Every scoped shortcut can be found
+there under its own region, so nothing is only discoverable from settings;
+the go-to chords are shown as the way out.
 
 ### Order
 
@@ -654,9 +657,15 @@ out.
    Focus: a route change that takes the focused element with it puts focus
    in the new page's composer, else its pane -- never on a phone, and never
    taken from somewhere it still is.
-4. **The layered leader.**
-5. **Cursor navigation per surface:** sidebar, then dashboard lists, then
-   transcript turns.
+4. **Cursor navigation per surface:** sidebar, then dashboard lists, then
+   transcript turns. First, because it is what gives regions actions of
+   their own -- rename, pin, move on a row -- and without them the leader
+   has little to show.
+5. **The leader redesign.** The popup takes the question and permission
+   takeover's material and row shape, and where it sits is decided per
+   screen: over the composer when there is one, else anchored to the focused
+   region. The two halves above -- keys working up the tree, and the current
+   region shown with the outer levels a step away -- are built with it.
 
 Each step is its own change, checked before the next.
 
@@ -666,7 +675,8 @@ Interrupted turns, composer hierarchy, empty states and motion are done; the
 composer and the sidebar were the first interaction-feedback passes. Next is
 section 8, whose regions also carry the whole-UI fade and the
 dashboard-to-chat transition deferred from section 7: regions first, then
-the first jumps, then the fade, then the leader and cursor navigation. Mobile
+the first jumps, then the fade (all built), then cursor navigation, then the
+leader redesign. Mobile
 file browsing (4) and the autosave pilot (3) remain, independent of it.
 
 Each implementation should identify its affected surface, use the smallest
