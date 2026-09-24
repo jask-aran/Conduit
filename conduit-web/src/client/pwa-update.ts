@@ -20,7 +20,7 @@
  * the library's `controlling` listener, the only one left.
  */
 
-import { createSignal } from "solid-js";
+import { createEffect, createSignal, onCleanup } from "solid-js";
 
 let registeredServiceWorker: ServiceWorkerRegistration | null = null;
 let updateRequest: Promise<boolean> | null = null;
@@ -29,9 +29,39 @@ let resetRequest: Promise<void> | null = null;
 let takeUpdate: (() => Promise<void>) | null = null;
 let waiting = false;
 let announce: (() => void) | null = null;
+let holdsUpdate: (() => boolean) | null = null;
+let preparing = false;
+let preparation: Promise<void> | null = null;
+let preparationTimer: ReturnType<typeof setTimeout> | null = null;
+let releaseHoldLock: (() => void) | null = null;
+let holdLockTask: Promise<void> | null = null;
+let manualOverride = false;
+const HOLD_LOCK = "conduit:pwa-unsaved-work";
+// The default response drain is ten minutes. If it aborts after the notice,
+// stop holding the installed worker once that drain could no longer succeed.
+const PREPARATION_TIMEOUT_MS = 11 * 60_000;
 
 /** Whether a new build is installed and waiting for a quiet moment. */
-export const pwaUpdateWaiting = () => waiting;
+export const pwaUpdateWaiting = () => waiting && !preparing;
+
+// A dirty tab holds a shared lock. An update takes an exclusive lock before
+// activating the origin-wide worker, so another tab cannot lose its draft.
+function syncHoldLock() {
+  if (!("locks" in navigator)) return;
+  if (!holdsUpdate?.() || manualOverride) {
+    releaseHoldLock?.();
+    return;
+  }
+  if (holdLockTask) return;
+  holdLockTask = navigator.locks.request(HOLD_LOCK, { mode: "shared" }, async () => {
+    if (!holdsUpdate?.() || manualOverride) return;
+    await new Promise<void>((resolve) => { releaseHoldLock = resolve; });
+  }).then(() => {
+    releaseHoldLock = null;
+    holdLockTask = null;
+    if (holdsUpdate?.() && !manualOverride) syncHoldLock();
+  });
+}
 
 /*
  * Whether a check is still deciding if this page is about to be replaced.
@@ -83,6 +113,12 @@ export function rememberPwaRegistration(registration: ServiceWorkerRegistration 
  */
 export function startPwaUpdates({ hold, onUpdateReady }: { hold: () => boolean; onUpdateReady: () => void }) {
   announce = onUpdateReady;
+  holdsUpdate = hold;
+  createEffect(() => { hold(); syncHoldLock(); });
+  onCleanup(() => {
+    holdsUpdate = null;
+    releaseHoldLock?.();
+  });
   // Imported here rather than at the top of the file: `virtual:pwa-register`
   // exists only inside a Vite build, and everything else in this module is
   // ordinary code that its tests load directly under Node.
@@ -95,7 +131,8 @@ export function startPwaUpdates({ hold, onUpdateReady }: { hold: () => boolean; 
         // Announced first, so a hand-pressed check sees it landed; then taken
         // straight away if there was nothing on screen worth interrupting.
         announce?.();
-        if (!hold()) void applyPwaUpdate();
+        if (preparing) setUpdateImpending(false);
+        else if (!hold()) void applyPwaUpdate();
         else setUpdateImpending(false);
       },
     });
@@ -105,15 +142,40 @@ export function startPwaUpdates({ hold, onUpdateReady }: { hold: () => boolean; 
 
 /** Take the waiting build now. The page reloads, so nothing after this runs. */
 export function applyPwaUpdate(): Promise<boolean> {
-  if (!waiting || !takeUpdate) return Promise.resolve(false);
+  if (!waiting || !takeUpdate || preparing || (holdsUpdate?.() && !manualOverride)) return Promise.resolve(false);
   // Both the arrival and a hand-pressed check can ask for the same build; the
   // second gets the first's answer rather than a second SKIP_WAITING and a
   // second reload timer.
-  taking ??= takeWaiting(takeUpdate).catch((cause) => { taking = null; throw cause; });
+  taking ??= takeWaitingAcrossTabs(takeUpdate).catch((cause) => { taking = null; throw cause; });
   return taking;
 }
 
 let taking: Promise<boolean> | null = null;
+
+async function takeWaitingAcrossTabs(update: () => Promise<void>): Promise<boolean> {
+  // An automatic skipWaiting affects every tab on this origin. If this browser
+  // cannot coordinate them, keep the worker waiting until a person asks for it.
+  if (!("locks" in navigator)) {
+    setUpdateImpending(false);
+    return manualOverride ? takeWaiting(update) : false;
+  }
+  releaseHoldLock?.();
+  await holdLockTask;
+  const taken = await navigator.locks.request(HOLD_LOCK, { ifAvailable: true }, async (lock) => {
+    if (!lock || (holdsUpdate?.() && !manualOverride)) return false;
+    // Keep the exclusive lock until control changes. Releasing it as soon as
+    // SKIP_WAITING is sent would let another tab start a draft before reload.
+    const controlling = new Promise<void>((resolve) => {
+      navigator.serviceWorker.addEventListener("controllerchange", () => resolve(), { once: true });
+      window.setTimeout(resolve, RELOAD_FALLBACK_MS);
+    });
+    const result = await takeWaiting(update);
+    await controlling;
+    return result;
+  });
+  if (!taken) setUpdateImpending(false);
+  return taken;
+}
 
 async function takeWaiting(takeUpdate: () => Promise<void>): Promise<boolean> {
   try { sessionStorage.setItem(TOOK_UPDATE_KEY, "1"); } catch { /* private mode; the notice is not worth failing the update over */ }
@@ -131,9 +193,9 @@ async function takeWaiting(takeUpdate: () => Promise<void>): Promise<boolean> {
   return true;
 }
 
-export async function checkForPwaUpdate() {
+export async function checkForPwaUpdate(background = false) {
   if (!("serviceWorker" in navigator)) return;
-  setUpdateImpending(true);
+  if (!background) setUpdateImpending(true);
   let installing: ServiceWorker | null = null;
   try {
     const registration = registeredServiceWorker || await navigator.serviceWorker.getRegistration();
@@ -142,10 +204,50 @@ export async function checkForPwaUpdate() {
     // already installing by then, and `onNeedRefresh` takes it from here.
     installing = registration?.installing ?? null;
   } finally {
-    if (!installing || waiting) setUpdateImpending(false);
+    if (background || !installing || waiting) setUpdateImpending(false);
     else installing.addEventListener("statechange", () => {
       if (installing?.state === "redundant") setUpdateImpending(false);
     });
+  }
+}
+
+/** Download the next client while this server still serves its static files. */
+export function preparePwaRestart() {
+  if (!("serviceWorker" in navigator) || preparing) return;
+  preparing = true;
+  preparation = checkForPwaUpdate(true).catch(() => {});
+  preparationTimer = window.setTimeout(() => {
+    if (!preparing) return;
+    preparing = false;
+    if (waiting && !holdsUpdate?.()) void applyPwaUpdate();
+  }, PREPARATION_TIMEOUT_MS);
+}
+
+/** The announced server restart has closed its stream. Take the ready build. */
+export async function finishPwaRestart() {
+  if (!preparing) return;
+  preparing = false;
+  if (preparationTimer !== null) window.clearTimeout(preparationTimer);
+  preparationTimer = null;
+  setUpdateImpending(true);
+  try {
+    await preparation;
+    preparation = null;
+    const registration = registeredServiceWorker || await navigator.serviceWorker.getRegistration();
+    if (registration?.waiting) {
+      waiting = true;
+      if (holdsUpdate?.()) setUpdateImpending(false);
+      else if (!await applyPwaUpdate()) setUpdateImpending(false);
+    } else if (registration?.installing) {
+      // onNeedRefresh takes it when installation finishes. A failed install
+      // must not leave the terminal behind the update screen forever.
+      const installing = registration.installing;
+      installing.addEventListener("statechange", () => {
+        if (installing.state === "redundant") setUpdateImpending(false);
+      });
+    } else setUpdateImpending(false);
+  } catch {
+    setUpdateImpending(false);
   }
 }
 
@@ -186,7 +288,7 @@ async function performPwaUpdate(reloadPage: () => void) {
     reloadPage();
     return true;
   }
-  if (waiting) return applyPwaUpdate();
+  if (waiting) { preparing = false; return applyPwaUpdate(); }
 
   const registration = registeredServiceWorker || await navigator.serviceWorker.getRegistration();
   if (!registration) {
@@ -202,10 +304,7 @@ async function performPwaUpdate(reloadPage: () => void) {
   // taken directly.
   if (!registration.installing && !registration.waiting) return false;
   if (!waiting && registration.waiting && !registration.installing) {
-    try { sessionStorage.setItem(TOOK_UPDATE_KEY, "1"); } catch { /* as above */ }
-    registration.waiting.postMessage({ type: "SKIP_WAITING" });
-    window.setTimeout(() => window.location.reload(), RELOAD_FALLBACK_MS);
-    return true;
+    return takeWaitingAcrossTabs(async () => registration.waiting?.postMessage({ type: "SKIP_WAITING" }));
   }
   if (!await untilWaiting(120_000)) return false;
   return applyPwaUpdate();
@@ -213,8 +312,12 @@ async function performPwaUpdate(reloadPage: () => void) {
 
 export function forcePwaUpdate(reloadPage: () => void = () => window.location.reload()) {
   if (!updateRequest) {
+    manualOverride = true;
+    releaseHoldLock?.();
     updateRequest = performPwaUpdate(reloadPage).finally(() => {
       updateRequest = null;
+      manualOverride = false;
+      syncHoldLock();
     });
   }
   return updateRequest;

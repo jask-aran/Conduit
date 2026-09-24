@@ -677,7 +677,10 @@ function App() {
    */
   const takePwaUpdate = async () => {
     setUpdateState({ kind: "working", label: "Updating Conduit…" });
-    if (!await applyPwaUpdate()) sayUpToDate();
+    if (!await applyPwaUpdate()) {
+      if (pwaUpdateWaiting()) setUpdateState({ kind: "ready" });
+      else sayUpToDate();
+    }
   };
   const setPwaUpdating = (busy: boolean) => setUpdateState(busy ? { kind: "checking" } : { kind: "idle" });
   const [addingServer, setAddingServer] = createSignal(false);
