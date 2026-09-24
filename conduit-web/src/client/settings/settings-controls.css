@@ -1,0 +1,121 @@
+/* Settings controls (settings-controls.tsx): monochrome, the gray wash for
+   what is current, no colour. */
+.settings-segmented {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--segments), minmax(0, 1fr));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px;
+  background: color-mix(in oklch, var(--background), transparent 30%);
+}
+.settings-segmented-thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  width: calc((100% - 4px) / var(--segments));
+  border-radius: 6px;
+  background: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--foreground), transparent 90%);
+  transform: translateX(calc(100% * var(--segment)));
+  transition: transform 200ms cubic-bezier(.2, .8, .2, 1);
+}
+.settings-segmented button {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  min-height: 26px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 0 8px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.settings-segmented button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings-segmented button svg { width: 13px; height: 13px; flex: none; }
+.settings-segmented button:hover:not(:disabled) { color: var(--foreground); }
+.settings-segmented button[aria-checked="true"] { color: var(--foreground); }
+.settings-segmented button:focus-visible { outline: none; color: var(--foreground); }
+.settings-segmented:has(button:focus-visible) .settings-segmented-thumb { box-shadow: inset 0 0 0 1px var(--ring); }
+.settings-segmented button:disabled { cursor: default; opacity: .5; }
+
+.settings-switch {
+  position: relative;
+  width: 30px;
+  height: 18px;
+  flex: none;
+  justify-self: end;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--input);
+  padding: 0;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+.settings-switch > span {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--muted-foreground);
+  transition: transform 150ms cubic-bezier(.2, .8, .2, 1), background 150ms ease;
+}
+.settings-switch[aria-checked="true"] { border-color: transparent; background: var(--primary); }
+.settings-switch[aria-checked="true"] > span { background: var(--primary-foreground); transform: translateX(12px); }
+.settings-switch:focus-visible { outline: 1px solid var(--ring); outline-offset: 2px; }
+.settings-switch:disabled { cursor: default; opacity: .5; }
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-segmented-thumb, .settings-switch, .settings-switch > span { transition: none; }
+}
+
+/* One-column rows (a tile whose rows change with a choice, like Voice):
+   the Appearance row, with a wider control column, a muted hint under the
+   name, and controls that sit side by side. */
+.settings-rows[data-single] { grid-template-columns: minmax(0, 1fr); }
+.settings-rows[data-single] > .settings-row { grid-template-columns: minmax(0, 1fr) minmax(180px, 300px); border-left: 0; border-top: 1px solid var(--border); }
+.settings-rows[data-single] > :first-child { border-top: 0; }
+.settings-row > span > small, .settings-row > label > span > small { display: block; margin-top: 1px; overflow: hidden; color: var(--muted-foreground); font-size: 10.5px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.settings-row > span > small.settings-inline-error { color: var(--destructive); }
+.settings-row-control { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: 6px; }
+.settings-dialog .settings-row-control > select,
+.settings-dialog .settings-row-control > input { width: 100%; min-width: 0; height: 30px; min-height: 30px; margin: 0; font-size: 12px; }
+.settings-row-control > [data-slot="button"] { flex: none; }
+.settings-row-value { color: var(--muted-foreground); font-size: 12px; white-space: nowrap; }
+.settings-row > .settings-switch { justify-self: end; }
+.settings-row > .settings-segmented { width: 100%; }
+.settings-rows[data-single] > .settings-row[data-stack] { grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); }
+.settings-row-control > [data-slot="button"] svg { width: 14px; height: 14px; }
+.settings-row-note { margin: 0; padding: 10px 12px; border-top: 1px solid var(--border); color: var(--muted-foreground); font-size: 12px; }
+.settings-rows[data-single] > .settings-row-note:first-child { border-top: 0; }
+.settings-row-wide { padding: 4px 12px 10px; }
+.settings-row-wide .settings-recorder-monitor { width: 100%; }
+.voice-key-row > label { display: flex; min-width: 0; align-items: center; gap: 8px; color: var(--foreground); font-size: 12px; font-weight: 500; }
+.voice-key-row > label > span { min-width: 0; }
+.voice-key-row > label > span > small { display: block; color: var(--muted-foreground); font-size: 10.5px; font-weight: 400; }
+.voice-key-row > label > svg { width: 14px; height: 14px; flex: none; color: var(--muted-foreground); }
+.settings-dialog .settings-keycap-input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center; caret-color: transparent; cursor: pointer; }
+.settings-progress { width: 100%; height: 4px; appearance: none; border: 0; border-radius: 999px; background: var(--input); overflow: hidden; }
+.settings-progress::-webkit-progress-bar { background: var(--input); }
+.settings-progress::-webkit-progress-value { border-radius: 999px; background: var(--foreground); }
+.settings-progress::-moz-progress-bar { background: var(--foreground); }
+
+@media (max-width: 760px) {
+  .settings-rows[data-single] > .settings-row { grid-template-columns: minmax(0, 1fr) minmax(120px, 190px); }
+  /* A row with a segmented choice or a long value puts its control under its
+     name, where it has the width. */
+  .settings-rows[data-single] > .settings-row[data-stack] { grid-template-columns: 1fr; gap: 8px; padding-block: 10px; }
+  .settings-segmented button { min-height: 32px; }
+  .settings-switch { width: 36px; height: 22px; }
+  .settings-switch > span { width: 16px; height: 16px; }
+  .settings-switch[aria-checked="true"] > span { transform: translateX(14px); }
+}
