@@ -77,6 +77,35 @@ must still use an APK signed with the expected key and obtain system installer
 confirmation. A server-provided URL or version is an offer, not authority to
 run unverified code.
 
+A production server should fetch published release artifacts from GitHub in
+the background, store them across server/container restarts, verify that the
+manifest and all required files agree, and expose the new manifest only after
+the files are complete. It must not offer a half-downloaded release. A
+development server should publish its locally built Windows and Android
+artifacts through the same update API, under the development channel. Building
+and serving are separate steps: a running server must keep serving the last
+complete build while another is being built. Once a complete release is
+published, the server can notify connected installed clients to check the
+manifest. The manifest remains the source of truth for clients that reconnect
+after the notice.
+
+Windows currently calls Tauri's `downloadAndInstall`, then relaunches. Tauri
+also supports `download` followed later by `install`. The client should check
+its chosen update server, download a signed package while it remains usable,
+and report **ready** only after that download completes. A ready update can
+then be installed and the app relaunched without another network transfer.
+Windows exits the app during installation, so the install/relaunch still causes
+a short interruption. Decide whether a ready package remains available after
+the app itself exits; Tauri's in-process downloaded update alone does not
+establish that guarantee. Do not tie this install to every server restart.
+
+Android can likewise download an APK from the chosen server and hold it ready
+without Google Play. A later install must still go through Android's package
+installer and may require approval to install from that source. Google Play
+distribution would enable a different Play-managed update flow; it is not a
+prerequisite for predownloading a server-hosted APK. The current Android path
+opens a remote APK URL, so local staging and installer handoff are new work.
+
 An installed app can connect to several servers, which may run different
 releases or be controlled by different operators. Choose an explicit update
 source and trust rule: a configured home server, a fixed Conduit update server,
@@ -100,6 +129,11 @@ connection state used to decide when a server may restart.
 - Which Conduit server may offer installed-client updates, and does it host
   artifacts itself or redirect to a release host? How are channel and signing
   identity selected?
+- When should a ready Windows package install: only on request, when the app
+  becomes idle, or after a server announces a compatible new release? Which
+  unsent work must delay relaunch?
+- Must a downloaded Windows package survive closing the app before install?
+  If so, define durable staging instead of relying on an in-process update.
 - Should browser restart readiness and installed-client update delivery be
   separate implementation slices under one connection/update design?
 
