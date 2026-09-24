@@ -50,6 +50,9 @@ export class PromptStore {
     if (Buffer.byteLength(content, "utf8") > MAX_PROMPT_BYTES) {
       throw Object.assign(new Error("Prompt exceeds 128 KiB"), { code: "prompt_too_large", status: 413 });
     }
+    // Settings save prompts as they are typed, so editing back to the shipped
+    // text is common; that is the default again, not an override of it.
+    if (content === await fs.readFile(this.prompt(id).defaultPath, "utf8").catch(() => null)) return this.reset(id);
     await fs.mkdir(this.root, { recursive: true });
     const target = this.overridePath(id);
     const temporary = `${target}.${process.pid}.tmp`;

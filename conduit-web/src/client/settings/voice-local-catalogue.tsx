@@ -20,7 +20,6 @@ export interface VoiceLocalCatalogueProps {
   installingModelId: string | null;
   installProgress: { phase: string; current: string; completedBytes: number; totalBytes: number } | null;
   licenseAccepted: boolean;
-  dirty: boolean;
   onFamilyChange: (modelId: string) => void;
   onRuntimeChange: (runtimeId: string) => void;
   onVariantChange: (artifactId: string) => void;
@@ -109,7 +108,6 @@ export default function VoiceLocalCatalogue(props: VoiceLocalCatalogueProps) {
         <strong>{props.selectedModel?.label || "Choose a model family"}</strong>
         <small>{props.selectedArtifact?.precision?.toUpperCase() || ""} · {props.selectedArtifact?.format || "Select a variant"} · {runtimeLabel(props.selection?.runtimeId || "")}</small>
       </div>
-      <span class="voice-draft-state" data-dirty={props.dirty}>{props.dirty ? "Unsaved" : "Saved"}</span>
     </div>
     <p>{props.selectedModel?.description || "Choose a model family, runtime, variant, and batching mode."}</p>
     <small class="voice-selection-guide">Choose the model family first. Runtime, variant, and batching choices are limited to the catalogue path that can run it.</small>

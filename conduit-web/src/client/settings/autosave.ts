@@ -81,3 +81,11 @@ export function createAutosave<T>(options: {
     busy: () => timer !== undefined || state().kind === "saving",
   };
 }
+
+/** One header status for a section saved by more than one autosave: a failure first, then saving, then saved. */
+export function combineSaveStates(states: SaveState[]): SaveState {
+  return states.find((state) => state.kind === "failed")
+    ?? states.find((state) => state.kind === "saving")
+    ?? states.find((state) => state.kind === "saved")
+    ?? { kind: "idle" };
+}

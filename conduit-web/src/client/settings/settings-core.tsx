@@ -38,7 +38,7 @@ import {
 } from "../chat/transcript-appearance";
 import type { CodeBlockCollapseMode } from "../chat/code-block";
 import { ShortcutsSettings } from "./shortcuts-settings";
-import { createAutosave, type SaveState } from "./autosave";
+import { combineSaveStates, createAutosave, type SaveState } from "./autosave";
 import { SaveStatus } from "./save-status";
 
 const sectionGroups = [
@@ -280,6 +280,15 @@ export function Settings(props: {
   const [promptBaseline, setPromptBaseline] = createSignal("");
   const [promptStatus, setPromptStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
   const [promptSaving, setPromptSaving] = createSignal(false);
+  const promptAutosave = createAutosave<{ id: string; content: string }>({
+    save: async (value) => (await api<EditablePrompt>(`/v0/prompts/${encodeURIComponent(value.id)}`, { method: "PUT", body: JSON.stringify({ content: value.content }) })),
+    onSaved: (saved) => {
+      const prompt = saved as EditablePrompt;
+      setPrompts((items) => items.map((item) => item.id === prompt.id ? prompt : item));
+      if (prompt.id === promptId()) { setPromptDraft(prompt.content); setPromptBaseline(prompt.content); }
+    },
+    delayMs: 800,
+  });
   const [promptError, setPromptError] = createSignal("");
   const [workspaceId, setWorkspaceId] = createSignal<string | null>(null);
   const [authProviders, setAuthProviders] = createSignal<PiAuthProvider[]>([]);
@@ -307,9 +316,16 @@ export function Settings(props: {
   const [voiceLicenseAccepted, setVoiceLicenseAccepted] = createSignal(false);
   const [voiceTestResult, setVoiceTestResult] = createSignal("");
   const [voiceDraft, setVoiceDraft] = createSignal<VoiceDictationSettings>({ ...props.voiceSettings });
-  const [voiceSettingsSaved, setVoiceSettingsSaved] = createSignal(false);
   const [warmMicrophoneActive, setWarmMicrophoneActive] = createSignal(isWarmMicrophoneActive());
   const [voiceServerEdited, setVoiceServerEdited] = createSignal(false);
+  const voiceAutosave = createAutosave<VoiceServerSettings>({
+    save: (settings) => persistVoiceServer(settings),
+    onSaved: (saved) => { setVoiceServerSettings(saved); setVoiceServerEdited(false); },
+  });
+  const voiceDraftAutosave = createAutosave<VoiceDictationSettings>({
+    save: async (settings) => { props.onVoiceSettingsSave(settings); return settings; },
+    onSaved: () => {},
+  });
   const [audioInputDevices, setAudioInputDevices] = createSignal<AudioInputDevice[]>([]);
   const [audioInputStatus, setAudioInputStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
   const [audioInputError, setAudioInputError] = createSignal("");
@@ -415,14 +431,12 @@ export function Settings(props: {
       setSearchKey("");
       setVoiceSecret("");
       setVoiceTestResult("");
-      setVoiceSettingsSaved(false);
       audioInputWaveform.reset();
       clearAudioInputTest();
       setAudioInputSignalDetected(false);
       return;
     }
     setVoiceDraft({ ...props.voiceSettings });
-    setVoiceSettingsSaved(false);
     const initial = props.initialSection || "ui";
     setSection(initial);
     // Asked for a section by name -- from a command, or a link out of the app
@@ -476,6 +490,7 @@ export function Settings(props: {
   createEffect(() => { if (props.open && section() === "runtime") void loadRuntime(); });
 
   const choosePrompt = (id: string, items = prompts()) => {
+    if (id !== promptId()) void promptAutosave.flush();
     const selected = items.find((item) => item.id === id) || items[0];
     if (!selected) return;
     setPromptId(selected.id);
@@ -486,6 +501,7 @@ export function Settings(props: {
     setPromptStatus("loading");
     setPromptError("");
     try {
+      await promptAutosave.flush();
       const result = await api<{ prompts: EditablePrompt[] }>("/v0/prompts");
       setPrompts(result.prompts);
       choosePrompt(promptId(), result.prompts);
@@ -496,27 +512,23 @@ export function Settings(props: {
     }
   };
   createEffect(() => { if (props.open && section() === "prompts") void loadPrompts(); });
-  const savePrompt = async () => {
-    if (!promptId() || promptDraft() === promptBaseline()) return;
-    setPromptSaving(true);
-    setPromptError("");
-    try {
-      const saved = await api<EditablePrompt>(`/v0/prompts/${encodeURIComponent(promptId())}`, { method: "PUT", body: JSON.stringify({ content: promptDraft() }) });
-      setPrompts((items) => items.map((item) => item.id === saved.id ? saved : item));
-      setPromptDraft(saved.content);
-      setPromptBaseline(saved.content);
-      toast.success(`${saved.label} prompt saved`);
-    } catch (error) { setPromptError((error as Error).message); }
-    finally { setPromptSaving(false); }
+  // An empty prompt is held back rather than saved.
+  const editPrompt = (content: string) => {
+    setPromptDraft(content);
+    if (!promptId()) return;
+    if (!content.trim()) return promptAutosave.hold();
+    promptAutosave.edit({ id: promptId(), content });
   };
   const resetPrompt = async () => {
     const current = prompts().find((item) => item.id === promptId());
     if (!current) return;
-    if (!current.modified) { setPromptDraft(promptBaseline()); return; }
+    if (!current.modified && promptDraft() === promptBaseline()) return;
     if (!window.confirm(`Reset ${current.label} to its shipped default?`)) return;
+    promptAutosave.hold();
     setPromptSaving(true);
     setPromptError("");
     try {
+      await promptAutosave.flush();
       const reset = await api<EditablePrompt>(`/v0/prompts/${encodeURIComponent(current.id)}`, { method: "DELETE" });
       setPrompts((items) => items.map((item) => item.id === reset.id ? reset : item));
       setPromptDraft(reset.content);
@@ -679,7 +691,7 @@ export function Settings(props: {
     setVoiceError("");
     try {
       const loaded = await api<VoiceServerSettings>("/v0/voice/settings");
-      if (request !== voiceLoadRequest || generation !== voiceSettingsGeneration || voiceSaveInFlight > 0) return;
+      if (request !== voiceLoadRequest || generation !== voiceSettingsGeneration || voiceSaveInFlight > 0 || voiceAutosave.busy()) return;
       const previous = voiceServerSettings();
       setVoiceServerSettings(preserveLocalSelection && previous ? preserveVoiceServerDraft(loaded, previous, voiceServerEdited()) : loaded);
       if (!preserveLocalSelection) setVoiceServerEdited(false);
@@ -720,17 +732,29 @@ export function Settings(props: {
     onCleanup(() => window.clearInterval(timer));
   });
 
+  // This browser's dictation settings are stored as they change.
   const updateVoiceDraft = (patch: Partial<VoiceDictationSettings>) => {
     if (patch.warmMicrophone === false) stopWarmMicrophone();
-    setVoiceDraft((current) => ({ ...current, ...patch }));
-    setVoiceSettingsSaved(false);
+    const next = { ...voiceDraft(), ...patch };
+    setVoiceDraft(next);
+    voiceDraftAutosave.edit(next, "now");
   };
-  const editVoiceServer = (update: (current: VoiceServerSettings) => VoiceServerSettings) => {
-    setVoiceServerSettings((current) => current ? update(current) : current);
+  // The server's: a choice at once, typing after a pause. A custom endpoint
+  // that is not an https:// URL yet is held back rather than sent.
+  const voiceEndpointError = (settings: VoiceServerSettings) => {
+    if (settings.mode !== "remote" || settings.provider !== "custom") return "";
+    try { return new URL(settings.endpoint).protocol === "https:" ? "" : "An https:// URL"; } catch { return "An https:// URL"; }
+  };
+  const editVoiceServer = (update: (current: VoiceServerSettings) => VoiceServerSettings, when: "pause" | "now" = "now") => {
+    const current = voiceServerSettings();
+    if (!current) return;
+    const next = update(current);
+    setVoiceServerSettings(next);
     setVoiceServerEdited(true);
-    setVoiceSettingsSaved(false);
+    if (voiceEndpointError(next)) return voiceAutosave.hold();
+    voiceAutosave.edit(next, when);
   };
-  const updateVoiceServer = (patch: Partial<VoiceServerSettings>) => editVoiceServer((current) => ({ ...current, ...patch }));
+  const updateVoiceServer = (patch: Partial<VoiceServerSettings>, when: "pause" | "now" = "now") => editVoiceServer((current) => ({ ...current, ...patch }), when);
   const selectedVoiceProvider = createMemo(() => voiceServerSettings()?.providers.find((provider) => provider.id === voiceServerSettings()?.provider));
   const voiceCatalogue = createMemo(() => voiceServerSettings()?.local?.catalogue || null);
   const selectedVoiceSelection = createMemo<VoiceLocalSelection | null>(() => {
@@ -777,7 +801,6 @@ export function Settings(props: {
   const cloudTiming = createMemo(() => selectedVoiceAdapter()?.transport === "ws"
     ? { label: "Live", description: "Text appears while you speak and may revise." }
     : { label: "After Stop", description: "Nothing appears until you stop." });
-  const voiceDirty = createMemo(() => voiceServerEdited() || Boolean(voiceSecret().trim()) || !sameVoiceDraft(voiceDraft(), props.voiceSettings));
   const selectLocalProfile = (profile: VoiceExecutionProfile) => {
     const catalogue = voiceCatalogue();
     const artifact = catalogue?.artifacts.find((candidate) => candidate.id === profile.artifactId);
@@ -837,7 +860,7 @@ export function Settings(props: {
     const profile = selectedVoiceProfiles().find((candidate) => candidate.id === profileId);
     if (profile) selectLocalProfile(profile);
   };
-  const persistVoiceServer = async (settings: VoiceServerSettings) => {
+  const persistVoiceServer = async (settings: VoiceServerSettings, secret = "") => {
     voiceSettingsGeneration += 1;
     voiceSaveInFlight += 1;
     try {
@@ -851,10 +874,9 @@ export function Settings(props: {
           adapter: settings.adapter,
           model: settings.model,
           endpoint: settings.endpoint,
-          auth: { type: settings.auth.type, headerName: settings.auth.headerName, secret: voiceSecret() },
+          auth: { type: settings.auth.type, headerName: settings.auth.headerName, secret },
         }),
       });
-      setVoiceSecret("");
       const savedState = settings.mode === "local" && settings.localSelection
         ? (() => {
           const responseSelection = saved.localSelection;
@@ -869,39 +891,39 @@ export function Settings(props: {
           };
         })()
         : saved;
-      setVoiceServerSettings(savedState);
-      setVoiceServerEdited(false);
       return savedState;
     } finally {
       voiceSettingsGeneration += 1;
       voiceSaveInFlight -= 1;
     }
   };
-  const saveVoiceSettings = async () => {
-    const settings = voiceServerSettings();
-    if (!settings) return;
+  // A key is a credential, so it is saved by its own button (or Enter), not
+  // as it is typed; what else is waiting is sent first.
+  const saveVoiceSecret = async () => {
+    const secret = voiceSecret().trim();
+    if (!secret) return;
     setVoiceBusy(true);
     setVoiceError("");
     setVoiceTestResult("");
     try {
-      await persistVoiceServer(settings);
-      props.onVoiceSettingsSave(voiceDraft());
-      setVoiceSettingsSaved(true);
-      toast.success("Voice settings saved");
-    } catch (error) {
-      setVoiceError((error as Error).message);
-      toast.error((error as Error).message);
-    }
+      await voiceAutosave.flush();
+      const settings = voiceServerSettings();
+      if (!settings) return;
+      setVoiceServerSettings(await persistVoiceServer(settings, secret));
+      setVoiceServerEdited(false);
+      setVoiceSecret("");
+    } catch (error) { setVoiceError((error as Error).message); }
     finally { setVoiceBusy(false); }
   };
   const testVoiceServer = async () => {
+    if (voiceSecret().trim()) await saveVoiceSecret();
     const settings = voiceServerSettings();
     if (!settings) return;
     setVoiceBusy(true);
     setVoiceError("");
     setVoiceTestResult("");
     try {
-      if (voiceServerEdited() || voiceSecret().trim()) await persistVoiceServer(settings);
+      await voiceAutosave.flush();
       await api("/v0/voice/test", { method: "POST", body: "{}" });
       setVoiceTestResult("Connection successful");
       await loadVoiceSettings({ quiet: true });
@@ -937,7 +959,7 @@ export function Settings(props: {
         const message = formatMicrophoneError(error);
         setAudioInputError(message);
         if (selectedDeviceId && isUnavailableAudioInputError(error)) {
-          toast.error("The selected microphone is no longer available. Choose another device and save Voice settings.");
+          toast.error("The selected microphone is no longer available. Choose another device.");
         }
       }
     } finally {
@@ -1032,18 +1054,29 @@ export function Settings(props: {
     if ((["live", "generating", "ttl"] as const).some((key) => runtimeFieldError(draft, key))) return runtimeAutosave.hold();
     runtimeAutosave.edit({ maxLiveProcesses: Number(draft.live), maxGeneratingProcesses: Number(draft.generating), idleProcessTtlMs: Number(draft.ttl) * 1000 });
   };
-  // Leaving the section or closing Settings sends what is waiting rather than
+  // Each section saved as it is edited, and how its header says so. Leaving
+  // the section or closing Settings sends what is waiting rather than
   // dropping it; a failure nobody is looking at any more is said in a toast.
-  const flushRuntime = () => void runtimeAutosave.flush().then(() => {
-    const state = runtimeAutosave.state();
-    if (state.kind === "failed" && !(props.open && section() === "runtime")) toast.error(`Runtime settings not saved: ${state.message}`);
-  });
-  createEffect(on(() => props.open && section() === "runtime", (showing, wasShowing) => { if (wasShowing && !showing) flushRuntime(); }));
+  const autosaved: Partial<Record<Section, { label: string; saves: Array<ReturnType<typeof createAutosave<any>>> }>> = {
+    runtime: { label: "Runtime settings", saves: [runtimeAutosave] },
+    prompts: { label: "Prompt", saves: [promptAutosave] },
+    voice: { label: "Voice settings", saves: [voiceAutosave, voiceDraftAutosave] },
+  };
+  for (const [id, entry] of Object.entries(autosaved) as Array<[Section, NonNullable<(typeof autosaved)[Section]>]>) {
+    createEffect(on(() => props.open && section() === id, (showing, wasShowing) => {
+      if (!wasShowing || showing) return;
+      for (const save of entry.saves) void save.flush().then(() => {
+        const state = save.state();
+        if (state.kind === "failed" && !(props.open && section() === id)) toast.error(`${entry.label} not saved: ${state.message}`);
+      });
+    }));
+  }
   // The header says how the section's edits stand: saving, saved, or not
-  // saved with Retry. Sections that still have their own Save say nothing.
-  const saveState = (): { state: SaveState; retry: () => void } | null => section() === "runtime"
-    ? { state: runtimeAutosave.state(), retry: runtimeAutosave.retry }
-    : null;
+  // saved with Retry. Sections that save on their own terms say nothing.
+  const saveState = (): { state: SaveState; retry: () => void } | null => {
+    const entry = autosaved[section()];
+    return entry ? { state: combineSaveStates(entry.saves.map((save) => save.state())), retry: () => entry.saves.forEach((save) => save.retry()) } : null;
+  };
 
   return <KDialog.Root open={props.open} onOpenChange={props.onOpenChange}>
     <KDialog.Portal><KDialog.Content data-state={props.open ? "open" : "closed"} class="settings-dialog" onEscapeKeyDown={dismissEscape} onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}>
@@ -1095,18 +1128,18 @@ export function Settings(props: {
                 <div class="prompt-editor-toolbar">
                   <label for="prompt-selector">Prompt</label>
                   <select id="prompt-selector" value={promptId()} onChange={(event) => choosePrompt(event.currentTarget.value)}>
-                    <For each={prompts()}>{(prompt) => <option value={prompt.id}>{prompt.label}{prompt.kind === "service" ? " · service" : ""}</option>}</For>
+                    <For each={prompts()}>{(prompt) => <option value={prompt.id} selected={prompt.id === promptId()}>{prompt.label}{prompt.kind === "service" ? " · service" : ""}</option>}</For>
                   </select>
-                  <span>{promptDraft() !== promptBaseline() ? "Unsaved" : prompts().find((item) => item.id === promptId())?.modified ? "Modified" : "Default"}</span>
+                  <span>{prompts().find((item) => item.id === promptId())?.modified ? "Modified" : "Default"}</span>
                 </div>
-                <textarea aria-label="System prompt" spellcheck={false} value={promptDraft()} onInput={(event) => setPromptDraft(event.currentTarget.value)} />
+                <textarea aria-label="System prompt" spellcheck={false} value={promptDraft()} onInput={(event) => editPrompt(event.currentTarget.value)} />
                 <div class="prompt-editor-footer">
                   <small>Changes apply when the next runtime or naming request starts.</small>
                   <div>
                     <Button variant="outline" disabled={promptSaving() || (!prompts().find((item) => item.id === promptId())?.modified && promptDraft() === promptBaseline())} onClick={() => void resetPrompt()}>Reset to default</Button>
-                    <Button disabled={promptSaving() || !promptDraft().trim() || promptDraft() === promptBaseline()} onClick={() => void savePrompt()}>{promptSaving() ? "Saving…" : "Save prompt"}</Button>
                   </div>
                 </div>
+                <Show when={!promptDraft().trim()}><p class="settings-inline-error" role="alert">A prompt cannot be empty; it is not saved until it has text.</p></Show>
                 <Show when={promptError() || promptStatus() === "error"}><p class="settings-inline-error" role="alert">{promptError()}</p></Show>
               </section>
             </Show>
@@ -1261,7 +1294,6 @@ export function Settings(props: {
                   installingModelId={voiceServerSettings()!.local?.installingModelId || null}
                   installProgress={voiceServerSettings()!.local?.progress || null}
                   licenseAccepted={voiceLicenseAccepted()}
-                  dirty={voiceDirty()}
                   onFamilyChange={selectLocalFamily}
                   onRuntimeChange={selectLocalRuntime}
                   onVariantChange={selectLocalVariant}
@@ -1287,12 +1319,12 @@ export function Settings(props: {
                       }}><For each={selectedVoiceProvider()!.models}>{(model) => <option value={model.id}>{model.label}</option>}</For></select><small>{selectedVoiceProvider()!.models.find((model) => model.id === voiceServerSettings()!.model)?.description}</small></Field></Show>
                       <Show when={voiceServerSettings()!.provider === "custom"}>
                         <Field><FieldLabel for="voice-adapter">Protocol adapter</FieldLabel><select id="voice-adapter" disabled={voiceBusy()} value={voiceServerSettings()!.adapter} onChange={(event) => updateVoiceServer({ adapter: event.currentTarget.value })}><For each={voiceServerSettings()!.adapters}>{(adapter) => <option value={adapter.id}>{adapter.label}</option>}</For></select><small>{voiceServerSettings()!.adapters.find((adapter) => adapter.id === voiceServerSettings()!.adapter)?.description}</small></Field>
-                        <Field><FieldLabel for="voice-endpoint">Endpoint URL</FieldLabel><Input id="voice-endpoint" type="url" disabled={voiceBusy()} value={voiceServerSettings()!.endpoint} placeholder="https://speech.example.com/v1/audio/transcriptions" onInput={(event) => updateVoiceServer({ endpoint: event.currentTarget.value })} /><small>Custom endpoints must resolve publicly and use HTTPS.</small></Field>
-                        <Field><FieldLabel for="voice-custom-model">Model parameter</FieldLabel><Input id="voice-custom-model" value={voiceServerSettings()!.model} placeholder="Optional model ID" onInput={(event) => updateVoiceServer({ model: event.currentTarget.value })} /></Field>
+                        <Field><FieldLabel for="voice-endpoint">Endpoint URL</FieldLabel><Input id="voice-endpoint" type="url" disabled={voiceBusy()} value={voiceServerSettings()!.endpoint} placeholder="https://speech.example.com/v1/audio/transcriptions" onInput={(event) => updateVoiceServer({ endpoint: event.currentTarget.value }, "pause")} /><Show when={voiceEndpointError(voiceServerSettings()!)} fallback={<small>Custom endpoints must resolve publicly and use HTTPS.</small>}>{(message) => <small class="settings-inline-error">{message()}</small>}</Show></Field>
+                        <Field><FieldLabel for="voice-custom-model">Model parameter</FieldLabel><Input id="voice-custom-model" value={voiceServerSettings()!.model} placeholder="Optional model ID" onInput={(event) => updateVoiceServer({ model: event.currentTarget.value }, "pause")} /></Field>
                       <Field><FieldLabel for="voice-auth-type">Authentication</FieldLabel><select id="voice-auth-type" disabled={voiceBusy()} value={voiceServerSettings()!.auth.type} onChange={(event) => editVoiceServer((current) => ({ ...current, auth: { ...current.auth, type: event.currentTarget.value as VoiceServerSettings["auth"]["type"] } }))}><option value="none">None</option><option value="bearer">Bearer token</option><option value="header">API-key header</option></select></Field>
-                      <Show when={voiceServerSettings()!.auth.type === "header"}><Field><FieldLabel for="voice-auth-header">Header name</FieldLabel><Input id="voice-auth-header" disabled={voiceBusy()} value={voiceServerSettings()!.auth.headerName} onInput={(event) => editVoiceServer((current) => ({ ...current, auth: { ...current.auth, headerName: event.currentTarget.value } }))} /></Field></Show>
+                      <Show when={voiceServerSettings()!.auth.type === "header"}><Field><FieldLabel for="voice-auth-header">Header name</FieldLabel><Input id="voice-auth-header" disabled={voiceBusy()} value={voiceServerSettings()!.auth.headerName} onInput={(event) => editVoiceServer((current) => ({ ...current, auth: { ...current.auth, headerName: event.currentTarget.value } }), "pause")} /></Field></Show>
                       </Show>
-                      <Show when={voiceServerSettings()!.provider !== "custom" || voiceServerSettings()!.auth.type !== "none"}><Field><FieldLabel for="voice-secret">{selectedVoiceProvider()?.authLabel || "Credential"}</FieldLabel><Input id="voice-secret" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore disabled={voiceBusy()} value={voiceSecret()} onInput={(event) => { setVoiceSecret(event.currentTarget.value); setVoiceServerEdited(true); setVoiceSettingsSaved(false); }} placeholder={voiceServerSettings()!.auth.configured ? "Saved · enter a new key to replace" : "Enter API key"} /><small>{voiceServerSettings()!.auth.configured ? "Stored on this server" : "Not configured"}</small></Field></Show>
+                      <Show when={voiceServerSettings()!.provider !== "custom" || voiceServerSettings()!.auth.type !== "none"}><Field><FieldLabel for="voice-secret">{selectedVoiceProvider()?.authLabel || "Credential"}</FieldLabel><Input id="voice-secret" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore disabled={voiceBusy()} value={voiceSecret()} onInput={(event) => setVoiceSecret(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveVoiceSecret(); }} placeholder={voiceServerSettings()!.auth.configured ? "Saved · enter a new key to replace" : "Enter API key"} /><Show when={voiceSecret().trim()}><Button variant="outline" size="sm" disabled={voiceBusy()} onClick={() => void saveVoiceSecret()}>Save key</Button></Show><small>{voiceServerSettings()!.auth.configured ? "Stored on this server" : "Not configured"}</small></Field></Show>
                     </FieldGroup>
                     <div class="voice-backend-facts" aria-label="Cloud backend and timing">
                       <div><span>Backend</span><strong>{selectedVoiceAdapter()?.label || "Not selected"}</strong><small>{selectedVoiceAdapter()?.transport === "ws" ? "WebSocket live PCM" : "HTTPS audio upload"} · {voiceServerSettings()!.auth.configured ? "credential configured" : "credential not configured"}</small></div>
@@ -1354,7 +1386,6 @@ export function Settings(props: {
                   </FieldGroup>
                 </details>
 
-                <div class="voice-settings-footer"><Button disabled={voiceBusy()} onClick={() => void saveVoiceSettings()}>{voiceBusy() ? <Spinner /> : null}Save Voice settings</Button><span class="voice-draft-state" data-dirty={voiceDirty()}>{voiceDirty() ? "Unsaved changes" : "All voice settings saved"}</span><Show when={voiceSettingsSaved()}><span class="voice-save-success" role="status">Saved</span></Show></div>
                 <Show when={voiceTestResult()}><p role="status" class="voice-test-success">{voiceTestResult()}</p></Show>
                 <Show when={voiceError()}><p role="alert" class="settings-inline-error">{voiceError()}</p></Show>
               </div>
