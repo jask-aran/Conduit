@@ -79,6 +79,8 @@ function TraceSegmentRow(props: {
     <Show when={error()} fallback={
       <div class="turn-trace-text" data-kind={props.segment().kind} data-discarded={discarded() ? "true" : undefined}
         title={discarded() ? "Interrupted — the agent has no record of this" : undefined}>
+        {/* The loss is this step's, so it says so here rather than on the turn. */}
+        <Show when={discarded()}><span class="turn-trace-not-kept">Not kept</span></Show>
         <Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()} renderer={props.renderer} pacing={props.pacing} onRendered={props.onRendered}>{text()}</ChatMarkdown></Suspense>
       </div>
     }>
@@ -116,9 +118,9 @@ function previewOf(trace: TurnTraceData): { status: string | null; counters: str
   for (const segment of trace.segments) {
     if (segment.kind === "tool") { totalCalls += 1; callsAfterText += 1; latestTool = segment.tool.name; }
     else if (segment.kind === "error") { summary = segment.message.errorMessage || "The model request failed."; callsAfterText = 0; }
-    // An answer a stop discarded is summed up as that, not quoted; discarded
-    // thinking leaves the summary as it was.
-    else if (segment.discarded) { if (segment.kind === "narration") { summary = "answer not kept"; callsAfterText = 0; } }
+    // Text a stop discarded is that one step's loss, not the turn's: what came
+    // before it was kept, so the summary is still the last thing that was.
+    else if (segment.discarded) continue;
     else if (segment.text.trim()) { summary = summaryOf(segment.text); callsAfterText = 0; }
   }
   const shown = callsAfterText || totalCalls;

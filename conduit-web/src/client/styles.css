@@ -337,6 +337,7 @@ svg { stroke-width: 1.5; }
    trace it is struck where it sits; as an answer it folds to one line. Quiet,
    never alarming -- nothing failed, it was interrupted on purpose. */
 .turn-trace-text[data-discarded="true"] .chat-markdown { text-decoration: line-through; text-decoration-thickness: 0.8px; opacity: 0.55; }
+.turn-trace-not-kept { display: block; margin-bottom: 1.6px; color: var(--muted-foreground); font-size: 8.8px; font-weight: 600; }
 .response-status { flex: none; margin-right: 4.8px; white-space: nowrap; }
 .response-actions [data-slot="button"].response-continue { width: auto; gap: 4px; padding-inline: 6.4px 8px; font-size: 9.6px; }
 .discarded-answer-header { display: flex; flex: 1; align-items: center; gap: 6.4px; min-width: 0; padding: 3.2px 1.6px; border: none; background: none; color: var(--muted-foreground); font-size: 10.4px; text-align: left; cursor: pointer; border-radius: 4.8px; }
@@ -1124,6 +1125,7 @@ svg { stroke-width: 1.5; }
 .turn-trace-error-heading time { margin-left: auto; color: var(--muted-foreground); font-size: 11px; font-weight: 400; }
 .turn-trace-error-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted-foreground); font-size: 11px; }
 .turn-trace-text[data-discarded="true"] .chat-markdown { text-decoration: line-through; opacity: 0.55; }
+.turn-trace-not-kept { display: block; margin-bottom: 2px; color: var(--muted-foreground); font-size: 11px; font-weight: 600; }
 .response-status { flex: none; margin-right: 6px; white-space: nowrap; }
 .response-actions [data-slot="button"].response-continue { width: auto; gap: 5px; padding-inline: 8px 10px; font-size: 12px; }
 .discarded-answer-header { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; padding: 4px 2px; border: none; background: none; color: var(--muted-foreground); font-size: 13px; text-align: left; cursor: pointer; border-radius: 6px; }
