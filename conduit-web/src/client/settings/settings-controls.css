@@ -109,7 +109,7 @@
 .settings-line-control { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: 2px; }
 .settings-line-control > select, .settings-line-control > input { flex: 1; }
 .settings-line-wide { display: flex; align-items: center; gap: 10px; padding: 2px 8px 6px; }
-.settings-line-wide .settings-recorder-monitor { min-width: 0; flex: 1; }
+.settings-line > .settings-recorder-monitor.voice-waveform { display: inline-flex; width: 100%; min-width: 0; margin: 0; color: var(--foreground); }
 .settings-line-wide .settings-progress { flex: 1; }
 .settings-line-note { margin: 0; padding: 2px 8px 6px; color: var(--destructive); font-size: 11px; }
 
