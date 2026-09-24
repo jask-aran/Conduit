@@ -521,7 +521,7 @@ Default key choices are tuned later; this settles the model.
 What exists. Shortcuts resolve through a flat priority list of contexts
 (`SHORTCUT_CONTEXT_PRIORITY`: palettes, settings, workspace panel, composer,
 chat, application, ...), each switched on and off by the surface that owns
-it rather than following focus. The leader, Ctrl+X, shows the second keys
+it rather than following focus. The leader (Ctrl+X then; Ctrl+G since the redesign) shows the second keys
 for one context at a time and only knows Global, Chat, Composer and
 Workspace. It already carries a few moves -- C focuses the composer, W the
 workspace panel, Tab switches chat and workspace, and inside the workspace
@@ -612,7 +612,7 @@ sent messages, so it becomes a mode of its own, to be designed concretely.
 ### The leader as the map
 
 Two halves, decided separately. **Keys work up the tree, always:** after
-Ctrl+X, the second key is looked for in the innermost region first and then
+the leader, the second key is looked for in the innermost region first and then
 outward, so a Global leader key still works from inside the workspace panel
 (today the innermost region with any sequence takes it whole). **What it
 shows is the current region:** the popup lists the innermost region's keys,
@@ -669,16 +669,19 @@ the go-to chords are shown as the way out.
    one small card sits bottom-centre on every screen (desktop only), in the
    composer's material and the question card's row shape -- one placement
    rather than a card rising from the composer where there is one and
-   something else where there is not. Heading: Ctrl+X and the path of
+   something else where there is not. Heading: the leader key and the path of
    regions, outermost first; list: the innermost region with keys, numbers
    first; ←/→, Tab or a click on the path moves out a level; a key an inner
    region claims is not listed further out; rows are clickable; the go-to
    chords and Esc sit at the foot. Keys work up the tree
    (`ShortcutManager`: the second stroke is looked for innermost first). A
    **Leader menu** setting in Shortcuts chooses when it shows: after a pause
-   (~450ms, default), at once, or never. Ctrl+X still starts a sequence only
-   where some region on the path has leader keys, so it stays Cut in the
-   composer. Found on the way: Ctrl+Shift+3 opened the workspace panel
+   (~450ms, default), at once, or never. The leader moved from Ctrl+X to
+   **Ctrl+G** ("go"), so it never competes with Cut; its only browser use is
+   Find next, which the page takes over. It opens anywhere -- where no
+   region has keys, the menu says so and shows the go-to chords -- except
+   where a terminal holds the keyboard. Searching "leader" in Shortcuts finds
+   the two-key shortcuts, and the Leader menu row shows the key. Found on the way: Ctrl+Shift+3 opened the workspace panel
    without focusing it when the file navigator was folded away (the filter
    it aimed at was hidden); the Files tab takes focus then. Still open: a
    row whose command does nothing where you are (Source Control in a chat

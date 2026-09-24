@@ -43,7 +43,7 @@ import {
 import { loadVoiceDictationSettings, saveVoiceDictationSettings, VOICE_DICTATION_STORAGE_KEY } from "./chat/voice-dictation";
 import { Transcript } from "./chat/transcript";
 import { isChatContentActivity } from "./chat/transcript-source";
-import { COMMAND_IDS, commandRegistry, getCommandDefinition } from "./commands/command-registry";
+import { COMMAND_IDS, commandRegistry, getCommandDefinition, LEADER_STROKE } from "./commands/command-registry";
 import { CommandMenu } from "./navigation/command-menu";
 import { LeaderPalette } from "./navigation/leader-palette";
 import { isLeaderMenuMode, LEADER_MENU_STORAGE_KEY, selectedLeaderMenu, setLeaderMenu } from "./shortcuts/leader-menu";
@@ -515,6 +515,7 @@ function App() {
   const shortcutManager = new ShortcutManager({
     commands: commandRegistry,
     environment: browserShortcutEnvironmentProvider.detect(),
+    leader: LEADER_STROKE,
   });
   const catalogue = createCatalogueStore();
   const [computerLocation, setComputerLocation] = createSignal<ComputerLocation | null>(null);

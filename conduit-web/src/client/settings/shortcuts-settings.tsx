@@ -10,7 +10,7 @@ import { shortcutConflicts } from "../shortcuts/shortcut-conflicts";
 import { shortcutEnvironmentLabel } from "../shortcuts/shortcut-environment";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import {
-  formatShortcutBinding, normalizeKeyboardEvent, sameBinding, shortcutBinding,
+  formatShortcutBinding, formatShortcutStroke, normalizeKeyboardEvent, sameBinding, sameStroke, shortcutBinding,
 } from "../shortcuts/shortcut-normalize";
 import type {
   ShortcutBinding, ShortcutCommandDefinition, ShortcutConflict, ShortcutStroke,
@@ -72,11 +72,13 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
       // is not offered where nothing could act on it.
       if (!desktopShell && command.contexts.every((context) => context === "global")) return false;
       if (!normalized) return true;
-      const bindings = props.manager.effectiveBindings(command.id)
-        .map((binding) => formatShortcutBinding(binding, props.manager.environment));
+      const effective = props.manager.effectiveBindings(command.id);
+      const bindings = effective.map((binding) => formatShortcutBinding(binding, props.manager.environment));
       return [
         command.label, command.description, command.group, ...command.keywords,
         ...command.contexts, ...bindings,
+        // A two-key shortcut starts with the leader.
+        ...(effective.some((binding) => binding.strokes.length === 2 && props.manager.leader && sameStroke(binding.strokes[0], props.manager.leader)) ? ["leader"] : []),
       ].join(" ").toLocaleLowerCase().includes(normalized);
     });
   });
@@ -228,7 +230,7 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
       </Button>
     </div>
 
-    <label class="settings-row shortcuts-leader-menu" for="leader-menu"><span>Leader menu</span>
+    <label class="settings-row shortcuts-leader-menu" for="leader-menu"><span>Leader menu <Show when={props.manager.leader}>{(stroke) => <kbd>{formatShortcutStroke(stroke(), props.manager.environment)}</kbd>}</Show></span>
       <select id="leader-menu" aria-label="When the leader menu shows" value={leaderMenu()} onChange={(event) => saveLeaderMenu(event.currentTarget.value as LeaderMenuMode)}>
         <For each={LEADER_MENU_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
       </select>

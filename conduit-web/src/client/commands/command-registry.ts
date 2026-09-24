@@ -8,8 +8,10 @@ import type {
 const stroke = (code: string, key: string, modifiers: ShortcutModifier[] = []) =>
   shortcutStroke(code, key, modifiers);
 const binding = (...strokes: ReturnType<typeof stroke>[]) => shortcutBinding(...strokes);
+/** The leader: Ctrl+G ("go"), clear of Cut; its browser use, Find next, gives way to the page. */
+export const LEADER_STROKE = stroke("KeyG", "G", ["primary"]);
 const scopedBinding = (code: string, key: string, modifiers: ShortcutModifier[] = []) =>
-  binding(stroke("KeyX", "X", ["primary"]), stroke(code, key, modifiers));
+  binding(LEADER_STROKE, stroke(code, key, modifiers));
 // Go-to shortcuts: one chord per top-level surface, numbered in screen order.
 // They open a closed surface and focus it, and never close one -- Ctrl+B and
 // Ctrl+. stay the toggles. The leader acts within a region; it does not move
