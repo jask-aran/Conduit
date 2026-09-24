@@ -142,7 +142,7 @@ test("classifies known browser conflicts and exact Conduit context conflicts", (
   assert.equal(browserShortcutConflicts(searchChats, windowsChrome).length, 0);
   assert.equal(browserShortcutConflicts(searchChats, windowsFirefox)[0]?.action, "Open Web Console");
   const modelSelector = getCommandDefinition(COMMAND_IDS.openModelSelector);
-  const scopedLeader = getCommandDefinition(COMMAND_IDS.focusWorkspacePanel).defaultBindings[0].strokes[0];
+  const scopedLeader = getCommandDefinition(COMMAND_IDS.workspaceFiles).defaultBindings[0].strokes[0];
   assert.notEqual(bindingIdentity(modelSelector.defaultBindings[0]), bindingIdentity(shortcutBinding(scopedLeader)));
   assert.deepEqual(modelSelector.contexts, ["application", "model-selector"]);
 
@@ -228,18 +228,19 @@ test("every region is ranked before each region it sits inside, so the innermost
 });
 
 test("focus in the composer resolves through composer, then chat, then application", () => {
-  const manager = new ShortcutManager({ commands: commandRegistry, environment: windowsChrome, storage: null });
+  const probe = {
+    id: "region-probe", label: "Probe", description: "", group: "commands", keywords: [], icon: "chat",
+    contexts: ["application", "chat", "composer"], configurable: true,
+    defaultBindings: [shortcutBinding(shortcutStroke("F9", "F9"))],
+  };
+  const manager = new ShortcutManager({ commands: [probe], environment: windowsChrome, storage: null });
   const ran = [];
   // The chain main.tsx activates for focus in a chat's composer, outermost first.
   const releases = ["application", "chat", "composer"].map((context) => manager.activateContext(context));
   for (const context of ["application", "chat", "composer"]) {
-    manager.registerHandler(COMMAND_IDS.focusWorkspacePanel, context, () => ran.push(context));
+    manager.registerHandler(probe.id, context, () => ran.push(context));
   }
-  const run = () => {
-    for (const stroke of getCommandDefinition(COMMAND_IDS.focusWorkspacePanel).defaultBindings[0].strokes) {
-      assert.equal(manager.handleKeydown(keyEventForStroke(stroke)), true);
-    }
-  };
+  const run = () => assert.equal(manager.handleKeydown(keyEvent("F9", "F9")), true);
   run();
   releases.pop()();
   run();
@@ -270,54 +271,46 @@ test("dispatches registry commands from their focused scopes", () => {
     const binding = getCommandDefinition(commandId).defaultBindings[0];
     for (const stroke of binding.strokes) assert.equal(manager.handleKeydown(keyEventForStroke(stroke)), true);
   };
+  // Both forms of each surface toggle -- the conventional key and the
+  // numbered chord -- reach it from inside another region.
+  const runEveryBinding = (commandId) => {
+    for (const binding of getCommandDefinition(commandId).defaultBindings) {
+      for (const stroke of binding.strokes) assert.equal(manager.handleKeydown(keyEventForStroke(stroke)), true);
+    }
+  };
   const composerRelease = manager.activateContext("composer");
   runFromBinding(COMMAND_IDS.openCommandPalette);
   runFromBinding(COMMAND_IDS.maximizeWorkspacePanel);
-  runFromBinding(COMMAND_IDS.focusWorkspacePanel);
-  runFromBinding(COMMAND_IDS.toggleChatWorkspaceFocus);
+  runEveryBinding(COMMAND_IDS.toggleSidebar);
+  runEveryBinding(COMMAND_IDS.toggleWorkspacePanel);
   composerRelease();
 
-  const chatRelease = manager.activateContext("chat");
-  runFromBinding(COMMAND_IDS.focusComposer);
-  runFromBinding(COMMAND_IDS.focusWorkspacePanel);
-  runFromBinding(COMMAND_IDS.toggleChatWorkspaceFocus);
-  chatRelease();
+  // The leader acts within a region: it no longer moves between them.
+  for (const id of [COMMAND_IDS.focusComposer, COMMAND_IDS.focusWorkspacePanel, COMMAND_IDS.focusTranscript, COMMAND_IDS.toggleChatWorkspaceFocus]) {
+    assert.deepEqual(getCommandDefinition(id).defaultBindings, [], `${id} has no default leader key`);
+  }
 
   const workspaceRelease = manager.activateContext("workspace-panel");
-  // The go-to jumps work from every region, the workspace panel included.
-  for (const id of [COMMAND_IDS.focusComposer, COMMAND_IDS.focusWorkspacePanel, COMMAND_IDS.focusSidebar, COMMAND_IDS.focusTranscript]) {
-    assert.ok(getCommandDefinition(id).contexts.includes("workspace-panel"), `${id} works from the workspace panel`);
-  }
-  runFromBinding(COMMAND_IDS.toggleChatWorkspaceFocus);
   runFromBinding(COMMAND_IDS.workspaceFiles);
   runFromBinding(COMMAND_IDS.workspaceSourceControl);
   runFromBinding(COMMAND_IDS.workspaceArtifacts);
   runFromBinding(COMMAND_IDS.workspaceTerminal);
   runFromBinding(COMMAND_IDS.openCommandPalette);
   workspaceRelease();
-
-  runFromBinding(COMMAND_IDS.focusComposer);
-  runFromBinding(COMMAND_IDS.focusWorkspacePanel);
-  runFromBinding(COMMAND_IDS.toggleChatWorkspaceFocus);
   releaseApplication();
 
   assert.deepEqual(ran, [
     `application:${COMMAND_IDS.openCommandPalette}`,
     `application:${COMMAND_IDS.maximizeWorkspacePanel}`,
-    `composer:${COMMAND_IDS.focusWorkspacePanel}`,
-    `composer:${COMMAND_IDS.toggleChatWorkspaceFocus}`,
-    `chat:${COMMAND_IDS.focusComposer}`,
-    `chat:${COMMAND_IDS.focusWorkspacePanel}`,
-    `chat:${COMMAND_IDS.toggleChatWorkspaceFocus}`,
-    `workspace-panel:${COMMAND_IDS.toggleChatWorkspaceFocus}`,
+    `application:${COMMAND_IDS.toggleSidebar}`,
+    `application:${COMMAND_IDS.toggleSidebar}`,
+    `application:${COMMAND_IDS.toggleWorkspacePanel}`,
+    `application:${COMMAND_IDS.toggleWorkspacePanel}`,
     `workspace-panel:${COMMAND_IDS.workspaceFiles}`,
     `workspace-panel:${COMMAND_IDS.workspaceSourceControl}`,
     `workspace-panel:${COMMAND_IDS.workspaceArtifacts}`,
     `workspace-panel:${COMMAND_IDS.workspaceTerminal}`,
     `application:${COMMAND_IDS.openCommandPalette}`,
-    `application:${COMMAND_IDS.focusComposer}`,
-    `application:${COMMAND_IDS.focusWorkspacePanel}`,
-    `application:${COMMAND_IDS.toggleChatWorkspaceFocus}`,
   ]);
 });
 
@@ -352,9 +345,9 @@ test("keeps a leader sequence pending until a second action or pointer input", (
     },
   };
   const uninstall = manager.install(target);
-  const release = manager.activateContext("chat");
-  manager.registerHandler(COMMAND_IDS.focusComposer, "chat", () => {});
-  const leader = getCommandDefinition(COMMAND_IDS.focusComposer).defaultBindings[0].strokes[0];
+  const release = manager.activateContext("workspace-panel");
+  manager.registerHandler(COMMAND_IDS.workspaceFiles, "workspace-panel", () => {});
+  const leader = getCommandDefinition(COMMAND_IDS.workspaceFiles).defaultBindings[0].strokes[0];
 
   assert.equal(manager.handleKeydown(keyEventForStroke(leader)), true);
   assert.ok(manager.pendingSequence());
