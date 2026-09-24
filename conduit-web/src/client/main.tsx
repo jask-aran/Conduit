@@ -106,6 +106,13 @@ import "./project/dashboard.css";
 import "./chat/composer-geometry.css";
 import "./styles.css";
 
+const DESKTOP_UPDATE_ROUTE_KEY = "conduit:desktop-update-route";
+if (desktopShell) {
+  const route = localStorage.getItem(DESKTOP_UPDATE_ROUTE_KEY);
+  if (route?.startsWith("/") && !route.startsWith("//")) history.replaceState({}, "", route);
+  localStorage.removeItem(DESKTOP_UPDATE_ROUTE_KEY);
+}
+
 const nativeApp = isInstalledClient();
 applyUiScale(selectedUiScale());
 // Stamp the reading-surface presets before first paint so the transcript is
@@ -678,6 +685,17 @@ function App() {
    * the one state that has no timer and no button.
    */
   const takePwaUpdate = async () => {
+    if (desktopShell) {
+      setUpdateState({ kind: "working", label: "Installing Conduit…" });
+      try {
+        localStorage.setItem(DESKTOP_UPDATE_ROUTE_KEY, location.pathname + location.search + location.hash);
+        if (!await desktopShell.installPreparedUpdate()) setUpdateState({ kind: "idle" });
+      } catch (error) {
+        setUpdateState({ kind: "ready" });
+        showError(error);
+      }
+      return;
+    }
     setUpdateState({ kind: "working", label: "Updating Conduit…" });
     if (!await applyPwaUpdate()) {
       if (pwaUpdateWaiting()) setUpdateState({ kind: "ready" });
@@ -685,33 +703,41 @@ function App() {
     }
   };
   const setPwaUpdating = (busy: boolean) => setUpdateState(busy ? { kind: "checking" } : { kind: "idle" });
+  const prepareDesktopUpdate = async (quiet: boolean) => {
+    const shell = desktopShell;
+    if (!shell || pwaUpdating()) return;
+    setPwaUpdating(true);
+    const notice = quiet ? null : toast.loading("Checking for updates…");
+    try {
+      const result = await shell.prepareUpdate((progress) => {
+        const share = progress.total ? Math.round((progress.downloaded / progress.total) * 100) : 0;
+        const label = `Downloading ${progress.version}… ${share}%`;
+        setUpdateState({ kind: "working", label });
+        if (notice) toast.loading(label, { id: notice });
+      });
+      if (result.kind === "ready") {
+        setUpdateState({ kind: "ready" });
+        if (notice) toast.success(`Conduit ${result.version} is ready to restart`, { id: notice });
+      } else if (quiet) {
+        setUpdateState({ kind: "idle" });
+      } else {
+        sayUpToDate();
+        if (notice) toast.success("Conduit is up to date", { id: notice });
+      }
+    } catch (error) {
+      setUpdateState({ kind: "idle" });
+      if (notice) { toast.dismiss(notice); showError(error); }
+    }
+  };
   const [addingServer, setAddingServer] = createSignal(false);
   const runPwaUpdate = async () => {
     if (pwaUpdating()) return;
+    if (desktopShell) {
+      await prepareDesktopUpdate(false);
+      return;
+    }
     setPwaUpdating(true);
     try {
-      // The desktop client is one signed artifact rather than a cache a
-      // service worker refreshes, so Update app means the installer. A false
-      // return is the only one that comes back: installing ends in a relaunch.
-      if (desktopShell) {
-        // One progress line in Conduit's own window, then the relaunch. The
-        // installer is silent, so nothing else appears and nothing is left to
-        // dismiss: it downloads, it restarts, it is the new version.
-        const notice = toast.loading("Checking for updates…");
-        const updated = await desktopShell.update((progress) => {
-          const share = progress.total ? Math.round((progress.downloaded / progress.total) * 100) : 0;
-          const label = progress.phase === "installing"
-            ? `Installing ${progress.version}…`
-            : `Downloading ${progress.version}… ${share}%`;
-          setUpdateState({ kind: "working", label });
-          toast.loading(label, { id: notice });
-        });
-        if (!updated) {
-          sayUpToDate();
-          toast.success("Conduit is up to date", { id: notice });
-        }
-        return;
-      }
       // A new APK replaces the shell, which a service worker cannot do, so on
       // Android this is a question about releases rather than about caches.
       if (androidShell) {
@@ -1969,6 +1995,10 @@ function App() {
   // one new-chat path however it was asked for.
   onMount(() => {
     if (!desktopShell) return;
+    // Stage a signed update while the window remains usable. The button and
+    // tray command can still ask for an immediate check at any time.
+    const firstCheck = window.setTimeout(() => void prepareDesktopUpdate(true), 10_000);
+    const laterChecks = window.setInterval(() => void prepareDesktopUpdate(true), 60 * 60_000);
     const stops: Array<() => void> = [];
     const remember = (unlisten: () => void) => stops.push(unlisten);
     void desktopShell.onNewChat(() => { void createChat(); }).then(remember);
@@ -1976,7 +2006,11 @@ function App() {
     void desktopShell.onCommand((commandId) => {
       if (commandId === COMMAND_IDS.newChatGlobally) void createChat();
     }).then(remember);
-    onCleanup(() => { for (const stop of stops) stop(); });
+    onCleanup(() => {
+      clearTimeout(firstCheck);
+      clearInterval(laterChecks);
+      for (const stop of stops) stop();
+    });
   });
 
   // The system-wide keys follow the registry: whatever is bound now is what the
