@@ -164,8 +164,9 @@ function agentMessage(codex, turnId, itemId, text, { phase = "final_answer" } = 
   codex("item/completed", { turnId, item: { id: itemId, type: "agentMessage", text, phase } });
 }
 
+// A trace shows what a stop discarded, struck through, as its last step.
 const shape = (rows) => rows.map((row) => (row.type === "trace"
-  ? `trace(${row.value.status})`
+  ? `trace(${row.value.status})${row.value.segments.filter((segment) => segment.discarded).map((segment) => ` ~${segment.text}~`).join("")}`
   : `${row.value.role}: ${row.value.content}`));
 
 const order = (messages) => messages.map((message) => `${message.role}:${(message.content || "").slice(0, 16)}`);
@@ -252,7 +253,7 @@ test("an interrupted answer keeps its text, and the next turn is its own", async
 
   assert.deepEqual(shape(chat.rows()), [
     "user: Tell me a long story",
-    "assistant: The rain fell upward.",
+    "trace(interrupted) ~The rain fell upward.~",
     "user: now stop",
     "assistant: Got it — stopping.",
   ]);
@@ -412,10 +413,11 @@ test("a turn Codex reports as failed leaves what it wrote in place", async () =>
   await chat.settle();
 
   assert.deepEqual(chat.errors.map((event) => event.error?.message), ["upstream refused"]);
-  // The half-answer the reader watched arrive is still there. It used to be
-  // given up, because only a completed item counted as having been written --
-  // so a turn that failed mid-sentence took its text off the screen.
-  assert.deepEqual(buildTurnRows(chat.messages(), []).map((row) => row.type), ["message", "message"]);
+  // The half-answer the reader watched arrive is still there, as the trace's
+  // last, struck-through step. It used to be given up, because only a
+  // completed item counted as having been written -- so a turn that failed
+  // mid-sentence took its text off the screen.
+  assert.deepEqual(shape(buildTurnRows(chat.messages(), [])), ["user: Fix the build", "trace(failed) ~Half an ans~"]);
   assert.equal(chat.messages().at(-1).content, "Half an ans");
 });
 

@@ -177,6 +177,15 @@ function harness() {
       manager.logs.get(record.chatId)?.entries || []);
     let held = loaded.messages;
     let heldTools = loaded.tools;
+    // What this browser has read of the chat's log. A client reads the log on
+    // from there when it hears the log moved on; this socket is not told, so
+    // it reads on whenever it is looked at.
+    let read = manager.logs.get(record.chatId)?.entries.length || 0;
+    const readOn = () => {
+      const entries = manager.logs.get(record.chatId)?.entries || [];
+      ({ messages: held, tools: heldTools } = applyTranscriptOps({ messages: held, tools: heldTools }, entries.slice(read)));
+      read = entries.length;
+    };
     socket.send = (frame) => {
       const wire = normalizeLiveEvent(JSON.parse(frame));
       if (wire.type !== "transcript_op") return;
@@ -187,7 +196,7 @@ function harness() {
     stream.handleUpgrade(record.id, {}, {}, null);
     attaching = ws;
     await settle();
-    return { messages: () => held, rows: () => buildTurnRows(held, heldTools) };
+    return { messages: () => (readOn(), held), rows: () => (readOn(), buildTurnRows(held, heldTools)) };
   };
 
   return { pi, send, begin, dispatch, read, accept, acceptPrompt, promptRead, settle, sent, errors, reattach,
@@ -221,8 +230,9 @@ const assistantText = (pi, text, { stopReason = "stop" } = {}) => {
   pi({ type: "message_end", message: partial });
 };
 
+// A trace shows what a stop discarded, struck through, as its last step.
 const shape = (rows) => rows.map((row) => (row.type === "trace"
-  ? `trace(${row.value.status})`
+  ? `trace(${row.value.status})${row.value.segments.filter((segment) => segment.discarded).map((segment) => ` ~${segment.text}~`).join("")}`
   : `${row.value.role}: ${row.value.content}`));
 
 /**
@@ -320,8 +330,9 @@ test("an interrupted story keeps its text, and the next turn is its own", async 
   assert.deepEqual(shape(chat.rows()), [
     "user: Tell me a long story",
     // The story was cut off, not abandoned: its text is what the turn had
-    // written, and a later message calling a tool does not demote it.
-    "assistant: The rain fell upward.",
+    // written, kept as its trace's last step, and a later message calling a
+    // tool does not take it away.
+    "trace(interrupted) ~The rain fell upward.~",
     "user: now stop, start a 90s bash timer",
     "trace(complete)",
     "assistant: Story stopped. Timer started.",
@@ -369,7 +380,7 @@ test("an answer cut off without a final message from the harness keeps what it h
 
   assert.deepEqual(shape(chat.rows()), [
     "user: Tell me a long story",
-    "assistant: The rain fell upward.",
+    "trace(interrupted) ~The rain fell upward.~",
   ]);
 });
 
@@ -461,7 +472,7 @@ test("interrupting with what was queued sends it once", async () => {
 
   assert.deepEqual(shape(chat.rows()), [
     "user: Tell me a long story",
-    "assistant: The rain fell upward.",
+    "trace(interrupted) ~The rain fell upward.~",
     "user: now stop",
     "assistant: Got it — stopping.",
   ]);
@@ -568,17 +579,21 @@ test("stopping a turn a late browser is watching leaves the turn on screen", asy
   const chat = harness();
   await chat.send({ type: "prompt", message: "Output a long story" });
   chat.pi({ type: "agent_start" });
+  chat.pi({ type: "message_end", message: { role: "user", content: "Output a long story" } });
   assistantText(chat.pi, "The Cartographer of Lost Things", { stopReason: "aborted" });
   await chat.settle();
 
   const late = await chat.reattach();
   chat.dispatch({ type: "stop_generation" });
+  await chat.read("abort");
+  await chat.accept("abort");
   await chat.settle();
   chat.pi({ type: "agent_settled" });
   await chat.settle();
 
   assert.equal(late.messages().length > 0, true, "the chat did not empty itself");
-  assert.deepEqual(shape(late.rows()).map((row) => row.split(":")[0]), ["user", "assistant"]);
+  // The answer the stop discarded is the trace's last step.
+  assert.deepEqual(shape(late.rows()), ["user: Output a long story", "trace(interrupted) ~The Cartographer of Lost Things~"]);
 });
 
 /**
@@ -690,14 +705,16 @@ test("a turn stopped before it wrote anything still has a row that says so", asy
   assert.equal(rows[1].traced, false, "no trace above it says so already");
 });
 
-test("a discarded answer under a trace does not say it was interrupted a second time", () => {
+test("a discarded answer is its trace's last, struck-through step, not a row of its own", () => {
   const { messages, tools } = projectSessionEntries([
     { type: "message", id: "u1", message: { role: "user", content: "Tell me a long story" } },
     { type: "message", id: "a1", message: { role: "assistant", stopReason: "aborted", errorMessage: "Request was aborted",
       content: [{ type: "thinking", thinking: "A story about maps." }, { type: "text", text: "Once, on the edge of the Map" }] } },
   ]);
   const rows = buildTurnRows(messages, tools);
-  assert.deepEqual(rows.map((row) => row.type === "trace" ? `trace(${row.value.status})` : row.value.role), ["user", "trace(interrupted)", "assistant"]);
-  assert.equal(rows[2].value.discarded, true);
-  assert.equal(rows[2].traced, true);
+  assert.deepEqual(rows.map((row) => row.type === "trace" ? `trace(${row.value.status})` : row.value.role), ["user", "trace(interrupted)"]);
+  const last = rows[1].value.segments.at(-1);
+  assert.equal(last.kind, "narration");
+  assert.equal(last.discarded, true);
+  assert.equal(rows[1].answerless, true, "so Regenerate hangs off the trace");
 });

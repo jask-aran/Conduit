@@ -51,11 +51,14 @@ function stableProjection(previous: TurnRow[], projected: TurnRow[]): TurnRow[] 
       const left = prior.value;
       const right = row.value;
       return left.active === right.active
+        && prior.answerless === row.answerless
+        && prior.timestamp === row.timestamp
         && left.status === right.status
         && left.segments.length === right.segments.length
         && left.segments.every((segment, index) => sameTraceSegment(segment, right.segments[index]!))
         ? prior : row;
     }
+    if (row.type === "pending") return prior;
     return row;
   });
 }

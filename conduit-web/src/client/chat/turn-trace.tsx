@@ -116,6 +116,9 @@ function previewOf(trace: TurnTraceData): { status: string | null; counters: str
   for (const segment of trace.segments) {
     if (segment.kind === "tool") { totalCalls += 1; callsAfterText += 1; latestTool = segment.tool.name; }
     else if (segment.kind === "error") { summary = segment.message.errorMessage || "The model request failed."; callsAfterText = 0; }
+    // An answer a stop discarded is summed up as that, not quoted; discarded
+    // thinking leaves the summary as it was.
+    else if (segment.discarded) { if (segment.kind === "narration") { summary = "answer not kept"; callsAfterText = 0; } }
     else if (segment.text.trim()) { summary = summaryOf(segment.text); callsAfterText = 0; }
   }
   const shown = callsAfterText || totalCalls;
@@ -152,7 +155,7 @@ export function TurnTrace(props: { trace: TurnTraceData; sessionId: string | nul
       <BrainIcon />
       <div class="turn-trace-preview">
         <For each={parts()}>{(part, index) => <span class={`turn-trace-${part.kind}`} data-status={part.kind === "status" ? props.trace.status : undefined}>
-          {index() ? " · " : ""}
+          {index() ? "\u00a0· " : ""}
           <Show when={part.kind === "summary"} fallback={part.text}>
             <Suspense fallback={part.text}><ChatMarkdown inline renderer={props.renderer} pacing={props.pacing}>{part.text}</ChatMarkdown></Suspense>
           </Show>
