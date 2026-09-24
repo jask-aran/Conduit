@@ -138,6 +138,34 @@ before a server feature it cannot use. These facts apply only to connected
 clients: offline devices are unknown, a completed download is not an install,
 and a new installed version is confirmed only when the client connects again.
 
+## Release selection
+
+Keep a tag as the explicit decision to publish a release candidate or stable
+release. Today `v*` tags trigger CI builds of the container, Windows app, and
+Android APK. A `vX.Y.Z-rc.N` tag produces a GitHub prerelease and does not move
+the container's `latest` tag; `vX.Y.Z` produces a stable release. Each tag
+needs its own committed `docs/releases/<tag>.md` file. Run the repository's
+release test gate before tagging. The decision that a commit is ready remains
+human, based on the finished scope and checks; the tag records that decision
+on an exact commit.
+
+The local `.devcontainer/start-conduit.sh restart` builds the working tree, not
+the latest tag. Local Windows development builds also use the last tag only to
+derive their next development version; they build the current checkout. Keep
+this fast development channel independent of release tags. A future locally
+distributed development update should identify its exact committed source and
+not claim that a dirty checkout is the named commit. Production servers should
+mirror completed CI release artifacts, not rebuild release binaries with local
+keys. If a local tool is needed to inspect a release build from source, make
+the tag an explicit input and build an isolated checkout of that exact commit;
+do not silently choose the highest local tag.
+
+After checking a candidate's installed artifacts, a stable tag can select the
+validated commit, provided its stable changelog was committed. The current CI
+builds new artifacts for the stable tag; it does not promote the candidate's
+exact binaries. Decide separately whether binary-identical promotion is worth
+changing that pipeline.
+
 ## Decisions to make before implementation
 
 - Is one browser tab a participant, or is one service worker registration a
