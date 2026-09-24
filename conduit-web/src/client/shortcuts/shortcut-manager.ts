@@ -194,7 +194,33 @@ export class ShortcutManager {
 
   pendingSequence(): PendingShortcutSequence | null {
     if (!this.pending) return null;
-    return { ...this.pending, commandIds: [...this.pending.commandIds] };
+    return {
+      ...this.pending,
+      commandIds: [...this.pending.commandIds],
+      levels: this.pending.levels.map((level) => ({ ...level, commandIds: [...level.commandIds] })),
+    };
+  }
+
+  /** Show another level in the leader menu, as ←/→ would. */
+  showPendingLevel(index: number): void {
+    if (!this.pending?.levels[index]?.commandIds.length || this.pending.shown === index) return;
+    this.pending = { ...this.pending, shown: index };
+    this.emit();
+  }
+
+  /** Run a command the pending sequence offers, as its second stroke would. */
+  runPendingCommand(commandId: string): boolean {
+    const pending = this.pending;
+    if (!pending) return false;
+    for (const level of pending.levels) {
+      if (!level.commandIds.includes(commandId)) continue;
+      const match = this.matchesForContext(level.context).find((item) => item.command.id === commandId);
+      if (!match) continue;
+      this.clearPendingSequence();
+      match.handler.run();
+      return true;
+    }
+    return false;
   }
 
   isContextActive(context: ShortcutContext): boolean {
@@ -225,13 +251,29 @@ export class ShortcutManager {
         return true;
       }
       const pending = this.pending;
-      const matches = this.matchesForContext(pending.context)
-        .filter((match) => match.binding.strokes.length === 2
+      // ←/→ and Tab browse the levels the leader menu shows; they are never a
+      // second stroke.
+      const browsable = pending.levels.map((level, index) => level.commandIds.length ? index : -1).filter((index) => index >= 0);
+      const at = browsable.indexOf(pending.shown);
+      const browse = event.key === "ArrowLeft" ? Math.max(0, at - 1)
+        : event.key === "ArrowRight" ? Math.min(browsable.length - 1, at + 1)
+          : event.key === "Tab" ? (at + (event.shiftKey ? browsable.length - 1 : 1)) % browsable.length
+            : null;
+      if (browse !== null) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (browsable[browse] !== pending.shown) {
+          this.pending = { ...pending, shown: browsable[browse]! };
+          this.emit();
+        }
+        return true;
+      }
+      const match = pending.levels.flatMap((level) => this.matchesForContext(level.context))
+        .find((match) => match.binding.strokes.length === 2
           && sameStroke(match.binding.strokes[0], pending.firstStroke)
           && sameStroke(match.binding.strokes[1], stroke)
           && (!isExclusiveTerminalEvent(event) || match.command.allowInExclusiveTarget));
       this.clearPendingSequence();
-      const match = matches[0];
       if (!match) return false;
       return this.executeMatch(event, match);
     }
@@ -246,31 +288,46 @@ export class ShortcutManager {
         return true;
       }
     }
+    // Innermost first. A region whose single stroke matches runs it; once
+    // one has a sequence for this stroke, the sequence starts, and every
+    // region out to the first exclusive one lends its sequences to it -- so
+    // a leader key works from inside any region below the one that owns it.
+    let levels: PendingShortcutSequence["levels"] | null = null;
     for (const active of contexts) {
       const matches = this.matchesForContext(active.context)
         .filter((match) => sameStroke(match.binding.strokes[0], stroke)
           && this.eventAllowedForMatch(event, stroke, active, match.command));
-      const complete = matches.find((match) => match.binding.strokes.length === 1);
-      if (complete) return this.executeMatch(event, complete);
-      const sequences = matches.filter((match) => match.binding.strokes.length === 2);
-      if (sequences.length) {
-        event.preventDefault();
-        event.stopPropagation();
-        this.pending = {
-          context: active.context,
-          firstStroke: stroke,
-          commandIds: [...new Set(sequences.map((match) => match.command.id))],
-        };
-        this.emit();
-        return true;
+      const sequenceIds = [...new Set(matches.filter((match) => match.binding.strokes.length === 2).map((match) => match.command.id))];
+      if (!levels) {
+        const complete = matches.find((match) => match.binding.strokes.length === 1);
+        if (complete) return this.executeMatch(event, complete);
+        if (sequenceIds.length) levels = contexts.slice(0, contexts.indexOf(active)).map((inner) => ({ context: inner.context, commandIds: [] }));
       }
-      if (active.options.exclusive) return false;
+      if (levels) levels.push({ context: active.context, commandIds: sequenceIds });
+      if (active.options.exclusive) break;
     }
-    return false;
+    if (!levels) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    const shown = levels.findIndex((level) => level.commandIds.length);
+    this.pending = {
+      context: levels[shown]!.context,
+      firstStroke: stroke,
+      commandIds: [...new Set(levels.flatMap((level) => level.commandIds))],
+      levels,
+      shown,
+    };
+    this.emit();
+    return true;
   };
 
   private handleBlur = () => this.clearPendingSequence();
-  private handlePointerDown = () => this.clearPendingSequence();
+  // A press in the leader menu is choosing from it, not leaving it.
+  private handlePointerDown = (event?: PointerEvent) => {
+    const target = event?.target ?? null;
+    if (isElement(target) && target.closest("[data-shortcut-leader-palette]")) return;
+    this.clearPendingSequence();
+  };
 
   private orderedActiveContexts(): ActiveContext[] {
     const newestByContext = new Map<ShortcutContext, ActiveContext>();

@@ -114,3 +114,6 @@
 }
 
 }
+
+/* When the leader menu shows after Ctrl+X (shortcuts/leader-menu.ts). */
+.shortcuts-leader-menu { border-top: 0; padding-inline: 2px; }

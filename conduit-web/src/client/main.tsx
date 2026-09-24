@@ -46,6 +46,7 @@ import { isChatContentActivity } from "./chat/transcript-source";
 import { COMMAND_IDS, commandRegistry, getCommandDefinition } from "./commands/command-registry";
 import { CommandMenu } from "./navigation/command-menu";
 import { LeaderPalette } from "./navigation/leader-palette";
+import { isLeaderMenuMode, LEADER_MENU_STORAGE_KEY, selectedLeaderMenu, setLeaderMenu } from "./shortcuts/leader-menu";
 import type { PaletteActions, PaletteContext } from "./palette/command-registry";
 import { bindVisualViewportShell, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobileOverlayKind } from "./navigation/mobile-layout";
 import { toggleKeyboardProbe } from "./navigation/keyboard-probe.ts";
@@ -2056,6 +2057,7 @@ function App() {
       codeBlockCollapseLines: selectedCodeBlockCollapseLines(),
       codeBlockWidth: selectedCodeBlockWidth(),
       panelMotion: selectedPanelMotion(),
+      leaderMenu: selectedLeaderMenu(),
       userMessageCollapse: selectedUserMessageCollapse(),
       chatSort: selectedChatSort(),
       shortcutOverrides: shortcutManager.shortcutOverrides(),
@@ -2083,6 +2085,7 @@ function App() {
       codeBlockCollapseLines: CODE_BLOCK_COLLAPSE_LINES_STORAGE_KEY,
       codeBlockWidth: CODE_BLOCK_WIDTH_STORAGE_KEY,
       panelMotion: PANEL_MOTION_STORAGE_KEY,
+      leaderMenu: LEADER_MENU_STORAGE_KEY,
       userMessageCollapse: USER_MESSAGE_COLLAPSE_STORAGE_KEY,
       chatSort: CHAT_SORT_STORAGE_KEY,
     };
@@ -2122,6 +2125,7 @@ function App() {
       else if (key === "codeBlockCollapseLines" && isCodeBlockCollapseLines(value) && !overridden(key)) applyTranscriptAppearance({ collapseLines: value });
       else if (key === "codeBlockWidth" && isCodeBlockWidthMode(value) && !overridden(key)) applyTranscriptAppearance({ codeWidth: value });
       else if (key === "panelMotion" && isPanelMotionMode(value) && !overridden(key)) publishUiPreference("panelMotion", value);
+      else if (key === "leaderMenu" && isLeaderMenuMode(value)) setLeaderMenu(value);
       else if (key === "userMessageCollapse" && isUserMessageCollapseMode(value) && !overridden(key)) applyTranscriptAppearance({ userMessageCollapse: value });
       else if (key === "shortcutOverrides" && value && typeof value === "object" && !Array.isArray(value)) {
         shortcutManager.replaceOverrides(value as ReturnType<ShortcutManager["shortcutOverrides"]>);

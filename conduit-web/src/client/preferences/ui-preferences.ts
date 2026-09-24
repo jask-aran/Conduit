@@ -18,6 +18,7 @@ export interface UiPreferences {
   codeBlockCollapseLines: number | null;
   codeBlockWidth: string | null;
   panelMotion: string | null;
+  leaderMenu: string | null;
   userMessageCollapse: string | null;
   chatSort: string | null;
   shortcutOverrides: Record<string, unknown> | null;

@@ -433,3 +433,37 @@ test("the global scope offers the OS only chords it can hold", () => {
   });
   assert.deepEqual(rebound, [{ accelerator: "CommandOrControl+Shift+KeyJ", commandId: COMMAND_IDS.revealWindow }]);
 });
+
+test("a leader key works from inside every region below the one that owns it, inner keys first", () => {
+  const leader = shortcutStroke("KeyX", "X", ["primary"]);
+  const define = (id, context, key) => ({
+    id, label: id, description: id, group: "commands", keywords: [], icon: "", configurable: true,
+    contexts: [context], defaultBindings: [shortcutBinding(leader, shortcutStroke(`Key${key}`, key.toLowerCase()))],
+  });
+  const manager = new ShortcutManager({
+    commands: [define("inner-a", "composer", "A"), define("outer-a", "application", "A"), define("outer-b", "application", "B")],
+    environment: windowsChrome,
+    storage: null,
+  });
+  const ran = [];
+  for (const [id, context] of [["inner-a", "composer"], ["outer-a", "application"], ["outer-b", "application"]]) {
+    manager.registerHandler(id, context, () => ran.push(id));
+  }
+  const releases = ["application", "chat", "composer"].map((context) => manager.activateContext(context));
+  const press = (key) => manager.handleKeydown(keyEvent(key, key.length === 1 ? `Key${key.toUpperCase()}` : key));
+
+  assert.equal(manager.handleKeydown(keyEventForStroke(leader)), true);
+  const pending = manager.pendingSequence();
+  assert.deepEqual(pending.levels.map((level) => [level.context, [...level.commandIds].sort()]),
+    [["composer", ["inner-a"]], ["chat", []], ["application", ["outer-a", "outer-b"]]]);
+  assert.equal(pending.shown, 0);
+  assert.equal(press("ArrowRight"), true);
+  assert.equal(manager.pendingSequence().shown, 2, "browsing skips a level with no keys");
+  assert.equal(press("b"), true);
+  assert.deepEqual(ran, ["outer-b"], "an outer region's key works from inside");
+
+  manager.handleKeydown(keyEventForStroke(leader));
+  press("a");
+  assert.deepEqual(ran, ["outer-b", "inner-a"], "an inner region's key hides the outer one bound alike");
+  releases.forEach((release) => release());
+});
