@@ -2418,3 +2418,26 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 @media (--conduit-phone-layout) {
   .queued-float { gap: 6px; padding: 3px 4px 3px 8px; }
 }
+
+/* The first open (main.tsx): until the route is ready only the frame shows;
+   then the composer is simply there and every other region fades in around
+   it, once. The last selector takes, inside the main pane, each outermost
+   part that does not hold the composer. */
+:root[data-arrival="waiting"] :is(
+  [data-region="sidebar"],
+  [data-region="workspace-panel"],
+  :is(.chat-main, .chat-main :has([data-region="composer"])) > :not([data-region="composer"], :has([data-region="composer"]))
+) { opacity: 0; }
+:root[data-arrival="arriving"] :is(
+  [data-region="sidebar"],
+  [data-region="workspace-panel"],
+  :is(.chat-main, .chat-main :has([data-region="composer"])) > :not([data-region="composer"], :has([data-region="composer"]))
+) { animation: ui-arrive 300ms cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes ui-arrive { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  :root[data-arrival="arriving"] :is(
+    [data-region="sidebar"],
+    [data-region="workspace-panel"],
+    :is(.chat-main, .chat-main :has([data-region="composer"])) > :not([data-region="composer"], :has([data-region="composer"]))
+  ) { animation: none; }
+}
