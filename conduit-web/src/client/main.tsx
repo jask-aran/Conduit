@@ -594,11 +594,20 @@ function App() {
       : null);
   const [routeBootstrap, setRouteBootstrap] = createSignal<"loading" | "ready" | "error">("loading");
   const [routeBootstrapError, setRouteBootstrapError] = createSignal("");
-  // The first open. Nothing but the frame shows until the route is ready;
-  // then the composer is simply there and everything around it fades in, once,
-  // rather than each part appearing as its data lands. A route that never
-  // settles is shown anyway after a moment.
+  // The first open. Nothing but the frame shows until the route is ready and
+  // laid out; then the composer is simply there and everything around it
+  // fades in, once, rather than each part appearing as its data lands. Laid out
+  // means the lazy parts that shape the page are in it: the workspace panel,
+  // when it was left open, narrows the main pane and moves the composer, and a
+  // project or Computer route draws its own dashboard. Their chunks are asked
+  // for now, beside the route's data, rather than once the route is ready. A
+  // route that never settles is shown anyway after a moment.
   {
+    const layoutReady = Promise.all([
+      readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "open") === "true" && !isMobileLayout() ? WorkspacePanel.preload() : null,
+      initialProjectRouteId ? ProjectDashboard.preload() : null,
+      initialComputerRoute ? ComputerDashboard.preload() : null,
+    ]).catch(() => undefined);
     const root = document.documentElement;
     let settle: ReturnType<typeof setTimeout> | undefined;
     const arrive = () => {
@@ -608,7 +617,11 @@ function App() {
     };
     root.dataset.arrival = "waiting";
     const fallback = setTimeout(arrive, 2500);
-    createEffect(() => { if (routeBootstrap() !== "loading") arrive(); });
+    // Two frames: the lazy parts render as their chunks resolve, and the page
+    // lays out once before it is shown.
+    createEffect(() => {
+      if (routeBootstrap() !== "loading") void layoutReady.then(() => requestAnimationFrame(() => requestAnimationFrame(arrive)));
+    });
     onCleanup(() => { clearTimeout(fallback); clearTimeout(settle); delete root.dataset.arrival; });
   }
   let dragDepth = 0;
