@@ -11,7 +11,9 @@ const binding = (...strokes: ReturnType<typeof stroke>[]) => shortcutBinding(...
 const scopedBinding = (code: string, key: string, modifiers: ShortcutModifier[] = []) =>
   binding(stroke("KeyX", "X", ["primary"]), stroke(code, key, modifiers));
 // Go-to shortcuts: one chord per top-level surface, numbered in screen order.
-// The leader acts within a region; it does not move between them.
+// They open a closed surface and focus it, and never close one -- Ctrl+B and
+// Ctrl+. stay the toggles. The leader acts within a region; it does not move
+// between them.
 const goTo = (digit: number) => binding(stroke(`Digit${digit}`, String(digit), ["primary", "shift"]));
 const EVERY_REGION = ["application", "chat", "dashboard", "composer", "workspace-panel"];
 
@@ -33,6 +35,7 @@ export const COMMAND_IDS = {
   toggleWorkspacePanel: "toggle-workspace-panel",
   maximizeWorkspacePanel: "maximize-workspace-panel",
   focusComposer: "focus-composer",
+  focusSidebar: "focus-sidebar",
   focusMainPane: "focus-main-pane",
   focusTranscript: "focus-transcript",
   focusWorkspacePanel: "focus-workspace-panel",
@@ -264,23 +267,23 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
   command({
     id: COMMAND_IDS.toggleSidebar,
     label: "Toggle sidebar",
-    description: "Open and focus the sidebar; from inside it, close it and go back to the main pane",
+    description: "Show or hide the navigation sidebar",
     group: "commands",
     icon: "sidebar",
-    keywords: ["panel", "nav", "menu", "focus", "go to"],
+    keywords: ["panel", "nav", "menu"],
     contexts: ["application", "palette.root"],
-    defaultBindings: [binding(stroke("KeyB", "B", ["primary"])), goTo(1)],
+    defaultBindings: [binding(stroke("KeyB", "B", ["primary"]))],
     palette: true,
   }),
   command({
     id: COMMAND_IDS.toggleWorkspacePanel,
     label: "Toggle workspace panel",
-    description: "Open and focus the workspace panel; from inside it, close it and go back to the main pane",
+    description: "Browse project files and working-tree changes",
     group: "commands",
     icon: "workspace-panel",
-    keywords: ["files", "diff", "inspector", "right panel", "focus", "go to"],
+    keywords: ["files", "diff", "inspector", "right panel"],
     contexts: ["application", "palette.root"],
-    defaultBindings: [binding(stroke("Period", ".", ["primary"])), goTo(3)],
+    defaultBindings: [binding(stroke("Period", ".", ["primary"]))],
     palette: true,
   }),
   command({
@@ -302,6 +305,18 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     icon: "chat",
     keywords: ["chat", "message", "input", "cursor"],
     contexts: EVERY_REGION,
+    allowInExclusiveTarget: true,
+    palette: true,
+  }),
+  command({
+    id: COMMAND_IDS.focusSidebar,
+    label: "Go to sidebar",
+    description: "Open the sidebar if it is closed and focus it, at the current row",
+    group: "navigation",
+    icon: "sidebar",
+    keywords: ["sidebar", "focus", "navigate", "chats", "projects", "go to"],
+    contexts: ["application"],
+    defaultBindings: [goTo(1)],
     allowInExclusiveTarget: true,
     palette: true,
   }),
@@ -331,11 +346,12 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
   command({
     id: COMMAND_IDS.focusWorkspacePanel,
     label: "Focus workspace panel",
-    description: "Open and focus the workspace panel",
+    description: "Open the workspace panel if it is closed and focus it",
     group: "navigation",
     icon: "workspace-panel",
-    keywords: ["workspace", "panel", "focus", "files"],
+    keywords: ["workspace", "panel", "focus", "files", "go to"],
     contexts: EVERY_REGION,
+    defaultBindings: [goTo(3)],
     allowInExclusiveTarget: true,
     palette: true,
   }),

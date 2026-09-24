@@ -570,32 +570,32 @@ chain is step 4.
 
 - **Go to a surface.** Direct shortcuts, one gesture each, that take you to
   a top-level surface in whatever state it is in: a **number** for each, in
-  screen order, and the surface's **conventional toggle** (Ctrl+B, Ctrl+.),
-  behaving the same. F6 is not relied on: laptops send media keys from the
+  screen order. They open and focus, never close; the surfaces' own toggles
+  (Ctrl+B, Ctrl+.) show and hide them as before. F6 is not relied on: laptops send media keys from the
   F-row, and browsers use F6 for the address bar.
 - **Act within a context.** The leader is only for what can be done where
   you are. Curated flows across contexts may come back later; for now it
   does not move between regions. Inside a context, numbers mean positions
   (the workspace panel's tabs), never other surfaces.
 
-As built, a first estimate to tune. Each surface has one toggle, reached by
-a conventional key and by its number, and both behave the same: open it if
-it is closed, focus it either way, and from inside it close it and hand
-focus back to the main pane.
+As built, a first estimate to tune. The numbered chords only go: they open
+a closed surface and focus it, and never close one. Ctrl+B and Ctrl+. stay
+the plain toggles they were -- having them take focus first made hiding an
+open surface cost two presses.
 
-| Number (Ctrl+Shift, ⌘⇧ on a Mac) | Conventional | Surface |
-|---|---|---|
-| 1 | Ctrl+B | Sidebar -- entered at the current row, else the folder holding it, else the first row; on a phone, the drawer |
-| 2 | -- | Main pane -- its composer when it has one, else the pane |
-| 3 | Ctrl+. | Workspace panel -- a maximised panel steps down to its normal width before it closes |
+| Number (Ctrl+Shift, ⌘⇧ on a Mac) | Goes to |
+|---|---|
+| 1 | Sidebar, expanded if collapsed -- entered at the current row, else the folder holding it, else the first row; on a phone, the drawer |
+| 2 | Main pane -- its composer when it has one, else the pane |
+| 3 | Workspace panel, opened if closed |
 
-Ctrl+Shift+. still maximises the workspace panel. The leader no longer
-moves between regions at all -- no C, W, S, T or Tab -- and keeps only
-actions within one: today the workspace panel's tabs and split. Focus
-composer, go to transcript and the chat/workspace switch stay in the
-palette without a default key. Known to tune: ⌘⇧3 is the macOS screenshot
-key, shown as a conflict in shortcut settings; Ctrl+B and Ctrl+. may yet
-give way to more conventional choices.
+The leader no longer moves between regions at all -- no C, W, S, T or Tab
+-- and keeps only actions within one: today the workspace panel's tabs and
+split. Focus composer, go to transcript and the chat/workspace switch stay
+in the palette without a default key. Known to tune: ⌘⇧3 is the macOS
+screenshot key, shown as a conflict in shortcut settings. Ctrl+Alt+B for the
+workspace panel was considered and left: its two stages, open and
+maximised, sit awkwardly on a VS Code-style toggle.
 
 ### Knowing it happened
 
@@ -636,8 +636,8 @@ out.
    saved shortcut preferences keep working. Little to see; the region cue
    comes with it.
 2. **The first jumps.** Built as a first estimate (above), tuned in use:
-   one toggle per surface by number and conventional key; the leader lost
-   its region switching.
+   numbered chords that open and focus; the toggles unchanged; the leader
+   lost its region switching.
 3. **The whole-UI fade and context switching** (with section 7's
    dashboard-to-chat transition), built on the regions: what fades is every
    region but the composer, and a route change puts focus in the region it
