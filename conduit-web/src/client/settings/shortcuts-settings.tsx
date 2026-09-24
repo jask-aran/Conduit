@@ -15,6 +15,7 @@ import {
 import type {
   ShortcutBinding, ShortcutCommandDefinition, ShortcutConflict, ShortcutStroke,
 } from "../shortcuts/shortcut-types";
+import { LEADER_MENU_OPTIONS, leaderMenu, saveLeaderMenu, type LeaderMenuMode } from "../shortcuts/leader-menu";
 import "./shortcuts-settings.css";
 
 const GROUP_LABELS: Record<string, string> = {
@@ -226,6 +227,12 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
         <RotateCcwIcon /> Reset all
       </Button>
     </div>
+
+    <label class="settings-row shortcuts-leader-menu" for="leader-menu"><span>Leader menu</span>
+      <select id="leader-menu" aria-label="When the leader menu shows" value={leaderMenu()} onChange={(event) => saveLeaderMenu(event.currentTarget.value as LeaderMenuMode)}>
+        <For each={LEADER_MENU_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+      </select>
+    </label>
 
     <label class="shortcuts-search">
       <SearchIcon />

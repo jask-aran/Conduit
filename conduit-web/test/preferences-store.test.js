@@ -21,6 +21,7 @@ const emptyUiPreferences = {
   codeBlockCollapseLines: null,
   codeBlockWidth: null,
   panelMotion: null,
+  leaderMenu: null,
   userMessageCollapse: null,
   chatSort: null,
   shortcutOverrides: null,

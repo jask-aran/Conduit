@@ -512,7 +512,7 @@ Status: steps 1 to 3 are built -- regions and the context tree, a first
 estimate of the go-to jumps, and the whole-UI fade with context switching.
 Step 4, cursor navigation, is built for the sidebar; the dashboard lists and
 transcript turns moved to their own docs. Step 5, the leader redesign, is
-next. Keyboard navigation of the sidebar
+built. Keyboard navigation of the sidebar
 was the natural next step after its cursor (section 6), but moving a cursor
 is the last part of this, not the first: how shortcuts are scoped, and how
 one moves between surfaces, come first, or every surface grows its own keys.
@@ -665,11 +665,24 @@ the go-to chords are shown as the way out.
    row is the wash alone, with no ring; Tab visits the same rows as ↓ (the
    chevron is not a stop). Roving focus, so Tab leaves the list in one
    press, is left to decide in use.
-5. **The leader redesign.** The popup takes the question and permission
-   takeover's material and row shape, and where it sits is decided per
-   screen: over the composer when there is one, else anchored to the focused
-   region. The two halves above -- keys working up the tree, and the current
-   region shown with the outer levels a step away -- are built with it.
+5. **The leader redesign.** Built. A step back to look: the page dims and
+   one small card sits bottom-centre on every screen (desktop only), in the
+   composer's material and the question card's row shape -- one placement
+   rather than a card rising from the composer where there is one and
+   something else where there is not. Heading: Ctrl+X and the path of
+   regions, outermost first; list: the innermost region with keys, numbers
+   first; ←/→, Tab or a click on the path moves out a level; a key an inner
+   region claims is not listed further out; rows are clickable; the go-to
+   chords and Esc sit at the foot. Keys work up the tree
+   (`ShortcutManager`: the second stroke is looked for innermost first). A
+   **Leader menu** setting in Shortcuts chooses when it shows: after a pause
+   (~450ms, default), at once, or never. Ctrl+X still starts a sequence only
+   where some region on the path has leader keys, so it stays Cut in the
+   composer. Found on the way: Ctrl+Shift+3 opened the workspace panel
+   without focusing it when the file navigator was folded away (the filter
+   it aimed at was hidden); the Files tab takes focus then. Still open: a
+   row whose command does nothing where you are (Source Control in a chat
+   without a repository) is listed anyway.
 
 Each step is its own change, checked before the next.
 

@@ -106,7 +106,17 @@ export interface ShortcutConflict {
 }
 
 export interface PendingShortcutSequence {
+  /** The innermost region with a sequence for this first stroke. */
   context: ShortcutContext;
   firstStroke: ShortcutStroke;
+  /** Every command a second stroke could run, across the levels. */
   commandIds: string[];
+  /**
+   * The regions around focus, innermost first, each with the commands its
+   * sequences name -- empty for a region with none. The second stroke is
+   * looked for innermost first, so an inner region's key hides an outer one's.
+   */
+  levels: Array<{ context: ShortcutContext; commandIds: string[] }>;
+  /** Which level the leader menu is showing; browsed with ←/→ and Tab. */
+  shown: number;
 }

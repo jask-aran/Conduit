@@ -635,7 +635,12 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   const focusTabDefault = (next: PanelTab, side: "left" | "right" = "left") => {
     if (next === "files") {
       if (!directories()[""]) void loadDirectory();
-      queueMicrotask(() => fileFilterInput?.focus({ preventScroll: true }));
+      // The filter lives in the file navigator, which a narrow panel folds
+      // away; focus on a hidden input goes nowhere, so the tab takes it then.
+      queueMicrotask(() => {
+        if (fileFilterInput?.checkVisibility({ visibilityProperty: true })) fileFilterInput.focus({ preventScroll: true });
+        else focusTabControl("files", side);
+      });
       return;
     }
     queueMicrotask(() => {
