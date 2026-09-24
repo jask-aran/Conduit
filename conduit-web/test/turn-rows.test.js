@@ -69,7 +69,8 @@ test("does not project persisted partials beside their resumed active generation
     },
   ], [], { activeGeneration: generation });
 
-  assert.deepEqual(rows.map((row) => row.key), ["message:u1", "trace:u1"]);
+  // A live turn with no answer yet holds its place with the pending row.
+  assert.deepEqual(rows.map((row) => row.key), ["message:u1", "trace:u1", "pending:u1"]);
   const trace = rows[1];
   assert.equal(trace?.type === "trace" && trace.value.segments[0]?.kind === "thinking" && trace.value.segments[0].text, "Current plan");
 });
@@ -264,7 +265,7 @@ test("does not expose a transient assistant error as terminal while Pi retries",
     },
   });
 
-  assert.deepEqual(rows.map((row) => row.key), ["message:u1"]);
+  assert.deepEqual(rows.map((row) => row.key), ["message:u1", "pending:u1"]);
 });
 
 test("indexes live blocks to one trace or answer row", () => {

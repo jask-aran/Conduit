@@ -84,7 +84,10 @@ export type TurnRow =
   // `traced` is whether a trace above this answer already speaks for its turn,
   // so a stopped turn says "Interrupted" once, on whichever row comes first.
   | { key: string; type: "message"; value: Message; live?: boolean; streamVersion?: number; displayKey?: string; precedingUserId?: string; traced?: boolean }
-  | { key: string; type: "trace"; value: TurnTraceData; precedingUserId?: string; answerless?: boolean; unstated?: boolean };
+  // `timestamp` is the turn's last reply's, for a trace with no answer row to carry it.
+  | { key: string; type: "trace"; value: TurnTraceData; precedingUserId?: string; answerless?: boolean; unstated?: boolean; timestamp?: string }
+  // Where the answer will be, from the start of a live turn until its text does.
+  | { key: string; type: "pending"; value: null; precedingUserId?: string };
 
 interface PersistedTurn {
   userMessage: Message | null;
@@ -434,9 +437,12 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null): Turn
       : generation.status === "failed" ? "failed"
       : generation.status === "complete" ? "complete"
       : executingTool ? "executing_tool" : "thinking";
-    rows.push({ key: `trace:${owner ? owner.id : `live:${generation.id}`}`, type: "trace", value: { active: running, status, segments }, precedingUserId: owner?.id, answerless: answers.length === 0 });
+    rows.push({ key: `trace:${owner ? owner.id : `live:${generation.id}`}`, type: "trace", value: { active: running, status, segments }, precedingUserId: owner?.id, answerless: answers.length === 0, timestamp: generation.assistantMessages.at(-1)?.timestamp || undefined });
   }
   rows.push(...answers);
+  if (!answers.length && active(generation) && generation.status !== "stopping") {
+    rows.push({ key: `pending:${owner ? owner.id : generation.id}`, type: "pending", value: null, precedingUserId: owner?.id });
+  }
   return rows;
 }
 
@@ -484,9 +490,12 @@ function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById
   const segments: TraceSegment[] = [];
   const claimed = new Set<string>();
   const finalAssistant = turn.assistants.at(-1) || null;
-  // A message says what it is, and is taken at its word.
+  // A message says what it is, and is taken at its word. One the harness is
+  // not carrying forward (`discarded`) is not an answer: it is the trace's
+  // last, struck-through step, so a stopped turn is one row.
   const answerAssistants = turn.assistants.filter((assistant) => {
     if (assistant.stopReason === "error" && assistant !== finalAssistant) return false;
+    if (assistant.discarded === true) return false;
     return !statedInterim(assistant);
   });
   for (const assistant of turn.assistants) {
@@ -518,6 +527,7 @@ function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById
       value: { active: false, status: outcome || "complete", segments },
       precedingUserId: turn.userMessage?.id,
       answerless: !hasAnswerRow,
+      timestamp: finalAssistant?.timestamp || undefined,
       ...(turn.userMessage && !outcome ? { unstated: true } : {}),
     });
   }

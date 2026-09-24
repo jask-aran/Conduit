@@ -1,8 +1,14 @@
-/* A discarded answer folding into its row: the text it was fades and closes
-   upward while the row settles in above it. The one height animation in the
-   transcript -- the answer has to give its room back, and it does so once. */
-.discarded-answer-collapse { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows 320ms cubic-bezier(.4, 0, .2, 1), opacity 220ms cubic-bezier(.4, 0, 1, 1); }
-.discarded-answer-collapse > div { min-height: 0; overflow: hidden; }
-.discarded-answer-collapse[data-collapsed="true"] { grid-template-rows: 0fr; opacity: 0; }
-.discarded-answer[data-collapsing="true"] > .response-actions { animation: discarded-row-in 260ms 120ms cubic-bezier(.2, .8, .2, 1) both; }
-@keyframes discarded-row-in { from { opacity: 0; transform: translateY(6px); } }
+/* Where the answer will be, from the start of a live turn until its first
+   words replace it: a line's worth of faint bars breathing in turn. One line
+   tall, so the text arriving moves nothing; opacity only. */
+.answer-pending { display: flex; height: 1.6em; align-items: center; gap: 5px; padding-left: 1px; animation: answer-pending-in 300ms 150ms cubic-bezier(.2, .8, .2, 1) both; }
+.answer-pending > span { height: 6px; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 84%); animation: answer-pending 1.4s ease-in-out infinite; }
+.answer-pending > span:nth-child(1) { width: 72px; }
+.answer-pending > span:nth-child(2) { width: 44px; animation-delay: .18s; }
+.answer-pending > span:nth-child(3) { width: 24px; animation-delay: .36s; }
+@keyframes answer-pending { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+@keyframes answer-pending-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .answer-pending { animation: none; }
+  .answer-pending > span { animation: none; opacity: .6; }
+}
