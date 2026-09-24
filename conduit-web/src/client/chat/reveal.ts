@@ -6,7 +6,7 @@ const GENTLE = "cubic-bezier(.2, .8, .2, 1)";
 const QUICK = "cubic-bezier(.4, 0, 1, 1)";
 
 /**
- * A row the reader opens or closes -- a trace, a tool call -- unfolds its body
+ * A row the reader opens or closes -- a trace, a tool call, a discarded answer -- unfolds its body
  * in height rather than appearing in one frame. This is the second exception
  * to "transform and opacity only" in DESIGN.md: pushing what is below is what
  * the reader asked for.

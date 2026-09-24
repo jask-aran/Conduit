@@ -5,6 +5,7 @@ import type { BooleanCapability, Message } from "../api/contracts";
 import { isChatContentActivity, type TranscriptSource } from "./transcript-source";
 import type { TurnArtifactSummary } from "../api/live-events";
 import { AttachmentCards } from "./attachments";
+import { createReveal } from "./reveal";
 import { ReviewCommentCards } from "./review-comment-cards";
 import { parseReviewComments } from "./review-comments";
 import { TurnTrace } from "./turn-trace";
@@ -218,6 +219,7 @@ function StopLabel(props: { traced?: boolean; detail: string }) {
  */
 function DiscardedAnswer(props: { message: Message; renderer?: MarkdownRendererId; pacing?: IncremarkPacingMode; traced?: boolean; collapse?: boolean }) {
   const [open, setOpen] = createSignal(false);
+  const reveal = createReveal(open);
   /* An answer discarded while it was on screen folds down into its row, so the
      reader sees where it went; one that arrives discarded is simply the row. */
   const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -251,8 +253,8 @@ function DiscardedAnswer(props: { message: Message; renderer?: MarkdownRendererI
         </div>
       </div>
     </Show>
-    <Show when={open()}>
-      <div class="discarded-answer-body">
+    <Show when={reveal.mounted()}>
+      <div ref={reveal.ref} class="discarded-answer-body">
         <Suspense fallback={<div class="markdown-skeleton" />}>
           <ChatMarkdown renderer={props.renderer} pacing={props.pacing}>{props.message.content || ""}</ChatMarkdown>
         </Suspense>
