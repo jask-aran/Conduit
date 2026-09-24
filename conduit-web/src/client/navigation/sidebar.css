@@ -442,3 +442,14 @@
 @media (prefers-reduced-motion: reduce) {
   .thread-harness-mark[data-lively], .thread-harness-mark[data-lively] .harness-mark { transition: none; }
 }
+
+/* While the keyboard moves the cursor (sidebar-cursor.ts), a row left under a
+   still pointer draws at rest until the pointer moves, so only the cursor row
+   is washed. An override rather than pointer-events: Chromium keeps :hover on
+   an element that stops taking the pointer until the mouse next moves. */
+.conduit-sidebar[data-keyboard-cursor] :is(.sidebar-row, .sidebar-rail-action, .sidebar-view-more):hover:not(:focus-visible, :has(:focus-visible), [data-selected="true"]) { background: transparent; }
+.conduit-sidebar[data-keyboard-cursor] .sidebar-row:hover:not(:focus-visible, :has(:focus-visible), [aria-current="page"], [data-holds-current]) { color: color-mix(in oklch, var(--sidebar-foreground), transparent 32%); }
+.conduit-sidebar[data-keyboard-cursor] .sidebar-row:hover:not(:focus-visible, :has(:focus-visible), [aria-current="page"], [data-holds-current]) :is(> svg, .sidebar-project-link > svg) { color: var(--muted-foreground); }
+.conduit-sidebar[data-keyboard-cursor] .sidebar-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] { color: var(--muted-foreground); opacity: .78; }
+.conduit-sidebar[data-keyboard-cursor] .sidebar-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: currentColor; opacity: 1; }
+.conduit-sidebar[data-keyboard-cursor] .sidebar-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 0; }

@@ -74,6 +74,7 @@ import { compareChatsBySort, sortChats, useChatSort } from "../preferences/chat-
 import { publishUiPreference, UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { HarnessMark, ThreadHarnessMark, harnessStatusLabel } from "../harness-brand";
+import { installSidebarCursor } from "./sidebar-cursor";
 import "./sidebar.css";
 
 const ComputerExplorer = lazy(() => import("../dashboard/computer-dashboard").then((module) => ({ default: module.ComputerExplorer })));
@@ -259,6 +260,10 @@ export function Sidebar(props: {
   onOpenWorkspaceIdentity: (project: Project) => void;
   onOpenSettings: (section?: string, workspaceId?: string | null) => void;
   onOpenPalette: (page?: string | null, initialQuery?: string | null) => void;
+  /** Esc from the top of the sidebar: back to the main pane. */
+  onFocusMainPane: () => void;
+  /** A chat opened from the keyboard is opened to write in. */
+  onHandToComposer: () => void;
   onUpdatePwa: () => void;
   pwaUpdating: boolean;
   updateState?: UpdateState;
@@ -283,6 +288,7 @@ export function Sidebar(props: {
   const [newKind, setNewKind] = createSignal<"folder" | "workspace" | null>(null);
   const [area, setArea] = createSignal<SidebarArea>(props.computer || props.terminal ? "computer" : "conduit");
   let sidebarRoot: HTMLElement | undefined;
+  let sidebarList: HTMLDivElement | undefined;
   let sidebarSurface: HTMLDivElement | undefined;
   let sidebarMotionId = 0;
   let sidebarEdgeMotionId: number | null = null;
@@ -418,6 +424,17 @@ export function Sidebar(props: {
       window.removeEventListener("conduit:ptys-changed", onPtysChanged);
       window.clearInterval(timer);
     });
+  });
+  onMount(() => {
+    if (!sidebarRoot || !sidebarList) return;
+    onCleanup(installSidebarCursor({
+      root: sidebarRoot,
+      list: sidebarList,
+      hasSelection: () => selectedChatIds().size > 0,
+      select: (ids) => setSelectedChatIds(new Set(ids)),
+      clearSelection: () => clearSelection(),
+      onLeave: () => props.onFocusMainPane(),
+    }));
   });
   onMount(() => {
     const keydown = (event: KeyboardEvent) => {
@@ -863,7 +880,9 @@ export function Sidebar(props: {
         }
         clearSelection();
         closeMobile();
-        void props.onOpenChat(menuProps.chat, menuProps.project);
+        // A click the keyboard made (Enter, Space) carries no pointer detail.
+        const fromKeyboard = event.detail === 0;
+        void props.onOpenChat(menuProps.chat, menuProps.project).then(() => { if (fromKeyboard) props.onHandToComposer(); });
       }}
     >
       <Show when={props.navigatingId === menuProps.chat.id} fallback={<RuntimeIndicator process={processFor(menuProps.chat)} stale={props.runtime.stale()} unread={menuProps.chat.unread} fallback={<ThreadHarnessMark id={menuProps.chat.harnessId} lively />} />}>
@@ -1046,9 +1065,10 @@ export function Sidebar(props: {
 
   const PinnedRow = (rowProps: { item: PinnedItem }) => {
     const item = rowProps.item;
-    const open = () => {
+    const open = (event: MouseEvent) => {
       closeMobile();
-      if (item.type === "chat") void props.onOpenChat(item.chat, item.project);
+      const fromKeyboard = event.detail === 0;
+      if (item.type === "chat") void props.onOpenChat(item.chat, item.project).then(() => { if (fromKeyboard) props.onHandToComposer(); });
       else if (item.type === "project") void props.onOpenProject(item.project);
       else props.onOpenPty(item.terminal);
     };
@@ -1153,7 +1173,7 @@ export function Sidebar(props: {
             <button type="button" aria-label="Computer" title="Computer" aria-pressed={area() === "computer"} onClick={() => setArea("computer")}><MonitorIcon /></button>
           </div>
         </div>
-        <div data-sidebar="content" class="sidebar-content">
+        <div ref={sidebarList} data-sidebar="content" class="sidebar-content">
           <div data-sidebar="rail-actions" class="sidebar-rail-actions" aria-label="Quick navigation">
             <Show when={area() === "computer"}>
             <RailAction label="Computer" current={props.computer} onClick={() => { setArea("computer"); closeMobile(); props.onOpenComputer(); }}><MonitorIcon /></RailAction>
