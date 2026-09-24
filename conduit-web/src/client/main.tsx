@@ -949,7 +949,7 @@ function App() {
    */
   const DASHBOARD_LEAVE_MS = 200;
   const leaveDashboard = (): Promise<DOMRect | null> => {
-    const wrap = document.querySelector<HTMLElement>('.chat-main [data-region="composer"]');
+    const wrap = document.querySelector<HTMLElement>('.chat-main [data-part="composer"]');
     if (!wrap || matchMedia("(prefers-reduced-motion: reduce)").matches) return Promise.resolve(null);
     const from = wrap.getBoundingClientRect();
     document.documentElement.dataset.routeMotion = "leaving";
@@ -969,7 +969,7 @@ function App() {
     if (!from) return void delete root.dataset.routeMotion;
     requestAnimationFrame(noteEmptyComposer);
     root.dataset.routeMotion = "arriving";
-    const wrap = chatComposerStack?.querySelector<HTMLElement>('[data-region="composer"]');
+    const wrap = chatComposerStack?.querySelector<HTMLElement>('[data-part="composer"]');
     if (wrap) {
       const to = wrap.getBoundingClientRect();
       const dx = from.left + from.width / 2 - (to.left + to.width / 2);
@@ -2201,7 +2201,6 @@ function App() {
       shortcutManager.registerHandler(COMMAND_IDS.toggleWorkspacePanel, "application", togglePanel),
       shortcutManager.registerHandler(COMMAND_IDS.focusSidebar, "application", goToSidebar),
       shortcutManager.registerHandler(COMMAND_IDS.maximizeWorkspacePanel, "application", maximizeWorkspacePanel),
-      shortcutManager.registerHandler(COMMAND_IDS.stashPrompt, "composer", stashPrompt),
       shortcutManager.registerHandler(COMMAND_IDS.stashPrompt, "chat", stashPrompt),
       // The go-to jumps, from every region the leader can start in.
       ...getCommandDefinition(COMMAND_IDS.focusComposer).contexts.map((context) =>
@@ -2213,7 +2212,6 @@ function App() {
       shortcutManager.registerHandler(COMMAND_IDS.focusMainPane, "application", focusMainPane),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "application", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "chat", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
-      shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "composer", toggleChatWorkspaceFocus),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "workspace-panel", toggleChatWorkspaceFocus),
       // A dashboard is the chat's sibling region and keeps what the main pane
       // could do there before regions had names.

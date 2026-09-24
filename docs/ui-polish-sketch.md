@@ -540,11 +540,15 @@ only conflict between a node and its ancestors, so siblings can reuse them:
 R can rename on a sidebar row and regenerate on a transcript turn.
 
 As built: `SHORTCUT_REGION_PARENTS` in `shortcuts/shortcut-types.ts` is the
-tree -- sidebar, chat (transcript, composer), dashboard (composer),
-workspace panel and terminal, under the application -- and the context
+tree -- sidebar, chat, dashboard, workspace panel and terminal, under the
+application -- and the context
 priority lists every region before the ones it sits inside. Surfaces mark
 themselves `data-region`; the main pane is `chat`, `dashboard` or
-`terminal` by route. On every focus change `main.tsx` walks the regions
+`terminal` by route. The composer and transcript were nodes of their own at
+first and were folded into the main pane: their commands were the chat's
+anyway, and in the leader menu a lit composer or an empty chat's transcript
+(which fills the pane under the composer) read worse than the pane itself.
+They are marked `data-part` instead, for styling and lookups. On every focus change `main.tsx` walks the regions
 around focus and activates each, replacing the one context it used to pick.
 Arriving in another top-level region from the keyboard, the region's edge
 brightens and settles (`shortcuts/region-cue.ts`); the chat and workspace

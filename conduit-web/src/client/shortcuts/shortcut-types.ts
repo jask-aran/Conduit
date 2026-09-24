@@ -8,8 +8,6 @@
  * in order. A composer sits in a chat or on a dashboard.
  */
 export const SHORTCUT_REGION_PARENTS = {
-  composer: ["chat", "dashboard"],
-  transcript: ["chat"],
   "workspace-panel": ["application"],
   sidebar: ["application"],
   chat: ["application"],
@@ -32,9 +30,9 @@ export const SHORTCUT_CONTEXT_PRIORITY = [
   "palette.page",
   "palette.root",
   "settings",
-  // The regions, each before the ones it sits inside.
-  "composer",
-  "transcript",
+  // The regions, each before the ones it sits inside. The main pane is one
+  // region whole: its composer and transcript are parts of it, not regions of
+  // their own (transcript mode may bring one back, docs/transcript-mode.md).
   "workspace-panel",
   "sidebar",
   "chat",

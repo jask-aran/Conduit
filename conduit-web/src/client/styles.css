@@ -2425,32 +2425,32 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
    main pane, each outermost part that does not hold the composer. */
 /* Hidden rather than transparent: the composer has an opacity transition of
    its own, for the question takeover, that would fade it back in. */
-:root[data-arrival="waiting"] [data-region="composer"] { visibility: hidden; }
+:root[data-arrival="waiting"] [data-part="composer"] { visibility: hidden; }
 :root[data-arrival="waiting"] :is(
   [data-region="sidebar"],
   [data-region="workspace-panel"],
-  :is(.chat-main, .chat-main :has([data-region="composer"])) > :not([data-region="composer"], :has([data-region="composer"]))
+  :is(.chat-main, .chat-main :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"]))
 ) { opacity: 0; }
 :root[data-arrival="arriving"] :is(
   [data-region="sidebar"],
   [data-region="workspace-panel"],
-  :is(.chat-main, .chat-main :has([data-region="composer"])) > :not([data-region="composer"], :has([data-region="composer"]))
+  :is(.chat-main, .chat-main :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"]))
 ) { animation: ui-arrive 300ms cubic-bezier(.2, .8, .2, 1) both; }
 @keyframes ui-arrive { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ui-leave { to { opacity: 0; } }
 
 /* Sending from a dashboard (main.tsx): the main pane but its composer
    leaves, then the chat's arrives around the composer as it travels. */
-:root[data-route-motion="leaving"] :is(.chat-main, .chat-main :has([data-region="composer"])) > :not([data-region="composer"], :has([data-region="composer"])) {
+:root[data-route-motion="leaving"] :is(.chat-main, .chat-main :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"])) {
   animation: ui-leave 200ms cubic-bezier(.4, 0, 1, 1) both;
 }
-:root[data-route-motion="arriving"] :is(.chat-main, .chat-main :has([data-region="composer"])) > :not([data-region="composer"], :has([data-region="composer"])) {
+:root[data-route-motion="arriving"] :is(.chat-main, .chat-main :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"])) {
   animation: ui-arrive 300ms cubic-bezier(.2, .8, .2, 1) both;
 }
 @media (prefers-reduced-motion: reduce) {
   :root[data-arrival="arriving"] :is(
     [data-region="sidebar"],
     [data-region="workspace-panel"],
-    :is(.chat-main, .chat-main :has([data-region="composer"])) > :not([data-region="composer"], :has([data-region="composer"]))
+    :is(.chat-main, .chat-main :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"]))
   ) { animation: none; }
 }
