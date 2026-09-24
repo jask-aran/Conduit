@@ -1472,35 +1472,35 @@ function App() {
       (target as HTMLElement | null | undefined)?.focus({ preventScroll: false });
     });
   };
-  const focusMainPane = () => {
-    if (isMobileLayout()) setMobileSidebarOpen(false);
-    if (hasComposer()) focusComposer();
-    else document.querySelector<HTMLElement>(".chat-main")?.focus({ preventScroll: true });
-  };
-  // A route change that takes the focused element with it leaves focus on the
-  // body, where no key does anything. It goes to the new page's own place
-  // instead: its composer, else the pane. Never taken from somewhere it still
-  // is, as a clicked sidebar row; not on a phone, where focusing the composer
-  // raises the keyboard; and not on the terminal page, which focuses its own.
-  // A composer still connecting is disabled, so the pane holds focus until it
-  // can take it, unless something has moved it by then.
-  const settleFocus = (attempt = 0) => {
-    if (isMobileLayout() || routeKind() === "terminal") return;
+  // Entering the main pane with nothing more specific in mind goes to its
+  // composer -- what is wanted nine times in ten -- else the pane. A composer
+  // still connecting is disabled, so the pane holds focus until it can take
+  // it, unless something else has taken focus by then. The terminal page
+  // focuses its own.
+  const enterMainPane = (attempt = 0, from: Element | null = null) => {
+    if (routeKind() === "terminal") return;
     const pane = document.querySelector<HTMLElement>(".chat-main");
     const active = document.activeElement;
-    if (active && active !== document.body && active !== pane) return;
+    if (attempt > 0 && active !== from && active !== document.body) return;
     if (hasComposer()) return focusComposer();
     if (active !== pane) pane?.focus({ preventScroll: true });
-    if (document.querySelector(".composer textarea") && attempt < 20) setTimeout(() => settleFocus(attempt + 1), 100);
+    if (document.querySelector(".composer textarea") && attempt < 20) setTimeout(() => enterMainPane(attempt + 1, pane), 100);
   };
-  createEffect(on([routeKind, () => catalogue.selectedId()], () => requestAnimationFrame(() => settleFocus()), { defer: true }));
-  // Enter on a sidebar chat opens it to write in: focus follows to its
-  // composer once the composer can take it, unless something else has moved it.
-  const handToComposer = (from = document.activeElement, attempt = 0) => {
-    if (isMobileLayout() || document.activeElement !== from) return;
-    if (hasComposer()) return focusComposer();
-    if (attempt < 20) setTimeout(() => handToComposer(from, attempt + 1), 100);
+  const focusMainPane = () => {
+    if (isMobileLayout()) setMobileSidebarOpen(false);
+    enterMainPane();
   };
+  // A route change that takes the focused element with it leaves focus on the
+  // body, where no key does anything; the new page is entered instead. Never
+  // taken from somewhere it still is, and not on a phone, where focusing the
+  // composer raises the keyboard.
+  const settleFocus = () => {
+    if (isMobileLayout()) return;
+    const active = document.activeElement;
+    if (active && active !== document.body && !active.matches(".chat-main")) return;
+    enterMainPane();
+  };
+  createEffect(on([routeKind, () => catalogue.selectedId()], () => requestAnimationFrame(settleFocus), { defer: true }));
   // Ctrl+Shift+1: open a collapsed sidebar and focus it; never close it --
   // Ctrl+B stays the toggle.
   const goToSidebar = () => {
@@ -2420,7 +2420,7 @@ function App() {
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
-      onNewChat={async (project) => { await createChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={openChat} onFocusMainPane={focusMainPane} onHandToComposer={() => handToComposer()} onOpenProject={openProject} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
+      onNewChat={async (project) => { await createChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={openChat} onFocusMainPane={focusMainPane} onEnterMainPane={() => { if (!isMobileLayout()) enterMainPane(); }} onOpenProject={openProject} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
       onOpenProjectMaximized={openProjectWithMaximizedWorkspace}
       onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
