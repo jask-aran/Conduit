@@ -662,6 +662,7 @@ export function Settings(props: {
   };
   createEffect(() => { if (props.open && section() === "search") void loadSearchSettings(); });
 
+  const brave = () => searchSettings()?.providers.find((provider) => provider.id === "brave");
   const saveSearchKey = async () => {
     const key = searchKey().trim();
     if (!key) return;
@@ -1146,90 +1147,83 @@ export function Settings(props: {
             </Show>
           </Show>
           <Show when={section() === "ui"}>
-            <div class="settings-stack">
-              <details class="settings-tile" open>
-                <summary><span><strong>Interface</strong></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
-                <div class="settings-rows">
-                  <label class="settings-row" for="interface-scale"><span>Scale</span>
+            <div class="settings-list">
+              <section class="settings-group" aria-label="Interface">
+                <h3>Interface</h3>
+                  <label class="settings-line" for="interface-scale"><span>Scale</span>
                     <select id="interface-scale" aria-label="Interface scale" value={props.interfaceScale} onChange={(event) => props.onInterfaceScaleChange(parseUiScale(event.currentTarget.value))}>
                       <For each={UI_SCALE_OPTIONS}>{(scale) => <option value={scale}>{Math.round(scale * 100)}%</option>}</For>
                     </select>
                   </label>
-                  <label class="settings-row" for="sidebar-chat-limit"><span>Sidebar chats</span>
+                  <label class="settings-line" for="sidebar-chat-limit"><span>Sidebar chats</span>
                     <Input id="sidebar-chat-limit" type="number" min={MIN_SIDEBAR_CHAT_LIMIT} max={MAX_SIDEBAR_CHAT_LIMIT} step="1" value={props.sidebarChatLimit} onChange={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} onBlur={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} />
                   </label>
-                  <label class="settings-row" for="composer-surface-mode"><span>Composer</span>
+                  <label class="settings-line" for="composer-surface-mode"><span>Composer</span>
                     <select id="composer-surface-mode" aria-label="Composer material" title={COMPOSER_SURFACE_OPTIONS.find((option) => option.value === props.composerSurface)?.description} value={props.composerSurface} onChange={(event) => props.onComposerSurfaceChange(event.currentTarget.value as ComposerSurfaceMode)}>
                       <For each={COMPOSER_SURFACE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </select>
                   </label>
-                  <label class="settings-row" for="markdown-renderer"><span>Markdown</span>
+                  <label class="settings-line" for="markdown-renderer"><span>Markdown</span>
                     <select id="markdown-renderer" aria-label="Markdown renderer" title={MARKDOWN_RENDERER_OPTIONS.find((option) => option.value === props.markdownRenderer)?.description} value={props.markdownRenderer} onChange={(event) => props.onMarkdownRendererChange(event.currentTarget.value as MarkdownRendererId)}>
                       <For each={MARKDOWN_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </select>
                   </label>
-                  <label class="settings-row" for="renderer-controls"><span>Renderer probes</span>
-                    <input id="renderer-controls" type="checkbox" aria-label="Show renderer controls" checked={props.rendererControlsVisible} onChange={(event) => props.onRendererControlsVisibleChange(event.currentTarget.checked)} />
+                  <label class="settings-line" for="renderer-controls"><span>Renderer probes</span>
+                    <Switch id="renderer-controls" label="Show renderer controls" checked={props.rendererControlsVisible} onChange={props.onRendererControlsVisibleChange} />
                   </label>
-                  <label class="settings-row" for="meteor-field"><span>Meteor field</span>
-                    <input id="meteor-field" type="checkbox" aria-label="Ambient meteor field" checked={props.meteorField} onChange={(event) => props.onMeteorFieldChange(event.currentTarget.checked)} />
+                  <label class="settings-line" for="meteor-field"><span>Meteor field</span>
+                    <Switch id="meteor-field" label="Ambient meteor field" checked={props.meteorField} onChange={props.onMeteorFieldChange} />
                   </label>
-                </div>
-              </details>
+              </section>
               <DesktopSettingsTile />
-              <details class="settings-tile" open>
-                <summary><span><strong>Reading</strong></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
-                <div class="settings-rows">
-                  <label class="settings-row" for="transcript-width"><span>Transcript width</span>
+              <section class="settings-group" aria-label="Reading">
+                <h3>Reading</h3>
+                  <label class="settings-line" for="transcript-width"><span>Transcript width</span>
                     <select id="transcript-width" aria-label="Transcript width" value={props.transcriptWidth} onChange={(event) => props.onTranscriptWidthChange(event.currentTarget.value as TranscriptWidthMode)}>
                       <For each={TRANSCRIPT_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </select>
                   </label>
-                  <label class="settings-row" for="transcript-wide-blocks"><span>Wide blocks</span>
+                  <label class="settings-line" for="transcript-wide-blocks"><span>Wide blocks</span>
                     <select id="transcript-wide-blocks" aria-label="Wide blocks" value={props.transcriptWideBlocks} onChange={(event) => props.onTranscriptWideBlocksChange(event.currentTarget.value as TranscriptWideBlocksMode)}>
                       <For each={TRANSCRIPT_WIDE_BLOCKS_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </select>
                   </label>
-                  <label class="settings-row" for="code-block-width"><span>Code width</span>
+                  <label class="settings-line" for="code-block-width"><span>Code width</span>
                     <select id="code-block-width" aria-label="Code block width" value={props.codeBlockWidth} onChange={(event) => props.onCodeBlockWidthChange(event.currentTarget.value as CodeBlockWidthMode)}>
                       <For each={CODE_BLOCK_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </select>
                   </label>
-                  <label class="settings-row" for="panel-motion"><span>Panel drag</span>
+                  <label class="settings-line" for="panel-motion"><span>Panel drag</span>
                     <select id="panel-motion" aria-label="Panel drag" title={PANEL_MOTION_OPTIONS.find((option) => option.value === props.panelMotion)?.label} value={props.panelMotion} onChange={(event) => props.onPanelMotionChange(event.currentTarget.value as PanelMotionMode)}>
                       <For each={PANEL_MOTION_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </select>
                   </label>
-                </div>
-              </details>
-              <details class="settings-tile" open>
-                <summary><span><strong>Collapse</strong></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
-                <div class="settings-rows">
-                  <label class="settings-row" for="code-block-collapse"><span>Code blocks</span>
+              </section>
+              <section class="settings-group" aria-label="Collapse">
+                <h3>Collapse</h3>
+                  <label class="settings-line" for="code-block-collapse"><span>Code blocks</span>
                     <select id="code-block-collapse" aria-label="Collapse code blocks" value={props.codeBlockCollapse} onChange={(event) => props.onCodeBlockCollapseChange(event.currentTarget.value as CodeBlockCollapseMode)}>
                       <For each={CODE_BLOCK_COLLAPSE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </select>
                   </label>
-                  <label class="settings-row" for="code-block-collapse-lines"><span>Fold over</span>
+                  <label class="settings-line" for="code-block-collapse-lines"><span>Fold over</span>
                     <select id="code-block-collapse-lines" aria-label="Collapse code blocks over" disabled={props.codeBlockCollapse === "off"} value={props.codeBlockCollapseLines} onChange={(event) => props.onCodeBlockCollapseLinesChange(Number(event.currentTarget.value))}>
                       <For each={CODE_BLOCK_COLLAPSE_LINE_CHOICES}>{(lines) => <option value={lines}>{lines} lines</option>}</For>
                     </select>
                   </label>
-                  <label class="settings-row" for="user-message-collapse"><span>Your messages</span>
+                  <label class="settings-line" for="user-message-collapse"><span>Your messages</span>
                     <select id="user-message-collapse" aria-label="Collapse your messages" value={props.userMessageCollapse} onChange={(event) => props.onUserMessageCollapseChange(event.currentTarget.value as UserMessageCollapseMode)}>
                       <For each={USER_MESSAGE_COLLAPSE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </select>
                   </label>
-                </div>
-              </details>
-              <details class="settings-tile">
-                <summary><span><MonitorIcon /><strong>Graphics</strong><small>Hardware acceleration recommended</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
-                <div class="settings-disclosure-content" role="note">For smooth animations, backdrop blur, and high-refresh-rate rendering, enable <em>Use graphics acceleration when available</em> in your browser settings, then relaunch the browser.</div>
-              </details>
-              <details class="settings-tile">
-                <summary><span><ActivityIcon /><strong>Context metrics</strong><small>{contextMetricPreset(props.contextMetrics) === "custom" ? "Custom selection" : CONTEXT_METRIC_PRESETS.find((preset) => preset.id === contextMetricPreset(props.contextMetrics))?.label}</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
-                <div class="settings-disclosure-content">
-                  <label class="settings-row" for="context-metric-preset"><span>Preset</span>
+              </section>
+              <section class="settings-group" aria-label="Graphics">
+                <h3>Graphics</h3>
+                <div class="settings-line" title="For smooth animations, backdrop blur and high-refresh-rate rendering, turn on “Use graphics acceleration when available” in your browser settings, then relaunch the browser."><span>Hardware acceleration</span><span class="settings-line-value">Turn on in browser</span></div>
+              </section>
+              <section class="settings-group" aria-label="Context metrics">
+                <h3>Context metrics</h3>
+                  <label class="settings-line" for="context-metric-preset"><span>Preset</span>
                     <select id="context-metric-preset" aria-label="Composer context metric preset" value={contextMetricPreset(props.contextMetrics)} onChange={(event) => {
                       const value = event.currentTarget.value as ContextMetricPresetId | "custom";
                       if (value !== "custom") props.onContextMetricsChange(metricsForContextMetricPreset(value));
@@ -1238,31 +1232,38 @@ export function Settings(props: {
                       <For each={CONTEXT_METRIC_PRESETS}>{(preset) => <option value={preset.id}>{preset.label}</option>}</For>
                     </select>
                   </label>
-                  <div class="settings-metric-groups" role="group" aria-label="Composer context metrics">
+                  <div class="settings-subgroups" role="group" aria-label="Composer context metrics">
                     <For each={CONTEXT_METRIC_GROUPS}>{(group) => <fieldset>
                       <legend>{group.label}</legend>
-                      <For each={CONTEXT_METRIC_OPTIONS.filter((option) => option.group === group.id)}>{(option) => <label class="settings-row" for={`context-metric-${option.id}`}>
+                      <For each={CONTEXT_METRIC_OPTIONS.filter((option) => option.group === group.id)}>{(option) => <label class="settings-line" for={`context-metric-${option.id}`}>
                         <span>{option.label}</span>
-                        <input id={`context-metric-${option.id}`} type="checkbox" aria-label={option.label} checked={props.contextMetrics.includes(option.id)} onChange={(event) => toggleContextMetric(option.id, event.currentTarget.checked)} />
+                        <Switch id={`context-metric-${option.id}`} label={option.label} checked={props.contextMetrics.includes(option.id)} onChange={(checked) => toggleContextMetric(option.id, checked)} />
                       </label>}</For>
                     </fieldset>}</For>
                   </div>
-                </div>
-              </details>
+              </section>
               <AboutSettingsTile />
             </div>
           </Show>
           <Show when={section() === "servers"}><div class="settings-stack"><ServersSettingsTile /></div></Show>
           <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
           <Show when={section() === "runtime"}>
-            <Show when={runtimeStatus() === "ready" && runtime()} fallback={<Show when={runtimeStatus() === "error"} fallback={<div class="settings-loading"><Spinner /><span>Loading runtime settings…</span></div>}><div role="alert" class="settings-error"><span>{runtimeError() || "Runtime settings could not be loaded."}</span><Button variant="outline" size="sm" onClick={() => void loadRuntime()}>Retry</Button></div></Show>}>
-              <FieldGroup class="settings-control-grid">
-                <Field><FieldLabel for="warm-processes">Warm processes</FieldLabel><Input id="warm-processes" type="number" inputMode="numeric" value={runtimeDraft().live} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "live")) || undefined} onInput={(event) => editRuntime("live", event.currentTarget.value)} /><Show when={runtimeFieldError(runtimeDraft(), "live")} fallback={<small>{runtime()!.liveCount || 0} live now</small>}>{(message) => <small class="settings-inline-error">{message()}</small>}</Show></Field>
-                <Field><FieldLabel for="generations">Concurrent generations</FieldLabel><Input id="generations" type="number" inputMode="numeric" value={runtimeDraft().generating} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "generating")) || undefined} onInput={(event) => editRuntime("generating", event.currentTarget.value)} /><Show when={runtimeFieldError(runtimeDraft(), "generating")} fallback={<small>{runtime()!.generatingCount || 0} generating</small>}>{(message) => <small class="settings-inline-error">{message()}</small>}</Show></Field>
-                <Field><FieldLabel for="idle-ttl">Idle TTL (seconds)</FieldLabel><Input id="idle-ttl" type="number" inputMode="numeric" value={runtimeDraft().ttl} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "ttl")) || undefined} onInput={(event) => editRuntime("ttl", event.currentTarget.value)} /><Show when={runtimeFieldError(runtimeDraft(), "ttl")}>{(message) => <small class="settings-inline-error">{message()}</small>}</Show></Field>
-              </FieldGroup>
-            </Show>
-            <details class="settings-disclosure"><summary><span><ActivityIcon /><strong>Pi installation</strong><small>{props.installations[0]?.available ? "Ready" : "Unavailable"}</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary><Show when={!props.installationsLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading Pi installation…</span></div>}><div class="installations"><For each={props.installations}>{(item) => <article><h3>{item.label}</h3><p>{item.available ? item.version ? `Pi ${item.version}` : "Available" : item.reason || (item as Installation & { error?: string }).error || "Unavailable"}</p></article>}</For></div></Show></details>
+            <div class="settings-list">
+              <Show when={runtimeStatus() === "ready" && runtime()} fallback={<Show when={runtimeStatus() === "error"} fallback={<div class="settings-loading"><Spinner /><span>Loading runtime settings…</span></div>}><div role="alert" class="settings-error"><span>{runtimeError() || "Runtime settings could not be loaded."}</span><Button variant="outline" size="sm" onClick={() => void loadRuntime()}>Retry</Button></div></Show>}>
+                <section class="settings-group" aria-label="Agent processes">
+                  <h3>Agent processes</h3>
+                  <label class="settings-line" for="warm-processes"><span>Warm processes<Show when={runtimeFieldError(runtimeDraft(), "live")} fallback={<em>{runtime()!.liveCount || 0} live</em>}>{(message) => <em data-tone="error">{message()}</em>}</Show></span><Input id="warm-processes" type="number" inputMode="numeric" value={runtimeDraft().live} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "live")) || undefined} onInput={(event) => editRuntime("live", event.currentTarget.value)} /></label>
+                  <label class="settings-line" for="generations"><span>Concurrent generations<Show when={runtimeFieldError(runtimeDraft(), "generating")} fallback={<em>{runtime()!.generatingCount || 0} generating</em>}>{(message) => <em data-tone="error">{message()}</em>}</Show></span><Input id="generations" type="number" inputMode="numeric" value={runtimeDraft().generating} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "generating")) || undefined} onInput={(event) => editRuntime("generating", event.currentTarget.value)} /></label>
+                  <label class="settings-line" for="idle-ttl"><span>Idle timeout (s)<Show when={runtimeFieldError(runtimeDraft(), "ttl")} fallback={null}>{(message) => <em data-tone="error">{message()}</em>}</Show></span><Input id="idle-ttl" type="number" inputMode="numeric" value={runtimeDraft().ttl} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "ttl")) || undefined} onInput={(event) => editRuntime("ttl", event.currentTarget.value)} /></label>
+                </section>
+              </Show>
+              <section class="settings-group" aria-label="Pi">
+                <h3>Pi</h3>
+                <Show when={!props.installationsLoading} fallback={<div class="settings-line"><span>Checking…</span></div>}>
+                  <For each={props.installations}>{(item) => <div class="settings-line"><span>{item.label}</span><span class="settings-line-value" data-mono title={item.available ? undefined : item.reason || (item as Installation & { error?: string }).error || undefined}>{item.available ? item.version ? `Pi ${item.version}` : "Available" : "Unavailable"}</span></div>}</For>
+                </Show>
+              </section>
+            </div>
           </Show>
           <Show when={section() === "workspaces"}>
             <Show when={!props.templatesLoading && !props.installationsLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading workspace settings…</span></div>}><Show when={workspaceProjects().find((workspace) => workspace.id === workspaceId())} fallback={<p>This workspace is not available.</p>}>{(workspace) => <div class="workspace-settings-card" data-current="true"><h3>{workspace().name}</h3><p>{workspace().workingRoot}</p><p>Override: {workspaceDefaultLabel(workspace()).startsWith("Inherit") ? "None" : workspaceDefaultLabel(workspace())}</p>
@@ -1405,20 +1406,26 @@ export function Settings(props: {
           </Show>
           <Show when={section() === "search"}>
             <Show when={searchStatus() === "ready" && searchSettings()} fallback={<Show when={searchStatus() === "error"} fallback={<div class="settings-loading"><Spinner /><span>Loading search settings…</span></div>}><div role="alert" class="settings-error"><span>{searchError() || "Search settings could not be loaded."}</span><Button variant="outline" size="sm" onClick={() => void loadSearchSettings()}>Retry</Button></div></Show>}>
-              <div class="search-settings">
-                <FieldGroup>
-                  <Field>
-                    <FieldLabel for="brave-search-api-key">Brave Search API key</FieldLabel>
-                    <Input id="brave-search-api-key" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore value={searchKey()} onInput={(event) => setSearchKey(event.currentTarget.value)} placeholder={searchSettings()!.providers.find((provider) => provider.id === "brave")?.configured ? "A key is already configured" : "BSA_…"} onKeyDown={(event) => { if (event.key === "Enter") void saveSearchKey(); }} />
-                    
-                  </Field>
-                  <div class="search-provider-actions">
-                    <span class="search-provider-status" data-configured={searchSettings()!.providers.find((provider) => provider.id === "brave")?.configured}>{searchSettings()!.providers.find((provider) => provider.id === "brave")?.source === "environment" ? "Using BRAVE_API_KEY from the server environment" : searchSettings()!.providers.find((provider) => provider.id === "brave")?.stored ? "Stored key active" : "No Brave key configured"}</span>
-                    <div><Button disabled={searchSaving() || !searchKey().trim()} onClick={() => void saveSearchKey()}>{searchSaving() ? <Spinner /> : null}Save key</Button><Show when={searchSettings()!.providers.find((provider) => provider.id === "brave")?.removable}><Button variant="outline" disabled={searchSaving()} onClick={() => void removeSearchKey()}>Remove stored key</Button></Show></div>
+              <div class="settings-list">
+                <section class="settings-group" aria-label="Brave Search">
+                  <h3>Brave Search</h3>
+                  <div class="settings-line"><label for="brave-search-api-key">API key<em>{brave()?.source === "environment" ? "from the server environment" : brave()?.stored ? "stored" : "not set"}</em></label>
+                    <div class="settings-line-control">
+                      <Input id="brave-search-api-key" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore value={searchKey()} onInput={(event) => setSearchKey(event.currentTarget.value)} placeholder={brave()?.configured ? "Replace" : "BSA_…"} onKeyDown={(event) => { if (event.key === "Enter") void saveSearchKey(); }} />
+                      <Show when={searchKey().trim()}><Button size="sm" disabled={searchSaving()} onClick={() => void saveSearchKey()}>{searchSaving() ? <Spinner /> : null}Save</Button></Show>
+                      <Show when={!searchKey().trim() && brave()?.removable}><Button variant="ghost" size="sm" disabled={searchSaving()} onClick={() => void removeSearchKey()}>Remove</Button></Show>
+                    </div>
                   </div>
-                </FieldGroup>
-                <Show when={searchError()}><p role="alert" class="settings-inline-error">{searchError()}</p></Show>
-                <details class="settings-disclosure"><summary><span><SearchIcon /><strong>More providers</strong><small>{searchSettings()!.providers.filter((provider) => !provider.enabled).length} planned integrations</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary><div class="search-provider-list"><For each={searchSettings()!.providers.filter((provider) => !provider.enabled)}>{(provider) => <article class="search-provider-card" data-disabled="true"><div><h3>{provider.label}<span>Coming later</span></h3><p>{provider.description}</p><a href={provider.docsUrl} target="_blank" rel="noreferrer">Provider documentation</a></div><Input type="password" disabled placeholder="Configuration not enabled yet" aria-label={`${provider.label} API key`} /></article>}</For></div></details>
+                  <Show when={searchError()}><p role="alert" class="settings-line-note">{searchError()}</p></Show>
+                </section>
+                <Show when={searchSettings()!.providers.some((provider) => !provider.enabled)}>
+                  <section class="settings-group" aria-label="Coming later">
+                    <h3>Coming later</h3>
+                    <For each={searchSettings()!.providers.filter((provider) => !provider.enabled)}>{(provider) =>
+                      <div class="settings-line" title={provider.description}><span>{provider.label}</span><a class="settings-line-link" href={provider.docsUrl} target="_blank" rel="noreferrer">Docs</a></div>
+                    }</For>
+                  </section>
+                </Show>
               </div>
             </Show>
           </Show>

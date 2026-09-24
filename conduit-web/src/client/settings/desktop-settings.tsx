@@ -1,8 +1,6 @@
 import { createSignal, onMount, Show } from "solid-js";
-import { ChevronRightIcon } from "lucide-solid";
+import { Switch } from "./settings-controls";
 import { desktopShell, type DesktopShellSettings } from "../platform/installed-client.ts";
-
-const ON_OFF = [{ value: "on", label: "On" }, { value: "off", label: "Off" }];
 
 /**
  * The window behaviour the shell owns, shown where every other preference is.
@@ -30,17 +28,14 @@ export function DesktopSettingsTile() {
   };
 
   const row = (id: string, label: string, value: boolean, disabled: boolean, change: (on: boolean) => Partial<DesktopShellSettings>) =>
-    <label class="settings-row" for={id}><span>{label}</span>
-      <select id={id} aria-label={label} disabled={disabled} value={value ? "on" : "off"}
-        onChange={(event) => update(change(event.currentTarget.value === "on"))}>
-        {ON_OFF.map((option) => <option value={option.value}>{option.label}</option>)}
-      </select>
+    <label class="settings-line" for={id}><span>{label}</span>
+      <Switch id={id} label={label} disabled={disabled} checked={value} onChange={(on) => update(change(on))} />
     </label>;
 
-  return <details class="settings-tile" open>
-    <summary><span><strong>Desktop</strong><small>What closing the window does, and how Conduit starts.</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
-    <Show when={settings()} fallback={<div class="settings-rows"><p class="settings-row"><span>Reading the shell's settings…</span></p></div>}>
-      {(current) => <div class="settings-rows">
+  return <section class="settings-group" aria-label="Desktop">
+    <h3>Desktop</h3>
+    <Show when={settings()} fallback={<div class="settings-line"><span>Reading the shell's settings…</span></div>}>
+      {(current) => <>
         {row("desktop-tray", "Keep running in tray", current().keepRunningInTray, false,
           (on) => ({ keepRunningInTray: on }))}
         {row("desktop-autostart", "Launch at sign-in", current().launchAtLogin, false,
@@ -48,8 +43,8 @@ export function DesktopSettingsTile() {
         {/* Starting hidden is only a question for a launch nobody asked for. */}
         {row("desktop-start-hidden", "Start hidden", current().startHidden, !current().launchAtLogin,
           (on) => ({ startHidden: on }))}
-        <Show when={error()}><p class="settings-row" role="alert"><span>{error()}</span></p></Show>
-      </div>}
+        <Show when={error()}><p class="settings-line-note" role="alert">{error()}</p></Show>
+      </>}
     </Show>
-  </details>;
+  </section>;
 }

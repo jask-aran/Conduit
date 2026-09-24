@@ -199,3 +199,19 @@
 /* Focus on the dialog's own buttons is the wash too, never a ring. */
 .settings-dialog .settings-shell :is(.settings-rail-close, .settings-close, .settings-back):focus-visible { outline: none; box-shadow: none; background: var(--accent); }
 .settings-dialog .settings-shell :is(.settings-rail h2, .settings-content > header h2) { font-weight: 600; }
+
+/* A value that is read, not chosen (About, Graphics): quiet, at the column's right. */
+.settings-line-value { min-width: 0; overflow: hidden; justify-self: end; color: var(--muted-foreground); font-size: 10.4px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.settings-line-value[data-mono] { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; }
+/* Sub-groups inside a group (context metrics): a quieter label over the same rows. */
+.settings-subgroups { display: grid; gap: 6px; }
+.settings-subgroups fieldset { display: grid; gap: 1px; margin: 0; border: 0; padding: 0; }
+.settings-subgroups legend { padding: 6px 6.4px 2px; color: var(--muted-foreground); font-size: 9.6px; }
+@media (max-width: 760px) {
+  .settings-line-value { font-size: 14px; }
+  .settings-line-value[data-mono] { font-size: 12.5px; }
+  .settings-subgroups legend { padding: 8px 9px 2px; font-size: 12px; }
+}
+.settings-line-link { justify-self: end; border-radius: 6px; padding: 3px 8px; color: var(--muted-foreground); font-size: 10.4px; text-decoration: none; }
+.settings-line-link:hover, .settings-line-link:focus-visible { outline: none; color: var(--foreground); }
+@media (max-width: 760px) { .settings-line-link { font-size: 14px; } }
