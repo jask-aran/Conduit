@@ -348,29 +348,12 @@ keyboard. Desktop density changes are outside this proposal.
 
 ## 5. Make empty states useful
 
-Status: built, reduced. Reviewing the sketch below, an empty section does not
-need its own action: the ways to start a chat or add a project or workspace
-already sit in the sidebar, and a second target in every empty section would
-only repeat them. Empty dashboard chat and workspace lists now read "Nothing
-here yet."; Live terminals stays a live reference list with no action, since
-there is nowhere useful for "Open terminal" to go. Instead, the sidebar's own
-actions were made rows: **New project** is a wide row under New chat and
-**New workspace** one under Files, each also on the collapsed rail, replacing
-the small buttons beside the Projects and Workspaces headings. Telling
-loading and a failed request apart from empty was not taken up.
-
-The dashboard currently uses messages such as “No recent chats”, “No
-Workspaces yet”, and “No live terminals”. These describe an absence but do
-not provide a next step within the empty section.
-
-Sketch: pair a short explanation with the relevant existing action: start a
-chat, add a workspace, or open a terminal. Reuse the established action flow.
-Keep each state compact and avoid tutorial copy or decorative illustrations.
-
-Distinguish an empty result from loading or a failed request. An unavailable
-server should offer recovery rather than suggest that the user's data does
-not exist. Review both a new account and an established account with an empty
-section.
+Status: built, reduced; the dashboard part moved to
+[`dashboard-redesign.md`](dashboard-redesign.md), since the dashboards are to
+be redesigned rather than polished. What stays here is the sidebar's share:
+its actions were made rows -- **New project** a wide row under New chat and
+**New workspace** one under Files, each also on the collapsed rail --
+replacing the small buttons beside the Projects and Workspaces headings.
 
 ## 6. Develop interaction feedback surface by surface
 
@@ -527,7 +510,9 @@ composer** -- the queued pill's width and material, about twice its height
 
 Status: steps 1 to 3 are built -- regions and the context tree, a first
 estimate of the go-to jumps, and the whole-UI fade with context switching.
-Step 4, cursor navigation, is next, starting with the sidebar. Keyboard navigation of the sidebar
+Step 4, cursor navigation, is built for the sidebar; the dashboard lists and
+transcript turns moved to their own docs. Step 5, the leader redesign, is
+next. Keyboard navigation of the sidebar
 was the natural next step after its cursor (section 6), but moving a cursor
 is the last part of this, not the first: how shortcuts are scoped, and how
 one moves between surfaces, come first, or every surface grows its own keys.
@@ -601,7 +586,7 @@ maximised, sit awkwardly on a VS Code-style toggle.
 ### Knowing it happened
 
 - **The cursor appears.** The sidebar's wash already means the cursor, so a
-  washed row appearing is the signal; a transcript turn takes the same wash.
+  washed row appearing is the signal.
 - **The region acknowledges it.** Its edge or heading brightens for ~150ms
   and settles, drawing the eye without a standing frame.
 - **The leader says where you are.** Opened anywhere, it shows the path as a
@@ -610,7 +595,7 @@ maximised, sit awkwardly on a VS Code-style toggle.
 ### Moving within a region and getting back
 
 - ↑/↓ move the cursor, skipping headings; Home/End go to the ends; →/← step
-  into and out of a folder or a turn. Shift+↑/↓ extends a selection, which
+  into and out of a folder. Shift+↑/↓ extends a selection, which
   is only more washed rows. The context menu opens with the Menu key or
   Shift+F10. Pointer and keyboard move the one cursor, so moving the mouse
   moves it and arrowing carries on from there.
@@ -619,6 +604,10 @@ maximised, sit awkwardly on a VS Code-style toggle.
 - **Esc steps outward** a level at a time, and from the top of any region
   goes home to the open chat's composer: pressing Esc enough always gets
   back to typing.
+
+The transcript's share of this -- walking and acting on turns -- moved to
+[`transcript-mode.md`](transcript-mode.md): ↑ from the composer already walks
+sent messages, so it becomes a mode of its own, to be designed concretely.
 
 ### The leader as the map
 
@@ -661,12 +650,12 @@ the go-to chords are shown as the way out.
    open), Ctrl+Shift+2, and a route change that drops focus. Actions with a
    target of their own -- a dialog, the palette, a terminal -- keep it. Not
    on a phone from a tap, where focusing the composer raises the keyboard.
-4. **Cursor navigation per surface:** sidebar, then transcript turns.
-   Dashboard lists are deferred until the dashboards are redesigned; the
-   list cursor should come with the new design rather than be fitted to
-   the old one. First, because it is what gives regions actions of
-   their own -- rename, pin, move on a row -- and without them the leader
-   has little to show. The sidebar is built (`navigation/sidebar-cursor.ts`):
+4. **Cursor navigation: the sidebar.** First, because it is what gives
+   regions actions of their own -- rename, pin, move on a row -- and without
+   them the leader has little to show. The dashboard lists and transcript
+   turns were to follow and moved out, each to be designed concretely first:
+   [`dashboard-redesign.md`](dashboard-redesign.md) and
+   [`transcript-mode.md`](transcript-mode.md). The sidebar is built (`navigation/sidebar-cursor.ts`):
    the cursor is the focused row; ↑/↓, Home/End; → opens a project then
    steps in, ← steps out then closes; Esc clears a selection, steps out,
    then goes home to the composer; Shift+↑/↓ selects chats as washes; Menu
@@ -690,8 +679,9 @@ Interrupted turns, composer hierarchy, empty states and motion are done; the
 composer and the sidebar were the first interaction-feedback passes. Next is
 section 8, whose regions also carry the whole-UI fade and the
 dashboard-to-chat transition deferred from section 7: regions first, then
-the first jumps, then the fade (all built), then cursor navigation, then the
-leader redesign. Mobile
+the first jumps, then the fade, then the sidebar's cursor (all built), then
+the leader redesign. The dashboards and transcript mode have their own docs.
+Mobile
 file browsing (4) and the autosave pilot (3) remain, independent of it.
 
 Each implementation should identify its affected surface, use the smallest
