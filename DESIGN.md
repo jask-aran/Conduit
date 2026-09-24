@@ -230,7 +230,7 @@ Menus and pane headers follow the component entries below. Palettes (model picke
 Settings pattern (illustrative, non-normative — current shell ~1120×820, rail ~190px):
 
 - **Nav = palette selection.** The rail behaves like the model-picker list: full-row `{colors.accent}` wash, `{rounded.md}`, muted icon at rest. No sliver, gradient, border emphasis, or icon recolor.
-- **Content = dashboard tiles.** Sections are hairline `10px` groups with stacked rows, a header title + muted subtitle, and trailing quiet controls. No status-strip card, no multi-column card grid as chrome.
+- **Content = a settings list** (Components): muted group headings over one-line rows, as the sidebar is drawn. Some sections are still hairline tiles from before; they move over. No status-strip card, no multi-column card grid as chrome.
 - **Settings save as they change.** No Save button: a valid edit is stored after a short pause (typing) or at once (a toggle, a choice). The section header says how it stands, beside the close button and holding its width -- a small spinner and "Saving", then "Saved" in muted text, or "Not saved" and a Retry button in the danger colour, which stays until retried. A value that is not valid yet is not saved; it says why under its field, in the danger colour. Credentials and one-off actions keep their own buttons.
 - New settings chrome must follow these two patterns, not the legacy blue selected nav.
 
@@ -317,7 +317,7 @@ Choosing in a menu:
 - It takes the keyboard while it is up: arrows move, a number or Enter chooses, Tab turns the page, Esc dismisses. One footer line explains the keys in keycaps; touch hides it and keeps the Next/Submit button.
 - A single question with a single answer skips tabs and Submit: choosing is answering.
 
-**Settings row** — a tile's one-line row: the setting's name in the text colour, an optional muted hint under it (one line, truncated), and its control at the right. A tile whose rows change with a choice (Voice) keeps one column so what changes reads as the same card; on a phone a row with a segmented choice or a long value puts the control under its name.
+**Settings list** — the sidebar's language, not tiles: no box, no dividers, no fill behind the page. A group is a small muted bold heading (~10.5px/700, about half the text colour) over one-line rows (~32px). A row's name is in the text colour at 500; its value is quiet -- a select is its value in muted text and a small chevron, with no box, lit with the row -- and the row takes the `{colors.accent}` wash under the pointer (not on touch). State that matters -- stored, installed, a test result, an error -- sits in muted text right after the name on the same line; descriptions go in a title, not under the name. Buttons are ghost and 26px unless they are the one action waiting (Install, Save a key). Voice is the reference; the tiled sections move to it.
 
 **Segmented choice** — two to four peer choices side by side, for a setting whose options are few and named (Transcription source, Capture, Activation): a hairline box, the current option under the gray wash, which slides to the next (~200ms). An optional 13px Lucide icon before each label. Never a colour, never a tick. A long or open list stays a select.
 
