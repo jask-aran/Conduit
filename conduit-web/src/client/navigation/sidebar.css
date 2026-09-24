@@ -424,3 +424,16 @@
   .sidebar-update > svg { width: 14px; height: 14px; }
   .sidebar-update > button { padding: 4px 10px; }
 }
+
+/* A chat's harness mark is greyed with its row, and shows in its own colours
+   while the row is hovered or focused. */
+.thread-harness-mark[data-lively] { position: relative; transition: color 150ms ease, opacity 150ms ease; }
+.thread-harness-mark[data-lively] .harness-mark { transition: background-color 150ms ease, opacity 150ms ease; }
+.thread-harness-mark .harness-mark-artwork { position: absolute; inset: 0; opacity: 0; }
+.sidebar-row:is(:hover, :focus-visible) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
+.sidebar-row:is(:hover, :focus-visible) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
+.sidebar-row:is(:hover, :focus-visible) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; }
+.sidebar-row:is(:hover, :focus-visible) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .thread-harness-mark[data-lively], .thread-harness-mark[data-lively] .harness-mark { transition: none; }
+}
