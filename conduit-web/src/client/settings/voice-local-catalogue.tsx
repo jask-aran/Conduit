@@ -111,41 +111,39 @@ export default function VoiceLocalCatalogue(props: VoiceLocalCatalogueProps) {
     ? props.installProgress ? `${props.installProgress.phase} · ${Math.round(100 * props.installProgress.completedBytes / Math.max(1, props.installProgress.totalBytes))}%` : "Installing…"
     : artifactStateLabel(props.backendStatus?.artifactState).replace(/^./, (first) => first.toUpperCase());
   return <>
-    <label class="settings-row" for="voice-local-family"><span>Model<small>{props.selectedModel?.languages || props.selectedModel?.description || ""}</small></span>
-      <select id="voice-local-family" disabled={disabled()} value={props.selection?.modelId || ""} onChange={(event) => props.onFamilyChange(event.currentTarget.value)}>
+    <label class="settings-line" for="voice-local-family"><span>Model</span>
+      <select id="voice-local-family" disabled={disabled()} title={props.selectedModel?.description} value={props.selection?.modelId || ""} onChange={(event) => props.onFamilyChange(event.currentTarget.value)}>
         <For each={props.catalogue.models}>{(model) => <option value={model.id}>{model.label}</option>}</For>
       </select>
     </label>
     <Show when={props.selection}>{(selection) => <>
-      <label class="settings-row" for="voice-local-runtime"><span>Runtime</span>
+      <label class="settings-line" for="voice-local-runtime"><span>Runtime</span>
         <select id="voice-local-runtime" disabled={disabled()} value={selection().runtimeId} onChange={(event) => props.onRuntimeChange(event.currentTarget.value)}>
           <For each={runtimeChoices()}>{(backendPath) => <option value={backendPath.runtimeId} title={runtimeOptionLabel(backendPath.runtimeId)}>{runtimeShortLabel(backendPath.runtimeId)}</option>}</For>
         </select>
       </label>
-      <label class="settings-row" for="voice-local-variant"><span>Variant<small>{props.selectedArtifact?.license.id || ""}</small></span>
+      <label class="settings-line" for="voice-local-variant"><span>Variant</span>
         <select id="voice-local-variant" disabled={disabled()} value={selection().artifactId} onChange={(event) => props.onVariantChange(event.currentTarget.value)}>
           <For each={variantChoices()}>{(artifact) => <option value={artifact.id} title={variantOptionLabel(artifact)}>{variantShortLabel(artifact)}</option>}</For>
         </select>
       </label>
-      <label class="settings-row" for="voice-local-batching"><span>Timing<small>{selectedProfile() ? profileDescription(selectedProfile()!) : "No timing for this runtime and variant"}</small></span>
-        <select id="voice-local-batching" disabled={disabled() || !props.profiles.length} value={selectedProfile()?.id || ""} onChange={(event) => props.onTimingChange(event.currentTarget.value)}>
+      <label class="settings-line" for="voice-local-batching"><span>Timing</span>
+        <select id="voice-local-batching" disabled={disabled() || !props.profiles.length} title={selectedProfile() ? profileDescription(selectedProfile()!) : undefined} value={selectedProfile()?.id || ""} onChange={(event) => props.onTimingChange(event.currentTarget.value)}>
           <For each={props.profiles}>{(profile) => <option value={profile.id}>{profileLabel(profile)}</option>}</For>
         </select>
       </label>
       <Show when={props.selectedLocalModel && !props.selectedLocalModel!.installed && !props.installingModelId}>
-        <div class="settings-row"><span>Accept {props.selectedLocalModel!.license.id}<small>{props.selectedLocalModel!.license.attribution}</small></span>
-          <Switch label={`Accept ${props.selectedLocalModel!.license.id}`} checked={props.licenseAccepted} onChange={props.onLicenseChange} />
+        <div class="settings-line" title={props.selectedLocalModel!.license.attribution}><span>Accept {props.selectedLocalModel!.license.id} licence</span>
+          <Switch label={`Accept ${props.selectedLocalModel!.license.id} licence`} checked={props.licenseAccepted} onChange={props.onLicenseChange} />
         </div>
       </Show>
-      <div class="settings-row" title={statusFacts()}><span>Model files<small data-state={props.backendStatus?.runtimeState || "cold"}>{filesState()}</small></span>
-        <div class="settings-row-control">
-          <Show when={props.installingModelId} fallback={<Show when={props.selectedLocalModel?.installed} fallback={<Button size="sm" disabled={disabled() || !props.licenseAccepted || !props.selectedLocalModel} onClick={props.onInstall}>Install</Button>}><Button variant="outline" size="sm" disabled={disabled() || !props.selectedLocalModel} onClick={props.onUninstall}>Uninstall</Button></Show>}>
-            <Button variant="outline" size="sm" disabled={props.busy} onClick={props.onCancelInstall}>Cancel</Button>
-          </Show>
-        </div>
+      <div class="settings-line" title={statusFacts()}><span>Model files<em>{filesState().toLowerCase()}</em></span>
+        <Show when={props.installingModelId} fallback={<Show when={props.selectedLocalModel?.installed} fallback={<Button size="sm" disabled={disabled() || !props.licenseAccepted || !props.selectedLocalModel} onClick={props.onInstall}>Install</Button>}><Button variant="ghost" size="sm" disabled={disabled() || !props.selectedLocalModel} onClick={props.onUninstall}>Uninstall</Button></Show>}>
+          <Button variant="ghost" size="sm" disabled={props.busy} onClick={props.onCancelInstall}>Cancel</Button>
+        </Show>
       </div>
-      <Show when={props.installProgress}>{(progress) => <div class="settings-row-wide"><progress class="settings-progress" max={Math.max(1, progress().totalBytes)} value={progress().completedBytes} /></div>}</Show>
-      <Show when={props.selectedLocalModel?.error}><p role="alert" class="settings-row-note settings-inline-error">{props.selectedLocalModel!.error}</p></Show>
+      <Show when={props.installProgress}>{(progress) => <div class="settings-line-wide"><progress class="settings-progress" max={Math.max(1, progress().totalBytes)} value={progress().completedBytes} /></div>}</Show>
+      <Show when={props.selectedLocalModel?.error}><p role="alert" class="settings-line-note">{props.selectedLocalModel!.error}</p></Show>
     </>}</Show>
   </>;
 }
