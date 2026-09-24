@@ -23,7 +23,7 @@
   --muted: oklch(0.97 0 0); --muted-foreground: oklch(0.556 0 0);
   --accent: oklch(0.97 0 0); --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325); --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0); --ring: oklch(0.708 0 0); --shortcut-focus: oklch(0.68 0.16 88); --radius: 0.625rem;
+  --input: oklch(0.922 0 0); --ring: oklch(0.708 0 0); --region-focus: oklch(0.42 0.004 258); --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0); --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0); --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.97 0 0); --sidebar-accent-foreground: oklch(0.205 0 0);
@@ -42,8 +42,8 @@
   --secondary: oklch(1 0 0 / 6%); --secondary-foreground: oklch(0.93 0.003 258);
   --muted: oklch(1 0 0 / 5%); --muted-foreground: oklch(0.63 0.006 262);
   --accent: oklch(1 0 0 / 7%); --accent-foreground: oklch(0.96 0.003 258);
-  --destructive: oklch(0.645 0.19 18); --border: oklch(1 0 0 / 7%); --shortcut-focus: oklch(0.84 0.16 88);
-  --input: oklch(1 0 0 / 9%); --ring: oklch(0.78 0.008 258);
+  --destructive: oklch(0.645 0.19 18); --border: oklch(1 0 0 / 7%);
+  --input: oklch(1 0 0 / 9%); --ring: oklch(0.78 0.008 258); --region-focus: oklch(0.86 0.006 258);
   --sidebar: transparent; --sidebar-foreground: oklch(0.9 0.003 258);
   --sidebar-primary: oklch(0.74 0.004 260); --sidebar-primary-foreground: oklch(0.985 0.003 258);
   --sidebar-accent: oklch(1 0 0 / 6%); --sidebar-accent-foreground: oklch(0.96 0.003 258);
@@ -2453,4 +2453,37 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
     [data-region="workspace-panel"],
     :is(.chat-main, .chat-main :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"]))
   ) { animation: none; }
+}
+
+/* Where focus is held (main.tsx marks the top-level region): a line along
+   its bottom edge, fading out at the ends so it sits inside any corner. The
+   regions' bottoms line up, so it reads as one baseline with the held region
+   lit. Arriving from the keyboard, .region-cue (region-cue.ts) dims the rest
+   for a moment around it. */
+[data-region]::after {
+  content: "";
+  position: absolute;
+  right: 16px;
+  bottom: 0;
+  left: 16px;
+  z-index: 5;
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(to right, transparent, var(--region-focus) 18%, var(--region-focus) 82%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms ease-out;
+}
+[data-region][data-focus-held]::after { opacity: 1; }
+/* The sidebar runs to the foot of the window; its line sits on the cards'. */
+[data-region="sidebar"]::after { bottom: 6.4px; }
+.workspace-panel:not(.workspace-panel-open)::after { display: none; }
+.region-cue {
+  position: fixed;
+  z-index: 73;
+  box-shadow: 0 0 0 200vmax rgb(0 0 0 / 30%);
+  pointer-events: none;
+}
+@media (--conduit-phone-layout) {
+  [data-region]::after { display: none; }
 }

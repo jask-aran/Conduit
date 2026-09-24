@@ -550,9 +550,13 @@ anyway, and in the leader menu a lit composer or an empty chat's transcript
 (which fills the pane under the composer) read worse than the pane itself.
 They are marked `data-part` instead, for styling and lookups. On every focus change `main.tsx` walks the regions
 around focus and activates each, replacing the one context it used to pick.
-Arriving in another top-level region from the keyboard, the region's edge
-brightens and settles (`shortcuts/region-cue.ts`); the chat and workspace
-titles keep their focus colour as the standing sign. The leader still
+The top-level region holding focus is marked `data-focus-held` and shows a
+line along its bottom edge -- the regions' bottoms line up, so it reads as one
+baseline with the held region lit; it replaced a yellow title colour, which
+the sidebar (a wordmark, no title) could not take. Arriving in another from
+the keyboard, the rest of the app dims for a moment around it, as the leader
+menu does (`shortcuts/region-cue.ts`); it replaced an outline blink that was
+too quick and that each region's contents covered differently. The leader still
 completes a sequence inside the context that started it; reading the whole
 chain is step 4.
 
@@ -591,8 +595,8 @@ maximised, sit awkwardly on a VS Code-style toggle.
 
 - **The cursor appears.** The sidebar's wash already means the cursor, so a
   washed row appearing is the signal.
-- **The region acknowledges it.** Its edge or heading brightens for ~150ms
-  and settles, drawing the eye without a standing frame.
+- **The region acknowledges it.** The rest of the app dims for ~0.8s around
+  it, the leader menu's lit region; the line along its bottom edge stays.
 - **The leader says where you are.** Opened anywhere, it shows the path as a
   breadcrumb, `Sidebar › NHP › Mersen Item Margin Simulation`.
 
