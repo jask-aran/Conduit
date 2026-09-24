@@ -386,6 +386,15 @@ state change. Touch users must receive feedback without hover.
 The composer was the first such surface, with section 2: its row, menus,
 primary slot and dictation state are settled and written into `DESIGN.md`.
 
+The sidebar is the second, built. Hover and the current page were the same
+grey wash, so the open chat and the one under the pointer looked alike. With
+keyboard navigation coming, the wash is now the cursor -- pointer, keyboard
+focus and a press share it, as in the palette and menus -- and the current
+page is white and semibold with no fill, its harness mark lit; a current rail
+icon is white with a heavier stroke. The Conduit/Computer switch keeps its
+wash as a two-state toggle. Recorded in `DESIGN.md` under List row. Left for
+later: the multi-selected chats' blue edge sliver, which `DESIGN.md` forbids.
+
 Review that surface with the user before extending the treatment elsewhere.
 Record accepted choices in `DESIGN.md` when they are ready to become a rule.
 Promote a treatment into shared components only when it fits more than one
@@ -510,7 +519,8 @@ composer** -- the queued pill's width and material, about twice its height
 
 Interrupted turns, composer hierarchy, empty states and motion are done; the
 composer was the first interaction-feedback pass. Left: mobile file browsing
-(4), the autosave pilot (3), and the next interaction-feedback surface (6).
+(4), the autosave pilot (3), and keyboard navigation, which the sidebar's
+cursor was shaped for (6).
 The dashboard-to-chat transition waits for a whole-UI fade on load, and is
 built with it.
 
