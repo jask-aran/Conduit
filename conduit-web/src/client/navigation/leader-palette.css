@@ -99,3 +99,5 @@
 @media (prefers-reduced-motion: reduce) {
   .leader-menu, .leader-menu-scrim { animation: none; }
 }
+
+.leader-menu-empty { margin: 4px 8px 6px; color: var(--muted-foreground); font-size: 12px; }

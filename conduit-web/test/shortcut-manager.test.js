@@ -435,7 +435,7 @@ test("the global scope offers the OS only chords it can hold", () => {
 });
 
 test("a leader key works from inside every region below the one that owns it, inner keys first", () => {
-  const leader = shortcutStroke("KeyX", "X", ["primary"]);
+  const leader = shortcutStroke("KeyG", "G", ["primary"]);
   const define = (id, context, key) => ({
     id, label: id, description: id, group: "commands", keywords: [], icon: "", configurable: true,
     contexts: [context], defaultBindings: [shortcutBinding(leader, shortcutStroke(`Key${key}`, key.toLowerCase()))],

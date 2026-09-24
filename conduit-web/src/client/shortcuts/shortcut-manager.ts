@@ -42,6 +42,8 @@ export interface ShortcutManagerOptions {
   commands: ShortcutCommandDefinition[];
   environment: ShortcutEnvironment;
   storage?: ShortcutStorage | null;
+  /** The leader key, which opens the leader menu anywhere, even with nothing in it. */
+  leader?: ShortcutStroke;
 }
 
 export interface RegisterShortcutHandlerOptions {
@@ -69,6 +71,7 @@ function contextRank(context: ShortcutContext): number {
 export class ShortcutManager {
   readonly environment: ShortcutEnvironment;
   readonly commands: ShortcutCommandDefinition[];
+  readonly leader: ShortcutStroke | null;
 
   private readonly commandById: Map<string, ShortcutCommandDefinition>;
   private readonly storage: ShortcutStorage | null;
@@ -86,6 +89,7 @@ export class ShortcutManager {
     const registryErrors = validateShortcutRegistry(options.commands);
     if (registryErrors.length) throw new Error(registryErrors.join("\n"));
     this.environment = options.environment;
+    this.leader = options.leader ?? null;
     this.storage = options.storage === undefined
       ? (typeof localStorage === "undefined" ? null : localStorage)
       : options.storage;
@@ -306,10 +310,16 @@ export class ShortcutManager {
       if (levels) levels.push({ context: active.context, commandIds: sequenceIds });
       if (active.options.exclusive) break;
     }
-    if (!levels) return false;
+    // The leader where no region has keys still opens, empty, so pressing it
+    // is never nothing -- except where a terminal holds the keyboard.
+    if (!levels && !isExclusiveTerminalEvent(event) && this.leader && sameStroke(this.leader, stroke)) {
+      const path = contexts.findIndex((active) => active.options.exclusive);
+      levels = contexts.slice(0, path < 0 ? contexts.length : path + 1).map((active) => ({ context: active.context, commandIds: [] }));
+    }
+    if (!levels?.length) return false;
     event.preventDefault();
     event.stopPropagation();
-    const shown = levels.findIndex((level) => level.commandIds.length);
+    const shown = Math.max(0, levels.findIndex((level) => level.commandIds.length));
     this.pending = {
       context: levels[shown]!.context,
       firstStroke: stroke,

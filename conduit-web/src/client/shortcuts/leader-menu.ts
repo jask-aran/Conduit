@@ -2,7 +2,7 @@ import { createSignal } from "solid-js";
 import { publishUiPreference } from "../preferences/ui-preferences";
 
 /**
- * When the leader menu shows after Ctrl+X. By default only after a pause, so
+ * When the leader menu shows after the leader, Ctrl+G. By default only after a pause, so
  * someone who knows the key they want never sees it; the menu is for the
  * moment of stepping back to look.
  */

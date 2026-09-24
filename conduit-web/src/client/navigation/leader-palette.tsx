@@ -26,7 +26,7 @@ type Row = { commandId: string; label: string; keys: string[] };
 const rank = (key: string) => /^\d$/.test(key) ? 0 : /^[a-z]$/i.test(key) ? 1 : 2;
 
 /**
- * The leader menu: what Ctrl+X can do from where you are.
+ * The leader menu: what the leader (Ctrl+G) can do from where you are.
  *
  * A step back to look, so it dims the page and shows one small card at the
  * foot of the screen, in the composer's material and the question card's row
@@ -94,7 +94,7 @@ export function LeaderPalette(props: { shortcuts: ShortcutManager }) {
     return keys ? [{ keys, label: label! }] : [];
   });
 
-  return <Show when={visible() && pending() && rows().length > 0}>
+  return <Show when={visible() && pending()}>
     <div class="leader-menu-scrim" aria-hidden="true" />
     <aside
       class="leader-menu composer-surface-material"
@@ -117,6 +117,7 @@ export function LeaderPalette(props: { shortcuts: ShortcutManager }) {
           </>}</For>
         </nav>
       </div>
+      <Show when={!rows().length}><p class="leader-menu-empty">No leader keys here yet.</p></Show>
       <div class="leader-menu-rows" role="list">
         <For each={rows()}>{(row) =>
           <button type="button" class="leader-menu-row" role="listitem" onClick={() => props.shortcuts.runPendingCommand(row.commandId)}>

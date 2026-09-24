@@ -115,5 +115,6 @@
 
 }
 
-/* When the leader menu shows after Ctrl+X (shortcuts/leader-menu.ts). */
+/* When the leader menu shows after the leader (shortcuts/leader-menu.ts). */
 .shortcuts-leader-menu { border-top: 0; padding-inline: 2px; }
+.shortcuts-leader-menu kbd { margin-left: 6px; border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; color: var(--muted-foreground); font: 550 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
