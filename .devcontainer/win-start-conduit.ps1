@@ -304,9 +304,11 @@ function Stop-All {
   } else {
     Write-Output "Conduit is not running."
   }
-  & $nodeCommand (Join-Path $root "scripts\terminal-lifecycle.mjs")
-  if ($LASTEXITCODE -ne 0) {
-    throw "Terminal session cleanup failed with exit code $LASTEXITCODE."
+  if ($env:CONDUIT_TERMINAL_TEARDOWN -eq "1") {
+    & $nodeCommand (Join-Path $root "scripts\terminal-lifecycle.mjs")
+    if ($LASTEXITCODE -ne 0) {
+      throw "Terminal session cleanup failed with exit code $LASTEXITCODE."
+    }
   }
 }
 
@@ -429,7 +431,7 @@ Commands:
   build                 Compile the production client bundle.
   start                 Start an existing production build.
   dev                   Start the server watcher and Vite hot reload.
-  stop                  Stop Vite, Conduit, resident Pi, and terminal processes.
+  stop                  Stop Vite, Conduit, and resident Pi. Preserve terminal sessions.
   restart               Rebuild if sources changed, then restart (default).
   status                Report the managed process and health endpoint.
   logs [server|vite] [-f]
@@ -438,6 +440,7 @@ Commands:
 
 restart is the production-like path. dev manages the server on $($env:CONDUIT_PORT)
 and Vite on $($env:CONDUIT_VITE_PORT); it is never used for deployment.
+CONDUIT_TERMINAL_TEARDOWN=1 ends terminal sessions on stop or restart.
 "@
 }
 

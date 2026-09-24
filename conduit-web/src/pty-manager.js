@@ -113,6 +113,7 @@ export class PtyManager extends EventEmitter {
     maxSessions = PTY_MAX_SESSIONS,
     pty = nodePty,
     tmuxPath = process.env.CONDUIT_TMUX_PATH || "tmux",
+    terminalTeardown = false,
     run = (command, args, options) => execFileAsync(command, args, options),
   }) {
     super();
@@ -120,6 +121,7 @@ export class PtyManager extends EventEmitter {
     this.maxSessions = maxSessions;
     this.pty = pty;
     this.tmuxPath = tmuxPath;
+    this.terminalTeardown = terminalTeardown;
     this.run = run;
     this.records = new Map();
     this.metadata = new Map();
@@ -186,28 +188,43 @@ export class PtyManager extends EventEmitter {
     try { persisted = JSON.parse(await fs.readFile(this.filePath, "utf8")); }
     catch (error) { if (error.code !== "ENOENT") throw error; }
 
-    // The product persistence promise is browser/network detach, not Conduit
-    // server restart. Clean up a stale dedicated tmux server from a prior run
-    // before projecting persisted rows as exited diagnostics.
+    for (const item of Array.isArray(persisted.sessions) ? persisted.sessions : []) {
+      if (!item?.id || !item.projectId || !TEMPLATES[item.templateId]) continue;
+      this.records.set(item.id, { ...item });
+    }
+
+    // This tmux server belongs only to this registry. Recover recorded sessions,
+    // and remove sessions without a record so a crash cannot leave hidden shells.
+    let active = new Map();
     try {
       await this.ensureTmux();
-      await this.killTmuxServer();
+      if (this.terminalTeardown) await this.killTmuxServer();
+      else {
+        active = await this.listTmuxMetadata();
+        const known = new Set([...this.records.values()]
+          .filter((item) => item.status === "running")
+          .map((item) => item.tmuxSession || terminalSessionName(item.id)));
+        for (const name of active.keys()) {
+          if (known.has(name)) continue;
+          await this.invokeTmux(["kill-session", "-t", name], { tolerateMissingServer: true });
+        }
+      }
     } catch (error) {
       if (error?.code !== "pty_tmux_unavailable" && error?.code !== "pty_tmux_version") throw error;
       this.tmuxReady = false;
     }
 
-    for (const item of Array.isArray(persisted.sessions) ? persisted.sessions : []) {
-      if (!item?.id || !item.projectId || !TEMPLATES[item.templateId]) continue;
-      this.records.set(item.id, item.status === "running"
-        ? {
-          ...item,
-          status: "exited",
-          exitCode: null,
-          signal: "server_restart",
-          updatedAt: new Date().toISOString(),
-        }
-        : { ...item, status: "exited" });
+    for (const item of this.records.values()) {
+      if (item.status !== "running") continue;
+      const metadata = active.get(item.tmuxSession || terminalSessionName(item.id));
+      if (metadata) {
+        this.metadata.set(item.id, metadata);
+        continue;
+      }
+      item.status = "exited";
+      item.exitCode = null;
+      item.signal = "server_restart";
+      item.updatedAt = new Date().toISOString();
     }
     await this.persist();
     return this.list();
@@ -216,8 +233,7 @@ export class PtyManager extends EventEmitter {
   list() { return [...this.records.values()].map((record) => view(record, this.metadata.get(record.id))).sort((a, b) => b.createdAt.localeCompare(a.createdAt)); }
   get(id) { const record = this.records.get(id); return record ? view(record, this.metadata.get(id)) : null; }
 
-  async activeSessionMetadata() {
-    if (![...this.records.values()].some((item) => item.status === "running")) return new Map();
+  async listTmuxMetadata() {
     await this.ensureTmux();
     const result = await this.invokeTmux([
       "list-panes", "-a", "-F",
@@ -234,6 +250,11 @@ export class PtyManager extends EventEmitter {
       });
     }
     return metadata;
+  }
+
+  async activeSessionMetadata() {
+    if (![...this.records.values()].some((item) => item.status === "running")) return new Map();
+    return this.listTmuxMetadata();
   }
 
   async reconcile() {
@@ -498,7 +519,7 @@ export class PtyManager extends EventEmitter {
     const runningCount = [...this.records.values()].filter((item) => item.status === "running").length;
     for (const id of [...this.attachments.keys()]) this.killAttachment(id);
     try {
-      if (this.tmuxReady || runningCount > 0) {
+      if (this.terminalTeardown && (this.tmuxReady || runningCount > 0)) {
         await this.ensureTmux();
         await this.killTmuxServer();
       }

@@ -883,8 +883,12 @@ Terminal processes run in a dedicated tmux server. Conduit uses disposable
 `node-pty` clients to attach browsers to those sessions. The server derives each
 cwd: a validated Workspace root for Workspace chats, otherwise Conduit's home
 directory. The browser supplies only a project id and cannot select a path.
-Lightweight records persist in `data/remotes.json`. A terminal survives browser
-and network detach, but it does not survive a Conduit server restart.
+Lightweight records persist in `data/remotes.json`. A terminal survives browser,
+network, and Conduit server restarts. On startup Conduit reattaches recorded tmux
+sessions, marks missing ones as exited, and removes sessions in its dedicated
+tmux server that have no record. Set `CONDUIT_TERMINAL_TEARDOWN=1` on the server
+and managed launcher to end all terminal sessions during shutdown and discard
+any that remain at startup. Without this setting, `stop` preserves them too.
 Conduit generates each terminal UUID and derives an immutable tmux session name
 from it. The mutable Conduit title is also the tmux window name. Terminal list
 responses add live `currentCommand`, `lastActivityAt`, and `paneDead` metadata

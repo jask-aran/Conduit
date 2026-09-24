@@ -60,13 +60,15 @@ test("terminal lifecycle output distinguishes managed shutdown from leftover cle
   assert.equal(terminalCleanupMessage(false), "Terminal cleanup found no leftover tmux server to stop.");
 });
 
-test("managed launchers clean terminal sessions after stopping Conduit", async () => {
+test("managed launchers clean terminal sessions only when teardown is requested", async () => {
   const shell = await fs.readFile(path.join(root, ".devcontainer/start-conduit.sh"), "utf8");
   const powershell = await fs.readFile(path.join(root, ".devcontainer/win-start-conduit.ps1"), "utf8");
   assert.match(shell, /node "\$ROOT\/scripts\/terminal-lifecycle\.mjs"/);
+  assert.match(shell, /CONDUIT_TERMINAL_TEARDOWN:-0/);
   assert.match(shell, /healthy Conduit server is running.+launcher does not manage it/);
   assert.doesNotMatch(shell, /restart\)\n\s+guard_component_mode\n\s+stop \|\| true/);
   assert.match(powershell, /scripts\\terminal-lifecycle\.mjs/);
+  assert.match(powershell, /CONDUIT_TERMINAL_TEARDOWN -eq "1"/);
   assert.match(powershell, /healthy Conduit server is running.+launcher does not manage it/);
 });
 

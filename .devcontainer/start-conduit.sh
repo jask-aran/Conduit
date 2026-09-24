@@ -64,7 +64,7 @@ Commands:
   build                 Compile the production client bundle.
   start                 Start an existing production build.
   dev                   Start the server watcher and Vite hot reload.
-  stop                  Stop Vite, Conduit, resident Pi, and terminal processes.
+  stop                  Stop Vite, Conduit, and resident Pi. Preserve terminal sessions.
   restart [--force]     Rebuild, wait for assistant responses, then restart.
                         --force skips the response drain.
   status                Report the managed process and health endpoint.
@@ -74,6 +74,7 @@ Commands:
 
 restart is the production-like path. dev manages the server on ${CONDUIT_PORT}
 and Vite on ${CONDUIT_VITE_PORT}; it is never used for deployment.
+CONDUIT_TERMINAL_TEARDOWN=1 ends terminal sessions on stop or restart.
 EOF
 }
 
@@ -316,7 +317,9 @@ stop() {
     echo "Stop that server before using this launcher." >&2
     return 1
   else echo "Conduit is not running."; fi
-  node "$ROOT/scripts/terminal-lifecycle.mjs"
+  if [[ "${CONDUIT_TERMINAL_TEARDOWN:-0}" == "1" ]]; then
+    node "$ROOT/scripts/terminal-lifecycle.mjs"
+  fi
 }
 
 status() {
