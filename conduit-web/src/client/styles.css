@@ -395,7 +395,6 @@ svg { stroke-width: 1.5; }
 .composer textarea:placeholder-shown { height: 35.2px !important; }
 .composer textarea[data-dictated-range="true"]::selection { background: oklch(0.32 0.006 264); color: var(--foreground); }
 .voice-waveform { display: grid; gap: 4.8px; width: 100%; box-sizing: border-box; padding: 7.2px 8.8px 5.6px; border: 0.8px solid color-mix(in oklch, var(--accent-cool), var(--border) 66%); border-radius: 9.6px; background: linear-gradient(180deg, color-mix(in oklch, var(--accent-cool), transparent 94%), color-mix(in oklch, var(--background), transparent 20%)); color: var(--muted-foreground); }
-.settings-recorder-monitor { margin-top: 1.6px; }
 .voice-waveform-header, .voice-waveform-readout, .voice-waveform-state, .voice-waveform-scale { display: flex; align-items: center; }
 .voice-waveform-header { justify-content: space-between; gap: 9.6px; min-height: 12.8px; font: 8.8px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.02em; }
 .voice-waveform-state { min-width: 0; gap: 4.8px; color: var(--foreground); }
@@ -1188,7 +1187,6 @@ svg { stroke-width: 1.5; }
 .composer textarea:placeholder-shown { height: 44px !important; }
 .composer textarea[data-dictated-range="true"]::selection { background: oklch(0.32 0.006 264); color: var(--foreground); }
 .voice-waveform { display: grid; gap: 6px; width: 100%; box-sizing: border-box; padding: 9px 11px 7px; border: 1px solid color-mix(in oklch, var(--accent-cool), var(--border) 66%); border-radius: 12px; background: linear-gradient(180deg, color-mix(in oklch, var(--accent-cool), transparent 94%), color-mix(in oklch, var(--background), transparent 20%)); color: var(--muted-foreground); }
-.settings-recorder-monitor { margin-top: 2px; }
 .voice-waveform-header, .voice-waveform-readout, .voice-waveform-state, .voice-waveform-scale { display: flex; align-items: center; }
 .voice-waveform-header { justify-content: space-between; gap: 12px; min-height: 16px; font: 11px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.02em; }
 .voice-waveform-state { min-width: 0; gap: 6px; color: var(--foreground); }

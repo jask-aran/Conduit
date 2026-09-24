@@ -1343,9 +1343,9 @@ export function Settings(props: {
                     </div>
                   </label>
                   <Show when={audioInputBusy() || audioInputTest()}>
-                    <div class="settings-line-wide">
-                      <VoiceWaveform class="settings-recorder-monitor" history={audioInputWaveform.history} level={audioInputWaveform.level} peak={audioInputWaveform.peak} state={audioInputBusy() ? "listening" : "stopped"} ariaLabel="Microphone input level" />
-                      <em data-tone={audioInputTest() && !audioInputBusy() && !audioInputTest()!.signalDetected ? "error" : undefined}>{audioInputBusy() ? (audioInputSignalDetected() ? "Signal" : "Listening…") : audioInputTest()!.signalDetected ? "Signal" : "No signal"}</em>
+                    {/* The composer's own waveform, so a test looks like dictation will. */}
+                    <div class="settings-line"><span>{audioInputBusy() ? (audioInputSignalDetected() ? "Signal" : "Listening…") : audioInputTest()!.signalDetected ? "Signal" : "No signal"}<em data-tone={audioInputTest() && !audioInputBusy() && !audioInputTest()!.signalDetected ? "error" : undefined}>level {Math.round(audioInputWaveform.level() * 100)}% · peak {Math.round(audioInputWaveform.peak() * 100)}%</em></span>
+                      <VoiceWaveform class="composer-actions-waveform settings-recorder-monitor" history={audioInputWaveform.history} level={audioInputWaveform.level} peak={audioInputWaveform.peak} state={audioInputBusy() ? "listening" : "stopped"} variant="compact" barDensity={3} ariaLabel="Microphone input level" />
                     </div>
                   </Show>
                   <Show when={audioInputError() || audioInputTest()?.recordingError || (audioInputStatus() === "error" && "Microphone list could not be loaded.")}>{(message) => <p role="alert" class="settings-line-note">{message()}</p>}</Show>
