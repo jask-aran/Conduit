@@ -248,7 +248,9 @@ export class ShortcutManager {
     if (!stroke) return false;
 
     if (this.pending) {
-      if (event.key === "Escape") {
+      // Esc, or the leader again, closes it -- and the leader is kept from
+      // the browser, which would otherwise take it (Ctrl+G is Find next).
+      if (event.key === "Escape" || (this.leader && sameStroke(this.leader, stroke))) {
         event.preventDefault();
         event.stopPropagation();
         this.clearPendingSequence();
