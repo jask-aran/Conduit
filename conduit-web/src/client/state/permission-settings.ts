@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { api, asList } from "../api/client";
+import { api, apiWhenServed, asList } from "../api/client";
 import type { PermissionMode, PermissionModeState } from "../api/contracts";
 
 type ErrorHandler = (error: unknown) => void;
@@ -20,7 +20,7 @@ export function createPermissionSettings(onError: ErrorHandler) {
     // -- offering a choice this chat cannot make.
     if (changed) { setProfiles([]); setSelected(""); }
     try {
-      const state = await api<PermissionModeState>(`/v0/chats/${encodeURIComponent(chatId)}/permission-profiles`);
+      const state = await apiWhenServed<PermissionModeState>(`/v0/chats/${encodeURIComponent(chatId)}/permission-profiles`);
       if (activeChatId !== chatId || requestId !== requestSequence) return;
       setProfiles(asList<PermissionMode>(state.modes));
       setSelected(state.selected || "");
