@@ -273,7 +273,7 @@ Motion explains a change of place: where something went, and what took its place
 
 **Tiled pane** — dashboard sections, workspace columns, live-terminal empty states. Hairline, 10px radius, flat. Selected/hover row is a gray wash inside the tile.
 
-**List row** — transparent, 7–8px radius, hover `{colors.accent}`. Selected chats in the sidebar may use the same wash; never an inset colored bar.
+**List row** — transparent, 7–8px radius. The `{colors.accent}` wash is the **cursor**: the row under the pointer, under keyboard focus, or being pressed, and only one row at a time — pointer and keyboard move the same cursor, as in a palette or menu. In the sidebar, the current page is not a wash: its row is white and semibold (640) with no fill, and a chat's harness mark shows in its own colours, so the cursor and where you are can always be told apart. A current rail icon is white with a heavier stroke. Never an inset coloured bar.
 
 **Palette / modal** — solid `{colors.popover}`, 11–12px radius. Model picker ergonomics are the standard: type-to-filter, groups, gray highlight, keycap footer.
 

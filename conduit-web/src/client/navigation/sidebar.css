@@ -6,7 +6,10 @@
   font-display: swap;
 }
 
-/* Sidebar owns its chrome and responsive drawer rules. */
+/* Sidebar owns its chrome and responsive drawer rules.
+   The grey wash is the cursor -- pointer, keyboard focus, a press -- and never
+   the current page, which is white and semibold with no fill, so the two can
+   always be told apart (DESIGN.md, List row). */
 .conduit-sidebar { position: relative; z-index: 20; width: 232px; contain: layout; flex: none; overflow: hidden; transition: width var(--panel-motion-duration) var(--panel-motion-easing); }
 .sidebar-container { position: absolute; top: 0; left: 0; bottom: 0; display: flex; width: 232px; flex-direction: column; overflow: hidden; background: var(--sidebar); color: var(--sidebar-foreground); }
 .conduit-sidebar[data-state="collapsed"] { width: 41.6px; }
@@ -45,12 +48,11 @@
 .sidebar-project:has(.sidebar-project-toggle[aria-expanded="true"]) .sidebar-chevron { rotate: 90deg; }
 .sidebar-row, .sidebar-user { display: flex; min-width: 0; align-items: center; gap: 6.4px; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
 .sidebar-row { width: 100%; min-height: 24px; padding: 4px 6.4px; text-align: left; font-size: 10.4px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 12%); }
-.sidebar-row:hover, .sidebar-row[aria-current="page"] { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
-.sidebar-project:hover { background: transparent; color: color-mix(in oklch, var(--sidebar-foreground), transparent 12%); }
-.sidebar-project[aria-current="page"], .sidebar-project[aria-current="page"]:hover { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible)) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.sidebar-row[aria-current="page"] { color: var(--sidebar-accent-foreground); font-weight: 640; }
 .sidebar-chat[data-selected="true"] { background: var(--sidebar-accent); box-shadow: inset 1.6px 0 var(--accent-cool); color: var(--sidebar-accent-foreground); }
 .sidebar-row > svg { width: 12px; height: 12px; flex: none; color: var(--muted-foreground); }
-.sidebar-row:hover > svg, .sidebar-row[aria-current="page"] > svg { color: var(--sidebar-accent-foreground); }
+.sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"]) > svg, .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"]) .sidebar-project-link > svg { color: var(--sidebar-accent-foreground); }
 .sidebar-action-slot { display: grid; width: 17.6px; height: 17.6px; min-width: 17.6px !important; flex: none !important; margin-right: -4.8px; place-items: center; overflow: visible !important; }
 .sidebar-route-indicator { width: 10px; height: 10px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 35%); }
 .sidebar-row span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -82,7 +84,9 @@
 .sidebar-rail-actions { display: none; flex-direction: column; gap: 0; padding: 6.4px 0 3.2px; }
 .sidebar-rail-section { display: flex; flex-direction: column; gap: 1.6px; }
 .sidebar-rail-action { position: relative; display: grid; width: 28.8px; height: 28.8px; flex: none; place-items: center; border: 0; border-radius: var(--radius-md); background: transparent; color: color-mix(in oklch, var(--sidebar-foreground), transparent 20%); }
-.sidebar-rail-action:hover, .sidebar-rail-action[aria-current="page"] { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.sidebar-rail-action:is(:hover, :focus-visible, :active) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.sidebar-rail-action[aria-current="page"] { color: var(--sidebar-accent-foreground); }
+.sidebar-rail-action[aria-current="page"] svg { stroke-width: 2.6; }
 .sidebar-rail-action:focus-visible { position: relative; z-index: 1; }
 .sidebar-rail-action svg { width: 13.6px; height: 13.6px; }
 .sidebar-rail-action .workspace-glyph { width: 13.6px; height: 13.6px; }
@@ -182,12 +186,11 @@
 .sidebar-project:has(.sidebar-project-toggle[aria-expanded="true"]) .sidebar-chevron { rotate: 90deg; }
 .sidebar-row, .sidebar-user { display: flex; min-width: 0; align-items: center; gap: 8px; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
 .sidebar-row { width: 100%; min-height: 34px; padding: 6px 9px; text-align: left; font-size: 14.5px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 12%); }
-.sidebar-row:hover, .sidebar-row[aria-current="page"] { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
-.sidebar-project:hover { background: transparent; color: color-mix(in oklch, var(--sidebar-foreground), transparent 12%); }
-.sidebar-project[aria-current="page"], .sidebar-project[aria-current="page"]:hover { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible)) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.sidebar-row[aria-current="page"] { color: var(--sidebar-accent-foreground); font-weight: 640; }
 .sidebar-chat[data-selected="true"] { background: var(--sidebar-accent); box-shadow: inset 2px 0 var(--accent-cool); color: var(--sidebar-accent-foreground); }
 .sidebar-row > svg { width: 17px; height: 17px; flex: none; color: var(--muted-foreground); }
-.sidebar-row:hover > svg, .sidebar-row[aria-current="page"] > svg { color: var(--sidebar-accent-foreground); }
+.sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"]) > svg, .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"]) .sidebar-project-link > svg { color: var(--sidebar-accent-foreground); }
 .sidebar-action-slot { display: grid; width: 24px; height: 24px; min-width: 24px !important; flex: none !important; margin-right: -6px; place-items: center; overflow: visible !important; }
 .sidebar-route-indicator { width: 12px; height: 12px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 35%); }
 .sidebar-row span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -213,7 +216,9 @@
 .sidebar-rail-actions { display: none; flex-direction: column; gap: 0; padding: 8px 0 4px; }
 .sidebar-rail-section { display: flex; flex-direction: column; gap: 2px; }
 .sidebar-rail-action { position: relative; display: grid; width: 36px; height: 36px; flex: none; place-items: center; border: 0; border-radius: var(--radius-md); background: transparent; color: color-mix(in oklch, var(--sidebar-foreground), transparent 20%); }
-.sidebar-rail-action:hover, .sidebar-rail-action[aria-current="page"] { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.sidebar-rail-action:is(:hover, :focus-visible, :active) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.sidebar-rail-action[aria-current="page"] { color: var(--sidebar-accent-foreground); }
+.sidebar-rail-action[aria-current="page"] svg { stroke-width: 2.6; }
 .sidebar-rail-action:focus-visible { position: relative; z-index: 1; }
 .sidebar-rail-action svg { width: 17px; height: 17px; }
 .sidebar-rail-action .workspace-glyph { width: 17px; height: 17px; }
@@ -426,14 +431,14 @@
 }
 
 /* A chat's harness mark is greyed with its row, and shows in its own colours
-   while the row is hovered or focused. */
+   while the row is the cursor or the current page. */
 .thread-harness-mark[data-lively] { position: relative; transition: color 150ms ease, opacity 150ms ease; }
 .thread-harness-mark[data-lively] .harness-mark { transition: background-color 150ms ease, opacity 150ms ease; }
 .thread-harness-mark .harness-mark-artwork { position: absolute; inset: 0; opacity: 0; }
-.sidebar-row:is(:hover, :focus-visible) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
-.sidebar-row:is(:hover, :focus-visible) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
-.sidebar-row:is(:hover, :focus-visible) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; }
-.sidebar-row:is(:hover, :focus-visible) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; }
+.sidebar-row:is(:hover, :focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
+.sidebar-row:is(:hover, :focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
+.sidebar-row:is(:hover, :focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; }
+.sidebar-row:is(:hover, :focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; }
 @media (prefers-reduced-motion: reduce) {
   .thread-harness-mark[data-lively], .thread-harness-mark[data-lively] .harness-mark { transition: none; }
 }
