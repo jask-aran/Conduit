@@ -2,8 +2,9 @@
 
 Status: sections 1 (interrupted turns), 2 (composer hierarchy), 5 (empty
 states, reduced) and 7 (motion, but for the deferred dashboard transition)
-are built and recorded below as built; 3, 4, 6 and 8 (keyboard) remain
-proposals for separate, bounded changes.
+are built and recorded below as built, as is 8 (keyboard) but for what waits
+on the dashboard redesign and transcript mode; 3 and 4 remain proposals for
+separate, bounded changes, and 6 goes on surface by surface.
 
 These proposals cover transcript density, composer hierarchy, mobile file
 browsing, useful empty states, and interaction feedback. A separate autosave
@@ -692,7 +693,8 @@ the go-to chords are shown as the way out.
    where a terminal holds the keyboard. Searching "leader" in Shortcuts finds
    the two-key shortcuts, and the Leader menu row shows the key. Found on the way: Ctrl+Shift+3 opened the workspace panel
    without focusing it when the file navigator was folded away (the filter
-   it aimed at was hidden); the Files tab takes focus then. Still open: a
+   it aimed at was hidden); the open file takes focus then, else the Files
+tab, whose focus is the wash rather than the browser's ring. Still open: a
    row whose command does nothing where you are (Source Control in a chat
    without a repository) is listed anyway.
 
