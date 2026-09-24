@@ -146,7 +146,10 @@ export function applyPwaUpdate(): Promise<boolean> {
   // Both the arrival and a hand-pressed check can ask for the same build; the
   // second gets the first's answer rather than a second SKIP_WAITING and a
   // second reload timer.
-  taking ??= takeWaitingAcrossTabs(takeUpdate).catch((cause) => { taking = null; throw cause; });
+  taking ??= takeWaitingAcrossTabs(takeUpdate).then((taken) => {
+    if (!taken) taking = null;
+    return taken;
+  }, (cause) => { taking = null; throw cause; });
   return taking;
 }
 
@@ -204,10 +207,12 @@ export async function checkForPwaUpdate(background = false) {
     // already installing by then, and `onNeedRefresh` takes it from here.
     installing = registration?.installing ?? null;
   } finally {
-    if (background || !installing || waiting) setUpdateImpending(false);
-    else installing.addEventListener("statechange", () => {
-      if (installing?.state === "redundant") setUpdateImpending(false);
-    });
+    if (!background && !taking) {
+      if (!installing || waiting) setUpdateImpending(false);
+      else installing.addEventListener("statechange", () => {
+        if (installing?.state === "redundant") setUpdateImpending(false);
+      });
+    }
   }
 }
 
@@ -242,9 +247,11 @@ export async function finishPwaRestart() {
       // onNeedRefresh takes it when installation finishes. A failed install
       // must not leave the terminal behind the update screen forever.
       const installing = registration.installing;
-      installing.addEventListener("statechange", () => {
+      const clearFailedInstall = () => {
         if (installing.state === "redundant") setUpdateImpending(false);
-      });
+      };
+      installing.addEventListener("statechange", clearFailedInstall);
+      clearFailedInstall();
     } else setUpdateImpending(false);
   } catch {
     setUpdateImpending(false);
