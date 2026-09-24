@@ -231,6 +231,7 @@ Settings pattern (illustrative, non-normative — current shell ~1120×820, rail
 
 - **Nav = palette selection.** The rail behaves like the model-picker list: full-row `{colors.accent}` wash, `{rounded.md}`, muted icon at rest. No sliver, gradient, border emphasis, or icon recolor.
 - **Content = dashboard tiles.** Sections are hairline `10px` groups with stacked rows, a header title + muted subtitle, and trailing quiet controls. No status-strip card, no multi-column card grid as chrome.
+- **Settings save as they change.** No Save button: a valid edit is stored after a short pause (typing) or at once (a toggle, a choice). The section header says how it stands, beside the close button and holding its width -- a small spinner and "Saving", then "Saved" in muted text, or "Not saved" and a Retry button in the danger colour, which stays until retried. A value that is not valid yet is not saved; it says why under its field, in the danger colour. Credentials and one-off actions keep their own buttons.
 - New settings chrome must follow these two patterns, not the legacy blue selected nav.
 
 # Elevation & Depth

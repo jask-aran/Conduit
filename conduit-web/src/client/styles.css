@@ -2489,3 +2489,13 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 @media (--conduit-phone-layout) {
   [data-region]::after { display: none; }
 }
+
+/* A settings section's save state (settings/save-status.tsx), beside the
+   close button: muted, and only the failure in the danger colour. */
+.settings-save-status { display: inline-flex; min-width: 72px; margin-left: auto; margin-right: 8px; align-items: center; justify-content: flex-end; gap: 6px; color: var(--muted-foreground); font-size: 11px; }
+.settings-save-status [data-slot="spinner"], .settings-save-status svg { width: 11px; height: 11px; }
+.settings-save-status[data-kind="saved"] > span { animation: ui-arrive 200ms ease-out both; }
+.settings-save-status[data-kind="failed"] { color: var(--destructive); }
+.settings-save-status button { border: 0; border-radius: 6px; background: var(--accent); padding: 2px 8px; color: var(--foreground); font: inherit; cursor: pointer; }
+.settings-save-status button:hover, .settings-save-status button:focus-visible { outline: none; background: color-mix(in oklch, var(--accent), var(--foreground) 10%); }
+.settings-dialog .settings-content [data-slot="field"] > small.settings-inline-error { color: var(--destructive); }
