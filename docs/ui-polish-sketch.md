@@ -1,8 +1,9 @@
 # UI polish sketch
 
-Status: sections 1 (interrupted turns) and 2 (composer hierarchy) are built
-and recorded below as built; the others are proposals for separate, bounded
-changes.
+Status: sections 1 (interrupted turns), 2 (composer hierarchy), 5 (empty
+states, reduced) and 7 (motion, but for the deferred dashboard transition)
+are built and recorded below as built; 3, 4 and 6 remain proposals for
+separate, bounded changes.
 
 These proposals cover transcript density, composer hierarchy, mobile file
 browsing, useful empty states, and interaction feedback. A separate autosave
@@ -347,6 +348,17 @@ keyboard. Desktop density changes are outside this proposal.
 
 ## 5. Make empty states useful
 
+Status: built, reduced. Reviewing the sketch below, an empty section does not
+need its own action: the ways to start a chat or add a project or workspace
+already sit in the sidebar, and a second target in every empty section would
+only repeat them. Empty dashboard chat and workspace lists now read "Nothing
+here yet."; Live terminals stays a live reference list with no action, since
+there is nowhere useful for "Open terminal" to go. Instead, the sidebar's own
+actions were made rows: **New project** is a wide row under New chat and
+**New workspace** one under Files, each also on the collapsed rail, replacing
+the small buttons beside the Projects and Workspaces headings. Telling
+loading and a failed request apart from empty was not taken up.
+
 The dashboard currently uses messages such as “No recent chats”, “No
 Workspaces yet”, and “No live terminals”. These describe an absence but do
 not provide a next step within the empty section.
@@ -423,6 +435,20 @@ Not proposed: the Workspace panel. It already slides in, and maximising slides
 over the chat on purpose rather than squeezing it, because the chat's contents
 misbehave at a narrow width.
 
+### 7b. Other pieces built alongside
+
+- **One Disclosure.** The trace, a tool call and a discarded answer's
+  "Interrupted · not kept" row are one component (`chat/disclosure.tsx`):
+  the header, one turning chevron, and the body that unfolds in height. A
+  disclosure opened at the tail lets go of the tail rather than being chased,
+  so it opens downward from where it was clicked; its body folds all the way
+  to nothing, gap included, so closing ends without a snap.
+- **The Conduit mark** is the wordmark's Druk Wide capital C, converted to a
+  path (`public/brand/conduit-mark.svg`).
+- **Sidebar harness marks** stay greyed with their row and show in their own
+  colours while it is hovered or focused: Codex's gradient, Claude Code's
+  orange, the rest at full foreground. The sidebar only, as an experiment.
+
 ### 7a. Attachment strip (side piece, from step 2)
 
 Checking step 2 showed two things. Each attachment card flashed three times:
@@ -482,12 +508,11 @@ composer** -- the queued pill's width and material, about twice its height
 
 ## Suggested order
 
-Interrupted turns and composer hierarchy are done; the composer was the first
-interaction-feedback pass. Mobile file browsing, dashboard empty states, and
-the autosave pilot can follow as separate changes.
-
-Approvals on the takeover is the cheapest of section 7 and the most
-consistent with what exists; the dashboard transition is the most ambitious.
+Interrupted turns, composer hierarchy, empty states and motion are done; the
+composer was the first interaction-feedback pass. Left: mobile file browsing
+(4), the autosave pilot (3), and the next interaction-feedback surface (6).
+The dashboard-to-chat transition waits for a whole-UI fade on load, and is
+built with it.
 
 Each implementation should identify its affected surface, use the smallest
 relevant check from `testing.md`, and leave a concrete result for user review.
