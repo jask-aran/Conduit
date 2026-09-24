@@ -22,6 +22,7 @@ const contextLabel = (context: ShortcutContext) => CONTEXT_LABELS[context]
   ?? context.replace(/[-.]/g, " ").replace(/^\w/, (first) => first.toUpperCase());
 
 type Row = { commandId: string; label: string; keys: string[] };
+const LEAVE_MS = 160;
 // Numbers first, in order, then letters, then the rest.
 const rank = (key: string) => /^\d$/.test(key) ? 0 : /^[a-z]$/i.test(key) ? 1 : 2;
 
@@ -53,27 +54,44 @@ export function LeaderPalette(props: { shortcuts: ShortcutManager }) {
   });
 
   // Shown after the pause, at once, or never; browsing the levels shows it
-  // straight away, since that is looking.
+  // straight away, since that is looking. It leaves the way it came, faded
+  // and dropped back, holding what it showed while it goes.
   const [visible, setVisible] = createSignal(false);
+  const [leaving, setLeaving] = createSignal(false);
+  const [last, setLast] = createSignal<PendingShortcutSequence | null>(null);
+  createEffect(() => { const current = pending(); if (current) setLast(current); });
+  const shown = () => pending() ?? (leaving() ? last() : null);
   let pause: ReturnType<typeof setTimeout> | undefined;
+  let leave: ReturnType<typeof setTimeout> | undefined;
   createEffect(on(() => Boolean(pending()), (active) => {
     clearTimeout(pause);
+    clearTimeout(leave);
+    if (!active) {
+      const wasVisible = visible();
+      setVisible(false);
+      if (wasVisible && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        setLeaving(true);
+        leave = setTimeout(() => setLeaving(false), LEAVE_MS);
+      }
+      return;
+    }
+    setLeaving(false);
     setVisible(false);
-    if (!active || leaderMenu() === "never") return;
+    if (leaderMenu() === "never") return;
     if (leaderMenu() === "immediate") setVisible(true);
     else pause = setTimeout(() => setVisible(true), LEADER_MENU_PAUSE_MS);
   }));
-  createEffect(on(() => pending()?.shown, (shown, previous) => {
-    if (previous !== undefined && shown !== previous && leaderMenu() !== "never") { clearTimeout(pause); setVisible(true); }
+  createEffect(on(() => pending()?.shown, (level, previous) => {
+    if (previous !== undefined && level !== previous && leaderMenu() !== "never") { clearTimeout(pause); setVisible(true); }
   }));
-  onCleanup(() => clearTimeout(pause));
+  onCleanup(() => { clearTimeout(pause); clearTimeout(leave); });
 
   const secondKeys = (commandId: string, first: PendingShortcutSequence["firstStroke"]) => props.shortcuts.effectiveBindings(commandId)
     .filter((binding) => binding.strokes.length === 2 && sameStroke(binding.strokes[0], first))
     .map((binding) => binding.strokes[1]!);
 
   const rows = createMemo<Row[]>(() => {
-    const current = pending();
+    const current = shown();
     if (!current) return [];
     const claimed = new Set(current.levels.slice(0, current.shown)
       .flatMap((level) => level.commandIds.flatMap((id) => secondKeys(id, current.firstStroke).map(strokeIdentity))));
@@ -84,7 +102,7 @@ export function LeaderPalette(props: { shortcuts: ShortcutManager }) {
       return keys.length ? [{ commandId, label: getCommandDefinition(commandId).label, keys }] : [];
     }).sort((left, right) => rank(left.keys[0]!) - rank(right.keys[0]!) || left.keys[0]!.localeCompare(right.keys[0]!, undefined, { numeric: true }));
   });
-  const browsable = () => (pending()?.levels.filter((level) => level.commandIds.length).length ?? 0) > 1;
+  const browsable = () => (shown()?.levels.filter((level) => level.commandIds.length).length ?? 0) > 1;
   const goTo = () => [
     [COMMAND_IDS.focusSidebar, "Sidebar"],
     [COMMAND_IDS.focusMainPane, "Main"],
@@ -94,23 +112,24 @@ export function LeaderPalette(props: { shortcuts: ShortcutManager }) {
     return keys ? [{ keys, label: label! }] : [];
   });
 
-  return <Show when={visible() && pending()}>
-    <div class="leader-menu-scrim" aria-hidden="true" />
+  return <Show when={(visible() || leaving()) && shown()}>
+    <div class="leader-menu-scrim" data-leaving={leaving() || undefined} aria-hidden="true" />
     <aside
       class="leader-menu composer-surface-material"
       data-composer-surface={surface()}
       data-shortcut-leader-palette="true"
+      data-leaving={leaving() || undefined}
       role="dialog"
-      aria-label={`Leader: ${contextLabel(pending()!.levels[pending()!.shown]!.context)}`}
+      aria-label={`Leader: ${contextLabel(shown()!.levels[shown()!.shown]!.context)}`}
     >
       <div class="leader-menu-top">
-        <kbd>{formatShortcutStroke(pending()!.firstStroke, props.shortcuts.environment)}</kbd>
+        <kbd>{formatShortcutStroke(shown()!.firstStroke, props.shortcuts.environment)}</kbd>
         <nav class="leader-menu-path" aria-label="Where you are">
-          <For each={[...pending()!.levels.entries()].reverse()}>{([index, level], position) => <>
+          <For each={[...shown()!.levels.entries()].reverse()}>{([index, level], position) => <>
             <Show when={position() > 0}><span class="leader-menu-separator" aria-hidden="true">›</span></Show>
             <button
               type="button"
-              aria-current={index === pending()!.shown ? "true" : undefined}
+              aria-current={index === shown()!.shown ? "true" : undefined}
               disabled={!level.commandIds.length}
               onClick={() => props.shortcuts.showPendingLevel(index)}
             >{contextLabel(level.context)}</button>
