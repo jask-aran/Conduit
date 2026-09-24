@@ -2467,7 +2467,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   bottom: 0;
   left: 16px;
   z-index: 5;
-  height: 2px;
+  height: 1.5px;
   border-radius: 1px;
   background: linear-gradient(to right, transparent, var(--region-focus) 18%, var(--region-focus) 82%, transparent);
   opacity: 0;
@@ -2481,7 +2481,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .region-cue {
   position: fixed;
   z-index: 73;
-  box-shadow: 0 0 0 200vmax rgb(0 0 0 / 30%);
+  box-shadow: 0 0 0 200vmax rgb(0 0 0 / 18%);
   pointer-events: none;
 }
 @media (--conduit-phone-layout) {
