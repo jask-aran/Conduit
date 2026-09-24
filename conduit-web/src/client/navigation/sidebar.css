@@ -443,6 +443,15 @@
   .thread-harness-mark[data-lively], .thread-harness-mark[data-lively] .harness-mark { transition: none; }
 }
 
+/* The wash is the only cursor in the list: a focused row draws no ring, from
+   the browser or anywhere else. The chevron is not a stop -- → and ← press it
+   -- so it is out of the tab order. */
+.conduit-sidebar :is(.sidebar-row, .sidebar-project-link, .sidebar-rail-action, .sidebar-view-more, .sidebar-harness-tile):focus-visible { outline: none; box-shadow: none; }
+.conduit-sidebar .sidebar-harness-tile:focus-visible {
+  border-color: color-mix(in oklch, var(--border), transparent 20%);
+  background: color-mix(in oklch, var(--sidebar-foreground), transparent 93%);
+}
+
 /* While the keyboard moves the cursor (sidebar-cursor.ts), a row left under a
    still pointer draws at rest until the pointer moves, so only the cursor row
    is washed. An override rather than pointer-events: Chromium keeps :hover on
