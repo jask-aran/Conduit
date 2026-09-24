@@ -479,8 +479,8 @@ svg { stroke-width: 1.5; }
 .chat-main-empty .message-scroller-viewport { overflow: hidden; overscroll-behavior-y: none; }
 .chat-main-empty .thread, .chat-main-empty .empty-thread, .chat-main-empty .welcome { width: 100%; min-height: 100%; padding: 0; }
 .chat-main-empty .welcome { padding-bottom: 140.8px; }
-/* A dashboard send waiting on its agent (main.tsx): docked, with no welcome. */
-.chat-main-arriving .empty-thread { visibility: hidden; }
+/* A first send waiting on its agent (main.tsx): docked, with no welcome. */
+.chat-main-sending .empty-thread { visibility: hidden; }
 .chat-main-empty .composer-stack { position: absolute; inset-inline: 0; top: 50%; z-index: 2; width: min(563.2px, calc(100% - 38.4px)); margin-inline: auto; padding: 0; transform: translateY(43.2px); background: transparent; }
 .chat-bootstrap { display: grid; min-height: 100%; place-items: center; color: var(--muted-foreground); font-size: 11.2px; }
 
