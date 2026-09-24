@@ -1,6 +1,7 @@
 import { For, Show } from "solid-js";
 import { Trash2Icon } from "lucide-solid";
 import { Button, Input } from "@/components/primitives";
+import { Switch } from "./settings-controls";
 import { clearNativeBearerToken } from "../api/native-auth-client.ts";
 import { isInstalledClient, isStandaloneBrowser } from "../platform/installed-client.ts";
 import { saveServerDirectory } from "../platform/server-directory.ts";
@@ -55,44 +56,41 @@ export function ServersSettingsTile() {
   const inUse = (entry: ServerEntry, path: ServerPath) =>
     entry.origin === activeOrigin() && path.origin === (activePath() || activeOrigin());
 
-  return <section class="settings-section-block">
-    <For each={servers()}>{(entry) => <div class="settings-server">
-      <div class="settings-server-row">
+  return <div class="settings-list">
+    <For each={servers()}>{(entry) => <section class="settings-group" aria-label={entry.name}>
+      <h3>{entry.name}</h3>
+      <label class="settings-line"><span>Name</span>
         <Input aria-label={`Name for ${entry.name}`} value={entry.name}
-          onChange={(event) => void rename(entry.origin, event.currentTarget.value)} />
-        <label class="settings-server-share"><input type="checkbox" aria-label={`Share ${entry.name} with other clients`}
-          checked={entry.shared} onChange={(event) => void share(entry.origin, event.currentTarget.checked)} />Share with other clients</label>
-        {/* The route below says which one is in use, and says it about the
-            address rather than about the server, so the row does not repeat
-            it -- it only withholds the button that would break it. */}
-        <Show when={entry.origin !== activeOrigin()}>
-          <Button variant="ghost" size="sm" aria-label={`Forget ${entry.name}`} onClick={() => void forget(entry.origin)}>
-            <Trash2Icon /> Forget
-          </Button>
-        </Show>
-      </div>
+          onChange={(event) => void rename(entry.origin, event.currentTarget.value)} /></label>
+      <div class="settings-line"><span>Share with other clients</span>
+        <Switch label={`Share ${entry.name} with other clients`} checked={entry.shared} onChange={(shared) => void share(entry.origin, shared)} /></div>
       {/*
         * Listed even when there is only one, because one address is still the
         * answer to "how does this client reach it" -- and a server that later
         * learns a second should read as having gained a route rather than as
-        * having changed shape.
+        * having changed shape. The row says which one is in use, about the
+        * address rather than about the server.
         */}
-      <ul class="settings-server-paths">
-        <For each={pathsOf(entry)}>{(path) => <li data-current={inUse(entry, path) || undefined}>
-          <code>{path.origin}</code>
-          <span>{reach(path)}</span>
-          <Show when={inUse(entry, path)}><em>In use</em></Show>
-        </li>}</For>
-      </ul>
-    </div>}</For>
-    <Show when={!servers().length}><p class="settings-note">No servers yet.</p></Show>
+      <For each={pathsOf(entry)}>{(path) => <div class="settings-line" data-current={inUse(entry, path) || undefined}>
+        <span><code>{path.origin}</code><em>{reach(path)}</em></span>
+        <span class="settings-line-value">{inUse(entry, path) ? "In use" : ""}</span>
+      </div>}</For>
+      {/* The one in use withholds only the button that would break it. */}
+      <Show when={entry.origin !== activeOrigin()}>
+        <div class="settings-line"><span>Forget this server</span>
+          <Button variant="ghost" size="sm" aria-label={`Forget ${entry.name}`} onClick={() => void forget(entry.origin)}>
+            <Trash2Icon /> Forget
+          </Button></div>
+      </Show>
+    </section>}</For>
+    <Show when={!servers().length}><p class="settings-line-note" data-tone="quiet">No servers yet.</p></Show>
     {/*
       * A standalone window is one origin and cannot be sent to another, so the
       * addresses above are shown to it as facts rather than as choices. Said
       * once, here, rather than beside every row it applies to.
       */}
     <Show when={isStandaloneBrowser() && servers().length > 0}>
-      <p class="settings-note">Installed to the home screen, so this app stays on the address it was installed from. Open another in a browser to use it.</p>
+      <p class="settings-line-note" data-tone="quiet">Installed to the home screen, so this app stays on the address it was installed from. Open another in a browser to use it.</p>
     </Show>
-  </section>;
+  </div>;
 }

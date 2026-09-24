@@ -3,9 +3,6 @@
 /* Current Voice lifecycle names, rendered by the rebuild composer. */
 .dictation-trigger[data-state="listening"] { box-shadow: 0 0 0 2.4px color-mix(in oklch, var(--ring), transparent 70%); }
 
-.settings-content[data-section="voice"] { padding: 11.2px 14.4px; }
-.settings-content[data-section="voice"] > header { margin-bottom: 9.6px; }
-.settings-content[data-section="voice"] > header h2 { font-size: 16px; }
 .voice-settings { gap: 8px; }
 .voice-settings-intro { margin: 0; color: var(--muted-foreground); font-size: 9.6px; line-height: 1.4; }
 .voice-settings .dictation-auto-send { padding: 7.2px 8px; }
@@ -55,9 +52,6 @@
 /* Current Voice lifecycle names, rendered by the rebuild composer. */
 .dictation-trigger[data-state="listening"] { box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring), transparent 70%); }
 
-.settings-content[data-section="voice"] { padding: 14px 18px; }
-.settings-content[data-section="voice"] > header { margin-bottom: 12px; }
-.settings-content[data-section="voice"] > header h2 { font-size: 20px; }
 .voice-settings { gap: 10px; }
 .voice-settings-intro { margin: 0; color: var(--muted-foreground); font-size: 12px; line-height: 1.4; }
 .voice-settings .dictation-auto-send { padding: 9px 10px; }

@@ -553,12 +553,6 @@ svg { stroke-width: 1.5; }
 .settings-cards article, .installations article, .workspace-settings-card { padding: 11.2px; border: 0.8px solid var(--border); border-radius: var(--radius); background: var(--card); }
 .settings-cards h3, .installations h3, .workspace-settings-card h3 { margin: 0; }
 .settings-cards p, .installations p, .workspace-settings-card p { margin: 4px 0; color: var(--muted-foreground); }
-.pi-auth-panel { display: grid; gap: 11.2px; }
-.pi-auth-panel > p { margin: 0; color: var(--muted-foreground); }
-.pi-auth-attempt { display: grid; gap: 7.2px; border: 0.8px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 11.2px; }
-.pi-auth-attempt h3, .pi-auth-attempt p { margin: 0; }
-.pi-auth-response, .pi-auth-options { display: flex; flex-wrap: wrap; gap: 6.4px; align-items: center; }
-.pi-auth-response input { min-width: 0; flex: 1 1 176px; }
 .search-settings { display: grid; gap: 12.8px; }
 .search-settings-intro { margin: 0; color: var(--muted-foreground); line-height: 1.45; }
 .search-provider-actions { display: flex; align-items: center; justify-content: space-between; gap: 9.6px; }
@@ -1314,9 +1308,6 @@ svg { stroke-width: 1.5; }
 .settings-content input, .settings-content select { min-height: 31px; height: 31px; padding: 5px 8px; font-size: 12px; }
 .settings-content [data-slot="button"] { min-height: 30px; height: auto; padding-block: 5px; font-size: 12px; }
 .settings-content small { font-size: 11px; line-height: 1.35; }
-.settings-section-block { display: grid; gap: 8px; padding-bottom: 16px; }
-.settings-section-block + .settings-section-block { border-top: 1px solid var(--border); padding-top: 16px; }
-.settings-section-block > h3 { margin: 0; font-size: 13px; }
 .settings-inline-action { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .settings-error, .settings-loading { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; }
 .settings-error { border-color: color-mix(in srgb, var(--destructive) 45%, var(--border)); color: var(--destructive); }
@@ -1359,12 +1350,6 @@ svg { stroke-width: 1.5; }
 .installations article { min-height: 0; }
 .settings-cards h3, .installations h3, .workspace-settings-card h3 { margin: 0; }
 .settings-cards p, .installations p, .workspace-settings-card p { margin: 5px 0; color: var(--muted-foreground); }
-.pi-auth-panel { display: grid; gap: 14px; }
-.pi-auth-panel > p { margin: 0; color: var(--muted-foreground); }
-.pi-auth-attempt { display: grid; gap: 9px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 14px; }
-.pi-auth-attempt h3, .pi-auth-attempt p { margin: 0; }
-.pi-auth-response, .pi-auth-options { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.pi-auth-response input { min-width: 0; flex: 1 1 220px; }
 .search-settings { display: grid; gap: 16px; }
 .search-settings-intro { margin: 0; color: var(--muted-foreground); line-height: 1.45; }
 .search-provider-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -1821,18 +1806,8 @@ svg { stroke-width: 1.5; }
    so it wraps and is not shouted like a group heading. */
 .server-route-note { max-width: 260px; text-transform: none; font-weight: 400; letter-spacing: 0; white-space: normal; line-height: 1.35; }
 .server-route-error { color: var(--destructive); text-transform: none; font-weight: 400; letter-spacing: 0; white-space: normal; line-height: 1.35; }
-.settings-server-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; }
 /* The routes sit under the name they belong to, indented so the hierarchy is
    in the layout rather than in a heading. */
-.settings-server-paths { display: flex; margin: 8px 0 0; flex-direction: column; gap: 2px; padding: 0 0 0 2px; list-style: none; }
-.settings-server-paths > li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; border-radius: var(--radius-sm); padding: 4px 6px; }
-.settings-server-paths > li[data-current] { background: var(--muted); }
-.settings-server-paths code { overflow: hidden; color: var(--muted-foreground); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.settings-server-paths span { color: var(--muted-foreground); font-size: 11px; white-space: nowrap; }
-.settings-server-paths em { color: var(--foreground); font-size: 11px; font-style: normal; white-space: nowrap; }
-.settings-server-current { color: var(--muted-foreground); font-size: 11px; }
-.settings-server-share { display: inline-flex; align-items: center; gap: 5px; color: var(--muted-foreground); font-size: 11px; white-space: nowrap; }
-.settings-note { margin: 0 0 8px; color: var(--muted-foreground); font-size: 11px; }
 
 /* Settings is a full control surface. Keep this final layer outside the
    density and mobile rebuild blocks so its desktop geometry is authoritative. */
@@ -1879,17 +1854,8 @@ svg { stroke-width: 1.5; }
 .settings-dialog .settings-content > header h2 { margin: 0; font-size: 20px; letter-spacing: -.025em; }
 .settings-dialog .settings-content > header p { margin: 0 0 14px; color: var(--muted-foreground); font-size: 12px; }
 .settings-dialog .settings-content[data-section="prompts"] { display: flex; overflow: hidden; flex-direction: column; }
-.prompt-editor { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
-.prompt-editor-toolbar { display: grid; grid-template-columns: auto minmax(180px, 320px) 1fr; align-items: center; gap: 10px; min-height: 48px; padding: 7px 10px; border-bottom: 1px solid var(--border); }
-.prompt-editor-toolbar > label { color: var(--muted-foreground); font-size: 11px; }
-.prompt-editor-toolbar > span { justify-self: end; color: var(--muted-foreground); font-size: 10px; }
-.settings-dialog .prompt-editor textarea { min-width: 0; min-height: 0; flex: 1; resize: none; border: 0; outline: 0; background: color-mix(in oklch, var(--background), black 5%); padding: 18px 20px; color: var(--foreground); font: 12px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; tab-size: 2; }
-.prompt-editor-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 54px; padding: 8px 10px; border-top: 1px solid var(--border); }
-.prompt-editor-footer > small { color: var(--muted-foreground); }
-.prompt-editor-footer > div { display: flex; gap: 8px; }
 /* Settings content follows the dashboard tile pattern: hairline groups of
    stacked rows. No multi-column card grids as chrome. */
-.settings-stack { display: grid; gap: 12px; }
 .settings-tile { overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: transparent; }
 .settings-tile > summary,
 .settings-disclosure > summary {
@@ -1902,21 +1868,14 @@ svg { stroke-width: 1.5; }
   list-style: none;
 }
 .settings-tile > summary::-webkit-details-marker,
-.settings-disclosure > summary::-webkit-details-marker { display: none; }
 .settings-tile > summary > span,
-.settings-disclosure > summary > span { display: grid; min-width: 0; flex: 1; grid-template-columns: 1fr; gap: 1px 8px; align-items: center; }
 .settings-tile > summary > span:has(svg),
-.settings-disclosure > summary > span:has(svg) { grid-template-columns: auto 1fr; }
 .settings-tile > summary > span svg,
-.settings-disclosure > summary > span svg { grid-row: 1 / span 2; }
 .settings-tile > summary strong,
-.settings-disclosure > summary strong { font-size: 13px; font-weight: 600; }
 .settings-tile > summary small,
-.settings-disclosure > summary small { color: var(--muted-foreground); font-size: 9px; font-weight: 400; line-height: 1.35; }
 .settings-tile > summary > span:has(svg) strong,
 .settings-disclosure > summary > span:has(svg) strong,
 .settings-tile > summary > span:has(svg) small,
-.settings-disclosure > summary > span:has(svg) small { grid-column: 2; }
 .settings-chevron { width: 14px; height: 14px; flex: none; margin-left: auto; color: var(--muted-foreground); transition: transform 140ms ease; }
 details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .settings-tile[open] > summary { border-bottom: 1px solid var(--border); }
@@ -1945,14 +1904,10 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .settings-dialog .settings-cards,
 .settings-dialog .installations,
 .settings-dialog .pi-auth-panel > .settings-cards,
-.settings-dialog .settings-disclosure > .search-provider-list { display: grid !important; grid-template-columns: minmax(0, 1fr) !important; align-items: start; gap: 10px !important; margin: 0; border-top: 0; padding: 0; }
 .settings-dialog .settings-content [data-slot="field-group"] { gap: 10px; }
 .settings-dialog .settings-content [data-slot="field"] { gap: 5px; }
 .settings-dialog .settings-content input,
 .settings-dialog .settings-content select { min-height: 34px; height: 34px; font-size: 12px; }
-.settings-dialog .settings-section-block { display: grid; gap: 8px; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: transparent; }
-.settings-dialog .settings-section-block + .settings-section-block { border-top: 1px solid var(--border); padding-top: 14px; }
-.settings-dialog .settings-section-block > h3 { margin: 0; font-size: 13px; }
 
 /*
  * Weight, so the page has a foreground and a background.
@@ -2029,9 +1984,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .settings-dialog .settings-content > header h2 { font-size: 19px; font-weight: 600; letter-spacing: -.025em; }
 .settings-dialog .settings-section-block > h3,
 .settings-dialog .settings-tile > summary strong,
-.settings-dialog .settings-disclosure > summary strong { font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
 .settings-dialog .settings-tile > summary small,
-.settings-dialog .settings-disclosure > summary small { font-size: 11px; line-height: 1.45; }
 
 /*
  * The close and the back control are the same kind of thing and are drawn the
@@ -2054,8 +2007,6 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .settings-dialog .settings-content > .settings-disclosure,
 .settings-dialog .settings-content > .settings-tile,
 .settings-dialog .settings-content > .settings-control-grid,
-.settings-dialog .settings-content > .settings-stack { margin-bottom: 12px; }
-.settings-dialog .settings-content > .settings-disclosure + .settings-disclosure { margin-top: 0; }
 
 /*
  * A setting is a row, not a stack.
@@ -2094,19 +2045,12 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
  * them: it had the weight of the labels beneath it and sat at the same indent,
  * so nothing said which was the container.
  */
-.settings-dialog .settings-section-block { padding: 0; }
 .settings-dialog .settings-section-block > h3 {
   margin: 0; border-bottom: 1px solid var(--border); padding: 11px 14px;
   color: var(--foreground); font-size: 12.5px; font-weight: 600; letter-spacing: -.01em;
 }
-.settings-dialog .settings-section-block > [data-slot="field-group"] { padding: 10px 12px !important; }
 /* Rows inside one tile are separated by the hairline, as tiled lists are. */
-.settings-dialog .settings-section-block > [data-slot="field-group"] { gap: 0 !important; padding: 0 !important; }
-.settings-dialog .settings-section-block > [data-slot="field-group"] > [data-slot="field"] { padding: 12px 14px; }
-.settings-dialog .settings-section-block > [data-slot="field-group"] > [data-slot="field"] + [data-slot="field"] { border-top: 1px solid var(--border); }
 /* A server is a row of the tile like any other, so it is inset like one. */
-.settings-dialog .settings-section-block > .settings-server { padding: 12px 14px; }
-.settings-dialog .settings-section-block > .settings-server + .settings-server { border-top: 1px solid var(--border); }
 
 /*
  * Selected is a wash, not an outline. The bright box was the leftover
@@ -2147,15 +2091,10 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
  * now read as the aside they are, and the panel opens closed: it says whether
  * it is connected on the summary row, which is the part worth seeing daily.
  */
-.settings-dialog .pi-auth-panel { padding: 12px; }
 .settings-dialog .pi-auth-panel > p,
 .settings-dialog .pi-auth-panel > ol {
   margin: 0 0 10px; max-width: 68ch; color: var(--muted-foreground); font-size: 11px; line-height: 1.5;
 }
-.settings-dialog .pi-auth-panel > ol { padding-left: 18px; }
-.settings-dialog .pi-auth-panel > ol li + li { margin-top: 3px; }
-.settings-dialog .pi-auth-panel > p > strong { color: var(--foreground); }
-.settings-dialog .pi-auth-panel code { font-size: 10.5px; }
 
 /* The close sits in the dialog's corner, level with the title it closes. */
 .settings-dialog .settings-content > header { align-items: start; }
@@ -2169,19 +2108,10 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   border-radius: 10px;
   background: transparent;
 }
-.settings-disclosure[open] > summary { border-bottom: 1px solid var(--border); }
 .settings-tile > summary > span svg,
-.settings-disclosure > summary > span svg { width: 14px; height: 14px; color: var(--muted-foreground); }
 .settings-disclosure > .pi-auth-panel,
 .settings-disclosure > .settings-loading,
-.settings-disclosure-content { border-top: 1px solid var(--border); padding: 14px; }
-.settings-disclosure-content { display: grid; gap: 10px; }
 .settings-dialog .installations > [data-slot="button"] { grid-column: 1 / -1; justify-self: start; }
-.settings-dialog .pi-auth-panel > [data-slot="field-group"] > [data-slot="button"] { justify-self: start; }
-.settings-dialog .pi-auth-panel > .settings-cards article { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 3px 8px; padding: 9px 10px; }
-.settings-dialog .pi-auth-panel > .settings-cards article p { grid-column: 1 / -1; font-size: 10px; }
-.settings-dialog .pi-auth-panel > .settings-cards article [data-slot="button"] { grid-column: 2; grid-row: 1; }
-.settings-dialog .settings-disclosure > .search-provider-list { margin: 0; border-top: 1px solid var(--border); padding: 12px; }
 .settings-dialog .voice-backend-disclosure { margin-top: 0; }
 .settings-dialog .voice-backend-disclosure > .voice-card { border: 0; border-top: 1px solid var(--border); border-radius: 0; }
 
@@ -2288,7 +2218,6 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   .settings-dialog .settings-content .settings-control-grid { margin-bottom: 12px; }
   .settings-dialog .settings-section-block > [data-slot="field-group"] > [data-slot="field"],
   .settings-dialog .settings-content .settings-control-grid > [data-slot="field"] { padding: 12px; }
-  .settings-dialog .settings-section-block > h3 { padding: 11px 12px; }
   /*
    * An intro paragraph is the first thing in the flow after a sticky header,
    * and its top margin was collapsing through it -- so the first line of Voice
@@ -2313,8 +2242,6 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   .settings-dialog .settings-content [data-slot="field-group"]:not(.settings-section-block [data-slot="field-group"]):not(.pi-auth-panel [data-slot="field-group"]) {
     border: 1px solid var(--border); border-radius: 10px; margin-bottom: 12px; overflow: hidden;
   }
-  .settings-dialog .settings-content [data-slot="field-group"]:not(.settings-section-block [data-slot="field-group"]):not(.pi-auth-panel [data-slot="field-group"]) > [data-slot="field"] { padding: 12px; }
-  .settings-dialog .settings-content [data-slot="field-group"]:not(.settings-section-block [data-slot="field-group"]):not(.pi-auth-panel [data-slot="field-group"]) > [data-slot="field"] + [data-slot="field"] { border-top: 1px solid var(--border); }
 
   /*
    * A server is a small stack on a phone, not four controls on one line. The
@@ -2322,18 +2249,9 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
    * width, and sharing it between them left a name box too narrow to read a
    * name in and an address truncated to nothing.
    */
-  .settings-server-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
-  .settings-dialog .settings-section-block > .settings-server { padding: 12px; }
   .settings-server-row > [data-slot="input"],
-  .settings-server-row > input { grid-column: 1 / -1; }
-  .settings-server-row > .settings-server-share { grid-column: 1; }
   .settings-server-row > [data-slot="button"],
-  .settings-server-row > .settings-server-current { grid-column: 2; grid-row: 2; justify-self: end; }
   /* No room for three columns beside an address, so the reach follows it. */
-  .settings-server-paths > li { grid-template-columns: minmax(0, 1fr) auto; }
-  .settings-server-paths code { grid-column: 1 / -1; white-space: normal; overflow-wrap: anywhere; }
-  .settings-dialog .settings-disclosure-content { padding: 12px; }
-  .settings-dialog .settings-note { margin: 0 0 10px; font-size: 11px; line-height: 1.5; }
 
   /* The back chevron is a control, not a target: it was drawing its own box. */
   .settings-dialog .settings-back { flex: none; border: 0; background: transparent; margin-left: -4px; }
@@ -2348,16 +2266,11 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   .settings-control-grid, .settings-dialog .settings-cards,
   .settings-dialog .settings-content[data-section="models"] .settings-section-block > [data-slot="field-group"],
   .settings-dialog .pi-auth-panel > [data-slot="field-group"],
-  .settings-dialog .pi-auth-panel > .settings-cards { grid-template-columns: 1fr; }
   .settings-rows { grid-template-columns: 1fr; }
   .settings-rows > .settings-row:nth-child(2n) { border-left: 0; }
   .settings-rows > .settings-row:nth-child(-n+2) { border-top: 1px solid var(--border); }
   .settings-rows > .settings-row:first-child { border-top: 0; }
   .settings-row { grid-template-columns: minmax(0, 1fr) minmax(110px, 160px); gap: 8px; padding-inline: 10px; }
-  .prompt-editor-toolbar { grid-template-columns: 1fr auto; }
-  .prompt-editor-toolbar > label { display: none; }
-  .prompt-editor-footer { align-items: stretch; flex-direction: column; }
-  .prompt-editor-footer > div { justify-content: flex-end; }
 }
 
 .harness-mark { display: block; flex: none; object-fit: contain; }

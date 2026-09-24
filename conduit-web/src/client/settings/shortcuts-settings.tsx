@@ -2,7 +2,7 @@ import {
   createEffect, createMemo, createSignal, For, onCleanup, Show,
 } from "solid-js";
 import {
-  AlertTriangleIcon, KeyboardIcon, PlusIcon, RotateCcwIcon, SearchIcon, XIcon,
+  AlertTriangleIcon, PlusIcon, RotateCcwIcon, SearchIcon, XIcon,
 } from "lucide-solid";
 import { Button, Input } from "@/components/primitives";
 import { desktopShell } from "../platform/installed-client";
@@ -220,118 +220,102 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
     return `${conflict.owner} may use this shortcut for ${conflict.action} before Conduit receives it.`;
   };
 
-  return <section class="shortcuts-settings" aria-labelledby="shortcuts-settings-title">
-    <div class="shortcuts-intro">
-      <div>
-        <p class="shortcuts-environment"><KeyboardIcon />{shortcutEnvironmentLabel(props.manager.environment)}</p>
-      </div>
-      <Button variant="outline" size="sm" onClick={resetAll} disabled={!hasOverrides()}>
-        <RotateCcwIcon /> Reset all
-      </Button>
-    </div>
-
-    <label class="settings-row shortcuts-leader-menu" for="leader-menu"><span>Leader menu <Show when={props.manager.leader}>{(stroke) => <kbd>{formatShortcutStroke(stroke(), props.manager.environment)}</kbd>}</Show></span>
-      <select id="leader-menu" aria-label="When the leader menu shows" value={leaderMenu()} onChange={(event) => saveLeaderMenu(event.currentTarget.value as LeaderMenuMode)}>
-        <For each={LEADER_MENU_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-      </select>
-    </label>
-
-    <label class="shortcuts-search">
-      <SearchIcon />
-      <Input
-        type="search"
-        aria-label="Search shortcuts"
-        placeholder="Search commands, contexts, or keys…"
-        value={query()}
-        onInput={(event) => setQuery(event.currentTarget.value)}
-      />
-    </label>
+  return <div class="settings-list shortcuts-settings" aria-label="Shortcuts">
+    <section class="settings-group" aria-label="Keyboard">
+      <h3>Keyboard</h3>
+      <div class="settings-line"><span>Keys for<em>{shortcutEnvironmentLabel(props.manager.environment)}</em></span>
+        <Button variant="ghost" size="sm" onClick={resetAll} disabled={!hasOverrides()}><RotateCcwIcon /> Reset all</Button></div>
+      <label class="settings-line" for="leader-menu"><span>Leader menu<Show when={props.manager.leader}>{(stroke) => <em><kbd>{formatShortcutStroke(stroke(), props.manager.environment)}</kbd></em>}</Show></span>
+        <select id="leader-menu" aria-label="When the leader menu shows" value={leaderMenu()} onChange={(event) => saveLeaderMenu(event.currentTarget.value as LeaderMenuMode)}>
+          <For each={LEADER_MENU_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+        </select>
+      </label>
+      <label class="shortcuts-search">
+        <SearchIcon />
+        <Input
+          type="search"
+          aria-label="Search shortcuts"
+          placeholder="Search commands, contexts, or keys…"
+          value={query()}
+          onInput={(event) => setQuery(event.currentTarget.value)}
+        />
+      </label>
+    </section>
 
     <p class="sr-only" aria-live="polite">{status()}</p>
     <Show when={groups().length} fallback={<p class="shortcuts-empty">No shortcuts match “{query()}”.</p>}>
-      <div class="shortcut-groups">
-        <For each={groups()}>{([group, items]) => <section class="shortcut-group">
-          <h3>{GROUP_LABELS[group] || contextLabel(group)}</h3>
-          <div class="shortcut-command-list">
-            <For each={items}>{(command) => {
-              const bindings = () => {
-                revision();
-                return props.manager.effectiveBindings(command.id);
-              };
-              const isRecording = () => recording()?.commandId === command.id;
-              return <article class="shortcut-command" data-recording={isRecording() || undefined}>
-                <div class="shortcut-command-copy">
-                  <div class="shortcut-command-title">
-                    <strong>{command.label}</strong>
-                    <Show when={overridden(command.id)}><span class="shortcut-override-badge">Custom</span></Show>
-                  </div>
-                  <div class="shortcut-contexts">
-                    <For each={command.contexts}>{(context) => <span>{contextLabel(context)}</span>}</For>
-                  </div>
-                </div>
-                <div class="shortcut-bindings">
-                  <Show when={bindings().length} fallback={<span class="shortcut-unassigned">Not assigned</span>}>
-                    <For each={bindings()}>{(binding, index) => <span class="shortcut-binding">
-                      <button
-                        type="button"
-                        class="shortcut-keycap"
-                        aria-label={`Replace ${formatShortcutBinding(binding, props.manager.environment)} for ${command.label}`}
-                        onClick={() => beginRecording(command.id, index())}
-                      >
-                        {formatShortcutBinding(binding, props.manager.environment)}
-                      </button>
-                      <button
-                        type="button"
-                        class="shortcut-clear"
-                        aria-label={`Clear ${formatShortcutBinding(binding, props.manager.environment)} from ${command.label}`}
-                        title="Clear shortcut"
-                        onClick={() => clearBinding(command, index())}
-                      ><XIcon /></button>
-                    </span>}</For>
-                  </Show>
-                  <button type="button" class="shortcut-add" onClick={() => beginRecording(command.id, null)}>
-                    <PlusIcon /> Add
-                  </button>
-                  <Show when={overridden(command.id)}>
-                    <button type="button" class="shortcut-reset" onClick={() => resetCommand(command)}>Reset</button>
-                  </Show>
-                </div>
-
-                <Show when={isRecording()}>
-                  <div class="shortcut-recorder-panel">
-                    <div
-                      ref={recorder}
-                      class="shortcut-recorder-capture"
-                      role="application"
-                      tabIndex={0}
-                      aria-label={`Record shortcut for ${command.label}`}
-                      onKeyDown={recordKey}
+      <For each={groups()}>{([group, items]) => <section class="settings-group" aria-label={GROUP_LABELS[group] || contextLabel(group)}>
+        <h3>{GROUP_LABELS[group] || contextLabel(group)}</h3>
+        <For each={items}>{(command) => {
+          const bindings = () => {
+            revision();
+            return props.manager.effectiveBindings(command.id);
+          };
+          const isRecording = () => recording()?.commandId === command.id;
+          // Where it applies is a description, so it is the row's title.
+          return <>
+            <div class="settings-line shortcut-command" data-recording={isRecording() || undefined} title={command.contexts.map(contextLabel).join(" · ")}>
+              <span>{command.label}<Show when={overridden(command.id)}><em>custom</em></Show></span>
+              <div class="settings-line-control shortcut-bindings">
+                <Show when={bindings().length} fallback={<span class="shortcut-unassigned">Not assigned</span>}>
+                  <For each={bindings()}>{(binding, index) => <span class="shortcut-binding">
+                    <button
+                      type="button"
+                      class="shortcut-keycap"
+                      aria-label={`Replace ${formatShortcutBinding(binding, props.manager.environment)} for ${command.label}`}
+                      onClick={() => beginRecording(command.id, index())}
                     >
-                      <span class="shortcut-recorder-dot" aria-hidden="true" />
-                      <Show when={candidate()} fallback={<span>Press a shortcut</span>}>
-                        {(binding) => <kbd>{formatShortcutBinding(binding(), props.manager.environment)}</kbd>}
-                      </Show>
-                    </div>
-                    <p class="shortcut-recorder-help">Press up to two shortcuts. Backspace clears. Escape or Tab cancels.</p>
-                    <Show when={duplicateBinding()}>
-                      <p class="shortcut-conflict" data-severity="error" role="alert"><AlertTriangleIcon />This command already has that shortcut.</p>
-                    </Show>
-                    <For each={conflicts()}>{(conflict) =>
-                      <p class="shortcut-conflict" data-severity={conflict.severity} role={conflict.severity === "error" ? "alert" : undefined}>
-                        <AlertTriangleIcon />{conflictMessage(conflict)}
-                      </p>
-                    }</For>
-                    <div class="shortcut-recorder-actions">
-                      <Button variant="ghost" size="sm" onClick={cancelRecording}>Cancel</Button>
-                      <Button size="sm" disabled={!candidate() || saveBlocked()} onClick={saveRecording}>Save shortcut</Button>
-                    </div>
-                  </div>
+                      {formatShortcutBinding(binding, props.manager.environment)}
+                    </button>
+                    <button
+                      type="button"
+                      class="shortcut-clear"
+                      aria-label={`Clear ${formatShortcutBinding(binding, props.manager.environment)} from ${command.label}`}
+                      title="Clear shortcut"
+                      onClick={() => clearBinding(command, index())}
+                    ><XIcon /></button>
+                  </span>}</For>
                 </Show>
-              </article>;
-            }}</For>
-          </div>
-        </section>}</For>
-      </div>
+                <Button variant="ghost" size="icon-sm" aria-label={`Add a shortcut for ${command.label}`} title="Add a shortcut" onClick={() => beginRecording(command.id, null)}><PlusIcon /></Button>
+                <Show when={overridden(command.id)}>
+                  <Button variant="ghost" size="icon-sm" aria-label={`Reset ${command.label} to its defaults`} title="Reset to default" onClick={() => resetCommand(command)}><RotateCcwIcon /></Button>
+                </Show>
+              </div>
+            </div>
+
+            <Show when={isRecording()}>
+              <div class="shortcut-recorder-panel">
+                <div
+                  ref={recorder}
+                  class="shortcut-recorder-capture"
+                  role="application"
+                  tabIndex={0}
+                  aria-label={`Record shortcut for ${command.label}`}
+                  onKeyDown={recordKey}
+                >
+                  <span class="shortcut-recorder-dot" aria-hidden="true" />
+                  <Show when={candidate()} fallback={<span>Press a shortcut</span>}>
+                    {(binding) => <kbd>{formatShortcutBinding(binding(), props.manager.environment)}</kbd>}
+                  </Show>
+                </div>
+                <p class="shortcut-recorder-help">Press up to two shortcuts. Backspace clears. Escape or Tab cancels.</p>
+                <Show when={duplicateBinding()}>
+                  <p class="shortcut-conflict" data-severity="error" role="alert"><AlertTriangleIcon />This command already has that shortcut.</p>
+                </Show>
+                <For each={conflicts()}>{(conflict) =>
+                  <p class="shortcut-conflict" data-severity={conflict.severity} role={conflict.severity === "error" ? "alert" : undefined}>
+                    <AlertTriangleIcon />{conflictMessage(conflict)}
+                  </p>
+                }</For>
+                <div class="shortcut-recorder-actions">
+                  <Button variant="ghost" size="sm" onClick={cancelRecording}>Cancel</Button>
+                  <Button size="sm" disabled={!candidate() || saveBlocked()} onClick={saveRecording}>Save shortcut</Button>
+                </div>
+              </div>
+            </Show>
+          </>;
+        }}</For>
+      </section>}</For>
     </Show>
-  </section>;
+  </div>;
 }
