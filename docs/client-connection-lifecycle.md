@@ -94,11 +94,9 @@ development Windows app is a separate installation and version channel.
 Android development APKs use a debug key, while CI release APKs use the release
 keystore; a development APK cannot replace the released Android app.
 
-Windows currently calls Tauri's `downloadAndInstall`, then relaunches. Tauri
-also supports `download` followed later by `install`. The client should check
-its chosen update source, download a signed package while it remains usable,
-and report **ready** only after that download completes. A ready update can
-then be installed and the app relaunched without another network transfer.
+Windows now calls Tauri's `download` while the app remains usable and reports
+**ready** after the package is verified. The person starts `install` from that
+state; the app then relaunches without another network transfer.
 Windows exits the app during installation, so the install/relaunch still causes
 a short interruption. Decide whether a ready package remains available after
 the app itself exits; Tauri's in-process downloaded update alone does not
@@ -121,9 +119,9 @@ short-lived connection state used to decide when a server may restart.
 
 ## Suggested order
 
-1. Split Windows update download from install using the current signed updater
-   source. Show download progress and a ready-to-restart action. This proves the
-   short install/relaunch path without changing server distribution first.
+1. Done: split Windows download from install using the current signed updater
+   source, with a ready-to-restart action. The installed update still needs a
+   live Windows test when an artifact is available.
 2. Keep released clients on GitHub while Windows staging is proven. Use the
    existing local route for development builds. Add a production server cache
    only if direct GitHub delivery has a measured or product-level shortcoming.
