@@ -244,3 +244,18 @@
   .settings-line-details code { font-size: 12px; }
   .settings-dialog .settings-prompt-text { font-size: 13px; }
 }
+
+/* About sits at the foot of the rail, as the connection does at the foot of
+   the app sidebar: its group label, then quiet lines of name and value. */
+.settings-dialog .settings-rail-about { margin-top: auto; padding-top: 16px; }
+.settings-rail-about > h3 { margin: 0; padding: 3.2px 6.4px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 52%); font-size: 9.6px; font-weight: 700; letter-spacing: .02em; }
+.settings-rail-about dl { display: grid; gap: 1px; margin: 0; }
+.settings-rail-about dl > div { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 8px; padding: 2px 6.4px; }
+.settings-rail-about dt { flex: none; color: var(--muted-foreground); font-size: 9.6px; }
+.settings-rail-about dd { min-width: 0; margin: 0; overflow: hidden; color: color-mix(in oklch, var(--sidebar-foreground), transparent 32%); font-size: 9.6px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 760px) {
+  .settings-dialog .settings-rail-about { padding-top: 24px; }
+  .settings-rail-about > h3 { padding: 5px 9px; font-size: 13px; }
+  .settings-rail-about dl > div { padding: 4px 9px; }
+  .settings-rail-about dt, .settings-rail-about dd { font-size: 12.5px; }
+}

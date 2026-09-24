@@ -2,7 +2,7 @@ import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMou
 import * as KDialog from "@kobalte/core/dialog";
 import { ActivityIcon, BotIcon, ChevronLeftIcon, ChevronRightIcon, FileTextIcon, XIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon, SlidersHorizontalIcon } from "lucide-solid";
 import { CableIcon, CloudIcon, CpuIcon, HandIcon, MicOffIcon, PlayIcon, RefreshCwIcon, RepeatIcon, RotateCcwIcon, SquareIcon } from "lucide-solid";
-import { AboutSettingsTile } from "./about-settings";
+import { AboutSettingsFooter } from "./about-settings";
 import { ServersSettingsTile } from "./servers-settings";
 import { DesktopSettingsTile } from "./desktop-settings";
 import { toast } from "solid-sonner";
@@ -1094,6 +1094,7 @@ export function Settings(props: {
               <For each={group.sections}>{(item) => <div role="presentation" class="settings-nav-item"><button role="tab" tabIndex={section() === item.id ? 0 : -1} aria-selected={section() === item.id} onClick={() => openSection(item.id)} onKeyDown={navigateSettingsTabs}><item.icon aria-hidden="true" /><span>{item.label}</span><ChevronRightIcon class="settings-nav-chevron" aria-hidden="true" /></button></div>}</For>
             </section>}</For>
           </nav>
+          <AboutSettingsFooter />
         </div>
         <main class="settings-content" data-section={section()}>
           <header>
@@ -1220,7 +1221,6 @@ export function Settings(props: {
                     </fieldset>}</For>
                   </div>
               </section>
-              <AboutSettingsTile />
             </div>
           </Show>
           <Show when={section() === "servers"}><ServersSettingsTile /></Show>
