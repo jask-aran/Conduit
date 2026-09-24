@@ -388,7 +388,9 @@ treatment would explain something. Each is its own change, built in this
 order and checked before the next; none is a pass over the app.
 
 Status: steps 1 to 3 are built, and the attachment strip (7a below), which
-came up while checking step 2. Step 4 is next.
+came up while checking step 2. Step 4 is deferred: it belongs with the whole
+UI fading in on load, so that sending from the dashboard can fade the rest of
+the UI out while the composer slides over, and is built with that.
 
 1. **Approvals as a composer takeover.** Built. Every approval, choice or
    typed request a harness makes is drawn as one question of one answer on the
@@ -409,7 +411,7 @@ came up while checking step 2. Step 4 is next.
    asked for. Steps arriving in an open trace fade in with a 4px rise and no
    height change. At the tail the tail spring keeps the reader there;
    otherwise nothing above them moves.
-4. **Dashboard to chat.** Sending from the dashboard composer cuts to the chat.
+4. **Dashboard to chat.** Deferred, see Status. Sending from the dashboard composer cuts to the chat.
    A View Transition gives the dashboard composer and the chat's composer one
    identity, so the browser moves one into the other; the first message rises
    into the list and the rest cross-fades. The send happens first and the

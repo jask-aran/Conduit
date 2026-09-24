@@ -23,20 +23,27 @@ function createReveal(open: () => boolean) {
         if (!isOpen) setMounted(false);
         return;
       }
+      // The row's gap above the body goes and comes with it, so nothing is
+      // left to snap when the body is taken away or first drawn. `node` has no
+      // padding of its own, so its height really reaches zero.
+      const parent = node.parentElement;
+      const gap = parent ? parseFloat(getComputedStyle(parent).rowGap) || 0 : 0;
+      const shut = -gap;
       const from = running ? node.getBoundingClientRect().height : isOpen ? 0 : node.getBoundingClientRect().height;
+      const fromMargin = running ? parseFloat(getComputedStyle(node).marginTop) || 0 : isOpen ? shut : 0;
       running?.cancel();
       node.style.overflow = "hidden";
       if (isOpen) {
         const to = node.getBoundingClientRect().height;
         const animation = node.animate([
-          { height: `${from}px`, opacity: from ? 1 : 0 },
+          { height: `${from}px`, marginTop: `${fromMargin}px`, opacity: from ? 1 : 0 },
           { opacity: 1, offset: 0.6 },
-          { height: `${to}px`, opacity: 1 },
+          { height: `${to}px`, marginTop: "0px", opacity: 1 },
         ], { duration: 200, easing: GENTLE });
         running = animation;
         animation.finished.then(() => settle(node), () => {});
       } else {
-        const animation = node.animate([{ height: `${from}px`, opacity: 1 }, { height: "0px", opacity: 0 }], { duration: 200, easing: QUICK, fill: "forwards" });
+        const animation = node.animate([{ height: `${from}px`, marginTop: `${fromMargin}px`, opacity: 1 }, { height: "0px", marginTop: `${shut}px`, opacity: 0 }], { duration: 200, easing: QUICK, fill: "forwards" });
         running = animation;
         animation.finished.then(() => { settle(node); if (!open()) setMounted(false); }, () => {});
       }
@@ -45,6 +52,9 @@ function createReveal(open: () => boolean) {
 
   return { mounted, ref: (node: HTMLElement) => { body = node; } };
 }
+
+/** Fired on a disclosure's root, bubbling, just before it opens or closes. */
+export const DISCLOSURE_TOGGLE_EVENT = "conduit:disclosure-toggle";
 
 /**
  * A row that opens to show what is under it: a turn's trace, a tool call, an
@@ -78,18 +88,22 @@ export function Disclosure(props: {
   const [local, root] = splitProps(props, ["class", "headerClass", "bodyClass", "header", "body", "initialOpen", "onOpenChange", "trigger", "triggerProps", "title", "label", "children"]);
   const [open, setOpen] = createSignal(Boolean(local.initialOpen));
   const reveal = createReveal(open);
+  let row!: HTMLDivElement;
   const toggle = () => {
     const next = !open();
+    // Said before the body moves, so a transcript following its tail lets go
+    // first: the row stays under the pointer and opens downward.
+    row.dispatchEvent(new CustomEvent(DISCLOSURE_TOGGLE_EVENT, { bubbles: true }));
     setOpen(next);
     local.onOpenChange?.(next);
   };
-  return <div class={local.class} data-open={open() ? "true" : "false"} {...root}>
+  return <div ref={row} class={local.class} data-open={open() ? "true" : "false"} {...root}>
     <Dynamic component={local.trigger ?? "button"} type="button" class={local.headerClass} aria-expanded={open()} aria-label={local.label} title={local.title} onClick={toggle} {...local.triggerProps}>
       {local.header}
       <ChevronDownIcon class="disclosure-chevron" data-open={open() ? "true" : "false"} />
     </Dynamic>
     <Show when={reveal.mounted()}>
-      <div ref={reveal.ref} class={local.bodyClass}>{untrack(local.body)}</div>
+      <div ref={reveal.ref} class="disclosure-body"><div class={local.bodyClass}>{untrack(local.body)}</div></div>
     </Show>
     {local.children}
   </div>;

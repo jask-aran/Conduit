@@ -5,7 +5,7 @@ import type { BooleanCapability, Message } from "../api/contracts";
 import { isChatContentActivity, type TranscriptSource } from "./transcript-source";
 import type { TurnArtifactSummary } from "../api/live-events";
 import { AttachmentCards } from "./attachments";
-import { Disclosure } from "./disclosure";
+import { Disclosure, DISCLOSURE_TOGGLE_EVENT } from "./disclosure";
 import { ReviewCommentCards } from "./review-comment-cards";
 import { parseReviewComments } from "./review-comments";
 import { TurnTrace } from "./turn-trace";
@@ -790,6 +790,16 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         viewport.style.overflowAnchor = previousOverflowAnchor;
       });
     };
+    // A disclosure opened at the tail would otherwise be chased: each frame of
+    // its unfold read as new content, the thread pushed up under the pointer.
+    // Let go of the tail instead, so it opens downward from where it was
+    // clicked, as if the reader had scrolled up to it already open.
+    const onDisclosureToggle = () => {
+      if (!following()) return;
+      if (rendererUsesInertialTailFollow()) { cancelTypewriterTailRejoin(); setTypewriterTailOwner("user", true); }
+      setFollowing(false);
+    };
+    thread.addEventListener(DISCLOSURE_TOGGLE_EVENT, onDisclosureToggle);
     window.addEventListener(CODE_BLOCK_TOGGLE_EVENT, onCodeBlockToggle);
     window.addEventListener(UI_PREFERENCE_CHANGE_EVENT, syncUiPreference);
     let latestButtonAnchorFrame: number | null = null;
@@ -1069,6 +1079,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     resizeObserver.observe(thread);
     onCleanup(() => {
       window.removeEventListener(CODE_BLOCK_TOGGLE_EVENT, onCodeBlockToggle);
+      thread.removeEventListener(DISCLOSURE_TOGGLE_EVENT, onDisclosureToggle);
       window.removeEventListener(UI_PREFERENCE_CHANGE_EVENT, syncUiPreference);
       layoutEpoch += 1;
       resizeObserver.disconnect();
