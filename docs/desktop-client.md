@@ -157,10 +157,18 @@ is a CI artifact from a tag; a local APK is for looking at, not for shipping.
 
 ### Desktop
 
-The updater fetches a manifest, verifies a **minisign signature** against the
-public key compiled into the build, installs silently and relaunches. Conduit
-reports its own download and install progress, so the update is one line in one
-window.
+The updater checks shortly after launch and then hourly. It downloads an
+available update while Conduit stays open and verifies its **minisign
+signature** against the public key compiled into the build. Check for updates
+can start the same download at any time. Once it is ready, the sidebar offers
+**Restart**; this is the only action that starts installation. The existing
+quiet NSIS mode closes Conduit, installs without an installer window, and
+relaunches it. The window returns to its previous size and screen position,
+and the client reopens its previous route.
+
+The verified package is held by the running client. If the app closes before
+Restart is pressed, the next launch checks and downloads again. A download
+failure leaves the current app running and does not offer Restart.
 
 Three things must agree or an update is invisible: the version compiled into
 the binary, the version in the manifest, and the release the artifacts sit in.

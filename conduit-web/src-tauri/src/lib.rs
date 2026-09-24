@@ -9,6 +9,7 @@ mod discovery;
 mod global_shortcuts;
 mod secrets;
 mod tray;
+mod update_window;
 mod window_chrome;
 
 use std::sync::Mutex;
@@ -44,6 +45,7 @@ pub fn run() {
             // is the only place a shortcut is decided.
             app.manage(global_shortcuts::Registered::default());
             tray::install(handle)?;
+            update_window::restore(handle);
             if let Some(window) = app.get_webview_window("main") {
                 window_chrome::paint_caption(&window);
             }
@@ -73,7 +75,8 @@ pub fn run() {
             desktop_settings::desktop_settings,
             desktop_settings::set_desktop_settings,
             global_shortcuts::set_global_shortcuts,
-            discovery::discover_servers
+            discovery::discover_servers,
+            update_window::remember_update_window
         ])
         .run(tauri::generate_context!())
         .expect("Conduit desktop failed to start");

@@ -144,11 +144,17 @@ export const androidShell = installedClientKind !== "android" ? null : {
 };
 
 export interface UpdateProgress {
-  phase: "downloading" | "installing";
   version: string;
   downloaded: number;
   total: number;
 }
+
+export type PreparedDesktopUpdate = { kind: "current" } | { kind: "ready"; version: string };
+
+// App remounts when an installed client changes servers. Keep the verified
+// download outside that tree, so switching servers does not discard it.
+let readyDesktopUpdate: import("@tauri-apps/plugin-updater").Update | null = null;
+let desktopUpdatePreparation: Promise<PreparedDesktopUpdate> | null = null;
 
 export interface GlobalShortcut {
   accelerator: string;
@@ -178,39 +184,45 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<DesktopShellSettings>("set_desktop_settings", { settings });
   },
-  /**
-   * The whole update, shell and client together: they are one artifact, so
-   * there is no version of Conduit where half of it has been replaced. Returns
-   * false when there was nothing to install; a true return is followed by a
-   * relaunch, so nothing after it runs.
-   *
-   * The progress it reports is Conduit's own -- the installer runs silently --
-   * so the whole update reads as one action in one window rather than a
-   * download followed by somebody else's dialog.
-   */
-  async update(onProgress?: (update: UpdateProgress) => void): Promise<boolean> {
-    const { check } = await import("@tauri-apps/plugin-updater");
-    const pending = await check();
-    if (!pending) return false;
-    let downloaded = 0;
-    let total = 0;
-    await pending.downloadAndInstall((event) => {
-      if (!onProgress) return;
-      if (event.event === "Started") {
-        total = event.data.contentLength || 0;
-        downloaded = 0;
-        onProgress({ phase: "downloading", version: pending.version, downloaded, total });
-        return;
+  /** Download and verify now; install only after the person takes the update. */
+  async prepareUpdate(onProgress?: (update: UpdateProgress) => void): Promise<PreparedDesktopUpdate> {
+    if (readyDesktopUpdate) return { kind: "ready", version: readyDesktopUpdate.version };
+    if (desktopUpdatePreparation) return desktopUpdatePreparation;
+    desktopUpdatePreparation = (async (): Promise<PreparedDesktopUpdate> => {
+      const { check } = await import("@tauri-apps/plugin-updater");
+      const pending = await check();
+      if (!pending) return { kind: "current" };
+      let downloaded = 0;
+      let total = 0;
+      try {
+        await pending.download((event) => {
+          if (event.event === "Started") {
+            total = event.data.contentLength || 0;
+            downloaded = 0;
+          } else if (event.event === "Progress") {
+            downloaded += event.data.chunkLength;
+          }
+          onProgress?.({ version: pending.version, downloaded, total });
+        });
+        readyDesktopUpdate = pending;
+        return { kind: "ready", version: pending.version };
+      } catch (error) {
+        await pending.close();
+        throw error;
       }
-      if (event.event === "Progress") {
-        downloaded += event.data.chunkLength;
-        onProgress({ phase: "downloading", version: pending.version, downloaded, total });
-        return;
-      }
-      onProgress({ phase: "installing", version: pending.version, downloaded: total, total });
-    });
-    const { relaunch } = await import("@tauri-apps/plugin-process");
-    await relaunch();
+    })();
+    try {
+      return await desktopUpdatePreparation;
+    } finally {
+      desktopUpdatePreparation = null;
+    }
+  },
+  /** The configured NSIS quiet mode installs and relaunches on Windows. */
+  async installPreparedUpdate(): Promise<boolean> {
+    if (!readyDesktopUpdate) return false;
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("remember_update_window");
+    await readyDesktopUpdate.install({ restartAfterInstall: true });
     return true;
   },
   async onNewChat(handler: () => void): Promise<() => void> {
