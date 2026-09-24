@@ -221,7 +221,7 @@ test("PTY manager only tolerates known missing-session tmux failures", async () 
   await fs.rm(root, { recursive: true, force: true });
 });
 
-test("PTY manager retains persisted rows and treats Conduit restart as a terminal-session boundary", async () => {
+test("PTY manager recovers recorded tmux sessions and removes untracked shells on restart", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-pty-load-"));
   const filePath = path.join(root, "remotes.json");
   await fs.writeFile(filePath, JSON.stringify({
@@ -235,16 +235,18 @@ test("PTY manager retains persisted rows and treats Conduit restart as a termina
   }));
   const pty = fakePty();
   const tmux = fakeTmux();
+  tmux.sessions.add("c_old");
+  tmux.sessions.add("c_other");
   tmux.sessions.add("stale-from-crashed-server");
   const manager = new PtyManager({ filePath, pty, run: tmux.run });
   await manager.load();
-  assert.equal(tmux.sessions.size, 0, "load should kill a stale dedicated Conduit tmux server");
+  assert.deepEqual([...tmux.sessions].sort(), ["c_old", "c_other"]);
   assert.deepEqual(manager.list().map((item) => item.id).sort(), ["exited", "new", "old", "other"]);
   assert.equal(manager.get("exited").exitCode, 7);
   assert.equal(manager.get("exited").signal, "tmux_session_ended");
   assert.equal(manager.get("exited").updatedAt, "2026-01-01T12:00:00.000Z");
-  assert.equal(manager.get("old").status, "exited");
-  assert.equal(manager.get("old").signal, "server_restart");
+  assert.equal(manager.get("old").status, "running");
+  assert.equal(manager.get("other").status, "running");
   assert.equal(manager.get("new").status, "exited");
   assert.equal(manager.get("new").signal, "server_restart");
   const persisted = JSON.parse(await fs.readFile(filePath, "utf8"));
@@ -259,5 +261,13 @@ test("PTY manager retains persisted rows and treats Conduit restart as a termina
     manager.list().filter((item) => item.projectId === "project-a").map((item) => item.id).sort(),
     ["exited", "new", "old", replacement.id].sort(),
   );
+  assert.equal(await manager.stopAll(), 3);
+  assert.equal(tmux.sessions.size, 3, "ordinary shutdown preserves recorded shells");
+
+  const teardown = new PtyManager({ filePath, pty, run: tmux.run, terminalTeardown: true });
+  await teardown.load();
+  assert.equal(tmux.sessions.size, 0, "explicit teardown removes the dedicated tmux server");
+  assert.equal(teardown.get("old").status, "exited");
+  assert.equal(teardown.get(replacement.id).status, "exited");
   await fs.rm(root, { recursive: true, force: true });
 });

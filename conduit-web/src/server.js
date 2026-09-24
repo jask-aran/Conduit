@@ -83,7 +83,7 @@ for (const project of await projects.list()) {
   const normalized = normalizeTemplateId(project.defaultTemplateId);
   if (normalized && normalized !== project.defaultTemplateId) await projects.update(project.id, { defaultTemplateId: normalized });
 }
-const terminals = new PtyManager({ filePath: config.remotesFile });
+const terminals = new PtyManager({ filePath: config.remotesFile, terminalTeardown: config.terminalTeardown });
 await terminals.load();
 const pinnedInstallation = config.installations.get("conduit-pinned");
 const registry = new ChatStore(config.sessionRegistryFile, {
@@ -944,7 +944,7 @@ async function shutdown(signal) {
   console.log(JSON.stringify({ type: "conduit.voice-archive-drain", ...archiveResult }));
   console.log(`Conduit stopped ${stoppedProcesses} Pi process${stoppedProcesses === 1 ? "" : "es"}`);
   console.log(`Conduit stopped ${stoppedCodexProcesses} Codex process${stoppedCodexProcesses === 1 ? "" : "es"}`);
-  console.log(`Conduit stopped ${stoppedTerminals} terminal session${stoppedTerminals === 1 ? "" : "s"}`);
+  console.log(`Conduit ${config.terminalTeardown ? "stopped" : "preserved"} ${stoppedTerminals} terminal session${stoppedTerminals === 1 ? "" : "s"}`);
 }
 
 for (const signal of ["SIGTERM", "SIGINT"]) {

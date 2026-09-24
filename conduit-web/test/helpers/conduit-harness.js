@@ -265,6 +265,7 @@ export async function startConduitHarness({ env = {} } = {}) {
       CONDUIT_PREFERENCES_FILE: path.join(root, "preferences.json"),
       CONDUIT_AUTH_FILE: path.join(root, "auth.json"),
       CONDUIT_REMOTES_FILE: path.join(root, "remotes.json"),
+      CONDUIT_TERMINAL_TEARDOWN: "1",
       CONDUIT_VOICE_CONFIG_FILE: path.join(root, "voice.json"),
       CONDUIT_VOICE_MODEL_ROOT: path.join(root, "voice-models"),
       CONDUIT_VOICE_RECORDINGS_ROOT: path.join(root, "voice-recordings"),
