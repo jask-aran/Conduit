@@ -51,14 +51,39 @@ available, not only the local development restart.
 4. Separate server compatibility from app installation. Desktop and Android
    can report their kind and build so the server can diagnose or reject an
    incompatible protocol. Their package downloads and installs must not hold
-   a server restart. Decide separately whether either installed client should
-   ever prefetch an update; Windows can use its signed updater, while Android
-   still needs user confirmation.
+   a server restart. Both installed clients should be able to obtain updates
+   from a Conduit server, subject to their platform install rules.
 5. Apply the chosen handoff to each supported deployment path. Check whether
    the local script and container replacement can expose the new browser
    assets while the old server still serves connections. If a path cannot,
    define its own safe fallback instead of treating readiness replies as proof
    that clients downloaded assets they could not reach.
+
+## Installed-client update source
+
+Today the released Windows app fetches its updater manifest from GitHub
+Releases. Android looks up the latest GitHub Release and opens its APK URL.
+The server already has a development-only `/desktop-updates` route for local
+Windows builds. The future path should let a Conduit server publish an update
+manifest and serve the matching Windows and Android artifacts itself. A
+deployment may optionally redirect to another artifact host. GitHub Releases
+could remain a publishing input, but a client must be able to complete an
+update through its configured Conduit server without contacting GitHub.
+
+The manifest needs a channel, version, platform, artifact URL, and enough
+identity to avoid mixing a development build with a release build. The Windows
+client must still verify the package signature with its built-in key. Android
+must still use an APK signed with the expected key and obtain system installer
+confirmation. A server-provided URL or version is an offer, not authority to
+run unverified code.
+
+An installed app can connect to several servers, which may run different
+releases or be controlled by different operators. Choose an explicit update
+source and trust rule: a configured home server, a fixed Conduit update server,
+or an opt-in update source on each server. Do not silently accept an app update
+from whichever server happens to be selected. Keep package update state
+(available, downloading, ready, installing) separate from the short-lived
+connection state used to decide when a server may restart.
 
 ## Decisions to make before implementation
 
@@ -72,8 +97,11 @@ available, not only the local development restart.
   per deployment? The server must still restart at the cap.
 - What is the compatibility contract between an installed client build and a
   server release, especially when one installed client visits several servers?
-- Should this work cover only browser restart readiness first, with installed
-  client compatibility as a separate implementation slice?
+- Which Conduit server may offer installed-client updates, and does it host
+  artifacts itself or redirect to a release host? How are channel and signing
+  identity selected?
+- Should browser restart readiness and installed-client update delivery be
+  separate implementation slices under one connection/update design?
 
 The first useful outcome is a bounded browser handoff: a changed worker is
 ready before the old server stops; the server stops as soon as all eligible
