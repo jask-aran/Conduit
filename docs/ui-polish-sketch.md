@@ -641,7 +641,10 @@ out.
 3. **The whole-UI fade and context switching** (with section 7's
    dashboard-to-chat transition), built on the regions: what fades is every
    region but the composer, and a route change puts focus in the region it
-   should.
+   should. The first open is built: only the frame until the page is laid
+   out -- the workspace panel and route dashboards are fetched beside the
+   route's data so they are in place -- then the composer is there and the
+   rest fades in once. Next, the reverse on a dashboard send.
 4. **The layered leader.**
 5. **Cursor navigation per surface:** sidebar, then dashboard lists, then
    transcript turns.
