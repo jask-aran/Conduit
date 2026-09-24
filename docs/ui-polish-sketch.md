@@ -417,7 +417,8 @@ order and checked before the next; none is a pass over the app.
 Status: steps 1 to 3 are built, and the attachment strip (7a below), which
 came up while checking step 2. Step 4 is deferred: it belongs with the whole
 UI fading in on load, so that sending from the dashboard can fade the rest of
-the UI out while the composer slides over, and is built with that.
+the UI out while the composer slides over, and is built with that. That is now step 3
+of section 8, built on its regions.
 
 1. **Approvals as a composer takeover.** Built. Every approval, choice or
    typed request a harness makes is drawn as one question of one answer on the
@@ -523,18 +524,22 @@ composer** -- the queued pill's width and material, about twice its height
 
 ## 8. Keyboard: contexts, the leader, and navigation
 
-Status: proposal, not started. Keyboard navigation of the sidebar was the
-natural next step after its cursor (section 6), but moving a cursor is the
-last part of this, not the first: the leader and the way shortcuts are
-scoped need their own pass alongside, or every surface grows its own keys.
+Status: proposal. Step 1, regions and the context tree, is next; the first
+jumps are decided once the regions exist. Keyboard navigation of the sidebar
+was the natural next step after its cursor (section 6), but moving a cursor
+is the last part of this, not the first: how shortcuts are scoped, and how
+one moves between surfaces, come first, or every surface grows its own keys.
+Default key choices are tuned later; this settles the model.
 
 What exists. Shortcuts resolve through a flat priority list of contexts
 (`SHORTCUT_CONTEXT_PRIORITY`: palettes, settings, workspace panel, composer,
 chat, application, ...), each switched on and off by the surface that owns
 it rather than following focus. The leader, Ctrl+X, shows the second keys
-for one context at a time, and only knows Global, Chat, Composer and
-Workspace. There is no way to move focus into the sidebar, nor any sign of
-which surface has it.
+for one context at a time and only knows Global, Chat, Composer and
+Workspace. It already carries a few moves -- C focuses the composer, W the
+workspace panel, Tab switches chat and workspace, and inside the workspace
+panel 1-4 open its tabs. There is no way to move focus into the sidebar,
+nor any sign of which surface has it.
 
 ### A tree of contexts that follows focus
 
@@ -547,17 +552,22 @@ hand. A shortcut belongs to one node. The innermost binding wins, and keys
 only conflict between a node and its ancestors, so siblings can reuse them:
 R can rename on a sidebar row and regenerate on a transcript turn.
 
-### Moving between regions
+### Two kinds of move
 
-- **F6 / Shift+F6** cycles the major regions -- sidebar, chat, workspace
-  panel -- the browser and OS convention VS Code also follows. In a browser
-  tab F6 may belong to the browser; the desktop client and the installed
-  app can take it, and the leader always works.
-- **The leader, then a letter**, jumps straight to one: sidebar, composer,
-  transcript, workspace. The letters are chosen against today's leader
-  bindings when this is built.
-- Each region keeps its own cursor. The sidebar is entered at the current
-  row the first time and at the last row left after that.
+- **Go to a surface.** Global shortcuts that take you to a top-level surface
+  in whatever state it is in, and leave you there: sidebar, chat, workspace
+  panel, dashboard, and so on. They come in two forms over the same list: a
+  **number** for each surface, in a fixed order that follows the screen, and
+  a **letter** for each, for memory. They are direct shortcuts, not leader
+  sequences -- a modifier chord such as Ctrl+Shift+number is the likely
+  shape -- because moving between surfaces should be one gesture. F6 is not
+  relied on: laptops send media keys from the F-row, and browsers use F6
+  for the address bar.
+- **Act within a context.** The leader is for what can be done where you
+  are. It crosses between contexts only for specific, curated flows -- from
+  the chat to the file it is discussing in the workspace panel, and back --
+  rather than as the general way around. Inside a context, numbers mean
+  positions (the workspace panel's tabs today), never other surfaces.
 
 ### Knowing it happened
 
@@ -580,38 +590,44 @@ R can rename on a sidebar row and regenerate on a transcript turn.
 - **Esc steps outward** a level at a time, and from the top of any region
   goes home to the open chat's composer: pressing Esc enough always gets
   back to typing.
-- New chat and the like are leader commands at the root, reachable from
-  anywhere, landing in the new chat's composer.
 
 ### The leader as the map
 
 Opened from anywhere, the leader lists what applies at each level of the
 path, innermost first -- "Sidebar row": rename, move, pin, delete; then
-"Sidebar"; then "App" -- with the region jumps always present. It becomes
-both where you learn the shortcuts of the place you are in and how you move
-to another place. Every scoped shortcut appears under its own context, so
-nothing is only discoverable from settings.
+"Sidebar"; then "App" -- with its curated cross-context flows marked as
+such. It is where you learn the shortcuts of the place you are in. Every
+scoped shortcut appears under its own context, so nothing is only
+discoverable from settings; the go-to shortcuts are listed too, as the way
+out.
 
 ### Order
 
-1. The context tree, focus regions, F6 and leader jumps, and the cues --
-   no per-surface navigation yet.
-2. The layered leader.
-3. Cursor navigation per surface: sidebar, then dashboard lists, then
+1. **Regions and the context tree.** Surfaces declare regions, the active
+   context is derived from focus, today's contexts map onto the tree, and
+   saved shortcut preferences keep working. Little to see; the region cue
+   comes with it.
+2. **The first jumps.** Decide the go-to list, its numbers and letters and
+   their chord, once the regions exist, and which leader flows cross
+   contexts.
+3. **The whole-UI fade and context switching** (with section 7's
+   dashboard-to-chat transition), built on the regions: what fades is every
+   region but the composer, and a route change puts focus in the region it
+   should.
+4. **The layered leader.**
+5. **Cursor navigation per surface:** sidebar, then dashboard lists, then
    transcript turns.
 
-Each step is its own change, checked before the next. Open before step 1:
-how today's contexts map onto the tree without breaking saved shortcut
-preferences, and whether the region cue is the same on every surface.
+Each step is its own change, checked before the next.
 
 ## Suggested order
 
 Interrupted turns, composer hierarchy, empty states and motion are done; the
-composer and the sidebar were the first interaction-feedback passes. Left:
-mobile file browsing (4), the autosave pilot (3), and keyboard contexts and
-navigation (8), in its own three steps.
-The dashboard-to-chat transition waits for a whole-UI fade on load, and is
-built with it.
+composer and the sidebar were the first interaction-feedback passes. Next is
+section 8, whose regions also carry the whole-UI fade and the
+dashboard-to-chat transition deferred from section 7: regions first, then
+the first jumps, then the fade, then the leader and cursor navigation. Mobile
+file browsing (4) and the autosave pilot (3) remain, independent of it.
 
 Each implementation should identify its affected surface, use the smallest
 relevant check from `testing.md`, and leave a concrete result for user review.
