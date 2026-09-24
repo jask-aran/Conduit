@@ -2499,3 +2499,9 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .settings-save-status button { border: 0; border-radius: 6px; background: var(--accent); padding: 2px 8px; color: var(--foreground); font: inherit; cursor: pointer; }
 .settings-save-status button:hover, .settings-save-status button:focus-visible { outline: none; background: color-mix(in oklch, var(--accent), var(--foreground) 10%); }
 .settings-dialog .settings-content [data-slot="field"] > small.settings-inline-error { color: var(--destructive); }
+@media (max-width: 760px) {
+  /* The phone header centres its title between back and close; the status
+     sits beside close without taking a place in that row. */
+  .settings-dialog .settings-content > header { position: sticky; }
+  .settings-dialog .settings-save-status { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: 48px; min-width: 0; height: 32px; margin: 0; }
+}

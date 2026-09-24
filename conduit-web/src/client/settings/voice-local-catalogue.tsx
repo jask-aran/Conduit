@@ -1,5 +1,6 @@
 import { For, Show } from "solid-js";
-import { Button, Field, FieldGroup, FieldLabel } from "@/components/primitives";
+import { Button } from "@/components/primitives";
+import { Switch } from "./settings-controls";
 import type { VoiceBackendPathStatus, VoiceExecutionProfile, VoiceExecutionCatalogueView, VoiceLocalModel, VoiceLocalSelection } from "../api/contracts";
 
 type CatalogueModel = VoiceExecutionCatalogueView["models"][number];
@@ -101,65 +102,50 @@ export default function VoiceLocalCatalogue(props: VoiceLocalCatalogueProps) {
     return `${precisionLabel(artifact.precision)} · ${formatLabel(artifact.format)} · ${Math.ceil(artifact.approximateBytes / 1024 / 1024)} MiB · ${artifactStateLabel(statusForPath(path)?.artifactState)}`;
   };
   const selectedProfile = () => props.profiles.find((profile) => profile.execution === props.selection?.execution && profile.segmentation === props.selection?.segmentation) || null;
-  return <div class="voice-card voice-local-catalogue" aria-label="Local transcription selection">
-    <div class="voice-selection-heading">
-      <div>
-        <span class="voice-model-kicker">This machine</span>
-        <strong>{props.selectedModel?.label || "Choose a model family"}</strong>
-        <small>{props.selectedArtifact?.precision?.toUpperCase() || ""} · {props.selectedArtifact?.format || "Select a variant"} · {runtimeLabel(props.selection?.runtimeId || "")}</small>
-      </div>
-    </div>
-    <p>{props.selectedModel?.description || "Choose a model family, runtime, variant, and batching mode."}</p>
-    <small class="voice-selection-guide">Choose the model family first. Runtime, variant, and batching choices are limited to the catalogue path that can run it.</small>
-    <FieldGroup>
-      <Field>
-        <FieldLabel for="voice-local-family">Model family</FieldLabel>
-        <select id="voice-local-family" disabled={disabled()} value={props.selection?.modelId || ""} onChange={(event) => props.onFamilyChange(event.currentTarget.value)}>
-          <For each={props.catalogue.models}>{(model) => <option value={model.id}>{model.label}</option>}</For>
+  // Rows in the Transcription tile, like the cloud ones: the choices, then
+  // the model files with the one action they need. The long runtime and
+  // variant facts are each option's title, not its label.
+  const runtimeShortLabel = (runtimeId: string) => runtimeLabel(runtimeId).replace(/ ONNX worker$/, "");
+  const variantShortLabel = (artifact: CatalogueArtifact) => `${precisionLabel(artifact.precision)} · ${Math.ceil(artifact.approximateBytes / 1024 / 1024)} MiB`;
+  const filesState = () => props.installingModelId
+    ? props.installProgress ? `${props.installProgress.phase} · ${Math.round(100 * props.installProgress.completedBytes / Math.max(1, props.installProgress.totalBytes))}%` : "Installing…"
+    : artifactStateLabel(props.backendStatus?.artifactState).replace(/^./, (first) => first.toUpperCase());
+  return <>
+    <label class="settings-row" for="voice-local-family"><span>Model<small>{props.selectedModel?.languages || props.selectedModel?.description || ""}</small></span>
+      <select id="voice-local-family" disabled={disabled()} value={props.selection?.modelId || ""} onChange={(event) => props.onFamilyChange(event.currentTarget.value)}>
+        <For each={props.catalogue.models}>{(model) => <option value={model.id}>{model.label}</option>}</For>
+      </select>
+    </label>
+    <Show when={props.selection}>{(selection) => <>
+      <label class="settings-row" for="voice-local-runtime"><span>Runtime</span>
+        <select id="voice-local-runtime" disabled={disabled()} value={selection().runtimeId} onChange={(event) => props.onRuntimeChange(event.currentTarget.value)}>
+          <For each={runtimeChoices()}>{(backendPath) => <option value={backendPath.runtimeId} title={runtimeOptionLabel(backendPath.runtimeId)}>{runtimeShortLabel(backendPath.runtimeId)}</option>}</For>
         </select>
-      </Field>
-      <Show when={props.selection}>{(selection) => <>
-        <Field>
-          <FieldLabel for="voice-local-runtime">Runtime</FieldLabel>
-          <select id="voice-local-runtime" disabled={disabled()} value={selection().runtimeId} onChange={(event) => props.onRuntimeChange(event.currentTarget.value)}>
-            <For each={runtimeChoices()}>{(backendPath) => <option value={backendPath.runtimeId}>{runtimeOptionLabel(backendPath.runtimeId)}</option>}</For>
-          </select>
-          <small>The runtime chooses the execution implementation. Compatible model format and valid ports are shown here.</small>
-        </Field>
-        <Field>
-          <FieldLabel for="voice-local-variant">Precision or variant</FieldLabel>
-          <select id="voice-local-variant" disabled={disabled()} value={selection().artifactId} onChange={(event) => props.onVariantChange(event.currentTarget.value)}>
-            <For each={variantChoices()}>{(artifact) => <option value={artifact.id}>{variantOptionLabel(artifact)}</option>}</For>
-          </select>
-          <small>{props.selectedModel?.languages || ""} · {props.selectedArtifact?.license.id || ""} · {props.selectedArtifact?.license.attribution || ""}. Install state controls whether this variant's files are available.</small>
-        </Field>
-        <span class="voice-selection-status" data-state={props.backendStatus?.runtimeState || "cold"}>{statusFacts()}</span>
-        <Field>
-          <FieldLabel for="voice-local-batching">Batching</FieldLabel>
-          <select id="voice-local-batching" disabled={disabled() || !props.profiles.length} value={selectedProfile()?.id || ""} onChange={(event) => props.onTimingChange(event.currentTarget.value)}>
-            <For each={props.profiles}>{(profile) => <option value={profile.id}>{profileLabel(profile)}</option>}</For>
-          </select>
-          <small>{selectedProfile() ? profileDescription(selectedProfile()!) : "This runtime and variant have no available batching profile."}</small>
-        </Field>
-        <div class="voice-install-panel">
-          <div class="voice-install-heading">
-            <h3>Managed local models</h3>
-            <span class="voice-model-status"><span>{artifactStateLabel(props.backendStatus?.artifactState)}</span></span>
-          </div>
-          <p>Install the selected variant to enable this path. Compatible runtimes use the same managed model files where the catalogue declares them.</p>
-          <Show when={props.installProgress}>{(progress) => <div class="voice-progress"><progress max={Math.max(1, progress().totalBytes)} value={progress().completedBytes} /><small>{progress().phase} · {progress().current || "preparing package"}</small></div>}</Show>
-          <Show when={props.selectedLocalModel?.error}><p role="alert" class="settings-inline-error">{props.selectedLocalModel!.error}</p></Show>
-          <Show when={props.selectedLocalModel && !props.selectedLocalModel!.installed && !props.installingModelId}>
-            <label class="dictation-auto-send"><input type="checkbox" checked={props.licenseAccepted} onChange={(event) => props.onLicenseChange(event.currentTarget.checked)} /><span><strong>Accept {props.selectedLocalModel!.license.id}</strong><small>{props.selectedLocalModel!.license.attribution}.</small></span></label>
-          </Show>
-          <div class="voice-actions">
-            <Show when={props.installingModelId} fallback={<Show when={props.selectedLocalModel?.installed} fallback={<Button disabled={disabled() || !props.licenseAccepted || !props.selectedLocalModel} onClick={props.onInstall}>Install selected variant</Button>}><Button variant="outline" disabled={disabled() || !props.selectedLocalModel} onClick={props.onUninstall}>Uninstall model files</Button></Show>}>
-              <Button variant="outline" disabled={props.busy} onClick={props.onCancelInstall}>Cancel installation</Button>
-            </Show>
-          </div>
+      </label>
+      <label class="settings-row" for="voice-local-variant"><span>Variant<small>{props.selectedArtifact?.license.id || ""}</small></span>
+        <select id="voice-local-variant" disabled={disabled()} value={selection().artifactId} onChange={(event) => props.onVariantChange(event.currentTarget.value)}>
+          <For each={variantChoices()}>{(artifact) => <option value={artifact.id} title={variantOptionLabel(artifact)}>{variantShortLabel(artifact)}</option>}</For>
+        </select>
+      </label>
+      <label class="settings-row" for="voice-local-batching"><span>Timing<small>{selectedProfile() ? profileDescription(selectedProfile()!) : "No timing for this runtime and variant"}</small></span>
+        <select id="voice-local-batching" disabled={disabled() || !props.profiles.length} value={selectedProfile()?.id || ""} onChange={(event) => props.onTimingChange(event.currentTarget.value)}>
+          <For each={props.profiles}>{(profile) => <option value={profile.id}>{profileLabel(profile)}</option>}</For>
+        </select>
+      </label>
+      <Show when={props.selectedLocalModel && !props.selectedLocalModel!.installed && !props.installingModelId}>
+        <div class="settings-row"><span>Accept {props.selectedLocalModel!.license.id}<small>{props.selectedLocalModel!.license.attribution}</small></span>
+          <Switch label={`Accept ${props.selectedLocalModel!.license.id}`} checked={props.licenseAccepted} onChange={props.onLicenseChange} />
         </div>
-      </>}
       </Show>
-    </FieldGroup>
-  </div>;
+      <div class="settings-row" title={statusFacts()}><span>Model files<small data-state={props.backendStatus?.runtimeState || "cold"}>{filesState()}</small></span>
+        <div class="settings-row-control">
+          <Show when={props.installingModelId} fallback={<Show when={props.selectedLocalModel?.installed} fallback={<Button size="sm" disabled={disabled() || !props.licenseAccepted || !props.selectedLocalModel} onClick={props.onInstall}>Install</Button>}><Button variant="outline" size="sm" disabled={disabled() || !props.selectedLocalModel} onClick={props.onUninstall}>Uninstall</Button></Show>}>
+            <Button variant="outline" size="sm" disabled={props.busy} onClick={props.onCancelInstall}>Cancel</Button>
+          </Show>
+        </div>
+      </div>
+      <Show when={props.installProgress}>{(progress) => <div class="settings-row-wide"><progress class="settings-progress" max={Math.max(1, progress().totalBytes)} value={progress().completedBytes} /></div>}</Show>
+      <Show when={props.selectedLocalModel?.error}><p role="alert" class="settings-row-note settings-inline-error">{props.selectedLocalModel!.error}</p></Show>
+    </>}</Show>
+  </>;
 }

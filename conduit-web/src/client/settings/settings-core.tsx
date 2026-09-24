@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
 import * as KDialog from "@kobalte/core/dialog";
 import { ActivityIcon, BotIcon, ChevronLeftIcon, ChevronRightIcon, FileTextIcon, XIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon, SlidersHorizontalIcon } from "lucide-solid";
-import { CableIcon } from "lucide-solid";
+import { AudioLinesIcon, CableIcon, CloudIcon, CpuIcon, HandIcon, MicIcon, MicOffIcon, PlayIcon, RefreshCwIcon, RepeatIcon, SquareIcon } from "lucide-solid";
 import { AboutSettingsTile } from "./about-settings";
 import { ServersSettingsTile } from "./servers-settings";
 import { DesktopSettingsTile } from "./desktop-settings";
@@ -38,6 +38,7 @@ import {
 } from "../chat/transcript-appearance";
 import type { CodeBlockCollapseMode } from "../chat/code-block";
 import { ShortcutsSettings } from "./shortcuts-settings";
+import { Segmented, Switch } from "./settings-controls";
 import { combineSaveStates, createAutosave, type SaveState } from "./autosave";
 import { SaveStatus } from "./save-status";
 
@@ -801,6 +802,14 @@ export function Settings(props: {
   const cloudTiming = createMemo(() => selectedVoiceAdapter()?.transport === "ws"
     ? { label: "Live", description: "Text appears while you speak and may revise." }
     : { label: "After Stop", description: "Nothing appears until you stop." });
+  // The tiles' one-line summaries, as the Appearance tiles have.
+  const transcriptionSummary = () => {
+    const settings = voiceServerSettings();
+    if (!settings || settings.mode === "off") return "Off";
+    if (settings.mode === "local") return [selectedVoiceCatalogueModel()?.label || "Choose a model", selectedLocalVoiceModel()?.installed ? "installed" : "not installed"].join(" · ");
+    return [selectedVoiceProvider()?.label, selectedVoiceProvider()?.models.find((model) => model.id === settings.model)?.label || settings.model].filter(Boolean).join(" · ");
+  };
+  const microphoneSummary = () => (voiceDraft().inputDeviceId && audioInputDevices().find((device) => device.deviceId === voiceDraft().inputDeviceId)?.label) || "System default microphone";
   const selectLocalProfile = (profile: VoiceExecutionProfile) => {
     const catalogue = voiceCatalogue();
     const artifact = catalogue?.artifacts.find((candidate) => candidate.id === profile.artifactId);
@@ -1273,120 +1282,139 @@ export function Settings(props: {
           </Show>
           <Show when={section() === "voice"}>
             <Show when={voiceStatus() === "ready" && voiceServerSettings()} fallback={<Show when={voiceStatus() === "error"} fallback={<div class="settings-loading"><Spinner /><span>Loading voice settings…</span></div>}><div role="alert" class="settings-error"><span>{voiceError() || "Voice settings could not be loaded."}</span><Button variant="outline" size="sm" onClick={() => void loadVoiceSettings()}>Retry</Button></div></Show>}>
-              <div class="voice-settings">
-                <FieldGroup>
-                  <Field><FieldLabel for="voice-mode">Transcription source</FieldLabel><select id="voice-mode" disabled={voiceBusy()} value={voiceServerSettings()!.mode} onChange={(event) => {
-                    const mode = event.currentTarget.value as VoiceServerSettings["mode"];
-                    updateVoiceServer({ mode });
-                  }}><option value="off">Off</option><option value="local">This machine</option><option value="remote">Cloud</option></select></Field>
-                </FieldGroup>
-                <Show when={voiceServerSettings()!.mode === "local" && voiceCatalogue()}>{(catalogue) => <VoiceLocalCatalogue
-                  catalogue={catalogue()}
-                  selection={selectedVoiceSelection()}
-                  selectedModel={selectedVoiceCatalogueModel()}
-                  selectedArtifact={selectedVoiceArtifact()}
-                  selectedBackendPath={selectedVoiceBackendPath()}
-                  backendStatus={selectedVoiceBackendStatus()}
-                  backendStatuses={voiceServerSettings()!.local?.backendPaths || []}
-                  selectedLocalModel={selectedLocalVoiceModel() || null}
-                  profiles={selectedVoiceProfiles()}
-                  busy={voiceBusy()}
-                  installingModelId={voiceServerSettings()!.local?.installingModelId || null}
-                  installProgress={voiceServerSettings()!.local?.progress || null}
-                  licenseAccepted={voiceLicenseAccepted()}
-                  onFamilyChange={selectLocalFamily}
-                  onRuntimeChange={selectLocalRuntime}
-                  onVariantChange={selectLocalVariant}
-                  onTimingChange={selectLocalTiming}
-                  onLicenseChange={setVoiceLicenseAccepted}
-                  onInstall={() => void installVoiceModel(selectedVoiceInstallModelId())}
-                  onCancelInstall={() => void cancelVoiceInstall()}
-                  onUninstall={() => void uninstallVoiceModel(selectedVoiceInstallModelId())}
-                />}</Show>
-                <Show when={voiceServerSettings()!.mode === "remote"}>
-                  <details class="settings-disclosure voice-backend-disclosure">
-                    <summary><span><Mic2Icon /><strong>Cloud transcription</strong><small>{selectedVoiceProvider()?.label} · {selectedVoiceProvider()?.models.find((model) => model.id === voiceServerSettings()!.model)?.label || voiceServerSettings()!.model}</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
-                    <div class="voice-card">
-                    <FieldGroup>
-                      <Field><FieldLabel for="voice-provider">Provider</FieldLabel><select id="voice-provider" disabled={voiceBusy()} value={voiceServerSettings()!.provider} onChange={(event) => {
+              <div class="settings-stack voice-settings">
+                <details class="settings-tile" open>
+                  <summary><span><AudioLinesIcon /><strong>Transcription</strong><small>{transcriptionSummary()}</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
+                  <div class="settings-rows" data-single>
+                    <div class="settings-row" data-stack><span>Source</span>
+                      <Segmented label="Transcription source" value={voiceServerSettings()!.mode} disabled={voiceBusy()} onChange={(mode) => updateVoiceServer({ mode })} options={[
+                        { value: "off", label: "Off", icon: <MicOffIcon /> },
+                        { value: "local", label: "This machine", icon: <CpuIcon /> },
+                        { value: "remote", label: "Cloud", icon: <CloudIcon /> },
+                      ]} />
+                    </div>
+                    <Show when={voiceServerSettings()!.mode === "off"}>
+                      <p class="settings-row-note">Dictation is off. Choose where speech is transcribed to use the microphone button.</p>
+                    </Show>
+                    <Show when={voiceServerSettings()!.mode === "local" && voiceCatalogue()}>{(catalogue) => <VoiceLocalCatalogue
+                      catalogue={catalogue()}
+                      selection={selectedVoiceSelection()}
+                      selectedModel={selectedVoiceCatalogueModel()}
+                      selectedArtifact={selectedVoiceArtifact()}
+                      selectedBackendPath={selectedVoiceBackendPath()}
+                      backendStatus={selectedVoiceBackendStatus()}
+                      backendStatuses={voiceServerSettings()!.local?.backendPaths || []}
+                      selectedLocalModel={selectedLocalVoiceModel() || null}
+                      profiles={selectedVoiceProfiles()}
+                      busy={voiceBusy()}
+                      installingModelId={voiceServerSettings()!.local?.installingModelId || null}
+                      installProgress={voiceServerSettings()!.local?.progress || null}
+                      licenseAccepted={voiceLicenseAccepted()}
+                      onFamilyChange={selectLocalFamily}
+                      onRuntimeChange={selectLocalRuntime}
+                      onVariantChange={selectLocalVariant}
+                      onTimingChange={selectLocalTiming}
+                      onLicenseChange={setVoiceLicenseAccepted}
+                      onInstall={() => void installVoiceModel(selectedVoiceInstallModelId())}
+                      onCancelInstall={() => void cancelVoiceInstall()}
+                      onUninstall={() => void uninstallVoiceModel(selectedVoiceInstallModelId())}
+                    />}</Show>
+                    <Show when={voiceServerSettings()!.mode === "remote"}>
+                      <label class="settings-row" for="voice-provider"><span>Provider</span><select id="voice-provider" disabled={voiceBusy()} value={voiceServerSettings()!.provider} onChange={(event) => {
                         const provider = voiceServerSettings()!.providers.find((candidate) => candidate.id === event.currentTarget.value)!;
                         setVoiceSecret("");
                         editVoiceServer((current) => ({ ...current, provider: provider.id, adapter: provider.adapter, endpoint: provider.endpoint, model: provider.models[0]?.id || "", auth: { ...current.auth, type: provider.id === "custom" ? current.auth.type : "bearer", configured: Boolean(provider.configured), source: provider.configured ? "stored" : null, removable: Boolean(provider.configured) } }));
-                      }}><For each={voiceServerSettings()!.providers}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></select></Field>
-                      <Show when={selectedVoiceProvider()?.models.length}><Field><FieldLabel for="voice-cloud-model">Model</FieldLabel><select id="voice-cloud-model" disabled={voiceBusy()} value={voiceServerSettings()!.model} onChange={(event) => {
-                        const model = selectedVoiceProvider()!.models.find((candidate) => candidate.id === event.currentTarget.value);
-                        updateVoiceServer({ model: event.currentTarget.value, ...(model?.adapter ? { adapter: model.adapter } : {}) });
-                      }}><For each={selectedVoiceProvider()!.models}>{(model) => <option value={model.id}>{model.label}</option>}</For></select><small>{selectedVoiceProvider()!.models.find((model) => model.id === voiceServerSettings()!.model)?.description}</small></Field></Show>
-                      <Show when={voiceServerSettings()!.provider === "custom"}>
-                        <Field><FieldLabel for="voice-adapter">Protocol adapter</FieldLabel><select id="voice-adapter" disabled={voiceBusy()} value={voiceServerSettings()!.adapter} onChange={(event) => updateVoiceServer({ adapter: event.currentTarget.value })}><For each={voiceServerSettings()!.adapters}>{(adapter) => <option value={adapter.id}>{adapter.label}</option>}</For></select><small>{voiceServerSettings()!.adapters.find((adapter) => adapter.id === voiceServerSettings()!.adapter)?.description}</small></Field>
-                        <Field><FieldLabel for="voice-endpoint">Endpoint URL</FieldLabel><Input id="voice-endpoint" type="url" disabled={voiceBusy()} value={voiceServerSettings()!.endpoint} placeholder="https://speech.example.com/v1/audio/transcriptions" onInput={(event) => updateVoiceServer({ endpoint: event.currentTarget.value }, "pause")} /><Show when={voiceEndpointError(voiceServerSettings()!)} fallback={<small>Custom endpoints must resolve publicly and use HTTPS.</small>}>{(message) => <small class="settings-inline-error">{message()}</small>}</Show></Field>
-                        <Field><FieldLabel for="voice-custom-model">Model parameter</FieldLabel><Input id="voice-custom-model" value={voiceServerSettings()!.model} placeholder="Optional model ID" onInput={(event) => updateVoiceServer({ model: event.currentTarget.value }, "pause")} /></Field>
-                      <Field><FieldLabel for="voice-auth-type">Authentication</FieldLabel><select id="voice-auth-type" disabled={voiceBusy()} value={voiceServerSettings()!.auth.type} onChange={(event) => editVoiceServer((current) => ({ ...current, auth: { ...current.auth, type: event.currentTarget.value as VoiceServerSettings["auth"]["type"] } }))}><option value="none">None</option><option value="bearer">Bearer token</option><option value="header">API-key header</option></select></Field>
-                      <Show when={voiceServerSettings()!.auth.type === "header"}><Field><FieldLabel for="voice-auth-header">Header name</FieldLabel><Input id="voice-auth-header" disabled={voiceBusy()} value={voiceServerSettings()!.auth.headerName} onInput={(event) => editVoiceServer((current) => ({ ...current, auth: { ...current.auth, headerName: event.currentTarget.value } }), "pause")} /></Field></Show>
+                      }}><For each={voiceServerSettings()!.providers}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></select></label>
+                      <Show when={selectedVoiceProvider()?.models.length}>
+                        <label class="settings-row" for="voice-cloud-model"><span>Model<small>{selectedVoiceProvider()!.models.find((model) => model.id === voiceServerSettings()!.model)?.description}</small></span><select id="voice-cloud-model" disabled={voiceBusy()} value={voiceServerSettings()!.model} onChange={(event) => {
+                          const model = selectedVoiceProvider()!.models.find((candidate) => candidate.id === event.currentTarget.value);
+                          updateVoiceServer({ model: event.currentTarget.value, ...(model?.adapter ? { adapter: model.adapter } : {}) });
+                        }}><For each={selectedVoiceProvider()!.models}>{(model) => <option value={model.id}>{model.label}</option>}</For></select></label>
                       </Show>
-                      <Show when={voiceServerSettings()!.provider !== "custom" || voiceServerSettings()!.auth.type !== "none"}><Field><FieldLabel for="voice-secret">{selectedVoiceProvider()?.authLabel || "Credential"}</FieldLabel><Input id="voice-secret" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore disabled={voiceBusy()} value={voiceSecret()} onInput={(event) => setVoiceSecret(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveVoiceSecret(); }} placeholder={voiceServerSettings()!.auth.configured ? "Saved · enter a new key to replace" : "Enter API key"} /><Show when={voiceSecret().trim()}><Button variant="outline" size="sm" disabled={voiceBusy()} onClick={() => void saveVoiceSecret()}>Save key</Button></Show><small>{voiceServerSettings()!.auth.configured ? "Stored on this server" : "Not configured"}</small></Field></Show>
-                    </FieldGroup>
-                    <div class="voice-backend-facts" aria-label="Cloud backend and timing">
-                      <div><span>Backend</span><strong>{selectedVoiceAdapter()?.label || "Not selected"}</strong><small>{selectedVoiceAdapter()?.transport === "ws" ? "WebSocket live PCM" : "HTTPS audio upload"} · {voiceServerSettings()!.auth.configured ? "credential configured" : "credential not configured"}</small></div>
-                      <div><span>When to transcribe</span><strong>{cloudTiming().label}</strong><small>{cloudTiming().description}</small></div>
-                    </div>
-                    <div class="voice-actions"><Button variant="outline" disabled={voiceBusy()} onClick={() => void testVoiceServer()}>Test credentials</Button><Show when={voiceServerSettings()!.auth.removable}><Button variant="outline" disabled={voiceBusy()} onClick={() => void removeVoiceCredential()}>Remove credential</Button></Show></div>
-                    </div>
-                  </details>
-                </Show>
-
-                <details class="settings-disclosure voice-advanced" id="voice-advanced">
-                  <summary id="voice-advanced-summary"><span><SlidersHorizontalIcon /><strong>Advanced</strong><small>Input and capture behaviour</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
-                  <FieldGroup>
-                  
-                  <div class="voice-input-test">
-                    <Field><FieldLabel for="voice-input-device">Microphone</FieldLabel><select ref={voiceInputSelect} id="voice-input-device" disabled={audioInputBusy()} value={voiceDraft().inputDeviceId} onChange={(event) => updateVoiceDraft({ inputDeviceId: event.currentTarget.value })}>
-                      <option value="">System default microphone</option>
-                      <Show when={voiceDraft().inputDeviceId && !audioInputDevices().some((device) => device.deviceId === voiceDraft().inputDeviceId)}><option value={voiceDraft().inputDeviceId}>Selected microphone unavailable</option></Show>
-                      <For each={audioInputDevices()}>{(device) => <option value={device.deviceId}>{device.label}</option>}</For>
-                    </select><small>Chrome controls site permission. Choose the input that should feed dictation.</small></Field>
-                    <Field><FieldLabel for="voice-capture-profile">Capture profile</FieldLabel><select id="voice-capture-profile" disabled={audioInputBusy()} value={voiceDraft().captureProfile} onChange={(event) => updateVoiceDraft({ captureProfile: event.currentTarget.value as "raw" | "processed" })}>
-                      <option value="raw">Raw candidate (browser AGC off)</option>
-                      <option value="processed">Processed browser profile (browser AGC on)</option>
-                    </select><small>Both profiles keep echo cancellation and noise suppression requested. Raw disables browser automatic gain and Conduit never adds adaptive ASR gain.</small></Field>
-                    <div class="voice-actions"><Button variant="outline" size="sm" disabled={audioInputBusy() || audioInputStatus() === "loading"} onClick={() => void loadAudioInputs()}>Refresh microphones</Button><Button variant="outline" size="sm" disabled={audioInputStatus() === "loading"} onClick={() => audioInputBusy() ? stopAudioInputTest() : void testAudioInput()}>{audioInputBusy() ? <><Spinner />Stop microphone test</> : "Test microphone"}</Button></div>
-                    <Show when={audioInputBusy() || audioInputTest()}>
-                      <VoiceWaveform class="settings-recorder-monitor" history={audioInputWaveform.history} level={audioInputWaveform.level} peak={audioInputWaveform.peak} state={audioInputBusy() ? "listening" : "stopped"} ariaLabel="Microphone input level" />
-                    </Show>
-                    <Show when={audioInputBusy() && audioInputSignalDetected()}><div class="voice-input-live-state" role="status">Signal detected · listening until you stop.</div></Show>
-                    <Show when={audioInputStatus() === "error" && !audioInputError()}><p role="alert" class="settings-inline-error">Microphone list could not be loaded.</p></Show>
-                    <Show when={audioInputTest()}>{(result) => <div class="voice-input-result" data-signal={result().signalDetected ? "detected" : "missing"}><strong>{result().signalDetected ? "Signal detected" : "No signal detected"}</strong><small>{result().label} · {result().sampleRate.toLocaleString()} Hz · peak {result().peak.toFixed(3)}</small></div>}</Show>
-                    <Show when={audioInputTest()?.recording}>
-                      <div class="voice-input-playback">
-                        <span>Test recording kept in browser memory.</span>
-                        <div class="voice-actions">
-                          <Button variant="outline" size="sm" disabled={audioInputPlayback()} onClick={() => void playAudioInputTest()}>{audioInputPlayback() ? "Playing test recording…" : "Play test recording"}</Button>
-                          <Button variant="outline" size="sm" disabled={!audioInputPlayback()} onClick={stopAudioInputPlayback}>Stop playback</Button>
+                      <Show when={voiceServerSettings()!.provider === "custom"}>
+                        <label class="settings-row" for="voice-adapter"><span>Protocol<small>{selectedVoiceAdapter()?.description}</small></span><select id="voice-adapter" disabled={voiceBusy()} value={voiceServerSettings()!.adapter} onChange={(event) => updateVoiceServer({ adapter: event.currentTarget.value })}><For each={voiceServerSettings()!.adapters}>{(adapter) => <option value={adapter.id}>{adapter.label}</option>}</For></select></label>
+                        <label class="settings-row" data-stack for="voice-endpoint"><span>Endpoint<Show when={voiceEndpointError(voiceServerSettings()!)} fallback={<small>Public and HTTPS</small>}>{(message) => <small class="settings-inline-error">{message()}</small>}</Show></span><Input id="voice-endpoint" type="url" disabled={voiceBusy()} value={voiceServerSettings()!.endpoint} placeholder="https://speech.example.com/v1/audio/transcriptions" onInput={(event) => updateVoiceServer({ endpoint: event.currentTarget.value }, "pause")} /></label>
+                        <label class="settings-row" for="voice-custom-model"><span>Model parameter</span><Input id="voice-custom-model" value={voiceServerSettings()!.model} placeholder="Optional" onInput={(event) => updateVoiceServer({ model: event.currentTarget.value }, "pause")} /></label>
+                        <div class="settings-row" data-stack><span>Authentication</span>
+                          <Segmented label="Authentication" value={voiceServerSettings()!.auth.type} disabled={voiceBusy()} onChange={(type) => editVoiceServer((current) => ({ ...current, auth: { ...current.auth, type } }))} options={[
+                            { value: "none", label: "None" },
+                            { value: "bearer", label: "Bearer" },
+                            { value: "header", label: "Header" },
+                          ]} />
+                        </div>
+                        <Show when={voiceServerSettings()!.auth.type === "header"}>
+                          <label class="settings-row" for="voice-auth-header"><span>Header name</span><Input id="voice-auth-header" disabled={voiceBusy()} value={voiceServerSettings()!.auth.headerName} onInput={(event) => editVoiceServer((current) => ({ ...current, auth: { ...current.auth, headerName: event.currentTarget.value } }), "pause")} /></label>
+                        </Show>
+                      </Show>
+                      <Show when={voiceServerSettings()!.provider !== "custom" || voiceServerSettings()!.auth.type !== "none"}>
+                        <div class="settings-row voice-key-row"><label for="voice-secret"><span>{selectedVoiceProvider()?.authLabel || "Key"}<small>{voiceServerSettings()!.auth.configured ? "Stored on this server" : "Not set"}</small></span></label>
+                          <div class="settings-row-control">
+                            <Input id="voice-secret" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore disabled={voiceBusy()} value={voiceSecret()} onInput={(event) => setVoiceSecret(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveVoiceSecret(); }} placeholder={voiceServerSettings()!.auth.configured ? "Replace key" : "Paste key"} />
+                            <Show when={voiceSecret().trim()}><Button size="sm" disabled={voiceBusy()} onClick={() => void saveVoiceSecret()}>Save</Button></Show>
+                          </div>
+                        </div>
+                      </Show>
+                      <div class="settings-row"><span>Connection<small>{voiceTestResult() || `Transcribes ${cloudTiming().label === "Live" ? "live, as you speak" : "after you stop"}`}</small></span>
+                        <div class="settings-row-control">
+                          <Button variant="outline" size="sm" disabled={voiceBusy()} onClick={() => void testVoiceServer()}>{voiceBusy() ? <Spinner /> : null}Test</Button>
+                          <Show when={voiceServerSettings()!.auth.removable}><Button variant="ghost" size="sm" disabled={voiceBusy()} onClick={() => void removeVoiceCredential()}>Remove key</Button></Show>
                         </div>
                       </div>
                     </Show>
-                    <Show when={audioInputTest()?.recordingError}><p role="status" class="voice-input-playback-error">{audioInputTest()?.recordingError}</p></Show>
-                    <Show when={audioInputError()}><p role="alert" class="settings-inline-error">{audioInputError()}</p></Show>
                   </div>
-                  <Field><FieldLabel for="dictation-shortcut">Dictation shortcut</FieldLabel><Input id="dictation-shortcut" value={voiceDraft().shortcut} readOnly onKeyDown={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    const shortcut = shortcutFromKeyboardEvent(event);
-                    if (shortcut) updateVoiceDraft({ shortcut });
-                  }} /><small>Focus the field and press a shortcut. The microphone button remains a start/stop toggle.</small></Field>
-                  <Field><FieldLabel for="dictation-activation">Activation behaviour</FieldLabel><select id="dictation-activation" value={voiceDraft().activation} onChange={(event) => updateVoiceDraft({ activation: event.currentTarget.value as "push_to_talk" | "toggle" })}>
-                    <option value="push_to_talk">Push to talk (hold)</option>
-                    <option value="toggle">Toggle (press)</option>
-                  </select><small>{voiceDraft().activation === "toggle" ? "Press the shortcut once to start and again to stop." : "Hold the shortcut while you speak. Release it to stop."}</small></Field>
-                  <label class="dictation-auto-send"><input type="checkbox" checked={voiceDraft().autoSend} onChange={(event) => updateVoiceDraft({ autoSend: event.currentTarget.checked })} /><span><strong>Auto-send timely final dictation</strong><small>Off by default. Conduit only submits a server-confirmed final transcript settled within one second.</small></span></label>
-                  <label class="dictation-auto-send"><input id="voice-warm-microphone" type="checkbox" checked={voiceDraft().warmMicrophone} onChange={(event) => updateVoiceDraft({ warmMicrophone: event.currentTarget.checked })} /><span><strong>Keep microphone warm between dictations</strong><small>Off by default. When enabled, Chrome keeps the microphone active after a dictation so the next one can start faster. Save this setting before use.</small></span></label>
-                  <Show when={warmMicrophoneActive()} fallback={<Show when={voiceDraft().warmMicrophone}><p class="voice-input-live-state" role="status">Warm microphone retention is enabled for the next dictation.</p></Show>}>
-                    <div class="voice-input-live-state" role="status">Microphone remains active between dictations.<Button variant="outline" size="sm" onClick={stopWarmMicrophone}>Stop warm microphone</Button></div>
-                  </Show>
-                  </FieldGroup>
                 </details>
 
-                <Show when={voiceTestResult()}><p role="status" class="voice-test-success">{voiceTestResult()}</p></Show>
+                <details class="settings-tile" open>
+                  <summary><span><MicIcon /><strong>Input</strong><small>{microphoneSummary()}</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary>
+                  <div class="settings-rows" data-single>
+                    <label class="settings-row" for="voice-input-device"><span>Microphone</span>
+                      <div class="settings-row-control">
+                        <select ref={voiceInputSelect} id="voice-input-device" disabled={audioInputBusy()} value={voiceDraft().inputDeviceId} onChange={(event) => updateVoiceDraft({ inputDeviceId: event.currentTarget.value })}>
+                          <option value="">System default</option>
+                          <Show when={voiceDraft().inputDeviceId && !audioInputDevices().some((device) => device.deviceId === voiceDraft().inputDeviceId)}><option value={voiceDraft().inputDeviceId}>Unavailable microphone</option></Show>
+                          <For each={audioInputDevices()}>{(device) => <option value={device.deviceId}>{device.label}</option>}</For>
+                        </select>
+                        <Button variant="ghost" size="icon-sm" aria-label="Refresh microphones" title="Refresh microphones" disabled={audioInputBusy() || audioInputStatus() === "loading"} onClick={() => void loadAudioInputs()}><RefreshCwIcon /></Button>
+                      </div>
+                    </label>
+                    <div class="settings-row"><span>Test<small>{audioInputBusy() ? (audioInputSignalDetected() ? "Signal detected · listening until you stop" : "Listening…") : audioInputTest() ? `${audioInputTest()!.signalDetected ? "Signal detected" : "No signal"} · peak ${audioInputTest()!.peak.toFixed(3)}` : "Record a few seconds to check the level"}</small></span>
+                      <div class="settings-row-control">
+                        <Show when={audioInputTest()?.recording && !audioInputBusy()}><Button variant="ghost" size="icon-sm" aria-label={audioInputPlayback() ? "Stop playback" : "Play test recording"} title={audioInputPlayback() ? "Stop playback" : "Play test recording"} onClick={() => audioInputPlayback() ? stopAudioInputPlayback() : void playAudioInputTest()}>{audioInputPlayback() ? <SquareIcon /> : <PlayIcon />}</Button></Show>
+                        <Button variant="outline" size="sm" disabled={audioInputStatus() === "loading"} onClick={() => audioInputBusy() ? stopAudioInputTest() : void testAudioInput()}>{audioInputBusy() ? "Stop" : "Test"}</Button>
+                      </div>
+                    </div>
+                    <Show when={audioInputBusy() || audioInputTest()}>
+                      <div class="settings-row-wide"><VoiceWaveform class="settings-recorder-monitor" history={audioInputWaveform.history} level={audioInputWaveform.level} peak={audioInputWaveform.peak} state={audioInputBusy() ? "listening" : "stopped"} ariaLabel="Microphone input level" /></div>
+                    </Show>
+                    <Show when={audioInputError() || audioInputTest()?.recordingError || (audioInputStatus() === "error" && "Microphone list could not be loaded.")}>{(message) => <p role="alert" class="settings-row-note settings-inline-error">{message()}</p>}</Show>
+                    <div class="settings-row" data-stack><span>Capture<small>{voiceDraft().captureProfile === "raw" ? "Browser gain control off" : "Browser gain control on"}</small></span>
+                      <Segmented label="Capture profile" value={voiceDraft().captureProfile} disabled={audioInputBusy()} onChange={(captureProfile) => updateVoiceDraft({ captureProfile })} options={[
+                        { value: "raw", label: "Raw" },
+                        { value: "processed", label: "Processed" },
+                      ]} />
+                    </div>
+                    <label class="settings-row" for="dictation-shortcut"><span>Shortcut<small>Focus and press a key</small></span><Input id="dictation-shortcut" class="settings-keycap-input" value={voiceDraft().shortcut} readOnly onKeyDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      const shortcut = shortcutFromKeyboardEvent(event);
+                      if (shortcut) updateVoiceDraft({ shortcut });
+                    }} /></label>
+                    <div class="settings-row" data-stack><span>Activation<small>{voiceDraft().activation === "toggle" ? "Press once to start, again to stop" : "Hold while you speak"}</small></span>
+                      <Segmented label="Activation" value={voiceDraft().activation} onChange={(activation) => updateVoiceDraft({ activation })} options={[
+                        { value: "push_to_talk", label: "Hold", icon: <HandIcon /> },
+                        { value: "toggle", label: "Toggle", icon: <RepeatIcon /> },
+                      ]} />
+                    </div>
+                    <div class="settings-row"><span>Send when done<small>Sends a final transcript that settles within a second</small></span><Switch label="Send when done" checked={voiceDraft().autoSend} onChange={(autoSend) => updateVoiceDraft({ autoSend })} /></div>
+                    <div class="settings-row"><span>Keep microphone warm<small>{warmMicrophoneActive() ? "Live between dictations" : "Faster start for the next dictation"}</small></span>
+                      <div class="settings-row-control">
+                        <Show when={warmMicrophoneActive()}><Button variant="ghost" size="sm" onClick={stopWarmMicrophone}>Release</Button></Show>
+                        <Switch label="Keep microphone warm" checked={voiceDraft().warmMicrophone} onChange={(warmMicrophone) => updateVoiceDraft({ warmMicrophone })} />
+                      </div>
+                    </div>
+                  </div>
+                </details>
+
                 <Show when={voiceError()}><p role="alert" class="settings-inline-error">{voiceError()}</p></Show>
               </div>
             </Show>

@@ -317,6 +317,12 @@ Choosing in a menu:
 - It takes the keyboard while it is up: arrows move, a number or Enter chooses, Tab turns the page, Esc dismisses. One footer line explains the keys in keycaps; touch hides it and keeps the Next/Submit button.
 - A single question with a single answer skips tabs and Submit: choosing is answering.
 
+**Settings row** — a tile's one-line row: the setting's name in the text colour, an optional muted hint under it (one line, truncated), and its control at the right. A tile whose rows change with a choice (Voice) keeps one column so what changes reads as the same card; on a phone a row with a segmented choice or a long value puts the control under its name.
+
+**Segmented choice** — two to four peer choices side by side, for a setting whose options are few and named (Transcription source, Capture, Activation): a hairline box, the current option under the gray wash, which slides to the next (~200ms). An optional 13px Lucide icon before each label. Never a colour, never a tick. A long or open list stays a select.
+
+**Switch** — on or off: a small pill, the track near-white with a dark knob when on, the input gray with a muted knob when off. For a setting that is one or the other; a checkbox is for choosing items, not settings.
+
 **Keycap** — 16px square, hairline, muted mono.
 
 **Input-quiet** — borderless inside frost composer or palette search.
