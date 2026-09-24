@@ -1,6 +1,6 @@
 ---
 name: Conduit
-description: In-app visual language for Conduit. Dark charcoal control plane, tiled hairline panes, frosted glass floating chrome. No blue anywhere.
+description: In-app visual language for Conduit. Dark charcoal control plane, inset panes holding plain lists grouped by heading and space, frosted glass floating chrome. No blue anywhere.
 note: "Frontmatter tokens are roles and ranges. Body copy wins on conflict."
 colors:
   frame: "oklch(0.138 0.004 264)"
@@ -135,7 +135,7 @@ components:
 
 # Overview
 
-Conduit is a self-hosted, always-dark agent control plane. The look is charcoal, quiet, and tiled: a darker frame, inset rounded panes, hairline lists, and frosted glass floating chrome. It is not a marketing site, not a light theme, and not a colorful dashboard.
+Conduit is a self-hosted, always-dark agent control plane. The look is charcoal and quiet: a darker frame, inset rounded panes, plain lists grouped by a heading and space -- the sidebar is the reference -- and frosted glass floating chrome. The hairline tiles Conduit started with are being retired; they remain on the dashboard and in the workspace panel until those are redesigned (`docs/dashboard-redesign.md`). It is not a marketing site, not a light theme, and not a colorful dashboard.
 
 The accepted surfaces are the app dashboard, the chat/workspace split, the frosted composer, the header action pill, and the model-picker palette. Copy those patterns. Frosted glass is the signature material — prefer it for floating, transient, or hero chrome, not just the composer.
 
@@ -150,7 +150,7 @@ The charcoal is cool-neutral at chroma ~0.004–0.006. That gray is the brand. D
 - **frame** — page ground behind inset panes (body, `#root`, mobile sidebar).
 - **background** — inset pane fill (chat main, settings shell).
 - **foreground / muted-foreground** — type. Muted for timestamps, hints, empty states, icons at rest.
-- **border** — 1px hairlines. Almost every grouping is a hairline, not a fill.
+- **border** — 1px hairlines: pane edges, inputs, a header or footer rule. Grouping is a heading and space, not a hairline box and not a fill.
 - **accent** — white at 6–7% opacity. This is hover, pressed, and selected. Selection is a gray wash, never a hue.
 - **card / popover** — slightly raised solids for menus, palettes, modal cards, tool/attachment cards. Frosted glass is preferred wherever the surface floats or overlays content (composer, user bubbles, header pill, floating toolbars); solid popover remains for dense lists like palettes where blur would hurt legibility.
 - **primary** — near-white. Default buttons and the one bright action.
@@ -171,7 +171,7 @@ application controls.
 - a left-edge sliver / inset rail that wraps a highlight
 - a gradient wash on a selected control
 - status strips, current-item cards, or "this is active" surfaces
-- focus rings (use the near-neutral `{colors.ring}`)
+- focus (focus is the `{colors.accent}` wash, never a ring or an outline, in any colour)
 - runtime dots, waveform bars, audio/connecting states, success text, icon tints
 
 Replacements: active/connecting states use `{colors.muted-foreground}`; live stays `{colors.live}` green, warn amber, danger red; success/ready text uses `{colors.foreground}` or `{colors.live}`; waveform bars and audio chrome use foreground/muted tints.
@@ -200,7 +200,7 @@ Desktop is a darker **frame** with **inset rounded panes** (chat ~16px radius, 8
 
 Two pane types:
 
-1. **Tiled content** — dashboard sections, workspace tree + preview, recent-chat lists, settings sections. Hairline box, ~10px radius, transparent/background fill, stacked rows, no drop shadow. Tiles sit adjacent; they do not float in a card grid with gaps of empty brand color.
+1. **Listed content** — the sidebar, settings, and what replaces the dashboard tiles. No box: a small muted heading over plain one-line rows, groups set apart by space, the wash as the cursor. Hairline tiles (a boxed, divided group at ~10px radius) are the old pattern, left on the dashboard and workspace panel until they are redesigned; do not add new ones.
 2. **Floating chrome** — composer, user bubbles, header icon pill, scroll-to-latest, floating toolbars. Frosted glass, larger radius (~22px for pills, 15px for bubbles), centered on the reading column where applicable. This is the signature material — reach for it first for anything that floats or overlays content.
 
 Dashboard composition (canonical):
@@ -236,19 +236,19 @@ Settings pattern (illustrative, non-normative — current shell ~1120×820, rail
 
 # Elevation & Depth
 
-Almost none on tiled content. Frosted glass carries the depth.
+Almost none on listed content. Frosted glass carries the depth.
 
-- Tiles and panes: hairline only.
+- Panes: hairline only. Lists: nothing.
 - Palettes/modals: one dark shadow `0 24px 70px rgb(0 0 0 / 35–45%)` plus hairline. Solid `{colors.popover}` stays for dense lists where blur would hurt legibility.
 - Frost chrome (the signature): translucent `frost-fill`, 1px white-alpha `frost-stroke`, blur 19–24px, optional top specular inset. No heavy drop. Composer, user bubble (`glass-bg` + blur), header pill, and future floating toolbars share this one material — do not redeclare it per component.
 - Primary buttons: top specular inset + short lift. Ghost buttons: no fill until hover.
 
-No stacked card shadows, no colored glows, no glass on tiled content, no glass on palettes.
+No stacked card shadows, no colored glows, no glass on listed content, no glass on palettes.
 
 # Shapes
 
 - Inset panes: 16px.
-- Tiles / dashboard sections: 10px.
+- Tiles (legacy, dashboard and workspace panel only): 10px.
 - Rows / small controls: 6–8px.
 - Composer and header pill: 22px (squircle, not a circle, not a sharp box).
 - Icon buttons in chrome: ~8–10px radius inside the frost pill.
@@ -274,7 +274,7 @@ Motion explains a change of place: where something went, and what took its place
 
 **Frost chrome (signature, use more of it)** — composer, user bubbles, header search/terminal/workspace pill, scroll-to-latest, and future floating toolbars or hero surfaces like the dashboard launch row. Shared material: `frost-fill` / `glass-bg`, `frost-stroke` / `glass-border`, blur, no opaque `--background` slab. When something floats over content or marks the primary action area, default to frosted glass before reaching for a solid card. Do not frost lists, trees, settings pages, or palettes.
 
-**Tiled pane** — dashboard sections, workspace columns, live-terminal empty states. Hairline, 10px radius, flat. Selected/hover row is a gray wash inside the tile.
+**Tiled pane (legacy)** — what the dashboard sections, workspace columns and live-terminal empty states still use: hairline, 10px radius, flat, a gray wash on the row inside. Being retired for lists (Layout); not for new surfaces.
 
 **List row** — transparent, 7–8px radius. The `{colors.accent}` wash is the **cursor**: the row under the pointer, under keyboard focus, or being pressed, and only one row at a time — pointer and keyboard move the same cursor, as in a palette or menu. Keyboard focus on a row is that wash and nothing else: no focus ring, from the browser or a component. Selecting several rows is the cursor applied to each: every selected row takes the same wash, with no edge bar, tick column or other marker. In the sidebar, the current page is not a wash: every row rests at one weight in grey text, and the current row -- chat, project, workspace or page alike -- is white and semibold (660) with no fill, its Lucide icons at a heavier stroke (2.6) and a harness mark lit rather than thickened. The folder or workspace holding the current chat is drawn the same way, collapsed or not, so where you are reads up the tree; a pinned row looks exactly like its unpinned row, marks included, and follows the same rules -- a harness mark in its own colours, but the white text is what must carry it, since most marks have none. The cursor and where you are can always be told apart. A current rail icon is white with a heavier stroke. Never an inset coloured bar.
 
@@ -317,7 +317,7 @@ Choosing in a menu:
 - It takes the keyboard while it is up: arrows move, a number or Enter chooses, Tab turns the page, Esc dismisses. One footer line explains the keys in keycaps; touch hides it and keeps the Next/Submit button.
 - A single question with a single answer skips tabs and Submit: choosing is answering.
 
-**Settings list** — the sidebar's language, not tiles: no box, no dividers, no fill behind the page. A group is a small muted bold heading (~10.5px/700, about half the text colour) over one-line rows (~32px). A row's name is in the text colour at 500; its value is quiet -- a select is its value in muted text and a small chevron, with no box, lit with the row -- and the row takes the `{colors.accent}` wash under the pointer (not on touch). State that matters -- stored, installed, a test result, an error -- sits in muted text right after the name on the same line; descriptions go in a title, not under the name. Buttons are ghost and 26px unless they are the one action waiting (Install, Save a key). Every row's control sits in one column of one width (240px; about half the row on a phone), so the boxes line up: a segmented choice, an input or a select fills it, and a lone button or switch sits at its right edge. Labels are short enough to fit it ("Local", not "This machine" -- the long name is the hover title), the name truncates before the control does, and the page never scrolls sideways. Voice is the reference; the tiled sections move to it.
+**Settings list** — the sidebar's language, not tiles: no box, no dividers, no fill behind the page. A group is a small muted bold heading (~10.5px/700, about half the text colour) over one-line rows (~32px). A row's name is in the text colour at 500; its value is quiet -- a select is its value in muted text and a small chevron, with no box, lit with the row -- and the row takes the `{colors.accent}` wash under the pointer (not on touch). State that matters -- stored, installed, a test result, an error -- sits in muted text right after the name on the same line; descriptions go in a title, not under the name. Buttons are ghost and 26px unless they are the one action waiting (Install, Save a key). Every row's control sits in one column of one width (240px; about half the row on a phone), so the boxes line up: a segmented choice, an input or a select fills it, and a lone button or switch sits at its right edge. Focus anywhere in a row is the row's wash, never a ring or outline on the control. Labels are short enough to fit it ("Local", not "This machine" -- the long name is the hover title), the name truncates before the control does, and the page never scrolls sideways. Voice is the reference; the tiled sections move to it.
 
 **Segmented choice** — two to four peer choices side by side, for a setting whose options are few and named (Transcription source, Capture, Activation): a hairline box, the current option under the gray wash, which slides to the next (~200ms). An optional 13px Lucide icon before each label. Never a colour, never a tick. A long or open list stays a select.
 
@@ -327,24 +327,24 @@ Choosing in a menu:
 
 **Input-quiet** — borderless inside frost composer or palette search.
 
-**Input-bordered** — 1px hairline inside settings/forms, `{rounded.md}` radius, min-height ~34–36px.
+**Input-bordered** — 1px hairline inside settings/forms, `{rounded.md}` radius, as tall as its row needs: compact inputs (settings rows, the workspace filter, file search) are fine.
 
 # Do's and Don'ts
 
 Do:
 
 - Design in near-monochrome charcoal. Hue only for live dots, destructive, git/data glyphs.
-- Group with hairline tiles and space, not colored surfaces.
+- Group with a heading and space, not hairline boxes or colored surfaces.
 - Put frosted glass on floating chrome and reach for it first: composer, user bubbles, header pill, scroll-to-latest, floating toolbars, dashboard launch row. It is the signature material.
 - Select with a gray accent wash (model picker, dashboard rows, settings rail).
-- Keep the dashboard title, frost composer, and tiled lists as the home-screen pattern.
+- Keep the dashboard title and frost composer as the home-screen pattern; its lists are being redesigned.
 - Stay dark. Match existing Solid/Kobalte slots (`data-slot="button"`, menu, dialog).
 - Hide the transcript scrollbar; keep thin thumbs on panes that scroll as ledgers.
 - Respect `prefers-reduced-motion` except the existing meteor field.
 
 Don't:
 
-- Do not use any blue for any purpose: no selection, rails, slivers, gradients, status strips, card emphasis, focus rings, dots, waveforms, or audio states.
+- Do not use any blue for any purpose: no selection, rails, slivers, gradients, status strips, card emphasis, focus, dots, waveforms, or audio states.
 - Do not put a colored left-edge sliver on selected cards, nav, or rows.
 - Do not follow the `frontend-design` skill's urge to add a signature accent color. Frosted glass is the signature; no hue is needed.
 - Do not glass the dashboard tiles, workspace tree, transcript, or settings body. Frost is for floating chrome — but use it generously there.
