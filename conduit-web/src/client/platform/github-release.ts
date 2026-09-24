@@ -4,6 +4,7 @@ export interface PublishedRelease {
   tag: string;
   version: string;
   apkUrl: string | null;
+  windowsUrl: string | null;
 }
 
 /** Version numbers only: a tag may be written `v0.7.1`, a manifest `0.7.1`. */
@@ -38,9 +39,11 @@ export async function latestRelease(fetchImpl: typeof fetch = fetch): Promise<Pu
   if (!tag) return null;
   const assets = Array.isArray(body.assets) ? body.assets as Array<{ name?: unknown; browser_download_url?: unknown }> : [];
   const apk = assets.find((asset) => typeof asset.name === "string" && asset.name.endsWith(".apk"));
+  const windows = assets.find((asset) => typeof asset.name === "string" && asset.name.endsWith("-setup.exe"));
   return {
     tag,
     version: tag.replace(/^v/, ""),
     apkUrl: apk && typeof apk.browser_download_url === "string" ? apk.browser_download_url : null,
+    windowsUrl: windows && typeof windows.browser_download_url === "string" ? windows.browser_download_url : null,
   };
 }

@@ -127,9 +127,10 @@ test("a published release is newer only when its version is", async () => {
     assets: [
       { name: "conduit-v0.7.2.apk.sha256", browser_download_url: "https://example.invalid/sum" },
       { name: "conduit-v0.7.2.apk", browser_download_url: "https://example.invalid/apk" },
+      { name: "Conduit_0.7.2_x64-setup.exe", browser_download_url: "https://example.invalid/exe" },
     ],
   }), { status: 200 }));
-  assert.deepEqual(release, { tag: "v0.7.2", version: "0.7.2", apkUrl: "https://example.invalid/apk" });
+  assert.deepEqual(release, { tag: "v0.7.2", version: "0.7.2", apkUrl: "https://example.invalid/apk", windowsUrl: "https://example.invalid/exe" });
   assert.equal(await latestRelease(async () => new Response("", { status: 404 })), null);
 });
 

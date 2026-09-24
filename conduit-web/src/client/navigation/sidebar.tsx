@@ -61,6 +61,8 @@ import {
 } from "@/components/primitives";
 import type { ChatSummary, ComputerLocation, HarnessSummary, Project, RuntimeProcess, WorkspacePolicy, WorkspaceSuggestion } from "../api/contracts";
 import type { UpdateState } from "../main";
+import { installedClientKind } from "../platform/installed-client";
+import { latestRelease, type PublishedRelease } from "../platform/github-release";
 import { api } from "../api/client";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import type { Pty } from "../remotes/terminal-pane";
@@ -128,6 +130,24 @@ function UpdateNotice(props: { state?: UpdateState; onTake?: () => void }) {
       </Show>
     </div>
   </Show>;
+}
+
+function InstallerDownloads() {
+  const [release, setRelease] = createSignal<PublishedRelease | null>(null);
+  const releasesPage = "https://github.com/jask-aran/Conduit/releases/latest";
+  onMount(() => { void latestRelease().then(setRelease).catch(() => setRelease(null)); });
+  return <div class="sidebar-downloads">
+    <span>Download</span>
+    <a href={release()?.windowsUrl || releasesPage} target="_blank" rel="noopener noreferrer" aria-label="Download for Windows" title="Download for Windows">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z" /></svg>
+    </a>
+    <a href={release()?.apkUrl || releasesPage} target="_blank" rel="noopener noreferrer" aria-label="Download for Android" title="Download for Android">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="m7.2 6-1.8-3 .9-.5 1.9 3.1a9 9 0 0 1 7.6 0l1.9-3.1.9.5-1.8 3A9 9 0 0 1 21 13H3a9 9 0 0 1 4.2-7ZM3 14h18v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+        <path d="M7.5 9h.01m8.99 0h.01" stroke="var(--background)" stroke-width="2" stroke-linecap="round" />
+      </svg>
+    </a>
+  </div>;
 }
 
 function SidebarChatTitle(props: { title: string; animate: boolean }) {
@@ -254,7 +274,7 @@ export function Sidebar(props: {
 }) {
   const [collapsed, setCollapsed] = createSignal(localStorage.getItem("conduit.sidebar") === "collapsed");
   const [visualCollapsed, setVisualCollapsed] = createSignal(collapsed());
-  const [shellWidth, setShellWidth] = createSignal(collapsed() ? 41.6 : 195.2);
+  const [shellWidth, setShellWidth] = createSignal(collapsed() ? 41.6 : 232);
   const [collapsedProjectIds, setCollapsedProjectIds] = createSignal(storedCollapsedProjects());
   const [selectedChatIds, setSelectedChatIds] = createSignal<Set<string>>(new Set());
   const [terminals, setTerminals] = createSignal<Pty[]>([]);
@@ -294,7 +314,7 @@ export function Sidebar(props: {
   const toggleSidebar = () => {
     const nextCollapsed = !collapsed();
     const startWidth = sidebarRoot?.getBoundingClientRect().width ?? shellWidth();
-    const targetWidth = nextCollapsed ? 41.6 : 195.2;
+    const targetWidth = nextCollapsed ? 41.6 : 232;
     cancelSidebarEdgeMotion();
     publishSidebarPreference(nextCollapsed);
     if (isMobileLayout()) {
@@ -366,7 +386,7 @@ export function Sidebar(props: {
         localStorage.setItem("conduit.sidebar", detail.value ? "collapsed" : "expanded");
         setCollapsed(detail.value);
         setVisualCollapsed(detail.value);
-        setShellWidth(detail.value ? 41.6 : 195.2);
+        setShellWidth(detail.value ? 41.6 : 232);
       } else if (detail?.key === "collapsedProjectIds" && Array.isArray(detail.value)) {
         setCollapsedProjectIds(new Set(detail.value.filter((item): item is string => typeof item === "string")));
       }
@@ -1123,9 +1143,14 @@ export function Sidebar(props: {
         <div data-sidebar="header">
           <Button variant="ghost" size="icon-sm" data-sidebar="trigger" aria-label="Toggle Sidebar" aria-expanded={isMobileLayout() ? props.mobileOpen : !collapsed()} onClick={onSidebarTrigger}><PanelLeftIcon /></Button>
           <button data-sidebar="brand" aria-label="Conduit" onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); }}><span>Conduit</span></button>
+          <div class="sidebar-area-toggle" data-area={area()} role="group" aria-label="Sidebar section">
+            <button type="button" aria-label="Conduit" title="Conduit" aria-pressed={area() === "conduit"} onClick={() => setArea("conduit")}><LayoutDashboardIcon /></button>
+            <button type="button" aria-label="Computer" title="Computer" aria-pressed={area() === "computer"} onClick={() => setArea("computer")}><MonitorIcon /></button>
+          </div>
         </div>
         <div data-sidebar="content" class="sidebar-content">
           <div data-sidebar="rail-actions" class="sidebar-rail-actions" aria-label="Quick navigation">
+            <Show when={area() === "computer"}>
             <RailAction label="Computer" current={props.computer} onClick={() => { setArea("computer"); closeMobile(); props.onOpenComputer(); }}><MonitorIcon /></RailAction>
             <RailAction label="Terminal View" current={props.terminal} onClick={() => { setArea("computer"); closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /></RailAction>
             <Show when={railWorkspaces().length}>
@@ -1138,7 +1163,8 @@ export function Sidebar(props: {
                 ><WorkspaceGlyph appearance={project.workspaceAppearance} /></RailAction>}</For>
               </div>
             </Show>
-            <div data-sidebar="rail-divider" aria-hidden="true" />
+            </Show>
+            <Show when={area() === "conduit"}>
             <RailAction label="Conduit Dashboard" current={props.dashboard} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); }}><LayoutDashboardIcon /></RailAction>
             <RailAction label="New chat" onClick={() => startNewChat()}><MessageSquarePlusIcon /></RailAction>
             <Show when={railFolders().length}>
@@ -1159,10 +1185,7 @@ export function Sidebar(props: {
                 onClick={() => { setArea("conduit"); closeMobile(); void props.onOpenChat(item.chat, item.project); }}
               ><MessageSquareIcon /></RailAction>}</For>
             </div>
-          </div>
-          <div class="sidebar-area-toggle" role="group" aria-label="Sidebar section">
-            <button type="button" aria-pressed={area() === "conduit"} onClick={() => setArea("conduit")}>Conduit</button>
-            <button type="button" aria-pressed={area() === "computer"} onClick={() => setArea("computer")}>Computer</button>
+            </Show>
           </div>
           <Show when={area() === "computer"}>
             <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.computer ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenComputer(); }}><MonitorIcon /><span>Files</span></button>
@@ -1221,6 +1244,7 @@ export function Sidebar(props: {
             * they could not see.
             */}
           <UpdateNotice state={props.updateState} onTake={props.onTakeUpdate} />
+          <Show when={installedClientKind === "browser"}><InstallerDownloads /></Show>
           <ServerSwitcher connectivity={props.connectivity} pwaUpdating={props.pwaUpdating}
           onOpenSettings={() => { closeMobile(); props.onOpenSettings(); }}
           onUpdatePwa={() => props.onUpdatePwa()}
