@@ -130,13 +130,13 @@ node -e '
   if (localUpdates) {
     // The updater refuses a plain-HTTP endpoint outright, which is right for a
     // release and impossible for a loopback one: a server on this machine has
-    // no certificate to present. The signature is still checked, so the
-    // guarantee that matters is unchanged. A remote HTTPS endpoint needs no
-    // exception.
+    // no certificate to present. A development client can select a local
+    // server route at runtime even when its fallback endpoint uses HTTPS.
+    // The signature is still checked before any update is installed.
     overlay.plugins = {
       updater: {
         endpoints: [`${base}/latest.json`],
-        ...(base.startsWith("http://") ? { dangerousInsecureTransportProtocol: true } : {}),
+        ...((dev || base.startsWith("http://")) ? { dangerousInsecureTransportProtocol: true } : {}),
       },
     };
   }

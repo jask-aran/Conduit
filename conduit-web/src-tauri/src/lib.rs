@@ -5,6 +5,7 @@
 //! Android client does.
 
 mod desktop_settings;
+mod dev_update;
 mod discovery;
 mod global_shortcuts;
 mod secrets;
@@ -74,6 +75,7 @@ pub fn run() {
             secrets::secret_remove,
             desktop_settings::desktop_settings,
             desktop_settings::set_desktop_settings,
+            dev_update::check_dev_update,
             global_shortcuts::set_global_shortcuts,
             discovery::discover_servers,
             update_window::remember_update_window

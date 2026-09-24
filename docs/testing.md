@@ -353,10 +353,11 @@ looks like it did not land.
 | **Android, released** | CI, on a tag | `com.jaskaran.conduit` | the persistent Android keystore | GitHub releases |
 | **Android, dev** | `npm run android:build` | `com.jaskaran.conduit.dev` | the local debug key | nothing |
 
-**The Windows dev client is the one that can test an update**, because its
-updater points at this machine. Build a baseline, install it, build again, and
-press Check for updates -- `start-conduit.sh` finds the build directory by
-itself and serves it at `/desktop-updates`. The full sequence is in
+**The Windows dev client is the one that can test an update**. It uses the
+active server route for the manifest and archive, then its built-in HTTPS
+endpoint if that route has no update. Build a baseline, install it, and build
+again -- `start-conduit.sh` finds the build directory by itself and serves it
+at `/desktop-updates`. The full sequence is in
 `docs/desktop-client.md`.
 
 **The Android dev APK cannot test an update at all.** It is a debug-signed

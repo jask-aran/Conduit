@@ -189,8 +189,26 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
     if (readyDesktopUpdate) return { kind: "ready", version: readyDesktopUpdate.version };
     if (desktopUpdatePreparation) return desktopUpdatePreparation;
     desktopUpdatePreparation = (async (): Promise<PreparedDesktopUpdate> => {
-      const { check } = await import("@tauri-apps/plugin-updater");
-      const pending = await check();
+      const { check, Update } = await import("@tauri-apps/plugin-updater");
+      const { getIdentifier } = await import("@tauri-apps/api/app");
+      let pending: InstanceType<typeof Update> | null = null;
+      if (await getIdentifier() === "com.jaskaran.conduit.desktop.dev") {
+        const { activePath } = await import("./servers.ts");
+        const route = activePath();
+        if (route) {
+          try {
+            const { invoke } = await import("@tauri-apps/api/core");
+            const metadata = await invoke<ConstructorParameters<typeof Update>[0] | null>("check_dev_update", {
+              endpoint: new URL("/desktop-updates/latest.json", route).href,
+            });
+            if (metadata) pending = new Update(metadata);
+          } catch {
+            // The selected server may not distribute development builds. The
+            // endpoint built into this client is still a valid update source.
+          }
+        }
+      }
+      pending ??= await check();
       if (!pending) return { kind: "current" };
       let downloaded = 0;
       let total = 0;

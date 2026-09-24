@@ -65,9 +65,10 @@ Today the released Windows app fetches its updater manifest from GitHub
 Releases. Android looks up the latest GitHub Release and opens its APK URL.
 The server already has a development-only `/desktop-updates` route for locally
 built Windows files. Development Windows clients use the development server's
-reachable HTTPS address by default, so remote clients can download those files.
-The build can select a different fixed update URL with `CONDUIT_LOCAL_UPDATE_URL`.
-Released clients can keep using GitHub Releases directly,
+active route first, including loopback or LAN when available. The development
+server's reachable HTTPS address remains the built-in fallback for a client
+without a working update route. The build can change that fallback with
+`CONDUIT_LOCAL_UPDATE_URL`. Released clients can keep using GitHub Releases directly,
 including for background downloads. A server-hosted update manifest and files
 are an optional distribution route if a concrete need appears, such as local
 network delivery or updates when GitHub is unavailable. Server caching is not
