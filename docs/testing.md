@@ -349,7 +349,7 @@ looks like it did not land.
 | | Built by | Identifier | Signed with | Updates from |
 | --- | --- | --- | --- | --- |
 | **Windows, released** | CI, on a tag | `com.jaskaran.conduit.desktop` | the minisign release key | GitHub releases |
-| **Windows, dev** | `npm run desktop:build:win -- --dev` | `com.jaskaran.conduit.desktop.dev` | the same key | `http://127.0.0.1:4310/desktop-updates` |
+| **Windows, dev** | `npm run desktop:build:win -- --dev` | `com.jaskaran.conduit.desktop.dev` | the same key | `https://localconduit.jask-aran.com/desktop-updates` by default |
 | **Android, released** | CI, on a tag | `com.jaskaran.conduit` | the persistent Android keystore | GitHub releases |
 | **Android, dev** | `npm run android:build` | `com.jaskaran.conduit.dev` | the local debug key | nothing |
 

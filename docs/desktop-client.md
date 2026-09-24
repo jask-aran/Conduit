@@ -91,7 +91,7 @@ Nothing is installed, so no version is compared and none has to be invented.
 | Name | Conduit | Conduit Dev |
 | Identifier | `com.jaskaran.conduit.desktop` | `…​.desktop.dev` |
 | Version | the release's | `0.7.2-dev.<timestamp>.<commit>` |
-| Updates from | GitHub releases | `http://127.0.0.1:4310/desktop-updates` |
+| Updates from | GitHub releases | `https://localconduit.jask-aran.com/desktop-updates` by default |
 
 The identifier is what does the work. Windows keys the install entry, the
 per-user data directory, the single-instance lock and the credential entry on
@@ -106,12 +106,15 @@ for a running instance by binary name, so two installs shipping
 installing the development client asks to close "Conduit", and Windows search
 offers two entries that read the same.
 
-A development client points its updater at a loopback address, which the
-updater refuses outright unless `dangerousInsecureTransportProtocol` is set —
-right for a release and impossible for a server on this machine, which has no
-certificate to present. Without it the client panics before its first window.
-The allowance relaxes the transport only; the signature is still checked
-against the key compiled into the build, which is what makes an update safe.
+A development client gets its update files from the development Conduit server.
+The default build uses its reachable HTTPS address, so a client on another
+machine can download the same signed build. Set `CONDUIT_LOCAL_UPDATE_URL` when
+building to use another server, for example
+`CONDUIT_LOCAL_UPDATE_URL=http://127.0.0.1:4310/desktop-updates` for a same-machine
+test. The URL is built into the client; changing the active Conduit server in
+the app does not change its update source. Plain HTTP needs
+`dangerousInsecureTransportProtocol`, which the build sets only for HTTP URLs.
+The client checks each update against its built-in signature key.
 
 **A development build names its own version**: the patch after the last tag, as
 a prerelease carrying the build time and the commit. It sorts above the release
@@ -195,13 +198,17 @@ npm run desktop:build:win -- --dev
 # 2. the server serves the build directory -- it finds it by itself
 bash .devcontainer/start-conduit.sh restart
 
-# 3. something newer, then press Check for updates
+# 3. something newer; the installed client downloads it in the background
 npm run desktop:build:win -- --dev
 ```
 
 `start-conduit.sh` looks for the directory the Windows build writes into and
 serves it when it is there, because remembering an environment variable before
 every restart is the difference between testing an update and not bothering.
+The default update URL reaches that route through the development server's
+public HTTPS address. The build still runs on the server host; the server
+distributes its output and does not build it. Install the new build with the
+client's **Restart** action after the download completes.
 `CONDUIT_DESKTOP_UPDATE_DIR` still overrides it. `/desktop-updates` exists only
 when that names a directory, serves that one directory, and 404s a missing
 file. It sits **ahead

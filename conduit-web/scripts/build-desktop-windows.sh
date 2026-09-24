@@ -22,6 +22,8 @@
 #                     can be installed alongside the released client. Implies
 #                     --local-updates, since a development client that updated
 #                     itself from GitHub would replace itself with the release.
+#                     Defaults to this project's reachable development server;
+#                     CONDUIT_LOCAL_UPDATE_URL overrides that address.
 #
 # Together they close the loop locally: build --dev --version 0.7.2, install it,
 # then build --dev --version 0.7.3 and press Update app.
@@ -114,7 +116,11 @@ if [ -n "$dev_client" ] && [ -z "$build_version" ]; then
   build_version="$next-dev.$(date -u +%Y%m%d%H%M%S).$(git rev-parse --short=7 HEAD 2>/dev/null || echo nogit)"
 fi
 
-update_base=${CONDUIT_LOCAL_UPDATE_URL:-"http://127.0.0.1:${CONDUIT_PORT:-4310}/desktop-updates"}
+if [ -n "$dev_client" ]; then
+  update_base=${CONDUIT_LOCAL_UPDATE_URL:-"https://localconduit.jask-aran.com/desktop-updates"}
+else
+  update_base=${CONDUIT_LOCAL_UPDATE_URL:-"http://127.0.0.1:${CONDUIT_PORT:-4310}/desktop-updates"}
+fi
 overlay="src-tauri/tauri.build-overlay.conf.json"
 trap 'rm -f "$overlay"' EXIT
 node -e '
@@ -125,11 +131,12 @@ node -e '
     // The updater refuses a plain-HTTP endpoint outright, which is right for a
     // release and impossible for a loopback one: a server on this machine has
     // no certificate to present. The signature is still checked, so the
-    // guarantee that matters is unchanged.
+    // guarantee that matters is unchanged. A remote HTTPS endpoint needs no
+    // exception.
     overlay.plugins = {
       updater: {
         endpoints: [`${base}/latest.json`],
-        dangerousInsecureTransportProtocol: true,
+        ...(base.startsWith("http://") ? { dangerousInsecureTransportProtocol: true } : {}),
       },
     };
   }
