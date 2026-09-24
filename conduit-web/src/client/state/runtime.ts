@@ -4,6 +4,7 @@ import type { RuntimeProcess } from "../api/contracts";
 import { onPathChange } from "../platform/servers";
 import { eventSourceUrl } from "../api/transport";
 import { authorizedFetch } from "../api/native-auth-client";
+import { finishPwaRestart, preparePwaRestart } from "../pwa-update";
 
 export type Connectivity = "connecting" | "online" | "reconnecting" | "offline";
 
@@ -16,6 +17,7 @@ export function createRuntimeStore() {
   let watchdog: ReturnType<typeof setInterval> | undefined;
   let lastFrameAt = 0;
   let attempts = 0;
+  let restartPrepared = false;
   // The server pings every 15s. A stream that dies without firing an error --
   // sleep, mobile background, an idle proxy -- goes silent instead, and every
   // pill would sit there frozen and looking authoritative. Silence is the
@@ -69,6 +71,8 @@ export function createRuntimeStore() {
           setStale(false);
         } else if (event.type === "runtime_global_snapshot") {
           replaceAll((event.processes || []) as RuntimeProcess[]);
+          restartPrepared = event.restartPrepared === true;
+          if (restartPrepared) preparePwaRestart();
           attempts = 0;
           setConnectivity("online");
           setStale(false);
@@ -80,6 +84,9 @@ export function createRuntimeStore() {
           window.dispatchEvent(new CustomEvent("conduit:chat-changed", { detail: event.chat }));
         } else if (event.type === "terminal_changed" || event.type === "terminal_removed") {
           window.dispatchEvent(new Event("conduit:ptys-changed"));
+        } else if (event.type === "pwa_restart_prepared") {
+          restartPrepared = true;
+          preparePwaRestart();
         }
       } catch {
         // A malformed global update must not take the app down.
@@ -89,6 +96,10 @@ export function createRuntimeStore() {
       if (source !== next) return;
       next.close();
       source = undefined;
+      if (restartPrepared) {
+        restartPrepared = false;
+        void finishPwaRestart();
+      }
       attempts += 1;
       const offline = attempts >= 5;
       setConnectivity(offline ? "offline" : "reconnecting");
