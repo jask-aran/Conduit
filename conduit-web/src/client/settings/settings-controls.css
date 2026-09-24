@@ -86,7 +86,7 @@
 .settings-list { --settings-control: 240px; display: grid; min-width: 0; gap: 12px; max-width: 640px; }
 .settings-group { display: grid; gap: 1px; }
 /* A light hairline between groups, halfway through the space that parts them. */
-.settings-group + .settings-group { border-top: 1px solid var(--border); padding-top: 12px; }
+.settings-group ~ .settings-group { border-top: 1px solid var(--border); padding-top: 12px; }
 /* Headings and names are the rail's: a group heading is its group label, a row's name its item. */
 .settings-group > h3 { margin: 0 0 2px; padding: 3.2px 6.4px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 52%); font-size: 9.6px; font-weight: 700; letter-spacing: .02em; }
 /* Every row's control sits in one column of one width, so the boxes line
@@ -134,8 +134,8 @@
 .settings-dialog .settings-line:hover select, .settings-dialog .settings-line select:focus-visible { color: var(--foreground); outline: none; }
 .settings-dialog .settings-line select option { background: var(--popover); color: var(--foreground); }
 .settings-dialog .settings-line input:not([type="checkbox"]) { width: 100%; min-width: 0; height: 24px; min-height: 24px; margin: 0; border-radius: 6px; padding: 0 8px; font-size: 10.4px; }
-.settings-dialog .settings-line [data-slot="button"] { height: 24px; min-height: 24px; flex: none; border-radius: 6px; padding: 0 8px; font-size: 10.4px; }
-.settings-dialog .settings-line [data-slot="button"][data-size="icon-sm"], .settings-dialog .settings-line [data-slot="button"]:has(> svg:only-child) { width: 24px; padding: 0; }
+.settings-dialog .settings-line [data-slot="button"] { white-space: nowrap; height: 24px; min-height: 24px; flex: none; border-radius: 6px; padding: 0 8px; font-size: 10.4px; }
+.settings-dialog .settings-line [data-slot="button"][data-size="icon-sm"] { width: 24px; padding: 0; }
 .settings-dialog .settings-line [data-slot="button"] svg { width: 12px; height: 12px; }
 .settings-dialog .settings-keycap-input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; text-align: center; caret-color: transparent; cursor: pointer; }
 /* Equal segments, each as wide as the longest label, so none truncates. */
@@ -149,7 +149,7 @@
 
 @media (max-width: 760px) {
   .settings-list { --settings-control: min(54%, 220px); gap: 10px; }
-  .settings-group + .settings-group { padding-top: 10px; }
+  .settings-group ~ .settings-group { padding-top: 10px; }
   .settings-line { gap: 10px; }
   .settings-group > h3 { padding: 5px 9px; font-size: 13px; }
   .settings-line { min-height: 44px; }
@@ -159,7 +159,7 @@
   .settings-dialog .settings-line select { height: 34px; font-size: 14px; }
   .settings-dialog .settings-line input:not([type="checkbox"]) { height: 34px; font-size: 14px; }
   .settings-dialog .settings-line [data-slot="button"] { height: 34px; font-size: 14px; }
-  .settings-dialog .settings-line [data-slot="button"]:has(> svg:only-child) { width: 34px; }
+  .settings-dialog .settings-line [data-slot="button"][data-size="icon-sm"] { width: 34px; }
   .settings-line > .settings-segmented button { min-height: 30px; padding: 0 4px; font-size: 13px; }
   .settings-line > .settings-segmented button svg { display: none; }
   .settings-switch { width: 36px; height: 22px; }
@@ -218,3 +218,29 @@
 .settings-line-link { justify-self: end; border-radius: 6px; padding: 3px 8px; color: var(--muted-foreground); font-size: 10.4px; text-decoration: none; }
 .settings-line-link:hover, .settings-line-link:focus-visible { outline: none; color: var(--foreground); }
 @media (max-width: 760px) { .settings-line-link { font-size: 14px; } }
+
+/* An address or a code in a row's name, and a key in its state. */
+.settings-line > span > code { min-width: 0; overflow: hidden; color: var(--foreground); font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; }
+.settings-line em kbd, .settings-line em code { border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; color: var(--muted-foreground); font: 550 9.6px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.settings-line-note[data-tone="quiet"] { color: var(--muted-foreground); }
+.settings-line-control[data-wrap] { flex-wrap: wrap; }
+/* Steps a row needs but that are not worth a line each: folded under it. */
+.settings-line-details { padding: 0 8px 6px; color: var(--muted-foreground); font-size: 9.6px; line-height: 1.5; }
+.settings-line-details > summary { width: fit-content; list-style: none; cursor: pointer; }
+.settings-line-details > summary::-webkit-details-marker { display: none; }
+.settings-line-details > summary:is(:hover, :focus-visible) { outline: none; color: var(--foreground); }
+.settings-line-details ol { display: grid; gap: 2px; margin: 4px 0; padding-left: 16px; }
+.settings-line-details p { margin: 4px 0 0; }
+.settings-line-details a { color: var(--foreground); }
+.settings-line-details code { font: 9.6px ui-monospace, SFMono-Regular, Menlo, monospace; }
+/* A prompt is the one long text in settings: its row, then the text filling the page. */
+.settings-dialog .settings-list.settings-prompts { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); }
+.settings-prompts > .settings-group { display: flex; min-height: 0; flex-direction: column; }
+.settings-dialog .settings-prompt-text { min-height: 240px; flex: 1; margin-top: 6px; resize: none; border: 1px solid var(--border); border-radius: 6.4px; outline: none; background: transparent; padding: 10px 12px; color: var(--foreground); font: 10.4px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+@media (max-width: 760px) {
+  .settings-line > span > code { font-size: 13px; }
+  .settings-line em kbd, .settings-line em code { font-size: 12px; }
+  .settings-line-details { padding-left: 9px; font-size: 12.5px; }
+  .settings-line-details code { font-size: 12px; }
+  .settings-dialog .settings-prompt-text { font-size: 13px; }
+}

@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
 import * as KDialog from "@kobalte/core/dialog";
 import { ActivityIcon, BotIcon, ChevronLeftIcon, ChevronRightIcon, FileTextIcon, XIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon, SlidersHorizontalIcon } from "lucide-solid";
-import { CableIcon, CloudIcon, CpuIcon, HandIcon, MicOffIcon, PlayIcon, RefreshCwIcon, RepeatIcon, SquareIcon } from "lucide-solid";
+import { CableIcon, CloudIcon, CpuIcon, HandIcon, MicOffIcon, PlayIcon, RefreshCwIcon, RepeatIcon, RotateCcwIcon, SquareIcon } from "lucide-solid";
 import { AboutSettingsTile } from "./about-settings";
 import { ServersSettingsTile } from "./servers-settings";
 import { DesktopSettingsTile } from "./desktop-settings";
@@ -1104,46 +1104,24 @@ export function Settings(props: {
             <SaveStatus status={saveState()} />
             <Button variant="ghost" size="icon-sm" class="settings-close" aria-label="Close" onClick={() => props.onOpenChange(false)}><XIcon aria-hidden="true" /></Button>
           </header>
-          <Show when={section() === "models"}><Show when={!props.templatesLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading profiles…</span></div>}><section class="settings-section-block"><FieldGroup>
-            <Field><FieldLabel for="default-profile">Default profile</FieldLabel><select id="default-profile" value={props.defaultTemplateId} onChange={(event) => void props.onDefaultTemplateChange(event.currentTarget.value)}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></select></Field>
-            <Field>
-              <FieldLabel>Session naming</FieldLabel>
-              <ModelSelector
-                models={namingModels()}
-                model={sessionNameModel()}
-                thinkingLevel={sessionNameThinkingLevel()}
-                disabled={generalLoading() || !namingModels().length}
-                onModelChange={chooseSessionNameModel}
-                onThinkingLevelChange={(level) => void saveSessionNaming(sessionNameModel(), level)}
-                onManageModels={props.onOpenModelSelector}
-              />
-            </Field>
-            <Field>
-              <FieldLabel>Available models</FieldLabel>
-              <small>{props.models.enabledModels().length} enabled</small>
-              <Button variant="outline" onClick={props.onOpenModelSelector}>Manage models</Button>
-            </Field>
-          </FieldGroup></section></Show></Show>
           <Show when={section() === "prompts"}>
             <Show when={promptStatus() === "ready"} fallback={<Show when={promptStatus() === "error"} fallback={<div class="settings-loading"><Spinner /><span>Loading prompts…</span></div>}><div class="settings-error" role="alert">{promptError()}</div></Show>}>
-              <section class="prompt-editor">
-                <div class="prompt-editor-toolbar">
-                  <label for="prompt-selector">Prompt</label>
-                  <select id="prompt-selector" value={promptId()} onChange={(event) => choosePrompt(event.currentTarget.value)}>
-                    <For each={prompts()}>{(prompt) => <option value={prompt.id} selected={prompt.id === promptId()}>{prompt.label}{prompt.kind === "service" ? " · service" : ""}</option>}</For>
-                  </select>
-                  <span>{prompts().find((item) => item.id === promptId())?.modified ? "Modified" : "Default"}</span>
-                </div>
-                <textarea aria-label="System prompt" spellcheck={false} value={promptDraft()} onInput={(event) => editPrompt(event.currentTarget.value)} />
-                <div class="prompt-editor-footer">
-                  <small>Changes apply when the next runtime or naming request starts.</small>
-                  <div>
-                    <Button variant="outline" disabled={promptSaving() || (!prompts().find((item) => item.id === promptId())?.modified && promptDraft() === promptBaseline())} onClick={() => void resetPrompt()}>Reset to default</Button>
-                  </div>
-                </div>
-                <Show when={!promptDraft().trim()}><p class="settings-inline-error" role="alert">A prompt cannot be empty; it is not saved until it has text.</p></Show>
-                <Show when={promptError() || promptStatus() === "error"}><p class="settings-inline-error" role="alert">{promptError()}</p></Show>
-              </section>
+              <div class="settings-list settings-prompts">
+                <section class="settings-group" aria-label="System prompt">
+                  <h3>System prompt</h3>
+                  <label class="settings-line" for="prompt-selector" title="Changes apply when the next runtime or naming request starts."><span>Prompt<em>{prompts().find((item) => item.id === promptId())?.modified ? "modified" : "default"}</em></span>
+                    <span class="settings-line-control">
+                      <select id="prompt-selector" value={promptId()} onChange={(event) => choosePrompt(event.currentTarget.value)}>
+                        <For each={prompts()}>{(prompt) => <option value={prompt.id} selected={prompt.id === promptId()}>{prompt.label}{prompt.kind === "service" ? " · service" : ""}</option>}</For>
+                      </select>
+                      <Button variant="ghost" size="icon-sm" aria-label="Reset to default" title="Reset to default" disabled={promptSaving() || (!prompts().find((item) => item.id === promptId())?.modified && promptDraft() === promptBaseline())} onClick={() => void resetPrompt()}><RotateCcwIcon /></Button>
+                    </span>
+                  </label>
+                  <Show when={!promptDraft().trim()}><p class="settings-line-note" role="alert">A prompt cannot be empty; it is not saved until it has text.</p></Show>
+                  <Show when={promptError() || promptStatus() === "error"}><p class="settings-line-note" role="alert">{promptError()}</p></Show>
+                  <textarea class="settings-prompt-text" aria-label="System prompt" spellcheck={false} value={promptDraft()} onInput={(event) => editPrompt(event.currentTarget.value)} />
+                </section>
+              </div>
             </Show>
           </Show>
           <Show when={section() === "ui"}>
@@ -1245,7 +1223,7 @@ export function Settings(props: {
               <AboutSettingsTile />
             </div>
           </Show>
-          <Show when={section() === "servers"}><div class="settings-stack"><ServersSettingsTile /></div></Show>
+          <Show when={section() === "servers"}><ServersSettingsTile /></Show>
           <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
           <Show when={section() === "runtime"}>
             <div class="settings-list">
@@ -1429,46 +1407,79 @@ export function Settings(props: {
               </div>
             </Show>
           </Show>
-          <Show when={section() === "models"}>
-            <details class="settings-disclosure"><summary><span><BotIcon /><strong>ChatGPT Web</strong><small>{chatGptStatus()?.auth === "configured" ? "Connected" : "Not connected"}</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary><div class="pi-auth-panel">
-              <p>Paste the cookie string from a signed-in ChatGPT browser. Conduit stores it on this server and never returns its values.</p>
-              <ol>
-                <li>Sign in at <a href="https://chatgpt.com" target="_blank" rel="noreferrer">chatgpt.com</a>.</li>
-                <li>Open browser developer tools, select Network, then reload ChatGPT.</li>
-                <li>Select a request to <code>chatgpt.com</code>. In Request Headers, copy the complete <code>Cookie</code> value.</li>
-                <li>Paste that value below. It must include <code>__Secure-next-auth.session-token</code>, either whole or split into numbered parts such as <code>.0</code> and <code>.1</code>.</li>
-              </ol>
-              <p><strong>Treat this value like a password.</strong> Do not paste it into a chat, issue, or log.</p>
-              <Field><FieldLabel for="chatgpt-web-cookie">ChatGPT cookies</FieldLabel><textarea id="chatgpt-web-cookie" rows="3" autocomplete="off" value={chatGptCookie()} onInput={(event) => setChatGptCookie(event.currentTarget.value)} placeholder={chatGptStatus()?.auth === "configured" ? "A ChatGPT session is connected" : "__Secure-next-auth.session-token.0=…; __Secure-next-auth.session-token.1=…"} /></Field>
-              <div><Button disabled={chatGptBusy() || !chatGptCookie().trim()} onClick={() => void saveChatGptCookie()}>{chatGptBusy() ? <Spinner /> : null}Save cookies</Button><Show when={chatGptStatus()?.auth === "configured"}><Button variant="outline" disabled={chatGptBusy()} onClick={() => void removeChatGptCookie()}>Remove cookies</Button></Show></div>
-              <Show when={chatGptStatus()}><small>Transport: curl_cffi {chatGptStatus()!.curlCffiVersion}, {chatGptStatus()!.impersonate}. Stored cookie names: {chatGptStatus()!.cookieNames.join(", ") || "none"}.</small></Show>
-              <Show when={chatGptError()}><p role="alert" class="settings-inline-error">{chatGptError()}</p></Show>
-            </div></details>
-            <details class="settings-disclosure"><summary><span><BotIcon /><strong>Provider accounts</strong><small>{authProviders().filter((provider) => provider.auth.configured).length} connected</small></span><ChevronRightIcon class="settings-chevron" aria-hidden="true" /></summary><div class="pi-auth-panel">
-              <p>Credentials are stored only in Conduit's pinned Pi runtime.</p>
-              <Show when={authUnavailable()}><p role="alert" class="settings-inline-error">Set a Conduit password with <code>node scripts/conduit-auth.mjs set-password</code>, then sign in to manage Pi credentials here.</p></Show>
-              <Show when={authError() && !authUnavailable()}><p role="alert" class="settings-inline-error">{authError()}</p></Show>
+          <Show when={section() === "models"}><div class="settings-list">
+            <section class="settings-group" aria-label="Defaults">
+              <h3>Defaults</h3>
+              <Show when={!props.templatesLoading} fallback={<div class="settings-line"><span>Default profile<em>loading…</em></span><span /></div>}>
+                <label class="settings-line" for="default-profile"><span>Default profile</span><select id="default-profile" value={props.defaultTemplateId} onChange={(event) => void props.onDefaultTemplateChange(event.currentTarget.value)}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></select></label>
+              </Show>
+              <div class="settings-line"><span>Session naming</span>
+                <ModelSelector
+                models={namingModels()}
+                model={sessionNameModel()}
+                thinkingLevel={sessionNameThinkingLevel()}
+                disabled={generalLoading() || !namingModels().length}
+                onModelChange={chooseSessionNameModel}
+                onThinkingLevelChange={(level) => void saveSessionNaming(sessionNameModel(), level)}
+                onManageModels={props.onOpenModelSelector}
+              />
+              </div>
+              <div class="settings-line"><span>Models<em>{props.models.enabledModels().length} enabled</em></span><Button variant="ghost" size="sm" onClick={props.onOpenModelSelector}>Manage</Button></div>
+            </section>
+            <section class="settings-group" aria-label="ChatGPT Web">
+              <h3>ChatGPT Web</h3>
+              <div class="settings-line" title={chatGptStatus() ? `Transport: curl_cffi ${chatGptStatus()!.curlCffiVersion}, ${chatGptStatus()!.impersonate}. Stored cookie names: ${chatGptStatus()!.cookieNames.join(", ") || "none"}.` : undefined}><label for="chatgpt-web-cookie">Cookies<em>{chatGptStatus()?.auth === "configured" ? "connected" : "not connected"}</em></label>
+                <div class="settings-line-control">
+                  <Input id="chatgpt-web-cookie" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore value={chatGptCookie()} onInput={(event) => setChatGptCookie(event.currentTarget.value)} placeholder={chatGptStatus()?.auth === "configured" ? "Replace" : "Paste the Cookie header"} onKeyDown={(event) => { if (event.key === "Enter" && chatGptCookie().trim()) void saveChatGptCookie(); }} />
+                  <Show when={chatGptCookie().trim()}><Button size="sm" disabled={chatGptBusy()} onClick={() => void saveChatGptCookie()}>{chatGptBusy() ? <Spinner /> : null}Save</Button></Show>
+                  <Show when={!chatGptCookie().trim() && chatGptStatus()?.auth === "configured"}><Button variant="ghost" size="sm" disabled={chatGptBusy()} onClick={() => void removeChatGptCookie()}>Remove</Button></Show>
+                </div>
+              </div>
+              <details class="settings-line-details"><summary>Where to find them</summary>
+                <ol>
+                  <li>Sign in at <a href="https://chatgpt.com" target="_blank" rel="noreferrer">chatgpt.com</a>.</li>
+                  <li>Open browser developer tools, select Network, then reload ChatGPT.</li>
+                  <li>Select a request to <code>chatgpt.com</code>. In Request Headers, copy the complete <code>Cookie</code> value.</li>
+                  <li>Paste it above. It must include <code>__Secure-next-auth.session-token</code>, whole or split into numbered parts such as <code>.0</code> and <code>.1</code>.</li>
+                </ol>
+                <p>Conduit stores it on this server and never returns its values. Treat it like a password: do not paste it into a chat, issue, or log.</p>
+              </details>
+              <Show when={chatGptError()}><p role="alert" class="settings-line-note">{chatGptError()}</p></Show>
+            </section>
+            <section class="settings-group" aria-label="Provider accounts">
+              <h3>Provider accounts</h3>
+              <Show when={authUnavailable()}><p role="alert" class="settings-line-note">Set a Conduit password with <code>node scripts/conduit-auth.mjs set-password</code>, then sign in to manage Pi credentials here.</p></Show>
+              <Show when={authError() && !authUnavailable()}><p role="alert" class="settings-line-note">{authError()}</p></Show>
               <Show when={!authUnavailable() && authLoading() && !authProviders().length} fallback={<Show when={!authUnavailable()}>
-                <FieldGroup>
-                  <Field><FieldLabel for="pi-auth-provider">Provider</FieldLabel><select id="pi-auth-provider" aria-label="Pi authentication provider" value={authProviderId()} onChange={(event) => setAuthProviderId(event.currentTarget.value)}><For each={authProviders()}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></select></Field>
-                  <Show when={authProviders().find((provider) => provider.id === authProviderId())?.oauth}><Button disabled={authLoading() || Boolean(authAttempt()?.active)} onClick={() => void startOAuth()}>{authLoading() ? <Spinner /> : null}Sign in with browser</Button></Show>
-                  <Field><FieldLabel for="pi-api-key">API key</FieldLabel><Input id="pi-api-key" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore value={apiKey()} onInput={(event) => setApiKey(event.currentTarget.value)} placeholder="Stored in Conduit Pi only" /></Field>
-                  <Button variant="outline" disabled={authLoading() || !apiKey()} onClick={() => void saveApiKey()}>{authLoading() ? <Spinner /> : null}Save API key</Button>
-                </FieldGroup>
-                <Show when={authAttempt()?.owned}>
-                  <article class="pi-auth-attempt"><h3>{authAttempt()!.providerLabel}</h3><p>{authAttempt()!.message}</p>
-                    <Show when={authAttempt()!.authUrl}><a href={authAttempt()!.authUrl!} target="_blank" rel="noreferrer">Open provider sign-in</a><p>{authAttempt()!.instructions}</p></Show>
-                    <Show when={authAttempt()!.deviceCode}><p>Code: <code>{authAttempt()!.deviceCode!.userCode}</code></p><a href={authAttempt()!.deviceCode!.verificationUri} target="_blank" rel="noreferrer">Open verification page</a></Show>
-                    <Show when={authAttempt()!.prompt?.type === "select"}><p>{authAttempt()!.prompt!.message}</p><div class="pi-auth-options"><For each={authAttempt()!.prompt!.options || []}>{(option) => <Button variant="outline" disabled={authLoading()} onClick={() => void answerAuthPrompt(option.id)}>{option.label}</Button>}</For></div></Show>
-                    <Show when={authAttempt()!.prompt && authAttempt()!.prompt!.type !== "select"}><Field><FieldLabel for="pi-auth-response">{authAttempt()!.prompt!.message}</FieldLabel><div class="pi-auth-response"><Input id="pi-auth-response" type="text" autocomplete="off" value={authResponse()} onInput={(event) => setAuthResponse(event.currentTarget.value)} placeholder={authAttempt()!.prompt!.placeholder || ""} onKeyDown={(event) => { if (event.key === "Enter") void answerAuthPrompt(authResponse()); }} /><Button disabled={authLoading() || !authResponse().trim()} onClick={() => void answerAuthPrompt(authResponse())}>Continue</Button></div></Field></Show>
-                    <Show when={authAttempt()!.error}><p role="alert" class="settings-inline-error">{authAttempt()!.error}</p></Show>
-                    <Show when={authAttempt()!.active}><Button variant="ghost" onClick={() => void cancelOAuth()}>Cancel sign-in</Button></Show>
-                  </article>
+                <label class="settings-line" for="pi-auth-provider" title="Credentials are stored only in Conduit's pinned Pi runtime."><span>Provider</span><select id="pi-auth-provider" aria-label="Pi authentication provider" value={authProviderId()} onChange={(event) => setAuthProviderId(event.currentTarget.value)}><For each={authProviders()}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></select></label>
+                <Show when={authProviders().find((provider) => provider.id === authProviderId())?.oauth}>
+                  <div class="settings-line"><span>Sign in</span><Button variant="ghost" size="sm" disabled={authLoading() || Boolean(authAttempt()?.active)} onClick={() => void startOAuth()}>{authLoading() ? <Spinner /> : null}Sign in with browser</Button></div>
                 </Show>
-                <div class="settings-cards"><For each={authProviders().filter((provider) => provider.auth.configured)}>{(provider) => <article><h3>{provider.label}</h3><p>{provider.auth.source === "stored" ? "Credential stored in Conduit Pi" : provider.auth.source === "environment" ? "Credential available from the server environment" : "Credential managed by Pi configuration"}</p><Show when={provider.auth.removable}><Button variant="outline" size="sm" disabled={authLoading()} onClick={() => void removePiAuth(provider.id)}>Remove credential</Button></Show></article>}</For></div>
-              </Show>}><div class="settings-loading"><Spinner /><span>Loading Pi authentication…</span></div></Show>
-            </div></details>
-          </Show>
+                <div class="settings-line"><label for="pi-api-key">API key</label>
+                  <div class="settings-line-control">
+                    <Input id="pi-api-key" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore value={apiKey()} onInput={(event) => setApiKey(event.currentTarget.value)} placeholder="Stored in Conduit Pi only" onKeyDown={(event) => { if (event.key === "Enter" && apiKey()) void saveApiKey(); }} />
+                    <Show when={apiKey()}><Button size="sm" disabled={authLoading()} onClick={() => void saveApiKey()}>{authLoading() ? <Spinner /> : null}Save</Button></Show>
+                  </div>
+                </div>
+                <Show when={authAttempt()?.owned}>
+                  <div class="settings-line"><span>{authAttempt()!.providerLabel}<em>{authAttempt()!.message}</em></span>
+                    <div class="settings-line-control">
+                      <Show when={authAttempt()!.authUrl}><a class="settings-line-link" href={authAttempt()!.authUrl!} target="_blank" rel="noreferrer">Open sign-in</a></Show>
+                      <Show when={authAttempt()!.active}><Button variant="ghost" size="sm" onClick={() => void cancelOAuth()}>Cancel</Button></Show>
+                    </div>
+                  </div>
+                  <Show when={authAttempt()!.authUrl && authAttempt()!.instructions}><p class="settings-line-note" data-tone="quiet">{authAttempt()!.instructions}</p></Show>
+                  <Show when={authAttempt()!.deviceCode}><div class="settings-line"><span>Code<em><code>{authAttempt()!.deviceCode!.userCode}</code></em></span><a class="settings-line-link" href={authAttempt()!.deviceCode!.verificationUri} target="_blank" rel="noreferrer">Open verification page</a></div></Show>
+                  <Show when={authAttempt()!.prompt?.type === "select"}><div class="settings-line"><span>{authAttempt()!.prompt!.message}</span><div class="settings-line-control" data-wrap><For each={authAttempt()!.prompt!.options || []}>{(option) => <Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => void answerAuthPrompt(option.id)}>{option.label}</Button>}</For></div></div></Show>
+                  <Show when={authAttempt()!.prompt && authAttempt()!.prompt!.type !== "select"}><div class="settings-line"><label for="pi-auth-response">{authAttempt()!.prompt!.message}</label><div class="settings-line-control"><Input id="pi-auth-response" type="text" autocomplete="off" value={authResponse()} onInput={(event) => setAuthResponse(event.currentTarget.value)} placeholder={authAttempt()!.prompt!.placeholder || ""} onKeyDown={(event) => { if (event.key === "Enter") void answerAuthPrompt(authResponse()); }} /><Button size="sm" disabled={authLoading() || !authResponse().trim()} onClick={() => void answerAuthPrompt(authResponse())}>Continue</Button></div></div></Show>
+                  <Show when={authAttempt()!.error}><p role="alert" class="settings-line-note">{authAttempt()!.error}</p></Show>
+                </Show>
+                <For each={authProviders().filter((provider) => provider.auth.configured)}>{(provider) => <div class="settings-line"><span title={provider.auth.source === "stored" ? "Credential stored in Conduit Pi" : provider.auth.source === "environment" ? "Credential available from the server environment" : "Credential managed by Pi configuration"}>{provider.label}<em>{provider.auth.source === "stored" ? "stored" : provider.auth.source === "environment" ? "environment" : "Pi config"}</em></span>
+                  <Show when={provider.auth.removable} fallback={<span />}><Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => void removePiAuth(provider.id)}>Remove</Button></Show>
+                </div>}</For>
+              </Show>}><div class="settings-line"><span>Provider<em>loading…</em></span><span /></div></Show>
+            </section>
+          </div></Show>
         </main>
       </div>
     </KDialog.Content></KDialog.Portal>
