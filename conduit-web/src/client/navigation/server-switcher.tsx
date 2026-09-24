@@ -71,9 +71,21 @@ export function ServerSwitcher(props: {
 
   // Only while the menu is open. A timer that pings every known address
   // forever is traffic nobody asked for, over links that may be metered.
+  // The row is only a handle for its menu, not a place to stand. A click does
+  // not focus it, and when the menu closes focus goes back to wherever it was
+  // before -- the menu library focuses its trigger once it has closed,
+  // whatever it is told, so that focus is passed straight on.
+  let focusBefore: Element | null = null;
+  let giveBack: Element | null | undefined;
   const onOpenChange = (open: boolean) => {
     clearInterval(timer);
-    if (!open) return;
+    if (!open) {
+      giveBack = focusBefore;
+      focusBefore = null;
+      setTimeout(() => { giveBack = undefined; }, 1000);
+      return;
+    }
+    giveBack = undefined;
     void measure();
     timer = setInterval(() => void measure(), PROBE_INTERVAL_MS);
   };
@@ -155,11 +167,14 @@ export function ServerSwitcher(props: {
   // elsewhere to open, so it is not offered the move and not shown the mark.
   const away = (entry: ServerEntry) => !isInstalledClient() && !isStandaloneBrowser() && entry.origin !== location.origin;
 
-  // The row is only a handle for its menu, not a place to stand: it is out of
-  // the tab order, a click does not focus it, and closing the menu does not
-  // hand focus back to it.
   return <Menu onOpenChange={onOpenChange}>
-    <MenuTrigger class="sidebar-user" tabIndex={-1} onMouseDown={(event: MouseEvent) => event.preventDefault()} aria-label={`${serverName()} · ${triggerDetail()}`} title={`${activeOrigin() || "No server"} — ${triggerDetail()}`}>
+    <MenuTrigger class="sidebar-user" tabIndex={-1} onPointerDown={() => { focusBefore = document.activeElement; }} onFocus={(event: FocusEvent) => {
+      if (giveBack === undefined) return;
+      const before = giveBack;
+      giveBack = undefined;
+      if (before instanceof HTMLElement && before.isConnected && before !== event.currentTarget) before.focus({ preventScroll: true });
+      else (event.currentTarget as HTMLElement).blur();
+    }} onMouseDown={(event: MouseEvent) => event.preventDefault()} aria-label={`${serverName()} · ${triggerDetail()}`} title={`${activeOrigin() || "No server"} — ${triggerDetail()}`}>
       <span class="sidebar-user-label"><strong>{serverName()}</strong><small>{triggerDetail()}</small></span>
       <span class={`server-status-indicator runtime-indicator runtime-indicator-${connectionTone()}`} aria-hidden="true">
         <Show when={props.connectivity === "connecting" || props.connectivity === "reconnecting"} fallback={<span class="runtime-indicator-dot" />}><Spinner class="size-3" /></Show>
