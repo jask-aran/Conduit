@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js";
 import { toast } from "solid-sonner";
-import { api, asList } from "../api/client";
+import { api, apiWhenServed, asList } from "../api/client";
 import type { ModelOption, ModelState } from "../api/contracts";
 import { preferredThinkingLevel } from "./thinking-levels";
 
@@ -68,13 +68,13 @@ export function createModelSettings(
     try {
       const refresh = initialCatalogRefresh || refreshCatalog;
       const [settings, catalog] = await Promise.all([
-        api<ModelState>(`/v0/settings?projectId=${encodeURIComponent(projectId)}`),
-        api<ModelState>(`/v0/models?projectId=${encodeURIComponent(projectId)}`),
+        apiWhenServed<ModelState>(`/v0/settings?projectId=${encodeURIComponent(projectId)}`),
+        apiWhenServed<ModelState>(`/v0/models?projectId=${encodeURIComponent(projectId)}`),
       ]);
       if (activeProjectId === projectId) applySettings(settings, catalog);
       if (refresh) void (async () => {
-        const refreshedCatalog = await api<ModelState>(`/v0/models?projectId=${encodeURIComponent(projectId)}&refresh=true`);
-        const refreshedSettings = await api<ModelState>(`/v0/settings?projectId=${encodeURIComponent(projectId)}`);
+        const refreshedCatalog = await apiWhenServed<ModelState>(`/v0/models?projectId=${encodeURIComponent(projectId)}&refresh=true`);
+        const refreshedSettings = await apiWhenServed<ModelState>(`/v0/settings?projectId=${encodeURIComponent(projectId)}`);
         initialCatalogRefresh = false;
         if (activeProjectId === projectId) applySettings(refreshedSettings, refreshedCatalog);
       })().catch(onError);
@@ -88,7 +88,7 @@ export function createModelSettings(
     const requestId = ++requestSequence;
     setChatLoading(true);
     try {
-      const catalog = await api<ModelState>(`/v0/chats/${encodeURIComponent(chatId)}/models`);
+      const catalog = await apiWhenServed<ModelState>(`/v0/chats/${encodeURIComponent(chatId)}/models`);
       if (activeChatId !== chatId || requestId !== requestSequence) return;
       const nextModels = asList<ModelOption>(catalog.models);
       const selected = nextModels.find((item) => item.spec === catalog.model);

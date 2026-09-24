@@ -2174,7 +2174,7 @@ function App() {
         window.dispatchEvent(new CustomEvent(COMPOSER_SURFACE_CHANGE_EVENT, { detail: value }));
       }
     };
-    void api<UiPreferences & { knownServers?: Array<{ origin?: unknown; name?: unknown }> }>("/v0/preferences").then(async (serverPreferences) => {
+    void apiWhenServed<UiPreferences & { knownServers?: Array<{ origin?: unknown; name?: unknown }> }>("/v0/preferences").then(async (serverPreferences) => {
       setSidebarPins(Array.isArray(serverPreferences.sidebarPins) ? serverPreferences.sidebarPins : []);
       // Every server keeps the directory, and every client that reaches one
       // both reads it and tops it up. Two addresses for the same machine share

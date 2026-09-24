@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { api, asList } from "../api/client";
+import { api, apiWhenServed, asList } from "../api/client";
 import type { ServiceLevel, ServiceLevelState } from "../api/contracts";
 
 type ErrorHandler = (error: unknown) => void;
@@ -16,7 +16,7 @@ export function createServiceLevelSettings(onError: ErrorHandler) {
     const requestId = ++requestSequence;
     if (changed) { setLevels([]); setSelected(""); }
     try {
-      const state = await api<ServiceLevelState>(`/v0/chats/${encodeURIComponent(chatId)}/service-levels`);
+      const state = await apiWhenServed<ServiceLevelState>(`/v0/chats/${encodeURIComponent(chatId)}/service-levels`);
       if (activeChatId !== chatId || requestId !== requestSequence) return;
       setLevels(asList<ServiceLevel>(state.levels));
       setSelected(state.selected || "");
