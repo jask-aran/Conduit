@@ -65,6 +65,8 @@ export function registerRuntimeRoutes(app, {
   });
 
   app.get("/healthz", (request, response) => {
+    // The launcher must not signal an older server that has no SIGUSR2 handler.
+    response.setHeader("X-Conduit-Pwa-Prepare", "1");
     const activeGenerations = runtimeHub.snapshot().processes.filter((process) => drainsOnRestart(process)
       && (process.active || process.stopping || process.compacting || process.retrying
         || process.generation && !process.generation.settled)).length;

@@ -239,6 +239,10 @@ prepare_client_restart() {
   local pid
   pid="$(managed_pid)" || return 0
   is_healthy || return 0
+  # The first deployment of this handshake still has an older server running.
+  # SIGUSR2 would terminate that process instead of notifying its clients.
+  if ! curl --silent --show-error --fail --max-time 2 --head "$HEALTH_URL" \
+    | grep -qi '^x-conduit-pwa-prepare: 1'; then return 0; fi
   kill -USR2 "$pid" || return 1
   echo "Giving connected browsers ${PWA_GRACE_SECONDS}s to install the new client."
   PWA_GRACE_STARTED_AT="$(date +%s)"
