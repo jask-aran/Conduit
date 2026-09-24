@@ -83,8 +83,10 @@
    the row is under the pointer, when the row takes the wash. State that
    matters (stored, installed, a test result) sits in muted text after the
    name, on the same line. */
-.settings-list { --settings-control: 240px; display: grid; min-width: 0; gap: 22px; max-width: 640px; }
+.settings-list { --settings-control: 240px; display: grid; min-width: 0; gap: 12px; max-width: 640px; }
 .settings-group { display: grid; gap: 1px; }
+/* A light hairline between groups, halfway through the space that parts them. */
+.settings-group + .settings-group { border-top: 1px solid var(--border); padding-top: 12px; }
 /* Headings and names are the rail's: a group heading is its group label, a row's name its item. */
 .settings-group > h3 { margin: 0 0 2px; padding: 3.2px 6.4px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 52%); font-size: 9.6px; font-weight: 700; letter-spacing: .02em; }
 /* Every row's control sits in one column of one width, so the boxes line
@@ -146,7 +148,8 @@
 .settings-progress::-moz-progress-bar { background: var(--foreground); }
 
 @media (max-width: 760px) {
-  .settings-list { --settings-control: min(54%, 220px); gap: 20px; }
+  .settings-list { --settings-control: min(54%, 220px); gap: 10px; }
+  .settings-group + .settings-group { padding-top: 10px; }
   .settings-line { gap: 10px; }
   .settings-group > h3 { padding: 5px 9px; font-size: 13px; }
   .settings-line { min-height: 44px; }
