@@ -84,16 +84,24 @@
    the row is under the pointer, when the row takes the wash. State that
    matters (stored, installed, a test result) sits in muted text after the
    name, on the same line. */
-.settings-list { display: grid; gap: 22px; max-width: 640px; }
+.settings-list { --settings-control: 240px; display: grid; min-width: 0; gap: 22px; max-width: 640px; }
 .settings-group { display: grid; gap: 1px; }
 .settings-group > h3 { margin: 0 0 4px; padding: 0 8px; color: color-mix(in oklch, var(--foreground), transparent 52%); font-size: 10.5px; font-weight: 700; letter-spacing: .02em; }
-.settings-line { display: flex; min-height: 32px; align-items: center; justify-content: space-between; gap: 12px; border-radius: 8px; padding: 2px 4px 2px 8px; }
+/* Every row's control sits in one column of one width, so the boxes line
+   up: a segmented choice, an input or a select fills it; a lone button or
+   switch sits at its right edge. The name gives way first on a narrow
+   screen, and nothing is wider than the column, so the page never scrolls
+   sideways. */
+.settings-line { display: grid; min-width: 0; min-height: 32px; grid-template-columns: minmax(0, 1fr) var(--settings-control); align-items: center; gap: 12px; border-radius: 8px; padding: 2px 4px 2px 8px; }
+.settings-line > :last-child { min-width: 0; max-width: 100%; }
+.settings-line > [data-slot="button"]:last-child, .settings-line > .settings-switch:last-child { justify-self: end; }
 @media (hover: hover) { .settings-line:hover { background: var(--accent); } }
 .settings-line > span, .settings-line > label { display: flex; min-width: 0; align-items: baseline; gap: 8px; overflow: hidden; color: var(--foreground); font-size: 12.5px; font-weight: 500; white-space: nowrap; }
 .settings-line em, .settings-line-wide em { overflow: hidden; color: var(--muted-foreground); font-size: 11px; font-style: normal; font-weight: 400; text-overflow: ellipsis; }
 .settings-line em[data-tone="error"], .settings-line-wide em[data-tone="error"] { color: var(--destructive); }
 .settings-line em[data-tone="ok"] { color: var(--foreground); }
-.settings-line-control { display: flex; min-width: 0; flex: none; align-items: center; justify-content: flex-end; gap: 2px; }
+.settings-line-control { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: 2px; }
+.settings-line-control > select, .settings-line-control > input { flex: 1; }
 .settings-line-wide { display: flex; align-items: center; gap: 10px; padding: 2px 8px 6px; }
 .settings-line-wide .settings-recorder-monitor { min-width: 0; flex: 1; }
 .settings-line-wide .settings-progress { flex: 1; }
@@ -102,8 +110,8 @@
 /* Quiet controls: a select is its value in muted text and a chevron, lit
    with the row; inputs keep a hairline since typing into nothing is lost. */
 .settings-dialog .settings-line select {
-  width: auto;
-  max-width: 260px;
+  width: 100%;
+  min-width: 0;
   height: 26px;
   min-height: 26px;
   appearance: none;
@@ -120,32 +128,35 @@
 .settings-dialog .settings-line:hover select, .settings-dialog .settings-line select:focus-visible { color: var(--foreground); outline: none; }
 .settings-dialog .settings-line select:focus-visible { background-color: var(--accent); }
 .settings-dialog .settings-line select option { background: var(--popover); color: var(--foreground); }
-.settings-dialog .settings-line input:not([type="checkbox"]) { width: 220px; height: 26px; min-height: 26px; margin: 0; border-radius: 6px; padding: 0 8px; font-size: 12px; }
+.settings-dialog .settings-line input:not([type="checkbox"]) { width: 100%; min-width: 0; height: 26px; min-height: 26px; margin: 0; border-radius: 6px; padding: 0 8px; font-size: 12px; }
 .settings-dialog .settings-line [data-slot="button"] { height: 26px; min-height: 26px; flex: none; border-radius: 6px; padding: 0 9px; font-size: 12px; }
 .settings-dialog .settings-line [data-slot="button"][data-size="icon-sm"], .settings-dialog .settings-line [data-slot="button"]:has(> svg:only-child) { width: 26px; padding: 0; }
 .settings-dialog .settings-line [data-slot="button"] svg { width: 13px; height: 13px; }
-.settings-dialog .settings-keycap-input { width: auto; min-width: 120px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; text-align: center; caret-color: transparent; cursor: pointer; }
+.settings-dialog .settings-keycap-input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; text-align: center; caret-color: transparent; cursor: pointer; }
 /* Equal segments, each as wide as the longest label, so none truncates. */
-.settings-line > .settings-segmented { width: max-content; max-width: 100%; flex: none; grid-template-columns: repeat(var(--segments), 1fr); }
-.settings-line > .settings-segmented button { min-height: 22px; padding: 0 12px; font-size: 11.5px; }
+.settings-line > .settings-segmented { width: 100%; grid-template-columns: repeat(var(--segments), minmax(0, 1fr)); }
+.settings-line > .settings-segmented button { min-height: 22px; padding: 0 6px; font-size: 11.5px; }
 .settings-progress { height: 3px; appearance: none; border: 0; border-radius: 999px; background: var(--input); overflow: hidden; }
 .settings-progress::-webkit-progress-bar { background: var(--input); }
 .settings-progress::-webkit-progress-value { border-radius: 999px; background: var(--foreground); }
 .settings-progress::-moz-progress-bar { background: var(--foreground); }
 
 @media (max-width: 760px) {
-  .settings-list { gap: 20px; }
+  .settings-list { --settings-control: min(54%, 220px); gap: 20px; }
+  .settings-line { gap: 10px; }
   .settings-group > h3 { font-size: 12px; }
   .settings-line { min-height: 44px; }
   .settings-line > span, .settings-line > label { font-size: 14px; }
   .settings-line em { font-size: 12.5px; }
-  .settings-dialog .settings-line select { height: 34px; font-size: 14px; max-width: 200px; }
-  .settings-dialog .settings-line input:not([type="checkbox"]) { width: 170px; height: 34px; font-size: 14px; }
+  .settings-dialog .settings-line select { height: 34px; font-size: 14px; }
+  .settings-dialog .settings-line input:not([type="checkbox"]) { height: 34px; font-size: 14px; }
   .settings-dialog .settings-line [data-slot="button"] { height: 34px; font-size: 14px; }
   .settings-dialog .settings-line [data-slot="button"]:has(> svg:only-child) { width: 34px; }
-  .settings-line > .settings-segmented button { min-height: 30px; padding: 0 8px; font-size: 12.5px; }
+  .settings-line > .settings-segmented button { min-height: 30px; padding: 0 4px; font-size: 13px; }
   .settings-line > .settings-segmented button svg { display: none; }
   .settings-switch { width: 36px; height: 22px; }
   .settings-switch > span { width: 16px; height: 16px; }
   .settings-switch[aria-checked="true"] > span { transform: translateX(14px); }
 }
+/* A backstop: a settings list never scrolls sideways, even if a value runs long. */
+.settings-dialog .settings-content:has(.settings-list) { overflow-x: hidden; }

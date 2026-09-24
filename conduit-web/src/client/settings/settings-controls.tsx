@@ -9,7 +9,7 @@ import "./settings-controls.css";
 export function Segmented<T extends string>(props: {
   label: string;
   value: T;
-  options: ReadonlyArray<{ value: T; label: string; icon?: JSX.Element }>;
+  options: ReadonlyArray<{ value: T; label: string; icon?: JSX.Element; title?: string }>;
   onChange: (value: T) => void;
   disabled?: boolean;
   id?: string;
@@ -38,6 +38,7 @@ export function Segmented<T extends string>(props: {
       <button
         type="button"
         role="radio"
+        title={option.title}
         aria-checked={option.value === props.value}
         tabIndex={option.value === props.value ? 0 : -1}
         disabled={props.disabled}
