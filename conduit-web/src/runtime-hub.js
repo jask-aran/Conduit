@@ -7,12 +7,14 @@ export class RuntimeHub {
   constructor({ listViews } = {}) {
     this.listViews = listViews || (() => []);
     this.clients = new Set();
+    this.restartPrepared = false;
   }
 
   snapshot() {
     return {
       type: "runtime_global_snapshot",
       processes: this.listViews(),
+      ...(this.restartPrepared ? { restartPrepared: true } : {}),
       at: new Date().toISOString(),
     };
   }
@@ -27,6 +29,12 @@ export class RuntimeHub {
     if (!event || typeof event !== "object") return;
     const payload = JSON.stringify(event);
     for (const client of this.clients) this.write(client, payload);
+  }
+
+  prepareRestart() {
+    if (this.restartPrepared) return;
+    this.restartPrepared = true;
+    this.publish({ type: "pwa_restart_prepared", at: new Date().toISOString() });
   }
 
   publishProcess(view, reason = "update") {

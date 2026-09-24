@@ -36,7 +36,13 @@ test("runtime hub sends snapshot on attach and process updates to all clients", 
   assert.equal(writes.length, 5);
   assert.match(writes[4], /terminal_removed/);
 
+  hub.prepareRestart();
+  assert.match(writes[5], /pwa_restart_prepared/);
+  hub.prepareRestart();
+  assert.equal(writes.length, 6);
+  assert.equal(hub.snapshot().restartPrepared, true);
+
   detach();
   hub.publishProcess({ id: "p2", chatId: "c2", status: "running", activity: "idle" });
-  assert.equal(writes.length, 5);
+  assert.equal(writes.length, 6);
 });
