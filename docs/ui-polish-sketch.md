@@ -2,8 +2,8 @@
 
 Status: sections 1 (interrupted turns), 2 (composer hierarchy), 5 (empty
 states, reduced) and 7 (motion, but for the deferred dashboard transition)
-are built and recorded below as built; 3, 4 and 6 remain proposals for
-separate, bounded changes.
+are built and recorded below as built; 3, 4, 6 and 8 (keyboard) remain
+proposals for separate, bounded changes.
 
 These proposals cover transcript density, composer hierarchy, mobile file
 browsing, useful empty states, and interaction feedback. A separate autosave
@@ -398,7 +398,8 @@ look and behave exactly like their unpinned rows. A current rail icon is
 white with a heavier stroke. Several selected chats are the wash on each,
 nothing more -- the general rule for multi-selection. The Conduit/Computer
 switch keeps its wash as a two-state toggle. Both areas follow the same
-rules. Recorded in `DESIGN.md` under List row.
+rules. Recorded in `DESIGN.md` under List row. Moving that cursor with the
+keyboard belongs to section 8.
 
 Review that surface with the user before extending the treatment elsewhere.
 Record accepted choices in `DESIGN.md` when they are ready to become a rule.
@@ -520,12 +521,95 @@ composer** -- the queued pill's width and material, about twice its height
   could replace the dialog later. Attachments already sent, under a prompt in
   the transcript, keep today's cards; they could become read-only chips after.
 
+## 8. Keyboard: contexts, the leader, and navigation
+
+Status: proposal, not started. Keyboard navigation of the sidebar was the
+natural next step after its cursor (section 6), but moving a cursor is the
+last part of this, not the first: the leader and the way shortcuts are
+scoped need their own pass alongside, or every surface grows its own keys.
+
+What exists. Shortcuts resolve through a flat priority list of contexts
+(`SHORTCUT_CONTEXT_PRIORITY`: palettes, settings, workspace panel, composer,
+chat, application, ...), each switched on and off by the surface that owns
+it rather than following focus. The leader, Ctrl+X, shows the second keys
+for one context at a time, and only knows Global, Chat, Composer and
+Workspace. There is no way to move focus into the sidebar, nor any sign of
+which surface has it.
+
+### A tree of contexts that follows focus
+
+Each surface declares itself as a region: sidebar; chat, holding transcript
+and composer; workspace panel, holding files, source control and terminal;
+dashboard; palettes and dialogs. The active context is the chain of regions
+around the focused element -- `App › Chat › Composer`,
+`App › Sidebar › NHP` -- worked out from focus rather than registered by
+hand. A shortcut belongs to one node. The innermost binding wins, and keys
+only conflict between a node and its ancestors, so siblings can reuse them:
+R can rename on a sidebar row and regenerate on a transcript turn.
+
+### Moving between regions
+
+- **F6 / Shift+F6** cycles the major regions -- sidebar, chat, workspace
+  panel -- the browser and OS convention VS Code also follows. In a browser
+  tab F6 may belong to the browser; the desktop client and the installed
+  app can take it, and the leader always works.
+- **The leader, then a letter**, jumps straight to one: sidebar, composer,
+  transcript, workspace. The letters are chosen against today's leader
+  bindings when this is built.
+- Each region keeps its own cursor. The sidebar is entered at the current
+  row the first time and at the last row left after that.
+
+### Knowing it happened
+
+- **The cursor appears.** The sidebar's wash already means the cursor, so a
+  washed row appearing is the signal; a transcript turn takes the same wash.
+- **The region acknowledges it.** Its edge or heading brightens for ~150ms
+  and settles, drawing the eye without a standing frame.
+- **The leader says where you are.** Opened anywhere, it shows the path as a
+  breadcrumb, `Sidebar › NHP › Mersen Item Margin Simulation`.
+
+### Moving within a region and getting back
+
+- ↑/↓ move the cursor, skipping headings; Home/End go to the ends; →/← step
+  into and out of a folder or a turn. Shift+↑/↓ extends a selection, which
+  is only more washed rows. The context menu opens with the Menu key or
+  Shift+F10. Pointer and keyboard move the one cursor, so moving the mouse
+  moves it and arrowing carries on from there.
+- **Enter acts.** On a sidebar chat it opens it and hands focus to its
+  composer, because opening a chat is usually to write in it.
+- **Esc steps outward** a level at a time, and from the top of any region
+  goes home to the open chat's composer: pressing Esc enough always gets
+  back to typing.
+- New chat and the like are leader commands at the root, reachable from
+  anywhere, landing in the new chat's composer.
+
+### The leader as the map
+
+Opened from anywhere, the leader lists what applies at each level of the
+path, innermost first -- "Sidebar row": rename, move, pin, delete; then
+"Sidebar"; then "App" -- with the region jumps always present. It becomes
+both where you learn the shortcuts of the place you are in and how you move
+to another place. Every scoped shortcut appears under its own context, so
+nothing is only discoverable from settings.
+
+### Order
+
+1. The context tree, focus regions, F6 and leader jumps, and the cues --
+   no per-surface navigation yet.
+2. The layered leader.
+3. Cursor navigation per surface: sidebar, then dashboard lists, then
+   transcript turns.
+
+Each step is its own change, checked before the next. Open before step 1:
+how today's contexts map onto the tree without breaking saved shortcut
+preferences, and whether the region cue is the same on every surface.
+
 ## Suggested order
 
 Interrupted turns, composer hierarchy, empty states and motion are done; the
-composer was the first interaction-feedback pass. Left: mobile file browsing
-(4), the autosave pilot (3), and keyboard navigation, which the sidebar's
-cursor was shaped for (6).
+composer and the sidebar were the first interaction-feedback passes. Left:
+mobile file browsing (4), the autosave pilot (3), and keyboard contexts and
+navigation (8), in its own three steps.
 The dashboard-to-chat transition waits for a whole-UI fade on load, and is
 built with it.
 
