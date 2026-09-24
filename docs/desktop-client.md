@@ -106,15 +106,15 @@ for a running instance by binary name, so two installs shipping
 installing the development client asks to close "Conduit", and Windows search
 offers two entries that read the same.
 
-A development client gets its update files from the development Conduit server.
-The default build uses its reachable HTTPS address, so a client on another
-machine can download the same signed build. Set `CONDUIT_LOCAL_UPDATE_URL` when
-building to use another server, for example
-`CONDUIT_LOCAL_UPDATE_URL=http://127.0.0.1:4310/desktop-updates` for a same-machine
-test. The URL is built into the client; changing the active Conduit server in
-the app does not change its update source. Plain HTTP needs
-`dangerousInsecureTransportProtocol`, which the build sets only for HTTP URLs.
-The client checks each update against its built-in signature key.
+A development client first checks `/desktop-updates` through the active server
+route. The same route supplies the archive, so loopback or a LAN address works
+when the app has selected it. If that server does not serve development updates,
+the client checks its built-in HTTPS endpoint. The default endpoint is
+`https://localconduit.jask-aran.com/desktop-updates`, which lets a remote client
+update even before it has selected a route. Set `CONDUIT_LOCAL_UPDATE_URL` when
+building to change that fallback. Development builds permit plain HTTP for
+direct routes; the client verifies the archive with its built-in signature key
+before installation. Released clients keep using GitHub Releases.
 
 **A development build names its own version**: the patch after the last tag, as
 a prerelease carrying the build time and the commit. It sorts above the release
@@ -205,10 +205,9 @@ npm run desktop:build:win -- --dev
 `start-conduit.sh` looks for the directory the Windows build writes into and
 serves it when it is there, because remembering an environment variable before
 every restart is the difference between testing an update and not bothering.
-The default update URL reaches that route through the development server's
-public HTTPS address. The build still runs on the server host; the server
-distributes its output and does not build it. Install the new build with the
-client's **Restart** action after the download completes.
+The build still runs on the server host; the server distributes its output and
+does not build it. Install the new build with the client's **Restart** action
+after the download completes.
 `CONDUIT_DESKTOP_UPDATE_DIR` still overrides it. `/desktop-updates` exists only
 when that names a directory, serves that one directory, and 404s a missing
 file. It sits **ahead
