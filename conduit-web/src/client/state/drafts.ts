@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { api, asList } from "../api/client";
+import { api, apiWhenServed, asList } from "../api/client";
 import { activeOrigin } from "../platform/servers";
 
 export interface DraftEntry { text: string; attachmentIds: string[]; savedAt: string }
@@ -183,7 +183,7 @@ export function createDrafts(onError: (error: unknown) => void) {
     // person can see while the request is in the air beats a correct one they
     // cannot.
     try {
-      const payload = await api<{ drafts?: Record<string, DraftEntry>; stash?: StashEntry[] }>("/v0/drafts");
+      const payload = await apiWhenServed<{ drafts?: Record<string, DraftEntry>; stash?: StashEntry[] }>("/v0/drafts");
       for (const [chatId, raw] of Object.entries(payload.drafts || {})) {
         if (timers.has(chatId)) continue;
         const saved = validEntry(raw);
