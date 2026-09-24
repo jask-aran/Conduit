@@ -37,6 +37,28 @@ export async function api<T>(url: string, options: RequestInit = {}): Promise<T>
   return body as T;
 }
 
+/**
+ * A read made on the way in, when the server may still be starting -- the
+ * first load after a restart, often a reload the new build asked for. A
+ * starting server answers with no connection, or with a 5xx from itself or
+ * the proxy in front of it; those are tried again, backing off, for about
+ * half a minute before the failure is let through. Anything else fails at
+ * once. For GETs only: a write is never repeated behind the caller's back.
+ */
+export async function apiWhenServed<T>(url: string): Promise<T> {
+  const delays = [250, 500, 1000, 1500, 2000, 3000, 4000, 5000, 5000, 5000];
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await api<T>(url);
+    } catch (error) {
+      const status = (error as { apiRequest?: ApiRequestMetadata }).apiRequest?.status;
+      const starting = status === undefined ? error instanceof TypeError : status >= 500;
+      if (!starting || attempt >= delays.length) throw error;
+      await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+    }
+  }
+}
+
 export const asList = <T>(value: unknown): T[] => Array.isArray(value) ? value as T[] : [];
 
 export { pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./routes.ts";

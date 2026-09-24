@@ -2,7 +2,7 @@
  * The leader menu (leader-palette.tsx): a step back to look. The page dims and
  * one small card sits at the foot of the screen, in the composer's material
  * (.composer-surface-material) and the question card's row shape. It arrives
- * gently and has no exit of its own: choosing or cancelling ends it.
+ * gently and leaves quickly the way it came when a choice or Esc ends it.
  */
 .leader-menu-scrim {
   position: fixed;
@@ -30,6 +30,13 @@
 
 @keyframes leader-menu-dim { from { opacity: 0; } }
 @keyframes leader-menu-rise { from { opacity: 0; transform: translateY(8px); } }
+@keyframes leader-menu-undim { to { opacity: 0; } }
+@keyframes leader-menu-drop { to { opacity: 0; transform: translateY(8px); } }
+
+/* Leaving: quick, accelerating, back the way it came; nothing in it answers
+   the pointer while it goes. */
+.leader-menu-scrim[data-leaving] { animation: leader-menu-undim 150ms cubic-bezier(.4, 0, 1, 1) both; pointer-events: none; }
+.leader-menu[data-leaving] { animation: leader-menu-drop 150ms cubic-bezier(.4, 0, 1, 1) both; pointer-events: none; }
 
 .leader-menu kbd {
   display: inline-grid;

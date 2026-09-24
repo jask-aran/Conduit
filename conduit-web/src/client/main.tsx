@@ -12,7 +12,7 @@ import "solid-sonner/styles.css";
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
 import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/primitives";
-import { api, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./api/client";
+import { api, apiWhenServed, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./api/client";
 import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl } from "./api/transport";
 import { startPathSelection } from "./platform/path-selector";
 import { canDiscoverServers, discoverServers, type FoundServer } from "./platform/discovery";
@@ -2313,7 +2313,9 @@ function App() {
     };
     window.addEventListener("popstate", onPopState);
     onCleanup(() => window.removeEventListener("popstate", onPopState));
-    const templateRequest = api<{ templates: Template[]; defaultTemplateId?: string }>("/v0/templates")
+    // Everything read on the way in waits out a server that is still starting
+    // (apiWhenServed), rather than failing once and leaving the page loading.
+    const templateRequest = apiWhenServed<{ templates: Template[]; defaultTemplateId?: string }>("/v0/templates")
       .catch(() => ({ templates: [], defaultTemplateId: "assistant" }))
       .then((payload) => {
         setTemplates(asList<Template>(payload.templates));
@@ -2321,7 +2323,7 @@ function App() {
         setTemplatesLoading(false);
         return payload;
       });
-    void api<{
+    void apiWhenServed<{
       profiles: Array<{ id: string; label: string; description?: string; management: string; disabled?: boolean; drive?: boolean; agent: { protocol: string; implementation: string } }>;
       harnesses?: Record<string, HarnessManifestView>;
     }>("/v0/profiles")
@@ -2333,23 +2335,23 @@ function App() {
             disabled: profile.disabled, implementation: profile.agent?.implementation, drive: profile.drive })));
       })
       .catch(() => { setExternalProfiles([]); setHarnessCapabilities({}); });
-    void api<{ partialContinue?: boolean; maxAttachmentBytes?: number }>("/v0/capabilities")
+    void apiWhenServed<{ partialContinue?: boolean; maxAttachmentBytes?: number }>("/v0/capabilities")
       .then((payload) => {
         setPartialContinue(payload.partialContinue !== false);
         const maxBytes = payload.maxAttachmentBytes;
         if (typeof maxBytes === "number" && Number.isSafeInteger(maxBytes) && maxBytes > 0) setMaxAttachmentBytes(maxBytes);
       })
       .catch(() => setPartialContinue(true));
-    void api<{ installations: Installation[] }>("/v0/pi-installations")
+    void apiWhenServed<{ installations: Installation[] }>("/v0/pi-installations")
       .then((payload) => setInstallations(asList<Installation>(payload.installations)))
       .catch(() => setInstallations([]))
       .finally(() => setInstallationsLoading(false));
 
     const routeId = initialRouteId;
-    const catalogueRequest = api<{ projects: Project[] }>("/v0/projects");
+    const catalogueRequest = apiWhenServed<{ projects: Project[] }>("/v0/projects");
     const selectedChatRequest = routeId ? Promise.all([
-      api<ChatSummary>(`/v0/chats/${encodeURIComponent(routeId)}`),
-      api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(routeId)}`),
+      apiWhenServed<ChatSummary>(`/v0/chats/${encodeURIComponent(routeId)}`),
+      apiWhenServed<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(routeId)}`),
     ]) : null;
     void (async () => {
       const [cataloguePayload, selectedChat] = await Promise.all([
