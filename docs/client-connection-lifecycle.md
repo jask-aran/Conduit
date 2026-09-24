@@ -114,6 +114,30 @@ from whichever server happens to be selected. Keep package update state
 (available, downloading, ready, installing) separate from the short-lived
 connection state used to decide when a server may restart.
 
+## Suggested order
+
+1. Split Windows update download from install using the current signed updater
+   source. Show download progress and a ready-to-restart action. This proves the
+   short install/relaunch path without changing server distribution first.
+2. Make the existing development artifact route serve a complete versioned
+   manifest and signed local build. Then add the production server's background
+   release fetch and atomic promotion. Ship a Windows client that selects its
+   trusted Conduit update server; older released clients still need their
+   current GitHub update path to obtain that bridge version.
+3. Let Android download the APK from that server into app-controlled storage,
+   then hand the local file to Android's installer on request. This shares the
+   server release catalog but needs a different client install path.
+4. Add short-lived connection identities and browser worker readiness replies
+   to shorten the server restart wait. Native package readiness can be reported
+   for visibility, but must not become a condition for stopping the server.
+
+The connection record could then show which active client version and protocol
+capabilities each server currently sees, target update notices, and explain why
+a browser restart waited. A later compatibility rule could warn an older app
+before a server feature it cannot use. These facts apply only to connected
+clients: offline devices are unknown, a completed download is not an install,
+and a new installed version is confirmed only when the client connects again.
+
 ## Decisions to make before implementation
 
 - Is one browser tab a participant, or is one service worker registration a
