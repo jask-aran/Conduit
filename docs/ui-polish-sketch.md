@@ -3,8 +3,8 @@
 Status: sections 1 (interrupted turns), 2 (composer hierarchy), 5 (empty
 states, reduced) and 7 (motion, but for the deferred dashboard transition)
 are built and recorded below as built, as is 8 (keyboard) but for what waits
-on the dashboard redesign and transcript mode; 3 (autosave) is piloted on
-Runtime; 4 remains a proposal, and 6 goes on surface by surface.
+on the dashboard redesign and transcript mode; 3 (autosave) is built for
+Runtime, Prompts and Voice; 4 remains a proposal, and 6 goes on surface by surface.
 
 These proposals cover transcript density, composer hierarchy, mobile file
 browsing, useful empty states, and interaction feedback. A separate autosave
@@ -321,11 +321,24 @@ looking, a toast says so. Checked in the browser: three quick edits sent one
 request with the last value; an out-of-range value sent nothing; leaving at
 once still saved. Not yet exercised: a failing save (the path is there).
 
-Next, in turn: the sections that already save on change with no feedback
-(default profile, session naming, context metrics, shortcuts, appearance)
-take the header status; then Voice and Prompts, which still have their own
-Save. The prompt editor is a document rather than a setting and may keep
-an explicit save. Credentials (API keys, sign-in) are actions, not settings.
+**Prompts** and **Voice** followed, and their Save buttons are gone too.
+A prompt saves after a longer pause (800ms); an empty one is held back with
+a note under the editor; switching prompts sends what is waiting; Reset to
+default stays a confirmed action. Saving a prompt's shipped text is the
+default again rather than an override of it (`prompt-store.js`), since
+typing back to the original is common now. Voice is two saves under one
+status: this browser's dictation settings as they change, and the server's
+transcription settings -- choices at once, the endpoint, model parameter
+and header name after a pause, and a custom endpoint that is not yet an
+https:// URL held back with the reason under it. The API key is a
+credential: it has its own Save key button (or Enter), and Test credentials
+sends what is waiting first. Found on the way: saving a prompt redrew its
+option in the selector, which then showed the next prompt while you were
+still editing the first.
+
+Next: the sections that already save on change with no feedback (default
+profile, session naming, context metrics, shortcuts, appearance) take the
+header status. Credentials (API keys, sign-in) are actions, not settings.
 
 The desired direction is automatic saving whenever a setting changes, with
 feedback in the top bar. This replaces the narrower server-settings proposal.
