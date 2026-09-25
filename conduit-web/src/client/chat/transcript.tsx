@@ -38,6 +38,7 @@ import {
   createTailFollowState,
   decideTailScroll,
   rebaseTailFollowState,
+  HISTORY_LOAD_TOP_PX,
   shouldFollowAfterHistoryRestore,
   shouldLoadEarlierHistory,
   shouldRestoreHistoryAnchor,
@@ -579,12 +580,17 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   };
   const loadEarlier = () => {
     const maxScrollTop = viewportMaxScrollTop();
+    const settled = !thread?.querySelector(".markdown-skeleton");
     if (!shouldLoadEarlierHistory({
       following: following(),
       maxScrollTop,
       scrollTop: viewport.scrollTop,
+      settled,
     })) return;
-    if (rendererUsesInertialTailFollow()) {
+    // Filling a short page is not the reader scrolling up: it stays on the
+    // latest, and the turns above arrive out of sight.
+    const filling = settled && maxScrollTop < HISTORY_LOAD_TOP_PX;
+    if (rendererUsesInertialTailFollow() && !filling) {
       cancelTypewriterTailRejoin();
       setTypewriterTailOwner("user", true);
       setFollowing(false);
@@ -602,8 +608,10 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         setTypewriterTailOwner("user", true);
       }
     };
+    let loadedMore = false;
     historyLoad = props.chat.loadOlder().then((loaded) => {
       if (!loaded) return;
+      loadedMore = true;
       queueMicrotask(restoreAnchor);
       return new Promise<void>((resolve) => requestAnimationFrame(() => {
         restoreAnchor();
@@ -615,6 +623,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     }).finally(() => {
       viewport.style.overflowAnchor = previousOverflowAnchor;
       historyLoad = null;
+      // Still short after this page, it asks for the next.
+      if (filling && loadedMore) requestAnimationFrame(loadEarlier);
     });
   };
   createRenderEffect(() => {
