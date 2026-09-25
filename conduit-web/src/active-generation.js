@@ -209,6 +209,8 @@ export function reduceActiveGeneration(current, event) {
         status: event.isError ? "error" : "complete",
         output: event.output,
         isError: Boolean(event.isError),
+        ...(event.kind ? { kind: event.kind } : {}),
+        ...(event.subject ? { subject: event.subject } : {}),
         ...(event.at ? { completedAt: event.at } : {}),
       };
       break;

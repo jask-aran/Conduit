@@ -268,17 +268,36 @@ export class CodexAppServerAdapter extends EventEmitter {
   /**
    * Codex records far more per turn than Conduit renders. Commands, file edits,
    * MCP calls and searches all become the tool activity the live stream already
-   * publishes; reasoning items are always empty over this API, and compaction
-   * markers have nothing to show.
+   * publishes; reasoning is a message of its own, and compaction markers have
+   * nothing to show.
    */
   static toolActivity(item) {
-    const activity = CodexAppServerAdapter.activityOf(item);
-    if (!activity) return null;
-    const kind = toolKind(CODEX_TOOL_KINDS, item.type);
+    const { kind: stated, subject: target, ...activity } = CodexAppServerAdapter.activityOf(item) || {};
+    if (!activity.name) return null;
+    const kind = stated || toolKind(CODEX_TOOL_KINDS, item.type);
     // The four it names keep what they acted on as their input: the command,
-    // the changed paths, the query, the image.
-    const subject = kind === "other" ? null : toolSubject(activity.input);
+    // the changed paths, the query, the image. A web search says for itself.
+    const subject = kind === "other" ? null : toolSubject(target ?? activity.input);
     return { ...activity, kind, ...(subject ? { subject } : {}) };
+  }
+
+  /**
+   * What a web search item did, which its `action` says: searched, opened a
+   * page, or looked for words in one. Opening the pages a search found is
+   * reported with an action of `other` and no query, and the results it
+   * returns are those pages -- so they are what it acted on.
+   */
+  static webSearchTarget(item) {
+    const action = item.action || {};
+    if (action.type === "search") return { kind: "search", subject: action.queries?.length ? action.queries : action.query || item.query };
+    if (action.type === "openPage") return { kind: "fetch", subject: action.url };
+    if (action.type === "findInPage") {
+      const page = toolSubject(action.url);
+      return { kind: "search", subject: action.pattern && page ? `${action.pattern} in ${page}` : action.pattern || page };
+    }
+    const pages = (Array.isArray(item.results) ? item.results : []).map((result) => result?.url).filter(Boolean);
+    if (!item.query && pages.length) return { kind: "fetch", subject: pages };
+    return { kind: "search", subject: item.query };
   }
 
   static activityOf(item) {
@@ -303,7 +322,8 @@ export class CodexAppServerAdapter extends EventEmitter {
         output: item.agentStatus || "", isError: item.status === "failed" };
     }
     if (item.type === "webSearch") {
-      return { name: "web search", input: item.query || "", output: item.results ?? "", isError: false };
+      return { name: "web search", input: item.query || "", output: item.results ?? "", isError: false,
+        ...CodexAppServerAdapter.webSearchTarget(item) };
     }
     if (item.type === "imageView") return { name: "view image", input: item.path || "", output: "", isError: false };
     return null;
@@ -393,6 +413,7 @@ export class CodexAppServerAdapter extends EventEmitter {
         }
       } else if (!turn.some((message) => message.role === "assistant" && message.stopReason === "stop")) {
         const answer = turn.findLast((message) => message.role === "assistant"
+          && message.blocks.some((block) => block.kind === "text")
           && !message.blocks.some((block) => block.kind === "tool_call"));
         if (answer) { answer.stopReason = "stop"; answer.interim = false; }
       }
@@ -423,10 +444,11 @@ export class CodexAppServerAdapter extends EventEmitter {
         continue;
       }
       if (item.type === "reasoning") {
+        // Reasoning with no summary is reasoning the model did and did not
+        // describe: Codex keeps only the provider's encrypted copy of it.
         const text = itemPartsText(item.summary);
-        if (!text) continue;
-        messages.push({ id: item.id || `reasoning-${turnId}`, role: "assistant", content: text,
-          blocks: [{ kind: "thinking", text }], stopReason: "toolUse", interim: true, answers: answering });
+        messages.push({ id: item.id || `reasoning-${turnId}`, role: "assistant", content: "",
+          blocks: [{ kind: "thinking", text, redacted: !text }], stopReason: "toolUse", interim: true, answers: answering });
         interim = messages.at(-1);
         continue;
       }
@@ -920,9 +942,8 @@ export class CodexAppServerAdapter extends EventEmitter {
           phase: "start", seq: ++record.generationSeq, messageId });
       }
       this.settleCarrier(record, messageId);
-      record.turn = { id: turnId, messageId, blocks: text
-        ? [{ kind: "thinking", contentIndex: 0, text, redacted: false }]
-        : [] };
+      // One Codex did not summarise is still reasoning that happened.
+      record.turn = { id: turnId, messageId, blocks: [{ kind: "thinking", contentIndex: 0, text, redacted: !text }] };
       this.publish(record, { type: "assistant_content", generationId: turnId, phase: "final",
         seq: ++record.generationSeq, messageId, stopReason: "toolUse", errorMessage: null, blocks: record.turn.blocks });
     } else if (method === "item/started" || method === "item/completed") {
@@ -937,11 +958,15 @@ export class CodexAppServerAdapter extends EventEmitter {
             kind: activity.kind, subject: activity.subject, input: activity.input, messageId: record.turn?.messageId || null, generationId: turnId }));
         }
       } else {
+        // A search only says what it did once it has, so what it acted on is
+        // restated with what it returned.
         this.publish(record, { type: "tool_activity", generationId: turnId, phase: "end", seq: ++record.generationSeq,
-          toolCallId: params.item.id, name: activity.name, output: truncate(activity.output), isError: activity.isError });
+          toolCallId: params.item.id, name: activity.name, kind: activity.kind, subject: activity.subject,
+          output: truncate(activity.output), isError: activity.isError });
         if (this.states(record)) {
           this.publish(record, toolClose({ toolCallId: params.item.id, output: truncate(activity.output),
-            isError: activity.isError, cancelled: Boolean(activity.isError && record.stopping), generationId: turnId }));
+            isError: activity.isError, cancelled: Boolean(activity.isError && record.stopping),
+            kind: activity.kind, subject: activity.subject || null, generationId: turnId }));
         }
       }
     } else if (method === "serverRequest/resolved") {
@@ -1111,6 +1136,9 @@ export class CodexAppServerAdapter extends EventEmitter {
         input: CodexAppServerAdapter.inputItems(message, options?.attachments),
         ...(record.model ? { model: record.model } : {}),
         ...(record.thinkingLevel ? { effort: record.thinkingLevel } : {}),
+        // What the model is thinking, in its own words. Codex's default for
+        // the gpt-6 models is none, and `auto` gives nothing on them either.
+        summary: "detailed",
         ...(record.serviceLevel ? { serviceTier: record.serviceLevel } : {}),
         ...(record.permissionProfile ? { permissions: record.permissionProfile } : {}),
         ...CodexAppServerAdapter.policy(record.approvalPolicy, record.approvalsReviewer),

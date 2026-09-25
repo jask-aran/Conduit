@@ -142,6 +142,8 @@ export function applyToolOp(tools, event) {
     if (!event.toolCallId) return tools;
     return tools.map((tool) => (tool.toolCallId === event.toolCallId
       ? { ...tool, output: event.output, isError: Boolean(event.isError), cancelled: event.cancelled === true, done: true,
+        ...(event.kind ? { kind: event.kind } : {}),
+        ...(event.subject ? { subject: event.subject } : {}),
         ...(event.completedAt ? { completedAt: event.completedAt } : {}) }
       : tool));
   }

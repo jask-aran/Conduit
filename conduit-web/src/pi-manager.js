@@ -1046,9 +1046,9 @@ export class PiManager extends EventEmitter {
       if (event.type === "tool_execution_completed" && this.logFor(record)) {
         // Pi kills a running tool when the turn is stopped and reports it as
         // failing ("Command aborted"). This process asked for the stop.
-        this.publish(record, toolClose({ toolCallId: event.toolCallId, output: event.result,
+        this.publish(record, toolClose({ toolCallId: event.toolCallId, output: event.output,
           isError: event.isError, cancelled: Boolean(event.isError && record.generation?.aborting),
-          generationId: record.generation?.id || null }));
+          subject: event.subject || null, generationId: record.generation?.id || null }));
       }
       if (TURN_ENDINGS.has(event.type)) {
         this.dropUnwrittenMessages(record);

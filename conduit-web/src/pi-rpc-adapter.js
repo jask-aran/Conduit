@@ -137,6 +137,7 @@ export function normalizePiBackendEvent(event) {
         phase: { tool_execution_started: "start", tool_execution_updated: "update", tool_execution_completed: "end" }[event.type],
         toolCallId: event.toolCallId, name: event.name, input: event.input,
         ...(event.type === "tool_execution_started" ? { kind: toolKind(PI_TOOL_KINDS, event.name), subject: piToolSubject(event.name, event.input) ?? undefined } : {}),
+        ...(event.type === "tool_execution_completed" && event.subject ? { subject: event.subject } : {}),
         output: event.output, isError: event.isError,
         ...(event.at ? { at: event.at } : {}) };
     case "extension_ui_request": {

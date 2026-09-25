@@ -30,6 +30,9 @@ import { wasDiscarded } from "../abort-signature.js";
  * A tool: `toolCallId`, `name`, `kind`, `subject`, `input`, `output`, `isError`, `cancelled`, `done`.
  * A turn: `outcome` -- `complete`, `interrupted` or `failed` -- stated on the
  * prompt it answers, once the turn is over.
+ * Why a message stopped: `stop`, `toolUse`, `length`, `error` or `aborted` --
+ * ACP's `end_turn` and `cancelled`, OpenCode's `tool-calls`, are the adapter's
+ * to translate, since the browser reads a stop as `aborted` and nothing else.
  * An event: `seq`.
  *
  * A harness's own names -- Pi's `type`/`toolCall`/`arguments`/`thinking`/
@@ -43,6 +46,7 @@ import { wasDiscarded } from "../abort-signature.js";
 
 const ROLES = new Set(["user", "assistant"]);
 const OUTCOMES = new Set(["complete", "interrupted", "failed"]);
+export const STOP_REASONS = new Set(["stop", "toolUse", "length", "error", "aborted"]);
 const text = (value) => typeof value === "string" && value.length > 0;
 
 /**
@@ -107,6 +111,7 @@ export function assertTranscriptOp(event) {
     if (typeof event.interim !== "boolean") bad("interim must be stated");
     if (typeof event.content !== "string") bad("content must be stated");
     if (!Array.isArray(event.blocks)) bad("blocks must be stated");
+    if (event.stopReason != null && !STOP_REASONS.has(event.stopReason)) bad(`stopReason ${JSON.stringify(event.stopReason)}`);
   } else if (event.op === "message.drop") {
     if (!text(event.messageId)) bad("no message id");
     // The three drops are one statement each. Asking for two of them at once
@@ -118,6 +123,8 @@ export function assertTranscriptOp(event) {
     if (event.subject !== undefined && !text(event.subject)) bad("subject must be a line or left out");
   } else if (event.op === "tool.close") {
     if (!text(event.toolCallId)) bad("no tool call id");
+    if (event.kind !== undefined && !TOOL_KINDS.has(event.kind)) bad(`kind ${JSON.stringify(event.kind)}`);
+    if (event.subject !== undefined && !text(event.subject)) bad("subject must be a line or left out");
     if (event.isError && event.cancelled) bad("a tool is stopped or it failed");
   } else if (event.op === "turn.settle") {
     if (!text(event.promptId)) bad("no prompt id");
@@ -230,13 +237,19 @@ export const toolOpen = ({ toolCallId, name, kind = "other", subject = null, inp
  * And what it returned. A tool the user's stop cut short was `cancelled`, not
  * failed: harnesses report the kill as an error -- Pi's "Command aborted" -- and
  * the adapter, which knows it asked for the stop, says which it was.
+ *
+ * Some tools only say what they acted on once they have: a Codex web search
+ * that turned out to open a page, Pi's read of a stored page by its number.
+ * Their `kind` and `subject` are restated here and replace what the open said.
  */
 export const toolClose = ({ toolCallId, output, isError = false, cancelled = false, generationId = null,
-  completedAt = new Date().toISOString() }) =>
+  kind = undefined, subject = null, completedAt = new Date().toISOString() }) =>
   assertTranscriptOp({
     type: "transcript_op", op: "tool.close", toolCallId, output, completedAt,
     isError: Boolean(isError) && !cancelled,
     ...(cancelled ? { cancelled: true } : {}),
+    ...(kind ? { kind } : {}),
+    ...(subject ? { subject } : {}),
     ...(generationId ? { generationId } : {}),
   });
 

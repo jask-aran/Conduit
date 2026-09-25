@@ -1,4 +1,4 @@
-import { PI_TOOL_KINDS, piSubjectFields } from "./pi-capabilities.js";
+import { PI_TOOL_KINDS, piResultFailed, piResultSubject, piSubjectFields } from "./pi-capabilities.js";
 import { toolKind, toolSubject } from "./harnesses/transcript-ops.js";
 function record(value) {
   return value && typeof value === "object" ? value : {};
@@ -205,15 +205,19 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0, cl
           input: source.args,
           output: source.partialResult,
         })];
-      case "tool_execution_end":
+      case "tool_execution_end": {
+        const name = String(source.toolName || "");
+        const subject = piResultSubject(name, source.result?.details);
         return [emit({
           type: "tool_execution_completed",
           toolCallId: String(source.toolCallId || ""),
-          name: String(source.toolName || ""),
+          name,
           output: source.result,
-          isError: Boolean(source.isError),
+          isError: Boolean(source.isError) || piResultFailed(name, source.result?.details),
+          ...(subject ? { subject } : {}),
           at: new Date().toISOString(),
         })];
+      }
       case "auto_retry_start":
         return [emit({
           type: "generation_retry_started",
