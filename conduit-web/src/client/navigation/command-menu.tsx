@@ -474,7 +474,9 @@ export function CommandMenu(props: {
   });
   createEffect(() => { void chatView(); void chatSort(); setActive(0); });
   createEffect(() => {
-    if (props.open) document.getElementById(optionId(active()))?.scrollIntoView({ block: "nearest" });
+    // The first row brings its group label into view with it.
+    if (props.open && active() === 0 && listbox) listbox.scrollTop = 0;
+    else if (props.open) document.getElementById(optionId(active()))?.scrollIntoView({ block: "nearest" });
   });
   createEffect(() => {
     if (selectionMode() && props.open) queueMicrotask(() => listbox?.focus());
@@ -508,16 +510,18 @@ export function CommandMenu(props: {
     if (searchHere) focusInput();
     else requestAnimationFrame(() => { if (listbox) listbox.scrollTop = 0; listbox?.focus(); });
   };
-  const backScope = () => {
+  // Stepping out returns to the row it left from; from the input (Backspace
+  // on the chip) typing carries on there.
+  const backScope = (toList = true) => {
     const previous = scopeReturn();
     setScopeReturn(null);
-    focusAfterQuery = "list";
+    focusAfterQuery = toList ? "list" : "input";
     setQuery(previous?.query || parsedQuery().text);
     requestAnimationFrame(() => {
       const index = selectable().findIndex((row) => row.key === previous?.activeKey);
       setActive(index >= 0 ? index : 0);
       if (listbox) listbox.scrollTop = previous?.scrollTop || 0;
-      listbox?.focus();
+      if (toList) listbox?.focus();
     });
   };
   const lastActivity = (project: Project) => project.sessions.reduce<string | undefined>((latest, chat) => {
@@ -782,7 +786,7 @@ export function CommandMenu(props: {
         if (searching()) enterScope(row.project);
         else if (!expandedProjects().has(row.project.id)) toggleFolder(row.project.id);
         else if (selectable()[active() + 1]?.type === "command" && (selectable()[active() + 1] as Extract<SelectableRow, { type: "command" }>).parentId === row.project.id) move(1);
-        else enterScope(row.project);
+        else if (row.count) enterScope(row.project);
         return;
       }
       if (event.key === "ArrowRight" && row?.type === "browse-all") { event.preventDefault(); enterScope(row.project); return; }
@@ -795,7 +799,7 @@ export function CommandMenu(props: {
           return;
         }
         if (row?.type === "folder" && expandedProjects().has(row.project.id)) { event.preventDefault(); toggleFolder(row.project.id); return; }
-        if (chatScope().kind === "project") { event.preventDefault(); backScope(); return; }
+        if (chatScope().kind !== "all") { event.preventDefault(); backScope(); return; }
       }
       if (event.key === "PageDown" || event.key === "PageUp") { event.preventDefault(); move(event.key === "PageDown" ? 10 : -10); return; }
       if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey && !selectionMode()) {
@@ -830,9 +834,9 @@ export function CommandMenu(props: {
           const parent = parentId ? selectable().findIndex((item) => item.type === "folder" && item.project.id === parentId) : -1;
           if (parent >= 0) setActive(parent);
           else if (row?.type === "folder" && expandedProjects().has(row.project.id)) toggleFolder(row.project.id);
-          else if (chatScope().kind === "project") backScope();
+          else if (chatScope().kind !== "all") backScope();
           else close();
-        } else if (chatScope().kind === "project") backScope();
+        } else if (chatScope().kind !== "all") backScope(false);
         else close();
       }
       else if (page() && !directMode) goBack();
@@ -840,7 +844,7 @@ export function CommandMenu(props: {
     }
     if (event.key === "Backspace" && chatPage() && !parsedQuery().text && (event.currentTarget === input || inList)) {
       if (chatView() !== "all") { event.preventDefault(); setChatView("all"); }
-      else if (chatScope().kind !== "all") { event.preventDefault(); backScope(); }
+      else if (chatScope().kind !== "all") { event.preventDefault(); backScope(inList); }
     }
     // Backspace edits the query. It never exits a page when no filter remains.
   };
@@ -952,7 +956,7 @@ export function CommandMenu(props: {
               <Show when={chatPage()}>
                 <SearchIcon class="command-input-icon" aria-hidden="true" />
                 <Show when={!moveMode() && chatScope().kind !== "all"}>
-                  <button type="button" class="command-filter-chip" title="Remove scope (Backspace)" onMouseDown={(event) => event.preventDefault()} onClick={() => { backScope(); focusInput(); }}>in:{scopeChipName()}<span aria-hidden="true">×</span></button>
+                  <button type="button" class="command-filter-chip" title="Remove scope (Backspace)" onMouseDown={(event) => event.preventDefault()} onClick={() => { backScope(false); focusInput(); }}>in:{scopeChipName()}<span aria-hidden="true">×</span></button>
                 </Show>
                 <Show when={!moveMode() && chatView() !== "all"}>
                   <button type="button" class="command-filter-chip" title="Remove filter" onMouseDown={(event) => event.preventDefault()} onClick={() => { setChatView("all"); focusInput(); }}>{VIEW_LABELS[chatView()]}<span aria-hidden="true">×</span></button>
