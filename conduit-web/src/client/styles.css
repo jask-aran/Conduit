@@ -2605,3 +2605,10 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 /* Full-screen on a phone, the frost sits over whole lines of text: a darker
    core under it keeps the rows clear. */
 @media (--conduit-mobile-layout) { .command-dialog .command-shell { background: linear-gradient(#ffffff2b, #ffffff2b), oklch(0.19 0.005 264 / 72%); } }
+/* Models: scoped is the white of a place you use, unscoped the sidebar's grey,
+   not bold throughout. */
+.command-model-option[data-scoped] .command-model-label { font-weight: 560; color: var(--foreground); }
+.command-model-option:not([data-scoped]) .command-model-label { font-weight: 450; color: var(--muted-foreground); }
+.command-model-option[data-highlighted] .command-model-label { color: var(--foreground); }
+.command-model-label { font-size: 12px; }
+.command-model-spec { font-size: 10px; }
