@@ -185,12 +185,12 @@ export function ProjectDashboard(props: {
   });
   const chatTime = (chat: DashboardChat) => Date.parse((chatSort() === "created" ? chat.createdAt : chat.lastMessageAt || chat.createdAt) || "") || 0;
   const chatGroups = createMemo(() => groupByDay(visibleChats().slice(0, limit()), chatTime, now()));
-  const outsideGroups = createMemo(() => groupByDay(filteredOutside().slice(0, limit()), (thread) => thread.at, now()));
   const activeChatCount = createMemo(() => payload()?.stats.activeChats
     ?? props.project.sessions.filter((chat) => chat.status === "active").length);
   const scopedTerminals = createMemo(() => terminals()
     .filter((terminal) => terminal.projectId === projectId() && terminal.status === "running"));
   const filteredOutside = createMemo(() => outsideFilter() ? outsideThreads().filter((thread) => thread.harnessId === outsideFilter()) : outsideThreads());
+  const outsideGroups = createMemo(() => groupByDay(filteredOutside().slice(0, limit()), (thread) => thread.at, now()));
   createEffect(() => setThreadSide(readThreadSide(projectId())));
   const saveThreadSide = (side: ThreadSide) => {
     setThreadSide(side);
