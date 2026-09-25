@@ -2400,10 +2400,11 @@ function App() {
       .finally(() => setInstallationsLoading(false));
 
     const routeId = initialRouteId;
-    const catalogueRequest = apiWhenServed<{ projects: Project[] }>("/v0/projects");
+    // A route cannot finish loading if these reads fail during a long outage.
+    const catalogueRequest = apiWhenServed<{ projects: Project[] }>("/v0/projects", true);
     const selectedChatRequest = routeId ? Promise.all([
-      apiWhenServed<ChatSummary>(`/v0/chats/${encodeURIComponent(routeId)}`),
-      apiWhenServed<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(routeId)}`),
+      apiWhenServed<ChatSummary>(`/v0/chats/${encodeURIComponent(routeId)}`, true),
+      apiWhenServed<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(routeId)}`, true),
     ]) : null;
     void (async () => {
       const [cataloguePayload, selectedChat] = await Promise.all([
