@@ -202,7 +202,7 @@ svg.lucide :where(path, circle, ellipse, line, polyline, polygon, rect) { vector
  * how this went wrong twice already. Only one of them can be right, and the
  * one that knows a keyboard is involved is this one.
  */
-.message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; scroll-padding-top: 44.8px; scrollbar-width: none; overflow-anchor: none; }
+.message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; outline: none; scroll-padding-top: 44.8px; scrollbar-width: none; overflow-anchor: none; }
 .message-scroller-viewport::-webkit-scrollbar { display: none; }
 .thread { width: min(var(--transcript-column-width), calc(100% - var(--transcript-column-gutter))); min-height: 100%; margin-inline: auto; padding: 70.4px 35.2px 25.6px; }
 [data-slot="message-scroller-item"] { margin-block: 8px; content-visibility: visible; contain-intrinsic-size: none; }
