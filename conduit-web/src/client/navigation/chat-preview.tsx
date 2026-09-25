@@ -1,5 +1,8 @@
-import { createResource, createSignal, createEffect, onCleanup, Show } from "solid-js";
+import { createResource, createSignal, createEffect, For, onCleanup, Show } from "solid-js";
+import { FolderIcon, MessageSquareIcon } from "lucide-solid";
+import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { api } from "../api/client";
+import { chatSortStamp } from "../preferences/chat-sort";
 import type { ChatSummary, Message, Project, ToolKind, TranscriptDetail } from "../api/contracts";
 import { harnessLabelFor, ThreadHarnessMark } from "../harness-brand";
 import { PLAIN_SPHERE, SPUTTERING_SPHERE } from "../chat/orb-frames";
@@ -60,7 +63,38 @@ const dateOf = (value?: string | null) => {
     : new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" }).format(date);
 };
 
-export function ChatPreview(props: { target: Target | null; folder?: Project | null }) {
+const isWorkspace = (project: Project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || "");
+const stampOf = (chat: ChatSummary) => chatSortStamp(chat, "latest") || "";
+
+/* A folder or workspace under the cursor: what it is, where it lives, how
+   its chats stand, and the latest few. All from the catalogue already held. */
+function FolderPreview(props: { project: Project; active: (chat: ChatSummary) => boolean }) {
+  const chats = () => [...props.project.sessions].filter((chat) => chat.status !== "draft").sort((a, b) => Date.parse(stampOf(b) || "0") - Date.parse(stampOf(a) || "0"));
+  const loose = () => props.project.slug === "chat";
+  const where = () => loose() ? "Chats outside any folder" : isWorkspace(props.project) ? props.project.externalPath || props.project.workingRoot : "Folder";
+  const standing = () => {
+    const unread = chats().filter((chat) => chat.unread).length;
+    const running = chats().filter(props.active).length;
+    return [`${chats().length} chat${chats().length === 1 ? "" : "s"}`, unread ? `${unread} unread` : "", running ? `${running} running` : ""].filter(Boolean).join(" · ");
+  };
+  return <>
+    <div class="command-preview-title">
+      <Show when={isWorkspace(props.project)} fallback={loose() ? <MessageSquareIcon class="command-icon" /> : <FolderIcon class="command-icon" />}><WorkspaceGlyph appearance={props.project.workspaceAppearance} /></Show>
+      <span>{loose() ? "Chats" : props.project.name}</span>
+    </div>
+    <div class="command-preview-facts" title={where()}>{where()}</div>
+    <div class="command-preview-facts">{standing()}</div>
+    <Show when={chats().length} fallback={<p class="command-preview-empty">No chats yet</p>}>
+      <div class="command-preview-chats">
+        <For each={chats().slice(0, 6)}>{(chat) => <div class="command-preview-chat">
+          <ThreadHarnessMark id={chat.harnessId} /><span class="command-preview-chat-title">{chat.title || "Untitled chat"}</span><small>{dateOf(stampOf(chat))}</small>
+        </div>}</For>
+      </div>
+    </Show>
+  </>;
+}
+
+export function ChatPreview(props: { target: Target | null; folder?: Project | null; active?: (chat: ChatSummary) => boolean }) {
   // The cursor has to rest a moment before a chat is read.
   const [settled, setSettled] = createSignal<Target | null>(null);
   createEffect(() => {
@@ -78,7 +112,7 @@ export function ChatPreview(props: { target: Target | null; folder?: Project | n
   });
 
   return <aside class="command-preview" aria-label="Chat preview" aria-live="polite">
-    <Show when={props.target} fallback={<p class="command-preview-empty">{props.folder ? props.folder.name : "Nothing highlighted"}</p>}>
+    <Show when={props.target} fallback={<Show when={props.folder} fallback={<p class="command-preview-empty">Nothing highlighted</p>}>{(folder) => <FolderPreview project={folder()} active={props.active || (() => false)} />}</Show>}>
       {(target) => <>
         <div class="command-preview-title"><ThreadHarnessMark id={target().chat.harnessId} /><span>{target().chat.title || "Untitled chat"}</span></div>
         <div class="command-preview-facts">{[...new Set([
