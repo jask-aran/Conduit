@@ -147,6 +147,9 @@ export function reduceActiveGeneration(current, event) {
         contentIndex: event.contentIndex,
         status: "streaming",
         identity: contentBlockIdentity(event.messageId, event.contentIndex),
+        // A call being written, named as soon as the harness knows which.
+        ...(event.name ? { name: event.name, toolKind: event.toolKind } : {}),
+        ...(event.toolCallId ? { toolCallId: event.toolCallId } : {}),
       });
       if (event.blockKind === "tool_call") block.inputText = `${existing?.inputText || ""}${event.delta}`;
       else block.text = `${existing?.text || ""}${event.delta}`;

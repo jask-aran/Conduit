@@ -1,3 +1,5 @@
+import { PI_TOOL_KINDS } from "./pi-capabilities.js";
+import { toolKind } from "./harnesses/transcript-ops.js";
 function record(value) {
   return value && typeof value === "object" ? value : {};
 }
@@ -30,11 +32,13 @@ function normalizeBlock(block, contentIndex) {
     return { kind: "text", contentIndex, text: String(block.text || "") };
   }
   if (block?.type === "toolCall") {
+    const name = String(block.name || "");
     return {
       kind: "tool_call",
       contentIndex,
       toolCallId: String(block.id || ""),
-      name: String(block.name || ""),
+      name,
+      ...(name ? { toolKind: toolKind(PI_TOOL_KINDS, name) } : {}),
       input: block.arguments,
     };
   }
@@ -92,12 +96,18 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0, cl
           })];
         }
         if (update.type.endsWith("_delta")) {
+          // A call being written says which tool it is as soon as Pi knows:
+          // the browser never sees the call's start, only these, and without
+          // a name it read as an unknown tool until the tool began to run.
+          const call = blockKind === "tool_call" ? normalizeBlock(content[contentIndex], contentIndex) : null;
           return [emit({
             type: "content_block_delta",
             messageId: activeMessageId,
             blockKind,
             contentIndex,
             delta: String(update.delta || ""),
+            ...(call?.name ? { name: call.name, toolKind: call.toolKind } : {}),
+            ...(call?.toolCallId ? { toolCallId: call.toolCallId } : {}),
           })];
         }
         if (update.type === "toolcall_end") {

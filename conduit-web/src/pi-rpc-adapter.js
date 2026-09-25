@@ -90,7 +90,9 @@ export function normalizePiBackendEvent(event) {
     case "content_block_delta":
       return { ...base, type: "assistant_content", phase: "delta", seq: event.seq,
         messageId: event.messageId, contentIndex: event.contentIndex,
-        blockKind: event.blockKind, delta: event.delta };
+        blockKind: event.blockKind, delta: event.delta,
+        ...(event.name ? { name: event.name, toolKind: event.toolKind } : {}),
+        ...(event.toolCallId ? { toolCallId: event.toolCallId } : {}) };
     case "assistant_message_started":
       return { ...base, type: "assistant_content", phase: "start", seq: event.seq, messageId: event.messageId };
     case "assistant_message_completed": {
