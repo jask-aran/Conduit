@@ -136,3 +136,16 @@
   .split-header h1 { flex-direction: row; align-items: baseline; gap: 8px; font-size: 24px; }
   .split-header-glyph { width: 26px; height: 26px; }
 }
+
+/* The chats list heading and its day groups (chat-list.tsx). */
+.split-day { padding: 8px 6.4px 2px; color: var(--muted-foreground); font-size: 9.6px; }
+.split-group-rows > .split-day:first-child { padding-top: 0; }
+.split-group-actions .split-list-filter { display: inline-flex; height: 20px; align-items: center; gap: 3px; border: 0; border-radius: 6px; background: transparent; padding: 0 6px; color: var(--muted-foreground); font-size: 9.6px; }
+.split-group-actions .split-list-filter:is(:hover, :focus-visible, [data-expanded]) { outline: none; background: var(--accent); color: var(--foreground); }
+.split-group-more small { margin-left: 5px; color: var(--muted-foreground); font: 8.8px ui-monospace, SFMono-Regular, Consolas, monospace; }
+.split-check { display: inline-grid; width: 14px; place-items: center; }
+.split-check svg { width: 12px; height: 12px; }
+@media (--conduit-mobile-layout) {
+  .split-day { padding: 12px 9px 3px; font-size: 12px; }
+  .split-group-actions .split-list-filter { height: 32px; padding: 0 8px; font-size: 13px; }
+}

@@ -13,14 +13,14 @@ import type { RuntimeStore } from "../state/runtime";
 import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
-import { SplitDashboard, SplitEmpty, SplitGroup, SplitGroupMore, SplitHeader, SplitRow, SplitShortcut, SplitShortcuts } from "./primitives/split";
+import { Segmented } from "../settings/settings-controls";
+import { CHAT_PAGE, DayGroups, groupByDay, ListFilter, ListSearch, ShowMore } from "./primitives/chat-list";
+import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitRow, SplitShortcut, SplitShortcuts } from "./primitives/split";
 import "./app-dashboard.css";
 
 // The Conduit dashboard is also where New chat lands: the composer, every
 // recent chat under it, and the places work lives on the right -- project
 // folders as a shelf, workspaces and terminals as lists.
-
-const CHAT_PAGE = 40;
 
 const isWorkspace = (project: Project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || "");
 
@@ -39,17 +39,6 @@ function shortAge(value: number, currentTime = Date.now()) {
   if (days < 14) return `${days}d`;
   if (days < 60) return `${Math.round(days / 7)}w`;
   return `${Math.round(days / 30)}mo`;
-}
-
-/** The day heading a chat falls under, as the search overlay groups them. */
-function dayGroup(value: number, currentTime = Date.now()) {
-  const today = new Date(currentTime); today.setHours(0, 0, 0, 0);
-  const day = 86_400_000;
-  if (value >= today.getTime()) return "Today";
-  if (value >= today.getTime() - day) return "Yesterday";
-  if (value >= today.getTime() - 6 * day) return "This week";
-  if (value >= today.getTime() - 29 * day) return "This month";
-  return "Earlier";
 }
 
 function FolderMark() {
@@ -103,15 +92,8 @@ export function AppDashboard(props: {
       .filter(({ chat }) => !unreadOnly() || chat.unread)
       .sort((left, right) => compareChatsBySort(left.chat, right.chat, sort));
   });
-  const grouped = createMemo(() => {
-    const groups: Array<{ label: string; rows: ReturnType<typeof chats> }> = [];
-    for (const row of chats().slice(0, limit())) {
-      const label = dayGroup(Date.parse((chatSort() === "created" ? row.chat.createdAt : row.chat.lastMessageAt || row.chat.createdAt) || "") || 0, now());
-      if (groups.at(-1)?.label !== label) groups.push({ label, rows: [] });
-      groups.at(-1)!.rows.push(row);
-    }
-    return groups;
-  });
+  const chatTime = (chat: ChatSummary) => Date.parse((chatSort() === "created" ? chat.createdAt : chat.lastMessageAt || chat.createdAt) || "") || 0;
+  const grouped = createMemo(() => groupByDay(chats().slice(0, limit()), (row) => chatTime(row.chat), now()));
   const running = createMemo(() => allChats().filter(({ chat }) => props.runtime.getProcess(chat.id)?.active).length);
   const unread = createMemo(() => allChats().filter(({ chat }) => chat.unread).length);
   const folderLive = (project: Project) => project.sessions.some((chat) => props.runtime.getProcess(chat.id)?.active);
@@ -178,17 +160,15 @@ export function AppDashboard(props: {
     props.onOpenProject(project);
   };
 
-  const chatsGroup = <SplitGroup id="app-dashboard-chats" label="Recent chats" count={allChats().length} order="list" actions={<>
-      <button type="button" aria-pressed={!unreadOnly()} class={unreadOnly() ? "" : "is-on"} onClick={() => setUnreadOnly(false)}>All</button>
-      <button type="button" aria-pressed={unreadOnly()} class={unreadOnly() ? "is-on" : ""} onClick={() => setUnreadOnly(true)}>Unread</button>
-      <button type="button" title="Change sort" onClick={() => saveChatSort(chatSort() === "latest" ? "created" : "latest")}>{chatSort() === "latest" ? "Latest" : "Created"}</button>
-      <button type="button" aria-label="Search chats" title="Search chats" onClick={() => props.onSearchChats("all")}><SearchIcon /></button>
-    </>} more={<Show when={chats().length > limit()}><SplitGroupMore onClick={() => setLimit((value) => value + CHAT_PAGE)}>Show more</SplitGroupMore></Show>}>
+  const chatsGroup = <SplitGroup id="app-dashboard-chats" order="list"
+    heading={<Segmented label="Chats" value={unreadOnly() ? "unread" : "all"} onChange={(value) => { setUnreadOnly(value === "unread"); setLimit(CHAT_PAGE); }} options={[
+      { value: "all", label: "Recent chats", detail: <small>{allChats().length}</small> },
+      { value: "unread", label: "Unread", detail: <small>{unread()}</small> },
+    ]} />}
+    actions={<><ListFilter sort={chatSort()} onSort={saveChatSort} /><ListSearch label="Search chats" onClick={() => props.onSearchChats("all")} /></>}
+    more={<ShowMore total={chats().length} shown={limit()} onMore={() => setLimit((value) => value + CHAT_PAGE)} />}>
     <Show when={chats().length} fallback={<SplitEmpty>{unreadOnly() ? "Nothing unread." : "Nothing here yet."}</SplitEmpty>}>
-      <For each={grouped()}>{(group) => <>
-        <div class="app-dashboard-day">{group.label}</div>
-        <For each={group.rows}>{chatRow}</For>
-      </>}</For>
+      <DayGroups groups={grouped()}>{chatRow}</DayGroups>
     </Show>
   </SplitGroup>;
 

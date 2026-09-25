@@ -2,7 +2,6 @@ import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import {
-  ChevronDownIcon,
   CopyIcon,
   EllipsisIcon,
   FolderGit2Icon,
@@ -18,9 +17,10 @@ import {
   Trash2Icon,
   XIcon,
 } from "lucide-solid";
-import { HarnessMark, ThreadHarnessMark } from "../harness-brand";
+import { ThreadHarnessMark } from "../harness-brand";
 import { activityLabel } from "../../activity.js";
 import { Segmented } from "../settings/settings-controls";
+import { CHAT_PAGE, DayGroups, groupByDay, ListFilter, ListSearch, ShowMore } from "../dashboard/primitives/chat-list";
 import { FileTypeIcon } from "../workspace/file-type-icon";
 import {
   Button,
@@ -163,6 +163,8 @@ export function ProjectDashboard(props: {
   const [outsideLoading, setOutsideLoading] = createSignal(true);
   const [outsideFilter, setOutsideFilter] = createSignal("");
   const [threadSide, setThreadSide] = createSignal<ThreadSide>("chats");
+  const [unreadOnly, setUnreadOnly] = createSignal(false);
+  const [limit, setLimit] = createSignal(CHAT_PAGE);
   const chatSort = useChatSort();
   const projectId = createMemo(() => props.project.id);
   const isWorkspace = createMemo(() => workspaceProject(props.project));
@@ -178,10 +180,12 @@ export function ProjectDashboard(props: {
     const previews = new Map((payload()?.recentChats || []).map((chat) => [chat.id, chat]));
     return props.project.sessions
       .map((chat) => ({ ...chat, lastMessageAt: previews.get(chat.id)?.lastMessageAt || chat.lastMessageAt, lastMessagePreview: previews.get(chat.id)?.lastMessagePreview || "" }))
-      .filter((chat) => chat.status === "active")
-      .sort((left, right) => compareChatsBySort(left, right, sort))
-      .slice(0, 10);
+      .filter((chat) => chat.status === "active" && (!unreadOnly() || chat.unread))
+      .sort((left, right) => compareChatsBySort(left, right, sort));
   });
+  const chatTime = (chat: DashboardChat) => Date.parse((chatSort() === "created" ? chat.createdAt : chat.lastMessageAt || chat.createdAt) || "") || 0;
+  const chatGroups = createMemo(() => groupByDay(visibleChats().slice(0, limit()), chatTime, now()));
+  const outsideGroups = createMemo(() => groupByDay(filteredOutside().slice(0, limit()), (thread) => thread.at, now()));
   const activeChatCount = createMemo(() => payload()?.stats.activeChats
     ?? props.project.sessions.filter((chat) => chat.status === "active").length);
   const scopedTerminals = createMemo(() => terminals()
@@ -374,8 +378,8 @@ export function ProjectDashboard(props: {
   </Menu>;
 
   // Running chats stay in place; their dot and activity say they are live.
-  const chatRows = () => <Show when={visibleChats().length} fallback={<SplitEmpty>Nothing here yet.</SplitEmpty>}>
-    <For each={visibleChats()}>{(item) => {
+  const chatRows = () => <Show when={visibleChats().length} fallback={<SplitEmpty>{unreadOnly() ? "Nothing unread." : "Nothing here yet."}</SplitEmpty>}>
+    <DayGroups groups={chatGroups()}>{(item) => {
       const process = () => props.runtime.getProcess(item.id);
       const live = () => process()?.active ? activityLabel(runtimeActivity(process()) || "working", activityDetail(process())) : "";
       return <ContextMenu><ContextMenuTrigger as={SplitRow} element="button" onPointerEnter={() => props.onPrefetchChat(item)} onFocus={() => props.onPrefetchChat(item)} onClick={() => void props.onOpenChat(item, props.project)}
@@ -390,38 +394,30 @@ export function ProjectDashboard(props: {
           <ContextMenuItem onSelect={() => props.onOpenChatTerminal(item, props.project)}><TerminalIcon />Open terminal</ContextMenuItem>
           <Show when={isConduitManagedProject(props.project)}><ContextMenuItem onSelect={() => props.onContextAction("pin-chat", { chat: item })}><Show when={props.isPinned("chat", item.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show></ContextMenuItem></Show>
         </ContextMenuGroup><ContextMenuSeparator /><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-chat", { chat: item, project: props.project })}><Trash2Icon />{commandLabel(COMMAND_IDS.deleteChat)}</ContextMenuItem></ContextMenuContent></ContextMenu>;
-    }}</For>
+    }}</DayGroups>
   </Show>;
 
   const outsideRows = () => <Show when={!outsideLoading()} fallback={<SplitEmpty><Spinner /><span>Looking for threads…</span></SplitEmpty>}>
     <Show when={filteredOutside().length} fallback={<SplitEmpty>No threads outside Conduit in this workspace.</SplitEmpty>}>
-      <For each={filteredOutside()}>{(thread) =>
+      <DayGroups groups={outsideGroups()}>{(thread) =>
         <SplitRow element="button" title={thread.preview || thread.title} onClick={() => props.onOpenHarnessThread?.(thread.harnessId, workingRoot(), thread.id, thread.title)}
           lead={<ThreadHarnessMark id={thread.harnessId} lively />} primary={thread.title || "Untitled thread"} context={thread.preview}
           trailing={thread.at ? relativeActivity(new Date(thread.at).toISOString(), now()) : ""} />}
-      </For>
+      </DayGroups>
     </Show>
   </Show>;
 
   const threadsGroup = () => <SplitGroup id="dashboard-threads" order="list" heading={<Show when={isWorkspace()} fallback={<h2 id="dashboard-threads">Chats<small>{activeChatCount()}</small></h2>}>
-      <Segmented label="Threads" value={threadSide()} onChange={(value) => saveThreadSide(value as ThreadSide)} options={[
+      <Segmented label="Threads" value={threadSide()} onChange={(value) => { saveThreadSide(value as ThreadSide); setLimit(CHAT_PAGE); }} options={[
         { value: "chats", label: "Chats", detail: <small>{activeChatCount()}</small> },
         { value: "outside", label: "Not in Conduit", detail: <Show when={!outsideLoading()}><small>{outsideThreads().length}</small></Show> },
       ]} />
-    </Show>} actions={<Show when={showOutside()} fallback={<>
-        <button type="button" title="Change sort" onClick={() => saveChatSort(chatSort() === "latest" ? "created" : "latest")}>{chatSort() === "latest" ? "Latest" : "Created"}</button>
-        <button type="button" aria-label={`Search chats in ${props.project.name}`} title="Search chats" onClick={props.onSearchChats}><SearchIcon /></button>
-      </>}>
-      <Show when={outsideHarnesses().length > 1}>
-        <Menu modal={false}>
-          <MenuTrigger>{outsideHarnesses().find((harness) => harness.id === outsideFilter())?.label || "All harnesses"}<ChevronDownIcon /></MenuTrigger>
-          <MenuContent>
-            <MenuItem onSelect={() => setOutsideFilter("")}>All harnesses</MenuItem>
-            <For each={outsideHarnesses()}>{(harness) => <MenuItem onSelect={() => setOutsideFilter(harness.id)}><HarnessMark id={harness.id} />{harness.label}</MenuItem>}</For>
-          </MenuContent>
-        </Menu>
+    </Show>} actions={<>
+      <Show when={showOutside()} fallback={<ListFilter sort={chatSort()} onSort={saveChatSort} unreadOnly={unreadOnly()} onUnreadOnly={(value) => { setUnreadOnly(value); setLimit(CHAT_PAGE); }} />}>
+        <ListFilter harnesses={outsideHarnesses()} harness={outsideFilter()} onHarness={(id) => { setOutsideFilter(id); setLimit(CHAT_PAGE); }} />
       </Show>
-    </Show>}>
+      <ListSearch label={`Search chats in ${props.project.name}`} onClick={props.onSearchChats} />
+    </>} more={<ShowMore total={showOutside() ? filteredOutside().length : visibleChats().length} shown={limit()} onMore={() => setLimit((value) => value + CHAT_PAGE)} />}>
     <Show when={showOutside()} fallback={chatRows()}>{outsideRows()}</Show>
   </SplitGroup>;
 
