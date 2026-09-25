@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
-import { MODE_FRAMES, paintFrame, resolvePreset, type ModeOpts, type OrbState } from "thinking-orbs/engine";
+import { MODE_FRAMES, paintFrame, resolvePreset, type ModeFrame, type ModeOpts, type OrbState } from "thinking-orbs/engine";
 
-export type { ModeOpts, OrbState };
+export type { ModeFrame, ModeOpts, OrbState };
 
 /*
  * A turn's mark: a dotted orb whose motion says what it is doing, drawn by
@@ -14,7 +14,8 @@ export type { ModeOpts, OrbState };
  * then crossfades: the new state fades in over the old as the old fades out,
  * both still moving, so there is never a frame with nothing in it. Paused --
  * a settled turn, or reduced motion -- it is one still frame, and changes
- * without a fade.
+ * without a fade. `frame` replaces the state's geometry outright, for a
+ * still drawn in the engine's terms rather than taken from an animation.
  */
 const SIZE = 20;
 const DWELL_MS = 250;
@@ -36,29 +37,29 @@ function rgbOf(element: HTMLElement, color: string) {
   return { r: r!, g: g!, b: b! };
 }
 
-type Shown = { state: OrbState; opts?: ModeOpts };
+type Shown = { state: OrbState; opts?: ModeOpts; frame?: ModeFrame };
 
-export function ThinkingOrb(props: { state: OrbState; opts?: ModeOpts; paused?: boolean; tint?: string; class?: string }) {
+export function ThinkingOrb(props: { state: OrbState; opts?: ModeOpts; frame?: ModeFrame; paused?: boolean; tint?: string; class?: string }) {
   let front!: HTMLCanvasElement;
   let back!: HTMLCanvasElement;
   const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   const playing = () => !props.paused && !reduced;
 
   // What is shown, and what it is fading from while a crossfade runs.
-  const [shown, setShown] = createSignal<Shown>({ state: props.state, opts: props.opts });
+  const [shown, setShown] = createSignal<Shown>({ state: props.state, opts: props.opts, frame: props.frame });
   const [leaving, setLeaving] = createSignal<Shown | null>(null);
   let since = performance.now();
   let fadeFrom = 0;
   let pending: ReturnType<typeof setTimeout> | undefined;
-  createEffect(on(() => [props.state, props.opts] as const, ([state, opts]) => {
+  createEffect(on(() => [props.state, props.opts, props.frame] as const, ([state, opts, frame]) => {
     clearTimeout(pending);
-    const next = { state, opts };
+    const next = { state, opts, frame };
     const current = shown();
-    if (state === current.state && opts === current.opts) return;
+    if (state === current.state && opts === current.opts && frame === current.frame) return;
     if (!playing()) { setLeaving(null); setShown(next); since = performance.now(); return; }
     pending = setTimeout(() => {
       setLeaving(shown());
-      setShown({ state: props.state, opts: props.opts });
+      setShown({ state: props.state, opts: props.opts, frame: props.frame });
       since = fadeFrom = performance.now();
     }, Math.max(0, DWELL_MS - (performance.now() - since)));
   }, { defer: true }));
@@ -66,7 +67,7 @@ export function ThinkingOrb(props: { state: OrbState; opts?: ModeOpts; paused?: 
 
   const presetOf = (item: Shown) => {
     const preset = resolvePreset(item.state, SIZE);
-    return item.opts ? { ...preset, opts: { ...preset.opts, ...item.opts } } : preset;
+    return { ...preset, opts: { ...preset.opts, ...item.opts }, frame: item.frame ?? MODE_FRAMES[preset.mode] };
   };
   const frontPreset = createMemo(() => presetOf(shown()));
   const backPreset = createMemo(() => { const item = leaving(); return item ? presetOf(item) : null; });
@@ -82,7 +83,7 @@ export function ThinkingOrb(props: { state: OrbState; opts?: ModeOpts; paused?: 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, SIZE, SIZE);
       if (!preset) return;
-      paintFrame(ctx, MODE_FRAMES[preset.mode](SIZE, seconds * preset.speed, preset.opts), Boolean(front.closest(".dark")), tint());
+      paintFrame(ctx, preset.frame(SIZE, seconds * preset.speed, preset.opts), Boolean(front.closest(".dark")), tint());
     };
     const draw = (seconds: number) => {
       const fading = backPreset();
