@@ -75,14 +75,26 @@ export function ThinkingOrb(props: { state: OrbState; opts?: ModeOpts; frame?: M
   const backPreset = createMemo(() => { const item = leaving(); return item ? presetOf(item) : null; });
 
   onMount(() => {
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    for (const canvas of [front, back]) canvas.width = canvas.height = Math.round(SIZE * dpr);
+    /* The canvas is as many pixels across as its box is on screen -- the box
+       is sized in rem, so it grows with the UI scale, and the screen's own
+       density and the browser's zoom multiply that -- and the 20px geometry
+       is drawn scaled to fill it. Drawn at 20px and stretched, every dot was
+       upscaled at any scale above 100%. */
+    let pixels = 0;
+    const fit = (side: number) => {
+      const next = Math.max(1, Math.min(256, Math.round(side)));
+      if (next === pixels) return false;
+      pixels = next;
+      for (const canvas of [front, back]) canvas.width = canvas.height = pixels;
+      return true;
+    };
+    fit((front.getBoundingClientRect().width || SIZE) * (window.devicePixelRatio || 1));
     const frontContext = front.getContext("2d");
     const backContext = back.getContext("2d");
     if (!frontContext || !backContext) return;
     const tint = createMemo(() => props.tint ? rgbOf(front, props.tint) : undefined);
     const paintOn = (ctx: CanvasRenderingContext2D, preset: ReturnType<typeof presetOf> | null, seconds: number) => {
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.setTransform(pixels / SIZE, 0, 0, pixels / SIZE, 0, 0);
       ctx.clearRect(0, 0, SIZE, SIZE);
       if (!preset) return;
       paintFrame(ctx, preset.frame(SIZE, seconds * preset.speed, preset.opts), Boolean(front.closest(".dark")), tint());
@@ -114,10 +126,19 @@ export function ThinkingOrb(props: { state: OrbState; opts?: ModeOpts; frame?: M
     });
     const observer = new IntersectionObserver(([entry]) => { visible = Boolean(entry?.isIntersecting); sync(); });
     observer.observe(front);
+    // Watched in device pixels so a zoom, which leaves the box's CSS size
+    // alone, still reaches it. Resizing a canvas clears it, so a resize
+    // repaints at once.
+    const resized = new ResizeObserver(([entry]) => {
+      const side = (entry?.contentRect.width || 0) * (window.devicePixelRatio || 1);
+      if (side && fit(side)) draw(playing() ? performance.now() / 1000 : STILL_AT);
+    });
+    try { resized.observe(front, { box: "device-pixel-content-box" }); } catch { resized.observe(front); }
     document.addEventListener("visibilitychange", sync);
     onCleanup(() => {
       cancelAnimationFrame(frame);
       observer.disconnect();
+      resized.disconnect();
       document.removeEventListener("visibilitychange", sync);
     });
   });
