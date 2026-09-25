@@ -126,7 +126,7 @@
 .split-change-row code[data-status="D"] { color: var(--destructive); }
 .split-shortcuts .workspace-dashboard-manage { display: inline-grid; width: 24px; height: 24px; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted-foreground); }
 .split-shortcuts .workspace-dashboard-manage:is(:hover, :focus-visible, [data-expanded]) { outline: none; background: var(--accent); color: var(--foreground); }
-.split-shortcuts .workspace-dashboard-manage svg { width: 14px; height: 14px; }
+.split-shortcuts .workspace-dashboard-manage svg { display: block; width: 14px; height: 14px; }
 @media (--conduit-mobile-layout) {
   .split-change-row .workspace-change-counts, .split-change-row code { font-size: 12px; }
   .split-change-row > svg { width: 15px; height: 15px; }
