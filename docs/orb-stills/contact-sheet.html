@@ -14,9 +14,8 @@
 <meta charset="utf-8">
 <title>Orb Catalogue</title>
 <style>
-  :root { --dark: oklch(0.186 0.005 264); --dark-fg: oklch(0.93 0.003 258); --dark-muted: oklch(0.63 0.006 262); --dark-red: oklch(0.645 0.19 18);
-          --light: oklch(1 0 0); --light-fg: oklch(0.145 0 0); --light-muted: oklch(0.556 0 0); --light-red: oklch(0.577 0.245 27.325);
-          --rule: oklch(1 0 0 / 7%); }
+  /* Conduit's dark theme. */
+  :root { --dark: oklch(0.186 0.005 264); --dark-fg: oklch(0.93 0.003 258); --dark-muted: oklch(0.63 0.006 262); --red: oklch(0.645 0.19 18); --rule: oklch(1 0 0 / 7%); }
   body { background: var(--dark); color: var(--dark-muted); margin: 0; padding: 20px 24px 32px; font: 12px/1.4 system-ui, sans-serif; }
   h1 { color: var(--dark-fg); font-size: 16px; font-weight: 600; margin: 0 0 4px; }
   h2 { color: var(--dark-fg); font-size: 13px; font-weight: 600; margin: 32px 0 2px; }
@@ -35,34 +34,32 @@
   .card .chips span { display: flex; padding: 5px; border-radius: 5px; }
   .card.used { outline-color: var(--dark-muted); }
   .dark-bg { background: var(--dark); outline: 1px solid var(--rule); }
-  .light-bg { background: var(--light); }
   .header { display: flex; gap: 10px; align-items: center; width: 330px; padding: 7px 12px; border-radius: 6px; }
   .header .lines { min-width: 0; }
   .header .line1, .header .line2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .header b { font-weight: 560; }
-  .header.dark-bg { color: var(--dark-muted); }
-  .header.dark-bg b { color: var(--dark-fg); }
-  .header.light-bg { color: var(--light-muted); }
-  .header.light-bg b { color: var(--light-fg); }
+  .header { color: var(--dark-muted); }
+  .header b { color: var(--dark-fg); }
 </style>
 </head>
 <body>
 <h1>Orb catalogue</h1>
-<p>Every frame the turn orb can draw: the thinking-orbs library's animations, the same animations held by its own options, and the frames made for Conduit from the engine's pieces. Then each state a turn's header shows, with the orb it uses.</p>
+<p>Every frame the turn orb can draw: the thinking-orbs library's animations and the stills its own options hold them at, and the frames made for Conduit from the engine's pieces. Then each state a turn's header shows, with the orb it uses.</p>
 
 <h2>Library — animations</h2>
 <p>The 20px preset of each, at t = 0.3, 0.9, 1.5, 2.1, 2.7 and 3.3s, then playing.</p>
 <table id="library"></table>
 
-<h2>Library — held by its options</h2>
-<table id="held"></table>
+<h2>Library — stills</h2>
+<p>The animations held or calmed by the library's documented options, at the moment Conduit shows a still, enlarged and at 20px.</p>
+<div class="cards" id="held"></div>
 
 <h2>Made for Conduit</h2>
-<p>Built from the engine's camera, dot scaling and depth sort, each enlarged and at 20px on dark and light. The outlined card is in use.</p>
+<p>Built from the engine's camera, dot scaling and depth sort, playing, enlarged and at 20px. At rest each is the still it was drawn as; the outlined card, at rest, is a settled turn's orb.</p>
 <div class="cards" id="created"></div>
 
 <h2>In the app</h2>
-<p>Each state of a turn's header, with its orb as it plays there. Listening is kept for dictation; breathing is unused.</p>
+<p>Each state of a turn's header, with its orb as it plays there; settled turns are still. Listening is kept for dictation; breathing is unused.</p>
 <table id="app"></table>
 
 <script type="module">
@@ -76,11 +73,11 @@ const MOMENTS = [0.3, 0.9, 1.5, 2.1, 2.7, 3.3];
 const probe = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
 const rgbOf = (color) => { probe.clearRect(0, 0, 1, 1); probe.fillStyle = color; probe.fillRect(0, 0, 1, 1); const [r, g, b] = probe.getImageData(0, 0, 1, 1).data; return { r, g, b }; };
 const css = getComputedStyle(document.documentElement);
-const RED = { dark: rgbOf(css.getPropertyValue("--dark-red")), light: rgbOf(css.getPropertyValue("--light-red")) };
+const RED = rgbOf(css.getPropertyValue("--red"));
 
 /* Every canvas that plays, repainted each frame; the rest are painted once. */
 const playing = [];
-function orb(at, px, { dark = true, tint = false, play = false, t = 0 } = {}) {
+function orb(at, px, { tint = false, play = false, t = 0 } = {}) {
   const c = document.createElement("canvas");
   c.width = c.height = 20 * DPR;
   c.style.cssText = `width:${px}px;height:${px}px`;
@@ -88,7 +85,7 @@ function orb(at, px, { dark = true, tint = false, play = false, t = 0 } = {}) {
   const paint = (seconds) => {
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     ctx.clearRect(0, 0, 20, 20);
-    paintFrame(ctx, at(seconds), dark, tint ? RED[dark ? "dark" : "light"] : undefined);
+    paintFrame(ctx, at(seconds), true, tint ? RED : undefined);
   };
   paint(t);
   if (play) playing.push(paint);
@@ -106,25 +103,26 @@ function motionRows(table, rows) {
   }
 }
 motionRows("library", LIBRARY);
-motionRows("held", LIBRARY_HELD);
 
 const USED = new Set(IN_APP.filter(([, , source]) => source.startsWith("created")).map(([, , source]) => source.split(" · ")[1].split(",")[0]));
-for (const [name, what, at] of CREATED) {
-  const play = name === "Fibonacci sphere";
-  const text = el("div", ""); text.innerHTML = `<b>${name}</b>${what}`;
-  const chips = el("div", "chips", el("span", "dark-bg", orb(at, 20, { play })), el("span", "light-bg", orb(at, 20, { dark: false, play })));
-  document.getElementById("created").append(el("div", `card${USED.has(name) ? " used" : ""}`, orb(at, 72, { play }), text, chips));
+function cards(id, rows, play) {
+  for (const [name, what, at] of rows) {
+    const text = el("div", ""); text.innerHTML = `<b>${name}</b>${what}`;
+    const chips = el("div", "chips", el("span", "dark-bg", orb(at, 20, { play })));
+    document.getElementById(id).append(el("div", `card${play && USED.has(name) ? " used" : ""}`, orb(at, 72, { play }), text, chips));
+  }
 }
+cards("held", LIBRARY_HELD, false);
+cards("created", CREATED, true);
 
-function header(verb, line, at, { settled = false, tint = false } = {}, dark) {
+function header(verb, line, at, { settled = false, tint = false } = {}) {
   const lines = el("div", "lines");
   const time = settled ? "7m 16s · 10 fetches, 4 searches" : "42s";
   lines.innerHTML = `<div class="line1"><b>${verb}</b> · ${time}</div><div class="line2">${line || "&nbsp;"}</div>`;
-  return el("div", `header ${dark ? "dark-bg" : "light-bg"}`, orb(at, 20, { dark, tint, play: !settled }), lines);
+  return el("div", "header dark-bg", orb(at, 20, { tint, play: !settled }), lines);
 }
 for (const [verb, line, source, at, show] of IN_APP) {
-  const tr = el("tr", "", el("td", "", header(verb, line, at, show, true)), el("td", "", header(verb, line, at, show, false)),
-    el("td", `source${source.startsWith("created") ? " created" : ""}`, source));
+  const tr = el("tr", "", el("td", "", header(verb, line, at, show)), el("td", `source${source.startsWith("created") ? " created" : ""}`, source));
   document.getElementById("app").append(tr);
 }
 
