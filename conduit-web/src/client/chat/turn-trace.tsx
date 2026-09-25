@@ -284,8 +284,10 @@ function previewOf(trace: TurnTraceData, writing: boolean): { status: ReturnType
   return { status: statusOf(trace, writing), work: workOf(tools), detail: trace.active ? latest : thought || latest };
 }
 
-/* `01s` to `59s`, then `1m 02s` -- one format, live and settled. */
-function duration(ms: number): string {
+/* `01s` to `59s`, then `1m 02s` -- one format, live and settled, except a
+   settled turn that took under a second, which is in milliseconds. */
+function duration(ms: number, settled: boolean): string {
+  if (settled && ms < 1000) return `${Math.max(0, Math.floor(ms))}ms`;
   const seconds = Math.max(0, Math.floor(ms / 1000));
   const pad = (value: number) => String(value).padStart(2, "0");
   return seconds < 60 ? `${pad(seconds)}s` : `${Math.floor(seconds / 60)}m ${pad(seconds % 60)}s`;
@@ -305,7 +307,7 @@ function turnTime(trace: () => Pick<TurnTraceData, "active" | "startedAt" | "end
     const { active, startedAt, endedAt } = trace();
     const start = startedAt ? Date.parse(startedAt) : NaN;
     const end = active ? now() : endedAt ? Date.parse(endedAt) : NaN;
-    return Number.isNaN(start) || Number.isNaN(end) ? "" : duration(end - start);
+    return Number.isNaN(start) || Number.isNaN(end) ? "" : duration(end - start, !active);
   };
 }
 
