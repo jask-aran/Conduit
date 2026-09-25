@@ -224,12 +224,12 @@ Chat composition:
 Menus and pane headers follow the component entries below. Command and search overlays share one visual language, with separate layouts:
 
 - Ink-dark opaque face, 16–18px radius, soft outer shadow, no pane-edge inset line. The rest of the app dims behind it.
-- Command palette: compact action rows, `>` at the input, shortcuts right-aligned, grouped under small uppercase labels.
-- Chat search: wider two-line result rows, search icon at the input, filters and sort in a separate strip above the results. Edit mode changes the rows and the shortcut rail, without turning search into a command list.
+- Command palette: compact one-line action rows at roughly the sidebar's text and row scale, `>` at the input, shortcuts right-aligned, grouped under small uppercase labels. Settings results use the same density.
+- Chat search: wider one-line result rows with title, project, and date, search icon at the input, filters and sort in a compact strip above the results. Long text truncates. Edit mode changes the rows and the shortcut rail, without turning search into a command list.
 - Leader menu: smaller card above the composer, with region path at the top and keys aligned at the left of each action.
 - Highlighted option = one neutral full-row wash. No coloured rail. A current model keeps a fainter standing wash and a heavier label while the cursor is elsewhere.
 - Footer shortcut rail: darker than the face, with keycaps and labels. Keep each view's actions contextual.
-- Widths: commands ~620px, models ~720px, chat search ~860px. Mobile: fill the visual viewport with a small inset so it remains a dialog, not a new route.
+- Widths: commands ~512px, models ~576px, chat search ~720px. Mobile: fill the visual viewport with a small inset and larger tap targets so it remains a dialog, not a new route.
 
 Settings pattern (illustrative, non-normative — current shell ~1120×820, rail ~190px):
 
