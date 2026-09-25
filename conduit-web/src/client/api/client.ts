@@ -42,10 +42,12 @@ export async function api<T>(url: string, options: RequestInit = {}): Promise<T>
  * first load after a restart, often a reload the new build asked for. A
  * starting server answers with no connection, or with a 5xx from itself or
  * the proxy in front of it; those are tried again, backing off, for about
- * half a minute before the failure is let through. Anything else fails at
- * once. For GETs only: a write is never repeated behind the caller's back.
+ * half a minute before the failure is let through. Route bootstrap can opt
+ * into continued retries so a long outage does not leave the page stuck.
+ * Anything else fails at once. For GETs only: a write is never repeated
+ * behind the caller's back.
  */
-export async function apiWhenServed<T>(url: string): Promise<T> {
+export async function apiWhenServed<T>(url: string, keepRetrying = false): Promise<T> {
   const delays = [250, 500, 1000, 1500, 2000, 3000, 4000, 5000, 5000, 5000];
   for (let attempt = 0; ; attempt += 1) {
     try {
@@ -53,8 +55,8 @@ export async function apiWhenServed<T>(url: string): Promise<T> {
     } catch (error) {
       const status = (error as { apiRequest?: ApiRequestMetadata }).apiRequest?.status;
       const starting = status === undefined ? error instanceof TypeError : status >= 500;
-      if (!starting || attempt >= delays.length) throw error;
-      await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+      if (!starting || (attempt >= delays.length && !keepRetrying)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, delays[Math.min(attempt, delays.length - 1)]));
     }
   }
 }
