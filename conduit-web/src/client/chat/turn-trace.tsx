@@ -123,7 +123,9 @@ function previewOf(trace: TurnTraceData): { status: string | null; counters: str
     else if (segment.discarded) continue;
     else if (segment.text.trim()) { summary = summaryOf(segment.text); callsAfterText = 0; }
   }
-  const shown = callsAfterText || totalCalls;
+  // While it runs, the calls since the latest text say what it is doing now;
+  // once it has settled, only how many it made matters.
+  const shown = trace.active ? callsAfterText || totalCalls : totalCalls;
   const counters = totalCalls > 0
     ? `${shown} tool call${shown === 1 ? "" : "s"}${totalCalls > shown ? ` (${totalCalls} total)` : ""}`
     : "";
