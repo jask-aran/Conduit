@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { createSignal, untrack } from "solid-js";
 import { api, apiWhenServed, asList } from "../api/client";
 import type { PermissionMode, PermissionModeState } from "../api/contracts";
 
@@ -52,7 +52,18 @@ export function createPermissionSettings(onError: ErrorHandler) {
     }
   };
 
-  return { profiles, selected, select, choose };
+  /**
+   * The harness changed mode itself -- Claude Code does when an approval turns
+   * on accepting edits, or a plan is approved -- and its process says which it
+   * is in now. Read untracked, so following it never answers a choice of the
+   * user's with the mode it is replacing.
+   */
+  const follow = (chatId: string, permissionMode?: string) => untrack(() => {
+    if (chatId !== activeChatId || !permissionMode || permissionMode === selected()) return;
+    if (profiles().some((profile) => profile.id === permissionMode)) setSelected(permissionMode);
+  });
+
+  return { profiles, selected, select, choose, follow };
 }
 
 export type PermissionSettings = ReturnType<typeof createPermissionSettings>;

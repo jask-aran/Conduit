@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { EventEmitter } from "node:events";
-import { getSessionInfo, getSessionMessages, listSessions, query, resolveSettings } from "@anthropic-ai/claude-agent-sdk";
+import * as claudeAgentSdk from "@anthropic-ai/claude-agent-sdk";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
@@ -62,8 +62,28 @@ const PERMISSION_MODES = Object.freeze([
 ]);
 const EFFORT_LEVELS = new Set(["low", "medium", "high", "xhigh", "max"]);
 const APPROVE = "Allow";
-const APPROVE_SESSION = "Allow for session";
 const DENY = "Deny";
+const RULE_SCOPES = Object.freeze({ session: "this session", localSettings: "in this project", projectSettings: "in this project",
+  userSettings: "everywhere" });
+
+/**
+ * What agreeing to Claude Code's suggestion would do, said as its own prompt
+ * says it. The suggestion is not always a rule: for an edit it is switching
+ * the session to accept edits, and a label that said "for session" hid that.
+ */
+const suggestionLabel = (suggestions = []) => {
+  const mode = suggestions.find((item) => item.type === "setMode")?.mode;
+  if (mode === "acceptEdits") return "Allow all edits this session";
+  if (mode) return `Allow, and switch to ${PERMISSION_MODES.find((item) => item.id === mode)?.label || mode}`;
+  const grant = suggestions.find((item) => item.type === "addRules" && item.behavior === "allow");
+  if (grant) {
+    const rules = (grant.rules || []).map((rule) => (rule.ruleContent ? `${rule.toolName}(${rule.ruleContent})` : rule.toolName));
+    return `Always allow ${rules.join(", ")} ${RULE_SCOPES[grant.destination] || "from now on"}`;
+  }
+  const folders = suggestions.find((item) => item.type === "addDirectories");
+  if (folders) return `Allow, and add ${(folders.directories || []).join(", ")} ${RULE_SCOPES[folders.destination] || "from now on"}`;
+  return "Allow, and don't ask again";
+};
 
 const failure = (message, code = "backend_unavailable", status = 409) =>
   Object.assign(new Error(message), { code, status });
@@ -86,9 +106,6 @@ function resolveCommand(command) {
   }
   return undefined;
 }
-
-/** What Claude Code's settings say for a folder: model, effort, the mode a session starts in. */
-const settingsFor = (cwd) => resolveSettings({ cwd }).then((resolved) => resolved?.effective || {}, () => ({}));
 
 // `default` is an alias for one of the other rows, so the catalogue leaves it
 // out and lists each model once, under its own name.
@@ -189,15 +206,17 @@ const askAnswer = (pending, response) => {
 const approvalAnswer = (pending, response) => {
   const choice = isDismissal(response) ? DENY : String(response?.value ?? response?.optionId ?? DENY);
   if (choice === APPROVE) return { behavior: "allow", updatedInput: pending.input };
-  if (choice === APPROVE_SESSION) {
-    return { behavior: "allow", updatedInput: pending.input, updatedPermissions: pending.suggestions || [] };
+  if (pending.suggestions?.length && choice === suggestionLabel(pending.suggestions)) {
+    return { behavior: "allow", updatedInput: pending.input, updatedPermissions: pending.suggestions };
   }
   return { behavior: "deny", message: "The user denied this tool call." };
 };
 
 export class ClaudeCodeAdapter extends EventEmitter {
-  constructor({ command = "claude", logs = null } = {}) {
+  /** `sdk` is the Agent SDK's surface; a test hands in its own. */
+  constructor({ command = "claude", logs = null, sdk = claudeAgentSdk } = {}) {
     super();
+    this.sdk = sdk;
     // Unfound, the SDK runs the Claude Code it ships with; either reads the
     // user's ~/.claude configuration, credentials and sessions.
     this.executable = resolveCommand(command);
@@ -210,6 +229,11 @@ export class ClaudeCodeAdapter extends EventEmitter {
     this.records = this.sessions.records;
     this.byChatId = this.sessions.byChatId;
     Object.assign(this, unsupported(CLAUDE_CODE_CAPABILITIES, { label: "Claude Code" }));
+  }
+
+  /** What Claude Code's settings say for a folder: model, effort, the mode a session starts in. */
+  settingsFor(cwd) {
+    return this.sdk.resolveSettings({ cwd }).then((resolved) => resolved?.effective || {}, () => ({}));
   }
 
   async launch(context, { model = "", thinkingLevel = "", forceModel = false } = {}) {
@@ -248,7 +272,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
       requests: new Map(), steps: new Map(), stepOrder: [], step: null, tools: new Map(),
       commands: [], models: [], settings: {}, stderr: "",
     });
-    record.settings = await settingsFor(record.cwd);
+    record.settings = await this.settingsFor(record.cwd);
     // Only what the chat chose is passed, and the rest is left to the user's
     // own Claude Code settings and read back once it is up. The starting mode is
     // the exception: an SDK session starts in `default` whatever the settings
@@ -256,7 +280,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     const startMode = permissionMode || permissionModes(record.settings)
       .find((mode) => mode.id === record.settings.permissions?.defaultMode && mode.allowed)?.id || "";
     record.input = new InputQueue();
-    record.query = query({ prompt: record.input, options: {
+    record.query = this.sdk.query({ prompt: record.input, options: {
       cwd: record.cwd,
       ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}),
       ...(resume ? { resume: sessionId } : { sessionId }),
@@ -295,7 +319,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     const sessionId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!sessionId) throw failure("Claude Code session identity is missing");
     // A chat made and never prompted has an id and nothing saved under it yet.
-    const saved = await getSessionInfo(sessionId).catch(() => undefined);
+    const saved = await this.sdk.getSessionInfo(sessionId).catch(() => undefined);
     return this.start({ ...options, sessionId, resume: Boolean(saved) });
   }
 
@@ -312,6 +336,14 @@ export class ClaudeCodeAdapter extends EventEmitter {
     if (message.type === "system" && message.subtype === "init") {
       record.sessionId = message.session_id || record.sessionId;
       record.permissionMode = message.permissionMode || record.permissionMode;
+      return;
+    }
+    // Claude Code changes mode itself -- an approval that turned on accepting
+    // edits, a plan approved -- and says so; the chat's picker follows it.
+    if (message.type === "system" && message.subtype === "status" && message.permissionMode
+      && message.permissionMode !== record.permissionMode) {
+      record.permissionMode = message.permissionMode;
+      this.emit("changed", { record, reason: "permission_mode" });
       return;
     }
     if (!record.active || message.parent_tool_use_id) return;
@@ -476,7 +508,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
       id: requestId, kind: "select", title: title || `Claude wants to use ${displayName || toolName}`,
       message: toolName === "ExitPlanMode" ? String(input?.plan || "")
         : description || decisionReason || subjectOf(input) || toolName,
-      options: suggestions?.length ? [APPROVE, APPROVE_SESSION, DENY] : [APPROVE, DENY],
+      options: suggestions?.length ? [APPROVE, suggestionLabel(suggestions), DENY] : [APPROVE, DENY],
       placeholder: "", prefill: "", timeoutMs: null,
     };
     return new Promise((resolve) => {
@@ -622,7 +654,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
   }
 
   async listThreads({ cwd, limit = 60 } = {}) {
-    const sessions = await listSessions({ ...(cwd ? { dir: cwd } : {}), limit: Math.min(Math.max(limit, 1), 100) });
+    const sessions = await this.sdk.listSessions({ ...(cwd ? { dir: cwd } : {}), limit: Math.min(Math.max(limit, 1), 100) });
     const iso = (ms) => (ms ? new Date(ms).toISOString() : null);
     return sessions.map((session) => ({
       id: session.sessionId, title: session.customTitle || session.summary || session.firstPrompt || "Untitled Claude Code session",
@@ -646,6 +678,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     const toolsById = new Map();
     let prompt = null;
     let step = null;
+    let promptTools = [];
     for (const entry of history) {
       if (entry.parent_tool_use_id) continue;
       const content = entry.message?.content;
@@ -659,10 +692,17 @@ export class ClaudeCodeAdapter extends EventEmitter {
         if (results.length) continue;
         const text = blocks.filter((block) => block?.type === "text").map((block) => block.text).join("\n");
         if (!text.trim()) continue;
-        if (INTERRUPTED.test(text)) { if (prompt) prompt.outcome = "interrupted"; continue; }
+        // The stop's own marker, not a prompt. A tool it killed is saved as an
+        // error; it was stopped.
+        if (INTERRUPTED.test(text)) {
+          if (prompt) prompt.outcome = "interrupted";
+          for (const tool of promptTools) if (tool.isError) Object.assign(tool, { isError: false, cancelled: true });
+          continue;
+        }
         prompt = { id: promptId(entry.uuid), role: "user", content: text, outcome: "complete" };
         messages.push(prompt);
         step = null;
+        promptTools = [];
       } else if (entry.type === "assistant") {
         const id = entry.message?.id || entry.uuid;
         if (!step || step.id !== id) {
@@ -681,6 +721,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
             const tool = { toolCallId: block.id, name: block.name, kind: toolKind(CLAUDE_TOOL_KINDS, block.name),
               subject: subjectOf(block.input), input: block.input, output: "", isError: false, done: false };
             tools.push(tool);
+            promptTools.push(tool);
             toolsById.set(block.id, tool);
           }
         }
@@ -703,7 +744,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     const record = liveSessionId ? this.get(liveSessionId) : null;
     const sessionId = record?.sessionId || (typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId);
     if (!sessionId) return { messages: [], tools: [], page: { before: null } };
-    const history = await getSessionMessages(sessionId).catch(() => []);
+    const history = await this.sdk.getSessionMessages(sessionId).catch(() => []);
     return { ...ClaudeCodeAdapter.transcript(history), page: { before: null } };
   }
 
@@ -729,12 +770,12 @@ export class ClaudeCodeAdapter extends EventEmitter {
    */
   async listAvailableModels(cwd) {
     const input = new InputQueue();
-    const probe = query({ prompt: input, options: {
+    const probe = this.sdk.query({ prompt: input, options: {
       cwd, persistSession: false, settingSources: [],
       ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}),
     } });
     try {
-      const [init, settings] = await Promise.all([probe.initializationResult(), settingsFor(cwd)]);
+      const [init, settings] = await Promise.all([probe.initializationResult(), this.settingsFor(cwd)]);
       return catalogue(init.models || [], settings);
     } finally { input.end(); try { probe.close(); } catch { /* already gone */ } }
   }
@@ -780,7 +821,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     return Promise.resolve(permissionModes(record?.settings || {}, record?.models.find((item) => item.value === record.model)));
   }
 
-  async listAvailablePermissionModes(cwd) { return permissionModes(await settingsFor(cwd)); }
+  async listAvailablePermissionModes(cwd) { return permissionModes(await this.settingsFor(cwd)); }
   // Handed the mode the routes chose, as Codex and fx are, not its id.
   async setPermissionMode(id, mode) {
     const record = this.get(id);

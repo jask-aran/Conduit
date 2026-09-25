@@ -405,7 +405,7 @@ CONDUIT_PI_TRACE=/tmp/pi-trace.jsonl bash .devcontainer/start-conduit.sh restart
 
 ## What a transcript ends up looking like
 
-Three tests own this question, one per backend that states its own transcript.
+These tests own this question, one per backend that states its own transcript.
 Both describe the rows a reader should see rather than what the code does, so a
 bug that makes a transcript wrong without making a unit test wrong fails here.
 
@@ -419,6 +419,11 @@ bug that makes a transcript wrong without making a unit test wrong fails here.
   routes and `/api/event` stream in the shapes 2.0.14 was recorded sending,
   through the real adapter, chat log, command handling, live generation fold
   and client projection; also what a reload reads, with and without the log.
+- `test/claude-code-transcript-pipeline.test.js` -- Claude Code, faked at the
+  Agent SDK (`query()` and the session helpers) in the sequences 2.1.282 was
+  recorded sending, through the real adapter, chat log, command handling and
+  client projection: approvals, `AskUserQuestion`, a stop, and resuming the
+  saved session; also what a reload reads without the log.
 - `test/codex-end-to-end.test.js` -- the same rows again, but with a real
   Conduit process, a real chat and a real WebSocket, against the fake
   app-server daemon in `test/helpers/conduit-harness.js`. Slower, and it cannot
