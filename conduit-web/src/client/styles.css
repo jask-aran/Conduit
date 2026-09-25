@@ -2572,3 +2572,8 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-preview-turn b { color: var(--foreground); font-weight: 560; }
 .command-preview-turn .thinking-orb { width: 16px; height: 16px; flex: none; }
 .command-group-break { display: block; height: 8px; }
+/* The rail drops its least-needed hints as the card narrows rather than
+   cutting them off at the edge. */
+.command-hint-bar { container-type: inline-size; }
+@container (max-width: 900px) { .command-hint-bar [data-drop="3"] { display: none; } }
+@container (max-width: 640px) { .command-hint-bar [data-drop="2"] { display: none; } }

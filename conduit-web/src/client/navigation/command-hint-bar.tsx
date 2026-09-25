@@ -13,6 +13,8 @@ type Hint = {
   commandId?: string;
   label: string;
   keys?: string[];
+  /* Which hints go first as the rail narrows: 3 soonest, 1 never. */
+  drop?: 1 | 2 | 3;
 };
 
 const fixedHint = (label: string, ...keys: string[]): Hint => ({ label, keys });
@@ -34,9 +36,9 @@ function HintContents(props: { hint: Hint }) {
 function HintItem(props: { hint: Hint; onClick?: () => void }) {
   return <Show
     when={props.onClick}
-    fallback={<span class="command-hint-item"><HintContents hint={props.hint} /></span>}
+    fallback={<span class="command-hint-item" data-drop={props.hint.drop}><HintContents hint={props.hint} /></span>}
   >
-    <button type="button" class="command-hint-item command-hint-action" onClick={() => props.onClick?.()}>
+    <button type="button" class="command-hint-item command-hint-action" data-drop={props.hint.drop} onClick={() => props.onClick?.()}>
       <HintContents hint={props.hint} />
     </button>
   </Show>;
@@ -61,7 +63,9 @@ export function CommandHintBar(props: {
   const commandKeys = (commandId: string) => {
     shortcutRevision();
     return props.shortcuts.effectiveBindings(commandId)
-      .map((binding) => formatShortcutBinding(binding, props.shortcuts.environment));
+      .map((binding) => formatShortcutBinding(binding, props.shortcuts.environment))
+      // One binding per hint: the rail names a key, not every alias for it.
+      .slice(0, 1);
   };
   const pendingHints = () => {
     const pending = props.pendingSequence;
@@ -115,12 +119,12 @@ export function CommandHintBar(props: {
     if (props.context === "chat") return [
       commandHint(COMMAND_IDS.toggleChatEdit, "Edit"),
       commandHint(COMMAND_IDS.renameHighlightedChat, "Rename"),
-      commandHint(COMMAND_IDS.deleteHighlightedChat, "Delete"),
-      commandHint(COMMAND_IDS.moveHighlightedChat, "Move"),
-      fixedHint("Expand", "→"),
-      fixedHint("Search in", "/"),
-      fixedHint("Project", "Ctrl", "Enter"),
-      fixedHint("Preview", "Ctrl", "P"),
+      { ...commandHint(COMMAND_IDS.deleteHighlightedChat, "Delete"), drop: 2 },
+      { ...commandHint(COMMAND_IDS.moveHighlightedChat, "Move"), drop: 2 },
+      { ...fixedHint("Expand", "→"), drop: 3 },
+      { ...fixedHint("Search in", "/"), drop: 3 },
+      { ...fixedHint("Project", "Ctrl", "Enter"), drop: 3 },
+      { ...fixedHint("Preview", "Ctrl", "P"), drop: 2 },
       fixedHint("Open", "Enter"),
       fixedHint(props.scoped ? "Out" : "Close", "Esc"),
     ];
