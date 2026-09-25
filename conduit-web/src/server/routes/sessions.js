@@ -47,6 +47,17 @@ export function registerSessionRoutes(app, {
   const upToDate = (context, projection, page, requestedBefore = "") => (page?.before || requestedBefore
     ? projection
     : { ...projection, ...applyTranscriptOps(projection, chatLogs?.peek(context.chat.id)?.entries || []) });
+  /*
+   * Whether a turn is still running in this chat. The transcript holds the
+   * steps of a running turn that have finished, and its prompt has no outcome
+   * until the turn ends; the browser draws the turn from the socket once it
+   * attaches, and until then this is what says the turn has not ended yet.
+   */
+  const turnOpen = (chatId) => {
+    const process = backends.list().find((item) => item.chatId === chatId);
+    return Boolean(process && (process.active || process.stopping
+      || process.generation && !process.generation.settled));
+  };
 
   async function transcriptFor(context) {
     if (context.chat.backend?.implementation === "conduit_pi") {
@@ -79,7 +90,7 @@ export function registerSessionRoutes(app, {
         // Where the rest of the history starts is the adapter's to say, the same
         // as the transcript itself. This used to answer `null` for every backend
         // but Pi, which told the browser a long thread was all of it.
-        return response.json({ ...chatView(context.chat),
+        return response.json({ ...chatView(context.chat), turnOpen: turnOpen(context.chat.id),
           ...upToDate(context, projection, projection.page, request.query.before), attachments: [],
           page: projection.page || { before: null } });
       }
@@ -104,6 +115,7 @@ export function registerSessionRoutes(app, {
       const current = upToDate(context, projection, session.page, request.query.before);
       response.json({
         ...chatView(context.chat),
+        turnOpen: turnOpen(context.chat.id),
         model: session.model,
         thinkingLevel: session.thinkingLevel,
         messages: current.messages,

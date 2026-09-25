@@ -592,6 +592,10 @@ export function createActiveChat(options: ActiveChatOptions) {
       if (detail.profileId || detail.templateId) setTemplateId(detail.profileId || detail.templateId || null);
       if (detail.runtime) setRuntimeIdentity(detail.runtime);
       setBackendImplementation(detail.backend?.implementation || null);
+      // The socket says how the turn is going once it attaches; until then the
+      // transcript holds a running turn's finished steps, and this is what
+      // keeps them from reading as a turn that ended without saying how.
+      if (detail.turnOpen && generation() === "idle") setGeneration("active");
     });
   };
 

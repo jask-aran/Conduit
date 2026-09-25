@@ -335,6 +335,8 @@ export interface TranscriptDetail extends ChatSummary {
   messages: Message[];
   tools: ToolItem[];
   page?: { before?: string | null };
+  /** A turn is still running: the last prompt's unsettled steps are not an ended turn. */
+  turnOpen?: boolean;
 }
 
 export interface ModelOption {
