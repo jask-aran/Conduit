@@ -15,7 +15,7 @@
 .thinking-orb { position: relative; display: block; width: 100%; height: 100%; }
 .thinking-orb canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 /* A stopped turn's orb is dimmed; a failed one is tinted by the orb itself. */
-.turn-trace-mark[data-outcome="interrupted"] .thinking-orb { opacity: 0.5; }
+.turn-trace-mark[data-outcome="interrupted"] .thinking-orb { opacity: 0.6; }
 /* The starting header is not a button: it opens nothing. */
 .turn-trace-starting .turn-trace-header { cursor: default; }
 

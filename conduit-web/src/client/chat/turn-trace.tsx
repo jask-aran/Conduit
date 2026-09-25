@@ -222,19 +222,19 @@ const KIND_VERBS: Record<Exclude<ToolKind, "other">, string> = {
 const KIND_ORBS: Record<ToolKind, OrbState> = {
   command: "solving", read: "weaving", edit: "shaping", search: "searching", fetch: "searching", other: "solving",
 };
-const orbOfStep = (segment?: TraceSegment): OrbState =>
-  segment?.kind === "tool" ? KIND_ORBS[segment.tool.kind || "other"] : "working";
 
 /* A finished turn's mark: the outline closed into a circle -- the shaping
-   state held on its first shape, which reads as complete. */
+   state held on its first shape, which reads as complete. A stopped one is
+   the same outline held on its square, the stop button's glyph. */
 const CLOSED: ModeOpts = { shape: 0 };
+const STOPPED: ModeOpts = { shape: 2 };
 
 function statusOf(trace: TurnTraceData, writing: boolean): { verb: string; orb: OrbState; opts?: ModeOpts } {
   // Settled, the orb is a still frame: the closed circle for a finish or a
-  // failure; for a stop, the state it was in, which is its last step's.
+  // failure, the square for a stop.
   if (!trace.active) {
     const verb = ({ interrupted: "Interrupted", failed: "Failed" } as Record<string, string>)[trace.status] || "Done";
-    return trace.status === "interrupted" ? { verb, orb: orbOfStep(trace.segments.at(-1)) } : { verb, orb: "shaping", opts: CLOSED };
+    return { verb, orb: "shaping", opts: trace.status === "interrupted" ? STOPPED : CLOSED };
   }
   const running = trace.segments.flatMap((segment) => segment.kind === "tool" && !segment.tool.done ? [segment.tool] : []);
   if (running.length > 1) return { verb: `Running ${running.length} tools`, orb: "solving" };
