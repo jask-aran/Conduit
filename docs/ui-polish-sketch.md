@@ -1,6 +1,7 @@
 # UI polish sketch
 
-Status: sections 1 (interrupted turns), 1b (the trace header), 2 (composer hierarchy), 5 (empty
+Status: 1c (the opened trace as a trail) is agreed and next to build.
+Sections 1 (interrupted turns), 1b (the trace header), 2 (composer hierarchy), 5 (empty
 states, reduced) and 7 (motion, but for the deferred dashboard transition)
 are built and recorded below as built, as is 8 (keyboard) but for what waits
 on the dashboard redesign and transcript mode; 3 (autosave) is built for
@@ -146,6 +147,52 @@ Build:
 
 Decided: "Done" for a clean finish; time as `01s` into `1m 02s`, one
 format live and settled.
+
+### 1c. The opened trace: a trail
+
+Status: agreed, not built. Replaces the bordered tool cards (name · input,
+"Complete", chevron) that the opened trace is a column of today.
+
+The opened trace is one column of light lines on a thin rail, one line per
+step, in the order they happened:
+
+```
+│ 🧠 Planning web searches with official lodging queries
+│ 🔍 Ran 2 searches
+│    ├ Searched  official Shirakawa-go Ogimachi gassho house…
+│    └ Searched  Ogimachi gassho-zukuri stay 3 rooms
+│ ✎  Edited  ogimachi_gassho_house_research.md          1.2s
+│ 🌐 Fetched  shirakawa-go.gr.jp/en/stay/18/             2.6s
+│ ⌘  Ran  wc -l ogimachi_gassho_house_research.md       0.3s
+```
+
+- A tool step: its kind's icon, a past-tense verb (Ran, Read, Edited,
+  Searched, Fetched; Used `<name>` for any other), and its `subject` in mono,
+  muted -- the same kind and subject the header reads. Its duration is muted
+  and right-aligned.
+- A thinking step: its summary heading (or the start of its last sentence, as
+  the header takes it), with the thinking icon. Narration reads the same way.
+- Clicking a step opens it in place: a tool's input and output, as the card
+  shows them now; a thinking step's full text. The detail moves one level
+  down instead of going away.
+- Two or more tool steps of one kind in a row fold into one line ("Ran 3
+  searches"), the steps indented under it.
+- A running step's icon is a spinner. A failed step's icon is tinted and it
+  says Failed; one the stop cut short says Stopped. Discarded text keeps its
+  "Not kept" and strike.
+- No "Working · 28s" row at the end: the header's time already says it.
+
+Build:
+
+1. `tool.close` carries the time the tool finished, so a step has a duration
+   (a tool's start is already its `timestamp`).
+2. `turn-trace.tsx`: the steps become trail rows, the runs of one kind fold,
+   and `ToolCard`'s body becomes what a row opens to.
+3. `DESIGN.md`: the trail, beside the header.
+
+Later, not in this: a search's sources -- how many pages it found, with their
+sites' icons -- which needs each adapter to state the addresses a search
+returned.
 
 ## 2. Clarify composer hierarchy
 
