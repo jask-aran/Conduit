@@ -505,7 +505,7 @@ export function ProjectDashboard(props: {
       list={<Show when={!cloning()}>{threadsGroup()}</Show>}
       aside={<Show when={!cloning()}>
         <Show when={isWorkspace()}>{terminalsGroup()}</Show>
-        <Show when={git()} fallback={filesGroup()}>{changesGroup()}</Show>
+        <Show when={payload()?.changes.length} fallback={filesGroup()}>{changesGroup()}</Show>
       </Show>} />
 
     <Dialog open={appearanceOpen()} onOpenChange={(open) => { if (!savingAppearance()) setAppearanceOpen(open); }}>

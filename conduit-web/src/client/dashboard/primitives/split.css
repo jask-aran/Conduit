@@ -61,7 +61,7 @@
 .split-row-context code { font: 8.8px ui-monospace, SFMono-Regular, Consolas, monospace; }
 .split-row-trailing { flex: none; color: var(--muted-foreground); font: 8.8px ui-monospace, SFMono-Regular, Consolas, monospace; font-variant-numeric: tabular-nums; }
 .split-row-live { width: 6px; height: 6px; border-radius: 50%; background: var(--live); }
-.split-counts { display: inline-flex; gap: 5px; }
+.split-counts { display: inline-flex; gap: 5px; font: 8.8px ui-monospace, SFMono-Regular, Consolas, monospace; }
 .split-counts [data-change="removed"] { color: var(--destructive); }
 .split-counts [data-change="added"] { color: var(--workspace-git-added, #98c379); }
 
