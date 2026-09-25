@@ -2563,3 +2563,6 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 @media (max-width: 900px) { .command-preview { display: none; } .command-dialog-with-preview .command-shell { width: min(720px, calc(100vw - 22px)); } }
 @media (--conduit-mobile-layout) { .command-preview { display: none; } .command-dialog-with-preview .command-shell { width: 100%; } .command-label, .command-dialog-chat-search .command-option[data-chat-row="true"] .command-label { font-size: 14px; } }
 @media (prefers-reduced-motion: reduce) { .command-shell { animation: none; } }
+/* Typing lights the letters that matched and dims the rest of the label. */
+.command-label[data-matching], .command-model-label[data-matching] { color: var(--muted-foreground); }
+.command-label mark, .command-model-label mark { background: none; color: var(--foreground); font-weight: 700; }
