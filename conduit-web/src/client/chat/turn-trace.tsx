@@ -81,8 +81,7 @@ function ToolRow(props: RowProps & { tool: ToolItem }) {
 }
 
 /* Two or more steps of one kind in a row are one line that says how many, the
-   steps under it. It starts open -- the steps are the point -- so what is
-   remembered is folding it. */
+   steps under it a click below, like any other line of the trail. */
 const GROUP_WORDS: Record<ToolKind, (count: number) => string> = {
   command: (count) => `Ran ${count} commands`,
   read: (count) => `Read ${count} files`,
@@ -92,11 +91,11 @@ const GROUP_WORDS: Record<ToolKind, (count: number) => string> = {
   other: (count) => `Used ${count} tools`,
 };
 function ToolGroup(props: RowProps & { kind: ToolKind; tools: ToolItem[] }) {
-  const key = () => `fold:${props.tools[0]!.toolCallId}`;
+  const key = () => `group:${props.tools[0]!.toolCallId}`;
   const running = () => !props.settled && props.tools.some((tool) => !tool.done);
   const KindIcon = () => { const Icon = KIND_ICONS[props.kind]; return <Icon class="trail-icon" />; };
   return <Disclosure class="trail-row tool-group" headerClass="trail-row-header" bodyClass="tool-group-steps"
-    initialOpen={!props.toolOpen?.(key())} onOpenChange={(open) => props.onToolOpenChange?.(key(), !open)}
+    initialOpen={props.toolOpen?.(key())} onOpenChange={(open) => props.onToolOpenChange?.(key(), open)}
     header={<>
       <Show when={running()} fallback={<KindIcon />}><Spinner class="trail-icon" /></Show>
       <span class="trail-verb">{GROUP_WORDS[props.kind](props.tools.length)}</span>
