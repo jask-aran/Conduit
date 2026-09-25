@@ -25,6 +25,7 @@ import { chatSortStamp, compareChatsBySort, saveChatSort, useChatSort } from "..
 import { harnessLabelFor, ThreadHarnessMark } from "../harness-brand";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import type { ShortcutContext } from "../shortcuts/shortcut-types";
+import { ChatPreview } from "./chat-preview";
 import { CommandHintBar } from "./command-hint-bar";
 import type { CommandHintContext, CommandHintMode } from "./command-hint-bar";
 import { RuntimeIndicator, visibleRuntimeActivity } from "./runtime-indicator";
@@ -1006,18 +1007,7 @@ export function CommandMenu(props: {
               <For each={rows()}>{renderRow}</For>
             </div>
             <Show when={chatPage() && previewOpen() && !moveMode()}>
-              <aside class="command-preview" aria-label="Chat preview">
-                <Show when={highlightedChat()} fallback={<p class="command-preview-empty">{rowProject(selectable()[active()]) ? rowProject(selectable()[active()])!.name : "Nothing highlighted"}</p>}>
-                  {(target) => <>
-                    <div class="command-preview-title"><ThreadHarnessMark id={target().chat.harnessId} /><span>{target().chat.title || "Untitled chat"}</span></div>
-                    <div class="command-preview-facts">
-                      <span>{harnessLabelFor(target().chat.harnessId || target().chat.backend?.implementation)}</span>
-                      <span>{target().project.slug === "chat" ? "Chats" : target().project.name}</span>
-                      <span>Updated {formatChatDate(target().chat.lastMessageAt || target().chat.updatedAt)} · created {formatChatDate(target().chat.createdAt)}</span>
-                    </div>
-                  </>}
-                </Show>
-              </aside>
+              <ChatPreview target={activeChat()} folder={rowProject(selectable()[active()])} />
             </Show>
             </div>
             <CommandHintBar
