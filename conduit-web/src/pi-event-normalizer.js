@@ -49,6 +49,11 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0, cl
   let sequence = startingSequence;
   let messageSequence = 0;
   let activeMessageId = null;
+  // The calls of the message being written, by content index: which tool,
+  // under which id. Pi's RPC mode strips the partial message from every
+  // stream event and states these only on a call's start, so they are kept
+  // here for the deltas that follow it.
+  let calls = new Map();
 
   const emit = (event) => ({ ...event, generationId, seq: ++sequence });
   const normalize = (sourceValue) => {
@@ -72,6 +77,7 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0, cl
         // live message and its eventual session entry one message; without one
         // the fallback is unique within this generation and nothing more.
         activeMessageId = claimMessageId?.() || `${generationId}:m${++messageSequence}`;
+        calls = new Map();
         return [emit({ type: "assistant_message_started", messageId: activeMessageId })];
       case "message_update": {
         if (!activeMessageId || !update.type || update.type === "start") return [];
@@ -82,9 +88,14 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0, cl
           : update.type.startsWith("text_") ? "text"
             : update.type.startsWith("toolcall_") ? "tool_call" : null;
         if (!blockKind) return [];
+        if (update.type === "toolcall_start") {
+          const name = String(update.toolName || content[contentIndex]?.name || "");
+          const toolCallId = String(update.id || content[contentIndex]?.id || "");
+          calls.set(contentIndex, { name, toolCallId, ...(name ? { toolKind: toolKind(PI_TOOL_KINDS, name) } : {}) });
+        }
         if (update.type.endsWith("_start")) {
           const normalized = normalizeBlock(content[contentIndex], contentIndex)
-            || { kind: blockKind, contentIndex };
+            || { kind: blockKind, contentIndex, ...(blockKind === "tool_call" ? calls.get(contentIndex) : {}) };
           // Some providers include their first token in the partial block at
           // *_start and emit that same token again as the first delta. Starts
           // establish block identity; deltas own streaming text.
@@ -99,7 +110,9 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0, cl
           // A call being written says which tool it is as soon as Pi knows:
           // the browser never sees the call's start, only these, and without
           // a name it read as an unknown tool until the tool began to run.
-          const call = blockKind === "tool_call" ? normalizeBlock(content[contentIndex], contentIndex) : null;
+          const call = blockKind === "tool_call"
+            ? calls.get(contentIndex) || normalizeBlock(content[contentIndex], contentIndex)
+            : null;
           return [emit({
             type: "content_block_delta",
             messageId: activeMessageId,
