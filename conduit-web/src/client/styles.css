@@ -137,10 +137,8 @@ svg.lucide :where(path, circle, ellipse, line, polyline, polygon, rect) { vector
 .chat-context-menu-meta { display: block; max-width: 100%; overflow-wrap: anywhere; line-height: 1.35; }
 .chat-context-menu-values { padding: 1.6px 4.8px 4.8px; color: var(--foreground); font: 8.8px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
 
-/* Inset panel: floats on the darker frame. The hairline is an inset ring, not a
-   border, so the absolutely-positioned meteor field still fills the panel
-   exactly rather than being pushed in by a border box. */
-.chat-main { --chat-header-height: 44.8px; position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 8px 6.4px 1.6px; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 12.8px; background: var(--background); color: var(--foreground); box-shadow: inset 0 0 0 0.8px oklch(1 0 0 / 6%), inset 0 0.8px 0 0 oklch(1 0 0 / 7%); }
+/* Inset panel: the rounded fill sits directly on the darker frame. */
+.chat-main { --chat-header-height: 44.8px; position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 8px 6.4px 1.6px; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 12.8px; background: var(--background); color: var(--foreground); }
 /* The header is a flow item, so it reserves its own height for whatever the
    pane holds and no surface has to know it is there. It still paints over
    what runs beneath it -- see `.transcript`, the one surface that asks to. */
@@ -704,7 +702,6 @@ svg.lucide :where(path, circle, ellipse, line, polyline, polygon, rect) { vector
     height: var(--app-height, 100dvh);
     max-height: var(--app-height, 100dvh);
     border-radius: 0;
-    box-shadow: none;
   }
   /* Three renderer probes stack above the first message on a phone. Reserve
      their height so the controls never cover the streamed transcript. */
@@ -939,10 +936,8 @@ svg { stroke-width: 1.5; }
 .chat-context-menu-meta { display: block; max-width: 100%; overflow-wrap: anywhere; line-height: 1.35; }
 .chat-context-menu-values { padding: 2px 6px 6px; color: var(--foreground); font: 11px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
 
-/* Inset panel: floats on the darker frame. The hairline is an inset ring, not a
-   border, so the absolutely-positioned meteor field still fills the panel
-   exactly rather than being pushed in by a border box. */
-.chat-main { --chat-header-height: 56px; position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 16px); margin: 8px 10px 8px 2px; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 16px; background: var(--background); color: var(--foreground); box-shadow: inset 0 0 0 1px oklch(1 0 0 / 6%), inset 0 1px 0 0 oklch(1 0 0 / 7%); }
+/* Inset panel: the rounded fill sits directly on the darker frame. */
+.chat-main { --chat-header-height: 56px; position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 16px); margin: 8px 10px 8px 2px; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 16px; background: var(--background); color: var(--foreground); }
 .chat-header { position: relative; z-index: 2; display: flex; height: var(--chat-header-height); flex: none; align-items: center; gap: 8px; padding: 8px 14px; background: linear-gradient(to bottom, var(--background) 0 50%, transparent 100%); }
 .chat-header-title { display: flex; min-width: 0; align-items: center; gap: 7px; overflow: hidden; font-size: 14px; line-height: 20px; }
 .chat-header-title span, .chat-header-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1487,7 +1482,6 @@ svg { stroke-width: 1.5; }
     height: var(--app-height, 100dvh);
     max-height: var(--app-height, 100dvh);
     border-radius: 0;
-    box-shadow: none;
   }
   /* Three renderer probes stack above the first message on a phone. Reserve
      their height so the controls never cover the streamed transcript. */

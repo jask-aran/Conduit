@@ -150,7 +150,7 @@ The charcoal is cool-neutral at chroma ~0.004–0.006. That gray is the brand. D
 - **frame** — page ground behind inset panes (body, `#root`, mobile sidebar).
 - **background** — inset pane fill (chat main, settings shell).
 - **foreground / muted-foreground** — type. Muted for timestamps, hints, empty states, icons at rest.
-- **border** — 1px hairlines: pane edges, inputs, a header or footer rule. Grouping is a heading and space, with at most one hairline between groups -- not a hairline box and not a fill.
+- **border** — 1px hairlines: inputs, a header or footer rule, and dividers. Grouping is a heading and space, with at most one hairline between groups -- not a hairline box and not a fill. Do not outline the main or workspace pane with a hairline.
 - **accent** — white at 6–7% opacity. This is hover, pressed, and selected. Selection is a gray wash, never a hue.
 - **card / popover** — slightly raised solids for menus, palettes, modal cards, tool/attachment cards. Frosted glass is preferred wherever the surface floats or overlays content (composer, user bubbles, header pill, floating toolbars); solid popover remains for dense lists like palettes where blur would hurt legibility.
 - **primary** — near-white. Default buttons and the one bright action.
@@ -196,7 +196,7 @@ Do not invent further type sizes. Do not use serif except the Capacitor first-la
 
 # Layout
 
-Desktop is a darker **frame** with **inset rounded panes** (chat ~16px radius, 8px margin, inset hairline — not an outer border). Mobile drops the inset and goes full-bleed, keeping safe-area padding on edge controls.
+Desktop is a darker **frame** with **inset rounded panes** (chat ~16px radius, 8px margin, no pane-edge hairline). Mobile drops the inset and goes full-bleed, keeping safe-area padding on edge controls.
 
 Two pane types:
 

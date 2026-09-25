@@ -1477,21 +1477,28 @@ function App() {
     }
     focusComposer();
   };
-  // Only the go-to-region shortcuts light a region (its bottom line, and the
-  // arrival cue). Focus moving any other way -- a click, Tab, a menu handing
-  // it back -- says nothing, so nothing lights by accident.
-  let regionJumpAt = -Infinity;
-  let regionJumpTo: readonly string[] = [];
-  let heldRegionSync: ((target: EventTarget | null) => void) | undefined;
-  const markRegionJump = (to: readonly string[]) => {
-    regionJumpAt = performance.now();
-    regionJumpTo = to;
-    // Already there, focus may not move at all; look again once it has settled.
-    requestAnimationFrame(() => requestAnimationFrame(() => heldRegionSync?.(document.activeElement)));
+  // Shortcut contexts follow DOM focus. This one owner controls only the
+  // persistent bottom line; a menu can take focus without changing it.
+  let heldRegion: HTMLElement | null = null;
+  let syncFocusedShortcutContext: ((target: EventTarget | null) => void) | undefined;
+  const holdRegion = (region: HTMLElement | null) => {
+    if (heldRegion === region) return;
+    heldRegion?.removeAttribute("data-focus-held");
+    heldRegion = region;
+    region?.setAttribute("data-focus-held", "");
   };
+  const acknowledgeFocusedRegion = (region: HTMLElement | null) => {
+    if (!region || !region.contains(document.activeElement)) return;
+    holdRegion(region);
+    acknowledgeRegion(region);
+  };
+  const acknowledgeWorkspaceFocus = () => acknowledgeFocusedRegion(
+    document.activeElement instanceof Element
+      ? document.activeElement.closest<HTMLElement>('[data-region="workspace-panel"]')
+      : null,
+  );
   const focusWorkspacePanel = () => {
     if (!workspacePanelScope()) return;
-    markRegionJump(["workspace-panel"]);
     if (isMobileLayout()) setMobileSidebarOpen(false);
     if (!panelOpen()) setPanelOpenForChat(true);
     setWorkspaceFocusRequest((request) => request + 1);
@@ -1512,6 +1519,7 @@ function App() {
       ].find(shown);
       const target = row && (row.matches("button, a") ? row : row.querySelector("button, a"));
       (target as HTMLElement | null | undefined)?.focus({ preventScroll: false });
+      acknowledgeFocusedRegion(sidebar);
     });
   };
   // Entering the main pane with nothing more specific in mind goes to its
@@ -1529,9 +1537,9 @@ function App() {
     if (document.querySelector(".composer textarea") && attempt < 20) setTimeout(() => enterMainPane(attempt + 1, pane), 100);
   };
   const focusMainPane = () => {
-    markRegionJump(["chat", "dashboard", "terminal"]);
     if (isMobileLayout()) setMobileSidebarOpen(false);
     enterMainPane();
+    acknowledgeFocusedRegion(document.querySelector<HTMLElement>(".chat-main"));
   };
   // A route change that takes the focused element with it leaves focus on the
   // body, where no key does anything; the new page is entered instead. Never
@@ -1543,11 +1551,13 @@ function App() {
     if (active && active !== document.body && !active.matches(".chat-main")) return;
     enterMainPane();
   };
-  createEffect(on([routeKind, () => catalogue.selectedId()], () => requestAnimationFrame(settleFocus), { defer: true }));
+  createEffect(on([routeKind, () => catalogue.selectedId()], () => requestAnimationFrame(() => {
+    settleFocus();
+    syncFocusedShortcutContext?.(document.activeElement);
+  }), { defer: true }));
   // Ctrl+Shift+1: open a collapsed sidebar and focus it; never close it --
   // Ctrl+B stays the toggle.
   const goToSidebar = () => {
-    markRegionJump(["sidebar"]);
     const collapsed = document.querySelector('[data-region="sidebar"]')?.getAttribute("data-state") === "collapsed";
     if (!isMobileLayout() && collapsed) runSidebar("toggle-sidebar");
     focusSidebar();
@@ -2274,8 +2284,7 @@ function App() {
     // in the composer makes composer, chat and application active in that
     // order (SHORTCUT_REGION_PARENTS). A closed workspace panel is not a place.
     let releaseFocusedContexts: Array<() => void> = [];
-    let enteredRegion: Element | null = null;
-    const syncFocusedShortcutContext = (target: EventTarget | null) => {
+    syncFocusedShortcutContext = (target: EventTarget | null) => {
       for (const release of releaseFocusedContexts) release();
       releaseFocusedContexts = [];
       const regions: Array<{ name: string; element: Element }> = [];
@@ -2284,27 +2293,21 @@ function App() {
         if (isShortcutRegion(name) && (name !== "workspace-panel" || panelOpen())) regions.push({ name, element: node });
       }
       releaseFocusedContexts = regions.map((region) => shortcutManager.activateContext(region.name));
-      // The top-level region reached by a go-to-region shortcut is marked (its
-      // bottom edge lit) and the arrival cued; the mark stays while focus is
-      // somewhere no region is -- a menu, a dialog -- or elsewhere in it, and
-      // goes when focus reaches another region any other way.
-      const outermost = regions.at(-1)?.element ?? null;
-      if (!outermost) return;
-      const jumped = performance.now() - regionJumpAt < 1500 && regionJumpTo.includes(regions.at(-1)!.name);
-      if (outermost === enteredRegion && !jumped) return;
-      enteredRegion?.removeAttribute("data-focus-held");
-      enteredRegion = outermost;
-      if (!jumped) return;
-      regionJumpAt = -Infinity;
-      outermost.setAttribute("data-focus-held", "");
-      acknowledgeRegion(outermost);
+      // Main and workspace show their line whenever focus enters. The sidebar
+      // shows it only after its go-to shortcut. Focus outside a region keeps
+      // the last owner until another region receives focus.
+      const outermost = regions.at(-1);
+      if (!outermost || !(outermost.element instanceof HTMLElement)) return;
+      if (outermost.name === "sidebar") {
+        if (heldRegion !== outermost.element) holdRegion(null);
+      } else holdRegion(outermost.element);
     };
-    heldRegionSync = syncFocusedShortcutContext;
-    const onFocusIn = (event: FocusEvent) => syncFocusedShortcutContext(event.target);
+    const onFocusIn = (event: FocusEvent) => syncFocusedShortcutContext?.(event.target);
     window.addEventListener("focusin", onFocusIn);
     syncFocusedShortcutContext(document.activeElement);
     onCleanup(() => {
-      heldRegionSync = undefined;
+      syncFocusedShortcutContext = undefined;
+      holdRegion(null);
       window.removeEventListener("keydown", dismissOpenLayer, true);
       window.removeEventListener("focusin", onFocusIn);
       for (const release of releaseFocusedContexts) release();
@@ -2686,8 +2689,8 @@ function App() {
         </Show>
       </Show>
     </main>
-    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} requestedTab={workspaceViewRequest} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
-    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => selectedProject()!.id} projectName={() => selectedProject()!.name} sourceControlEnabled={() => selectedProject()!.kind === "workspace"} workingRoot={() => selectedProject()!.workingRoot} chatId={() => workspacePanelScope()!} artifactChatId={() => routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => chat.loadedId()} historyAvailable={() => routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} requestedTab={workspaceViewRequest} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
+    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
+    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => selectedProject()!.id} projectName={() => selectedProject()!.name} sourceControlEnabled={() => selectedProject()!.kind === "workspace"} workingRoot={() => selectedProject()!.workingRoot} chatId={() => workspacePanelScope()!} artifactChatId={() => routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => chat.loadedId()} historyAvailable={() => routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </div>
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>
