@@ -2,7 +2,7 @@
    760px or wider: the composer and the threads list at the composer's width
    on the left, what is live and what changed on the right, each scrolling on
    its own so one long list cannot stretch the page. Narrower, one column. */
-.split-dashboard { container: split-dashboard / inline-size; display: flex; min-height: 0; flex: 1; flex-direction: column; overflow-y: auto; scrollbar-width: var(--native-scrollbar-width); }
+.split-dashboard { position: relative; z-index: 1; container: split-dashboard / inline-size; display: flex; min-height: 0; flex: 1; flex-direction: column; overflow-y: auto; scrollbar-width: var(--native-scrollbar-width); }
 .split-dashboard-body { display: grid; width: min(1000px, calc(100% - 48px)); min-height: 0; flex: 1; grid-template-areas: "head head" "notice notice" "main aside"; grid-template-columns: minmax(0, var(--composer-desktop-reference-width)) minmax(240px, 1fr); grid-template-rows: auto auto minmax(280px, 1fr); column-gap: 32px; margin: 0 auto; padding: 22px 0 16px; }
 .split-dashboard-head { display: flex; min-width: 0; grid-area: head; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
 .split-dashboard-notice { grid-area: notice; margin-bottom: 16px; }
