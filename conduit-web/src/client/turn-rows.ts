@@ -193,8 +193,18 @@ const statedAnswers = (message: Message): string | null =>
  * clean finish. A turn still running has not ended, so its rows are the live
  * overlay's and are checked once they are not.
  */
-export function assertStatedOutcomes(rows: TurnRow[]): TurnRow[] {
-  const unstated = rows.find((row) => row.type === "trace" && row.unstated);
+const lastStatedIndex = (rows: TurnRow[]) => {
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index]!;
+    if (row.type === "trace" && !row.unstated) return index;
+  }
+  return -1;
+};
+export function assertStatedOutcomes(rows: TurnRow[], turnOpen = false): TurnRow[] {
+  // A chat whose turn is still running has not ended it: the unstated traces
+  // after the last prompt that did state how it ended are that turn's.
+  const checked = turnOpen ? rows.slice(0, lastStatedIndex(rows) + 1) : rows;
+  const unstated = checked.find((row) => row.type === "trace" && row.unstated);
   if (unstated) throw new Error(`transcript contract: the turn after prompt ${unstated.precedingUserId} ended without stating how. A backend must state \`turn.settle\` when a turn ends.`);
   return rows;
 }

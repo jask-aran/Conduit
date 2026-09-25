@@ -87,6 +87,7 @@ export function createTimelineStore(
   tools: Accessor<ToolItem[]>,
   activeGeneration: Accessor<ActiveGenerationView | null>,
   activeGenerationChange: Accessor<LiveGenerationChange | null> = () => null,
+  turnOpen: Accessor<boolean> = () => false,
 ) {
   const [rows, setRows] = createStore<TimelineRow[]>([]);
   /*
@@ -274,7 +275,7 @@ export function createTimelineStore(
     }
     const projected = stableProjection(previousProjectedRows, assertStatedOutcomes(inputGeneration
       ? projectLiveTurn(persistedRows, inputMessages, inputGeneration)
-      : persistedRows));
+      : persistedRows, turnOpen()));
     // Diffing the row sets allocates a Map and a Set the size of the whole
     // transcript, and the result is only ever a metric field. Every other
     // measurement here is already gated on the recorder; this one was not.
