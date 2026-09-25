@@ -1,8 +1,5 @@
 /* The Conduit dashboard (app-dashboard.tsx), on the split layout. */
-.app-dashboard-day { padding: 8px 6.4px 2px; color: var(--muted-foreground); font-size: 9.6px; }
-.app-dashboard-day:first-child { padding-top: 0; }
 .app-dashboard-activity { color: var(--live); }
-.app-dashboard .split-group-actions > button.is-on { background: var(--accent); color: var(--foreground); }
 
 /* The folder shelf: project folders as folders, no box, the wash as cursor. */
 .app-folder-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 2px; }
@@ -25,7 +22,6 @@
   .app-folder { width: 96px; flex: none; }
 }
 @media (--conduit-mobile-layout) {
-  .app-dashboard-day { padding: 12px 9px 3px; font-size: 12px; }
   .app-folder { width: 104px; padding: 10px 9px; }
   .app-folder-mark { width: 30px; height: 24px; }
   .app-folder-live { left: 34px; top: 11px; }
