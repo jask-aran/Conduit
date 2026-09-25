@@ -265,6 +265,8 @@ export type ToolActivityEvent = EventBase & {
   seq: number;
   toolCallId: string;
   name: string;
+  /** On `start`: what it did, as `tool.open` states it. */
+  kind?: "command" | "read" | "edit" | "search" | "fetch" | "other";
   input?: unknown;
   output?: unknown;
   isError?: boolean;
@@ -430,7 +432,9 @@ export type TranscriptOpEvent = EventBase & { type: "transcript_op" } & (
       provider?: string; model?: string; timestamp?: string; errorMessage?: string }
   /** One row taken back (`keep`), the history cut after it, or cut through it. */
   | { op: "message.drop"; messageId: string; keep?: boolean; inclusive?: boolean }
-  | { op: "tool.open"; toolCallId: string; name: string; input: unknown }
+  | { op: "tool.open"; toolCallId: string; name: string;
+      /** What it did, from the adapter's own table of its tool names. */
+      kind: "command" | "read" | "edit" | "search" | "fetch" | "other"; input: unknown }
   /** A tool the user's stop killed is `cancelled`, never `isError`. */
   | { op: "tool.close"; toolCallId: string; output: unknown; isError: boolean; cancelled?: true }
   /**

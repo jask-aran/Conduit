@@ -319,8 +319,9 @@ svg { stroke-width: 1.5; }
 .turn-trace-preview .chat-markdown { display: contents; font-size: inherit; line-height: inherit; }
 .turn-trace-preview :is(.chat-markdown, .incremark) > * { display: inline; margin: 0; }
 .turn-trace-preview :is(.chat-markdown, .incremark) > *:not(:last-child)::after { content: " "; }
-.turn-trace-counter, .turn-trace-status { flex: none; white-space: pre; }
-.turn-trace-status[data-status="interrupted"], .turn-trace-status[data-status="failed"] { color: var(--foreground); font-weight: 560; }
+.turn-trace-time, .turn-trace-work, .turn-trace-status { flex: none; white-space: pre; }
+.turn-trace-time { font-variant-numeric: tabular-nums; }
+.turn-trace-status { color: var(--foreground); font-weight: 560; }
 .turn-trace-summary { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .turn-trace[data-active="true"] .turn-trace-preview { animation: trace-shimmer 1.6s ease-in-out infinite; }
 @keyframes trace-shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
@@ -1111,8 +1112,9 @@ svg { stroke-width: 1.5; }
 .turn-trace-preview .chat-markdown { display: contents; font-size: inherit; line-height: inherit; }
 .turn-trace-preview :is(.chat-markdown, .incremark) > * { display: inline; margin: 0; }
 .turn-trace-preview :is(.chat-markdown, .incremark) > *:not(:last-child)::after { content: " "; }
-.turn-trace-counter, .turn-trace-status { flex: none; white-space: pre; }
-.turn-trace-status[data-status="interrupted"], .turn-trace-status[data-status="failed"] { color: var(--foreground); font-weight: 560; }
+.turn-trace-time, .turn-trace-work, .turn-trace-status { flex: none; white-space: pre; }
+.turn-trace-time { font-variant-numeric: tabular-nums; }
+.turn-trace-status { color: var(--foreground); font-weight: 560; }
 .turn-trace-summary { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .turn-trace[data-active="true"] .turn-trace-preview { animation: trace-shimmer 1.6s ease-in-out infinite; }
 @keyframes trace-shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }

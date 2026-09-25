@@ -54,6 +54,8 @@ function stableProjection(previous: TurnRow[], projected: TurnRow[]): TurnRow[] 
         && prior.answerless === row.answerless
         && prior.timestamp === row.timestamp
         && left.status === right.status
+        && left.startedAt === right.startedAt
+        && left.endedAt === right.endedAt
         && left.segments.length === right.segments.length
         && left.segments.every((segment, index) => sameTraceSegment(segment, right.segments[index]!))
         ? prior : row;

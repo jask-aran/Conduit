@@ -27,7 +27,7 @@ import { wasDiscarded } from "../abort-signature.js";
  * A block: `kind` (`text` | `thinking` | `tool_call`), `text`, `toolCallId`,
  * `name`, `input` -- plus `contentIndex`, `identity` and `status` while it is
  * still arriving, which are additions to these names and not alternatives.
- * A tool: `toolCallId`, `name`, `input`, `output`, `isError`, `cancelled`, `done`.
+ * A tool: `toolCallId`, `name`, `kind`, `input`, `output`, `isError`, `cancelled`, `done`.
  * A turn: `outcome` -- `complete`, `interrupted` or `failed` -- stated on the
  * prompt it answers, once the turn is over.
  * An event: `seq`.
@@ -44,6 +44,17 @@ import { wasDiscarded } from "../abort-signature.js";
 const ROLES = new Set(["user", "assistant"]);
 const OUTCOMES = new Set(["complete", "interrupted", "failed"]);
 const text = (value) => typeof value === "string" && value.length > 0;
+
+/**
+ * What a tool did, in one word the reader can count: "3 commands, 2 reads".
+ *
+ * Each harness names its tools its own way -- Pi's `bash`, Codex's command
+ * execution, OpenCode's `webfetch` -- so each adapter holds the table from its
+ * names to these, and the browser never guesses from a name. A tool the table
+ * does not know is `other`, which is still counted, just not named.
+ */
+export const TOOL_KINDS = new Set(["command", "read", "edit", "search", "fetch", "other"]);
+export const toolKind = (table, name) => (Object.hasOwn(table, name) ? table[name] : "other");
 
 /**
  * Every op is checked before it leaves, because nothing downstream checks it.
@@ -73,6 +84,7 @@ export function assertTranscriptOp(event) {
     if (event.keep && event.inclusive) bad("a drop either keeps the message or takes it");
   } else if (event.op === "tool.open") {
     if (!text(event.toolCallId)) bad("no tool call id");
+    if (!TOOL_KINDS.has(event.kind)) bad(`kind ${JSON.stringify(event.kind)}`);
   } else if (event.op === "tool.close") {
     if (!text(event.toolCallId)) bad("no tool call id");
     if (event.isError && event.cancelled) bad("a tool is stopped or it failed");
@@ -171,9 +183,9 @@ export const messageDrop = ({ messageId, inclusive = false, keep = false, genera
  * they ran. Stated here, they travel in the same order as everything else and
  * a replay restores them with it.
  */
-export const toolOpen = ({ toolCallId, name, input, messageId = null, generationId = null }) =>
+export const toolOpen = ({ toolCallId, name, kind = "other", input, messageId = null, generationId = null }) =>
   assertTranscriptOp({
-    type: "transcript_op", op: "tool.open", toolCallId, name: name || "tool", input,
+    type: "transcript_op", op: "tool.open", toolCallId, name: name || "tool", kind, input,
     ...(messageId ? { messageId } : {}),
     ...(generationId ? { generationId } : {}),
   });

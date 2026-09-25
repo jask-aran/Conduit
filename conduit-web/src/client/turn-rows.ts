@@ -1,6 +1,6 @@
 import { textBlockClassifications } from "../active-generation.js";
 import { mergeContinuation } from "../continuation.js";
-import type { ContentBlock, Message, ToolItem } from "./api/contracts";
+import type { ContentBlock, Message, ToolItem, ToolKind } from "./api/contracts";
 
 /**
  * A block of a message still arriving.
@@ -40,6 +40,7 @@ export interface ActiveGenerationView {
   toolExecutions: Record<string, {
     toolCallId?: string;
     name?: string;
+    kind?: ToolKind;
     input?: unknown;
     // What the tool has returned. `status` says whether that is all of it, the
     // same way a block in flight carries its own text and says it is streaming.
@@ -74,6 +75,10 @@ export interface TurnTraceData {
   active: boolean;
   status: "thinking" | "executing_tool" | "interrupted" | "complete" | "failed";
   segments: TraceSegment[];
+  // The turn's time, prompt to last reply, off the timestamps the messages
+  // already carry. A live turn has no end yet; its header counts from the start.
+  startedAt?: string;
+  endedAt?: string;
 }
 
 export type TurnRow =
@@ -350,6 +355,7 @@ export function buildLiveToolItem(
   return {
     toolCallId,
     name: execution.name || fallback.name || "tool",
+    kind: execution.kind || "other",
     input: execution.input ?? fallback.input,
     output: execution.output,
     done: execution.status === "complete" || execution.status === "error" || execution.status === "cancelled",
@@ -369,6 +375,11 @@ export function buildLiveToolItem(
  * disagree with the first, which is what the reader saw as an answer changing
  * shape after it had settled.
  */
+
+const turnTime = (startedAt?: string | null, endedAt?: string | null) => ({
+  ...(startedAt ? { startedAt } : {}),
+  ...(endedAt ? { endedAt } : {}),
+});
 
 function liveRows(generation: ActiveGenerationView, owner: Message | null): TurnRow[] {
   const classifications = textBlockClassifications(generation) as Record<string, "interim" | "answer">;
@@ -437,7 +448,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null): Turn
       : generation.status === "failed" ? "failed"
       : generation.status === "complete" ? "complete"
       : executingTool ? "executing_tool" : "thinking";
-    rows.push({ key: `trace:${owner ? owner.id : `live:${generation.id}`}`, type: "trace", value: { active: running, status, segments }, precedingUserId: owner?.id, answerless: answers.length === 0, timestamp: generation.assistantMessages.at(-1)?.timestamp || undefined });
+    rows.push({ key: `trace:${owner ? owner.id : `live:${generation.id}`}`, type: "trace", value: { active: running, status, segments, ...turnTime(owner?.timestamp, running ? undefined : generation.assistantMessages.at(-1)?.timestamp) }, precedingUserId: owner?.id, answerless: answers.length === 0, timestamp: generation.assistantMessages.at(-1)?.timestamp || undefined });
   }
   rows.push(...answers);
   if (!answers.length && active(generation) && generation.status !== "stopping") {
@@ -524,7 +535,7 @@ function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById
     rows.push({
       key: `trace:${turn.userMessage ? turn.userMessage.id : turn.assistants[0]!.id}`,
       type: "trace",
-      value: { active: false, status: outcome || "complete", segments },
+      value: { active: false, status: outcome || "complete", segments, ...turnTime(turn.userMessage?.timestamp, finalAssistant?.timestamp) },
       precedingUserId: turn.userMessage?.id,
       answerless: !hasAnswerRow,
       timestamp: finalAssistant?.timestamp || undefined,

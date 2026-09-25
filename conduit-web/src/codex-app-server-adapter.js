@@ -9,7 +9,7 @@ import { wasDiscarded } from "./abort-signature.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { messageClose, messageDrop, messageOpen, toolClose, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
+import { messageClose, messageDrop, messageOpen, toolClose, toolKind, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 export const CODEX_CAPABILITIES = Object.freeze({
@@ -35,6 +35,11 @@ export const CODEX_CAPABILITIES = Object.freeze({
 // waits for a reply - so an unanswered one stalls the turn silently. Each entry
 // maps one approval method onto Conduit's neutral permission prompt and back
 // onto the decision vocabulary that method expects.
+// Codex's tool items, by what they do. Codex reads files through commands, so
+// there is no read of its own; an image it opens is one.
+const CODEX_TOOL_KINDS = Object.freeze({
+  commandExecution: "command", fileChange: "edit", webSearch: "search", imageView: "read",
+});
 const APPROVAL_OPTIONS = Object.freeze(["Approve", "Approve for session", "Deny"]);
 const APPROVAL_POLICIES = Object.freeze(["untrusted", "on-request", "never"]);
 const APPROVAL_REVIEWERS = Object.freeze(["user", "auto_review"]);
@@ -267,6 +272,11 @@ export class CodexAppServerAdapter extends EventEmitter {
    * markers have nothing to show.
    */
   static toolActivity(item) {
+    const activity = CodexAppServerAdapter.activityOf(item);
+    return activity && { ...activity, kind: toolKind(CODEX_TOOL_KINDS, item.type) };
+  }
+
+  static activityOf(item) {
     if (item.type === "commandExecution") {
       return { name: "command", input: item.command || "", output: item.aggregatedOutput || "", isError: item.status === "failed" };
     }
@@ -425,7 +435,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       interim.blocks.push({ kind: "tool_call", toolCallId: item.id, name: activity.name, input: activity.input });
       // A command still running when the turn was interrupted went with it.
       const cancelled = row.turnStatus === "interrupted" && item.status === "inProgress";
-      tools.push({ toolCallId: item.id, name: activity.name, input: activity.input, done: true,
+      tools.push({ toolCallId: item.id, name: activity.name, kind: activity.kind, input: activity.input, done: true,
         output: textResult(truncate(activity.output)), isError: activity.isError && !cancelled, ...(cancelled ? { cancelled } : {}) });
     }
     closeTurn();
@@ -915,11 +925,11 @@ export class CodexAppServerAdapter extends EventEmitter {
       if (!activity) return;
       if (method === "item/started") {
         this.publish(record, { type: "tool_activity", generationId: turnId, phase: "start", seq: ++record.generationSeq,
-          toolCallId: params.item.id, name: activity.name, input: activity.input });
+          toolCallId: params.item.id, name: activity.name, kind: activity.kind, input: activity.input });
         this.attachToolCall(record, turnId, params.item.id, activity);
         if (this.states(record)) {
           this.publish(record, toolOpen({ toolCallId: params.item.id, name: activity.name,
-            input: activity.input, messageId: record.turn?.messageId || null, generationId: turnId }));
+            kind: activity.kind, input: activity.input, messageId: record.turn?.messageId || null, generationId: turnId }));
         }
       } else {
         this.publish(record, { type: "tool_activity", generationId: turnId, phase: "end", seq: ++record.generationSeq,

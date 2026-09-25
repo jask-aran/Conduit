@@ -6,7 +6,8 @@ import { wasAborted } from "./abort-signature.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { CONTINUE_PROMPT, mergeContinuation } from "./continuation.js";
 import { wasDiscarded } from "./abort-signature.js";
-import { PI_CAPABILITIES } from "./pi-capabilities.js";
+import { PI_CAPABILITIES, PI_TOOL_KINDS } from "./pi-capabilities.js";
+import { toolKind } from "./harnesses/transcript-ops.js";
 import { isPathInside } from "./workspace-paths.js";
 
 
@@ -704,6 +705,7 @@ export function toolsFromEntries(entries) {
         tools.set(block.id, {
           toolCallId: block.id,
           name: block.name,
+          kind: toolKind(PI_TOOL_KINDS, block.name),
           input: block.arguments,
           done: false,
           timestamp: entry.timestamp || null,
@@ -714,6 +716,7 @@ export function toolsFromEntries(entries) {
       const current = tools.get(message.toolCallId) || {
         toolCallId: message.toolCallId,
         name: message.toolName,
+        kind: toolKind(PI_TOOL_KINDS, message.toolName),
         input: {},
       };
       tools.set(message.toolCallId, {

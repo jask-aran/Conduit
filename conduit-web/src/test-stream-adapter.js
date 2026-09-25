@@ -158,6 +158,7 @@ export const approvalFromPrompt = (message) => /\bapprove|approval\b/i.test(Stri
 /** The tool a run calls, and what it returns. Fixed, like everything else. */
 export const TEST_STREAM_TOOL = Object.freeze({
   name: "read_file",
+  kind: "read",
   input: Object.freeze({ path: "docs/testing.md" }),
   output: "docs/testing.md: approach selection, commands, safety boundaries, evidence.",
 });
@@ -417,10 +418,10 @@ export class TestStreamAdapter extends EventEmitter {
       seq: ++record.generationSeq, messageId, contentIndex, blockKind: "tool_call",
       delta: JSON.stringify(input) });
     turn.blocks.push({ kind: "tool_call", contentIndex, toolCallId, name: TEST_STREAM_TOOL.name, input });
-    this.publish(record, toolOpen({ toolCallId, name: TEST_STREAM_TOOL.name, input,
+    this.publish(record, toolOpen({ toolCallId, name: TEST_STREAM_TOOL.name, kind: TEST_STREAM_TOOL.kind, input,
       messageId, generationId }));
     this.publish(record, { type: "tool_activity", phase: "start", generationId,
-      seq: ++record.generationSeq, toolCallId, name: TEST_STREAM_TOOL.name, input });
+      seq: ++record.generationSeq, toolCallId, name: TEST_STREAM_TOOL.name, kind: TEST_STREAM_TOOL.kind, input });
     this.publish(record, { type: "tool_activity", phase: "update", generationId,
       seq: ++record.generationSeq, toolCallId, name: TEST_STREAM_TOOL.name, input,
       output: TEST_STREAM_TOOL.output.slice(0, 24) });

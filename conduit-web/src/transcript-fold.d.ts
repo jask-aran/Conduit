@@ -1,4 +1,4 @@
-import type { Message, ToolItem } from "./client/api/contracts";
+import type { Message, ToolItem, ToolKind } from "./client/api/contracts";
 
 export interface ProtocolMessage {
   id?: string;
@@ -25,6 +25,7 @@ export interface TranscriptOp {
   generationId?: string | null;
   toolCallId?: string;
   name?: string;
+  kind?: ToolKind;
   input?: unknown;
   output?: unknown;
   isError?: boolean;
