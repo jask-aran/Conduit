@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createRenderEffect, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from "solid-js";
-import { ArrowDownIcon, CheckIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
+import { ArrowDownIcon, BellIcon, CheckIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { BooleanCapability, Message } from "../api/contracts";
 import { isChatContentActivity, type TranscriptSource } from "./transcript-source";
@@ -1151,6 +1151,11 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             return userId ? artifactSummaries().get(userId) : undefined;
           });
           let row!: HTMLDivElement;
+          if (user() && message().origin === "harness") {
+            return <div ref={row} data-slot="message-scroller-item" data-message-id={message().id}>
+              <p class="harness-prompt"><BellIcon aria-hidden="true" /><span>{message().content}</span></p>
+            </div>;
+          }
           return <div ref={row} data-slot="message-scroller-item" data-message-id={message().id}>
             <article data-slot="message" data-align={user() ? "end" : "start"} class={user() ? "message-user" : "message-assistant"}>
               <div data-slot="message-content">

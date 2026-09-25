@@ -71,6 +71,8 @@ export function applyTranscriptOp(messages, event) {
       : {
         id: incoming.id, role: "user", content: displayUserText(incoming),
         timestamp: incoming.timestamp || new Date().toISOString(),
+        // A prompt the harness made itself, not the user's words.
+        ...(incoming.origin === "harness" ? { origin: "harness" } : {}),
       },
     event.after ?? null);
   }

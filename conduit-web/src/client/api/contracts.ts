@@ -297,6 +297,12 @@ export interface Message {
    */
   discarded?: boolean;
   queueMode?: "steer" | "follow_up";
+  /**
+   * A prompt the harness made itself -- a background task finishing -- rather
+   * than the user's words. It opens a turn like any prompt and is drawn as a
+   * notice, not as the user's bubble.
+   */
+  origin?: "harness";
   attachments?: Attachment[];
   order?: number;
 }
