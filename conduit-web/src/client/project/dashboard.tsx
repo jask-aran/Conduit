@@ -407,13 +407,16 @@ export function ProjectDashboard(props: {
     </Show>
   </Show>;
 
-  const threadsGroup = () => <SplitGroup id="dashboard-threads" order="list" heading={<Show when={isWorkspace()} fallback={<h2 id="dashboard-threads">Chats<small>{activeChatCount()}</small></h2>}>
+  const threadsGroup = () => <SplitGroup id="dashboard-threads" order="list" heading={<Show when={isWorkspace()} fallback={<Segmented label="Chats" value={unreadOnly() ? "unread" : "all"} onChange={(value) => { setUnreadOnly(value === "unread"); setLimit(CHAT_PAGE); }} options={[
+        { value: "all", label: "Chats", detail: <small>{activeChatCount()}</small> },
+        { value: "unread", label: "Unread", detail: <small>{props.project.sessions.filter((chat) => chat.status === "active" && chat.unread).length}</small> },
+      ]} />}>
       <Segmented label="Threads" value={threadSide()} onChange={(value) => { saveThreadSide(value as ThreadSide); setLimit(CHAT_PAGE); }} options={[
         { value: "chats", label: "Chats", detail: <small>{activeChatCount()}</small> },
         { value: "outside", label: "Not in Conduit", detail: <Show when={!outsideLoading()}><small>{outsideThreads().length}</small></Show> },
       ]} />
     </Show>} actions={<>
-      <Show when={showOutside()} fallback={<ListFilter sort={chatSort()} onSort={saveChatSort} unreadOnly={unreadOnly()} onUnreadOnly={(value) => { setUnreadOnly(value); setLimit(CHAT_PAGE); }} />}>
+      <Show when={showOutside()} fallback={<ListFilter sort={chatSort()} onSort={saveChatSort} unreadOnly={isWorkspace() ? unreadOnly() : undefined} onUnreadOnly={isWorkspace() ? (value) => { setUnreadOnly(value); setLimit(CHAT_PAGE); } : undefined} />}>
         <ListFilter harnesses={outsideHarnesses()} harness={outsideFilter()} onHarness={(id) => { setOutsideFilter(id); setLimit(CHAT_PAGE); }} />
       </Show>
       <ListSearch label={`Search chats in ${props.project.name}`} onClick={props.onSearchChats} />
