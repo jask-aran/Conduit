@@ -64,8 +64,14 @@ const plainSphere = (t = 0) => sphereAt(0.55 + t * SPIN);
 /* How far the sphere has turned by `t`, told as a loop of segments:
    [seconds, radians, easing]. A segment without radians is a hold. */
 const smooth = (x) => x * x * (3 - 2 * x);
+const linear = (x) => x;
+const easeIn = (x) => x ** 3;
 const easeOut = (x) => 1 - (1 - x) ** 3;
-const backOut = (x) => 1 + 2.7 * (x - 1) ** 3 + 1.7 * (x - 1) ** 2;
+/* Past the mark and back: `c` is how far past. */
+const back = (c) => (x) => 1 + (c + 1) * (x - 1) ** 3 + c * (x - 1) ** 2;
+const backOut = back(1.7);
+/* Past the mark and back, and past again, dying away. */
+const spring = (x) => 1 - Math.exp(-7 * x) * Math.cos(14 * x);
 function turning(segments) {
   const period = segments.reduce((sum, [seconds]) => sum + seconds, 0);
   const lap = segments.reduce((sum, [, radians = 0]) => sum + radians, 0);
@@ -213,6 +219,26 @@ export const CREATED = [
   ["circle with a gap", "the library's circle with an arc of dots removed", (t = 0) => gapped(still("shaping", { shape: 0 })(), -Math.PI / 4 + t * 2.4, 0.75)],
 ];
 
+/* A longer sputter. It turns at the plain sphere's speed, and every change of
+   pace keeps its speed where one phase hands to the next: an ease out of a
+   cruise starts at cruising speed (a cubic ease out starts at three times
+   its average, so it covers a sixth of a second's cruise per second), and an
+   ease back in ends at it. The stops between are jolts past the mark and
+   back. */
+const CRUISE = (seconds) => [seconds, SPIN * seconds, linear];
+const SLOW = (seconds) => [seconds, (SPIN * seconds) / 3, easeOut];
+const RECOVER = (seconds) => [seconds, (SPIN * seconds) / 3, easeIn];
+const SPUTTER = [
+  CRUISE(3), SLOW(0.3), [0.6],                                      // turning, then snags
+  [0.14, 0.3, back(2.2)], [0.5],                                    // a jolt
+  [0.08, 0.06, backOut], [0.12], [0.08, 0.06, backOut], [0.12], [0.1, 0.1, backOut], [0.9], // a stutter
+  [0.18, -0.1], [0.4],                                              // kicks back
+  [0.22, 0.45, spring], [0.3],                                      // a big jolt that rings
+  RECOVER(1.2), CRUISE(2), SLOW(1), [1.2],                          // catches, turns, runs down
+  [0.14, 0.22, back(2.2)], [0.35], [0.16, 0.34, back(2.2)], [0.7],  // two jolts
+  RECOVER(1),                                                       // and catches again
+];
+
 /* Prototypes for a turn that did not finish: the plain sphere turning in
    fits and starts, from softest to most broken. */
 export const PROTOTYPES = [
@@ -221,6 +247,7 @@ export const PROTOTYPES = [
   ["coasting", "pushed, then slowing to rest before the next push", stopStart(turning([[2.2, 1.5, easeOut], [0.9]]))],
   ["stalling", "turns, stops for a while, starts again, never evenly", stopStart(turning([[1.1, 0.8], [0.9], [0.45, 0.22], [1.3], [0.8, 0.5], [0.5]]))],
   ["sputtering", "short jolts that overshoot and settle, one backwards", stopStart(turning([[0.16, 0.26, backOut], [0.55], [0.12, 0.14, backOut], [1.0], [0.2, -0.07], [0.35], [0.14, 0.3, backOut], [1.2]]))],
+  ["sputtering, long", "turns as the plain sphere does, snags, jolts and stutters, kicks back, recovers; about 15s before it repeats", stopStart(turning(SPUTTER))],
 ];
 
 /* Each state a turn's header shows, the orb it shows it with, and a line of
