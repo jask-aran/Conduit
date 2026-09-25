@@ -2,7 +2,7 @@
 
 export type SessionSurface = "chat" | "terminal";
 export type AgentProtocol = "pi_rpc" | "acp" | "native_api" | "pty";
-export type AgentImplementation = "conduit_pi" | "codex" | "opencode" | "chatgpt-web" | (string & {});
+export type AgentImplementation = "conduit_pi" | "codex" | "claude-code" | "opencode" | "chatgpt-web" | (string & {});
 export type ProfileManagement = "conduit" | "agent";
 
 export interface AgentProfile {

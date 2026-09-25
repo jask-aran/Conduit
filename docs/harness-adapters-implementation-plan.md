@@ -1,12 +1,16 @@
 # Harness adapters implementation plan
 
-> **Status (2026-09-22): fx and OpenCode 2 adapters landed; Claude remains.**
-> `src/harnesses/index.js` owns registration, detection, catalogue entries,
-> profile selection and discovery policy. `SessionRecords`, `unsupported()` and
-> the session-store scanner are present. `FxAcpAdapter` uses fx 0.0.10 ACP.
-> `OpenCodeAdapter` uses the OpenCode 2.0.8 authenticated loopback service.
-> Both are selectable profiles and machine-wide drive targets. Claude Code
-> 2.1.278 remains planned.
+> **Status (2026-09-25): fx and OpenCode 2 adapters landed; Claude Code is a
+> prototype.** `src/harnesses/index.js` owns registration, detection, catalogue
+> entries, profile selection and discovery policy. `SessionRecords`,
+> `unsupported()` and the session-store scanner are present. `FxAcpAdapter`
+> uses fx 0.0.10 ACP. `OpenCodeAdapter` uses the OpenCode 2.0.8 authenticated
+> loopback service. `ClaudeCodeAdapter` uses Agent SDK 0.3.282 against the
+> installed Claude Code 2.1.282: create, resume, streamed steps and tools,
+> approvals, `AskUserQuestion`, cancel, model, effort and permission mode, and
+> SDK-backed discovery and history. All three are selectable profiles and
+> machine-wide drive targets. Claude Code forks, compaction, usage, subagent
+> traces and `CLAUDE_CONFIG_DIR` isolation remain (Phase 3).
 
 Add fx, OpenCode and Claude Code as Conduit harnesses. fx and OpenCode now
 support discovery, drive, and normal Conduit chats. They use the shared generic
