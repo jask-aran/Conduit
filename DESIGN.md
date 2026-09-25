@@ -228,6 +228,7 @@ Menus and pane headers follow the component entries below. Command and search ov
 - Chat search: wider one-line result rows with title, project, and date, search icon at the input, active filter chips below it, and an All chats scope toggle with sort controls in the shortcut rail. Chat rows use the same harness marks as the sidebar. Long text truncates. Search opens and closes on its own; it has no Back row to the command palette. Edit mode changes the rows and the shortcut rail, without turning search into a command list.
 - Leader menu: smaller card above the composer, with region path at the top and keys aligned at the left of each action.
 - Highlighted option = one neutral full-row wash. No coloured rail. A current model keeps a fainter standing wash and a heavier label while the cursor is elsewhere.
+- Command and chat rows rest in the sidebar's grey at weight 400. The current chat alone is white and semibold, without a standing wash. The keyboard cursor adds the row wash and white text without changing weight.
 - Footer shortcut rail: darker than the face, with keycaps and labels. Keep each view's actions contextual.
 - Widths: commands ~512px, models ~576px, chat search ~720px. Mobile: fill the visual viewport with a small inset and larger tap targets so it remains a dialog, not a new route.
 

@@ -657,8 +657,6 @@ svg.lucide :where(path, circle, ellipse, line, polyline, polygon, rect) { vector
 [data-slot="button"][data-variant="default"] {
   box-shadow: inset 0 0.8px 0 0 oklch(1 0 0 / 45%), 0 6.4px 16px -10px rgb(0 0 0 / 55%);
 }
-/* Selection carries the plain gray wash, never a hue or edge sliver. */
-.command-option[data-highlighted] { box-shadow: inset 0 0 0 0.8px oklch(1 0 0 / 6%); }
 
 @media (--conduit-phone-layout) {
   .mobile-panel-backdrop {
@@ -1436,8 +1434,6 @@ svg { stroke-width: 1.5; }
 [data-slot="button"][data-variant="default"] {
   box-shadow: inset 0 1px 0 0 oklch(1 0 0 / 45%), 0 8px 20px -10px rgb(0 0 0 / 55%);
 }
-/* Selection carries the plain gray wash, never a hue or edge sliver. */
-.command-option[data-highlighted] { box-shadow: inset 0 0 0 1px oklch(1 0 0 / 6%); }
 
 @media (--conduit-phone-layout) {
   .mobile-panel-backdrop {
@@ -2428,14 +2424,17 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-list > .command-group-label:first-child { margin-top: 2px; }
 .command-option { min-height: 29px; gap: 8px; border-radius: 7px; padding: 5px 8px; }
 .command-option[data-highlighted], .command-option[data-chat-selected="true"] { background: var(--overlay-cursor); }
+.command-option:not(.command-model-option):not([data-danger]) { color: color-mix(in oklch, var(--foreground), transparent 32%); }
+.command-option:not(.command-model-option):is([data-highlighted], [data-chat-selected="true"], :hover, [aria-current="page"]) { color: var(--foreground); }
 .command-icon { width: 12px; height: 12px; }
 .command-copy { gap: 0; }
-.command-label { min-width: 0; font-size: 10.4px; font-weight: 570; }
+.command-label { min-width: 0; font-size: 10.4px; font-weight: 400; }
 .command-copy small { font-size: 9px; }
 .command-option:not(.command-model-option) .command-copy { flex-direction: row; align-items: baseline; gap: 10px; }
 .command-option:not(.command-model-option) .command-copy small { max-width: 40%; margin-left: auto; }
 .command-dialog-chat-search .command-option[data-chat-row="true"] { min-height: 30px; align-items: center; }
-.command-dialog-chat-search .command-option[data-chat-row="true"] .command-label { display: block; min-width: 0; flex: 1; overflow: hidden; font-size: 10.4px; font-weight: 590; text-overflow: ellipsis; white-space: nowrap; }
+.command-dialog-chat-search .command-option[data-chat-row="true"] .command-label { display: block; min-width: 0; flex: 1; overflow: hidden; font-size: 10.4px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.command-dialog-chat-search .command-option[data-chat-row="true"][aria-current="page"] .command-label { font-weight: 660; }
 .command-dialog-chat-search .command-option[data-chat-row="true"] .command-copy small { flex: none; font-size: 9px; }
 .command-option[data-chat-row="true"] .thread-harness-mark { width: 12px; height: 12px; }
 .command-option[data-chat-row="true"]:is([data-highlighted], [data-chat-selected="true"], :hover) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
