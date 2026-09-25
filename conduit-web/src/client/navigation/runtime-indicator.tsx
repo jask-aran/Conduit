@@ -19,7 +19,7 @@ export const visibleRuntimeActivity = (process: RuntimeProcess | null | undefine
   return activity;
 };
 
-const activityDetail = (process: RuntimeProcess | null | undefined): string | null => {
+export const activityDetail = (process: RuntimeProcess | null | undefined): string | null => {
   const value = process?.activity;
   return value && typeof value === "object" ? value.label || null : null;
 };

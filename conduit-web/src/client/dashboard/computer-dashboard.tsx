@@ -63,6 +63,8 @@ export function ComputerDashboard(props: {
   onOpenFile: (path: string) => void;
   runtime?: RuntimeStore;
   selectedHarness?: string | null;
+  pendingThread?: { harnessId: string; path: string; id: string; title: string } | null;
+  onPendingThreadOpened?: () => void;
   onOpenHarness?: (id: string | null) => void;
   onOpenHarnessHere?: (id: string, cwd: string) => void;
   onOpenHarnessChat?: (chat: ChatSummary, project: Project, prompt?: string) => void;
@@ -199,7 +201,7 @@ export function ComputerDashboard(props: {
       </aside></Show>
       <Show when={!props.selectedHarness}><div class="computer-sidebar-resize" role="separator" aria-label="Resize locations sidebar" aria-orientation="vertical" aria-valuemin="120" aria-valuemax="280" aria-valuenow={sidebarWidth()} onPointerDown={startSidebarResize} /></Show>
 
-      <Show when={!props.selectedHarness} fallback={<HarnessDashboard harness={harnesses().find((item) => item.id === props.selectedHarness)} catalogueLoaded={harnessesLoaded()} projects={workspaces()} cwd={props.location?.project.workingRoot || ""} runtime={props.runtime} scope={harnessScope()} onScope={setHarnessScope} onOpenChat={props.onOpenHarnessChat} composer={props.harnessComposer} onDriveChange={props.onHarnessDriveChange} renderDrive={props.renderHarnessDrive} />}>
+      <Show when={!props.selectedHarness} fallback={<HarnessDashboard harness={harnesses().find((item) => item.id === props.selectedHarness)} catalogueLoaded={harnessesLoaded()} projects={workspaces()} cwd={props.location?.project.workingRoot || ""} runtime={props.runtime} scope={harnessScope()} onScope={setHarnessScope} onOpenChat={props.onOpenHarnessChat} composer={props.harnessComposer} onDriveChange={props.onHarnessDriveChange} pendingThread={props.pendingThread} onPendingThreadOpened={props.onPendingThreadOpened} renderDrive={props.renderHarnessDrive} />}>
       <div class="computer-explorer-main">
         <div class="computer-explorer-toolbar">
           <button type="button" aria-label="Home folder" title="Home folder" disabled={props.loading} onClick={() => props.onBrowse()}><HomeIcon /></button>
