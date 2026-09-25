@@ -312,6 +312,8 @@ export interface ToolItem {
   toolCallId: string;
   name?: string;
   kind?: ToolKind;
+  /** What it acted on, in one line, as the adapter states it. */
+  subject?: string;
   input?: unknown;
   output?: unknown;
   outputDeferred?: boolean;

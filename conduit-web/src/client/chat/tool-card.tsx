@@ -12,6 +12,9 @@ const commandTools = new Set(["bash", "shell", "exec", "terminal", "run_command"
 const scalar = (value: unknown): string | null => typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : null;
 
 function summary(tool: ToolItem) {
+  // What the adapter says it acted on, where it says; the guess below is for a
+  // tool it does not name.
+  if (tool.subject) return tool.subject.length > 90 ? `…${tool.subject.slice(-89)}` : tool.subject;
   const args = tool.input && typeof tool.input === "object" ? tool.input as Record<string, unknown> : {};
   for (const key of ["path", "file", "command", "url", "query", "pattern", "name"]) {
     const value = scalar(args[key]);

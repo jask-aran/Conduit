@@ -41,6 +41,7 @@ export interface ActiveGenerationView {
     toolCallId?: string;
     name?: string;
     kind?: ToolKind;
+    subject?: string;
     input?: unknown;
     // What the tool has returned. `status` says whether that is all of it, the
     // same way a block in flight carries its own text and says it is streaming.
@@ -356,6 +357,7 @@ export function buildLiveToolItem(
     toolCallId,
     name: execution.name || fallback.name || "tool",
     kind: execution.kind || "other",
+    ...(execution.subject ? { subject: execution.subject } : {}),
     input: execution.input ?? fallback.input,
     output: execution.output,
     done: execution.status === "complete" || execution.status === "error" || execution.status === "cancelled",
@@ -451,7 +453,9 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null): Turn
     rows.push({ key: `trace:${owner ? owner.id : `live:${generation.id}`}`, type: "trace", value: { active: running, status, segments, ...turnTime(owner?.timestamp, running ? undefined : generation.assistantMessages.at(-1)?.timestamp) }, precedingUserId: owner?.id, answerless: answers.length === 0, timestamp: generation.assistantMessages.at(-1)?.timestamp || undefined });
   }
   rows.push(...answers);
-  if (!answers.length && active(generation) && generation.status !== "stopping") {
+  // Held only until something of the turn shows: its trace, once it has one,
+  // is what says it is working.
+  if (!answers.length && !segments.length && active(generation) && generation.status !== "stopping") {
     rows.push({ key: `pending:${owner ? owner.id : generation.id}`, type: "pending", value: null, precedingUserId: owner?.id });
   }
   return rows;

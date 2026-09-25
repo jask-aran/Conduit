@@ -26,6 +26,7 @@ export interface TranscriptOp {
   toolCallId?: string;
   name?: string;
   kind?: ToolKind;
+  subject?: string;
   input?: unknown;
   output?: unknown;
   isError?: boolean;

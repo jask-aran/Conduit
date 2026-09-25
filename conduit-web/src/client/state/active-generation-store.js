@@ -251,6 +251,7 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
             toolCallId: event.toolCallId,
             name: event.name,
             kind: event.kind || "other",
+            ...(event.subject ? { subject: event.subject } : {}),
             input: event.input,
             status: "running",
             output: null,

@@ -9,7 +9,7 @@ import { wasDiscarded } from "./abort-signature.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { messageClose, messageDrop, messageOpen, toolClose, toolKind, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
+import { messageClose, messageDrop, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 export const CODEX_CAPABILITIES = Object.freeze({
@@ -273,7 +273,12 @@ export class CodexAppServerAdapter extends EventEmitter {
    */
   static toolActivity(item) {
     const activity = CodexAppServerAdapter.activityOf(item);
-    return activity && { ...activity, kind: toolKind(CODEX_TOOL_KINDS, item.type) };
+    if (!activity) return null;
+    const kind = toolKind(CODEX_TOOL_KINDS, item.type);
+    // The four it names keep what they acted on as their input: the command,
+    // the changed paths, the query, the image.
+    const subject = kind === "other" ? null : toolSubject(activity.input);
+    return { ...activity, kind, ...(subject ? { subject } : {}) };
   }
 
   static activityOf(item) {
@@ -435,7 +440,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       interim.blocks.push({ kind: "tool_call", toolCallId: item.id, name: activity.name, input: activity.input });
       // A command still running when the turn was interrupted went with it.
       const cancelled = row.turnStatus === "interrupted" && item.status === "inProgress";
-      tools.push({ toolCallId: item.id, name: activity.name, kind: activity.kind, input: activity.input, done: true,
+      tools.push({ toolCallId: item.id, name: activity.name, kind: activity.kind, subject: activity.subject, input: activity.input, done: true,
         output: textResult(truncate(activity.output)), isError: activity.isError && !cancelled, ...(cancelled ? { cancelled } : {}) });
     }
     closeTurn();
@@ -925,11 +930,11 @@ export class CodexAppServerAdapter extends EventEmitter {
       if (!activity) return;
       if (method === "item/started") {
         this.publish(record, { type: "tool_activity", generationId: turnId, phase: "start", seq: ++record.generationSeq,
-          toolCallId: params.item.id, name: activity.name, kind: activity.kind, input: activity.input });
+          toolCallId: params.item.id, name: activity.name, kind: activity.kind, subject: activity.subject, input: activity.input });
         this.attachToolCall(record, turnId, params.item.id, activity);
         if (this.states(record)) {
           this.publish(record, toolOpen({ toolCallId: params.item.id, name: activity.name,
-            kind: activity.kind, input: activity.input, messageId: record.turn?.messageId || null, generationId: turnId }));
+            kind: activity.kind, subject: activity.subject, input: activity.input, messageId: record.turn?.messageId || null, generationId: turnId }));
         }
       } else {
         this.publish(record, { type: "tool_activity", generationId: turnId, phase: "end", seq: ++record.generationSeq,

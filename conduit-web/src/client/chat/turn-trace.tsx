@@ -122,33 +122,40 @@ const KIND_WORDS: Record<ToolKind, [string, string]> = {
 };
 const plural = (count: number, [one, many]: [string, string]) => `${count} ${count === 1 ? one : many}`;
 
-/* Totals per kind in the order each first appeared; three named, then how many
-   more calls there were. */
+/* Totals per kind, most used first -- every kind named, since there are only
+   six; a narrow header cuts the smallest. */
 function workOf(tools: ToolItem[]): string {
   const counts = new Map<ToolKind, number>();
   for (const tool of tools) counts.set(tool.kind || "other", (counts.get(tool.kind || "other") || 0) + 1);
-  const kinds = [...counts];
-  const named = kinds.slice(0, 3).map(([kind, count]) => plural(count, KIND_WORDS[kind])).join(", ");
-  const rest = kinds.slice(3).reduce((sum, [, count]) => sum + count, 0);
-  return rest ? `${named} +${rest}` : named;
+  return [...counts].sort((left, right) => right[1] - left[1])
+    .map(([kind, count]) => plural(count, KIND_WORDS[kind])).join(", ");
 }
+
+/* What a running tool of each kind is doing, said over what it did it to. */
+const KIND_VERBS: Record<Exclude<ToolKind, "other">, string> = {
+  command: "Running", read: "Reading", edit: "Editing", search: "Searching", fetch: "Fetching",
+};
 
 /* One verb for what it is doing, or how it ended -- always there, so a clean
-   finish says Done rather than being told apart by what it lacks. Live: the
-   tools since the latest text are one running tool by name, or how many ran
-   in a row; once the answer streams, it is writing. */
-function statusOf(trace: TurnTraceData, writing: boolean): string {
-  if (!trace.active) return ({ interrupted: "Interrupted", failed: "Failed" } as Record<string, string>)[trace.status] || "Done";
-  if (writing) return "Writing";
-  const latest = trace.segments.at(-1);
-  if (latest?.kind !== "tool") return "Thinking";
-  let inARow = 0;
-  for (let index = trace.segments.length - 1; trace.segments[index]?.kind === "tool"; index -= 1) inARow += 1;
-  if (inARow === 1 && !latest.tool.done) return `Running ${latest.tool.name || "a tool"}`;
-  return `Used ${plural(inARow, ["tool", "tools"])}`;
+   finish says Done rather than being told apart by what it lacks. Live, a
+   running tool is named by what it is doing and to what; several at once are
+   counted; between tools it is thinking, and once the answer streams, writing. */
+function statusOf(trace: TurnTraceData, writing: boolean): { verb: string; subject: string } {
+  if (!trace.active) return { verb: ({ interrupted: "Interrupted", failed: "Failed" } as Record<string, string>)[trace.status] || "Done", subject: "" };
+  const running = trace.segments.flatMap((segment) => segment.kind === "tool" && !segment.tool.done ? [segment.tool] : []);
+  if (running.length > 1) return { verb: `Running ${running.length} tools`, subject: "" };
+  const tool = running[0];
+  if (!tool) return { verb: writing ? "Writing" : "Thinking", subject: "" };
+  const kind = tool.kind || "other";
+  if (kind === "other" || !tool.subject) {
+    return { verb: kind === "other" || kind === "command" ? `${kind === "other" ? "Using" : "Running"} ${tool.name || "a tool"}` : KIND_VERBS[kind], subject: "" };
+  }
+  // A file is its name here; the whole path is on the step below.
+  const subject = kind === "read" || kind === "edit" ? tool.subject.split("/").at(-1)! : tool.subject;
+  return { verb: KIND_VERBS[kind], subject: kind === "search" ? `\u201c${subject}\u201d` : subject };
 }
 
-function previewOf(trace: TurnTraceData, writing: boolean): { status: string; work: string; summary: string } {
+function previewOf(trace: TurnTraceData, writing: boolean): { status: { verb: string; subject: string }; work: string; summary: string } {
   let summary = "";
   const tools: ToolItem[] = [];
   for (const segment of trace.segments) {
@@ -195,15 +202,22 @@ export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sess
     header={<>
       <BrainIcon />
       <div class="turn-trace-preview">
-        {/* Status is always there and always first, so each part after it is
-            led by its separator; fixed slots, so the ticking time never
-            re-renders the thinking beside it. */}
-        <span class="turn-trace-status" data-status={props.trace.status}>{preview().status}</span>
-        <Show when={time()}>{(text) => <span class="turn-trace-time">{"\u00a0· "}{text()}</span>}</Show>
-        <Show when={preview().work}>{(text) => <span class="turn-trace-work">{"\u00a0· "}{text()}</span>}</Show>
-        <Show when={preview().summary}>{(text) => <span class="turn-trace-summary">{"\u00a0· "}
-          <Suspense fallback={text()}><ChatMarkdown inline renderer={props.renderer} pacing={props.pacing}>{text()}</ChatMarkdown></Suspense>
-        </span>}</Show>
+        {/* Two lines: what it is doing, and what it is thinking. The first is
+            fixed slots, so the ticking time never re-renders the rest; the
+            second is held open while the turn runs, so the first thinking to
+            arrive moves nothing below. */}
+        <div class="turn-trace-line">
+          <span class="turn-trace-status" data-status={props.trace.status}>{preview().status.verb}</span>
+          <Show when={preview().status.subject}>{(text) => <span class="turn-trace-subject">{"\u00a0"}{text()}</span>}</Show>
+          <Show when={time()}>{(text) => <span class="turn-trace-time">{"\u00a0· "}{text()}</span>}</Show>
+          <Show when={preview().work}>{(text) => <span class="turn-trace-work">{"\u00a0· "}{text()}</span>}</Show>
+        </div>
+        <Show when={preview().summary || props.trace.active}>
+          <div class="turn-trace-summary">
+            <Show when={preview().summary} fallback={"\u00a0"}>{(text) =>
+              <Suspense fallback={text()}><ChatMarkdown inline renderer={props.renderer} pacing={props.pacing}>{text()}</ChatMarkdown></Suspense>}</Show>
+          </div>
+        </Show>
       </div>
     </>}
     body={() => {
