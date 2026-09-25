@@ -71,10 +71,11 @@ live, before the answer       ▬▬▬ ▬▬ ▬   (breathing, one line tall; 
 
 Status: built, then revised after use: the header is two lines (status, time
 and work; then the thinking, held open while live); work names every kind,
-most used first, with no "+N"; and a running tool is its verb and subject --
-`Searching “…”`, `Editing notes.md` -- from a `subject` each adapter states
-beside `kind`, in place of "Running bash" / "Used N tools". The drawings below
-are the first version.
+most used first, with no "+N"; a running tool is its kind's verb
+(`Searching`, `Editing`) in place of "Running bash" / "Used N tools"; and the
+second line is the latest step -- live, the thinking or a tool's `subject`
+(stated by each adapter beside `kind`), whichever came last; settled, the
+last thinking. The drawings below are the first version.
 
 One anatomy, live and settled:
 

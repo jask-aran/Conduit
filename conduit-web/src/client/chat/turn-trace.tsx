@@ -131,42 +131,51 @@ function workOf(tools: ToolItem[]): string {
     .map(([kind, count]) => plural(count, KIND_WORDS[kind])).join(", ");
 }
 
-/* What a running tool of each kind is doing, said over what it did it to. */
+/* What a running tool of each kind is doing. */
 const KIND_VERBS: Record<Exclude<ToolKind, "other">, string> = {
   command: "Running", read: "Reading", edit: "Editing", search: "Searching", fetch: "Fetching",
 };
 
 /* One verb for what it is doing, or how it ended -- always there, so a clean
    finish says Done rather than being told apart by what it lacks. Live, a
-   running tool is named by what it is doing and to what; several at once are
-   counted; between tools it is thinking, and once the answer streams, writing. */
-function statusOf(trace: TurnTraceData, writing: boolean): { verb: string; subject: string } {
-  if (!trace.active) return { verb: ({ interrupted: "Interrupted", failed: "Failed" } as Record<string, string>)[trace.status] || "Done", subject: "" };
+   running tool is its kind's verb, several at once are counted, between tools
+   it is thinking, and once the answer streams, writing. What the tool is
+   acting on is the line below's, not this one's. */
+function statusOf(trace: TurnTraceData, writing: boolean): string {
+  if (!trace.active) return ({ interrupted: "Interrupted", failed: "Failed" } as Record<string, string>)[trace.status] || "Done";
   const running = trace.segments.flatMap((segment) => segment.kind === "tool" && !segment.tool.done ? [segment.tool] : []);
-  if (running.length > 1) return { verb: `Running ${running.length} tools`, subject: "" };
+  if (running.length > 1) return `Running ${running.length} tools`;
   const tool = running[0];
-  if (!tool) return { verb: writing ? "Writing" : "Thinking", subject: "" };
+  if (!tool) return writing ? "Writing" : "Thinking";
   const kind = tool.kind || "other";
-  if (kind === "other" || !tool.subject) {
-    return { verb: kind === "other" || kind === "command" ? `${kind === "other" ? "Using" : "Running"} ${tool.name || "a tool"}` : KIND_VERBS[kind], subject: "" };
-  }
-  // A file is its name here; the whole path is on the step below.
-  const subject = kind === "read" || kind === "edit" ? tool.subject.split("/").at(-1)! : tool.subject;
-  return { verb: KIND_VERBS[kind], subject: kind === "search" ? `\u201c${subject}\u201d` : subject };
+  return kind === "other" ? `Using ${tool.name || "a tool"}` : KIND_VERBS[kind];
 }
 
-function previewOf(trace: TurnTraceData, writing: boolean): { status: { verb: string; subject: string }; work: string; summary: string } {
-  let summary = "";
+/* A tool's line: what it acted on, a search's in quotes, a long path from its
+   end, since the file is the part worth reading. */
+function toolLine(tool: ToolItem): string {
+  const subject = tool.subject || "";
+  if (tool.kind === "search") return `\u201c${subject}\u201d`;
+  return subject.length > 80 && (tool.kind === "read" || tool.kind === "edit") ? `\u2026${subject.slice(-79)}` : subject;
+}
+
+/* The second line is the latest step: live, whichever came last of the
+   thinking and a tool that says what it acted on; settled, the last thinking,
+   which is what the turn concluded. Discarded text is that one step's loss, not
+   the turn's, so it is passed over. */
+type Detail = { text: string; markdown: boolean };
+function previewOf(trace: TurnTraceData, writing: boolean): { status: string; work: string; detail: Detail | null } {
+  let detail: Detail | null = null;
   const tools: ToolItem[] = [];
   for (const segment of trace.segments) {
-    if (segment.kind === "tool") tools.push(segment.tool);
-    else if (segment.kind === "error") summary = segment.message.errorMessage || "The model request failed.";
-    // Text a stop discarded is that one step's loss, not the turn's: what came
-    // before it was kept, so the summary is still the last thing that was.
+    if (segment.kind === "tool") {
+      tools.push(segment.tool);
+      if (trace.active && segment.tool.subject) detail = { text: toolLine(segment.tool), markdown: false };
+    } else if (segment.kind === "error") detail = { text: segment.message.errorMessage || "The model request failed.", markdown: false };
     else if (segment.discarded) continue;
-    else if (segment.text.trim()) summary = summaryOf(segment.text);
+    else if (segment.text.trim()) detail = { text: summaryOf(segment.text), markdown: true };
   }
-  return { status: statusOf(trace, writing), work: workOf(tools), summary };
+  return { status: statusOf(trace, writing), work: workOf(tools), detail };
 }
 
 /* `01s` to `59s`, then `1m 02s` -- one format, live and settled. */
@@ -202,20 +211,22 @@ export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sess
     header={<>
       <BrainIcon />
       <div class="turn-trace-preview">
-        {/* Two lines: what it is doing, and what it is thinking. The first is
+        {/* Two lines: what it is doing, and its latest step. The first is
             fixed slots, so the ticking time never re-renders the rest; the
-            second is held open while the turn runs, so the first thinking to
+            second is held open while the turn runs, so the first step to
             arrive moves nothing below. */}
         <div class="turn-trace-line">
-          <span class="turn-trace-status" data-status={props.trace.status}>{preview().status.verb}</span>
-          <Show when={preview().status.subject}>{(text) => <span class="turn-trace-subject">{"\u00a0"}{text()}</span>}</Show>
+          <span class="turn-trace-status" data-status={props.trace.status}>{preview().status}</span>
           <Show when={time()}>{(text) => <span class="turn-trace-time">{"\u00a0· "}{text()}</span>}</Show>
           <Show when={preview().work}>{(text) => <span class="turn-trace-work">{"\u00a0· "}{text()}</span>}</Show>
         </div>
-        <Show when={preview().summary || props.trace.active}>
+        <Show when={preview().detail || props.trace.active}>
           <div class="turn-trace-summary">
-            <Show when={preview().summary} fallback={"\u00a0"}>{(text) =>
-              <Suspense fallback={text()}><ChatMarkdown inline renderer={props.renderer} pacing={props.pacing}>{text()}</ChatMarkdown></Suspense>}</Show>
+            {/* A tool's line is plain text -- a path's underscores are not emphasis. */}
+            <Show when={preview().detail} fallback={"\u00a0"}>{(detail) =>
+              <Show when={detail().markdown} fallback={detail().text}>
+                <Suspense fallback={detail().text}><ChatMarkdown inline renderer={props.renderer} pacing={props.pacing}>{detail().text}</ChatMarkdown></Suspense>
+              </Show>}</Show>
           </div>
         </Show>
       </div>
