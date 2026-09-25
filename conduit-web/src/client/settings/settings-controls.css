@@ -188,7 +188,7 @@
 .settings-dialog .settings-shell .settings-nav-item > button { min-height: 24px; gap: 6.4px; border: 0; border-radius: 6.4px; padding: 4px 6.4px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 32%); font-size: 10.4px; font-weight: 400; }
 .settings-dialog .settings-shell .settings-nav-item > button svg { width: 12px; height: 12px; stroke-width: 1.5; color: var(--muted-foreground); }
 .settings-dialog .settings-shell .settings-nav-item > button[aria-selected="true"] { background: transparent; box-shadow: none; color: var(--accent-foreground); font-weight: 660; }
-.settings-dialog .settings-shell .settings-nav-item > button[aria-selected="true"] svg { color: var(--accent-foreground); stroke-width: 2.6; }
+.settings-dialog .settings-shell .settings-nav-item > button[aria-selected="true"] svg { color: var(--accent-foreground); stroke-width: 2; }
 .settings-dialog .settings-shell .settings-nav-item > button:hover, .settings-dialog .settings-shell .settings-nav-item > button:focus-visible { outline: none; background: var(--accent); }
 @media (max-width: 760px) {
   .settings-dialog .settings-shell .settings-nav-group > h3 { padding: 5px 9px; font-size: 13px; }

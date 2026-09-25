@@ -5,6 +5,7 @@ import type { Message, ToolItem, ToolKind } from "../api/contracts";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
 import { KIND_ICONS, stepDuration, ToolStep } from "./tool-card";
 import "./turn-trail.css";
+import { ThinkingOrb, type OrbState } from "./thinking-orb";
 import { Disclosure } from "./disclosure";
 import type { MarkdownRendererId } from "./markdown-settings";
 import type { IncremarkPacingMode } from "./incremark-pacing";
@@ -193,14 +194,20 @@ const KIND_VERBS: Record<Exclude<ToolKind, "other">, string> = {
    running tool is its kind's verb, several at once are counted, between tools
    it is thinking, and once the answer streams, writing. What the tool is
    acting on is the line below's, not this one's. */
-function statusOf(trace: TurnTraceData, writing: boolean): string {
-  if (!trace.active) return ({ interrupted: "Interrupted", failed: "Failed" } as Record<string, string>)[trace.status] || "Done";
+/* And the orb's motion for each: a scan for looking, a wiring constellation
+   for the web, orbits for anything run, a morphing outline for making. */
+const KIND_ORBS: Record<ToolKind, OrbState> = {
+  command: "working", read: "searching", edit: "shaping", search: "searching", fetch: "connecting", other: "working",
+};
+
+function statusOf(trace: TurnTraceData, writing: boolean): { verb: string; orb: OrbState } {
+  if (!trace.active) return { verb: ({ interrupted: "Interrupted", failed: "Failed" } as Record<string, string>)[trace.status] || "Done", orb: "breathing" };
   const running = trace.segments.flatMap((segment) => segment.kind === "tool" && !segment.tool.done ? [segment.tool] : []);
-  if (running.length > 1) return `Running ${running.length} tools`;
+  if (running.length > 1) return { verb: `Running ${running.length} tools`, orb: "working" };
   const tool = running[0];
-  if (!tool) return writing ? "Writing" : "Thinking";
+  if (!tool) return writing ? { verb: "Writing", orb: "composing" } : { verb: "Thinking", orb: "breathing" };
   const kind = tool.kind || "other";
-  return kind === "other" ? `Using ${tool.name || "a tool"}` : KIND_VERBS[kind];
+  return { verb: kind === "other" ? `Using ${tool.name || "a tool"}` : KIND_VERBS[kind], orb: KIND_ORBS[kind] };
 }
 
 /* A tool's line: what it acted on, a search's in quotes, a long path from its
@@ -217,7 +224,7 @@ function toolLine(tool: ToolItem): string {
    the last thinking, which is what the turn concluded. Discarded text is that
    one step's loss, not the turn's, so it is passed over. */
 type Detail = { text: string; markdown: boolean };
-function previewOf(trace: TurnTraceData, writing: boolean): { status: string; work: string; detail: Detail | null } {
+function previewOf(trace: TurnTraceData, writing: boolean): { status: { verb: string; orb: OrbState }; work: string; detail: Detail | null } {
   let detail: Detail | null = null;
   let running: Detail | null = null;
   const tools: ToolItem[] = [];
@@ -263,14 +270,18 @@ export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sess
   return <Disclosure class="turn-trace" data-active={props.trace.active ? "true" : "false"} headerClass="turn-trace-header" bodyClass="turn-trace-body"
     initialOpen={props.initialOpen} onOpenChange={props.onOpenChange}
     header={<>
-      <BrainIcon />
+      {/* Live, the orb says the turn is working and how; settled, the brain.
+          One box for both, so nothing beside it moves when the turn ends. */}
+      <span class="turn-trace-mark">
+        <Show when={props.trace.active} fallback={<BrainIcon />}><ThinkingOrb state={preview().status.orb} /></Show>
+      </span>
       <div class="turn-trace-preview">
         {/* Two lines: what it is doing, and its latest step. The first is
             fixed slots, so the ticking time never re-renders the rest; the
             second is held open while the turn runs, so the first step to
             arrive moves nothing below. */}
         <div class="turn-trace-line">
-          <span class="turn-trace-status" data-status={props.trace.status}>{preview().status}</span>
+          <span class="turn-trace-status" data-status={props.trace.status}>{preview().status.verb}</span>
           <Show when={time()}>{(text) => <span class="turn-trace-time">{"\u00a0· "}{text()}</span>}</Show>
           <Show when={preview().work}>{(text) => <span class="turn-trace-work">{"\u00a0· "}{text()}</span>}</Show>
         </div>

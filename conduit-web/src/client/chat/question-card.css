@@ -49,7 +49,7 @@
 /* Several answers: a box that fills when chosen. */
 .question-check[data-multi="true"] { width: 14px; height: 14px; border: 1.5px solid var(--muted-foreground); border-radius: 4px; }
 .question-option[aria-selected="true"] .question-check[data-multi="true"] { border-color: var(--foreground); background: var(--foreground); color: var(--background); }
-.question-check[data-multi="true"] svg { width: 11px; height: 11px; stroke-width: 3; }
+.question-check[data-multi="true"] svg { width: 11px; height: 11px; stroke-width: 2; }
 .question-own-input { min-width: 0; flex: 1; border: 0; background: transparent; padding: 0; color: var(--foreground); font: inherit; font-size: 13px; line-height: 1.4; outline: 0; resize: none; }
 .question-own-input::placeholder { color: var(--muted-foreground); }
 

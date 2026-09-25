@@ -57,7 +57,7 @@
 /* The composer's own actions carry a heavier stroke than the app's 1.5
    hairline: they are the row's weight. */
 .composer .composer-desktop-attachment svg, .composer .composer-plus-trigger svg,
-.composer .dictation-trigger svg, .composer .composer-send-trigger svg { stroke-width: 2; }
+.composer .dictation-trigger svg, .composer .composer-send-trigger svg { stroke-width: 1.75; }
 /* The up arrow fills less of its box than the microphone does of its own; it
    is drawn a size up so the row reads as one height. */
 .composer-actions .composer-send-trigger > svg { scale: 1.15; }
