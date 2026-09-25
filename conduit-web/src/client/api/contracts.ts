@@ -525,6 +525,8 @@ export interface RuntimeProcess {
   retry?: RetryState | null;
   runtime?: RuntimeIdentity;
   capabilities?: ChatCapabilities;
+  /** The permission mode the harness is running in now, for one that states it. */
+  permissionMode?: string;
 }
 
 export interface LiveRecord {

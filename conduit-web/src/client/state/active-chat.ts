@@ -1,4 +1,4 @@
-import { batch, createMemo, createSignal, onCleanup, untrack } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 import { deriveFineActivity } from "../../activity.js";
 import { api, asList } from "../api/client";
 import { createAgentSession } from "./agent-session";
@@ -807,6 +807,11 @@ export function createActiveChat(options: ActiveChatOptions) {
     ({ chat }) => { void attachments.select(chat.id); },
     ({ chat }) => hydrateDraft(chat.id),
   ];
+
+  createEffect(() => {
+    const chatId = selectedId();
+    if (chatId) permissions?.follow(chatId, options.runtime.getProcess(chatId)?.permissionMode);
+  });
 
   const reconcileChatScope = (chat: ChatSummary, project: Project, detail?: TranscriptDetail, launching = false) =>
     Promise.all(chatScopes.map((scope) => scope({ chat, project, detail, launching }))).then(() => {});
