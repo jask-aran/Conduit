@@ -2400,6 +2400,11 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   box-shadow: 0 28px 84px rgb(0 0 0 / 55%);
 }
 .command-dialog-chat-search .command-shell { width: min(720px, calc(100vw - 22px)); max-height: min(576px, 76dvh); }
+.command-search-path { display: flex; min-height: 27px; align-items: center; gap: 5px; padding: 6px 14px 0; color: var(--muted-foreground); font-size: 9px; }
+.command-search-path button { border: 0; background: none; padding: 0; color: var(--muted-foreground); font: inherit; cursor: pointer; }
+.command-search-path button:hover, .command-search-path button:focus-visible { outline: none; color: var(--foreground); }
+.command-search-path > span:last-of-type { color: var(--foreground); }
+.command-search-path small { margin-left: auto; color: var(--muted-foreground); font-size: inherit; }
 .command-dialog-model-selector .command-shell { width: min(576px, calc(100vw - 22px)); }
 .command-input-row { min-height: 44px; gap: 8px; padding: 4px 11px; border-bottom-color: var(--overlay-edge); }
 .command-input { min-height: 36px; font-size: 12px; font-weight: 520; }
@@ -2437,6 +2442,22 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-dialog-chat-search .command-option[data-chat-row="true"][aria-current="page"] .command-label { font-weight: 660; }
 .command-dialog-chat-search .command-option[data-chat-row="true"] .command-copy small { flex: none; font-size: 9px; }
 .command-option[data-chat-row="true"] .thread-harness-mark { width: 12px; height: 12px; }
+.command-option[data-chat-child="true"] { padding-left: 29px; }
+.command-folder-option .command-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.command-folder-option[aria-current="page"] .command-label { color: var(--foreground); font-weight: 660; }
+.command-folder-option small { flex: none; margin-left: auto; color: var(--muted-foreground); font-size: 9px; white-space: nowrap; }
+.command-folder-option .command-icon, .command-folder-option .workspace-glyph { width: 13px; height: 13px; flex: none; }
+.command-folder-toggle, .command-folder-chevron { display: inline-grid; width: 13px; height: 16px; flex: none; place-items: center; border: 0; background: transparent; padding: 0; color: var(--muted-foreground); }
+.command-folder-toggle { cursor: pointer; }
+.command-folder-toggle svg { width: 11px; height: 11px; transition: transform 120ms ease; }
+.command-folder-toggle svg[data-expanded] { transform: rotate(90deg); }
+.command-folder-search { display: inline-grid; width: 17px; height: 17px; flex: none; place-items: center; border: 0; border-radius: 4px; background: transparent; padding: 0; color: var(--muted-foreground); opacity: 0; cursor: pointer; }
+.command-folder-search svg { width: 12px; height: 12px; }
+.command-folder-option:is([data-highlighted], :hover) .command-folder-search { opacity: 1; }
+.command-folder-search:hover, .command-folder-search:focus-visible { outline: none; background: var(--overlay-cursor); color: var(--foreground); opacity: 1; }
+.command-browse-all { padding-left: 29px; color: var(--muted-foreground); }
+.command-browse-all .command-label { font-size: 10px; }
+.command-browse-indent { display: none; }
 .command-option[data-chat-row="true"]:is([data-highlighted], [data-chat-selected="true"], [aria-current="page"], :hover) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
 .command-option[data-chat-row="true"]:is([data-highlighted], [data-chat-selected="true"], [aria-current="page"], :hover) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
 .command-option[data-chat-row="true"]:is([data-highlighted], [data-chat-selected="true"], [aria-current="page"], :hover) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; }

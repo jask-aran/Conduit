@@ -82,9 +82,15 @@ all chats pre-applies `scope:chats` in the same surface. Empty-query Backspace
 removes a filter before it can change palette level; Escape returns to the root
 palette or closes a direct launch. Tab enters a highlighted drill-down page.
 
-Chat search matches chat titles and their owning folder or Workspace. Its footer
-sets project scope, activity view (All, Needs attention, In progress, Unread),
-and Latest or Created sort. Rows use the sidebar's live and unread indicators;
+Chat search opens on five recent chats and a tree of Chats, project, and Workspace
+folders. Right expands a folder to show up to five recent chats, including the
+current chat when present. Browse all opens that folder's full flat chat list;
+Left or Escape returns to the same folder row. Slash searches within the active
+folder, while typing in the root searches chat titles and folder names across
+all folders. Up and Down move one cursor through the visible rows. Enter opens
+a chat or folder, and the path above the input shows the search scope. The
+footer sets activity view (All, Needs attention, In progress, Unread) and
+Latest or Created sort. Rows use the sidebar's live and unread indicators;
 active work appears beside project and date. It includes the current chat and
 supports Cmd/Ctrl+E selection mode. Outside selection mode, Alt+R renames the highlighted chat and
 Cmd/Ctrl+K followed by R, M, or D renames, moves, or requests confirmed

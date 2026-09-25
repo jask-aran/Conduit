@@ -16,8 +16,9 @@ import {
 } from "../palette/command-registry";
 import type { PaletteActions, PaletteCommand, PaletteContext } from "../palette/command-registry";
 import { rankPaletteResults } from "../palette/palette-search";
+import { scorePaletteMatch } from "../palette/palette-search";
 import {
-  parseChatQuery, removeChatQueryFilter, resolveChatQueryScope, serializeChatQuery,
+  parseChatQuery, resolveChatQueryScope, serializeChatQuery,
 } from "../palette/chat-query";
 import { COMMAND_IDS, commandRegistry } from "../commands/command-registry";
 import { chatSortStamp, compareChatsBySort, useChatSort } from "../preferences/chat-sort";
@@ -28,6 +29,7 @@ import { CommandHintBar } from "./command-hint-bar";
 import type { CommandHintContext, CommandHintMode } from "./command-hint-bar";
 import { RuntimeIndicator, visibleRuntimeActivity } from "./runtime-indicator";
 import type { RuntimeStore } from "../state/runtime";
+import { WorkspaceGlyph } from "../project/workspace-appearance";
 
 const icons: Record<string, (props: { class?: string }) => JSX.Element> = {
   "new-chat": MessageSquarePlusIcon,
@@ -80,12 +82,15 @@ const FOCUS_MOVING_COMMAND_IDS = new Set<string>([
 
 type Row =
   | { type: "heading"; key: string; label: string }
-  | { type: "command"; key: string; index: number; command: PaletteCommand }
+  | { type: "command"; key: string; index: number; command: PaletteCommand; parentId?: string }
   | { type: "model"; key: string; index: number; model: ModelOption; scoped?: boolean }
-  | { type: "destination"; key: string; index: number; project: Project };
+  | { type: "destination"; key: string; index: number; project: Project }
+  | { type: "folder"; key: string; index: number; project: Project; count: number; searchResult?: boolean }
+  | { type: "browse-all"; key: string; index: number; project: Project; count: number };
 
 type SelectableRow = Exclude<Row, { type: "heading" }>;
 type ChatTarget = { chat: ChatSummary; project: Project };
+type ScopeReturn = { query: string; activeKey: string | null; scrollTop: number };
 type ChatSearchMode =
   | { kind: "browse" }
   | { kind: "select" }
@@ -106,6 +111,9 @@ function groupModels(models: ModelOption[]): { provider: string; items: ModelOpt
 
 const optionId = (index: number) => `command-option-${index}`;
 const canonicalPage = (value?: string | null) => value === "goto" ? "chat-search" : (value || null);
+const isWorkspace = (project: Project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || "");
+const PREVIEW_COUNT = 5;
+const RECENT_COUNT = 5;
 
 function formatChatDate(value?: string): string {
   if (!value || !Number.isFinite(Date.parse(value))) return "Unknown date";
@@ -141,6 +149,8 @@ export function CommandMenu(props: {
   const [selectedChatIds, setSelectedChatIds] = createSignal<Set<string>>(new Set());
   const [editingValue, setEditingValue] = createSignal("");
   const [chatView, setChatView] = createSignal<"all" | "attention" | "progress" | "unread">("all");
+  const [expandedProjects, setExpandedProjects] = createSignal<Set<string>>(new Set());
+  const [scopeReturn, setScopeReturn] = createSignal<ScopeReturn | null>(null);
   const [deleteChoice, setDeleteChoice] = createSignal<"cancel" | "confirm">("cancel");
   const [shortcutRevision, setShortcutRevision] = createSignal(0);
   const selectionMode = () => {
@@ -171,6 +181,7 @@ export function CommandMenu(props: {
   let wasOpen = false;
   let lastLaunchNonce: number | undefined;
   let directMode = false;
+  let focusAfterQuery: "input" | "list" = "input";
 
   onCleanup(props.shortcuts.subscribe(() => setShortcutRevision((value) => value + 1)));
 
@@ -226,6 +237,8 @@ export function CommandMenu(props: {
     setEditingValue("");
     setPendingDelete(null);
     setChatView("all");
+    setExpandedProjects(new Set<string>());
+    setScopeReturn(null);
     directMode = false;
   };
 
@@ -236,13 +249,17 @@ export function CommandMenu(props: {
     if (props.open && (!wasOpen || launchChanged)) {
       if (!wasOpen) returnFocus = document.activeElement as HTMLElement | null;
       setPage(canonicalPage(props.initialPage));
-      setQuery(props.initialQuery || "");
+      const initialQuery = props.initialQuery || "";
+      setQuery(initialQuery);
       setSelectionMode(false);
       setSelectedChatIds(new Set<string>());
       setMoveMode(false);
       setEditingId(null);
       setPendingDelete(null);
       setChatView("all");
+      setExpandedProjects(new Set<string>());
+      const initialScope = resolveChatQueryScope(parseChatQuery(initialQuery), props.context.projects || []);
+      setScopeReturn(initialScope.kind === "project" ? { query: "", activeKey: `folder:${initialScope.project.id}`, scrollTop: 0 } : null);
       directMode = Boolean(props.directLaunch);
       lastLaunchNonce = props.launchNonce;
       focusInput();
@@ -295,6 +312,57 @@ export function CommandMenu(props: {
         push({ type: "heading", key: `m-${group.provider}`, label: group.provider });
         for (const model of group.items) push({ type: "model", key: `model:${model.spec}`, index: index++, model });
       }
+      return out;
+    }
+
+    if (chatPage()) {
+      const chatCommands = source.filter((command) => command.entity === "chat" && command.chat && command.project);
+      const scope = chatScope();
+      if (searching()) {
+        const queryText = parsedQuery().text;
+        const matches = [
+          ...chatCommands.map((command) => ({ command, score: scorePaletteMatch({ label: command.label, query: queryText }) }))
+            .filter((item) => item.score >= 0.42),
+          ...(scope.kind === "all" ? props.context.projects.map((project) => ({ project, score: scorePaletteMatch({ label: project.name, query: queryText }) }))
+            .filter((item) => item.score >= 0.42) : []),
+        ].sort((left, right) => right.score - left.score || ("command" in left && "command" in right
+          ? compareChatsBySort(left.command.chat!, right.command.chat!, chatSort()) : "project" in left ? -1 : 1));
+        if (matches.length) push({ type: "heading", key: "search-results", label: "Results" });
+        for (const match of matches) {
+          if ("project" in match) push({ type: "folder", key: `folder:${match.project.id}`, index: index++, project: match.project, count: match.project.sessions.filter(chatNavigable).length, searchResult: true });
+          else push({ type: "command", key: match.command.id, index: index++, command: match.command });
+        }
+        return out;
+      }
+      if (scope.kind === "project") {
+        for (const command of chatCommands) push({ type: "command", key: command.id, index: index++, command });
+        return out;
+      }
+      if (scope.kind === "unresolved") return out;
+      if (chatCommands.length) {
+        push({ type: "heading", key: "recent-heading", label: "Recent" });
+        for (const command of chatCommands.slice(0, RECENT_COUNT)) push({ type: "command", key: `recent:${command.id}`, index: index++, command });
+      }
+      const addFolder = (project: Project) => {
+        const children = chatCommands.filter((command) => command.project?.id === project.id);
+        push({ type: "folder", key: `folder:${project.id}`, index: index++, project, count: project.sessions.filter(chatNavigable).length });
+        if (!expandedProjects().has(project.id)) return;
+        const preview = children.slice(0, PREVIEW_COUNT);
+        const current = children.find((command) => command.chat?.id === props.context.chatId);
+        if (current && !preview.includes(current) && preview.length === PREVIEW_COUNT) preview[PREVIEW_COUNT - 1] = current;
+        for (const command of preview) push({ type: "command", key: `preview:${command.id}`, index: index++, command, parentId: project.id });
+        if (children.length > preview.length) push({ type: "browse-all", key: `browse:${project.id}`, index: index++, project, count: children.length });
+      };
+      const projects = props.context.projects || [];
+      const chatRoot = projects.find((project) => project.slug === "chat");
+      push({ type: "heading", key: "browse-heading", label: "Browse" });
+      if (chatRoot) addFolder(chatRoot);
+      const folders = projects.filter((project) => project.slug !== "chat" && !isWorkspace(project));
+      if (folders.length) push({ type: "heading", key: "projects-heading", label: "Projects" });
+      for (const project of folders) addFolder(project);
+      const workspaces = projects.filter((project) => project.slug !== "chat" && isWorkspace(project));
+      if (workspaces.length) push({ type: "heading", key: "workspaces-heading", label: "Workspaces" });
+      for (const project of workspaces) addFolder(project);
       return out;
     }
 
@@ -363,6 +431,7 @@ export function CommandMenu(props: {
   const highlightedChat = createMemo<ChatTarget | null>(() => {
     const target = activeChat();
     if (target) return target;
+    if (chatPage() && selectable()[active()]) return null;
     if (searching()) return null;
     const fallback = selectable().find((row): row is Extract<SelectableRow, { type: "command" }> => row.type === "command" && row.command.entity === "chat" && Boolean(row.command.chat && row.command.project));
     return fallback?.command.chat && fallback.command.project
@@ -375,10 +444,13 @@ export function CommandMenu(props: {
     if (active() >= count) setActive(count ? count - 1 : 0);
   });
   createEffect(() => {
-    void query(); void page(); void moveMode(); void chatView(); void chatSort();
+    void query(); void page(); void moveMode();
     setActive(0);
-    if (props.open && !selectionMode() && !editingId()) focusInput();
+    const target = focusAfterQuery;
+    focusAfterQuery = "input";
+    if (props.open && !selectionMode() && !editingId() && target === "input") focusInput();
   });
+  createEffect(() => { void chatView(); void chatSort(); setActive(0); });
   createEffect(() => {
     if (props.open) document.getElementById(optionId(active()))?.scrollIntoView({ block: "nearest" });
   });
@@ -401,30 +473,46 @@ export function CommandMenu(props: {
       if (!selectionMode()) setSelectedChatIds(new Set<string>());
       return;
     }
+    if (chatPage() && chatScope().kind === "project") { backScope(); return; }
     setPage(null); setQuery(""); setSelectionMode(false); setSelectedChatIds(new Set<string>()); directMode = false;
   };
 
-  const removeFilter = (index: number) => {
-    setQuery(removeChatQueryFilter(parsedQuery(), index));
-    focusInput();
+  const enterScope = (project: Project, searchHere = false) => {
+    setScopeReturn({ query: query(), activeKey: selectable()[active()]?.key || `folder:${project.id}`, scrollTop: listbox?.scrollTop || 0 });
+    const filter = project.slug === "chat" ? { kind: "scope" as const, value: "chats", raw: "scope:chats" }
+      : { kind: "in" as const, value: project.id, raw: `in:${project.id}` };
+    focusAfterQuery = searchHere ? "input" : "list";
+    setQuery(serializeChatQuery([filter], parsedQuery().text));
+    if (searchHere) focusInput();
+    else requestAnimationFrame(() => { if (listbox) listbox.scrollTop = 0; listbox?.focus(); });
   };
-  const scopeValue = () => {
-    const scope = chatScope();
-    return scope.kind === "all" ? "all" : scope.kind === "unresolved" ? "unresolved" : scope.project.slug === "chat" ? "chats" : `project:${scope.project.id}`;
+  const backScope = () => {
+    const previous = scopeReturn();
+    setScopeReturn(null);
+    focusAfterQuery = "list";
+    setQuery(previous?.query || parsedQuery().text);
+    requestAnimationFrame(() => {
+      const index = selectable().findIndex((row) => row.key === previous?.activeKey);
+      setActive(index >= 0 ? index : 0);
+      if (listbox) listbox.scrollTop = previous?.scrollTop || 0;
+      listbox?.focus();
+    });
   };
-  const selectScope = (value: string) => {
-    const project = value.startsWith("project:") ? props.context.projects.find((item) => item.id === value.slice(8)) : null;
-    const filter = value === "chats" ? [{ kind: "scope" as const, value: "chats", raw: "scope:chats" }]
-      : project ? [{ kind: "in" as const, value: project.id, raw: `in:${project.id}` }] : [];
-    setQuery(serializeChatQuery(filter, parsedQuery().text));
-    focusInput();
-  };
+  const toggleFolder = (id: string) => setExpandedProjects((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const scopeName = () => { const scope = chatScope(); return scope.kind === "project" ? scope.project.name : "All chats"; };
   const emptyMessage = () => {
     if (modelSelectorPage()) return "No matching models.";
     const scope = chatScope();
     if (scope.kind === "unresolved") return `No chats in “${scope.value}”.`;
-    if (chatPage() && parsedQuery().filters.length) return "No chats match this filter.";
-    return chatPage() ? "No matching chats." : "No matching commands.";
+    if (chatPage()) {
+      if (searching()) return scope.kind === "project" ? `No matches in ${scope.project.name}.` : "No matching chats or folders.";
+      return scope.kind === "project" ? `No chats in ${scope.project.name}.` : "No chats yet.";
+    }
+    return "No matching commands.";
   };
 
   const toggleChatSelection = (id: string) => {
@@ -589,6 +677,13 @@ export function CommandMenu(props: {
       return;
     }
     if (row.type === "destination") { void chooseDestination(row.project); return; }
+    if (row.type === "browse-all") { enterScope(row.project); return; }
+    if (row.type === "folder") {
+      if (selectionMode()) { toggleFolder(row.project.id); return; }
+      close();
+      requestAnimationFrame(() => props.actions.openProject(row.project));
+      return;
+    }
     const command = row.command;
     if (selectionMode() && command.entity === "chat" && command.chat) { toggleChatSelection(command.chat.id); return; }
     if (command.kind === "page" && command.page) {
@@ -613,7 +708,7 @@ export function CommandMenu(props: {
   const move = (delta: number) => {
     const count = selectable().length;
     if (!count) return;
-    setActive((current) => (current + delta + count) % count);
+    setActive((current) => chatPage() ? Math.min(count - 1, Math.max(0, current + delta)) : (current + delta + count) % count);
   };
 
   function toggleActiveModelScope() {
@@ -629,6 +724,7 @@ export function CommandMenu(props: {
 
   const keydown = (event: KeyboardEvent) => {
     const key = event.key.toLowerCase();
+    const inList = event.currentTarget === listbox;
     // Unmodified selection actions belong to the result list. When the search
     // input owns the event, letters and Delete must edit the query instead.
     if (selectionMode() && event.currentTarget !== input
@@ -637,10 +733,47 @@ export function CommandMenu(props: {
       if (key === "c") { event.preventDefault(); copySelected(); return; }
       if (key === "/") { event.preventDefault(); input?.focus(); return; }
     }
-    if (event.key === "ArrowDown") { event.preventDefault(); move(1); return; }
-    if (event.key === "ArrowUp") { event.preventDefault(); move(-1); return; }
-    if (event.key === "Home") { event.preventDefault(); setActive(0); return; }
-    if (event.key === "End") { event.preventDefault(); setActive(Math.max(0, selectable().length - 1)); return; }
+    if (chatPage() && inList && !moveMode()) {
+      const row = selectable()[active()];
+      if (event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault();
+        const project = row?.type === "folder" || row?.type === "browse-all" ? row.project : row?.type === "command" ? row.command.project : null;
+        if (project && chatScope().kind === "all") enterScope(project, true);
+        else focusInput();
+        return;
+      }
+      if (event.key === "ArrowRight" && row?.type === "folder") {
+        event.preventDefault();
+        if (searching()) enterScope(row.project);
+        else if (!expandedProjects().has(row.project.id)) toggleFolder(row.project.id);
+        else if (selectable()[active() + 1]?.type === "command" && (selectable()[active() + 1] as Extract<SelectableRow, { type: "command" }>).parentId === row.project.id) move(1);
+        else enterScope(row.project);
+        return;
+      }
+      if (event.key === "ArrowRight" && row?.type === "browse-all") { event.preventDefault(); enterScope(row.project); return; }
+      if (event.key === "ArrowLeft") {
+        if ((row?.type === "command" && row.parentId) || row?.type === "browse-all") {
+          event.preventDefault();
+          const parentId = row.type === "browse-all" ? row.project.id : row.parentId;
+          const parent = selectable().findIndex((item) => item.type === "folder" && item.project.id === parentId);
+          if (parent >= 0) setActive(parent);
+          return;
+        }
+        if (row?.type === "folder" && expandedProjects().has(row.project.id)) { event.preventDefault(); toggleFolder(row.project.id); return; }
+        if (chatScope().kind === "project") { event.preventDefault(); backScope(); return; }
+      }
+      if (event.key === "PageDown" || event.key === "PageUp") { event.preventDefault(); move(event.key === "PageDown" ? 10 : -10); return; }
+      if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey && !selectionMode()) {
+        event.preventDefault();
+        setQuery(serializeChatQuery(parsedQuery().filters, `${parsedQuery().text}${event.key}`));
+        focusInput();
+        return;
+      }
+    }
+    if (event.key === "ArrowDown") { event.preventDefault(); if (chatPage() && !inList) listbox?.focus(); else move(1); return; }
+    if (event.key === "ArrowUp") { event.preventDefault(); if (chatPage() && !inList) { setActive(Math.max(0, selectable().length - 1)); listbox?.focus(); } else if (chatPage() && active() === 0) input?.focus(); else move(-1); return; }
+    if (event.key === "Home" && (!chatPage() || inList)) { event.preventDefault(); setActive(0); return; }
+    if (event.key === "End" && (!chatPage() || inList)) { event.preventDefault(); setActive(Math.max(0, selectable().length - 1)); return; }
     if (event.key === "Tab" && !event.shiftKey) {
       const row = selectable()[active()];
       if (row?.type === "command" && row.command.kind === "page") { event.preventDefault(); runRow(row); }
@@ -652,13 +785,25 @@ export function CommandMenu(props: {
       if (editingId()) { setEditingId(null); return; }
       if (moveMode()) { goBack(); return; }
       if (selectionMode()) { exitSelection(); return; }
-      if (chatPage()) close();
+      if (chatPage()) {
+        if (parsedQuery().text) { setQuery(serializeChatQuery(parsedQuery().filters, "")); focusInput(); }
+        else if (inList) {
+          const row = selectable()[active()];
+          const parentId = row?.type === "command" ? row.parentId : row?.type === "browse-all" ? row.project.id : null;
+          const parent = parentId ? selectable().findIndex((item) => item.type === "folder" && item.project.id === parentId) : -1;
+          if (parent >= 0) setActive(parent);
+          else if (row?.type === "folder" && expandedProjects().has(row.project.id)) toggleFolder(row.project.id);
+          else if (chatScope().kind === "project") backScope();
+          else close();
+        } else if (chatScope().kind === "project") backScope();
+        else close();
+      }
       else if (page() && !directMode) goBack();
       else close();
     }
-    if (event.key === "Backspace" && chatPage() && !parsedQuery().text && parsedQuery().filters.length) {
+    if (event.key === "Backspace" && chatPage() && !parsedQuery().text && chatScope().kind === "project") {
       event.preventDefault();
-      removeFilter(parsedQuery().filters.length - 1);
+      backScope();
     }
     // Backspace edits the query. It never exits a page when no filter remains.
   };
@@ -676,7 +821,7 @@ export function CommandMenu(props: {
     const selected = () => active() === row.index;
     const commonProps = {
       id: optionId(row.index),
-      role: "option",
+      role: chatPage() && !moveMode() ? "treeitem" : "option",
       "aria-selected": selected(),
       class: "command-option",
       // Keep focus in the input or list so keyboard control survives a click.
@@ -700,11 +845,31 @@ export function CommandMenu(props: {
         <span class="command-copy"><span class="command-label">{row.project.name}</span><small>{row.project.slug === "chat" ? "Chats" : "Folder or workspace"}</small></span>
       </div>;
     }
+    if (row.type === "folder") {
+      const expanded = () => expandedProjects().has(row.project.id);
+      const unread = () => row.project.sessions.filter((chat) => chat.unread).length;
+      const live = () => row.project.sessions.filter((chat) => {
+        const activity = chatActivity(chat);
+        return activity && activity !== "idle";
+      }).length;
+      return <div {...commonProps} class="command-option command-folder-option" role="treeitem" aria-level={1} aria-expanded={row.searchResult ? undefined : expanded()} aria-current={props.context.project?.id === row.project.id ? "page" : undefined} data-highlighted={selected() || undefined}>
+        <Show when={!row.searchResult} fallback={<span class="command-folder-chevron" aria-hidden="true" />}>
+          <button type="button" class="command-folder-toggle" tabIndex={-1} aria-label={`${expanded() ? "Collapse" : "Expand"} ${row.project.name}`} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); toggleFolder(row.project.id); }}><ChevronRightIcon data-expanded={expanded() || undefined} /></button>
+        </Show>
+        <Show when={isWorkspace(row.project)} fallback={<FolderIcon class="command-icon" />}><WorkspaceGlyph appearance={row.project.workspaceAppearance} /></Show>
+        <span class="command-label">{row.project.name}</span>
+        <small>{row.count} chat{row.count === 1 ? "" : "s"}<Show when={unread()}> · {unread()} unread</Show><Show when={live()}> · {live()} active</Show></small>
+        <button type="button" class="command-folder-search" tabIndex={-1} aria-label={`Search in ${row.project.name}`} title={`Search in ${row.project.name}`} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); enterScope(row.project, true); }}><SearchIcon /></button>
+      </div>;
+    }
+    if (row.type === "browse-all") return <div {...commonProps} class="command-option command-browse-all" role="treeitem" aria-level={2} data-highlighted={selected() || undefined}>
+      <span class="command-browse-indent" aria-hidden="true" /><ChevronRightIcon class="command-icon" /><span class="command-label">Browse all {row.count} chats</span>
+    </div>;
     const command = row.command;
     const Icon = icons[command.icon];
     const chatSelected = () => Boolean(command.chat && selectedChatIds().has(command.chat.id));
     const editing = () => command.chat?.id === editingId();
-    return <div {...commonProps} title={command.chat?.title || command.label} aria-current={command.chat?.id === props.context.chatId ? "page" : undefined} data-highlighted={selected() || undefined} data-danger={command.destructive || undefined} data-checked={command.checked || undefined} data-chat-row={command.entity === "chat" || undefined} data-chat-selected={chatSelected() || undefined}>
+    return <div {...commonProps} title={command.chat?.title || command.label} aria-level={chatPage() ? row.parentId ? 2 : 1 : undefined} aria-current={command.chat?.id === props.context.chatId ? "page" : undefined} data-highlighted={selected() || undefined} data-danger={command.destructive || undefined} data-checked={command.checked || undefined} data-chat-row={command.entity === "chat" || undefined} data-chat-child={Boolean(row.parentId) || undefined} data-chat-selected={chatSelected() || undefined}>
       <Show when={selectionMode() && command.entity === "chat"}>
         <span class="command-select-mark" aria-hidden="true">{chatSelected() ? <CheckIcon /> : null}</span>
       </Show>
@@ -739,6 +904,12 @@ export function CommandMenu(props: {
           <div class="command-shell">
             <KDialog.Title class="sr-only">{modelSelectorPage() ? "Model selector" : chatPage() ? "Chat search" : "Command palette"}</KDialog.Title>
             <KDialog.Description class="sr-only">{modelSelectorPage() ? "Choose the models available in this project." : chatPage() ? "Find and manage chats." : "Search commands, settings, and models."}</KDialog.Description>
+            <Show when={chatPage() && !moveMode()}><div class="command-search-path">
+              <Show when={chatScope().kind === "project"} fallback={<span>All chats</span>}>
+                <button type="button" onClick={backScope}>All</button><span aria-hidden="true">›</span><span>{scopeName()}</span>
+              </Show>
+              <small>{commands().length} chat{commands().length === 1 ? "" : "s"}</small>
+            </div></Show>
             <div class="command-input-row">
               <Show when={moveMode() || (page() && !chatPage() && !modelSelectorPage())}>
                 <Button type="button" variant="ghost" size="icon-sm" class="command-back" aria-label={moveMode() ? "Back to chat results" : "Back to commands"} title="Back" onMouseDown={(event) => event.preventDefault()} onClick={goBack}><ArrowLeftIcon /></Button>
@@ -753,9 +924,10 @@ export function CommandMenu(props: {
                 aria-expanded="true"
                 aria-controls="command-listbox"
                 aria-autocomplete="list"
+                aria-haspopup={chatPage() ? "tree" : "listbox"}
                 aria-activedescendant={selectable().length ? optionId(active()) : undefined}
                 aria-label={moveMode() ? "Choose destination" : modelSelectorPage() ? "Find models" : chatPage() ? "Search chats" : "Search commands"}
-                placeholder={moveMode() ? "Choose destination…" : chatPage() ? "Search chats…" : modelSelectorPage() ? "Find models…" : pageMeta()?.placeholder || "Run a command…"}
+                placeholder={moveMode() ? "Choose destination…" : chatPage() ? chatScope().kind === "project" ? `Search ${scopeName()} chats…` : "Search chats, projects, workspaces…" : modelSelectorPage() ? "Find models…" : pageMeta()?.placeholder || "Run a command…"}
                 value={moveMode() ? "" : parsedQuery().text}
                 disabled={moveMode()}
                 onInput={(event) => setQuery(serializeChatQuery(parsedQuery().filters, event.currentTarget.value))}
@@ -774,7 +946,7 @@ export function CommandMenu(props: {
                 <XIcon />
               </Button>
             </div>
-            <div id="command-listbox" ref={listbox} role="listbox" aria-label={modelSelectorPage() ? "Models" : chatPage() ? "Chats" : "Commands"} class="command-list" tabIndex={selectionMode() || moveMode() ? 0 : -1} onKeyDown={keydown}>
+            <div id="command-listbox" ref={listbox} role={chatPage() && !moveMode() ? "tree" : "listbox"} aria-label={modelSelectorPage() ? "Models" : chatPage() ? "Chat browser" : "Commands"} aria-activedescendant={selectable().length ? optionId(active()) : undefined} class="command-list" tabIndex={chatPage() || selectionMode() || moveMode() ? 0 : -1} onKeyDown={keydown}>
               <Show when={!selectable().length}><p class="command-empty">{emptyMessage()}</p></Show>
               <For each={rows()}>{renderRow}</For>
             </div>
@@ -783,9 +955,7 @@ export function CommandMenu(props: {
               mode={modelSelectorPage() ? "model-selector" : hintMode()}
               pendingSequence={pendingActionSequence()}
               shortcuts={props.shortcuts}
-              scope={scopeValue()}
-              projects={props.context.projects}
-              onScopeChange={selectScope}
+              scoped={chatScope().kind === "project"}
               chatView={chatView()}
               onChatViewChange={setChatView}
               selectedCount={selectionMode() ? selectedTargets().length : null}
