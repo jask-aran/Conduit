@@ -60,13 +60,28 @@ export const toolKind = (table, name) => (Object.hasOwn(table, name) ? table[nam
  * And what it did it to, in one short line: the command, the path, the query,
  * the page. The adapter picks the field out of its own tool's input -- the
  * browser cannot, since every harness spells its inputs differently -- and this
- * makes it one line. A list is its first item and how many more; a web address
- * loses its scheme. Nothing worth naming is null.
+ * makes it one line. A list is its first item and how many more. A web address
+ * is its site and path -- no scheme, no `www`, no query string, which is what
+ * made one unreadable -- and several are counted as pages, since a row of
+ * addresses says less than "4 pages on shirakawa-go.gr.jp". Nothing worth
+ * naming is null.
  */
+const pageOf = (value) => {
+  try {
+    const url = new URL(value);
+    return { host: url.hostname.replace(/^www\d*\./, ""), path: url.pathname === "/" ? "" : url.pathname };
+  } catch { return null; }
+};
 export const toolSubject = (value) => {
   const list = (Array.isArray(value) ? value : [value]).filter((item) => typeof item === "string" && item.trim());
   if (!list.length) return null;
-  let line = list[0].trim().split("\n")[0].replace(/^https?:\/\//, "");
+  const pages = list.map((item) => (/^https?:\/\//i.test(item.trim()) ? pageOf(item.trim()) : null));
+  if (pages.every(Boolean)) {
+    if (list.length === 1) return `${pages[0].host}${pages[0].path}`;
+    const hosts = new Set(pages.map((page) => page.host));
+    return hosts.size === 1 ? `${list.length} pages on ${pages[0].host}` : `${list.length} pages`;
+  }
+  let line = list[0].trim().split("\n")[0];
   if (line.length > 160) line = `${line.slice(0, 159)}…`;
   return list.length > 1 ? `${line} and ${list.length - 1} more` : line;
 };

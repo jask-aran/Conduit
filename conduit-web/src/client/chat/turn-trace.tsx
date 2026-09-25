@@ -159,23 +159,25 @@ function toolLine(tool: ToolItem): string {
   return subject.length > 80 && (tool.kind === "read" || tool.kind === "edit") ? `\u2026${subject.slice(-79)}` : subject;
 }
 
-/* The second line is the latest step: live, whichever came last of the
-   thinking and a tool that says what it acted on; settled, the last thinking,
-   which is what the turn concluded. Discarded text is that one step's loss, not
-   the turn's, so it is passed over. */
+/* The second line is the latest step: live, a tool while it runs and says what
+   it is acting on, otherwise the last thinking -- a finished tool's address
+   under "Thinking" read as the line contradicting the one above it. Settled,
+   the last thinking, which is what the turn concluded. Discarded text is that
+   one step's loss, not the turn's, so it is passed over. */
 type Detail = { text: string; markdown: boolean };
 function previewOf(trace: TurnTraceData, writing: boolean): { status: string; work: string; detail: Detail | null } {
   let detail: Detail | null = null;
+  let running: Detail | null = null;
   const tools: ToolItem[] = [];
   for (const segment of trace.segments) {
     if (segment.kind === "tool") {
       tools.push(segment.tool);
-      if (trace.active && segment.tool.subject) detail = { text: toolLine(segment.tool), markdown: false };
+      if (trace.active && !segment.tool.done && segment.tool.subject) running = { text: toolLine(segment.tool), markdown: false };
     } else if (segment.kind === "error") detail = { text: segment.message.errorMessage || "The model request failed.", markdown: false };
     else if (segment.discarded) continue;
     else if (segment.text.trim()) detail = { text: summaryOf(segment.text), markdown: true };
   }
-  return { status: statusOf(trace, writing), work: workOf(tools), detail };
+  return { status: statusOf(trace, writing), work: workOf(tools), detail: running || detail };
 }
 
 /* `01s` to `59s`, then `1m 02s` -- one format, live and settled. */
