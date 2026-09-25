@@ -265,7 +265,7 @@ export type ToolActivityEvent = EventBase & {
   seq: number;
   toolCallId: string;
   name: string;
-  /** On `start`: what it did, as `tool.open` states it. */
+  /** On `start`: what it did, as `tool.open` states it; on `end`, only if it is known only then. */
   kind?: "command" | "read" | "edit" | "search" | "fetch" | "other";
   subject?: string;
   /** On `start` and `end`: when, stated once where it is published. */
@@ -444,6 +444,8 @@ export type TranscriptOpEvent = EventBase & { type: "transcript_op" } & (
       timestamp: string }
   /** A tool the user's stop killed is `cancelled`, never `isError`. */
   | { op: "tool.close"; toolCallId: string; output: unknown; isError: boolean; cancelled?: true;
+      /** What it did and to what, when that was only known once it had. */
+      kind?: "command" | "read" | "edit" | "search" | "fetch" | "other"; subject?: string;
       /** When it finished, stamped as it did. */
       completedAt: string }
   /**

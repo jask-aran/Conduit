@@ -49,8 +49,12 @@ const contentText = (content) => (Array.isArray(content) ? content : [])
   .map((item) => item?.text || item?.content?.map?.((part) => part?.text || "").join("") || "").join("");
 const STREAM_RETRY_LIMIT = 10;
 // A stopped step is saved as finish "error" with an "aborted" error; it is a stop, not a failure.
+// The rest of OpenCode's finish reasons, in Conduit's words; one it adds later is a stop.
+const OPENCODE_STOP_REASONS = Object.freeze({
+  "tool-calls": "toolUse", stop: "stop", length: "length", error: "error", "content-filter": "error",
+});
 const stopReasonOf = (row) => row.error?.type === "aborted" ? "aborted"
-  : row.finish === "tool-calls" ? "toolUse" : row.finish || (row.time?.completed ? "stop" : null);
+  : row.finish ? OPENCODE_STOP_REASONS[row.finish] || "stop" : row.time?.completed ? "stop" : null;
 const errorOf = (row) => row.error?.type === "aborted" ? null : row.error?.message || null;
 const toolOutput = (part) => contentText(part?.state?.content) || String(part?.state?.output || part?.state?.error || "");
 // OpenCode's TUI setting of the same name, offered the same way: its client
@@ -135,10 +139,24 @@ const subjectOf = (name, input) => Object.hasOwn(OPENCODE_TOOL_SUBJECTS, name) &
 // prompt typed in its TUI never reads as one of Conduit's.
 const serviceMessageId = (conduitId) => `msg_${conduitId}`;
 const conduitMessageId = (id) => String(id || "").startsWith("msg_m_") ? id.slice(4) : id;
+/**
+ * Reasoning the provider did but did not show: a finished part with no text,
+ * which OpenCode keeps only as the provider's encrypted copy to send back.
+ */
+const hiddenReasoning = (part) => !String(part.text || "").trim()
+  && Boolean(part.state?.reasoningEncryptedContent || part.time?.completed || part.time?.end
+    || Object.values(part.metadata || {}).some((value) => value?.reasoningEncryptedContent));
+// When a tool ran and finished. OpenCode's current store keeps these on the
+// part (`ran`, `completed`); its earlier one kept them on the part's state.
+const toolTimes = (part) => {
+  const started = iso(part.time?.ran ?? part.time?.created ?? part.state?.time?.start);
+  const finished = iso(part.time?.completed ?? part.state?.time?.end);
+  return { ...(started ? { timestamp: started } : {}), ...(finished ? { completedAt: finished } : {}) };
+};
 /** The blocks of a saved assistant message, as Conduit states them live and on reload alike. */
 const blocksOf = (row) => (row.content || []).flatMap((part, index) => {
   if (part.type === "text") return [{ kind: "text", contentIndex: index, text: part.text || "" }];
-  if (part.type === "reasoning") return [{ kind: "thinking", contentIndex: index, text: part.text || "", redacted: false }];
+  if (part.type === "reasoning") return [{ kind: "thinking", contentIndex: index, text: part.text || "", redacted: hiddenReasoning(part) }];
   if (part.type === "tool") return [{ kind: "tool_call", contentIndex: index,
     toolCallId: part.id || part.callID, name: part.name || part.tool || "tool", input: part.state?.input ?? null }];
   return [];
@@ -870,8 +888,7 @@ export class OpenCodeAdapter extends EventEmitter {
         tools.push({ toolCallId: part.id || part.callID, name: part.name || part.tool || "tool",
           kind: kindOf(part.name || part.tool), subject: subjectOf(part.name || part.tool, part.state?.input), input: part.state?.input ?? null, output: toolOutput(part), isError: part.state?.status === "error" && !cancelled,
           ...(cancelled ? { cancelled } : {}), done: ["completed", "error"].includes(part.state?.status),
-          ...(iso(part.state?.time?.start) ? { timestamp: iso(part.state.time.start) } : {}),
-          ...(iso(part.state?.time?.end) ? { completedAt: iso(part.state.time.end) } : {}) });
+          ...toolTimes(part) });
       }
       const text = blocks.filter((block) => block.kind === "text").map((block) => block.text).join("\n");
       messages.push({ id: row.id, role: "assistant", content: text, blocks, answers: lastUser,

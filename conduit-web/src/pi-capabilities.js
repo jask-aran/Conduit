@@ -51,3 +51,20 @@ export const piToolSubject = (name, input) => {
   const fields = [PI_TOOL_SUBJECTS[name]].flat();
   return toolSubject(fields.map((field) => input[field]).find((value) => value != null));
 };
+
+/**
+ * And what a result's `details` say that its input did not.
+ *
+ * `get_search_content` names a stored page by the id of the fetch that stored
+ * it and its place in that fetch's list, so what it read is only named in what
+ * it returns. And the web-research tools report a search or fetch that failed
+ * for every query or page as an ordinary result with the errors written into
+ * its text -- the counts in `details` are what say none of it worked.
+ */
+export const piResultSubject = (name, details) => (name === "get_search_content" ? toolSubject(details?.url) : null);
+export const piResultFailed = (name, details) => {
+  if (!details || typeof details !== "object") return false;
+  if (name === "web_search") return details.queryCount > 0 && details.successfulQueries === 0;
+  if (name === "fetch_content") return details.urlCount > 0 && details.successful === 0;
+  return false;
+};

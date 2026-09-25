@@ -101,6 +101,7 @@ test("Codex prompt writes the installed app-server turn/start shape", async () =
     threadId: "thread-1", input: [{ type: "text", text: "Test prompt" }],
     model: "codex-other",
     effort: "high",
+    summary: "detailed",
     serviceTier: "priority",
   } });
   adapter.receive(live, JSON.stringify({ id: 1, result: { turn: { id: "turn-1" } } }));
@@ -264,7 +265,7 @@ test("a Codex turn maps onto Conduit's rollup: commentary and commands, then the
   assert.equal(messages[1].content, "Looking now.");
   assert.deepEqual(messages[1].blocks.map((block) => block.kind), ["text", "tool_call"], "commands hang off the message that ran them");
   assert.equal(messages[2].content, "Built.");
-  assert.deepEqual(tools, [{ toolCallId: "e1", name: "command", input: "npm run build", done: true, output: "ok", isError: false }]);
+  assert.deepEqual(tools, [{ toolCallId: "e1", name: "command", kind: "command", subject: "npm run build", input: "npm run build", done: true, output: "ok", isError: false }]);
 });
 
 test("a turn with no final_answer phase still ends in an answer", () => {

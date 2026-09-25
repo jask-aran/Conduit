@@ -16,9 +16,9 @@ const execFile = promisify(execFileCallback);
 // read when the name is not one of these.
 const FX_TOOL_KINDS = Object.freeze({
   terminal: "command", shell: "command",
-  read_file: "read", grep_files: "read", list_files: "read", file_info: "read", read_tool_result: "read",
+  read_file: "read", grep_files: "read", glob_files: "read", list_files: "read", file_info: "read", read_tool_result: "read",
   edit_file: "edit", write_file: "edit",
-  web_search: "search",
+  web_search: "search", capability_search: "search",
   web_fetch: "fetch",
 });
 const ACP_TOOL_KINDS = Object.freeze({
@@ -31,6 +31,19 @@ const subjectOf = (input) => input && typeof input === "object"
   : undefined;
 const kindOf = (name, acpKind) => Object.hasOwn(FX_TOOL_KINDS, name)
   ? FX_TOOL_KINDS[name] : toolKind(ACP_TOOL_KINDS, acpKind);
+// ACP's reasons a turn stopped, in Conduit's. A stopped turn is `cancelled` in
+// ACP and `aborted` to everything that draws one.
+const FX_STOP_REASONS = Object.freeze({
+  end_turn: "stop", refusal: "stop", max_tokens: "length", max_turn_requests: "length",
+  cancelled: "aborted", error: "error",
+});
+const OUTCOMES = Object.freeze({ aborted: "interrupted", error: "failed" });
+// A turn waits on fx's saved copy of it to settle, so the read may not hang it.
+const SESSION_READ_MS = 15_000;
+// A saved result, as Conduit states a tool's ending. fx saves a failure as
+// `failure`, and says nothing but the status to tell it from a success.
+const resultState = (result) => ({ isError: !["success", "cancelled"].includes(result.status),
+  cancelled: result.status === "cancelled" });
 
 export const FX_CAPABILITIES = Object.freeze({
   history: "linear",
@@ -162,7 +175,7 @@ export class FxAcpAdapter extends EventEmitter {
   async run(args, options = {}) {
     try {
       const { stdout } = await execFile(this.command, args, {
-        cwd: options.cwd, maxBuffer: 32 * 1024 * 1024, encoding: "utf8",
+        cwd: options.cwd, maxBuffer: 32 * 1024 * 1024, encoding: "utf8", timeout: options.timeout || 0,
       });
       return stdout;
     } catch (cause) {
@@ -203,7 +216,7 @@ export class FxAcpAdapter extends EventEmitter {
       cwd: project?.workingRoot, sessionId: null, status: "starting", ready: false,
       activity: "starting", active: false, stopping: false, model: "", thinkingLevel: "",
       permissionMode: "", generation: null, generationSeq: 0, clients: new Set(), events: [],
-      hostUiRequests: [], requests: new Map(), answer: null, tools: new Map(), loading: true,
+      hostUiRequests: [], requests: new Map(), steps: [], tools: new Map(), loading: true,
     });
     record.client = new AcpClient(this.command, record.cwd,
       (message) => this.notification(record, message),
@@ -274,49 +287,47 @@ export class FxAcpAdapter extends EventEmitter {
     } catch (cause) { await this.close(record.id); throw cause; }
   }
 
-  ensureAnswer(record, messageId = "") {
-    if (record.answer) return record.answer;
-    const id = messageId || crypto.randomUUID();
-    record.answer = { id, text: "", blocks: [], tools: new Set() };
-    this.publish(record, messageOpen({ id, role: "assistant", generationId: record.generation?.id || null,
+  /**
+   * A step of the turn: what fx thought and said, then the tools it ran, until
+   * it next thinks or speaks. Each is a message of its own, in the order it
+   * happened, so the trace reads the way the turn went -- the shape fx saves
+   * too, where each tool step keeps the words that came before it. The last
+   * one, if it ran nothing, is the answer.
+   */
+  openStep(record) {
+    // A step the turn has moved on from was work towards the answer, not it.
+    const previous = record.steps.at(-1);
+    if (previous) this.publish(record, { type: "assistant_content", phase: "final", generationId: record.generation?.id || null,
+      seq: ++record.generationSeq, messageId: previous.id, stopReason: "toolUse", errorMessage: null, blocks: previous.blocks });
+    const step = { id: crypto.randomUUID(), fxMessageId: undefined, blocks: [] };
+    record.steps.push(step);
+    this.publish(record, messageOpen({ id: step.id, role: "assistant", generationId: record.generation?.id || null,
       answers: record.answering || null, timestamp: new Date().toISOString() }));
     this.publish(record, { type: "assistant_content", phase: "start", generationId: record.generation?.id || null,
-      seq: ++record.generationSeq, messageId: id });
-    return record.answer;
+      seq: ++record.generationSeq, messageId: step.id });
+    return step;
   }
 
-  answerBlocks(record, answer) {
-    const tools = [...answer.tools].map((id) => record.tools.get(id)).filter(Boolean)
-      .map((tool, index) => ({ kind: "tool_call", contentIndex: index + 1, toolCallId: tool.id, name: tool.name, input: tool.input }));
-    return [...(answer.text ? [{ kind: "text", contentIndex: 0, text: answer.text }] : []), ...tools];
-  }
-
-  startTraceMessage(record, kind) {
-    const trace = { id: crypto.randomUUID(), kind, text: "" };
-    record.traceMessages.push(trace);
-    this.publish(record, messageOpen({ id: trace.id, role: "assistant", generationId: record.generation?.id || null,
-      answers: record.answering || null, timestamp: new Date().toISOString() }));
-    this.publish(record, { type: "assistant_content", phase: "start", generationId: record.generation?.id || null,
-      seq: ++record.generationSeq, messageId: trace.id });
-    return trace;
-  }
-
-  appendTraceText(record, trace, delta) {
-    trace.text += delta;
+  appendStepText(record, step, kind, delta) {
+    let block = step.blocks.find((item) => item.kind === kind);
+    if (!block) step.blocks.push(block = { kind, contentIndex: step.blocks.length, text: "" });
+    block.text += delta;
     this.publish(record, { type: "assistant_content", phase: "delta", generationId: record.generation?.id || null,
-      seq: ++record.generationSeq, messageId: trace.id, contentIndex: 0, blockKind: trace.kind, delta });
+      seq: ++record.generationSeq, messageId: step.id, contentIndex: block.contentIndex, blockKind: kind, delta });
   }
 
-  finishTraceMessages(record, stopReason, answerText = "") {
-    for (const trace of record.traceMessages) {
-      // The saved reply is the answer; its live copy in the trace would repeat it.
-      const text = trace.kind === "narration" && answerText.trim() && trace.text.trim() === answerText.trim() ? "" : trace.text;
-      const blocks = [{ kind: trace.kind, contentIndex: 0, text }];
-      this.publish(record, { type: "assistant_content", phase: "final", generationId: record.generation?.id || null,
-        seq: ++record.generationSeq, messageId: trace.id, stopReason, errorMessage: null, blocks });
-      this.publish(record, messageClose({ messageId: trace.id, stopReason,
-        blocks: trace.kind === "narration" ? [{ kind: "text", contentIndex: 0, text }] : blocks,
-        interim: true, generationId: record.generation?.id || null, keepsPartial: false }));
+  /** Every step the turn took, finished: the answer as the answer, the rest as the work before it. */
+  closeSteps(record, stopReason, answer, errorMessage = null) {
+    const last = record.steps.at(-1);
+    for (const step of record.steps) {
+      const ending = step === answer || step === last;
+      const reason = ending ? stopReason : "toolUse";
+      const blocks = step.blocks;
+      this.publish(record, { type: "assistant_content", phase: "final", generationId: record.generation.id,
+        seq: ++record.generationSeq, messageId: step.id, stopReason: reason, errorMessage: ending ? errorMessage : null, blocks });
+      this.publish(record, messageClose({ messageId: step.id, stopReason: reason, blocks, interim: step !== answer,
+        generationId: record.generation.id, keepsPartial: FX_CAPABILITIES.interruptKeepsPartial,
+        ...(step === answer ? { model: record.model || null } : {}), errorMessage: ending ? errorMessage : null }));
     }
   }
 
@@ -329,40 +340,43 @@ export class FxAcpAdapter extends EventEmitter {
     }
     if (record.loading || update.sessionUpdate === "user_message_chunk") return;
     const generationId = record.generation?.id || null;
+    const current = record.steps.at(-1);
     if (update.sessionUpdate === "agent_thought_chunk") {
       const delta = outputText([update.content]);
       if (!delta) return;
-      const trace = record.reasoningMessage || (record.reasoningMessage = this.startTraceMessage(record, "thinking"));
-      this.appendTraceText(record, trace, delta);
+      // Thinking starts a step, unless the one open has only thought so far.
+      const step = current && current.blocks.every((block) => block.kind === "thinking") ? current : this.openStep(record);
+      this.appendStepText(record, step, "thinking", delta);
       return;
     }
     if (update.sessionUpdate === "agent_message_chunk") {
       const delta = outputText([update.content]);
       if (!delta) return;
-      record.liveMessageText += delta;
-      if (record.currentFxMessageId !== update.messageId) {
-        record.currentFxMessageId = update.messageId;
-        record.currentActivity = this.startTraceMessage(record, "narration");
-      }
-      this.appendTraceText(record, record.currentActivity, delta);
+      // So does speaking, unless the open step has said and run nothing yet,
+      // or this is the message it is already saying.
+      const spoken = current?.blocks.some((block) => block.kind === "text");
+      const ran = current?.blocks.some((block) => block.kind === "tool_call");
+      const step = current && !ran && (!spoken || current.fxMessageId === update.messageId) ? current : this.openStep(record);
+      step.fxMessageId = update.messageId;
+      this.appendStepText(record, step, "text", delta);
       return;
     }
     if (update.sessionUpdate === "tool_call") {
-      const answer = this.ensureAnswer(record);
+      const step = current || this.openStep(record);
       const tool = { id: update.toolCallId, name: update.name || update.title || "tool",
-        input: update.rawInput ?? null, output: "", closed: false };
+        input: update.rawInput ?? null, output: "", closed: false, stepId: step.id, startedAt: new Date().toISOString() };
       tool.kind = kindOf(tool.name, update.kind);
       tool.subject = subjectOf(tool.input);
       record.tools.set(tool.id, tool);
-      answer.tools.add(tool.id);
+      step.blocks.push({ kind: "tool_call", contentIndex: step.blocks.length, toolCallId: tool.id, name: tool.name, input: tool.input });
       this.publish(record, toolOpen({ toolCallId: tool.id, name: tool.name, kind: tool.kind, subject: tool.subject, input: tool.input,
-        messageId: answer.id, generationId }));
+        messageId: step.id, generationId, timestamp: tool.startedAt }));
       this.publish(record, { type: "tool_activity", phase: "start", generationId,
         seq: ++record.generationSeq, toolCallId: tool.id, name: tool.name, kind: tool.kind, subject: tool.subject, input: tool.input });
       // The turn being painted places a running tool by its block, so the
-      // answer says it is calling one now, not when the turn ends.
+      // step says it is calling one now, not when the turn ends.
       this.publish(record, { type: "assistant_content", phase: "final", generationId, seq: ++record.generationSeq,
-        messageId: answer.id, stopReason: "toolUse", errorMessage: null, blocks: this.answerBlocks(record, answer) });
+        messageId: step.id, stopReason: "toolUse", errorMessage: null, blocks: step.blocks });
       return;
     }
     if (update.sessionUpdate === "tool_call_update") {
@@ -375,8 +389,9 @@ export class FxAcpAdapter extends EventEmitter {
         output: tool.output, isError: update.status === "failed" });
       if (done && !tool.closed) {
         tool.closed = true;
+        tool.completedAt = new Date().toISOString();
         this.publish(record, toolClose({ toolCallId: tool.id, output: tool.output,
-          isError: update.status === "failed", generationId }));
+          isError: update.status === "failed", completedAt: tool.completedAt, generationId }));
       }
     }
   }
@@ -410,13 +425,12 @@ export class FxAcpAdapter extends EventEmitter {
     record.generation = { id: generationId, closed: false, settled: false };
     record.answering = userMessageId;
     record.promptText = parseAttachmentEnvelope(message).message;
-    record.answer = null;
-    record.traceMessages = [];
-    record.reasoningMessage = null;
-    record.currentFxMessageId = null;
-    record.currentActivity = null;
-    record.liveMessageText = "";
+    record.steps = [];
     record.tools.clear();
+    // How long the saved history was before this turn, so a stopped turn can
+    // tell whether fx saved it.
+    record.historyBefore = this.json(["session", "--id", record.sessionId, "--json"], { timeout: SESSION_READ_MS })
+      .then((data) => data.history?.length ?? null, () => null);
     this.publish(record, messageOpen({ id: userMessageId, role: "user", generationId,
       content: record.promptText, timestamp: new Date().toISOString() }));
     this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.generationSeq,
@@ -429,48 +443,69 @@ export class FxAcpAdapter extends EventEmitter {
     return { generationId, attachmentIdentity: { messageId: userMessageId } };
   }
 
-  async finish(record, stopReason) {
+  async finish(record, acpStopReason) {
     if (!record.active) return;
+    let stopReason = FX_STOP_REASONS[acpStopReason] || "stop";
+    const stopped = stopReason === "aborted" || stopReason === "error";
     let error = null;
-    if (stopReason !== "cancelled" && stopReason !== "error") {
-      try {
-        const data = await this.json(["session", "--id", record.sessionId, "--json"]);
-        if (!record.active) return;
-        // The latest saved turn is the reply; fx may store the prompt text differently.
-        const turn = data.history?.at(-1);
-        if (typeof turn?.assistant !== "string") throw failure("fx completed without a saved reply");
-        this.ensureAnswer(record).text = turn.assistant;
-        await this.recordTurnIds(record, data.history.length - 1);
-      } catch (cause) {
+    let saved = null;
+    try {
+      const data = await this.json(["session", "--id", record.sessionId, "--json"], { timeout: SESSION_READ_MS });
+      if (!record.active) return;
+      const history = data.history || [];
+      const before = await record.historyBefore;
+      // The latest saved turn is the reply; fx may store the prompt text
+      // differently. A turn that stopped is this prompt's only if fx added it.
+      if (!stopped || (Number.isInteger(before) && history.length > before)) {
+        saved = { turn: history.at(-1), index: history.length - 1 };
+      }
+      if (!stopped && typeof saved?.turn?.assistant !== "string") throw failure("fx completed without a saved reply");
+    } catch (cause) {
+      if (!stopped) {
         error = cause;
         stopReason = "error";
-        this.ensureAnswer(record).text = record.liveMessageText;
         this.publish(record, { type: "error", generationId: record.generation?.id || null, scope: "runtime",
           error: { code: "backend_unavailable", message: cause.message || String(cause) } });
       }
     }
-    this.finishTraceMessages(record, stopReason, record.answer?.text);
-    // An ended turn answers nothing more: its prompts and running tools end with it.
+    // The answer is the last step if it ran nothing -- fx streamed it as it
+    // wrote it -- in the words fx saved. A turn that ran a tool last and still
+    // answered gets a step for the answer.
+    const last = record.steps.at(-1);
+    const ranNothing = Boolean(last) && !last.blocks.some((block) => block.kind === "tool_call");
+    const spoke = ranNothing && last.blocks.some((block) => block.kind === "text" && block.text.trim());
+    let answer = null;
+    if (typeof saved?.turn?.assistant === "string" && !stopped && !error) {
+      answer = ranNothing ? last : this.openStep(record);
+      const text = answer.blocks.find((block) => block.kind === "text");
+      if (text) text.text = saved.turn.assistant;
+      else answer.blocks.push({ kind: "text", contentIndex: answer.blocks.length, text: saved.turn.assistant });
+    } else if (spoke) answer = last;
+    // An ended turn answers nothing more: its prompts end with it.
     this.cancelRequests(record);
+    // What each tool returned, as fx saved it: ACP streams a preview, and a
+    // failure is told from a success only in the saved record.
+    const results = new Map((saved?.turn?.execution?.tool_steps || [])
+      .flatMap((step) => step.tool_results || []).map((result) => [result.tool_call_id, result]));
     for (const tool of record.tools.values()) {
-      if (tool.closed) continue;
-      tool.closed = true;
-      this.publish(record, toolClose({ toolCallId: tool.id, output: tool.output,
-        isError: stopReason !== "cancelled", cancelled: stopReason === "cancelled", generationId: record.generation.id }));
+      const result = results.get(tool.id);
+      if (result) {
+        tool.closed = true;
+        this.publish(record, toolClose({ toolCallId: tool.id, output: result.output ?? result.preview ?? tool.output,
+          ...resultState(result), completedAt: tool.completedAt,
+          generationId: record.generation.id }));
+      } else if (!tool.closed) {
+        // And the ones still running end with the turn.
+        tool.closed = true;
+        this.publish(record, toolClose({ toolCallId: tool.id, output: tool.output,
+          isError: stopReason !== "aborted", cancelled: stopReason === "aborted", generationId: record.generation.id }));
+      }
     }
-    const answer = record.answer;
-    if (answer) {
-      const blocks = this.answerBlocks(record, answer);
-      this.publish(record, { type: "assistant_content", phase: "final", generationId: record.generation.id,
-        seq: ++record.generationSeq, messageId: answer.id, stopReason, errorMessage: error?.message || null, blocks });
-      this.publish(record, messageClose({ messageId: answer.id, stopReason, blocks,
-        generationId: record.generation.id, keepsPartial: false, model: record.model || null,
-        errorMessage: error?.message || null }));
-    }
-    // ACP's own word for a stopped turn is `cancelled`.
+    this.closeSteps(record, stopReason, answer, error?.message || null);
+    const outcome = OUTCOMES[stopReason] || "complete";
+    if (saved) await this.recordTurnIds(record, saved.index, answer, outcome);
     if (record.answering) {
-      this.publish(record, turnSettle({ promptId: record.answering, generationId: record.generation.id,
-        outcome: stopReason === "cancelled" ? "interrupted" : stopReason === "error" ? "failed" : "complete" }));
+      this.publish(record, turnSettle({ promptId: record.answering, generationId: record.generation.id, outcome }));
     }
     record.active = false;
     record.stopping = false;
@@ -478,7 +513,7 @@ export class FxAcpAdapter extends EventEmitter {
     Object.assign(record.generation, { closed: true, settled: true });
     this.publish(record, { type: "status", generationId: record.generation.id, phase: "settled",
       seq: ++record.generationSeq, status: record.activity, activity: record.activity, detail: null });
-    this.emit("settled", { record, completed: stopReason !== "cancelled" && stopReason !== "error" });
+    this.emit("settled", { record, completed: !stopped && !error });
   }
 
   failPrompt(record, cause) {
@@ -513,10 +548,17 @@ export class FxAcpAdapter extends EventEmitter {
     this.publish(record, { type: "permission_resolved", generationId: record.generation?.id || null, requestId });
   }
 
-  async recordTurnIds(record, index) {
+  /**
+   * The names this turn was streamed under, kept by its place in fx's history:
+   * the prompt, the answer, the step each tool ran in and when it started and
+   * finished -- which fx does not save -- and how the turn ended.
+   */
+  async recordTurnIds(record, index, answer, outcome) {
     if (!record.turnIdsFile || index < 0) return;
     const ids = await readTurnIds(record.turnIdsFile);
-    ids[`${record.sessionId}:${index}`] = { user: record.answering, assistant: record.answer?.id };
+    ids[`${record.sessionId}:${index}`] = { user: record.answering, assistant: answer?.id, outcome,
+      tools: Object.fromEntries([...record.tools.values()].map((tool) => [tool.id,
+        { step: tool.stepId, at: tool.startedAt, ...(tool.completedAt ? { done: tool.completedAt } : {}) }])) };
     try {
       await fs.mkdir(path.dirname(record.turnIdsFile), { recursive: true });
       await fs.writeFile(record.turnIdsFile, JSON.stringify(ids));
@@ -581,6 +623,12 @@ export class FxAcpAdapter extends EventEmitter {
 
   listSessions(options) { return this.listThreads(options); }
 
+  /**
+   * fx's saved history as a transcript, in the shape it was streamed in: each
+   * step's words and the tools after them, then the answer. Steps fx saved
+   * with no words of their own ran on from the step before, as they did live;
+   * a step Conduit streamed is named what it was streamed as.
+   */
   static transcript(data, turnIds = {}) {
     const messages = [];
     const tools = [];
@@ -588,20 +636,34 @@ export class FxAcpAdapter extends EventEmitter {
       const streamed = turnIds[`${data.id}:${index}`] || {};
       const userId = streamed.user || `${data.id}:user:${index}`;
       const assistantId = streamed.assistant || `${data.id}:assistant:${index}`;
-      messages.push({ id: userId, role: "user", content: turn.user?.text || "", outcome: "complete" });
-      const blocks = [{ kind: "text", text: turn.assistant || "" }];
-      for (const step of turn.execution?.tool_steps || []) {
-        for (const call of step.tool_calls || []) {
+      const outcome = streamed.outcome || "complete";
+      messages.push({ id: userId, role: "user", content: turn.user?.text || "", outcome });
+      let step = null;
+      for (const [stepIndex, saved] of (turn.execution?.tool_steps || []).entries()) {
+        const said = typeof saved.assistant === "string" ? saved.assistant.trim() : "";
+        const calls = saved.tool_calls || [];
+        const streamedStep = calls.map((call) => streamed.tools?.[call.id]?.step).find(Boolean);
+        if (!step || said || (streamedStep && streamedStep !== step.id)) {
+          step = { id: streamedStep || `${data.id}:${index}:step:${stepIndex}`, role: "assistant", content: said,
+            blocks: said ? [{ kind: "text", text: said }] : [], answers: userId, stopReason: "toolUse", interim: true };
+          messages.push(step);
+        }
+        for (const call of calls) {
           let input = call.arguments_json || "";
           try { input = JSON.parse(input); } catch { /* Keep the native text. */ }
-          blocks.push({ kind: "tool_call", toolCallId: call.id, name: call.name, input });
-          const result = (step.tool_results || []).find((item) => item.tool_call_id === call.id);
+          step.blocks.push({ kind: "tool_call", toolCallId: call.id, name: call.name, input });
+          const result = (saved.tool_results || []).find((item) => item.tool_call_id === call.id);
+          // fx saves neither time: `created_at_ms` is when the turn was saved.
+          const started = streamed.tools?.[call.id]?.at;
+          const finished = streamed.tools?.[call.id]?.done;
           tools.push({ toolCallId: call.id, name: call.name, kind: kindOf(call.name), subject: subjectOf(input), input,
-            output: result?.output || result?.preview || "", isError: result?.status === "failed", done: Boolean(result) });
+            output: result?.output || result?.preview || "", ...(result ? resultState(result) : { isError: false }),
+            done: Boolean(result), ...(started ? { timestamp: started } : {}), ...(finished ? { completedAt: finished } : {}) });
         }
       }
-      messages.push({ id: assistantId, role: "assistant", content: turn.assistant || "", blocks,
-        answers: userId, stopReason: "stop", interim: false });
+      messages.push({ id: assistantId, role: "assistant", content: turn.assistant || "",
+        blocks: [{ kind: "text", text: turn.assistant || "" }], answers: userId,
+        stopReason: outcome === "interrupted" ? "aborted" : outcome === "failed" ? "error" : "stop", interim: false });
     }
     return { messages, tools };
   }
