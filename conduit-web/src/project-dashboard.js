@@ -165,9 +165,9 @@ export async function buildProjectDashboard({
     },
     git,
     changes,
-    // A repository shows what changed through Git; a folder without one
-    // shows what was written to it lately.
-    recentFiles: git ? [] : await listRecentFiles(project.workingRoot),
+    // Uncommitted changes when there are any; otherwise what was written to
+    // the folder lately.
+    recentFiles: changes.length ? [] : await listRecentFiles(project.workingRoot),
     recentChats,
   };
 }
