@@ -5,7 +5,7 @@ import type { Message, ToolItem, ToolKind } from "../api/contracts";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
 import { KIND_ICONS, stepDuration, ToolStep, VERBS } from "./tool-card";
 import "./turn-trail.css";
-import { PLAIN_SPHERE } from "./orb-stills";
+import { ORBITS_TRAILED, PLAIN_SPHERE, SPUTTERING_SPHERE } from "./orb-frames";
 import { ThinkingOrb, type ModeFrame, type OrbState } from "./thinking-orb";
 import { Disclosure } from "./disclosure";
 import type { MarkdownRendererId } from "./markdown-settings";
@@ -217,18 +217,22 @@ const KIND_VERBS: Record<Exclude<ToolKind, "other">, string> = {
    it is thinking, and once the answer streams, writing. What the tool is
    acting on is the line below's, not this one's. */
 /* And the orb's motion for each: the globe scan for anything on the web, a
-   plait for reading, a morphing outline for editing, and the scramble that
+   plait for reading, trailed orbits for editing, and the scramble that
    clicks back for a command or any tool without an animation of its own.
-   Thinking is the base state; the answer arriving is the sash. */
-const KIND_ORBS: Record<ToolKind, OrbState> = {
-  command: "solving", read: "weaving", edit: "shaping", search: "searching", fetch: "searching", other: "solving",
+   Thinking is the base state; the answer arriving is the sash. A frame of
+   Conduit's own stands in for a library state where one is named. */
+type Mark = { orb: OrbState; frame?: ModeFrame };
+const KIND_ORBS: Record<ToolKind, Mark> = {
+  command: { orb: "solving" }, read: { orb: "weaving" }, edit: { orb: "working", frame: ORBITS_TRAILED },
+  search: { orb: "searching" }, fetch: { orb: "searching" }, other: { orb: "solving" },
 };
 
-function statusOf(trace: TurnTraceData, writing: boolean): { verb: string; orb: OrbState; frame?: ModeFrame } {
-  // Settled, the orb is the plain sphere.
+function statusOf(trace: TurnTraceData, writing: boolean): Mark & { verb: string } {
+  // Settled, the orb is the sphere: turning for a finish, sputtering for a
+  // turn that did not finish.
   if (!trace.active) {
     const verb = ({ interrupted: "Interrupted", failed: "Failed" } as Record<string, string>)[trace.status] || "Done";
-    return { verb, orb: "working", frame: PLAIN_SPHERE };
+    return { verb, orb: "working", frame: verb === "Done" ? PLAIN_SPHERE : SPUTTERING_SPHERE };
   }
   const running = trace.segments.flatMap((segment) => segment.kind === "tool" && !segment.tool.done ? [segment.tool] : []);
   if (running.length > 1) return { verb: `Running ${running.length} tools`, orb: "solving" };
@@ -236,7 +240,7 @@ function statusOf(trace: TurnTraceData, writing: boolean): { verb: string; orb: 
   if (!tool) return writing ? { verb: "Writing", orb: "composing" } : { verb: "Thinking", orb: "working" };
   if (unnamed(tool)) return { verb: "Calling a tool", orb: "solving" };
   const kind = tool.kind || "other";
-  return { verb: kind === "other" ? `Using ${tool.name || "a tool"}` : KIND_VERBS[kind], orb: KIND_ORBS[kind] };
+  return { verb: kind === "other" ? `Using ${tool.name || "a tool"}` : KIND_VERBS[kind], ...KIND_ORBS[kind] };
 }
 
 /* A tool's line: what it acted on, a search's in quotes, a long path from its
@@ -314,9 +318,9 @@ export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sess
     header={<>
       {/* One box, live and settled, so nothing beside it moves when the turn
           ends. A turn that did not finish -- stopped or failed -- tints the
-          orb and holds it still; a finished one's sphere turns. */}
+          orb. */}
       <span class="turn-trace-mark">
-        <ThinkingOrb state={preview().status.orb} frame={preview().status.frame} paused={unfinished()} tint={unfinished() ? "var(--destructive)" : undefined} />
+        <ThinkingOrb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} />
       </span>
       <div class="turn-trace-preview">
         {/* Two lines: what it is doing, and its latest step. The first is
