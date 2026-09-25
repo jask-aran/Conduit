@@ -95,7 +95,7 @@ export type TurnRow =
   // `timestamp` is the turn's last reply's, for a trace with no answer row to carry it.
   | { key: string; type: "trace"; value: TurnTraceData; precedingUserId?: string; answerless?: boolean; unstated?: boolean; timestamp?: string }
   // Where the answer will be, from the start of a live turn until its text does.
-  | { key: string; type: "pending"; value: null; precedingUserId?: string };
+  | { key: string; type: "pending"; value: null; precedingUserId?: string; startedAt?: string };
 
 interface PersistedTurn {
   userMessage: Message | null;
@@ -460,7 +460,8 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null): Turn
   // Held only until something of the turn shows: its trace, once it has one,
   // is what says it is working.
   if (!answers.length && !segments.length && active(generation) && generation.status !== "stopping") {
-    rows.push({ key: `pending:${owner ? owner.id : generation.id}`, type: "pending", value: null, precedingUserId: owner?.id });
+    rows.push({ key: `pending:${owner ? owner.id : generation.id}`, type: "pending", value: null, precedingUserId: owner?.id,
+      ...(owner?.timestamp ? { startedAt: owner.timestamp } : {}) });
   }
   return rows;
 }

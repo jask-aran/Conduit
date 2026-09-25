@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, Index, lazy, Match, onCleanup, Show, Suspense, Switch } from "solid-js";
-import { BrainIcon, LightbulbIcon, MessageSquareTextIcon, TriangleAlertIcon } from "lucide-solid";
+import { LightbulbIcon, MessageSquareTextIcon, TriangleAlertIcon } from "lucide-solid";
 import { Spinner } from "@/components/primitives";
 import type { Message, ToolItem, ToolKind } from "../api/contracts";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
@@ -127,6 +127,9 @@ function trailOf(segments: TraceSegment[]): TrailItem[] {
       run.push(segment.tool);
       continue;
     }
+    // Text that has not said anything is not a line of the trail, and does
+    // not split a run of tools either.
+    if (segment.kind !== "error" && !segment.text.trim()) continue;
     flush();
     if (segment.kind === "error") items.push({ type: "error", message: segment.message });
     else items.push({ type: "text", segment });
@@ -194,18 +197,27 @@ const KIND_VERBS: Record<Exclude<ToolKind, "other">, string> = {
    running tool is its kind's verb, several at once are counted, between tools
    it is thinking, and once the answer streams, writing. What the tool is
    acting on is the line below's, not this one's. */
-/* And the orb's motion for each: a scan for looking, a wiring constellation
-   for the web, orbits for anything run, a morphing outline for making. */
+/* And the orb's motion for each: the globe scan for anything on the web, a
+   plait for reading, a morphing outline for editing, and the scramble that
+   clicks back for a command or any tool without an animation of its own.
+   Thinking is the base state; the answer arriving is the sash. */
 const KIND_ORBS: Record<ToolKind, OrbState> = {
-  command: "working", read: "searching", edit: "shaping", search: "searching", fetch: "connecting", other: "working",
+  command: "solving", read: "weaving", edit: "shaping", search: "searching", fetch: "searching", other: "solving",
 };
+const orbOfStep = (segment?: TraceSegment): OrbState =>
+  segment?.kind === "tool" ? KIND_ORBS[segment.tool.kind || "other"] : "working";
 
 function statusOf(trace: TurnTraceData, writing: boolean): { verb: string; orb: OrbState } {
-  if (!trace.active) return { verb: ({ interrupted: "Interrupted", failed: "Failed" } as Record<string, string>)[trace.status] || "Done", orb: "breathing" };
+  // Settled, the orb is a still frame: the base state for a finish or a
+  // failure; for a stop, the state it was in, which is its last step's.
+  if (!trace.active) {
+    const verb = ({ interrupted: "Interrupted", failed: "Failed" } as Record<string, string>)[trace.status] || "Done";
+    return { verb, orb: trace.status === "interrupted" ? orbOfStep(trace.segments.at(-1)) : "working" };
+  }
   const running = trace.segments.flatMap((segment) => segment.kind === "tool" && !segment.tool.done ? [segment.tool] : []);
-  if (running.length > 1) return { verb: `Running ${running.length} tools`, orb: "working" };
+  if (running.length > 1) return { verb: `Running ${running.length} tools`, orb: "solving" };
   const tool = running[0];
-  if (!tool) return writing ? { verb: "Writing", orb: "composing" } : { verb: "Thinking", orb: "breathing" };
+  if (!tool) return writing ? { verb: "Writing", orb: "composing" } : { verb: "Thinking", orb: "working" };
   const kind = tool.kind || "other";
   return { verb: kind === "other" ? `Using ${tool.name || "a tool"}` : KIND_VERBS[kind], orb: KIND_ORBS[kind] };
 }
@@ -248,7 +260,7 @@ function duration(ms: number): string {
 
 /* A live turn counts up from its prompt each second; a settled one is the time
    from its prompt to its last reply. Nothing when either end is unknown. */
-function turnTime(trace: () => TurnTraceData) {
+function turnTime(trace: () => Pick<TurnTraceData, "active" | "startedAt" | "endedAt">) {
   const [now, setNow] = createSignal(Date.now());
   createEffect(() => {
     if (!trace().active) return;
@@ -267,13 +279,18 @@ function turnTime(trace: () => TurnTraceData) {
 export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sessionId: string | null; renderer?: MarkdownRendererId; pacing?: IncremarkPacingMode; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void }) {
   const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
   const time = turnTime(() => props.trace);
+  // A settled orb plays while the pointer is on its header, and is still
+  // otherwise: movement is what says a turn is still working.
+  const [hovering, setHovering] = createSignal(false);
   return <Disclosure class="turn-trace" data-active={props.trace.active ? "true" : "false"} headerClass="turn-trace-header" bodyClass="turn-trace-body"
     initialOpen={props.initialOpen} onOpenChange={props.onOpenChange}
+    triggerProps={{ onPointerEnter: () => setHovering(true), onPointerLeave: () => setHovering(false) }}
     header={<>
-      {/* Live, the orb says the turn is working and how; settled, the brain.
-          One box for both, so nothing beside it moves when the turn ends. */}
-      <span class="turn-trace-mark">
-        <Show when={props.trace.active} fallback={<BrainIcon />}><ThinkingOrb state={preview().status.orb} /></Show>
+      {/* One box, live and settled, so nothing beside it moves when the turn
+          ends. A stop dims the orb; a failure tints it. */}
+      <span class="turn-trace-mark" data-outcome={props.trace.active ? undefined : props.trace.status}>
+        <ThinkingOrb state={preview().status.orb} paused={!props.trace.active && !hovering()}
+          tint={!props.trace.active && props.trace.status === "failed" ? "var(--destructive)" : undefined} />
       </span>
       <div class="turn-trace-preview">
         {/* Two lines: what it is doing, and its latest step. The first is
@@ -307,4 +324,24 @@ export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sess
         </div>
       }</Index>;
     }} />;
+}
+
+/* A turn before anything of it has shown: the header it will become, its orb
+   connecting and its time counting, one line of space held under it for the
+   step that will fill it. The trace takes its place when its first step
+   arrives, in the same spot, at the same height. */
+export function TraceStarting(props: { startedAt?: string }) {
+  const time = turnTime(() => ({ active: true, startedAt: props.startedAt }));
+  return <div class="turn-trace turn-trace-starting" data-active="true" role="status" aria-label="Starting">
+    <div class="turn-trace-header">
+      <span class="turn-trace-mark"><ThinkingOrb state="connecting" /></span>
+      <div class="turn-trace-preview">
+        <div class="turn-trace-line">
+          <span class="turn-trace-status">Starting</span>
+          <Show when={time()}>{(text) => <span class="turn-trace-time">{"\u00a0· "}{text()}</span>}</Show>
+        </div>
+        <div class="turn-trace-summary">{"\u00a0"}</div>
+      </div>
+    </div>
+  </div>;
 }
