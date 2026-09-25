@@ -192,7 +192,7 @@ Geist Variable everywhere for UI. `ui-monospace` (not Geist Mono) for model ids,
 - **sans 12–14px** — body, chat, lists.
 - **row-title ~10.5px / 580** — dashboard row titles (see `{typography.row-title}`).
 - **caption 8.5–9px** — section subtitles, timestamps, empty copy.
-- **uppercase tracked meta** — palette group labels (`SCOPED`, `GOOGLE`), terminal pane tags. Scarce.
+- **uppercase tracked meta** — terminal pane tags. Scarce.
 - **keycaps** — 8px mono in a 16px rounded square, muted stroke.
 
 Do not invent further type sizes. Do not use serif except the Capacitor first-launch wordmark (legacy).
@@ -231,13 +231,13 @@ Chat composition:
 
 Menus and pane headers follow the component entries below. Command and search overlays share one visual language, with separate layouts:
 
-- Ink-dark opaque face, 16–18px radius, soft outer shadow, no pane-edge inset line. The rest of the app dims behind it.
-- Command palette: compact one-line action rows at roughly the sidebar's text and row scale, `>` at the input, shortcuts right-aligned, grouped under small uppercase labels. Settings results use the same density. Drill-down pages put Back in the header, never in a full-width result row.
-- Chat search: a keyboard-first tree with recent chats and project, workspace, and Chats folders. A folder shows a short recent preview; Browse all opens a flat list for that folder. Arrow keys move through the tree, Right expands or enters, Left collapses or returns, slash searches within a folder, and typing searches chats and folders. The path sits above the input. Wider one-line chat rows use the sidebar's live, unread, idle, or harness indicator, then title, project, and date. The footer holds activity view, sort, and shortcuts in fixed space. Search opens and closes on its own; it has no Back row to the command palette. Edit mode adds inline checkboxes and puts its selected count in the footer, so results do not move vertically.
+- The composer's frost, 14px radius, pinned near the top (so filtering shrinks it from the bottom, not the middle) over a ~42% dim; it rises ~8px as it arrives. `docs/palette-sketches/palette-sketch.html` is the reference.
+- Command palette: compact one-line action rows at roughly the sidebar's text and row scale, `>` at the input, shortcuts right-aligned, grouped under the sidebar's sentence-case group labels (9.6px/700, about half the text colour); shortcuts are keycaps, as in the rail. Settings results use the same density. Drill-down pages put Back in the header, never in a full-width result row.
+- Chat search: a keyboard-first tree with recent chats and project, workspace, and Chats folders. A folder shows a short recent preview; Browse all opens a flat list for that folder. Arrow keys move through the tree, Right expands or enters, Left collapses or returns, slash searches within a folder, and typing searches chats and folders. The bar is a search icon, then chips, then the query, then Latest/Created: a scope is only ever a mono chip (`in:Japan`), as is an activity view (`is:unread`, `is:running`, `is:attention`, typed or chosen), and Backspace on an empty query removes the last one. The root is Recent, then Folders -- Chats, projects and workspaces in one list, each with a live or unread dot, its count and last activity. Enter on a folder scopes into it and Ctrl Enter opens its page. A preview column sits at the right on wide screens (the card widens to 900px), toggled with Ctrl P and remembered per device. One-line chat rows use the sidebar's live, unread, idle, or harness indicator, then title, project, and date. The footer holds only keys: actions first, the keys that move at the right. Search opens and closes on its own; it has no Back row to the command palette. Edit mode adds inline checkboxes and puts its selected count in the footer, so results do not move vertically.
 - Leader menu: smaller card above the composer, with region path at the top and keys aligned at the left of each action.
 - Highlighted option = one neutral full-row wash. No coloured rail. A current model keeps a fainter standing wash and a heavier label while the cursor is elsewhere.
-- Command and chat rows rest in the sidebar's grey at weight 400. The current chat alone is white and semibold, without a standing wash. The keyboard cursor adds the row wash and white text without changing weight.
-- Footer shortcut rail: darker than the face, with keycaps and labels. Keep each view's actions contextual.
+- Rows are 12px at 520, a step under the text colour. The current chat alone is white and semibold, without a standing wash. The keyboard cursor adds the row wash and white text without changing weight.
+- Footer shortcut rail: on the same frost under a faint hairline, with keycaps and labels; clickable actions are white. Keep each view's actions contextual.
 - Widths: commands ~512px, models ~576px, chat search ~720px. Mobile: fill the visual viewport with a small inset and larger tap targets so it remains a dialog, not a new route.
 
 Settings pattern (illustrative, non-normative — current shell ~1120×820, rail ~190px):
@@ -252,11 +252,11 @@ Settings pattern (illustrative, non-normative — current shell ~1120×820, rail
 Almost none on listed content. Frosted glass carries the depth.
 
 - Panes: hairline only. Lists: nothing.
-- Palettes/modals: one dark outer shadow and a subtle edge. Dense lists use the opaque ink-dark overlay face where blur would hurt legibility.
+- Palettes/modals: one dark outer shadow and a subtle edge. Palettes use the composer's frost; dropdown menus stay solid.
 - Frost chrome (the signature): translucent `frost-fill`, 1px white-alpha `frost-stroke`, blur 19–24px, optional top specular inset. No heavy drop. Composer, user bubble (`glass-bg` + blur), header pill, and future floating toolbars share this one material — do not redeclare it per component.
 - Primary buttons: top specular inset + short lift. Ghost buttons: no fill until hover.
 
-No stacked card shadows, no colored glows, no glass on listed content, no glass on palettes.
+No stacked card shadows, no colored glows, no glass on listed content. Palettes float, so they take the composer's frost.
 
 # Shapes
 
@@ -287,13 +287,13 @@ Motion explains a change of place: where something went, and what took its place
 
 # Components
 
-**Frost chrome (signature, use more of it)** — composer, user bubbles, header search/terminal/workspace pill, scroll-to-latest, and future floating toolbars or hero surfaces like the dashboard launch row. Shared material: `frost-fill` / `glass-bg`, `frost-stroke` / `glass-border`, blur, no opaque `--background` slab. When something floats over content or marks the primary action area, default to frosted glass before reaching for a solid card. Do not frost lists, trees, settings pages, or palettes.
+**Frost chrome (signature, use more of it)** — composer, user bubbles, header search/terminal/workspace pill, scroll-to-latest, and future floating toolbars or hero surfaces like the dashboard launch row. Shared material: `frost-fill` / `glass-bg`, `frost-stroke` / `glass-border`, blur, no opaque `--background` slab. When something floats over content or marks the primary action area, default to frosted glass before reaching for a solid card. Do not frost lists, trees or settings pages; palettes float, so they are frosted.
 
 **Tiled pane (legacy)** — what the dashboard sections, workspace columns and live-terminal empty states still use: hairline, 10px radius, flat, a gray wash on the row inside. Being retired for lists (Layout); not for new surfaces.
 
 **List row** — transparent, 7–8px radius. The `{colors.accent}` wash is the **cursor**: the row under the pointer, under keyboard focus, or being pressed, and only one row at a time — pointer and keyboard move the same cursor, as in a palette or menu. Keyboard focus on a row is that wash and nothing else: no focus ring, from the browser or a component. Selecting several rows is the cursor applied to each: every selected row takes the same wash, with no edge bar, tick column or other marker. In the sidebar, the current page is not a wash: every row rests at one weight in grey text, and the current row -- chat, project, workspace or page alike -- is white and semibold (660) with no fill, its Lucide icons at a heavier stroke (2px) and a harness mark lit rather than thickened. The folder or workspace holding the current chat is drawn the same way, collapsed or not, so where you are reads up the tree; a pinned row looks exactly like its unpinned row, marks included, and follows the same rules -- a harness mark in its own colours, but the white text is what must carry it, since most marks have none. The cursor and where you are can always be told apart. A current rail icon is white with a heavier stroke. Never an inset coloured bar.
 
-**Palette / modal** — opaque ink-dark face, 16–18px radius. Type-to-filter, groups, gray highlight, and the keycap footer remain. Commands and chat search share these elements but keep distinct input and result layouts.
+**Palette / modal** — the composer's frost, 14px radius. Type-to-filter, groups, gray highlight, and the keycap footer remain. Commands and chat search share these elements but keep distinct input and result layouts.
 
 **Message time** — muted caption at the head of a message's action row (the agent's on the left, beside Regenerate; the user's beside the edit pencil), never a line of its own above the message.
 

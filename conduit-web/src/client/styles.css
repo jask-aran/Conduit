@@ -2501,3 +2501,65 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   .command-hint-bar { flex-wrap: wrap; }
   .command-search-footer-controls { width: 100%; }
 }
+
+/* Search and the command palette in the composer's frost (the palette sketch,
+   docs/palette-sketches): pinned near the top, sidebar-weight group labels,
+   one-line rows, keycaps on rows as in the rail, scope and activity as chips
+   in the bar, and a preview column in chat search. */
+.command-dialog { background: rgb(0 0 0 / 42%); }
+.command-shell, .command-dialog .command-shell {
+  border: 1px solid #ffffff4d;
+  border-radius: 14px;
+  background: #ffffff2b;
+  backdrop-filter: blur(24px);
+  box-shadow: 0 24px 70px rgb(0 0 0 / 38%), inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 10%);
+  animation: command-arrive 220ms cubic-bezier(.2, .8, .2, 1) both;
+}
+@keyframes command-arrive { from { opacity: 0; transform: translateY(8px); } }
+.command-dialog-with-preview .command-shell { width: min(900px, calc(100vw - 22px)); }
+.command-input-row { border-bottom-color: oklch(1 0 0 / 10%); }
+.command-input { font-size: 13px; font-weight: 450; }
+.command-input::placeholder { color: color-mix(in oklch, var(--foreground), transparent 45%); }
+.command-filter-chip, .command-filter-chip:hover { flex: none; gap: 5px; border: 0; border-radius: 6px; background: oklch(1 0 0 / 10%); padding: 2px 6px; color: var(--foreground); font: 500 9.6px/1.3 ui-monospace, SFMono-Regular, Consolas, monospace; cursor: pointer; }
+.command-filter-chip:hover, .command-filter-chip:focus-visible { background: oklch(1 0 0 / 16%); }
+.command-filter-chip span { color: var(--muted-foreground); font-size: 11px; }
+.command-sort-toggle { border-color: oklch(1 0 0 / 12%); border-radius: 7px; }
+.command-sort-toggle button { font-size: 9.6px; padding: 2px 7px; border-radius: 5px; color: var(--muted-foreground); cursor: pointer; }
+.command-sort-toggle button[aria-pressed="true"] { background: oklch(1 0 0 / 12%); color: var(--foreground); }
+.command-body { display: flex; min-height: 0; flex: 1; }
+.command-body .command-list { min-width: 0; flex: 1; }
+.command-group-label { margin: 10px 8px 4px; color: color-mix(in oklch, var(--foreground), transparent 50%); font-size: 9.6px; font-weight: 700; letter-spacing: 0; text-transform: none; }
+.command-option { min-height: 30px; border-radius: 9px; padding: 4px 8px; gap: 10px; }
+.command-option[data-highlighted], .command-option[data-chat-selected="true"] { background: oklch(1 0 0 / 10%); box-shadow: none; }
+.command-label, .command-dialog-chat-search .command-option[data-chat-row="true"] .command-label { font-size: 12px; font-weight: 520; }
+.command-dialog-chat-search .command-option[data-chat-row="true"][aria-current="page"] .command-label, .command-folder-option[aria-current="page"] .command-label { font-weight: 680; }
+.command-copy small, .command-folder-option small, .command-dialog-chat-search .command-option[data-chat-row="true"] .command-copy small { font-size: 10px; }
+.command-chat-date, .command-folder-count { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-variant-numeric: tabular-nums; }
+.command-chat-date { min-width: 34px; text-align: right; }
+.command-folder-meta { display: inline-flex; align-items: center; gap: 10px; }
+.command-folder-count { min-width: 18px; text-align: right; }
+.command-folder-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--foreground); }
+.command-folder-dot[data-live] { background: var(--live); }
+.command-chat-unread { background: var(--foreground); box-shadow: none; }
+.command-icon { width: 14px; height: 14px; }
+.command-shortcut { display: inline-flex; flex: none; gap: 3px; opacity: .75; }
+.command-option[data-highlighted] .command-shortcut { opacity: 1; }
+.command-shortcut kbd, .command-hint-key { display: inline-grid; min-width: 16px; height: 16px; place-items: center; border: 1px solid oklch(1 0 0 / 16%); border-radius: 4px; background: oklch(0 0 0 / 12%); padding: 0 4px; color: var(--muted-foreground); font: 550 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.command-option[data-highlighted] .command-shortcut kbd { color: var(--foreground); }
+.command-rename-input { border: 1px solid oklch(1 0 0 / 16%); border-radius: 7px; background: oklch(0 0 0 / 18%); padding: 3px 7px; }
+.command-select-mark { border-color: oklch(1 0 0 / 24%); border-radius: 4px; }
+.command-preview { display: grid; width: 280px; flex: none; align-content: start; gap: 10px; overflow: auto; border-left: 1px solid oklch(1 0 0 / 10%); padding: 14px 16px; color: var(--muted-foreground); font-size: 11px; }
+.command-preview-title { display: flex; gap: 8px; align-items: flex-start; color: var(--foreground); font-size: 12.5px; font-weight: 600; line-height: 1.3; }
+.command-preview-title .thread-harness-mark { width: 14px; height: 14px; flex: none; margin-top: 1px; }
+.command-preview-facts { display: grid; gap: 2px; font: 10px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.command-preview-empty { margin: auto 0; text-align: center; }
+.command-hint-bar, .command-hint-bar[data-chat-search] { min-height: 34px; flex-wrap: nowrap; gap: 12px; overflow: hidden; border-top-color: oklch(1 0 0 / 8%); background: transparent; padding: 6px 10px; font-size: 10px; }
+.command-hint-secondary { flex-wrap: nowrap; justify-content: flex-end; overflow: hidden; }
+.command-hint-key { color: var(--muted-foreground); }
+.command-hint-action, .command-hint-action:hover { min-height: 0; border: 0; border-radius: 6px; background: transparent; margin: -2px -4px; padding: 2px 4px; }
+.command-hint-action:hover, .command-hint-action:focus-visible { background: oklch(1 0 0 / 10%); }
+.command-hint-action .command-hint-key { color: var(--foreground); }
+.command-selection-count { color: var(--foreground); font-size: 10px; }
+@media (max-width: 900px) { .command-preview { display: none; } .command-dialog-with-preview .command-shell { width: min(720px, calc(100vw - 22px)); } }
+@media (--conduit-mobile-layout) { .command-preview { display: none; } .command-dialog-with-preview .command-shell { width: 100%; } .command-label, .command-dialog-chat-search .command-option[data-chat-row="true"] .command-label { font-size: 14px; } }
+@media (prefers-reduced-motion: reduce) { .command-shell { animation: none; } }

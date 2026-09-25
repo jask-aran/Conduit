@@ -90,3 +90,30 @@ project filter or separate tabs unless the user changes this direction.
 At the time of this note, unrelated working-tree changes exist in
 `bugs/README.md`, `.claude/`, `bugs/bulk-delete-outside-installation/`, and
 `docs/palette-sketches/`. Preserve them when doing further work.
+
+## Final look (decided with the user, 2026-09-25)
+
+The visual reference is `docs/palette-sketches/palette-sketch.html`. These
+decisions override earlier wording in this note where they differ.
+
+- Material: the composer's frost (`.composer-surface-material` frosted-live)
+  for the search and command palette card. It is pinned near the top rather
+  than centred. DESIGN.md's "no glass on palettes" is to be rewritten.
+- Search is its own surface, not a page of the command palette: no
+  `COMMANDS ›` crumb. The bar is a search icon, then chips, then the query,
+  then Latest/Created and close.
+- Scope is only ever a chip (`in:Japan ×`); there is no folder crumb. Activity
+  views are chips too (`is:unread`, `is:running`, attention). Backspace on an
+  empty query removes the last chip, and Esc steps out. The rail holds keys only.
+- Root: a Recent group of five chats, then a Folders group with Chats, projects
+  and workspaces in one list. A folder row shows a live or unread dot, its chat
+  count and its last activity. Right expands five chats inline with a
+  `Browse all N ›` row.
+- Enter on a folder scopes search into it (adds the chip). Opening the project
+  page is `Ctrl Enter`.
+- Rows are one line, as in the sketch: harness mark, title, then muted meta and
+  time. The current chat is white and semibold, and a running chat shows its orb.
+- Edit mode keeps the checkbox column, because it is a distinct mode.
+- A preview column is allocated now, even though it is empty at first. It is
+  open by default at wide widths and hidden below ~900px. A rail key toggles it
+  (`Ctrl P`), and the choice is remembered per device.

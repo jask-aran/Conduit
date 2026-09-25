@@ -1,0 +1,389 @@
+<!doctype html>
+<!--
+  A sketch of the command palette and chat search, redrawn in Conduit's
+  current language. Serve the repository root and open this page:
+
+    python3 -m http.server -d . 8000
+    http://localhost:8000/docs/palette-sketches/palette-sketch.html
+
+  now-*.png beside it are the palette as it is, captured from the app.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Palette Sketch</title>
+<style>
+@font-face { font-family: "Geist Variable"; src: url("../../conduit-web/node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; }
+:root {
+  --frame: oklch(0.138 0.004 264); --background: oklch(0.186 0.005 264); --foreground: oklch(0.93 0.003 258);
+  --popover: oklch(0.208 0.006 264); --muted-foreground: oklch(0.63 0.006 262); --accent: oklch(1 0 0 / 7%);
+  --border: oklch(1 0 0 / 7%); --destructive: oklch(0.645 0.19 18); --live: oklch(0.62 0.17 145);
+  --glass-bg: oklch(0.3 0.006 264 / 52%); --mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--frame); color: var(--muted-foreground); font: 13px/1.45 "Geist Variable", system-ui, sans-serif; padding: 24px 28px 60px; }
+h1 { color: var(--foreground); font-size: 18px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 6px; }
+h2 { color: var(--foreground); font-size: 14px; font-weight: 600; margin: 40px 0 4px; }
+p { margin: 0 0 10px; max-width: 92ch; }
+b { color: var(--foreground); font-weight: 560; }
+.controls { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; gap: 18px; align-items: center; margin: 16px -28px 0; padding: 10px 28px; background: color-mix(in oklch, var(--frame), transparent 8%); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+.controls label { display: flex; gap: 8px; align-items: center; font-size: 12px; }
+.seg { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 8px; }
+.seg button { border: 0; border-radius: 6px; background: transparent; color: var(--muted-foreground); font: inherit; font-size: 12px; padding: 3px 9px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
+.ghost { border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--foreground); font: inherit; font-size: 12px; padding: 4px 10px; cursor: pointer; }
+.pair { display: grid; grid-template-columns: minmax(280px, 420px) 1fr; gap: 24px; align-items: start; margin-top: 12px; }
+.now { display: grid; gap: 6px; font-size: 11px; }
+.now img { width: 100%; border-radius: 8px; opacity: .9; }
+.notes { font-size: 12px; margin: 10px 0 0; padding-left: 18px; max-width: 70ch; }
+.notes li { margin: 3px 0; }
+.caption { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; font-family: var(--mono); margin-bottom: 4px; }
+.plan { max-width: 92ch; }
+.plan ol { padding-left: 20px; } .plan li { margin: 4px 0; }
+code { font-family: var(--mono); font-size: 11.5px; color: var(--foreground); }
+
+/* ---- A stage: a mock Conduit window behind the palette. ---- */
+.stage-wrap { overflow: hidden; }
+.stage { position: relative; width: 1040px; height: 660px; border-radius: 12px; overflow: hidden; background: var(--frame); zoom: var(--scale, 1); font-size: 12px; }
+.stage.phone { width: 390px; height: 780px; border-radius: 28px; }
+.mock { position: absolute; inset: 0; display: grid; grid-template-columns: 220px 1fr; }
+.phone .mock { grid-template-columns: 1fr; }
+.mock-side { padding: 14px 10px; display: grid; align-content: start; gap: 2px; font-size: 10.4px; }
+.phone .mock-side { display: none; }
+.mock-side .brand { color: var(--foreground); font-weight: 700; font-size: 15px; margin: 0 6px 12px; letter-spacing: -.02em; }
+.mock-side .lbl { margin: 12px 6px 4px; font-size: 9.6px; font-weight: 700; color: color-mix(in oklch, var(--foreground), transparent 50%); }
+.mock-side .r { padding: 4px 6px; color: color-mix(in oklch, var(--foreground), transparent 32%); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mock-side .r.cur { color: var(--foreground); font-weight: 660; }
+.mock-main { margin: 8px 8px 8px 0; border-radius: 16px; background: var(--background); position: relative; overflow: hidden; padding: 40px 90px; color: var(--foreground); font-size: 13px; line-height: 1.6; }
+.phone .mock-main { margin: 0; border-radius: 0; padding: 60px 20px; }
+.mock-main p { max-width: none; margin: 0 0 12px; }
+.mock-main u { text-decoration-color: color-mix(in oklch, var(--foreground), transparent 50%); }
+.mock-bubble { margin-left: auto; width: fit-content; background: var(--glass-bg); border: 1px solid oklch(1 0 0 / 10%); border-radius: 15px; padding: 7px 12px; margin-bottom: 14px; }
+.mock-composer { position: absolute; left: 90px; right: 90px; bottom: 16px; height: 66px; border-radius: 22px; border: 1px solid #ffffff4d; background: #ffffff1a; }
+.phone .mock-composer { left: 10px; right: 10px; }
+
+.scrim { position: absolute; inset: 0; background: rgb(0 0 0 / var(--dim, 42%)); }
+.pal-slot { position: absolute; left: 0; right: 0; top: 64px; display: flex; justify-content: center; align-items: flex-start; }
+.phone .pal-slot { top: 6px; bottom: 6px; padding: 0 6px; }
+
+/* ---- The palette. ---- */
+.pal { display: flex; flex-direction: column; max-height: 540px; overflow: hidden; border-radius: 14px; color: var(--foreground); animation: pal-in 220ms cubic-bezier(.2,.8,.2,1) both; }
+.pal.w-cmd { width: 560px; } .pal.w-chat { width: 720px; } .pal.w-model { width: 576px; } .pal.w-wide { width: 900px; }
+.phone .pal { width: 100%; max-height: none; height: 100%; }
+@keyframes pal-in { from { opacity: 0; transform: translateY(8px); } }
+
+/* Materials, switched from the controls. */
+[data-material="smoked"] .pal { background: linear-gradient(180deg, oklch(1 0 0 / 7%), oklch(1 0 0 / 1.5%) 90px), oklch(0.205 0.006 264 / 80%); backdrop-filter: blur(28px) saturate(1.15); border: 1px solid oklch(1 0 0 / 13%); box-shadow: 0 24px 70px rgb(0 0 0 / 45%), inset 0 1px 0 rgb(255 255 255 / 20%); }
+[data-material="frost"] .pal { background: #ffffff2b; backdrop-filter: blur(24px); border: 1px solid #ffffff4d; box-shadow: 0 8px 32px rgb(0 0 0 / 20%), inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 10%); }
+[data-material="solid"] .pal { background: linear-gradient(180deg, oklch(1 0 0 / 5%), transparent 70px), var(--popover); border: 1px solid oklch(1 0 0 / 9%); box-shadow: 0 24px 70px rgb(0 0 0 / 42%), inset 0 1px 0 rgb(255 255 255 / 10%); }
+[data-material="solid"] .pal-search { background: oklch(1 0 0 / 3%); }
+
+.pal-search { display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 8px 0 14px; border-bottom: 1px solid oklch(1 0 0 / 8%); }
+.pal-search > svg { width: 15px; height: 15px; color: var(--muted-foreground); flex: none; }
+.crumbs { display: flex; align-items: center; gap: 2px; flex: none; }
+.crumbs button { border: 0; border-radius: 6px; background: transparent; padding: 2px 6px; color: var(--muted-foreground); font: 9.5px/1.3 var(--mono); letter-spacing: .07em; text-transform: uppercase; cursor: pointer; }
+.crumbs button:hover { color: var(--foreground); }
+.crumbs button[aria-current] { background: var(--accent); color: var(--foreground); }
+.crumbs i { color: var(--muted-foreground); opacity: .6; font-style: normal; font-size: 10px; }
+.q { flex: 1; min-width: 0; font-size: 14px; color: var(--foreground); white-space: nowrap; overflow: hidden; }
+.q.ph { color: var(--muted-foreground); }
+.q .caret { display: inline-block; width: 1px; height: 16px; background: var(--foreground); vertical-align: -3px; margin-left: 1px; animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.token { flex: none; border-radius: 6px; background: var(--accent); padding: 2px 6px; font: 10.5px/1.3 var(--mono); color: var(--foreground); }
+.token span { color: var(--muted-foreground); margin-left: 4px; }
+.count { flex: none; color: var(--muted-foreground); font-size: 11px; }
+.x { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; color: var(--muted-foreground); }
+.x svg { width: 14px; height: 14px; }
+.pal .seg { flex: none; border-color: oklch(1 0 0 / 9%); }
+.pal .seg button { font-size: 10.5px; padding: 2px 7px; }
+
+.body { display: flex; min-height: 0; flex: 1; }
+.list { flex: 1; min-width: 0; overflow: hidden; padding: 6px; }
+.glabel { margin: 10px 8px 4px; font-size: 9.6px; font-weight: 700; color: color-mix(in oklch, var(--foreground), transparent 50%); }
+.list > .glabel:first-child { margin-top: 4px; }
+.row { display: flex; align-items: center; gap: 10px; min-height: 30px; padding: 4px 8px; border-radius: 9px; }
+.row:hover { background: var(--accent); }
+.row.cursor, .row.sel { background: var(--accent); }
+.row > svg, .row .mark { width: 14px; height: 14px; flex: none; color: var(--muted-foreground); }
+.mark { width: 14px; height: 14px; flex: none; color: var(--muted-foreground); background: currentColor; -webkit-mask: var(--m) center / contain no-repeat; mask: var(--m) center / contain no-repeat; }
+.row.cursor > svg, .row.cursor .mark { color: var(--foreground); }
+.row.cursor .mark.claude { color: #d97757; }
+.title { flex: 1; min-width: 0; font-size: 12px; font-weight: 560; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: color-mix(in oklch, var(--foreground), transparent 12%); }
+.row.cursor .title { color: var(--foreground); }
+.row.cur .title { font-weight: 680; color: var(--foreground); }
+.title .dim { color: var(--muted-foreground); font-weight: 450; }
+.title em { font-style: normal; color: var(--foreground); font-weight: 700; }
+.row.q-on .title { color: var(--muted-foreground); font-weight: 480; }
+.row.q-on.cursor .title { color: color-mix(in oklch, var(--foreground), transparent 25%); }
+.meta { flex: none; display: flex; gap: 10px; align-items: center; color: var(--muted-foreground); font-size: 10.5px; }
+.meta .t { font-family: var(--mono); font-size: 10px; min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+.meta .spec { font-family: var(--mono); font-size: 10px; max-width: 290px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.keys { display: inline-flex; gap: 3px; flex: none; opacity: .75; }
+.row.cursor .keys { opacity: 1; }
+kbd { display: inline-grid; min-width: 18px; height: 18px; place-items: center; border: 1px solid color-mix(in oklch, var(--border), var(--foreground) 14%); border-radius: 4px; padding: 0 4px; color: var(--muted-foreground); font: 550 9.6px/1 var(--mono); background: oklch(0 0 0 / 12%); }
+.row.cursor kbd { color: var(--foreground); }
+.chev { width: 12px; height: 12px; color: var(--muted-foreground); flex: none; }
+.row.danger .title, .row.danger > svg { color: color-mix(in oklch, var(--destructive), var(--foreground) 12%); }
+.row.unscoped .title { color: var(--muted-foreground); font-weight: 480; }
+.row.unscoped.cursor .title { color: var(--foreground); }
+.row.current:not(.cursor) { background: oklch(1 0 0 / 3.5%); }
+.row.current .title { font-weight: 680; color: var(--foreground); }
+.row input { flex: 1; min-width: 0; border: 1px solid oklch(1 0 0 / 14%); border-radius: 7px; background: oklch(0 0 0 / 18%); color: var(--foreground); font: 560 12px "Geist Variable", sans-serif; padding: 3px 7px; outline: 0; }
+.orb { width: 14px; height: 14px; flex: none; }
+
+.preview { width: 290px; flex: none; border-left: 1px solid oklch(1 0 0 / 8%); padding: 14px 16px; display: grid; align-content: start; gap: 10px; font-size: 11px; }
+.preview .h { display: flex; gap: 8px; align-items: center; color: var(--foreground); font-weight: 600; font-size: 12.5px; line-height: 1.3; }
+.preview .facts { font-family: var(--mono); font-size: 10px; display: grid; gap: 2px; }
+.preview .pb { background: var(--glass-bg); border: 1px solid oklch(1 0 0 / 10%); border-radius: 12px; padding: 6px 10px; color: var(--foreground); margin-left: 24px; font-size: 11.5px; }
+.preview .pa { color: color-mix(in oklch, var(--foreground), transparent 20%); font-size: 11.5px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+.preview .trace { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+
+.rail { display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; overflow: hidden; min-height: 34px; padding: 6px 10px; border-top: 1px solid oklch(1 0 0 / 6%); font-size: 10.5px; color: var(--muted-foreground); }
+.rail span, .rail button { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.rail button { border: 0; background: transparent; color: var(--foreground); font: inherit; font-weight: 560; border-radius: 6px; padding: 2px 4px; margin: -2px -4px; cursor: pointer; }
+.rail button:hover { background: var(--accent); }
+.rail button kbd { color: var(--foreground); }
+.rail .end { margin-left: auto; display: inline-flex; gap: 12px; }
+.rail kbd { min-width: 16px; height: 16px; font-size: 9px; }
+.phone .rail { display: none; }
+.phone-bar { display: none; gap: 8px; padding: 8px; border-top: 1px solid oklch(1 0 0 / 8%); }
+.phone .phone-bar { display: flex; }
+.phone-bar button { flex: 1; min-height: 38px; border: 1px solid oklch(1 0 0 / 12%); border-radius: 11px; background: transparent; color: var(--foreground); font: 560 13px "Geist Variable", sans-serif; }
+.phone .row { min-height: 42px; }
+.phone .row .keys { display: none; }
+.phone .title { font-size: 13.5px; }
+.row.child { padding-left: 30px; }
+.row .caretx { width: 12px; height: 12px; flex: none; color: var(--muted-foreground); transition: transform .2s; }
+.row.open .caretx { transform: rotate(90deg); }
+.row.browse .title { color: var(--muted-foreground); font-weight: 480; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--live); flex: none; }
+.dot.unread { background: var(--foreground); }
+.meta .n { font-family: var(--mono); font-size: 10px; min-width: 18px; text-align: right; }
+.check { width: 14px; height: 14px; flex: none; border: 1px solid oklch(1 0 0 / 22%); border-radius: 4px; display: grid; place-items: center; }
+.check.on { background: var(--foreground); border-color: var(--foreground); }
+.check.on::after { content: ""; width: 7px; height: 4px; border: solid var(--background); border-width: 0 0 1.6px 1.6px; transform: rotate(-45deg) translate(1px,-1px); }
+.preview.empty { place-content: center; text-align: center; color: color-mix(in oklch, var(--muted-foreground), transparent 30%); font-size: 11px; }
+.open-proj { font-family: var(--mono); font-size: 10px; color: var(--muted-foreground); }
+</style>
+</head>
+<body data-material="frost">
+<h1>Palette sketch</h1>
+<p>The command palette, chat search and model selector, redrawn in the language Conduit has grown into since they were built: a glass card like the leader menu and composer, the sidebar's rows and group labels, harness marks, and the orb. The shortcut rail at the foot stays, tidied. Each proposal is live HTML over a mock window, beside the palette as it is now.</p>
+
+<div class="controls">
+  <label>Material <span class="seg" id="material"><button data-v="smoked">Smoked glass</button><button data-v="frost" aria-pressed="true">Composer frost</button><button data-v="solid">Solid, lit</button></span></label>
+  <label>Scale <span class="seg" id="scale"><button data-v="1" aria-pressed="true">100%</button><button data-v="1.25">125%</button><button data-v="1.5">150%</button></span></label>
+  <button class="ghost" id="replay">Replay the open</button>
+</div>
+
+<h2>What changes, in short</h2>
+<ul class="notes">
+  <li><b>Material.</b> A glass card instead of the flat grey slab. <b>Smoked glass</b> (recommended) is the composer's recipe darkened so dense rows stay legible over a busy transcript; the switch above shows the composer's frost as-is and a minimal solid-but-lit option.</li>
+  <li><b>It stays put.</b> The card is pinned near the top, not centred, so narrowing the list while typing shrinks it from the bottom instead of making it jump.</li>
+  <li><b>Where you are is a path, not a row.</b> <code>COMMANDS › CHATS</code> crumbs in the leader menu's style replace the <code>Search ›</code> prefix and the big Back row. Esc or Backspace on an empty query goes up one level; a crumb goes straight there.</li>
+  <li><b>Rows are one line</b>, in the sidebar's language: sentence-case group labels, a 12px title, and quiet mono meta on the right. Chat search fits about twice as many chats.</li>
+  <li><b>Row shortcuts are keycaps</b>, the same as the rail, not grey text like <code>Ctrl Shift C</code>.</li>
+  <li><b>Chats show their harness mark</b> instead of the same speech bubble on every row. A chat that is running shows its orb, the current chat is white and semibold (as in the sidebar), and chats are grouped by day with a short time on the right.</li>
+  <li><b>Typing highlights the match</b>: matched letters are white and the rest of the title dims.</li>
+  <li><b>Commands are grouped by intent</b> (This chat, Go to, Create, View, App) instead of one long COMMANDS list, with context actions first.</li>
+  <li><b>The rail.</b> The leader menu's keycaps and hairline. Actions you can click are white, and navigation keys sit at the right. Latest/Created moves up to the search row as a segmented choice.</li>
+  <li><b>Selecting several chats</b> uses the wash on each selected row, with no checkbox column (DESIGN.md already says this; today's palette breaks it).</li>
+</ul>
+
+<h2>Commands — at rest</h2>
+<div class="pair"><div class="now"><span class="caption">Now</span><img src="now-commands.png"></div><div class="stage-wrap" data-frame="commands"></div></div>
+
+<h2>Commands — typing</h2>
+<div class="pair"><div class="now"><span class="caption">Now</span><img src="now-query.png"></div><div class="stage-wrap" data-frame="query"></div></div>
+
+<h2>Search — decided</h2>
+<p>Search is its own surface (<code>Ctrl Shift K</code>), not a page of the command palette. The bar is a search icon, then chips, then the query. A scope is only ever a chip (<code>in:Japan</code>), and so are activity views (<code>is:unread</code>, <code>is:running</code>). Backspace on an empty query removes the last chip, and Esc steps out. The rail holds keys only. The preview column is allocated from the start and toggled with <code>Ctrl P</code>, remembered per device; below ~900px it is hidden.</p>
+
+<h2>Search — root</h2>
+<p>Recent (five chats), then Folders: Chats, projects and workspaces in one list, each with a live or unread dot, a count and its last activity. Right expands a folder to five chats and a Browse all row. Enter on a folder scopes into it, and <code>Ctrl Enter</code> opens the project.</p>
+<div class="pair"><div class="now"><span class="caption">Now</span><img src="now-chats.png"></div><div class="stage-wrap" data-frame="root"></div></div>
+
+<h2>Search — scoped into a folder, with chips</h2>
+<p>Enter on Japan (or Browse all) puts the chip in the bar and lists every chat in it. Here the preview column holds its space, still empty.</p>
+<div class="stage-wrap" data-frame="scoped"></div>
+
+<h2>Search — typing, preview filled (later)</h2>
+<div class="stage-wrap" data-frame="preview"></div>
+
+<h2>Search — editing several</h2>
+<p>Edit is a full mode, so it keeps a checkbox column; the count sits in the rail, so nothing above the results moves.</p>
+<div class="pair"><div class="now"><span class="caption">Now</span><img src="now-edit.png"></div><div class="stage-wrap" data-frame="edit"></div></div>
+
+<h2>Search — rename in place</h2>
+<div class="stage-wrap" data-frame="rename"></div>
+
+<h2>Model selector</h2>
+<div class="pair"><div class="now"><span class="caption">Now</span><img src="now-models.png"></div><div class="stage-wrap" data-frame="models"></div></div>
+<ul class="notes">
+  <li>Scoped is shown by text weight, not bold 700 everywhere: a scoped model's name is white, an unscoped one grey (the sidebar's rest/current contrast). The Scoped group stays at the top.</li>
+  <li>The model in use keeps its faint standing wash and heavier label, as DESIGN.md already says.</li>
+</ul>
+
+<h2>Phone</h2>
+<p>It still fills the screen with a 6px inset. Rows are taller, keycaps and the rail are hidden, and chat search gets a two-button bar at the foot (Edit and sort).</p>
+<div class="stage-wrap" data-frame="phone"></div>
+
+<h2>Plan</h2>
+<div class="plan">
+<ol>
+  <li><b>Material and placement</b> (<code>styles.css</code> command block): one <code>.palette-material</code> class owns the smoked glass, used by <code>.command-shell</code> and the delete confirmation. The shell is pinned at the top (<code>align-items: start</code>, top offset) instead of <code>place-items: center</code>. The dim behind drops from 55% to ~42%. It arrives with the leader menu's rise and fade (220ms) and leaves quickly.</li>
+  <li><b>Search row</b> (<code>command-menu.tsx</code>): crumbs from <code>pageMeta</code> replace <code>.command-page-prefix</code>, and the <code>page-back</code> row goes. A leading search icon at the root. Filter chips become mono tokens. The sort toggle moves here from the rail.</li>
+  <li><b>Rows</b>: one line everywhere, with the chat rows' two-line clamp and <code>&lt;small&gt;</code> detail line removed. Keycaps come from the same formatter the rail uses. <code>HarnessMark</code> on chat rows. Day groups and short times from <code>chatSortStamp</code>. The current chat and running chats come from the sidebar's existing state.</li>
+  <li><b>Match highlighting</b> (<code>palette-search.ts</code>): return the matched ranges with the rank so the label can wrap them.</li>
+  <li><b>Command groups</b> (<code>palette/command-registry.ts</code>): split <code>commands</code> into This chat, Go to, Create, View and App. Context actions sort first when they apply.</li>
+  <li><b>Edit mode</b>: drop <code>.command-select-mark</code>; a selected row takes the wash.</li>
+  <li><b>Rail</b> (<code>command-hint-bar.tsx</code>): the leader menu's keycap and hairline tokens. The bordered <code>Edit chats</code> button becomes a white actionable hint. Navigation keys are pushed right.</li>
+  <li><b>DESIGN.md</b>: rewrite the Palettes paragraph (glass allowed here, crumbs, one-line rows, sentence-case group labels, row keycaps, pinned top) and drop "no glass on palettes".</li>
+  <li>Preview column: a separate step, if wanted.</li>
+</ol>
+<p>Open choices: which material; the preview column now, later or never; sentence-case group labels (sidebar) or keep the uppercase tracked ones.</p>
+</div>
+
+<script type="module">
+import { ICONS } from "./icons.js";
+import { paintFrame, resolvePreset, MODE_FRAMES } from "../../conduit-web/node_modules/thinking-orbs/dist/engine.es.js";
+
+const svg = (name) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke">${name === "chevron-right" ? '<path d="m9 18 6-6-6-6"/>' : ICONS[name] || ""}</svg>`;
+const BRAND = "../../conduit-web/public/brand/";
+const MARKS = { codex: "codex-mono-mark.svg", claude: "claude-code-mono-mark.svg", pi: "pi-mark.svg", fx: "fx-mark.svg", opencode: "opencode-mark.svg" };
+const mark = (h) => `<i class="mark ${h}" style="--m:url('${BRAND}${MARKS[h]}')"></i>`;
+const keys = (...k) => `<span class="keys">${k.map((x) => `<kbd>${x}</kbd>`).join("")}</span>`;
+
+const back = (phone) => `<div class="mock">
+  <div class="mock-side"><div class="brand">Conduit</div>
+    <div class="r">Conduit Dashboard</div><div class="r">New chat</div><div class="r">New project</div>
+    <div class="lbl">Projects</div><div class="r">Engie</div><div class="r cur">Japan</div>
+    ${["Research gassho houses in japan, f…","Research gassho houses in japan, f…","Gassho House Stays for Six","Shirakawa-go Gassho Stays for Six","Gassho Houses in Japan for Six Gu…","Japan Gassho Farmhouse Recom…","Gassho House Stays in Japan","Gassho house stay for group of 6","Gassho House Group Stays","Research gassho houses in japan, f…","Research gassho houses in japan, f…"].map((t, i) => `<div class="r${i === 2 ? " cur" : ""}">${t}</div>`).join("")}
+  </div>
+  <div class="mock-main">
+    <p><b>2. GOKAYAMA BASE — best match if three rooms matter most.</b> It has four rooms and lists room-by-room capacity and rates. For six, ask about booking three rooms; the listed options accommodate up to 13 overall. <u>Official Gokayama guide</u></p>
+    <p><b>3. YAMASHITA-YA — another flexible three-room possibility.</b> It has private rooms and capacity for up to 15, with listed rates from ¥10,000 per small private room. Contact them to confirm that three private rooms are available for your night. <u>Official Gokayama guide</u></p>
+    <p>If you want the most atmospheric option, stay in Ainokura or Suganuma rather than Ogimachi, where the day-trip crowds thin out by late afternoon and the lanes go quiet.</p>
+    <div class="mock-bubble">tell me a story about it</div>
+    <p>The snow had been falling since noon when the six of them reached the village. Smoke rose from the thatch of the gassho house, and inside, someone was telling a story about the winter the river froze.</p>
+    <p>Dinner came on low trays: river fish, mountain vegetables, tofu set in the farmhouse's own kitchen. Nobody said much. The irori hissed.</p>
+    <div class="mock-composer"></div>
+  </div></div>`;
+
+const search = ({ crumbs = [], q = "", ph = "", tokens = [], right = "" } = {}) => `<div class="pal-search">
+  ${crumbs.length ? `<span class="crumbs">${crumbs.map((c, i) => `${i ? "<i>›</i>" : ""}<button${i === crumbs.length - 1 ? " aria-current" : ""}>${c}</button>`).join("")}</span>` : svg("search")}
+  ${tokens.map((t) => `<span class="token">${t}<span>×</span></span>`).join("")}
+  <span class="q${q ? "" : " ph"}">${q ? `${q}<span class="caret"></span>` : `<span class="caret"></span>${ph}`}</span>
+  ${right}<span class="x">${svg("x")}</span></div>`;
+
+const row = ({ icon, m, title, cls = "", meta = "", k, chev, orb }) => `<div class="row ${cls}">
+  ${m ? mark(m) : icon ? svg(icon) : ""}<span class="title">${title}</span>
+  ${meta ? `<span class="meta">${meta}</span>` : ""}${orb ? `<canvas class="orb" data-orb="${orb}"></canvas>` : ""}${k ? keys(...k) : ""}${chev ? `<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m9 18 6-6-6-6"/></svg>` : ""}</div>`;
+const g = (label) => `<p class="glabel">${label}</p>`;
+const rail = (left, end = `<span>${keys("↑", "↓")} Navigate</span><span>${keys("Enter")} Open</span><span>${keys("Esc")} Close</span>`) => `<div class="rail">${left}<span class="end">${end}</span></div>`;
+const act = (label, ...k) => `<button>${keys(...k)} ${label}</button>`;
+const hint = (label, ...k) => `<span>${keys(...k)} ${label}</span>`;
+const sort = `<span class="seg"><button aria-pressed="true">Latest</button><button>Created</button></span>`;
+
+const CHATS = [
+  ["codex", "Research gassho houses in japan, for a group of 6, 3 rooms for 1 night.", "Japan", "17:52", "running"],
+  ["codex", "Gassho House Stays for Six", "Japan", "17:50", "", "cur"],
+  ["claude", "Shirakawa-go Gassho Stays for Six", "Japan", "17:31"],
+  ["pi", "Research gassho houses in japan, for a group of 6, 3 rooms for 1 night.", "Japan", "17:12"],
+  ["fx", "Gassho Houses in Japan for Six Guests", "Japan", "16:48"],
+  ["opencode", "Research gassho houses in japan, for a group of 6, 3 rooms for 1 night.", "Japan", "16:30"],
+  ["codex", "Japan Gassho Farmhouse Recommendations", "Japan", "15:02"],
+  ["claude", "Palette overhaul sketch", "Conduit", "14:41"],
+  ["codex", "Orb frames for settled turns", "Conduit", "11:20"],
+];
+const OLDER = [["pi", "Tariff comparison for the Engie renewal", "Engie", "Tue"], ["codex", "Gassho House Group Stays", "Japan", "Tue"], ["claude", "Desktop updater parking notes", "Conduit", "Mon"], ["opencode", "Research gassho houses in japan, for a group of 6, 3 rooms for 1 night.", "Japan", "Mon"]];
+const chatRow = ([h, t, p, time, orb, cur], i, extra = "") => row({ m: h, title: t, cls: `${cur || ""} ${extra}`, meta: `<span>${p}</span><span class="t">${time}</span>`, orb: orb ? "working" : "" });
+
+const emptyPreview = `<aside class="preview empty">Preview<br>coming soon</aside>`;
+const folder = (name, icon, n, time, dot, cls = "") => `<div class="row ${cls}"><svg class="caretx" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m9 18 6-6-6-6"/></svg>${svg(icon)}<span class="title">${name}</span><span class="meta">${dot ? `<span class="dot ${dot}"></span>` : ""}<span class="n">${n}</span><span class="t">${time}</span></span></div>`;
+const pal = (w, inner) => `<div class="pal ${w}">${inner}</div>`;
+const FRAMES = {
+  commands: () => pal("w-cmd", search({ ph: "Search commands, chats and settings…" }) + `<div class="list">
+    ${g("This chat")}${row({ icon: "pencil", title: "Rename chat", cls: "cursor", k: ["Ctrl", "K", "R"] })}${row({ icon: "refresh-cw", title: "Regenerate last response" })}${row({ icon: "copy", title: "Copy transcript" })}${row({ icon: "folder-input", title: "Move chat…", k: ["Ctrl", "K", "M"] })}
+    ${g("Go to")}${row({ icon: "message-square", title: "Search chats", k: ["Ctrl", "Shift", "K"], chev: 1 })}${row({ icon: "settings", title: "Settings", k: ["Ctrl", ","], chev: 1 })}${row({ icon: "box", title: "Workspace views", chev: 1 })}
+    ${g("Create")}${row({ icon: "message-square-plus", title: "New chat", k: ["Ctrl", "Shift", "C"] })}${row({ icon: "folder-plus", title: "New folder" })}${row({ icon: "box", title: "New workspace" })}
+    ${g("View")}${row({ icon: "panel-left", title: "Toggle sidebar", k: ["Ctrl", "B"] })}${row({ icon: "panel-right", title: "Toggle workspace panel", k: ["Ctrl", "."] })}
+  </div>` + rail(hint("Open page", "Tab"))),
+  query: () => pal("w-cmd", search({ q: "togg" }) + `<div class="list">
+    ${g("View")}${row({ icon: "panel-left", title: "<em>Togg</em>le sidebar", cls: "q-on cursor", k: ["Ctrl", "B"] })}${row({ icon: "panel-right", title: "<em>Togg</em>le workspace panel", cls: "q-on", k: ["Ctrl", "."] })}${row({ icon: "panel-right", title: "<em>Togg</em>le maximized workspace panel", cls: "q-on", k: ["Ctrl", "Shift", "."] })}
+    ${g("This chat")}${row({ icon: "mic", title: "<em>Togg</em>le voice dictation", cls: "q-on" })}
+  </div>` + rail("")),
+  root: () => pal("w-wide", search({ ph: "Search chats and folders…", right: sort }) + `<div class="body"><div class="list">
+    ${g("Recent")}${CHATS.slice(0, 5).map((c, i) => chatRow(c, i)).join("")}
+    ${g("Folders")}${folder("Chats", "message-square", 12, "17:52", "live")}
+    ${folder("Japan", "folder", 31, "17:50", "unread", "open cursor")}
+    ${CHATS.slice(0, 4).map((c) => row({ m: c[0], title: c[1], cls: `child ${c[5] || ""}`, meta: `<span class="t">${c[3]}</span>`, orb: c[4] ? "working" : "" })).join("")}
+    ${row({ title: "Browse all 31", cls: "child browse", chev: 1 })}
+    ${folder("Engie", "folder", 4, "Tue")}${folder("conduit", "box", 88, "14:41", "live")}${folder("jaskNEM", "box", 9, "Mon")}
+  </div>${emptyPreview}</div>` + rail(act("Open project", "Ctrl", "Enter") + hint("Expand", "→") + hint("Search in", "/"), `<span>${keys("Ctrl", "P")} Preview</span><span>${keys("Enter")} Scope</span><span>${keys("Esc")} Close</span>`)),
+  scoped: () => pal("w-wide", search({ tokens: ["in:Japan"], ph: "Search in Japan…", right: sort }) + `<div class="body"><div class="list">
+    ${g("Today")}${CHATS.filter((c) => c[2] === "Japan").map((c, i) => row({ m: c[0], title: c[1], cls: `${c[5] || ""} ${i === 2 ? "cursor" : ""}`, meta: `<span class="t">${c[3]}</span>`, orb: c[4] ? "working" : "" })).join("")}
+    ${g("This week")}${OLDER.filter((c) => c[2] === "Japan").map((c) => row({ m: c[0], title: c[1], meta: `<span class="t">${c[3]}</span>` })).join("")}
+  </div>${emptyPreview}</div>` + rail(act("Edit", "Ctrl", "E") + hint("Rename", "Ctrl", "K", "R") + hint("Delete", "Ctrl", "K", "D") + hint("Move", "Ctrl", "K", "M"), `<span>${keys("Ctrl", "P")} Preview</span><span>${keys("Enter")} Open</span><span>${keys("Esc")} Out</span>`)),
+  preview: () => pal("w-wide", search({ tokens: ["in:Japan", "is:unread"], q: "research", right: sort }) + `<div class="body"><div class="list">
+    ${g("Today")}${[CHATS[0], CHATS[3], CHATS[5]].map((c, i) => row({ m: c[0], title: `<em>Research</em> gassho houses in japan, for a group of 6, 3 rooms for 1 night.`, cls: `q-on ${i === 1 ? "cursor" : ""}`, meta: `<span class="t">${c[3]}</span>`, orb: c[4] ? "working" : "" })).join("")}
+  </div><aside class="preview">
+    <div class="h">${mark("pi")}<span>Research gassho houses in japan, for a group of 6, 3 rooms for 1 night.</span></div>
+    <div class="facts"><span>Pi · claude-sonnet-5</span><span>Japan · 7 turns</span><span>Updated 17:12 · created 16:55</span></div>
+    <div class="pb">Can you check whether any of them take card payments?</div>
+    <div class="pa">Two of the three do. Gokayama Base takes cards at check-in and lists it on its booking page; Yamashita-ya is cash only, and the Ainokura minshuku asks you to pay by bank transfer in advance…</div>
+    <div class="trace"><canvas class="orb" data-orb="done"></canvas><span><b>Done</b> · 42s · 4 fetches, 2 searches</span></div>
+  </aside></div>` + rail(act("Edit", "Ctrl", "E") + hint("Rename", "Ctrl", "K", "R") + hint("Delete", "Ctrl", "K", "D"), `<span>${keys("Ctrl", "P")} Preview</span><span>${keys("Enter")} Open</span><span>${keys("Esc")} Close</span>`)),
+  edit: () => pal("w-wide", search({ tokens: ["in:Japan"], ph: "Filter…", right: sort }) + `<div class="body"><div class="list">
+    ${g("Today")}${CHATS.filter((c) => c[2] === "Japan").map((c, i) => `<div class="row ${[0, 3, 5].includes(i) ? "sel" : ""} ${i === 6 ? "cursor" : ""}"><span class="check ${[0, 3, 5].includes(i) ? "on" : ""}"></span>${mark(c[0])}<span class="title">${c[1]}</span><span class="meta"><span class="t">${c[3]}</span></span></div>`).join("")}
+  </div>${emptyPreview}</div>` + rail(`<span style="color:var(--foreground)">3 selected</span>` + act("Delete", "Ctrl", "K", "D") + act("Move", "Ctrl", "K", "M") + hint("Copy links", "C"), `<span>${keys("Space")} Select</span>${act("Done", "Ctrl", "E")}`)),
+  rename: () => pal("w-wide", search({ tokens: ["in:Japan"], ph: "Search in Japan…", right: sort }) + `<div class="body"><div class="list">
+    ${g("Today")}${CHATS.slice(0, 2).map((c) => row({ m: c[0], title: c[1], cls: c[5] || "", meta: `<span class="t">${c[3]}</span>`, orb: c[4] ? "working" : "" })).join("")}
+    <div class="row cursor">${mark("claude")}<input value="Shirakawa-go gassho stays, group of six"><span class="meta"><span class="t">17:31</span></span></div>
+    ${CHATS.slice(3, 7).map((c) => row({ m: c[0], title: c[1], meta: `<span class="t">${c[3]}</span>` })).join("")}
+  </div>${emptyPreview}</div>` + rail("", `<span>${keys("Enter")} Save</span><span>${keys("Esc")} Cancel</span>`)),
+  models: () => pal("w-model", search({ crumbs: ["Models"], ph: "Find a model…" }) + `<div class="list">
+    ${g("Scoped")}${[["GPT-6 Luna", "openai-codex/gpt-6-luna", "current cursor"], ["GPT-6 Sol", "openai-codex/gpt-6-sol"], ["Muse Spark 1.3 Free", "opencode/muse-spark-1.3-contributor-free"], ["Google: Gemini 3.8 Flash", "openrouter/google/gemini-3.8-flash"], ["Grok 4.6", "xai/grok-4.6"]].map(([t, s, c]) => row({ title: t, cls: c || "", meta: `<span class="spec">${s}</span>` })).join("")}
+    ${g("Google")}${[["Gemini 3.8 Flash", "google/gemini-3.8-flash"], ["Deep Research Max Preview", "google/deep-research-max-preview-04-2026", "unscoped"], ["Deep Research Preview", "google/deep-research-preview-04-2026", "unscoped"], ["Gemini 2.5 Flash", "google/gemini-2.5-flash", "unscoped"]].map(([t, s, c]) => row({ title: t, cls: c || "", meta: `<span class="spec">${s}</span>` })).join("")}
+  </div>` + rail(act("Scope", "Ctrl", "F"), `<span>${keys("Enter")} Use</span><span>${keys("Esc")} Close</span>`)),
+  phone: () => pal("", search({ ph: "Search chats…" }) + `<div class="list">
+    ${g("Today")}${CHATS.map((c, i) => row({ m: c[0], title: c[1], cls: c[5] || "", meta: `<span class="t">${c[3]}</span>`, orb: c[4] ? "working" : "" })).join("")}
+  </div><div class="phone-bar"><button>Edit</button><button>Latest ▾</button></div>`),
+};
+
+for (const wrap of document.querySelectorAll("[data-frame]")) {
+  const name = wrap.dataset.frame;
+  const phone = name === "phone";
+  wrap.innerHTML = `<div class="stage${phone ? " phone" : ""}">${back(phone)}<div class="scrim"></div><div class="pal-slot">${FRAMES[name]()}</div></div>`;
+}
+
+/* Orbs: the app's engine, the running state and a finished turn's sphere. */
+const orbs = [...document.querySelectorAll("canvas[data-orb]")].map((c) => {
+  const dpr = 3; c.width = c.height = 20 * dpr;
+  const preset = resolvePreset(c.dataset.orb === "done" ? "working" : c.dataset.orb, 20);
+  return { ctx: c.getContext("2d"), dpr, preset };
+});
+const loop = (now) => {
+  for (const { ctx, dpr, preset } of orbs) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, 20, 20);
+    paintFrame(ctx, MODE_FRAMES[preset.mode](20, (now / 1000) * preset.speed, preset.opts), true);
+  }
+  requestAnimationFrame(loop);
+};
+requestAnimationFrame(loop);
+
+const seg = (id, apply) => document.getElementById(id).addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  for (const x of e.currentTarget.children) x.setAttribute("aria-pressed", String(x === b));
+  apply(b.dataset.v);
+});
+seg("material", (v) => { document.body.dataset.material = v; });
+seg("scale", (v) => document.documentElement.style.setProperty("--scale", v));
+document.getElementById("replay").addEventListener("click", () => {
+  for (const p of document.querySelectorAll(".pal")) { p.style.animation = "none"; p.offsetWidth; p.style.animation = ""; }
+});
+window.done = true;
+</script>
+</body>
+</html>
