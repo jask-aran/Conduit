@@ -5,7 +5,7 @@ import * as KDialog from "@kobalte/core/dialog";
 import {
   ArrowLeftIcon, BrainIcon, CheckIcon, ChevronRightIcon, CopyIcon, FileInputIcon, FilePlus2Icon,
   FolderIcon, FolderInputIcon, FolderPlusIcon, LayersIcon, LogOutIcon, MessageSquareIcon, MicIcon,
-  MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, PlayIcon, RefreshCwIcon, SettingsIcon,
+  MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, PlayIcon, RefreshCwIcon, SearchIcon, SettingsIcon,
   SlashIcon, SlidersHorizontalIcon, SquareIcon, TerminalIcon, Trash2Icon, XIcon,
 } from "lucide-solid";
 import { Button } from "@/components/primitives";
@@ -20,7 +20,7 @@ import {
 } from "../palette/chat-query";
 import type { ChatQueryFilter } from "../palette/chat-query";
 import { COMMAND_IDS, commandRegistry } from "../commands/command-registry";
-import { chatSortStamp, useChatSort } from "../preferences/chat-sort";
+import { chatSortStamp, saveChatSort, useChatSort } from "../preferences/chat-sort";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import type { ShortcutContext } from "../shortcuts/shortcut-types";
 import { CommandHintBar } from "./command-hint-bar";
@@ -694,15 +694,9 @@ export function CommandMenu(props: {
             <KDialog.Title class="sr-only">{modelSelectorPage() ? "Model selector" : "Command Palette"}</KDialog.Title>
             <KDialog.Description class="sr-only">{modelSelectorPage() ? "Choose the models available in this project." : "Search commands, chats, settings, and models."}</KDialog.Description>
             <div class="command-input-row">
-              <Show when={pageMeta()}><span class="command-page-prefix">{pageMeta()!.prefix}</span></Show>
-              <Show when={chatPage()}>
-                <For each={parsedQuery().filters}>{(filter, index) => {
-                  const label = () => filterLabel(filter);
-                  return <button type="button" class="command-filter-chip" aria-label={`Remove ${label()} filter`} title={`Remove ${label()} filter`} onMouseDown={(event) => event.preventDefault()} onClick={() => removeFilter(index())}>
-                    {label()} <span aria-hidden="true">×</span>
-                  </button>;
-                }}</For>
-              </Show>
+              <Show when={chatPage()}><SearchIcon class="command-input-icon" aria-hidden="true" /></Show>
+              <Show when={!chatPage() && !modelSelectorPage() && !pageMeta()}><span class="command-input-glyph" aria-hidden="true">&gt;</span></Show>
+              <Show when={!chatPage() && pageMeta()}><span class="command-page-prefix">{pageMeta()!.prefix}</span></Show>
               <input
                 ref={input}
                 class="command-input"
@@ -712,12 +706,11 @@ export function CommandMenu(props: {
                 aria-autocomplete="list"
                 aria-activedescendant={selectable().length ? optionId(active()) : undefined}
                 aria-label={modelSelectorPage() ? "Find models" : "Search commands"}
-                placeholder={pageMeta()?.placeholder || "Search commands…"}
+                placeholder={chatPage() ? "Search chats…" : modelSelectorPage() ? "Find models…" : pageMeta()?.placeholder || "Run a command…"}
                 value={parsedQuery().text}
                 onInput={(event) => setQuery(serializeChatQuery(parsedQuery().filters, event.currentTarget.value))}
                 onKeyDown={keydown}
               />
-              <Show when={selectionMode()}><span class="command-selection-count">{selectedTargets().length} selected</span></Show>
               <Button
                 type="button"
                 variant="ghost"
@@ -731,7 +724,26 @@ export function CommandMenu(props: {
                 <XIcon />
               </Button>
             </div>
-            <div id="command-listbox" ref={listbox} role="listbox" aria-label={modelSelectorPage() ? "Models" : chatPage() ? "Chats" : "Commands"} class="command-list" data-mode-focus={selectionMode() || moveMode() || undefined} tabIndex={selectionMode() || moveMode() ? 0 : -1} onKeyDown={keydown}>
+            <Show when={chatPage()}>
+              <div class="command-search-tools">
+                <div class="command-search-filters" aria-label="Search filters">
+                  <Show when={parsedQuery().filters.length} fallback={<span class="command-search-scope">All chats</span>}>
+                    <For each={parsedQuery().filters}>{(filter, index) => {
+                      const label = () => filterLabel(filter);
+                      return <button type="button" class="command-filter-chip" aria-label={`Remove ${label()} filter`} title={`Remove ${label()} filter`} onMouseDown={(event) => event.preventDefault()} onClick={() => removeFilter(index())}>
+                        {label()} <span aria-hidden="true">×</span>
+                      </button>;
+                    }}</For>
+                  </Show>
+                  <Show when={selectionMode()}><span class="command-selection-count">{selectedTargets().length} selected</span></Show>
+                </div>
+                <div class="command-sort-toggle" role="group" aria-label="Chat sort">
+                  <button type="button" aria-pressed={chatSort() === "latest"} onClick={() => saveChatSort("latest")}>Latest</button>
+                  <button type="button" aria-pressed={chatSort() === "created"} onClick={() => saveChatSort("created")}>Created</button>
+                </div>
+              </div>
+            </Show>
+            <div id="command-listbox" ref={listbox} role="listbox" aria-label={modelSelectorPage() ? "Models" : chatPage() ? "Chats" : "Commands"} class="command-list" tabIndex={selectionMode() || moveMode() ? 0 : -1} onKeyDown={keydown}>
               <Show when={!selectable().length}><p class="command-empty">{emptyMessage()}</p></Show>
               <For each={rows()}>{renderRow}</For>
             </div>
