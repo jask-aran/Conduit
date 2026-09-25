@@ -665,7 +665,7 @@ export function CommandMenu(props: {
     const Icon = icons[command.icon];
     const chatSelected = () => Boolean(command.chat && selectedChatIds().has(command.chat.id));
     const editing = () => command.chat?.id === editingId();
-    return <div {...commonProps} title={command.chat?.title || command.label} data-highlighted={selected() || undefined} data-danger={command.destructive || undefined} data-checked={command.checked || undefined} data-chat-row={command.entity === "chat" || undefined} data-chat-selected={chatSelected() || undefined}>
+    return <div {...commonProps} title={command.chat?.title || command.label} aria-current={command.chat?.id === props.context.chatId ? "page" : undefined} data-highlighted={selected() || undefined} data-danger={command.destructive || undefined} data-checked={command.checked || undefined} data-chat-row={command.entity === "chat" || undefined} data-chat-selected={chatSelected() || undefined}>
       <Show when={selectionMode() && command.entity === "chat"}>
         <span class="command-select-mark" aria-hidden="true">{chatSelected() ? <CheckIcon /> : null}</span>
       </Show>

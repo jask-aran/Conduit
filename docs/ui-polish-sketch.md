@@ -611,9 +611,9 @@ misbehave at a narrow width.
   to nothing, gap included, so closing ends without a snap.
 - **The Conduit mark** is the wordmark's Druk Wide capital C, converted to a
   path (`public/brand/conduit-mark.svg`).
-- **Sidebar harness marks** stay greyed with their row and show in their own
-  colours while it is hovered or focused: Codex's gradient, Claude Code's
-  orange, the rest at full foreground. The sidebar only, as an experiment.
+- **Sidebar and chat-search harness marks** stay greyed with their row and show
+  in their own colours while it is hovered or focused: Codex's gradient,
+  Claude Code's orange, the rest at full foreground.
 
 ### 7a. Attachment strip (side piece, from step 2)
 
