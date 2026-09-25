@@ -2571,3 +2571,4 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-preview-turn { display: flex; align-items: center; gap: 8px; font-size: 11px; }
 .command-preview-turn b { color: var(--foreground); font-weight: 560; }
 .command-preview-turn .thinking-orb { width: 16px; height: 16px; flex: none; }
+.command-group-break { display: block; height: 8px; }
