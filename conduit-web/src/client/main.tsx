@@ -1253,6 +1253,11 @@ function App() {
   });
 
   const openDashboard = (historyMode: "push" | "replace" | "none" = "push") => {
+    // Already here: keep the composer's draft and its agent as they are.
+    if (routeKind() === "dashboard" && routeBootstrap() === "ready" && historyMode !== "none") {
+      setMobileSidebarOpen(false);
+      return;
+    }
     leaveChat(historyMode === "none");
     chat.reset();
     const chatRoot = catalogue.projects().find((project) => project.slug === "chat");
