@@ -381,7 +381,7 @@ export function ProjectDashboard(props: {
       return <ContextMenu><ContextMenuTrigger as={SplitRow} element="button" onPointerEnter={() => props.onPrefetchChat(item)} onFocus={() => props.onPrefetchChat(item)} onClick={() => void props.onOpenChat(item, props.project)}
           lead={<RuntimeIndicator process={process()} stale={props.runtime.stale()} unread={item.unread} fallback={<ThreadHarnessMark id={item.harnessId} />} />}
           primary={item.title || "Untitled chat"}
-          context={live() || item.lastMessagePreview}
+          context={live()}
           trailing={<time dateTime={item.lastMessageAt || item.createdAt}>{relativeActivity(item.lastMessageAt || item.createdAt, now())}</time>} />
         <ContextMenuContent class="w-60 sidebar-context-menu"><ContextMenuGroup>
           <ContextMenuItem onSelect={() => props.onContextAction("rename-chat", { chat: item, project: props.project })}><PencilIcon />{commandLabel(COMMAND_IDS.renameChat)}</ContextMenuItem>
