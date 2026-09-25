@@ -1,6 +1,7 @@
 # UI polish sketch
 
-Status: sections 1 (interrupted turns), 2 (composer hierarchy), 5 (empty
+Status: 1b (the trace header) is agreed and next to build. Sections 1
+(interrupted turns), 2 (composer hierarchy), 5 (empty
 states, reduced) and 7 (motion, but for the deferred dashboard transition)
 are built and recorded below as built, as is 8 (keyboard) but for what waits
 on the dashboard redesign and transcript mode; 3 (autosave) is built for
@@ -31,39 +32,115 @@ and a turn with no answer. The compact view must preserve the distinction
 between kept output and discarded content. This is a presentation change,
 not a change to stored transcripts or backend turn states.
 
-Status: built. A stopped turn says **Interrupted** once, as the tag on its
-first row -- the word the trace and the composer use, in the text colour at
-560. Rows that are not the trace carry the Stop mark where a trace has its
-brain, so the two line up. Regenerate is always in the actions row under them.
+Status: built, and since reshaped. A stopped turn is one row: its trace,
+which says **Interrupted**. Text the stop discarded is a step inside that
+trace, struck through under its own small "Not kept" -- the loss is that
+step's, not the turn's, so the header's summary is still the last step that
+was kept. A turn stopped before it did anything is one Stop-marked line.
+Regenerate and the turn's time are the actions row under it.
 
 ```
-stopped under a tool          🧠 Interrupted · 1 tool call              ⌄
-                                 ↻
-
-discarded, no trace           ■  Interrupted · not kept · T̶h̶e̶ ̶V̶i̶l̶l̶a̶g̶e̶…  ⌄
-                                 ↻
-
-discarded under a trace       🧠 Interrupted · 2 tool calls · Checking…  ⌄
-                              ■  Not kept · T̶h̶e̶ ̶V̶i̶l̶l̶a̶g̶e̶…               ⌄
-                                 ↻
+stopped, text discarded       🧠 Interrupted · 5 tool calls · Let me fetch…   ⌄
+                              23:02  ↻
+  opened:                        …thinking, tool calls…
+                                 Not kept
+                                 T̶h̶e̶ ̶V̶i̶l̶l̶a̶g̶e̶ ̶o̶f̶…
 
 stopped before any answer     ■  Interrupted · before answering
-                                 ↻
+                              23:02  ↻
 
 kept, stopped part-way        …the answer so far, in full
-                              Interrupted   ▷ Continue   ⧉ ↻
+                              23:02  Interrupted   ▷ Continue   ⧉ ↻
 
-while stopping                Stopping…
+live, before the answer       ▬▬▬ ▬▬ ▬   (breathing, one line tall; the
+                                          first words replace it in place)
 ```
 
-- Kept text is always shown in full; discarded text is always folded to its
-  struck-through preview. Opened, it is muted text under the row, no rail.
-- Continue carries on the latest turn, so it appears only there, and only
-  when the agent kept what it wrote. Older stopped turns and discarded answers
-  offer Regenerate.
-- Copy appears only where there is text the agent kept.
-- A turn that ended with no answer -- stopped under a tool, or one that only
-  ran commands -- still has Regenerate under its trace.
+- A message's time leads its actions row -- the agent's on the left, the
+  user's beside the edit pencil -- never a line of its own above it.
+- "Not kept" is whatever the server marks `discarded`: with Pi, only the
+  message being written when the stop landed. A harness that keeps partial
+  text sends it undiscarded, and it is the answer row with Continue.
+- One rule, whatever the ending: a Codex turn that fails mid-answer also has
+  its discarded half-answer as a struck step (`Failed · …`). Say if failed
+  turns should keep it as the answer instead.
+- Kept text is always shown in full. Continue carries on the latest turn
+  only, and only when the agent kept what it wrote; Copy only where there is
+  kept text; a turn with no answer still has Regenerate under its trace.
+
+### 1b. Trace header: status, time, work, thinking
+
+Status: agreed, not built. Replaces the header's "N tool calls (M total)" and
+its summary-only finished state.
+
+One anatomy, live and settled:
+
+```
+🧠 Status · time · work · thinking preview                               ⌄
+```
+
+- **Status**: one bold word, always shown, in the face "Interrupted" uses now.
+- **time**: muted.
+- **work**: tool calls as single-word counts by kind; left out when none ran.
+- **thinking preview**: the latest thinking, muted, ellipsised to fit -- the
+  provider's own summary where it gives one (GPT), else the start of the
+  raw thinking's last sentence. Discarded text is skipped.
+
+Live:
+
+```
+🧠 Thinking · 0:04 · Let me break this down…
+🧠 Running bash · 0:12 · 1 command · I'll search for something engaging…
+🧠 Used 3 tools · 0:31 · 2 searches, 1 fetch · These are all fascinating…
+🧠 Writing · 0:44 · 3 searches, 2 fetches · I've gathered fascinating material…
+```
+
+- The status is what is happening now, swapped in place: Thinking; Running
+  `<tool>` while exactly one tool runs; "Used N tools" once several have run
+  in a row; Writing once the answer's text streams.
+- The timer ticks each second from when the prompt was accepted.
+- The answer's placeholder bars stay below; the header is what it is doing.
+
+Settled:
+
+```
+🧠 Interrupted · 1m 04s · 3 searches, 2 fetches · Let me fetch more details…  ⌄
+23:02  ↻
+
+🧠 Done · 6s · Actually, I'll provide a longer story as it's the most likely…  ⌄
+Did you mean "longer one"? Here's a much longer, detailed story:
+```
+
+- Status is Done, Interrupted or Failed -- a clean finish now says so.
+- Time is the turn's duration, prompt to last reply.
+- Work is totals per kind, in the order each kind first appeared; three
+  kinds named, then "+N".
+
+Tool kinds, mapped by each harness adapter (never by the browser from tool
+names):
+
+| kind      | shown as    | Pi                          | Codex / OpenCode          |
+|-----------|-------------|-----------------------------|---------------------------|
+| `command` | 3 commands  | `bash`                      | command execution, `bash` |
+| `read`    | 2 reads     | `read`, `grep`, `ls`        | file read, `read`         |
+| `edit`    | 1 edit      | `edit`, `write`             | file change, `edit`/`write` |
+| `search`  | 2 searches  | `web_search`                | web search                |
+| `fetch`   | 1 fetch     | `fetch_content`             | fetch                     |
+| `other`   | 2 tools     | anything else               | anything else             |
+
+Build:
+
+1. Adapters (Pi, Codex, OpenCode, fx, ChatGPT Web, test stream): a name to
+   kind table each, stating `kind` on the `tool.open` they already send;
+   `assertTranscriptOp` accepts only the six, and unmapped is `other`.
+2. `turn-trace.tsx`: `previewOf` becomes a live and a settled header, with a
+   small ticking timer; counts read `kind`.
+3. `turn-rows.ts`: each trace row carries the turn's start and end -- the
+   prompt's and the last reply's timestamps, already held; no new state.
+4. `DESIGN.md`: the header anatomy, and the status word always shown.
+
+Defaults to confirm when built: "Done" for a clean finish (vs Finished or
+Complete); the timer as `0:44` / `1m 04s` live and `6s` / `1m 04s` settled.
 
 ## 2. Clarify composer hierarchy
 
