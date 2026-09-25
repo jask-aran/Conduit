@@ -182,6 +182,7 @@ const harnessConfig = {
   // than one of its own.
   logs: chatLogs,
   codexCommand: process.env.CONDUIT_CODEX_COMMAND || "codex",
+  claudeCommand: process.env.CONDUIT_CLAUDE_COMMAND || "claude",
   fxCommand: process.env.CONDUIT_FX_COMMAND || "fx",
   opencodeCommand: process.env.CONDUIT_OPENCODE_COMMAND || "opencode2",
   chatgptWebPython: process.env.CONDUIT_CHATGPT_WEB_PYTHON

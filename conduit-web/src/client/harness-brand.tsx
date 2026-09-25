@@ -64,6 +64,7 @@ const IMPLEMENTATION_LABELS: Record<string, string> = {
   conduit_pi: "Conduit Pi",
   codex: "Codex",
   "chatgpt-web": "ChatGPT Web",
+  "claude-code": "Claude Code",
 };
 
 export const harnessLabelFor = (implementation?: string | null) => implementation
