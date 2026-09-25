@@ -1132,6 +1132,9 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (!streaming()) return;
     stopPending = true;
     setGeneration("stopping");
+    // The server clears the queue before it stops, so what was queued comes
+    // back to the composer rather than being sent after the stop.
+    clearQueue();
     session.sendWhenReady({ type: "stop_generation", generationId: currentGeneration });
   };
 

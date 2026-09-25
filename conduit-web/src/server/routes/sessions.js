@@ -1,7 +1,7 @@
 import path from "node:path";
 import { conduitPiSessionFile } from "../../backend-session.js";
 import { chatView, isChatId } from "../../chat-store.js";
-import { applyMessageIds } from "../../message-ids.js";
+import { applyMessageIds, entryMessageRows } from "../../message-ids.js";
 import { applyTranscriptOps } from "../../transcript-fold.js";
 import {
   projectSessionEntries,
@@ -108,6 +108,14 @@ export function registerSessionRoutes(app, {
         throw error;
       }
       const projection = projectSessionEntries(session.entries);
+      // A chat opened while its turn runs holds entries Pi has written since
+      // the turn last checkpointed, and their names are only tied to them at
+      // the checkpoint. Read unbound, the prompt came back as `pi:<entryId>`
+      // beside the name the chat's log gives it, and the turn drew twice --
+      // once finished under the one, once running under the other.
+      if (!request.query.before) {
+        await messageIds.bind(context.project, context.chat, entryMessageRows(session.entries));
+      }
       projection.messages = applyMessageIds(
         await attachments.decorateMessages(context.project, context.chat.id, projection.messages,
           { fromStart: !session.page?.before }),
