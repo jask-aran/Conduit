@@ -2516,7 +2516,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   animation: command-arrive 220ms cubic-bezier(.2, .8, .2, 1) both;
 }
 @keyframes command-arrive { from { opacity: 0; transform: translateY(8px); } }
-.command-dialog-with-preview .command-shell { width: min(900px, calc(100vw - 22px)); }
+.command-dialog-with-preview .command-shell { width: min(1040px, calc(100vw - 22px)); }
 .command-input-row { border-bottom-color: oklch(1 0 0 / 10%); }
 .command-input { font-size: 13px; font-weight: 450; }
 .command-input::placeholder { color: color-mix(in oklch, var(--foreground), transparent 45%); }
@@ -2548,10 +2548,10 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-option[data-highlighted] .command-shortcut kbd { color: var(--foreground); }
 .command-rename-input { border: 1px solid oklch(1 0 0 / 16%); border-radius: 7px; background: oklch(0 0 0 / 18%); padding: 3px 7px; }
 .command-select-mark { border-color: oklch(1 0 0 / 24%); border-radius: 4px; }
-.command-preview { display: grid; width: 280px; flex: none; align-content: start; gap: 10px; overflow: auto; border-left: 1px solid oklch(1 0 0 / 10%); padding: 14px 16px; color: var(--muted-foreground); font-size: 11px; }
+.command-preview { display: grid; width: 380px; flex: none; align-content: start; gap: 10px; overflow: auto; border-left: 1px solid oklch(1 0 0 / 10%); padding: 14px 16px; color: var(--muted-foreground); font-size: 11px; }
 .command-preview-title { display: flex; gap: 8px; align-items: flex-start; color: var(--foreground); font-size: 12.5px; font-weight: 600; line-height: 1.3; }
 .command-preview-title .thread-harness-mark { width: 14px; height: 14px; flex: none; margin-top: 1px; }
-.command-preview-facts { display: grid; gap: 2px; font: 10px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.command-preview-facts { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: 10px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
 .command-preview-empty { margin: auto 0; text-align: center; }
 .command-hint-bar, .command-hint-bar[data-chat-search] { min-height: 34px; flex-wrap: nowrap; gap: 12px; overflow: hidden; border-top-color: oklch(1 0 0 / 8%); background: transparent; padding: 6px 10px; font-size: 10px; }
 .command-hint-secondary { flex-wrap: nowrap; justify-content: flex-end; overflow: hidden; }
@@ -2560,7 +2560,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-hint-action:hover, .command-hint-action:focus-visible { background: oklch(1 0 0 / 10%); }
 .command-hint-action .command-hint-key { color: var(--foreground); }
 .command-selection-count { color: var(--foreground); font-size: 10px; }
-@media (max-width: 900px) { .command-preview { display: none; } .command-dialog-with-preview .command-shell { width: min(720px, calc(100vw - 22px)); } }
+@media (max-width: 1000px) { .command-preview { display: none; } .command-dialog-with-preview .command-shell { width: min(720px, calc(100vw - 22px)); } }
 @media (--conduit-mobile-layout) { .command-preview { display: none; } .command-dialog-with-preview .command-shell { width: 100%; } .command-label, .command-dialog-chat-search .command-option[data-chat-row="true"] .command-label { font-size: 14px; } }
 @media (prefers-reduced-motion: reduce) { .command-shell { animation: none; } }
 /* Typing lights the letters that matched and dims the rest of the label. */
