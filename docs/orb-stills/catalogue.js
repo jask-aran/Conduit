@@ -8,8 +8,9 @@
  * (radiusScale) and its z-sort (finalizeFrame) -- in its depth language:
  * near dots larger and brighter, far ones smaller and dimmer.
  *
- * The app's copies are conduit-web/src/client/chat/orb-stills.ts (the plain
- * sphere) and the state table in turn-trace.tsx; IN_APP below mirrors them.
+ * The app's copies are conduit-web/src/client/chat/orb-frames.ts (the plain
+ * and sputtering spheres, the trailed orbits) and the state table in
+ * turn-trace.tsx; IN_APP below mirrors them.
  */
 import { MODE_FRAMES, finalizeFrame, makeProj, radiusScale, resolvePreset } from "../../conduit-web/node_modules/thinking-orbs/dist/engine.es.js";
 
@@ -201,7 +202,8 @@ export const LIBRARY_HELD = [
 ];
 
 /* Made for Conduit, each moving; at rest (t = 0) each is the still it was
-   drawn as. The plain sphere at rest is the settled turn's orb. */
+   drawn as. The app's copies of those it uses are in
+   conduit-web/src/client/chat/orb-frames.ts. */
 export const CREATED = [
   ["plain sphere", "the searching globe's lattice without its scan, turning", plainSphere],
   ["Fibonacci sphere", "evenly spread dots on a turning sphere", fibonacciSphere],
@@ -252,7 +254,7 @@ export const PROTOTYPES = [
   ["coasting", "pushed, then slowing to rest before the next push", stopStart(turning([[2.2, 1.5, easeOut], [0.9]]))],
   ["stalling", "turns, stops for a while, starts again, never evenly", stopStart(turning([[1.1, 0.8], [0.9], [0.45, 0.22], [1.3], [0.8, 0.5], [0.5]]))],
   ["sputtering", "short jolts that overshoot and settle, one backwards", stopStart(turning([[0.16, 0.26, backOut], [0.55], [0.12, 0.14, backOut], [1.0], [0.2, -0.07], [0.35], [0.14, 0.3, backOut], [1.2]]))],
-  ["sputtering, long", "mostly snags, jolts, stutters and kicks back, catching the plain sphere's turn only briefly between; about 15s before it repeats", stopStart(turning(SPUTTER))],
+  ["sputtering, long", "mostly snags, jolts, stutters and kicks back, catching the plain sphere's turn only briefly between; about 14s before it repeats", stopStart(turning(SPUTTER))],
 ];
 
 /* Each state a turn's header shows, the orb it shows it with, and a line of
@@ -263,13 +265,13 @@ export const IN_APP = [
   ["Searching", "\u201cgassho house group of 6\u201d", "library · searching", animation("searching")],
   ["Fetching", "yusuke-gokayama.com/en/guesthouse/", "library · searching", animation("searching")],
   ["Reading", "src/client/chat/turn-trace.tsx", "library · weaving", animation("weaving")],
-  ["Editing", "src/client/chat/turn-trace.tsx", "library · shaping", animation("shaping")],
+  ["Editing", "src/client/chat/turn-trace.tsx", "created · orbits trailed", stalledOrbits],
   ["Running", "npm run typecheck", "library · solving", animation("solving")],
   ["Using get_search_content", "Any tool without a kind of its own", "library · solving", animation("solving")],
   ["Running 3 tools", "Several at once", "library · solving", animation("solving")],
   ["Writing", "Weighing Shirakawa-go against Gokayama", "library · composing", animation("composing")],
   ["Done", "Fetched yusuke-gokayama.com/en/guesthouse/", "created · plain sphere, turning", plainSphere, { settled: true, play: true }],
-  ["Interrupted", "Clarifying room availability and pricing details", "created · plain sphere, destructive tint", plainSphere, { settled: true, tint: true }],
-  ["Failed", "The provider returned an error", "created · plain sphere, destructive tint", plainSphere, { settled: true, tint: true }],
+  ["Interrupted", "Clarifying room availability and pricing details", "created · sputtering, long (the prototype above), destructive tint", stopStart(turning(SPUTTER)), { settled: true, tint: true, play: true }],
+  ["Failed", "The provider returned an error", "created · sputtering, long (the prototype above), destructive tint", stopStart(turning(SPUTTER)), { settled: true, tint: true, play: true }],
 ];
-/* Not used by a turn: listening is kept for dictation; breathing has no state. */
+/* Not used by a turn: listening is kept for dictation; breathing and shaping have no state. */
