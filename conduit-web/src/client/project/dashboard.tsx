@@ -2,7 +2,7 @@ import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import {
-  ArrowRightIcon,
+  ChevronDownIcon,
   CopyIcon,
   EllipsisIcon,
   FolderGit2Icon,
@@ -18,7 +18,10 @@ import {
   Trash2Icon,
   XIcon,
 } from "lucide-solid";
-import { ThreadHarnessMark } from "../harness-brand";
+import { HarnessMark, ThreadHarnessMark } from "../harness-brand";
+import { activityLabel } from "../../activity.js";
+import { Segmented } from "../settings/settings-controls";
+import { FileTypeIcon } from "../workspace/file-type-icon";
 import {
   Button,
   ContextMenu,
@@ -41,11 +44,11 @@ import {
   Spinner,
 } from "@/components/primitives";
 import { api } from "../api/client";
-import type { BackendSessionDiscovery, DashboardChat, Project, ProjectDashboardPayload, WorkspaceAppearance, WorkspaceOperation } from "../api/contracts";
-import { RuntimeIndicator } from "../navigation/runtime-indicator";
+import type { DashboardChat, HarnessSummary, HarnessThread, HarnessThreadDiscovery, Project, ProjectDashboardPayload, WorkspaceAppearance, WorkspaceOperation } from "../api/contracts";
+import { activityDetail, activityOf, RuntimeIndicator } from "../navigation/runtime-indicator";
 import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
-import { DashboardControlGroup, DashboardEmpty, DashboardGrid, DashboardIdentity, DashboardLaunch, DashboardQuickActions, DashboardRow, DashboardRowTitle, DashboardScrollRegion, DashboardSearchButton, DashboardSection, DashboardShell } from "../dashboard/primitives/dashboard";
+import { SplitCounts, SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitRow, SplitShortcut, SplitShortcuts } from "../dashboard/primitives/split";
 import type { Pty } from "../remotes/terminal-pane";
 import type { RuntimeStore } from "../state/runtime";
 import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
@@ -82,6 +85,19 @@ function kindLabel(project: Project) {
   return "Managed folder";
 }
 
+type ThreadSide = "chats" | "outside";
+type OutsideThread = HarnessThread & { harnessId: string; at: number };
+
+function readThreadSide(projectId: string): ThreadSide {
+  try { return localStorage.getItem(`conduit.dashboard.threads:${projectId}`) === "outside" ? "outside" : "chats"; } catch { return "chats"; }
+}
+
+// Harnesses report seconds, milliseconds or ISO strings.
+function timestampOf(value: number | string | null | undefined) {
+  if (typeof value === "number") return value < 1e12 ? value * 1000 : value;
+  return Date.parse(value || "") || 0;
+}
+
 function compactDate(value?: string | null) {
   const date = new Date(value || "");
   if (!Number.isFinite(date.getTime())) return "";
@@ -116,6 +132,7 @@ export function ProjectDashboard(props: {
   onOpenTerminal: (terminal: Pty) => void;
   onOpenTerminalMaximized: (terminal: Pty) => void;
   onPrefetchTerminal: () => void;
+  onOpenHarnessThread?: (harnessId: string, path: string, threadId: string, title: string) => void;
   onSearchChats: () => void;
   onRename: () => void;
   onDelete: () => void;
@@ -141,9 +158,11 @@ export function ProjectDashboard(props: {
   const [destroyOpen, setDestroyOpen] = createSignal(false);
   const [destroyConfirmation, setDestroyConfirmation] = createSignal("");
   const [destroying, setDestroying] = createSignal(false);
-  const [backendSessions, setBackendSessions] = createSignal<BackendSessionDiscovery | null>(null);
-  const [backendSessionsLoading, setBackendSessionsLoading] = createSignal(true);
-  const [adoptingSessionId, setAdoptingSessionId] = createSignal("");
+  const [outsideThreads, setOutsideThreads] = createSignal<OutsideThread[]>([]);
+  const [outsideHarnesses, setOutsideHarnesses] = createSignal<Array<{ id: string; label: string }>>([]);
+  const [outsideLoading, setOutsideLoading] = createSignal(true);
+  const [outsideFilter, setOutsideFilter] = createSignal("");
+  const [threadSide, setThreadSide] = createSignal<ThreadSide>("chats");
   const chatSort = useChatSort();
   const projectId = createMemo(() => props.project.id);
   const isWorkspace = createMemo(() => workspaceProject(props.project));
@@ -167,7 +186,12 @@ export function ProjectDashboard(props: {
     ?? props.project.sessions.filter((chat) => chat.status === "active").length);
   const scopedTerminals = createMemo(() => terminals()
     .filter((terminal) => terminal.projectId === projectId() && terminal.status === "running"));
-  const liveTerminals = createMemo(() => scopedTerminals().slice(0, 4));
+  const filteredOutside = createMemo(() => outsideFilter() ? outsideThreads().filter((thread) => thread.harnessId === outsideFilter()) : outsideThreads());
+  createEffect(() => setThreadSide(readThreadSide(projectId())));
+  const saveThreadSide = (side: ThreadSide) => {
+    setThreadSide(side);
+    try { localStorage.setItem(`conduit.dashboard.threads:${projectId()}`, side); } catch { /* a per-viewer convenience */ }
+  };
 
   const refreshTerminals = async () => {
     try {
@@ -212,16 +236,26 @@ export function ProjectDashboard(props: {
     onCleanup(() => { disposed = true; });
   });
 
+  // Threads this workspace's harnesses ran here that no Conduit chat owns.
   createEffect(() => {
-    const id = projectId();
+    const path = props.project.workingRoot;
     refreshVersion();
-    if (cloning()) return;
+    if (!isWorkspace() || cloning() || !path) { setOutsideThreads([]); setOutsideLoading(false); return; }
     let disposed = false;
-    setBackendSessionsLoading(true);
-    void api<BackendSessionDiscovery>(`/v0/projects/${encodeURIComponent(id)}/backend-sessions?implementation=codex`)
-      .then((value) => { if (!disposed) setBackendSessions(value); })
-      .catch(() => { if (!disposed) setBackendSessions(null); })
-      .finally(() => { if (!disposed) setBackendSessionsLoading(false); });
+    setOutsideLoading(true);
+    void (async () => {
+      const { harnesses } = await api<{ harnesses: HarnessSummary[] }>("/v0/harnesses");
+      const visible = harnesses.filter((harness) => harness.available && harness.discovery === "machine");
+      const found = await Promise.all(visible.map((harness) => api<HarnessThreadDiscovery>(`/v0/harnesses/${encodeURIComponent(harness.id)}/threads?path=${encodeURIComponent(path)}`)
+        .then((discovery) => discovery.groups.flatMap((group) => group.threads)
+          .filter((thread) => !thread.tracked)
+          .map((thread) => ({ ...thread, harnessId: harness.id as string, at: timestampOf(thread.updatedAt ?? thread.createdAt) })))
+        .catch(() => [])));
+      if (disposed) return;
+      setOutsideHarnesses(visible.map((harness) => ({ id: harness.id as string, label: harness.label })));
+      setOutsideThreads(found.flat().sort((left, right) => right.at - left.at));
+    })().catch(() => { if (!disposed) setOutsideThreads([]); })
+      .finally(() => { if (!disposed) setOutsideLoading(false); });
     onCleanup(() => { disposed = true; });
   });
 
@@ -313,160 +347,174 @@ export function ProjectDashboard(props: {
     }
   };
 
-  const adoptBackendSession = async (sessionId: string) => {
-    if (adoptingSessionId()) return;
-    setAdoptingSessionId(sessionId);
-    try {
-      const adopted = await api<DashboardChat>(`/v0/projects/${encodeURIComponent(props.project.id)}/backend-sessions/${encodeURIComponent(sessionId)}/adopt`, { method: "POST" });
-      await props.onOpenChat(adopted, props.project);
-    } catch (adoptionError) {
-      props.onError((adoptionError as Error).message);
-    } finally {
-      setAdoptingSessionId("");
-    }
-  };
-
   const terminalActivity = (terminal: Pty) => relativeActivity(
     terminal.lastActivityAt || terminal.updatedAt || terminal.createdAt,
     now(),
   );
-  const terminalCwd = (terminal: Pty) => terminal.cwd || props.project.workingRoot || "Working directory unavailable";
   const git = createMemo(() => payload()?.git || null);
+  const changeTotals = createMemo(() => (payload()?.changes || []).reduce((sum, file) => ({
+    added: sum.added + (file.added ?? 0),
+    removed: sum.removed + (file.removed ?? 0),
+  }), { added: 0, removed: 0 }));
+  const workingRoot = () => payload()?.identity.workingRoot || props.project.workingRoot || "";
+  const showOutside = () => isWorkspace() && threadSide() === "outside";
+
+  const manageMenu = () => <Menu modal={false}>
+    <MenuTrigger class="workspace-dashboard-manage" aria-label={isWorkspace() ? "Manage workspace" : "Manage project"} title={isWorkspace() ? "Manage workspace" : "Manage project"}><EllipsisIcon /></MenuTrigger>
+    <MenuContent>
+      <MenuGroup>
+        <Show when={isWorkspace()}><MenuItem onSelect={() => setAppearanceOpen(true)}><PaletteIcon />Workspace identity</MenuItem></Show>
+        <MenuItem onSelect={props.onRename}><PencilIcon />Rename</MenuItem>
+        <MenuItem onSelect={() => props.onOpenSettings("workspaces", props.project.id)}><Settings2Icon />{isWorkspace() ? "Workspace settings" : "Project settings"}</MenuItem>
+      </MenuGroup>
+      <MenuSeparator />
+      <MenuItem variant="destructive" onSelect={props.onDelete}><Trash2Icon />{isWorkspace() ? "Unlink workspace" : "Delete project"}</MenuItem>
+      <Show when={isWorkspace()}><MenuItem variant="destructive" onSelect={() => setDestroyOpen(true)}><Trash2Icon />Delete workspace and files</MenuItem></Show>
+    </MenuContent>
+  </Menu>;
+
+  // Running chats stay in place; their dot and activity say they are live.
+  const chatRows = () => <Show when={visibleChats().length} fallback={<SplitEmpty>Nothing here yet.</SplitEmpty>}>
+    <For each={visibleChats()}>{(item) => {
+      const process = () => props.runtime.getProcess(item.id);
+      const live = () => process()?.active ? activityLabel(activityOf(process()) || "working", activityDetail(process())) : "";
+      return <ContextMenu><ContextMenuTrigger as={SplitRow} element="button" onPointerEnter={() => props.onPrefetchChat(item)} onFocus={() => props.onPrefetchChat(item)} onClick={() => void props.onOpenChat(item, props.project)}
+          lead={<RuntimeIndicator process={process()} stale={props.runtime.stale()} unread={item.unread} fallback={<ThreadHarnessMark id={item.harnessId} />} />}
+          primary={item.title || "Untitled chat"}
+          context={live() || item.lastMessagePreview}
+          trailing={<time dateTime={item.lastMessageAt || item.createdAt}>{relativeActivity(item.lastMessageAt || item.createdAt, now())}</time>} />
+        <ContextMenuContent class="w-60 sidebar-context-menu"><ContextMenuGroup>
+          <ContextMenuItem onSelect={() => props.onContextAction("rename-chat", { chat: item, project: props.project })}><PencilIcon />{commandLabel(COMMAND_IDS.renameChat)}</ContextMenuItem>
+          <ContextMenuItem onSelect={() => props.onContextAction("move-chat", { chat: item, project: props.project })}><FolderOpenIcon />Move to folder…</ContextMenuItem>
+          <ContextMenuItem onSelect={() => props.onContextAction("copy-chat", { chat: item })}><CopyIcon />{commandLabel(COMMAND_IDS.copyTranscript)}</ContextMenuItem>
+          <ContextMenuItem onSelect={() => props.onOpenChatTerminal(item, props.project)}><TerminalIcon />Open terminal</ContextMenuItem>
+          <Show when={isConduitManagedProject(props.project)}><ContextMenuItem onSelect={() => props.onContextAction("pin-chat", { chat: item })}><Show when={props.isPinned("chat", item.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show></ContextMenuItem></Show>
+        </ContextMenuGroup><ContextMenuSeparator /><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-chat", { chat: item, project: props.project })}><Trash2Icon />{commandLabel(COMMAND_IDS.deleteChat)}</ContextMenuItem></ContextMenuContent></ContextMenu>;
+    }}</For>
+  </Show>;
+
+  const outsideRows = () => <Show when={!outsideLoading()} fallback={<SplitEmpty><Spinner /><span>Looking for threads…</span></SplitEmpty>}>
+    <Show when={filteredOutside().length} fallback={<SplitEmpty>No threads outside Conduit in this workspace.</SplitEmpty>}>
+      <For each={filteredOutside()}>{(thread) =>
+        <SplitRow element="button" title={thread.preview || thread.title} onClick={() => props.onOpenHarnessThread?.(thread.harnessId, workingRoot(), thread.id, thread.title)}
+          lead={<HarnessMark id={thread.harnessId} />} primary={thread.title || "Untitled thread"} context={thread.preview}
+          trailing={thread.at ? relativeActivity(new Date(thread.at).toISOString(), now()) : ""} />}
+      </For>
+    </Show>
+  </Show>;
+
+  const threadsGroup = () => <SplitGroup id="dashboard-threads" order="list" heading={<Show when={isWorkspace()} fallback={<h2 id="dashboard-threads">Chats<small>{activeChatCount()}</small></h2>}>
+      <Segmented label="Threads" value={threadSide()} onChange={(value) => saveThreadSide(value as ThreadSide)} options={[
+        { value: "chats", label: "Chats", detail: <small>{activeChatCount()}</small> },
+        { value: "outside", label: "Not in Conduit", detail: <Show when={!outsideLoading()}><small>{outsideThreads().length}</small></Show> },
+      ]} />
+    </Show>} actions={<Show when={showOutside()} fallback={<>
+        <button type="button" title="Change sort" onClick={() => saveChatSort(chatSort() === "latest" ? "created" : "latest")}>{chatSort() === "latest" ? "Latest" : "Created"}</button>
+        <button type="button" aria-label={`Search chats in ${props.project.name}`} title="Search chats" onClick={props.onSearchChats}><SearchIcon /></button>
+      </>}>
+      <Show when={outsideHarnesses().length > 1}>
+        <Menu modal={false}>
+          <MenuTrigger>{outsideHarnesses().find((harness) => harness.id === outsideFilter())?.label || "All harnesses"}<ChevronDownIcon /></MenuTrigger>
+          <MenuContent>
+            <MenuItem onSelect={() => setOutsideFilter("")}>All harnesses</MenuItem>
+            <For each={outsideHarnesses()}>{(harness) => <MenuItem onSelect={() => setOutsideFilter(harness.id)}><HarnessMark id={harness.id} />{harness.label}</MenuItem>}</For>
+          </MenuContent>
+        </Menu>
+      </Show>
+    </Show>}>
+    <Show when={showOutside()} fallback={chatRows()}>{outsideRows()}</Show>
+  </SplitGroup>;
+
+  const terminalsGroup = () => <SplitGroup id="dashboard-terminals" label="Terminals" count={scopedTerminals().length} busy={terminalsLoading()} actions={<button type="button" onClick={() => props.onOpenView("terminal")}>Open</button>}>
+    <Show when={scopedTerminals().length} fallback={<SplitEmpty>{terminalsLoading() ? "Loading terminals…" : "No live terminals."}</SplitEmpty>}>
+      <For each={scopedTerminals()}>{(terminal) =>
+        <ContextMenu><ContextMenuTrigger as={SplitRow} element="button" onPointerEnter={props.onPrefetchTerminal} onFocus={props.onPrefetchTerminal} onClick={() => props.onOpenTerminal(terminal)}
+            lead={<TerminalIcon />} primary={terminal.title || "Shell"} context={terminal.currentCommand || "shell"} trailing={terminalActivity(terminal)} />
+          <ContextMenuContent class="w-52 sidebar-context-menu"><ContextMenuGroup>
+            <ContextMenuItem onSelect={() => props.onOpenTerminalMaximized(terminal)}><TerminalIcon />Open maximized</ContextMenuItem>
+            <ContextMenuItem onSelect={() => props.onContextAction("rename-terminal", { terminal })}><PencilIcon />Rename</ContextMenuItem>
+          </ContextMenuGroup><ContextMenuSeparator /><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-terminal", { terminal })}><Trash2Icon />Destroy shell</ContextMenuItem></ContextMenuContent></ContextMenu>}
+      </For>
+    </Show>
+  </SplitGroup>;
+
+  // Uncommitted work against HEAD, staged and unstaged together, drawn with
+  // the workspace panel's change rows.
+  const changesGroup = () => <SplitGroup id="dashboard-changes" label="Changes" count={git()?.changedFiles ?? 0} actions={<Show when={git()?.changedFiles}><SplitCounts {...changeTotals()} /></Show>}>
+    <Show when={payload()?.changes.length} fallback={<SplitEmpty>{payload() ? "Working tree clean." : "Loading…"}</SplitEmpty>}>
+      <For each={payload()!.changes}>{(file) => {
+        const name = file.path.replace(/\/$/, "").split("/").at(-1) ?? file.path;
+        const directory = file.path.replace(/\/$/, "").split("/").slice(0, -1).join("/");
+        const status = file.status === "??" ? "U" : file.status.trim().charAt(0);
+        return <button type="button" class="split-row split-change-row" title={file.path} onClick={() => props.onOpenView("diff")}>
+          <FileTypeIcon name={name} />
+          <span class="workspace-change-name">{name}</span>
+          <span class="workspace-change-directory">{directory}</span>
+          <Show when={file.added != null} fallback={<small class="workspace-change-counts">—</small>}>
+            <small class="workspace-change-counts"><span class="workspace-git-removed">−{file.removed}</span><span class="workspace-git-added">+{file.added}</span></small>
+          </Show>
+          <code data-status={status}>{status}</code>
+        </button>;
+      }}</For>
+    </Show>
+  </SplitGroup>;
+
+  const filesGroup = () => <SplitGroup id="dashboard-files" label="Files" actions={<button type="button" onClick={() => props.onOpenView("files")}>Browse</button>}>
+    <Show when={payload()?.recentFiles.length} fallback={<SplitEmpty>{payload() ? "No files yet." : "Loading…"}</SplitEmpty>}>
+      <For each={payload()!.recentFiles}>{(file) =>
+        <SplitRow element="button" onClick={() => props.onOpenView("files")} lead={<FileTypeIcon name={file.name} />} primary={file.name} trailing={relativeActivity(file.modifiedAt, now())} />}
+      </For>
+    </Show>
+  </SplitGroup>;
 
   return <>
-    <DashboardShell class="workspace-dashboard" label={`${props.project.name} dashboard`}>
-      <DashboardIdentity title={props.project.name} kind={kindLabel(props.project)} glyph={<Show when={isWorkspace()} fallback={<FolderGit2Icon />}><WorkspaceGlyph appearance={activeAppearance()} /></Show>} subtitle={
-        <button type="button" class="workspace-dashboard-path" title="Copy working path" onClick={() => void copyPath()}>
-              <code>{payload()?.identity.workingRoot || props.project.workingRoot || "Working path unavailable"}</code>
-              <CopyIcon />
-              <Show when={copied()}><em>Copied</em></Show>
-        </button>
-      } actions={<Menu modal={false}>
-          <MenuTrigger class="workspace-dashboard-manage" aria-label="Manage workspace" title="Manage workspace"><EllipsisIcon /></MenuTrigger>
-          <MenuContent>
-            <MenuGroup>
-              <Show when={isWorkspace()}><MenuItem onSelect={() => setAppearanceOpen(true)}><PaletteIcon />Workspace identity</MenuItem></Show>
-              <MenuItem onSelect={props.onRename}><PencilIcon />Rename</MenuItem>
-              <MenuItem onSelect={() => props.onOpenSettings("workspaces", props.project.id)}><Settings2Icon />Workspace settings</MenuItem>
-            </MenuGroup>
-            <MenuSeparator />
-            <MenuItem variant="destructive" onSelect={props.onDelete}><Trash2Icon />{isWorkspace() ? "Unlink workspace" : "Delete project"}</MenuItem>
-            <Show when={isWorkspace()}><MenuItem variant="destructive" onSelect={() => setDestroyOpen(true)}><Trash2Icon />Delete workspace and files</MenuItem></Show>
-          </MenuContent>
-        </Menu>} />
+    <SplitDashboard class="workspace-dashboard" label={`${props.project.name} dashboard`}
+      header={<SplitHeader title={props.project.name} kind={kindLabel(props.project)}
+        glyph={<Show when={isWorkspace()} fallback={<FolderGit2Icon />}><WorkspaceGlyph appearance={activeAppearance()} /></Show>}
+        context={[
+          <button type="button" title="Copy working path" onClick={() => void copyPath()}><code>{copied() ? "Copied" : workingRoot() || "Working path unavailable"}</code></button>,
+          git() && <>{git()!.branch}{git()!.upstream ? ` → ${git()!.upstream}` : ""}</>,
+          git() && (git()!.ahead || git()!.behind) ? [git()!.ahead && `${git()!.ahead} ahead`, git()!.behind && `${git()!.behind} behind`].filter(Boolean).join(", ") : null,
+          !isWorkspace() && `last active ${relativeActivity(payload()?.stats.lastActivityAt, now()).toLowerCase()}`,
+        ]} />}
+      shortcuts={<SplitShortcuts>
+        <SplitShortcut icon={<FolderOpenIcon />} label="Files" onClick={() => props.onOpenView("files")} />
+        <Show when={isWorkspace()} fallback={<SplitShortcut icon={<SearchIcon />} label="Search chats" onClick={props.onSearchChats} />}>
+          <SplitShortcut icon={<GitCompareArrowsIcon />} label="Changes" onClick={() => props.onOpenView("diff")} />
+        </Show>
+        <Show when={isWorkspace()} fallback={<SplitShortcut icon={<CopyIcon />} label="Copy path" onClick={() => void copyPath()} />}>
+          <SplitShortcut icon={<TerminalIcon />} label="Terminal" onClick={() => props.onOpenView("terminal")} />
+        </Show>
+        <SplitShortcut icon={<Settings2Icon />} label="Settings" onClick={() => props.onOpenSettings("workspaces", props.project.id)} />
+        {manageMenu()}
+      </SplitShortcuts>}
+      notice={cloning() || (error() && !cloning()) ? <>
+        <Show when={cloning()}>
+          <section class="clone-progress" aria-live="polite">
+            <div class="clone-progress-heading"><Spinner /><div><strong>{operation()?.state === "cancelling" ? "Cancelling clone" : "Cloning workspace"}</strong><p>Closing this tab does not stop the operation.</p></div></div>
+            <div class="clone-progress-path"><span>Destination</span><code>{props.project.workingRoot}</code></div>
+            <pre aria-label="Clone output preview">{operation()?.diagnostic || "Preparing clone…"}</pre>
+            <Button variant="destructive" size="sm" disabled={cancellingClone()} onClick={() => void cancelClone()}><XIcon />{cancellingClone() ? "Cancelling…" : "Cancel clone"}</Button>
+          </section>
+        </Show>
+        <Show when={error() && !cloning()}>
+          <div class="project-dashboard-error" role="alert"><strong>Dashboard details could not be loaded</strong><span>{error()}</span></div>
+        </Show>
+      </> : undefined}
+      composer={cloning() ? undefined : props.composer}
+      list={<Show when={!cloning()}>{threadsGroup()}</Show>}
+      aside={<Show when={!cloning()}>
+        <Show when={isWorkspace()}>{terminalsGroup()}</Show>
+        <Show when={git()} fallback={filesGroup()}>{changesGroup()}</Show>
+      </Show>} />
 
-      <Show when={cloning()}>
-        <section class="clone-progress" aria-live="polite">
-          <div class="clone-progress-heading"><Spinner /><div><strong>{operation()?.state === "cancelling" ? "Cancelling clone" : "Cloning workspace"}</strong><p>Closing this tab does not stop the operation.</p></div></div>
-          <div class="clone-progress-path"><span>Destination</span><code>{props.project.workingRoot}</code></div>
-          <pre aria-label="Clone output preview">{operation()?.diagnostic || "Preparing clone…"}</pre>
-          <Button variant="destructive" size="sm" disabled={cancellingClone()} onClick={() => void cancelClone()}><XIcon />{cancellingClone() ? "Cancelling…" : "Cancel clone"}</Button>
-        </section>
-      </Show>
-
-      <Dialog open={appearanceOpen()} onOpenChange={(open) => { if (!savingAppearance()) setAppearanceOpen(open); }}>
-        <DialogContent class="workspace-appearance-dialog" title="Workspace identity" description="Choose a short mark or a Lucide icon, then choose a preset or custom color.">
-          <Show when={appearanceOpen()}>
-            <WorkspaceAppearanceEditor compact value={activeAppearance()} saving={savingAppearance()} onSave={(appearance) => void saveAppearance(appearance)} />
-          </Show>
-        </DialogContent>
-      </Dialog>
-
-      <Show when={error() && !cloning()}>
-        <div class="project-dashboard-error" role="alert"><strong>Dashboard details could not be loaded</strong><span>{error()}</span></div>
-      </Show>
-
-      <Show when={!cloning()}>
-        <DashboardLaunch primary={props.composer} aside={<DashboardQuickActions label="Workspace actions">
-            <button type="button" onClick={() => props.onOpenView("files")}><FolderOpenIcon /><strong>Files</strong><ArrowRightIcon /></button>
-            <Show when={isWorkspace()} fallback={<button type="button" onClick={props.onSearchChats}><SearchIcon /><strong>Search chats</strong><ArrowRightIcon /></button>}>
-              <button type="button" onClick={() => props.onOpenView("diff")}><GitCompareArrowsIcon /><strong>Changes</strong><ArrowRightIcon /></button>
-            </Show>
-            <Show when={isWorkspace()} fallback={<button type="button" onClick={() => void copyPath()}><CopyIcon /><strong>Copy path</strong><ArrowRightIcon /></button>}>
-              <button type="button" onClick={() => props.onOpenView("terminal")}><TerminalIcon /><strong>Terminal</strong><ArrowRightIcon /></button>
-            </Show>
-            <button type="button" onClick={() => props.onOpenSettings("workspaces", props.project.id)}><Settings2Icon /><strong>Settings</strong><ArrowRightIcon /></button>
-          </DashboardQuickActions>} />
-
-        <DashboardGrid primary={<DashboardSection scrollable class="workspace-dashboard-chats" id="workspace-recent-chats" title="Recent chats" description={activeChatCount() > 10 ? "10 most recent in this workspace" : "Conversations in this workspace"} actions={
-              <div class="workspace-dashboard-chat-actions">
-                <DashboardControlGroup label="Recent chat sort">
-                  <button type="button" aria-pressed={chatSort() === "latest"} onClick={() => saveChatSort("latest")}>Latest</button>
-                  <button type="button" aria-pressed={chatSort() === "created"} onClick={() => saveChatSort("created")}>Created</button>
-                </DashboardControlGroup>
-                <DashboardSearchButton aria-label={`Search chats in ${props.project.name}`} title="Search workspace chats" onClick={props.onSearchChats}><SearchIcon /></DashboardSearchButton>
-              </div>}>
-            <Show when={visibleChats().length} fallback={<DashboardEmpty>Nothing here yet.</DashboardEmpty>}>
-              <DashboardScrollRegion class="project-chat-list">
-                <For each={visibleChats()}>{(item) =>
-                  <ContextMenu><ContextMenuTrigger as={DashboardRow} element="button" onPointerEnter={() => props.onPrefetchChat(item)} onFocus={() => props.onPrefetchChat(item)} onClick={() => void props.onOpenChat(item, props.project)} leading={<RuntimeIndicator process={props.runtime.getProcess(item.id)} stale={props.runtime.stale()} unread={item.unread} fallback={<ThreadHarnessMark id={item.harnessId} />} />} content={<>
-                      <DashboardRowTitle title={item.title || "Untitled chat"} context={`${props.project.name}${compactDate(item.createdAt) ? ` · ${compactDate(item.createdAt)}` : ""}`} />
-                      <Show when={item.lastMessagePreview}><small>{item.lastMessagePreview}</small></Show>
-                    </>} meta={<time dateTime={item.lastMessageAt || item.createdAt}>{relativeActivity(item.lastMessageAt || item.createdAt, now())}</time>} trailing={<ArrowRightIcon />} /><ContextMenuContent class="w-60 sidebar-context-menu"><ContextMenuGroup>
-                    <ContextMenuItem onSelect={() => props.onContextAction("rename-chat", { chat: item, project: props.project })}><PencilIcon />{commandLabel(COMMAND_IDS.renameChat)}</ContextMenuItem>
-                    <ContextMenuItem onSelect={() => props.onContextAction("move-chat", { chat: item, project: props.project })}><FolderOpenIcon />Move to folder…</ContextMenuItem>
-                    <ContextMenuItem onSelect={() => props.onContextAction("copy-chat", { chat: item })}><CopyIcon />{commandLabel(COMMAND_IDS.copyTranscript)}</ContextMenuItem>
-                    <ContextMenuItem onSelect={() => props.onOpenChatTerminal(item, props.project)}><TerminalIcon />Open terminal</ContextMenuItem>
-                    <Show when={isConduitManagedProject(props.project)}><ContextMenuItem onSelect={() => props.onContextAction("pin-chat", { chat: item })}><Show when={props.isPinned("chat", item.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show></ContextMenuItem></Show>
-                  </ContextMenuGroup><ContextMenuSeparator /><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-chat", { chat: item, project: props.project })}><Trash2Icon />{commandLabel(COMMAND_IDS.deleteChat)}</ContextMenuItem></ContextMenuContent></ContextMenu>}
-                </For>
-              </DashboardScrollRegion>
-            </Show>
-          </DashboardSection>} rail={<>
-            <DashboardSection class="workspace-dashboard-backend-sessions" id="workspace-codex-sessions-title" title="Codex sessions" description="Untracked sessions in this workspace">
-              <Show when={!backendSessionsLoading()} fallback={<DashboardEmpty><Spinner /><span>Finding sessions…</span></DashboardEmpty>}>
-                <Show when={backendSessions()?.adoptable.length} fallback={<DashboardEmpty>No untracked Codex sessions.</DashboardEmpty>}>
-                  <div class="workspace-dashboard-session-list">
-                    <For each={backendSessions()!.adoptable.slice(0, 5)}>{(session) => <DashboardRow class="workspace-dashboard-session-row" content={<><strong>{session.title}</strong><small>Codex · full history</small></>} trailing={<Button variant="outline" size="sm" disabled={Boolean(adoptingSessionId())} onClick={() => void adoptBackendSession(session.id)}>{adoptingSessionId() === session.id ? <Spinner /> : null}Track</Button>} />}</For>
-                  </div>
-                </Show>
-              </Show>
-            </DashboardSection>
-            <Show when={isWorkspace()} fallback={
-              <DashboardSection class="workspace-dashboard-scope" id="workspace-scope-title" title="Project scope" description="Managed by Conduit">
-                <dl>
-                  <div><dt>Chats</dt><dd>{payload()?.stats.activeChats ?? props.project.sessions.length}</dd></div>
-                  <div><dt>Live now</dt><dd>{payload()?.stats.liveChats ?? 0}</dd></div>
-                  <div><dt>Last activity</dt><dd>{relativeActivity(payload()?.stats.lastActivityAt, now())}</dd></div>
-                </dl>
-              </DashboardSection>
-            }>
-              <DashboardSection class="workspace-dashboard-repository" id="workspace-repository-title" title="Repository" description={git()?.branch || (payload() ? "No Git repository" : "Loading…")} actions={<Show when={git()}><button type="button" onClick={() => props.onOpenView("diff")}>Open changes <ArrowRightIcon /></button></Show>}>
-                <Show when={git()} fallback={<DashboardEmpty>No Git repository detected.</DashboardEmpty>}>
-                  <div class="workspace-dashboard-repository-state">
-                    <div><strong>{git()!.branch}</strong><small>{git()!.upstream || "No upstream"}</small></div>
-                    <dl>
-                      <div><dt>Changed</dt><dd>{git()!.changedFiles}</dd></div>
-                      <div><dt>Ahead</dt><dd>{git()!.ahead}</dd></div>
-                      <div><dt>Behind</dt><dd>{git()!.behind}</dd></div>
-                    </dl>
-                  </div>
-                </Show>
-              </DashboardSection>
-
-              <DashboardSection class="workspace-dashboard-terminals" id="workspace-terminals-title" title="Live terminals" description={`${scopedTerminals().length || "No"} running in ${props.project.name}`}>
-                <Show when={!terminalsLoading()} fallback={<DashboardEmpty><Spinner /><span>Loading terminals…</span></DashboardEmpty>}>
-                  <Show when={liveTerminals().length} fallback={<DashboardEmpty>No live terminals.</DashboardEmpty>}>
-                    <div class="workspace-dashboard-terminal-list">
-                      <For each={liveTerminals()}>{(terminal) =>
-                        <ContextMenu><ContextMenuTrigger as={DashboardRow} element="button" onPointerEnter={props.onPrefetchTerminal} onFocus={props.onPrefetchTerminal} onClick={() => props.onOpenTerminal(terminal)} leading={<TerminalIcon />} content={<>
-                            <strong>{terminal.title || "Shell"}</strong>
-                            <small title={`${terminal.currentCommand || "shell"} · ${terminalActivity(terminal)} · ${terminalCwd(terminal)}`}>
-                              {terminal.currentCommand || "shell"} · {terminalActivity(terminal)} · <code>{terminalCwd(terminal)}</code>
-                            </small>
-                          </>} trailing={<ArrowRightIcon />} /><ContextMenuContent class="w-52 sidebar-context-menu"><ContextMenuGroup>
-                          <ContextMenuItem onSelect={() => props.onOpenTerminalMaximized(terminal)}><TerminalIcon />Open maximized</ContextMenuItem>
-                          <ContextMenuItem onSelect={() => props.onContextAction("rename-terminal", { terminal })}><PencilIcon />Rename</ContextMenuItem>
-                        </ContextMenuGroup><ContextMenuSeparator /><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-terminal", { terminal })}><Trash2Icon />Destroy shell</ContextMenuItem></ContextMenuContent></ContextMenu>}
-                      </For>
-                    </div>
-                  </Show>
-                </Show>
-              </DashboardSection>
-            </Show>
-          </>} />
-      </Show>
-    </DashboardShell>
+    <Dialog open={appearanceOpen()} onOpenChange={(open) => { if (!savingAppearance()) setAppearanceOpen(open); }}>
+      <DialogContent class="workspace-appearance-dialog" title="Workspace identity" description="Choose a short mark or a Lucide icon, then choose a preset or custom color.">
+        <Show when={appearanceOpen()}>
+          <WorkspaceAppearanceEditor compact value={activeAppearance()} saving={savingAppearance()} onSave={(appearance) => void saveAppearance(appearance)} />
+        </Show>
+      </DialogContent>
+    </Dialog>
 
     <KAlertDialog.Root open={destroyOpen()} onOpenChange={(open) => { if (!destroying()) setDestroyOpen(open); }}>
       <KAlertDialog.Portal><KAlertDialog.Content class="conduit-modal" onEscapeKeyDown={(event) => { if (destroying()) event.preventDefault(); }}>

@@ -9,7 +9,7 @@ import "./settings-controls.css";
 export function Segmented<T extends string>(props: {
   label: string;
   value: T;
-  options: ReadonlyArray<{ value: T; label: string; icon?: JSX.Element; title?: string }>;
+  options: ReadonlyArray<{ value: T; label: string; icon?: JSX.Element; title?: string; detail?: JSX.Element }>;
   onChange: (value: T) => void;
   disabled?: boolean;
   id?: string;
@@ -43,7 +43,7 @@ export function Segmented<T extends string>(props: {
         tabIndex={option.value === props.value ? 0 : -1}
         disabled={props.disabled}
         onClick={() => option.value !== props.value && props.onChange(option.value)}
-      >{option.icon}<span>{option.label}</span></button>
+      >{option.icon}<span>{option.label}</span>{option.detail}</button>
     }</For>
   </div>;
 }

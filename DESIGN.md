@@ -135,7 +135,7 @@ components:
 
 # Overview
 
-Conduit is a self-hosted, always-dark agent control plane. The look is charcoal and quiet: a darker frame, inset rounded panes, plain lists grouped by a heading and space -- the sidebar is the reference -- and frosted glass floating chrome. The hairline tiles Conduit started with are being retired; they remain on the dashboard and in the workspace panel until those are redesigned (`docs/dashboard-redesign.md`). It is not a marketing site, not a light theme, and not a colorful dashboard.
+Conduit is a self-hosted, always-dark agent control plane. The look is charcoal and quiet: a darker frame, inset rounded panes, plain lists grouped by a heading and space -- the sidebar is the reference -- and frosted glass floating chrome. The hairline tiles Conduit started with are being retired; they remain on the Conduit dashboard and in the workspace panel until those are redesigned (`docs/dashboard-redesign.md`). It is not a marketing site, not a light theme, and not a colorful dashboard.
 
 The accepted surfaces are the app dashboard, the chat/workspace split, the frosted composer, the header action pill, and the model-picker palette. Copy those patterns. Frosted glass is the signature material — prefer it for floating, transient, or hero chrome, not just the composer.
 
@@ -210,6 +210,14 @@ Dashboard composition (canonical):
 - Below: one tall tiled list (recent chats) spanning two rows, two stacked tiles on the right (workspaces, terminals).
 - Section heading is a 48px hairline header: title + 9px muted subtitle, trailing quiet controls.
 - Rows are 43px, icon + copy + chevron, hover = accent wash.
+
+Project and workspace dashboard composition (`dashboard/primitives/split.tsx`), listed content with no tiles:
+
+- A header across the top: glyph, name with its kind beside it, and one muted line of context written as words (path, branch → upstream, ahead/behind). Quiet text shortcuts sit at its right: the old quick actions (Files, Changes or Search chats, Terminal or Copy path, Settings) and the manage ⋯.
+- Two columns when the pane is 760px or wider: the composer with the threads list under it at the composer's width, then the rest (Terminals for a workspace; Changes for a repository, or recent Files for a folder) at the right. Each column scrolls on its own.
+- A workspace's threads list switches between Chats and Not in Conduit (threads its harnesses ran here that no Conduit chat owns) with a segmented control; the side is remembered per workspace. Running chats stay in the list, marked by the runtime dot and their activity.
+- Changes rows are the workspace panel's change rows: file mark, name, folder, −/+ line counts, status letter.
+- Narrower, one column: header, composer, threads, the rest. On a phone the shortcuts become a row of large targets and the composer docks at the foot.
 
 Chat composition:
 

@@ -6,13 +6,13 @@ import type { ChatSummary, RuntimeProcess } from "../api/contracts";
 
 type Activity = string;
 
-const activityOf = (process: RuntimeProcess | null | undefined): Activity | null => {
+export const activityOf = (process: RuntimeProcess | null | undefined): Activity | null => {
   if (!process) return null;
   const raw = typeof process.activity === "string" ? process.activity : process.activity?.kind;
   return raw || (process.status === "starting" ? "starting" : process.active ? "working" : "idle");
 };
 
-const activityDetail = (process: RuntimeProcess | null | undefined): string | null => {
+export const activityDetail = (process: RuntimeProcess | null | undefined): string | null => {
   const value = process?.activity;
   return value && typeof value === "object" ? value.label || null : null;
 };

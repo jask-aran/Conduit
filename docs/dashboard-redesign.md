@@ -1,6 +1,6 @@
 # Dashboard redesign
 
-Status: seeded, not designed. Moved out of `ui-polish-sketch.md` on
+Status: project and workspace dashboards built; the app dashboard is not yet designed. Moved out of `ui-polish-sketch.md` on
 2026-09-24 because the dashboards need an overhaul rather than more polish:
 the wish is to redesign them and arrive at a more concrete design before
 anything else is fitted to them. Keyboard navigation of their lists was the
@@ -16,7 +16,11 @@ visual language; the design here is to be written.
 The app dashboard is an intro title ("Start where the work is."), a launch
 row -- the composer, with a Search chats quick action beside it -- and a grid
 of sections: Recent chats, Recent Workspaces and Live terminals. The project
-dashboard is the same shape, scoped to one project.
+project and workspace dashboards are built: a header with the context line
+and text shortcuts, the composer with the threads list under it on the left,
+and Terminals and Changes (or recent Files) on the right; one column on a
+narrow pane. `DESIGN.md` describes the composition. The app dashboard keeps
+the tiles until it is redesigned; harness dashboards are designed separately.
 
 ## Carried over from the polish doc
 
