@@ -46,6 +46,10 @@
 <h1>Orb catalogue</h1>
 <p>Every frame the turn orb can draw: the thinking-orbs library's animations and the stills its own options hold them at, and the frames made for Conduit from the engine's pieces. Then each state a turn's header shows, with the orb it uses.</p>
 
+<h2>Prototype — the stop-start sphere, for Interrupted and Failed</h2>
+<p>The plain sphere in the destructive tint, turning in fits and starts rather than smoothly, from softest to most broken. Each enlarged, then as it would sit in both headers.</p>
+<table id="prototypes"></table>
+
 <h2>Library — animations</h2>
 <p>The 20px preset of each, at t = 0.3, 0.9, 1.5, 2.1, 2.7 and 3.3s, then playing.</p>
 <table id="library"></table>
@@ -59,12 +63,12 @@
 <div class="cards" id="created"></div>
 
 <h2>In the app</h2>
-<p>Each state of a turn's header, with its orb as it plays there; settled turns are still. Listening is kept for dictation; breathing is unused.</p>
+<p>Each state of a turn's header, with its orb as it plays there: Done turns; Interrupted and Failed hold still. Listening is kept for dictation; breathing is unused.</p>
 <table id="app"></table>
 
 <script type="module">
 import { paintFrame } from "../../conduit-web/node_modules/thinking-orbs/dist/engine.es.js";
-import { CREATED, IN_APP, LIBRARY, LIBRARY_HELD } from "./catalogue.js";
+import { CREATED, IN_APP, LIBRARY, LIBRARY_HELD, PROTOTYPES } from "./catalogue.js";
 
 const DPR = 4;
 const MOMENTS = [0.3, 0.9, 1.5, 2.1, 2.7, 3.3];
@@ -115,15 +119,21 @@ function cards(id, rows, play) {
 cards("held", LIBRARY_HELD, false);
 cards("created", CREATED, true);
 
-function header(verb, line, at, { settled = false, tint = false } = {}) {
+function header(verb, line, at, { settled = false, tint = false, play = !settled } = {}) {
   const lines = el("div", "lines");
   const time = settled ? "7m 16s · 10 fetches, 4 searches" : "42s";
   lines.innerHTML = `<div class="line1"><b>${verb}</b> · ${time}</div><div class="line2">${line || "&nbsp;"}</div>`;
-  return el("div", "header dark-bg", orb(at, 20, { tint, play: !settled }), lines);
+  return el("div", "header dark-bg", orb(at, 20, { tint, play }), lines);
 }
 for (const [verb, line, source, at, show] of IN_APP) {
   const tr = el("tr", "", el("td", "", header(verb, line, at, show)), el("td", `source${source.startsWith("created") ? " created" : ""}`, source));
   document.getElementById("app").append(tr);
+}
+
+for (const [name, what, at] of PROTOTYPES) {
+  document.getElementById("prototypes").append(el("tr", "", label(name, what), el("td", "", orb(at, 72, { tint: true, play: true })),
+    el("td", "", header("Interrupted", "Clarifying room availability and pricing details", at, { settled: true, tint: true, play: true })),
+    el("td", "", header("Failed", "The provider returned an error", at, { settled: true, tint: true, play: true }))));
 }
 
 window.done = true;

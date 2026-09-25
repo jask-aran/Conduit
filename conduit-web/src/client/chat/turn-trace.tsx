@@ -5,7 +5,7 @@ import type { Message, ToolItem, ToolKind } from "../api/contracts";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
 import { KIND_ICONS, stepDuration, ToolStep, VERBS } from "./tool-card";
 import "./turn-trail.css";
-import { ORB_AT_REST } from "./orb-stills";
+import { PLAIN_SPHERE } from "./orb-stills";
 import { ThinkingOrb, type ModeFrame, type OrbState } from "./thinking-orb";
 import { Disclosure } from "./disclosure";
 import type { MarkdownRendererId } from "./markdown-settings";
@@ -224,11 +224,11 @@ const KIND_ORBS: Record<ToolKind, OrbState> = {
   command: "solving", read: "weaving", edit: "shaping", search: "searching", fetch: "searching", other: "solving",
 };
 
-function statusOf(trace: TurnTraceData, writing: boolean): { verb: string; orb: OrbState; still?: ModeFrame } {
-  // Settled, the orb is a still: the orb at rest.
+function statusOf(trace: TurnTraceData, writing: boolean): { verb: string; orb: OrbState; frame?: ModeFrame } {
+  // Settled, the orb is the plain sphere.
   if (!trace.active) {
     const verb = ({ interrupted: "Interrupted", failed: "Failed" } as Record<string, string>)[trace.status] || "Done";
-    return { verb, orb: "working", still: ORB_AT_REST };
+    return { verb, orb: "working", frame: PLAIN_SPHERE };
   }
   const running = trace.segments.flatMap((segment) => segment.kind === "tool" && !segment.tool.done ? [segment.tool] : []);
   if (running.length > 1) return { verb: `Running ${running.length} tools`, orb: "solving" };
@@ -308,16 +308,15 @@ function turnTime(trace: () => Pick<TurnTraceData, "active" | "startedAt" | "end
 export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sessionId: string | null; renderer?: MarkdownRendererId; pacing?: IncremarkPacingMode; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void }) {
   const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
   const time = turnTime(() => props.trace);
+  const unfinished = () => !props.trace.active && (props.trace.status === "failed" || props.trace.status === "interrupted");
   return <Disclosure class="turn-trace" data-active={props.trace.active ? "true" : "false"} headerClass="turn-trace-header" bodyClass="turn-trace-body"
     initialOpen={props.initialOpen} onOpenChange={props.onOpenChange}
     header={<>
       {/* One box, live and settled, so nothing beside it moves when the turn
-          ends. A turn that did not finish -- stopped or failed -- tints the orb. */}
+          ends. A turn that did not finish -- stopped or failed -- tints the
+          orb and holds it still; a finished one's sphere turns. */}
       <span class="turn-trace-mark">
-        {/* Settled it is still, pointer or not: movement is what says a turn
-            is working. */}
-        <ThinkingOrb state={preview().status.orb} frame={preview().status.still} paused={!props.trace.active}
-          tint={!props.trace.active && (props.trace.status === "failed" || props.trace.status === "interrupted") ? "var(--destructive)" : undefined} />
+        <ThinkingOrb state={preview().status.orb} frame={preview().status.frame} paused={unfinished()} tint={unfinished() ? "var(--destructive)" : undefined} />
       </span>
       <div class="turn-trace-preview">
         {/* Two lines: what it is doing, and its latest step. The first is

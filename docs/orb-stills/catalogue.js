@@ -55,10 +55,31 @@ const gapped = (frame, at, half) => ({ ...frame, dots: frame.dots.filter((d) => 
 const SPIN = 0.5;
 const ease = (t, rate) => 0.5 - 0.5 * Math.cos(t * rate);
 
-function plainSphere(t = 0) {
-  const pt = makeProj(0.55 + t * SPIN, 0.42, C, C, R);
+function sphereAt(yaw) {
+  const pt = makeProj(yaw, 0.42, C, C, R);
   return finalizeFrame(lattice(6, 17).map(({ p }) => { const [x, y, z] = pt(...p); return shade(x, y, z, (z + 1) / 2); }), [], 0.3);
 }
+const plainSphere = (t = 0) => sphereAt(0.55 + t * SPIN);
+
+/* How far the sphere has turned by `t`, told as a loop of segments:
+   [seconds, radians, easing]. A segment without radians is a hold. */
+const smooth = (x) => x * x * (3 - 2 * x);
+const easeOut = (x) => 1 - (1 - x) ** 3;
+const backOut = (x) => 1 + 2.7 * (x - 1) ** 3 + 1.7 * (x - 1) ** 2;
+function turning(segments) {
+  const period = segments.reduce((sum, [seconds]) => sum + seconds, 0);
+  const lap = segments.reduce((sum, [, radians = 0]) => sum + radians, 0);
+  return (t) => {
+    const loops = Math.floor(t / period);
+    let rest = t - loops * period, angle = loops * lap;
+    for (const [seconds, radians = 0, ease = smooth] of segments) {
+      if (rest < seconds) return angle + radians * ease(rest / seconds);
+      angle += radians; rest -= seconds;
+    }
+    return angle;
+  };
+}
+const stopStart = (angle) => (t = 0) => sphereAt(0.55 + angle(t));
 
 function fibonacciSphere(t) {
   const n = 64, dots = [];
@@ -192,6 +213,16 @@ export const CREATED = [
   ["circle with a gap", "the library's circle with an arc of dots removed", (t = 0) => gapped(still("shaping", { shape: 0 })(), -Math.PI / 4 + t * 2.4, 0.75)],
 ];
 
+/* Prototypes for a turn that did not finish: the plain sphere turning in
+   fits and starts, from softest to most broken. */
+export const PROTOTYPES = [
+  ["pulsing", "turns and eases to a stop, over and over, evenly", stopStart((t) => SPIN * (t - Math.sin(t * 2.2) / 2.2))],
+  ["ratchet", "a twelfth of a turn, then a hold, like a clock's hand", stopStart(turning([[0.3, TAU / 12], [0.7]]))],
+  ["coasting", "pushed, then slowing to rest before the next push", stopStart(turning([[2.2, 1.5, easeOut], [0.9]]))],
+  ["stalling", "turns, stops for a while, starts again, never evenly", stopStart(turning([[1.1, 0.8], [0.9], [0.45, 0.22], [1.3], [0.8, 0.5], [0.5]]))],
+  ["sputtering", "short jolts that overshoot and settle, one backwards", stopStart(turning([[0.16, 0.26, backOut], [0.55], [0.12, 0.14, backOut], [1.0], [0.2, -0.07], [0.35], [0.14, 0.3, backOut], [1.2]]))],
+];
+
 /* Each state a turn's header shows, the orb it shows it with, and a line of
    the kind that sits under it. */
 export const IN_APP = [
@@ -205,7 +236,7 @@ export const IN_APP = [
   ["Using get_search_content", "Any tool without a kind of its own", "library · solving", animation("solving")],
   ["Running 3 tools", "Several at once", "library · solving", animation("solving")],
   ["Writing", "Weighing Shirakawa-go against Gokayama", "library · composing", animation("composing")],
-  ["Done", "Fetched yusuke-gokayama.com/en/guesthouse/", "created · plain sphere", plainSphere, { settled: true }],
+  ["Done", "Fetched yusuke-gokayama.com/en/guesthouse/", "created · plain sphere, turning", plainSphere, { settled: true, play: true }],
   ["Interrupted", "Clarifying room availability and pricing details", "created · plain sphere, destructive tint", plainSphere, { settled: true, tint: true }],
   ["Failed", "The provider returned an error", "created · plain sphere, destructive tint", plainSphere, { settled: true, tint: true }],
 ];

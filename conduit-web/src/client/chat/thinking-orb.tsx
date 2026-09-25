@@ -15,7 +15,8 @@ export type { ModeFrame, ModeOpts, OrbState };
  * both still moving, so there is never a frame with nothing in it. Paused --
  * a settled turn, or reduced motion -- it is one still frame, and changes
  * without a fade. `frame` replaces the state's geometry outright, for a
- * still drawn in the engine's terms rather than taken from an animation.
+ * frame drawn in the engine's terms rather than taken from the library; it
+ * is given plain seconds, not the state's preset speed.
  */
 const SIZE = 20;
 const DWELL_MS = 250;
@@ -66,8 +67,9 @@ export function ThinkingOrb(props: { state: OrbState; opts?: ModeOpts; frame?: M
   onCleanup(() => clearTimeout(pending));
 
   const presetOf = (item: Shown) => {
+    if (item.frame) return { speed: 1, opts: item.opts || {}, frame: item.frame };
     const preset = resolvePreset(item.state, SIZE);
-    return { ...preset, opts: { ...preset.opts, ...item.opts }, frame: item.frame ?? MODE_FRAMES[preset.mode] };
+    return { speed: preset.speed, opts: { ...preset.opts, ...item.opts }, frame: MODE_FRAMES[preset.mode] };
   };
   const frontPreset = createMemo(() => presetOf(shown()));
   const backPreset = createMemo(() => { const item = leaving(); return item ? presetOf(item) : null; });
