@@ -1012,7 +1012,7 @@ export function CommandMenu(props: {
               <For each={rows()}>{renderRow}</For>
             </div>
             <Show when={chatPage() && previewOpen() && !moveMode()}>
-              <ChatPreview target={activeChat()} folder={rowProject(selectable()[active()])} />
+              <ChatPreview target={activeChat()} folder={rowProject(selectable()[active()])} active={(chat) => { const activity = chatActivity(chat); return Boolean(activity && activity !== "idle"); }} />
             </Show>
             </div>
             <CommandHintBar
