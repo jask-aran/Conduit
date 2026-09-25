@@ -123,13 +123,40 @@ export interface PalettePage {
 }
 
 export const PALETTE_GROUPS: PaletteGroup[] = [
-  { id: "commands", heading: "Commands" },
-  { id: "settings", heading: "Settings" },
+  { id: "chat", heading: "This chat" },
   { id: "navigation", heading: "Go to" },
+  { id: "create", heading: "Create" },
+  { id: "view", heading: "View" },
   { id: "profiles", heading: "Profiles" },
   { id: "thinking", heading: "Thinking level" },
+  { id: "settings", heading: "Settings" },
+  { id: "commands", heading: "Commands" },
+  { id: "app", heading: "App" },
   { id: "danger", heading: "Danger zone" },
 ];
+
+/* Where a general command sits in the palette, by what it is for: what acts on
+   the chat in front of you first, then where to go, what to make, how the
+   window is laid out, and the app itself. */
+const INTENT_GROUPS: Record<string, string> = {
+  [COMMAND_IDS.renameChat]: "chat", [COMMAND_IDS.autoNameChat]: "chat", [COMMAND_IDS.moveChat]: "chat",
+  [COMMAND_IDS.stopResponse]: "chat", [COMMAND_IDS.stopProcess]: "chat", [COMMAND_IDS.regenerateResponse]: "chat",
+  [COMMAND_IDS.continueResponse]: "chat", [COMMAND_IDS.compactContext]: "chat", [COMMAND_IDS.copyResponse]: "chat",
+  [COMMAND_IDS.copyTranscript]: "chat", [COMMAND_IDS.attachFiles]: "chat", [COMMAND_IDS.stashPrompt]: "chat",
+  [COMMAND_IDS.toggleDictation]: "chat", [COMMAND_IDS.renameFolder]: "chat",
+  [COMMAND_IDS.searchChats]: "navigation", [COMMAND_IDS.openSettings]: "navigation", [COMMAND_IDS.openWorkspaceViews]: "navigation",
+  [COMMAND_IDS.openRuntimeChat]: "navigation",
+  [COMMAND_IDS.newChat]: "create", [COMMAND_IDS.newFolder]: "create", [COMMAND_IDS.newWorkspace]: "create",
+  [COMMAND_IDS.toggleSidebar]: "view", [COMMAND_IDS.toggleWorkspacePanel]: "view", [COMMAND_IDS.maximizeWorkspacePanel]: "view",
+  [COMMAND_IDS.retryConnection]: "app", [COMMAND_IDS.reload]: "app", [COMMAND_IDS.updateApp]: "app",
+  [COMMAND_IDS.resetAppCache]: "app", [COMMAND_IDS.keyboardProbe]: "app",
+};
+
+export function paletteGroupOf(command: { id?: string; group?: string; destructive?: boolean }): string {
+  if (command.destructive) return "danger";
+  const group = command.group || "commands";
+  return group === "commands" && command.id ? INTENT_GROUPS[command.id] || group : group;
+}
 
 /** Only sections the Solid Settings surface renders. Target's `diagnostics` is
  *  omitted (no Solid surface yet) to avoid a dead drill-down entry. */
@@ -488,7 +515,7 @@ export function resolvePaletteCommands(context: PaletteContext, options: { page?
 export function groupPaletteCommands(commands: PaletteCommand[]): (PaletteGroup & { items: PaletteCommand[] })[] {
   const buckets = new Map<string, PaletteCommand[]>(PALETTE_GROUPS.map((group) => [group.id, []]));
   for (const command of commands) {
-    const groupId = command.destructive ? "danger" : (command.group || "commands");
+    const groupId = paletteGroupOf(command);
     if (!buckets.has(groupId)) buckets.set(groupId, []);
     buckets.get(groupId)!.push(command);
   }

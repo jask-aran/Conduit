@@ -12,7 +12,7 @@ import { Button } from "@/components/primitives";
 import { activityLabel } from "../../activity.js";
 import type { ChatSummary, ModelOption, Project } from "../api/contracts";
 import {
-  groupPaletteCommands, PALETTE_PAGES, resolvePaletteCommands,
+  groupPaletteCommands, PALETTE_GROUPS, PALETTE_PAGES, paletteGroupOf, resolvePaletteCommands,
 } from "../palette/command-registry";
 import type { PaletteActions, PaletteCommand, PaletteContext } from "../palette/command-registry";
 import { rankPaletteResults } from "../palette/palette-search";
@@ -59,14 +59,25 @@ const icons: Record<string, (props: { class?: string }) => JSX.Element> = {
   slash: SlashIcon,
 };
 
-const GROUP_HEADINGS: Record<string, string> = {
-  commands: "Commands",
-  settings: "Settings",
-  navigation: "Chat actions",
-  profiles: "Profiles",
-  thinking: "Thinking level",
-  danger: "Danger zone",
-};
+const GROUP_HEADINGS: Record<string, string> = Object.fromEntries(PALETTE_GROUPS.map((group) => [group.id, group.heading]));
+
+/* The letters of a label a query matched: the substring when there is one,
+   otherwise its letters in order. Null when it matched on something unseen. */
+function matchedLabel(label: string, query: string): JSX.Element | null {
+  const q = query.trim().toLowerCase();
+  if (!q) return null;
+  const lower = label.toLowerCase();
+  const at = lower.indexOf(q);
+  if (at >= 0) return <>{label.slice(0, at)}<mark>{label.slice(at, at + q.length)}</mark>{label.slice(at + q.length)}</>;
+  const hits = new Set<number>();
+  let from = 0;
+  for (const char of q.replace(/\s+/g, "")) {
+    const index = lower.indexOf(char, from);
+    if (index < 0) return null;
+    hits.add(index); from = index + 1;
+  }
+  return <>{[...label].map((char, index) => hits.has(index) ? <mark>{char}</mark> : char)}</>;
+}
 
 const FOCUS_MOVING_COMMAND_IDS = new Set<string>([
   COMMAND_IDS.toggleWorkspacePanel,
@@ -379,9 +390,14 @@ export function CommandMenu(props: {
       }) || [];
       if (chatPage()) ranked.sort((left, right) => right.score - left.score
         || compareChatsBySort(left.command!.chat!, right.command!.chat!, chatSort()));
+      // Each group once, in the order of its best match.
+      const groupOf = (row: typeof ranked[number]) => chatPage() ? "Results" : row.command ? paletteGroupOf(row.command) : row.group;
+      const firstSeen = new Map<string, number>();
+      ranked.forEach((row, at) => { if (!firstSeen.has(groupOf(row))) firstSeen.set(groupOf(row), at); });
+      ranked.sort((left, right) => firstSeen.get(groupOf(left))! - firstSeen.get(groupOf(right))!);
       let lastGroup = "";
       for (const row of ranked) {
-        const group = chatPage() ? "Results" : row.group;
+        const group = groupOf(row);
         if (group !== lastGroup) {
           push({ type: "heading", key: `h-${group}-${index}`, label: GROUP_HEADINGS[group] || group });
           lastGroup = group;
@@ -851,7 +867,7 @@ export function CommandMenu(props: {
     } as const;
     if (row.type === "model") {
       if (modelSelectorPage()) return <div {...commonProps} class="command-option command-model-option" data-highlighted={selected() || undefined} data-scoped={row.scoped || undefined}>
-        <span class="command-model-label">{row.model.label}</span><small class="command-model-spec">{row.model.spec}</small>
+        <span class="command-model-label" data-matching={matchedLabel(row.model.label, parsedQuery().text) ? "" : undefined}>{matchedLabel(row.model.label, parsedQuery().text) || row.model.label}</span><small class="command-model-spec">{row.model.spec}</small>
       </div>;
       const Icon = icons.model!;
       return <div {...commonProps} data-highlighted={selected() || undefined}>
@@ -877,7 +893,7 @@ export function CommandMenu(props: {
           <button type="button" class="command-folder-toggle" tabIndex={-1} aria-label={`${expanded() ? "Collapse" : "Expand"} ${row.project.name}`} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); toggleFolder(row.project.id); }}><ChevronRightIcon data-expanded={expanded() || undefined} /></button>
         </Show>
         <Show when={isWorkspace(row.project)} fallback={<FolderIcon class="command-icon" />}><WorkspaceGlyph appearance={row.project.workspaceAppearance} /></Show>
-        <span class="command-label">{row.project.name}</span>
+        <span class="command-label" data-matching={matchedLabel(row.project.name, parsedQuery().text) ? "" : undefined}>{matchedLabel(row.project.name, parsedQuery().text) || row.project.name}</span>
         <small class="command-folder-meta">
           <Show when={live() || unread()}><span class="command-folder-dot" data-live={live() ? "" : undefined} title={live() ? `${live()} active` : `${unread()} unread`} /></Show>
           <span class="command-folder-count">{row.count}</span>
@@ -901,7 +917,7 @@ export function CommandMenu(props: {
         {(chat) => <span class="command-chat-status"><RuntimeIndicator process={props.runtime.getProcess(chat().id)} stale={props.runtime.stale()} unread={chat().unread} fallback={<ThreadHarnessMark id={chat().harnessId} lively />} /><Show when={chat().unread && chatActivity(chat()) !== "idle" && chatActivity(chat())}><span class="command-chat-unread" role="status" aria-label="Unread response" /></Show></span>}
       </Show>
       <span class="command-copy">
-        <Show when={editing()} fallback={<span class="command-label">{command.label}</span>}>
+        <Show when={editing()} fallback={<span class="command-label" data-matching={matchedLabel(command.label, parsedQuery().text) ? "" : undefined}>{matchedLabel(command.label, parsedQuery().text) || command.label}</span>}>
           <input ref={renameInput} class="command-rename-input" value={editingValue()} onInput={(event) => setEditingValue(event.currentTarget.value)} onKeyDown={renameKeydown} onClick={(event) => event.stopPropagation()} aria-label={`Rename ${command.label}`} />
         </Show>
         <Show when={!editing() && command.detail}><small class={command.chat ? "command-chat-meta" : undefined}>
