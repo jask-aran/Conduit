@@ -82,17 +82,20 @@ all chats pre-applies `scope:chats` in the same surface. Empty-query Backspace
 removes a filter before it can change palette level; Escape returns to the root
 palette or closes a direct launch. Tab enters a highlighted drill-down page.
 
-Chat search matches chat titles and their owning folder or Workspace. It shows
-creation dates, includes the current chat, and supports Cmd/Ctrl+E selection
-mode. Outside selection mode, Alt+R renames the highlighted chat and
+Chat search matches chat titles and their owning folder or Workspace. Its footer
+sets project scope, activity view (All, Needs attention, In progress, Unread),
+and Latest or Created sort. Rows use the sidebar's live and unread indicators;
+active work appears beside project and date. It includes the current chat and
+supports Cmd/Ctrl+E selection mode. Outside selection mode, Alt+R renames the highlighted chat and
 Cmd/Ctrl+K followed by R, M, or D renames, moves, or requests confirmed
 deletion. Selection mode supports Space, M (move), C (copy links), and
 D/Delete (confirmed delete); rename remains a single-chat action. The sidebar's
 Chats group shows 20 rows by default; Settings → UI stores an integer limit
 from 5 to 100, and View all chats opens a Chats-scoped search for older rows. A
 folder or Workspace can remain collapsed even when it contains the active
-chat; Search chats remains the route to that session. Existing generation
-indicators stay unchanged. Search and management use the
+chat; Search chats remains the route to that session. Edit keeps the result
+list in place: checkboxes shift rows right and the selected count stays in the
+footer. Search and management use the
 same palette shell so later file, artifact, and host search domains can add
 rows and previews without a second dialog.
 

@@ -2437,10 +2437,27 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-dialog-chat-search .command-option[data-chat-row="true"][aria-current="page"] .command-label { font-weight: 660; }
 .command-dialog-chat-search .command-option[data-chat-row="true"] .command-copy small { flex: none; font-size: 9px; }
 .command-option[data-chat-row="true"] .thread-harness-mark { width: 12px; height: 12px; }
-.command-option[data-chat-row="true"]:is([data-highlighted], [data-chat-selected="true"], :hover) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
-.command-option[data-chat-row="true"]:is([data-highlighted], [data-chat-selected="true"], :hover) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
-.command-option[data-chat-row="true"]:is([data-highlighted], [data-chat-selected="true"], :hover) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; }
-.command-option[data-chat-row="true"]:is([data-highlighted], [data-chat-selected="true"], :hover) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; }
+.command-option[data-chat-row="true"]:is([data-highlighted], [data-chat-selected="true"], [aria-current="page"], :hover) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
+.command-option[data-chat-row="true"]:is([data-highlighted], [data-chat-selected="true"], [aria-current="page"], :hover) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
+.command-option[data-chat-row="true"]:is([data-highlighted], [data-chat-selected="true"], [aria-current="page"], :hover) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; }
+.command-option[data-chat-row="true"]:is([data-highlighted], [data-chat-selected="true"], [aria-current="page"], :hover) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; }
+.command-chat-status { position: relative; display: inline-flex; width: 16px; height: 16px; flex: none; align-items: center; justify-content: center; }
+.command-chat-status .runtime-indicator { width: 16px; height: 16px; }
+.command-chat-unread { position: absolute; right: -2px; bottom: 0; width: 5px; height: 5px; border-radius: 50%; background: oklch(0.68 0.17 250); box-shadow: 0 0 0 2px var(--overlay-face); }
+.command-chat-meta { display: flex; min-width: 0; align-items: center; gap: 4px; }
+.command-chat-activity, .command-chat-project { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.command-chat-activity { max-width: 116px; }
+.command-chat-activity[data-attention] { color: var(--foreground); }
+.command-chat-project { max-width: 94px; }
+.command-chat-date { flex: none; white-space: nowrap; }
+.command-hint-bar[data-chat-search] { min-height: 62px; flex-wrap: wrap; align-content: center; gap: 4px 9px; }
+.command-hint-bar[data-chat-search][data-mode="move"] { min-height: 32px; }
+.command-hint-bar[data-chat-search] .command-search-footer-controls { width: 100%; min-height: 22px; gap: 12px; }
+.command-search-footer-controls label { display: inline-flex; min-width: 0; align-items: center; gap: 3px; white-space: nowrap; }
+.command-search-footer-controls select { max-width: 170px; border: 0; border-radius: 4px; outline: none; background: transparent; padding: 2px 12px 2px 2px; color: var(--foreground); color-scheme: dark; font: inherit; cursor: pointer; }
+.command-search-footer-controls select:hover, .command-search-footer-controls select:focus-visible { background: var(--overlay-cursor); }
+.command-search-footer-controls select option { background: var(--overlay-face); color: var(--foreground); }
+.command-hint-bar[data-chat-search] .command-hint-primary { min-height: 20px; }
 .command-shortcut, .command-model-spec { font: 500 8.5px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .command-empty { padding: 16px 9px; }
 .command-hint-bar { min-height: 32px; gap: 9px; border-top-color: var(--overlay-edge); background: var(--overlay-rail); padding: 5px 10px; font-size: 8.8px; }
