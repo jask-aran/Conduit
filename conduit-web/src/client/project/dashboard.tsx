@@ -379,7 +379,7 @@ export function ProjectDashboard(props: {
       const process = () => props.runtime.getProcess(item.id);
       const live = () => process()?.active ? activityLabel(runtimeActivity(process()) || "working", activityDetail(process())) : "";
       return <ContextMenu><ContextMenuTrigger as={SplitRow} element="button" onPointerEnter={() => props.onPrefetchChat(item)} onFocus={() => props.onPrefetchChat(item)} onClick={() => void props.onOpenChat(item, props.project)}
-          lead={<RuntimeIndicator process={process()} stale={props.runtime.stale()} unread={item.unread} fallback={<ThreadHarnessMark id={item.harnessId} />} />}
+          lead={<RuntimeIndicator process={process()} stale={props.runtime.stale()} unread={item.unread} fallback={<ThreadHarnessMark id={item.harnessId} lively />} />}
           primary={item.title || "Untitled chat"}
           context={live()}
           trailing={<time dateTime={item.lastMessageAt || item.createdAt}>{relativeActivity(item.lastMessageAt || item.createdAt, now())}</time>} />
@@ -397,7 +397,7 @@ export function ProjectDashboard(props: {
     <Show when={filteredOutside().length} fallback={<SplitEmpty>No threads outside Conduit in this workspace.</SplitEmpty>}>
       <For each={filteredOutside()}>{(thread) =>
         <SplitRow element="button" title={thread.preview || thread.title} onClick={() => props.onOpenHarnessThread?.(thread.harnessId, workingRoot(), thread.id, thread.title)}
-          lead={<HarnessMark id={thread.harnessId} />} primary={thread.title || "Untitled thread"} context={thread.preview}
+          lead={<ThreadHarnessMark id={thread.harnessId} lively />} primary={thread.title || "Untitled thread"} context={thread.preview}
           trailing={thread.at ? relativeActivity(new Date(thread.at).toISOString(), now()) : ""} />}
       </For>
     </Show>
