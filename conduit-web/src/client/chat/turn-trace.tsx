@@ -5,7 +5,7 @@ import type { Message, ToolItem, ToolKind } from "../api/contracts";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
 import { KIND_ICONS, stepDuration, ToolStep } from "./tool-card";
 import "./turn-trail.css";
-import { ThinkingOrb, type OrbState } from "./thinking-orb";
+import { ThinkingOrb, type ModeOpts, type OrbState } from "./thinking-orb";
 import { Disclosure } from "./disclosure";
 import type { MarkdownRendererId } from "./markdown-settings";
 import type { IncremarkPacingMode } from "./incremark-pacing";
@@ -211,12 +211,16 @@ const KIND_ORBS: Record<ToolKind, OrbState> = {
 const orbOfStep = (segment?: TraceSegment): OrbState =>
   segment?.kind === "tool" ? KIND_ORBS[segment.tool.kind || "other"] : "working";
 
-function statusOf(trace: TurnTraceData, writing: boolean): { verb: string; orb: OrbState } {
-  // Settled, the orb is a still frame: the base state for a finish or a
+/* A finished turn's mark: the outline closed into a circle -- the shaping
+   state held on its first shape, which reads as complete. */
+const CLOSED: ModeOpts = { shape: 0 };
+
+function statusOf(trace: TurnTraceData, writing: boolean): { verb: string; orb: OrbState; opts?: ModeOpts } {
+  // Settled, the orb is a still frame: the closed circle for a finish or a
   // failure; for a stop, the state it was in, which is its last step's.
   if (!trace.active) {
     const verb = ({ interrupted: "Interrupted", failed: "Failed" } as Record<string, string>)[trace.status] || "Done";
-    return { verb, orb: trace.status === "interrupted" ? orbOfStep(trace.segments.at(-1)) : "working" };
+    return trace.status === "interrupted" ? { verb, orb: orbOfStep(trace.segments.at(-1)) } : { verb, orb: "shaping", opts: CLOSED };
   }
   const running = trace.segments.flatMap((segment) => segment.kind === "tool" && !segment.tool.done ? [segment.tool] : []);
   if (running.length > 1) return { verb: `Running ${running.length} tools`, orb: "solving" };
@@ -241,7 +245,7 @@ function toolLine(tool: ToolItem): string {
    the last thinking, which is what the turn concluded. Discarded text is that
    one step's loss, not the turn's, so it is passed over. */
 type Detail = { text: string; markdown: boolean };
-function previewOf(trace: TurnTraceData, writing: boolean): { status: { verb: string; orb: OrbState }; work: string; detail: Detail | null } {
+function previewOf(trace: TurnTraceData, writing: boolean): { status: ReturnType<typeof statusOf>; work: string; detail: Detail | null } {
   let detail: Detail | null = null;
   let running: Detail | null = null;
   const tools: ToolItem[] = [];
@@ -284,17 +288,15 @@ function turnTime(trace: () => Pick<TurnTraceData, "active" | "startedAt" | "end
 export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sessionId: string | null; renderer?: MarkdownRendererId; pacing?: IncremarkPacingMode; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void }) {
   const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
   const time = turnTime(() => props.trace);
-  // A settled orb plays while the pointer is on its header, and is still
-  // otherwise: movement is what says a turn is still working.
-  const [hovering, setHovering] = createSignal(false);
   return <Disclosure class="turn-trace" data-active={props.trace.active ? "true" : "false"} headerClass="turn-trace-header" bodyClass="turn-trace-body"
     initialOpen={props.initialOpen} onOpenChange={props.onOpenChange}
-    triggerProps={{ onPointerEnter: () => setHovering(true), onPointerLeave: () => setHovering(false) }}
     header={<>
       {/* One box, live and settled, so nothing beside it moves when the turn
           ends. A stop dims the orb; a failure tints it. */}
       <span class="turn-trace-mark" data-outcome={props.trace.active ? undefined : props.trace.status}>
-        <ThinkingOrb state={preview().status.orb} paused={!props.trace.active && !hovering()}
+        {/* Settled it is still, pointer or not: movement is what says a turn
+            is working. */}
+        <ThinkingOrb state={preview().status.orb} opts={preview().status.opts} paused={!props.trace.active}
           tint={!props.trace.active && props.trace.status === "failed" ? "var(--destructive)" : undefined} />
       </span>
       <div class="turn-trace-preview">

@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
-import { MODE_FRAMES, paintFrame, resolvePreset, type OrbState } from "thinking-orbs/engine";
+import { MODE_FRAMES, paintFrame, resolvePreset, type ModeOpts, type OrbState } from "thinking-orbs/engine";
 
-export type { OrbState };
+export type { ModeOpts, OrbState };
 
 /*
  * A turn's mark: a dotted orb whose motion says what it is doing, drawn by
@@ -11,12 +11,14 @@ export type { OrbState };
  *
  * Live, it plays, and paints only while on screen and the tab is visible. A
  * change of state is held off until the current one has shown for a moment,
- * then dips through a short fade, so quick tool calls do not flicker it.
- * Paused -- a settled turn, or reduced motion -- it is one still frame.
+ * then crossfades: the new state fades in over the old as the old fades out,
+ * both still moving, so there is never a frame with nothing in it. Paused --
+ * a settled turn, or reduced motion -- it is one still frame, and changes
+ * without a fade.
  */
 const SIZE = 20;
 const DWELL_MS = 800;
-const FADE_MS = 90;
+const FADE_MS = 260;
 const STILL_AT = 0.6;
 
 /* A CSS colour, var() included, as the painter's RGB: resolved on the canvas
@@ -34,41 +36,62 @@ function rgbOf(element: HTMLElement, color: string) {
   return { r: r!, g: g!, b: b! };
 }
 
-export function ThinkingOrb(props: { state: OrbState; paused?: boolean; tint?: string; class?: string }) {
-  let canvas!: HTMLCanvasElement;
+type Shown = { state: OrbState; opts?: ModeOpts };
+
+export function ThinkingOrb(props: { state: OrbState; opts?: ModeOpts; paused?: boolean; tint?: string; class?: string }) {
+  let front!: HTMLCanvasElement;
+  let back!: HTMLCanvasElement;
   const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   const playing = () => !props.paused && !reduced;
 
-  const [shown, setShown] = createSignal(props.state);
-  const [fading, setFading] = createSignal(false);
+  // What is shown, and what it is fading from while a crossfade runs.
+  const [shown, setShown] = createSignal<Shown>({ state: props.state, opts: props.opts });
+  const [leaving, setLeaving] = createSignal<Shown | null>(null);
   let since = performance.now();
+  let fadeFrom = 0;
   let pending: ReturnType<typeof setTimeout> | undefined;
-  createEffect(on(() => props.state, (next) => {
+  createEffect(on(() => [props.state, props.opts] as const, ([state, opts]) => {
     clearTimeout(pending);
-    setFading(false);
-    if (next === shown()) return;
-    const settle = () => { setShown(props.state); since = performance.now(); setFading(false); };
-    if (!playing()) return settle();
+    const next = { state, opts };
+    const current = shown();
+    if (state === current.state && opts === current.opts) return;
+    if (!playing()) { setLeaving(null); setShown(next); since = performance.now(); return; }
     pending = setTimeout(() => {
-      setFading(true);
-      pending = setTimeout(settle, FADE_MS);
+      setLeaving(shown());
+      setShown({ state: props.state, opts: props.opts });
+      since = fadeFrom = performance.now();
     }, Math.max(0, DWELL_MS - (performance.now() - since)));
   }, { defer: true }));
   onCleanup(() => clearTimeout(pending));
 
-  const preset = createMemo(() => resolvePreset(shown(), SIZE));
+  const presetOf = (item: Shown) => {
+    const preset = resolvePreset(item.state, SIZE);
+    return item.opts ? { ...preset, opts: { ...preset.opts, ...item.opts } } : preset;
+  };
+  const frontPreset = createMemo(() => presetOf(shown()));
+  const backPreset = createMemo(() => { const item = leaving(); return item ? presetOf(item) : null; });
 
   onMount(() => {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    canvas.width = canvas.height = Math.round(SIZE * dpr);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const tint = createMemo(() => props.tint ? rgbOf(canvas, props.tint) : undefined);
-    const draw = (seconds: number) => {
-      const { mode, speed, opts } = preset();
+    for (const canvas of [front, back]) canvas.width = canvas.height = Math.round(SIZE * dpr);
+    const frontContext = front.getContext("2d");
+    const backContext = back.getContext("2d");
+    if (!frontContext || !backContext) return;
+    const tint = createMemo(() => props.tint ? rgbOf(front, props.tint) : undefined);
+    const paintOn = (ctx: CanvasRenderingContext2D, preset: ReturnType<typeof presetOf> | null, seconds: number) => {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, SIZE, SIZE);
-      paintFrame(ctx, MODE_FRAMES[mode](SIZE, seconds * speed, opts), Boolean(canvas.closest(".dark")), tint());
+      if (!preset) return;
+      paintFrame(ctx, MODE_FRAMES[preset.mode](SIZE, seconds * preset.speed, preset.opts), Boolean(front.closest(".dark")), tint());
+    };
+    const draw = (seconds: number) => {
+      const fading = backPreset();
+      const progress = fading ? Math.min(1, (performance.now() - fadeFrom) / FADE_MS) : 1;
+      if (fading && progress >= 1) setLeaving(null);
+      paintOn(frontContext, frontPreset(), seconds);
+      paintOn(backContext, progress < 1 ? fading : null, seconds);
+      front.style.opacity = String(progress);
+      back.style.opacity = String(1 - progress);
     };
 
     let frame = 0;
@@ -80,14 +103,14 @@ export function ThinkingOrb(props: { state: OrbState; paused?: boolean; tint?: s
     };
     // Still, it is drawn once for each change of what it shows.
     createEffect(() => {
-      preset();
+      frontPreset();
       tint();
       if (playing()) draw(performance.now() / 1000);
-      else draw(STILL_AT);
+      else { setLeaving(null); draw(STILL_AT); }
       sync();
     });
     const observer = new IntersectionObserver(([entry]) => { visible = Boolean(entry?.isIntersecting); sync(); });
-    observer.observe(canvas);
+    observer.observe(front);
     document.addEventListener("visibilitychange", sync);
     onCleanup(() => {
       cancelAnimationFrame(frame);
@@ -95,5 +118,8 @@ export function ThinkingOrb(props: { state: OrbState; paused?: boolean; tint?: s
       document.removeEventListener("visibilitychange", sync);
     });
   });
-  return <canvas ref={canvas} class={props.class} data-fading={fading() ? "true" : undefined} aria-hidden="true" />;
+  return <span class={`thinking-orb ${props.class || ""}`} aria-hidden="true">
+    <canvas ref={back} />
+    <canvas ref={front} />
+  </span>;
 }
