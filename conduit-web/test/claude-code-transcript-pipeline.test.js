@@ -355,3 +355,39 @@ test("a chat whose Claude Code has gone resumes the saved session, and a never-p
   assert.equal(chat.run().options.resume, undefined);
   assert.equal(chat.run().options.sessionId, fresh.sessionId);
 });
+
+/** Recorded: a backgrounded Bash, and the turn Claude Code starts by itself when it finishes. */
+const BACKGROUND = { id: "toolu_01NRrEEGGzqk9faigaw2bYpL", name: "Bash",
+  input: { command: "sleep 6 && echo bg-done", description: "Background sleep and echo command", run_in_background: true } };
+const SUMMARY = "Background command \"Background sleep and echo command\" completed (exit code 0)";
+const OWN_TURN = ["user: Run it in the background", "trace(complete)", "assistant: started",
+  `user: ${SUMMARY}`, "trace(complete)", "assistant: Background task completed (exit code 0)."];
+
+test("a background task finishing starts a turn of Claude Code's own, drawn on its notice, live and after a reload", async () => {
+  const chat = await harness();
+  await chat.send("Run it in the background");
+  calls(chat.run(), "msg_b1", BACKGROUND);
+  ended(chat.run(), "tool_use");
+  toolResult(chat.run(), BACKGROUND.id, "Command running in background with ID: b9jzzj61o.");
+  answer(chat.run(), "msg_b2", "started");
+  succeeded(chat.run(), "started");
+  await chat.settle();
+  // Nothing from Conduit: the task ends, and Claude Code turns to it.
+  chat.run().emit({ type: "system", subtype: "task_notification", task_id: "b9jzzj61o", tool_use_id: BACKGROUND.id,
+    status: "completed", summary: SUMMARY });
+  answer(chat.run(), "msg_b3", "Background task completed (exit code 0).");
+  succeeded(chat.run(), "Background task completed (exit code 0).");
+  await chat.settle();
+  assert.deepEqual(shape(chat.rows()), OWN_TURN);
+  assert.equal(chat.rows().find((row) => row.value?.content === SUMMARY).value.origin, "harness");
+  // Claude Code saves the notification as a prompt of its own origin, before the reply.
+  const history = chat.claude.saved.get(chat.record.sessionId);
+  history.splice(history.findIndex((entry) => entry.message?.id === "msg_b3"), 0, { type: "user", uuid: crypto.randomUUID(),
+    origin: { kind: "task-notification" }, parent_tool_use_id: null, message: { role: "user", content: "<task-notification>\n"
+      + `<task-id>b9jzzj61o</task-id>\n<status>completed</status>\n<summary>${SUMMARY}</summary>\n</task-notification>` } });
+  for (const log of [true, false]) {
+    const { rows } = await chat.reload({ log });
+    assert.deepEqual(shape(rows), OWN_TURN);
+    assert.equal(rows.find((row) => row.value?.content === SUMMARY).value.origin, "harness");
+  }
+});

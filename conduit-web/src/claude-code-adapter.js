@@ -31,6 +31,19 @@ const OUTCOMES = Object.freeze({ aborted: "interrupted", error: "failed" });
 // An interrupt the CLI never answers with a result still ends the turn.
 const INTERRUPT_SETTLE_MS = 5_000;
 const INTERRUPTED = /^\[Request interrupted by user/;
+// A prompt Claude Code made itself -- a background task finishing, say -- is
+// named by the task, which the live notification and the saved entry share.
+const taskPromptId = (taskId, status) => `task_${taskId}_${status}`;
+const tagged = (text, tag) => text.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`))?.[1]?.trim() || "";
+/** A saved prompt that did not come from the user, in Conduit's words; null for the user's own. */
+const harnessPrompt = (entry, text) => {
+  const kind = entry.origin?.kind;
+  if (!kind || kind === "human") return null;
+  if (kind === "task-notification") {
+    return { id: taskPromptId(tagged(text, "task-id"), tagged(text, "status")), content: tagged(text, "summary") || "A background task finished" };
+  }
+  return { id: promptId(entry.uuid), content: entry.origin.body || text };
+};
 
 export const CLAUDE_CODE_CAPABILITIES = Object.freeze({
   history: "linear",
@@ -270,7 +283,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
       activity: "starting", active: false, stopping: false, model, thinkingLevel, permissionMode,
       generation: null, generationSeq: 0, clients: new Set(), events: [], hostUiRequests: [],
       requests: new Map(), steps: new Map(), stepOrder: [], step: null, tools: new Map(),
-      commands: [], models: [], settings: {}, stderr: "",
+      commands: [], models: [], settings: {}, notices: [], stderr: "",
     });
     record.settings = await this.settingsFor(record.cwd);
     // Only what the chat chose is passed, and the rest is left to the user's
@@ -346,7 +359,19 @@ export class ClaudeCodeAdapter extends EventEmitter {
       this.emit("changed", { record, reason: "permission_mode" });
       return;
     }
-    if (!record.active || message.parent_tool_use_id) return;
+    if (message.parent_tool_use_id) return;
+    // A background task finishing while nothing runs makes Claude Code start a
+    // turn of its own. The notification is held as that turn's prompt.
+    if (message.type === "system" && message.subtype === "task_notification") {
+      if (!record.active) record.notices.push({ id: taskPromptId(message.task_id, message.status),
+        content: message.summary || "A background task finished" });
+      return;
+    }
+    if (!record.active && ["stream_event", "assistant", "result"].includes(message.type)) {
+      if (message.type === "result") return;
+      this.beginOwnTurn(record);
+    }
+    if (!record.active) return;
     if (message.type === "stream_event") this.streamEvent(record, message.event);
     else if (message.type === "assistant") this.assistantMessage(record, message);
     else if (message.type === "user") this.toolResults(record, message.message?.content);
@@ -354,6 +379,27 @@ export class ClaudeCodeAdapter extends EventEmitter {
       const step = this.openStep(record, message.uuid);
       this.appendText(record, step, step.blocks.length, "text", message.content || "");
     } else if (message.type === "result") this.finish(record, message);
+  }
+
+  /**
+   * A turn Claude Code started without a prompt from here. It answers the
+   * notices that set it off, stated as a prompt the harness made, so the turn
+   * is grouped, settled and reloaded like any other.
+   */
+  beginOwnTurn(record) {
+    const notices = record.notices.splice(0);
+    const prompt = notices.length
+      ? { id: notices[0].id, content: notices.map((notice) => notice.content).join("\n") }
+      : { id: promptId(crypto.randomUUID()), content: "Claude Code went on by itself" };
+    const generationId = crypto.randomUUID();
+    Object.assign(record, { active: true, activity: "working", stopping: false,
+      generation: { id: generationId, closed: false, settled: false }, answering: prompt.id,
+      steps: new Map(), stepOrder: [], step: null });
+    record.tools.clear();
+    this.publish(record, messageOpen({ id: prompt.id, role: "user", origin: "harness", generationId,
+      content: prompt.content, timestamp: new Date().toISOString() }));
+    this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.generationSeq,
+      status: "working", activity: "working", detail: null });
   }
 
   /**
@@ -694,6 +740,14 @@ export class ClaudeCodeAdapter extends EventEmitter {
         if (!text.trim()) continue;
         // The stop's own marker, not a prompt. A tool it killed is saved as an
         // error; it was stopped.
+        const made = harnessPrompt(entry, text);
+        if (made) {
+          prompt = { id: made.id, role: "user", origin: "harness", content: made.content, outcome: "complete" };
+          messages.push(prompt);
+          step = null;
+          promptTools = [];
+          continue;
+        }
         if (INTERRUPTED.test(text)) {
           if (prompt) prompt.outcome = "interrupted";
           for (const tool of promptTools) if (tool.isError) Object.assign(tool, { isError: false, cancelled: true });
