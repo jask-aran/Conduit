@@ -42,7 +42,10 @@ export function LeaderPalette(props: { shortcuts: ShortcutManager }) {
   onCleanup(props.shortcuts.subscribe(() => setRevision((value) => value + 1)));
   const pending = createMemo<PendingShortcutSequence | null>(() => {
     revision();
-    return props.shortcuts.pendingSequence();
+    // Only the leader opens this menu. Other chords -- chat search's Ctrl+K
+    // then R, D or M -- are named by their own surface's rail.
+    const current = props.shortcuts.pendingSequence();
+    return current && current.firstStroke.code === "KeyG" ? current : null;
   });
 
   // Shown after the pause, at once, or never; browsing the levels shows it
