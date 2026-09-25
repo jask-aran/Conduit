@@ -174,6 +174,7 @@ export function reduceActiveGeneration(current, event) {
       next.toolExecutions[event.toolCallId] = {
         toolCallId: event.toolCallId,
         name: event.name,
+        kind: event.kind || "other",
         input: event.input,
         status: "running",
         // What the tool has returned so far. `status` says whether that is all

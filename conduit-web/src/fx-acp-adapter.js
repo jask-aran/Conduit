@@ -6,10 +6,26 @@ import { EventEmitter } from "node:events";
 import { promisify } from "node:util";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { messageClose, messageOpen, toolClose, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
+import { messageClose, messageOpen, toolClose, toolKind, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 const execFile = promisify(execFileCallback);
+
+// fx's tools, by what they do, as its saved history names them. Live, ACP
+// states a kind of its own beside a name that may be only a title, so that is
+// read when the name is not one of these.
+const FX_TOOL_KINDS = Object.freeze({
+  terminal: "command", shell: "command",
+  read_file: "read", grep_files: "read", list_files: "read", file_info: "read", read_tool_result: "read",
+  edit_file: "edit", write_file: "edit",
+  web_search: "search",
+  web_fetch: "fetch",
+});
+const ACP_TOOL_KINDS = Object.freeze({
+  execute: "command", read: "read", edit: "edit", delete: "edit", move: "edit", search: "search", fetch: "fetch",
+});
+const kindOf = (name, acpKind) => Object.hasOwn(FX_TOOL_KINDS, name)
+  ? FX_TOOL_KINDS[name] : toolKind(ACP_TOOL_KINDS, acpKind);
 
 export const FX_CAPABILITIES = Object.freeze({
   history: "linear",
@@ -330,12 +346,13 @@ export class FxAcpAdapter extends EventEmitter {
       const answer = this.ensureAnswer(record);
       const tool = { id: update.toolCallId, name: update.name || update.title || "tool",
         input: update.rawInput ?? null, output: "", closed: false };
+      tool.kind = kindOf(tool.name, update.kind);
       record.tools.set(tool.id, tool);
       answer.tools.add(tool.id);
-      this.publish(record, toolOpen({ toolCallId: tool.id, name: tool.name, input: tool.input,
+      this.publish(record, toolOpen({ toolCallId: tool.id, name: tool.name, kind: tool.kind, input: tool.input,
         messageId: answer.id, generationId }));
       this.publish(record, { type: "tool_activity", phase: "start", generationId,
-        seq: ++record.generationSeq, toolCallId: tool.id, name: tool.name, input: tool.input });
+        seq: ++record.generationSeq, toolCallId: tool.id, name: tool.name, kind: tool.kind, input: tool.input });
       // The turn being painted places a running tool by its block, so the
       // answer says it is calling one now, not when the turn ends.
       this.publish(record, { type: "assistant_content", phase: "final", generationId, seq: ++record.generationSeq,
@@ -573,7 +590,7 @@ export class FxAcpAdapter extends EventEmitter {
           try { input = JSON.parse(input); } catch { /* Keep the native text. */ }
           blocks.push({ kind: "tool_call", toolCallId: call.id, name: call.name, input });
           const result = (step.tool_results || []).find((item) => item.tool_call_id === call.id);
-          tools.push({ toolCallId: call.id, name: call.name, input,
+          tools.push({ toolCallId: call.id, name: call.name, kind: kindOf(call.name), input,
             output: result?.output || result?.preview || "", isError: result?.status === "failed", done: Boolean(result) });
         }
       }

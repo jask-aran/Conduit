@@ -250,6 +250,7 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
           setPath(["toolExecutions", event.toolCallId], {
             toolCallId: event.toolCallId,
             name: event.name,
+            kind: event.kind || "other",
             input: event.input,
             status: "running",
             output: null,

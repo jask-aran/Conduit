@@ -22,3 +22,16 @@ export const PI_CAPABILITIES = Object.freeze({
   attachments: true,
   interruptKeepsPartial: false,
 });
+
+/**
+ * Pi's tools, by what they do. The file tools that only look -- `grep`, `find`,
+ * `ls` -- are reads, `write` is an edit, and the web-research extension's
+ * paging through a stored result is a fetch like the fetch that stored it.
+ */
+export const PI_TOOL_KINDS = Object.freeze({
+  bash: "command",
+  read: "read", grep: "read", find: "read", ls: "read",
+  edit: "edit", write: "edit",
+  web_search: "search",
+  fetch_content: "fetch", get_search_content: "fetch",
+});

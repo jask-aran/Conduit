@@ -1,7 +1,6 @@
 # UI polish sketch
 
-Status: 1b (the trace header) is agreed and next to build. Sections 1
-(interrupted turns), 2 (composer hierarchy), 5 (empty
+Status: sections 1 (interrupted turns), 1b (the trace header), 2 (composer hierarchy), 5 (empty
 states, reduced) and 7 (motion, but for the deferred dashboard transition)
 are built and recorded below as built, as is 8 (keyboard) but for what waits
 on the dashboard redesign and transcript mode; 3 (autosave) is built for
@@ -70,8 +69,8 @@ live, before the answer       ▬▬▬ ▬▬ ▬   (breathing, one line tall; 
 
 ### 1b. Trace header: status, time, work, thinking
 
-Status: agreed, not built. Replaces the header's "N tool calls (M total)" and
-its summary-only finished state.
+Status: built. Replaces the header's "N tool calls (M total)" and its
+summary-only finished state. `+N` after three kinds counts the remaining calls.
 
 One anatomy, live and settled:
 

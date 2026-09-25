@@ -240,6 +240,8 @@ export interface ContentBlock {
 }
 
 export type TurnOutcome = "complete" | "interrupted" | "failed";
+/** What a tool did, stated by the harness adapter from its own tool names. */
+export type ToolKind = "command" | "read" | "edit" | "search" | "fetch" | "other";
 
 export interface Message {
   id: string;
@@ -309,6 +311,7 @@ export interface Message {
 export interface ToolItem {
   toolCallId: string;
   name?: string;
+  kind?: ToolKind;
   input?: unknown;
   output?: unknown;
   outputDeferred?: boolean;
