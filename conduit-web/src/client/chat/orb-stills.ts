@@ -4,8 +4,9 @@ import { finalizeFrame, makeProj, radiusScale, type Dot, type ModeFrame } from "
  * A settled turn's mark: the orb at rest. The searching state's lat/lon
  * lattice, without its scan, projected by the engine's camera and shaded in
  * its depth language -- near dots larger and brighter, far ones smaller and
- * dimmer -- so it is the same object as the live orb, stopped. Every
- * candidate considered for it is on the contact sheet in docs/orb-stills.
+ * dimmer -- so it is the same object as the live orb, stopped. The
+ * catalogue in docs/orb-stills shows it beside every other frame the orb can
+ * draw, and which state uses each.
  */
 const LAT_RINGS = 6;
 const LON_DENSITY = 17;

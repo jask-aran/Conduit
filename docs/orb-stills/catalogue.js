@@ -1,13 +1,15 @@
 /*
- * Every frame considered for a settled turn's orb, as frame functions in the
- * thinking-orbs engine's contract: (size, t, opts) -> { dots, lines }. The
- * package's own animations come from its MODE_FRAMES; everything else is
- * built from the engine's exported pieces -- its camera (makeProj), its dot
- * scaling (radiusScale) and its z-sort (finalizeFrame) -- in its depth
- * language: near dots larger and brighter, far ones smaller and dimmer.
+ * The orb's catalogue: the thinking-orbs library's animations, the stills its
+ * own options hold them at, the frames made for Conduit, and which state of a
+ * turn uses each. Every frame is a function in the engine's contract --
+ * (size, t, opts) -> { dots, lines } -- so the page draws them all the same
+ * way. The library's come from its MODE_FRAMES; Conduit's are built from the
+ * engine's exported pieces -- its camera (makeProj), its dot scaling
+ * (radiusScale) and its z-sort (finalizeFrame) -- in its depth language:
+ * near dots larger and brighter, far ones smaller and dimmer.
  *
- * The shipped frame is conduit-web/src/client/chat/orb-stills.ts; "Plain
- * sphere" below is the same geometry.
+ * The app's copies are conduit-web/src/client/chat/orb-stills.ts (the plain
+ * sphere) and the state table in turn-trace.tsx; IN_APP below mirrors them.
  */
 import { MODE_FRAMES, finalizeFrame, makeProj, radiusScale, resolvePreset } from "../../conduit-web/node_modules/thinking-orbs/dist/engine.es.js";
 
@@ -137,55 +139,62 @@ function split() {
   return finalizeFrame(lattice(6, 17).map(({ p }) => { const side = p[0] + 0.35 * Math.sin(p[1] * 6) > 0 ? 1 : -1; const [x, y, z] = pt(p[0] + side * 0.16, p[1] - side * 0.06, p[2]); return shade(x, y, z, (z / 1.1 + 1) / 2); }), [], 0.3);
 }
 
-/* The package's states, and the options that calm some of them. */
-export const STATES = ["working", "searching", "solving", "listening", "connecting", "weaving", "composing", "breathing", "shaping"];
-export const CALMED = [
-  ["globe, no scan (searching, scanMul 0)", animation("searching", { scanMul: 0 })],
-  ["ring, no wobble (breathing, wobMul 0)", animation("breathing", { wobMul: 0 })],
-  ["sash, no wobble (composing, wobMul 0)", animation("composing", { wobMul: 0 })],
-  ["outline held on its circle (shaping, shape 0)", animation("shaping", { shape: 0 })],
-  ["custom: Fibonacci sphere", fibonacciSphere],
+/* The library's nine animations, at the 20px preset. */
+export const LIBRARY = [
+  ["working", "particles on tilted orbits"],
+  ["searching", "a scan meridian sweeps a dotted globe"],
+  ["solving", "bands scramble, then click back solved"],
+  ["listening", "a waveform rolls through the rings"],
+  ["connecting", "a constellation wires itself"],
+  ["weaving", "three strands plait around the sphere"],
+  ["composing", "an undulating multi-band sash"],
+  ["breathing", "a ring slowly morphing"],
+  ["shaping", "dotted outline: circle, triangle, square"],
+].map(([state, what]) => [state, what, animation(state)]);
+
+/* The same animations held or calmed by the library's documented options. */
+export const LIBRARY_HELD = [
+  ["searching · scanMul 0", "the globe without its scan", animation("searching", { scanMul: 0 })],
+  ["breathing · wobMul 0", "the ring without its wobble", animation("breathing", { wobMul: 0 })],
+  ["composing · wobMul 0", "the sash without its wobble", animation("composing", { wobMul: 0 })],
+  ["shaping · shape 0", "the outline held on its circle", animation("shaping", { shape: 0 })],
+  ["shaping · shape 1", "held on its triangle", animation("shaping", { shape: 1 })],
+  ["shaping · shape 2", "held on its square", animation("shaping", { shape: 2 })],
 ];
 
-/* Each candidate: [label, outcome, frame, how it is shown]. `outcome` sets
-   the header's verb; `tint: true` draws it in the destructive colour. */
-export const ROUNDS = [
-  ["Shipped: plain sphere", [
-    ["Done", "Done", plainSphere],
-    ["Interrupted, red", "Interrupted", plainSphere, { tint: true }],
-    ["Failed, red", "Failed", plainSphere, { tint: true }],
-  ]],
-  ["Round 1 — Done as the package's outline, Interrupted as the last step's state", [
-    ["Done: outline held on its circle", "Done", still("shaping", { shape: 0 })],
-    ["Failed: the same circle, red", "Failed", still("shaping", { shape: 0 }), { tint: true }],
-    ["Interrupted: last step (working), 50%", "Interrupted", still("working"), { opacity: 0.5 }],
-    ["Interrupted: last step (searching), 50%", "Interrupted", still("searching"), { opacity: 0.5 }],
-  ]],
-  ["Round 2 — Interrupted as a stop", [
-    ["square (outline, shape 2)", "Interrupted", still("shaping", { shape: 2 })],
-    ["square, 60%", "Interrupted", still("shaping", { shape: 2 }), { opacity: 0.6 }],
-    ["circle with a gap", "Interrupted", () => gapped(still("shaping", { shape: 0 })(), -Math.PI / 4, 0.75)],
-    ["circle with a gap, 60%", "Interrupted", () => gapped(still("shaping", { shape: 0 })(), -Math.PI / 4, 0.75), { opacity: 0.6 }],
-    ["circle, 50%", "Interrupted", still("shaping", { shape: 0 }), { opacity: 0.5 }],
-  ]],
-  ["Round 3 — 3D stills from the engine's pieces", [
-    ["Done: armillary (every orbit closed)", "Done", armillary],
-    ["Done: plain sphere", "Done", plainSphere],
-    ["Done: ringed planet", "Done", ringedPlanet],
-    ["Done: tick pressed into the orb", "Done", () => pressed(TICK)],
-    ["Interrupted: half-built sphere", "Interrupted", halfBuilt, { opacity: 0.6 }],
-    ["Interrupted: dotted cube (the stop square in 3D)", "Interrupted", cube, { opacity: 0.6 }],
-    ["Interrupted: orbits stalled mid-flight", "Interrupted", stalledOrbits, { opacity: 0.6 }],
-    ["Interrupted: sphere stuck mid-twist", "Interrupted", midTwist, { opacity: 0.6 }],
-    ["Failed: shattered sphere", "Failed", shattered, { tint: true }],
-    ["Failed: split sphere", "Failed", split, { tint: true }],
-  ]],
-  ["Round 4 — two sets", [
-    ["A · Done: tick pressed in", "Done", () => pressed(TICK)],
-    ["A · Interrupted: stop square pressed in", "Interrupted", () => pressed(SQUARE)],
-    ["A · Failed: cross pressed in", "Failed", () => pressed(CROSS), { tint: true }],
-    ["B · Done: the orb at rest", "Done", plainSphere],
-    ["B · Interrupted: dotted cube", "Interrupted", cube, { opacity: 0.6 }],
-    ["B · Failed: the orb burst apart", "Failed", shattered, { tint: true }],
-  ]],
+/* Made for Conduit. All are stills but the Fibonacci sphere, which turns. */
+export const CREATED = [
+  ["plain sphere", "the searching globe's lattice at rest, without its scan", plainSphere],
+  ["Fibonacci sphere", "evenly spread dots on a turning sphere", fibonacciSphere],
+  ["armillary", "three orbits, each closed", armillary],
+  ["ringed planet", "a small globe inside a tilted ring", ringedPlanet],
+  ["tick pressed in", "the sphere dimmed, a tick laid on its face", () => pressed(TICK)],
+  ["square pressed in", "the same, with the stop square", () => pressed(SQUARE)],
+  ["cross pressed in", "the same, with a cross", () => pressed(CROSS)],
+  ["half-built sphere", "the lattice up to just above its equator", halfBuilt],
+  ["dotted cube", "the stop square in 3D", cube],
+  ["orbits stalled", "three orbits, each drawn only as far as its particle got", stalledOrbits],
+  ["sphere mid-twist", "two slabs of the lattice turned partway", midTwist],
+  ["shattered sphere", "the lattice's octants pushed apart", shattered],
+  ["split sphere", "the lattice parted along a jagged seam", split],
+  ["circle with a gap", "the library's circle with an arc of dots removed", () => gapped(still("shaping", { shape: 0 })(), -Math.PI / 4, 0.75)],
 ];
+
+/* Each state a turn's header shows, the orb it shows it with, and a line of
+   the kind that sits under it. */
+export const IN_APP = [
+  ["Starting", "", "library · connecting", animation("connecting")],
+  ["Thinking", "Weighing Shirakawa-go against Gokayama", "library · working", animation("working")],
+  ["Searching", "\u201cgassho house group of 6\u201d", "library · searching", animation("searching")],
+  ["Fetching", "yusuke-gokayama.com/en/guesthouse/", "library · searching", animation("searching")],
+  ["Reading", "src/client/chat/turn-trace.tsx", "library · weaving", animation("weaving")],
+  ["Editing", "src/client/chat/turn-trace.tsx", "library · shaping", animation("shaping")],
+  ["Running", "npm run typecheck", "library · solving", animation("solving")],
+  ["Using get_search_content", "Any tool without a kind of its own", "library · solving", animation("solving")],
+  ["Running 3 tools", "Several at once", "library · solving", animation("solving")],
+  ["Writing", "Weighing Shirakawa-go against Gokayama", "library · composing", animation("composing")],
+  ["Done", "Fetched yusuke-gokayama.com/en/guesthouse/", "created · plain sphere", plainSphere, { settled: true }],
+  ["Interrupted", "Clarifying room availability and pricing details", "created · plain sphere, destructive tint", plainSphere, { settled: true, tint: true }],
+  ["Failed", "The provider returned an error", "created · plain sphere, destructive tint", plainSphere, { settled: true, tint: true }],
+];
+/* Not used by a turn: listening is kept for dictation; breathing has no state. */
