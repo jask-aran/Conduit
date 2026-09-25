@@ -50,7 +50,7 @@
 .sidebar-row { width: 100%; min-height: 24px; padding: 4px 6.4px; text-align: left; font-size: 10.4px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 32%); }
 .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible)) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 .sidebar-row:is([aria-current="page"], [data-holds-current]) { color: var(--sidebar-accent-foreground); font-weight: 660; }
-.sidebar-row:is([aria-current="page"], [data-holds-current]) svg { stroke-width: 2.6; }
+.sidebar-row:is([aria-current="page"], [data-holds-current]) svg { stroke-width: 2; }
 .sidebar-chat[data-selected="true"] { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 .sidebar-row > svg { width: 12px; height: 12px; flex: none; color: var(--muted-foreground); }
 .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"], [data-holds-current]) > svg, .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"], [data-holds-current]) .sidebar-project-link > svg { color: var(--sidebar-accent-foreground); }
@@ -86,7 +86,7 @@
 .sidebar-rail-action { position: relative; display: grid; width: 28.8px; height: 28.8px; flex: none; place-items: center; border: 0; border-radius: var(--radius-md); background: transparent; color: color-mix(in oklch, var(--sidebar-foreground), transparent 20%); }
 .sidebar-rail-action:is(:hover, :focus-visible, :active) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 .sidebar-rail-action[aria-current="page"] { color: var(--sidebar-accent-foreground); }
-.sidebar-rail-action[aria-current="page"] svg { stroke-width: 2.6; }
+.sidebar-rail-action[aria-current="page"] svg { stroke-width: 2; }
 .sidebar-rail-action:focus-visible { position: relative; z-index: 1; }
 .sidebar-rail-action svg { width: 13.6px; height: 13.6px; }
 .sidebar-rail-action .workspace-glyph { width: 13.6px; height: 13.6px; }
@@ -188,7 +188,7 @@
 .sidebar-row { width: 100%; min-height: 34px; padding: 6px 9px; text-align: left; font-size: 14.5px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 32%); }
 .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible)) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 .sidebar-row:is([aria-current="page"], [data-holds-current]) { color: var(--sidebar-accent-foreground); font-weight: 660; }
-.sidebar-row:is([aria-current="page"], [data-holds-current]) svg { stroke-width: 2.6; }
+.sidebar-row:is([aria-current="page"], [data-holds-current]) svg { stroke-width: 2; }
 .sidebar-chat[data-selected="true"] { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 .sidebar-row > svg { width: 17px; height: 17px; flex: none; color: var(--muted-foreground); }
 .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"], [data-holds-current]) > svg, .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"], [data-holds-current]) .sidebar-project-link > svg { color: var(--sidebar-accent-foreground); }
@@ -218,7 +218,7 @@
 .sidebar-rail-action { position: relative; display: grid; width: 36px; height: 36px; flex: none; place-items: center; border: 0; border-radius: var(--radius-md); background: transparent; color: color-mix(in oklch, var(--sidebar-foreground), transparent 20%); }
 .sidebar-rail-action:is(:hover, :focus-visible, :active) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 .sidebar-rail-action[aria-current="page"] { color: var(--sidebar-accent-foreground); }
-.sidebar-rail-action[aria-current="page"] svg { stroke-width: 2.6; }
+.sidebar-rail-action[aria-current="page"] svg { stroke-width: 2; }
 .sidebar-rail-action:focus-visible { position: relative; z-index: 1; }
 .sidebar-rail-action svg { width: 17px; height: 17px; }
 .sidebar-rail-action .workspace-glyph { width: 17px; height: 17px; }
