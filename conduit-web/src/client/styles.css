@@ -2584,3 +2584,24 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-preview-chat small { flex: none; color: var(--muted-foreground); font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; }
 .command-preview-chat .thread-harness-mark { width: 12px; height: 12px; flex: none; }
 .command-preview > * { min-width: 0; }
+/* Chat search on a phone: buttons at the foot instead of the key rail, sort
+   among them rather than in the search row, chips that scroll sideways, and a
+   folder chevron big enough to tap (the rest of the row scopes into it). */
+.command-phone-bar { display: none; }
+@media (--conduit-mobile-layout) {
+  .command-dialog-chat-search .command-hint-bar { display: none; }
+  .command-phone-bar { display: flex; gap: 8px; border-top: 1px solid oklch(1 0 0 / 10%); padding: 8px 8px calc(8px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
+  .command-phone-bar button { min-height: 40px; flex: 1; border: 1px solid oklch(1 0 0 / 14%); border-radius: 11px; background: transparent; color: var(--foreground); font: 560 14px "Geist Variable", sans-serif; }
+  .command-phone-bar button:disabled { opacity: .45; }
+  .command-phone-bar .command-phone-danger:not(:disabled) { color: var(--destructive); }
+  .command-dialog-chat-search .command-sort-toggle { display: none; }
+  .command-dialog-chat-search .command-input-row { overflow-x: auto; scrollbar-width: none; }
+  .command-dialog-chat-search .command-input { min-width: 55%; }
+  .command-folder-toggle { width: 32px; height: 36px; margin-left: -8px; }
+  .command-folder-toggle svg { width: 14px; height: 14px; }
+  .command-folder-search { display: none; }
+  .command-list { padding-bottom: 8px; }
+}
+/* Full-screen on a phone, the frost sits over whole lines of text: a darker
+   core under it keeps the rows clear. */
+@media (--conduit-mobile-layout) { .command-dialog .command-shell { background: linear-gradient(#ffffff2b, #ffffff2b), oklch(0.19 0.005 264 / 72%); } }
