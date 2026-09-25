@@ -44,6 +44,8 @@ const PI_TOOL_SUBJECTS = Object.freeze({
   grep: "pattern", find: "pattern",
   web_search: ["queries", "query"], fetch_content: ["urls", "url"],
 });
+/** The fields a tool's subject is read from, for a reader that has only part of its input. */
+export const piSubjectFields = (name) => (Object.hasOwn(PI_TOOL_SUBJECTS, name) ? [PI_TOOL_SUBJECTS[name]].flat() : []);
 export const piToolSubject = (name, input) => {
   if (!Object.hasOwn(PI_TOOL_SUBJECTS, name) || !input || typeof input !== "object") return null;
   const fields = [PI_TOOL_SUBJECTS[name]].flat();

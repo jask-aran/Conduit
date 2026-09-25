@@ -29,7 +29,8 @@ function sameTraceSegment(left: TraceSegment, right: TraceSegment): boolean {
   if (left.kind === "error" && right.kind === "error") return left.message === right.message;
   if ((left.kind === "thinking" || left.kind === "narration")
     && (right.kind === "thinking" || right.kind === "narration")) {
-    return left.text === right.text && left.live === right.live && left.discarded === right.discarded;
+    return left.text === right.text && left.live === right.live && left.discarded === right.discarded
+      && (left.kind === "thinking" ? left.hidden : undefined) === (right.kind === "thinking" ? right.hidden : undefined);
   }
   return false;
 }
@@ -227,7 +228,7 @@ export function createTimelineStore(
     const nextSegment: TraceSegment = {
       kind: "tool",
       id: segment.id,
-      tool: buildLiveToolItem(change.toolCallId, execution, { name: segment.tool.name, kind: segment.tool.kind, input: segment.tool.input }),
+      tool: buildLiveToolItem(change.toolCallId, execution, { name: segment.tool.name, kind: segment.tool.kind, subject: segment.tool.subject, input: segment.tool.input }),
     };
     const nextValue = updateTraceSegment(current, location.segmentIndex, nextSegment);
     if (!nextValue) return null;

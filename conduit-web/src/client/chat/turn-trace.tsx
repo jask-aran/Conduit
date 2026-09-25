@@ -3,7 +3,7 @@ import { LightbulbIcon, MessageSquareTextIcon, TriangleAlertIcon } from "lucide-
 import { Spinner } from "@/components/primitives";
 import type { Message, ToolItem, ToolKind } from "../api/contracts";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
-import { KIND_ICONS, stepDuration, ToolStep } from "./tool-card";
+import { KIND_ICONS, stepDuration, ToolStep, VERBS } from "./tool-card";
 import "./turn-trail.css";
 import { ThinkingOrb, type ModeOpts, type OrbState } from "./thinking-orb";
 import { Disclosure } from "./disclosure";
@@ -109,7 +109,8 @@ type TrailItem =
   | { type: "text"; segment: Extract<TraceSegment, { kind: "thinking" | "narration" }> }
   | { type: "error"; message: Message }
   | { type: "tool"; tool: ToolItem }
-  | { type: "group"; kind: ToolKind; tools: ToolItem[] };
+  | { type: "group"; kind: ToolKind; tools: ToolItem[] }
+  | { type: "hidden" };
 
 /* The segments as the trail's lines: a run of tools of one kind becomes a
    group, anything else its own line. */
@@ -121,7 +122,17 @@ function trailOf(segments: TraceSegment[]): TrailItem[] {
     else if (run.length) items.push({ type: "tool", tool: run[0]! });
     run = [];
   };
+  let hiddenSaid = false;
   for (const segment of segments) {
+    // Reasoning the provider kept to itself is said once, where it first
+    // happened -- not once per step, and not splitting a run of tools.
+    if (segment.kind === "thinking" && segment.hidden) {
+      if (hiddenSaid) continue;
+      hiddenSaid = true;
+      flush();
+      items.push({ type: "hidden" });
+      continue;
+    }
     if (segment.kind === "tool") {
       if (run.length && (run[0]!.kind || "other") !== (segment.tool.kind || "other")) flush();
       run.push(segment.tool);
@@ -143,6 +154,9 @@ function TrailLine(props: RowProps & { item: TrailItem }) {
     <Match when={props.item.type === "text" && props.item}>{(item) => <TextStep {...props} segment={item().segment} />}</Match>
     <Match when={props.item.type === "error" && props.item}>{(item) => <div class="trail-row trail-error"><TraceError message={item().message} profileLabel={props.profileLabel} /></div>}</Match>
     <Match when={props.item.type === "tool" && props.item}>{(item) => <ToolRow {...props} tool={item().tool} />}</Match>
+    <Match when={props.item.type === "hidden"}>
+      <div class="trail-row trail-note"><div class="trail-row-header"><LightbulbIcon class="trail-icon" /><span class="trail-summary">Reasoning not shared by the provider</span></div></div>
+    </Match>
     <Match when={props.item.type === "group" && props.item}>{(item) => <ToolGroup {...props} kind={item().kind} tools={item().tools} />}</Match>
   </Switch>;
 }
@@ -239,25 +253,37 @@ function toolLine(tool: ToolItem): string {
   return subject.length > 80 && (tool.kind === "read" || tool.kind === "edit") ? `\u2026${subject.slice(-79)}` : subject;
 }
 
-/* The second line is the latest step: live, a tool while it runs and says what
-   it is acting on, otherwise the last thinking -- a finished tool's address
-   under "Thinking" read as the line contradicting the one above it. Settled,
-   the last thinking, which is what the turn concluded. Discarded text is that
-   one step's loss, not the turn's, so it is passed over. */
+/* The second line is the trail's latest line. A tool running is what it is
+   acting on (the verb is on the line above); once it has run it is its past
+   tense, "Ran pwd && ls -la", until the next step replaces it -- so a turn
+   whose reasoning is never shown still says what it has done. Thinking, when
+   there is any, replaces it as it arrives. Settled, the last thinking if
+   there was any, since that is what the turn concluded; otherwise the last
+   step. Discarded text is that one step's loss, not the turn's, so it is
+   passed over. */
 type Detail = { text: string; markdown: boolean };
+function stepLine(tool: ToolItem, live: boolean): string {
+  const subject = toolLine(tool);
+  if (live && !tool.done) return subject;
+  const kind = tool.kind || "other";
+  const verb = VERBS[kind][1];
+  if (kind === "other") return [verb, tool.name, subject].filter(Boolean).join(" ");
+  return `${verb} ${subject || tool.name || ""}`.trim();
+}
 function previewOf(trace: TurnTraceData, writing: boolean): { status: ReturnType<typeof statusOf>; work: string; detail: Detail | null } {
-  let detail: Detail | null = null;
-  let running: Detail | null = null;
+  let latest: Detail | null = null;
+  let thought: Detail | null = null;
   const tools: ToolItem[] = [];
   for (const segment of trace.segments) {
     if (segment.kind === "tool") {
       tools.push(segment.tool);
-      if (trace.active && !segment.tool.done && segment.tool.subject) running = { text: toolLine(segment.tool), markdown: false };
-    } else if (segment.kind === "error") detail = { text: segment.message.errorMessage || "The model request failed.", markdown: false };
+      const line = unnamed(segment.tool) ? "" : stepLine(segment.tool, trace.active);
+      if (line) latest = { text: line, markdown: false };
+    } else if (segment.kind === "error") latest = thought = { text: segment.message.errorMessage || "The model request failed.", markdown: false };
     else if (segment.discarded) continue;
-    else if (segment.text.trim()) detail = { text: summaryOf(segment.text), markdown: true };
+    else if (segment.text.trim()) latest = thought = { text: summaryOf(segment.text), markdown: true };
   }
-  return { status: statusOf(trace, writing), work: workOf(tools), detail: running || detail };
+  return { status: statusOf(trace, writing), work: workOf(tools), detail: trace.active ? latest : thought || latest };
 }
 
 /* `01s` to `59s`, then `1m 02s` -- one format, live and settled. */

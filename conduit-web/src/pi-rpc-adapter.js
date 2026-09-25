@@ -92,6 +92,7 @@ export function normalizePiBackendEvent(event) {
         messageId: event.messageId, contentIndex: event.contentIndex,
         blockKind: event.blockKind, delta: event.delta,
         ...(event.name ? { name: event.name, toolKind: event.toolKind } : {}),
+        ...(event.subject ? { subject: event.subject } : {}),
         ...(event.toolCallId ? { toolCallId: event.toolCallId } : {}) };
     case "assistant_message_started":
       return { ...base, type: "assistant_content", phase: "start", seq: event.seq, messageId: event.messageId };
@@ -136,7 +137,8 @@ export function normalizePiBackendEvent(event) {
         phase: { tool_execution_started: "start", tool_execution_updated: "update", tool_execution_completed: "end" }[event.type],
         toolCallId: event.toolCallId, name: event.name, input: event.input,
         ...(event.type === "tool_execution_started" ? { kind: toolKind(PI_TOOL_KINDS, event.name), subject: piToolSubject(event.name, event.input) ?? undefined } : {}),
-        output: event.output, isError: event.isError };
+        output: event.output, isError: event.isError,
+        ...(event.at ? { at: event.at } : {}) };
     case "extension_ui_request": {
       const request = normalizeHostUiRequest(event);
       if (!request) return { ...base, type: "pi_event" };

@@ -33,6 +33,8 @@ test("restores completed tool calls from persisted messages", () => {
   assert.deepEqual(toolsFromEntries(entries), [{
     toolCallId: "call_1",
     name: "write",
+    kind: "edit",
+    subject: "note.md",
     input: { path: "note.md" },
     done: true,
     isError: false,

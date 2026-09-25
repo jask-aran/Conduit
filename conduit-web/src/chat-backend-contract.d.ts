@@ -268,6 +268,8 @@ export type ToolActivityEvent = EventBase & {
   /** On `start`: what it did, as `tool.open` states it. */
   kind?: "command" | "read" | "edit" | "search" | "fetch" | "other";
   subject?: string;
+  /** On `start` and `end`: when, stated once where it is published. */
+  at?: string;
   input?: unknown;
   output?: unknown;
   isError?: boolean;

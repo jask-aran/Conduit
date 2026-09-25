@@ -21,6 +21,9 @@ type LiveBlock = {
   // Which kind of tool a call is, stated by the adapter while it is still
   // being written, before the tool runs and states it itself.
   toolKind?: ToolKind;
+  // What a call acts on, read out of its arguments while they are written.
+  subject?: string;
+  redacted?: boolean;
   input?: unknown;
   status?: string;
 };
@@ -72,7 +75,9 @@ export type TraceSegment =
   // the next request -- an interrupted turn on a backend that cannot keep a
   // partial. Inside the trace it is struck through rather than collapsed: it is
   // already behind the rollup, and hiding it twice would just lose it.
-  | { kind: "thinking"; id: string; text: string; live?: boolean; discarded?: boolean }
+  // `hidden` is reasoning the provider kept to itself: it happened, and there
+  // is no text of it to show.
+  | { kind: "thinking"; id: string; text: string; live?: boolean; discarded?: boolean; hidden?: boolean }
   | { kind: "narration"; id: string; text: string; live?: boolean; discarded?: boolean }
   | { kind: "error"; id: string; message: Message }
   | { kind: "tool"; id: string; tool: ToolItem };
@@ -330,7 +335,7 @@ export function buildLiveToolSegment(
   return {
     kind: "tool",
     id: `tool:${toolCallId}`,
-    tool: buildLiveToolItem(toolCallId, execution, { name: block.name, kind: block.toolKind, input: block.input }),
+    tool: buildLiveToolItem(toolCallId, execution, { name: block.name, kind: block.toolKind, subject: block.subject, input: block.input }),
   };
 }
 
@@ -356,13 +361,13 @@ function buildLiveErrorSegment(
 export function buildLiveToolItem(
   toolCallId: string,
   execution: ActiveGenerationView["toolExecutions"][string] = {},
-  fallback: { name?: string; kind?: ToolKind; input?: unknown } = {},
+  fallback: { name?: string; kind?: ToolKind; subject?: string; input?: unknown } = {},
 ): ToolItem {
   return {
     toolCallId,
     name: execution.name || fallback.name || "tool",
     kind: execution.kind || fallback.kind || "other",
-    ...(execution.subject ? { subject: execution.subject } : {}),
+    ...(execution.subject || fallback.subject ? { subject: execution.subject || fallback.subject } : {}),
     ...(execution.timestamp ? { timestamp: execution.timestamp } : {}),
     ...(execution.completedAt ? { completedAt: execution.completedAt } : {}),
     input: execution.input ?? fallback.input,
@@ -402,7 +407,8 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null): Turn
       .join("\n");
     for (const block of assistant.blocks) {
       if (block.kind === "thinking") {
-        segments.push({ kind: "thinking", id: block.identity, text: block.text || "", live: block.status === "streaming" });
+        segments.push({ kind: "thinking", id: block.identity, text: block.text || "", live: block.status === "streaming",
+          ...(block.redacted && !block.text ? { hidden: true } : {}) });
       } else if (block.kind === "narration") {
         segments.push({ kind: "narration", id: block.identity, text: block.text || "", live: block.status === "streaming" });
       } else if (block.kind === "text" && classifications[block.identity] === "interim") {
@@ -525,6 +531,9 @@ function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById
     const discarded = assistant.discarded === true;
     const thinking = thinkingOf(assistant);
     if (thinking) segments.push({ kind: "thinking", id: `thinking:${assistant.id}`, text: thinking, ...(discarded ? { discarded } : {}) });
+    else if ((assistant.blocks || []).some((block) => block.kind === "thinking" && block.redacted)) {
+      segments.push({ kind: "thinking", id: `thinking:${assistant.id}`, text: "", hidden: true });
+    }
     if (!answerAssistants.includes(assistant) && String(assistant.content || "").trim()) {
       segments.push({ kind: "narration", id: `narration:${assistant.id}`, text: String(assistant.content), ...(discarded ? { discarded } : {}) });
     }
