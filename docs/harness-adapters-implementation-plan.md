@@ -7,10 +7,12 @@
 > uses fx 0.0.10 ACP. `OpenCodeAdapter` uses the OpenCode 2.0.8 authenticated
 > loopback service. `ClaudeCodeAdapter` uses Agent SDK 0.3.282 against the
 > installed Claude Code 2.1.282: create, resume, streamed steps and tools,
-> approvals, `AskUserQuestion`, cancel, model, effort and permission mode, and
-> SDK-backed discovery and history. All three are selectable profiles and
-> machine-wide drive targets. Claude Code forks, compaction, usage, subagent
-> traces and `CLAUDE_CONFIG_DIR` isolation remain (Phase 3).
+> approvals, `AskUserQuestion`, cancel, model, effort and permission mode,
+> turns Claude Code starts itself, steer and follow-up queues, `/compact`,
+> fork and regenerate (not past a compaction), usage and attachments, with
+> history read from the session file so a compaction keeps what came before.
+> All three are selectable profiles and machine-wide drive targets. Claude
+> Code subagent traces and `CLAUDE_CONFIG_DIR` isolation remain (Phase 3).
 
 Add fx, OpenCode and Claude Code as Conduit harnesses. fx and OpenCode now
 support discovery, drive, and normal Conduit chats. They use the shared generic

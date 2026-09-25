@@ -35,7 +35,8 @@ export function ModelSelector(props: {
 }) {
   const selected = createMemo(() => props.models.find((item) => item.spec === props.model));
   const selectableModels = createMemo(() => props.models.filter((item) => !item.outsideScope));
-  const levels = createMemo(() => selected()?.thinkingLevels || ["off"]);
+  // A model with no levels still shows the slider, held on its one setting.
+  const levels = createMemo(() => selected()?.thinkingLevels?.length ? selected()!.thinkingLevels! : ["off"]);
   const label = createMemo(() => selected()?.label || props.model);
   // A catalogue we already hold is the answer while the next one loads: the
   // agent's own spinner already says something is starting, so swapping this
@@ -59,10 +60,10 @@ export function ModelSelector(props: {
       <MenuRadioGroup value={props.model} onChange={props.onModelChange}>
         <For each={selectableModels()}>{(item) => <MenuRadioItem class="composer-model-option" value={item.spec} closeOnSelect={false}><span title={item.label}>{item.label}</span><small>{item.provider}</small></MenuRadioItem>}</For>
       </MenuRadioGroup>
-      <Show when={selected() && levels().length > 1}><MenuSeparator />
-        <StepSlider label="Thinking" value={props.thinkingLevel}
+      <Show when={selected()}><MenuSeparator />
+        <StepSlider label="Thinking" value={levels().length > 1 ? props.thinkingLevel : levels()[0]!} disabled={levels().length < 2}
           options={levels().map((level) => ({ value: level, label: thinkingLabel(level) }))}
-          valueControl={(label) => <MenuSub>
+          valueControl={levels().length < 2 ? undefined : (label) => <MenuSub>
             <MenuSubTrigger class="step-slider-value">{label()}</MenuSubTrigger>
             <MenuSubContent>
               <MenuGroup><MenuLabel>Thinking</MenuLabel><MenuRadioGroup value={props.thinkingLevel} onChange={props.onThinkingLevelChange}>

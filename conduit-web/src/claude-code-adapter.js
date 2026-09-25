@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { EventEmitter } from "node:events";
 import * as claudeAgentSdk from "@anthropic-ai/claude-agent-sdk";
@@ -47,20 +48,20 @@ const harnessPrompt = (entry, text) => {
 
 export const CLAUDE_CODE_CAPABILITIES = Object.freeze({
   history: "linear",
-  fork: false,
-  regenerate: false,
-  steer: false,
-  followUpQueue: false,
+  fork: true,
+  regenerate: true,
+  steer: true,
+  followUpQueue: true,
   cancel: true,
-  compaction: false,
+  compaction: true,
   thinkingLevels: true,
   modelSwitch: true,
   toolUse: true,
   approvals: true,
   permissionModes: true,
-  usage: false,
+  usage: true,
   replay: false,
-  attachments: false,
+  attachments: true,
   interruptKeepsPartial: false,
 });
 
@@ -108,6 +109,86 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Conduit names a prompt `m_<uuid>` and Claude Code keeps the uuid it is handed,
 // so the saved session names the prompt what the browser already calls it.
 const promptId = (uuid) => `m_${uuid}`;
+const uuidOf = (messageId) => {
+  const bare = String(messageId || "").replace(/^m_/, "");
+  return UUID.test(bare) ? bare : crypto.randomUUID();
+};
+
+// What the model can see of an attachment; anything else is named by its path.
+const INLINE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"]);
+const ATTACHED = /^Attached file: /;
+async function promptContent(text, attachments = []) {
+  const blocks = [];
+  const named = [];
+  for (const item of attachments || []) {
+    if (!item?.path) continue;
+    if (INLINE_TYPES.has(item.type)) {
+      try {
+        const data = (await fs.promises.readFile(item.path)).toString("base64");
+        blocks.push({ type: item.type === "application/pdf" ? "document" : "image",
+          source: { type: "base64", media_type: item.type, data } });
+        continue;
+      } catch { /* named instead */ }
+    }
+    named.push(`Attached file: ${item.path}`);
+  }
+  if (text) blocks.push({ type: "text", text });
+  if (named.length) blocks.push({ type: "text", text: named.join("\n") });
+  return blocks;
+}
+
+const requestUsage = (usage) => {
+  const input = usage.input_tokens || 0;
+  const output = usage.output_tokens || 0;
+  const cacheRead = usage.cache_read_input_tokens || 0;
+  const cacheWrite = usage.cache_creation_input_tokens || 0;
+  return { input, output, cacheRead, cacheWrite, cacheWrite1h: usage.cache_creation?.ephemeral_1h_input_tokens ?? null,
+    reasoning: null, totalTokens: input + output + cacheRead + cacheWrite, cost: null };
+};
+
+/**
+ * A saved session's entries in the order they were written, from the file
+ * itself. The SDK's reader walks the chain back from its end, and a compaction
+ * starts the chain again, so it would lose everything before the compaction.
+ * A steer is saved as the command it was queued as, and read back as the
+ * prompt it became.
+ */
+async function readSavedSession(sessionId) {
+  const root = path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"), "projects");
+  let dirs = [];
+  try { dirs = await fs.promises.readdir(root); } catch { return null; }
+  for (const dir of dirs) {
+    let text;
+    try { text = await fs.promises.readFile(path.join(root, dir, `${sessionId}.jsonl`), "utf8"); } catch { continue; }
+    const seen = new Set();
+    const entries = [];
+    for (const line of text.split("\n")) {
+      let entry;
+      try { entry = line.trim() ? JSON.parse(line) : null; } catch { entry = null; }
+      if (!entry?.uuid || entry.isSidechain || seen.has(entry.uuid)) continue;
+      seen.add(entry.uuid);
+      // What a compaction summarised is not in the conversation Claude Code
+      // resumes, so nothing before it can be gone back to.
+      if (entry.type === "system" && entry.subtype === "compact_boundary") {
+        for (const earlier of entries) earlier.compacted = true;
+        continue;
+      }
+      const queued = entry.type === "attachment" && entry.attachment?.type === "queued_command"
+        && entry.attachment.commandMode === "prompt" && entry.attachment.source_uuid;
+      if (queued) {
+        entries.push({ type: "user", uuid: entry.attachment.source_uuid, parentUuid: entry.parentUuid,
+          message: { role: "user", content: entry.attachment.prompt } });
+      } else if ((entry.type === "user" || entry.type === "assistant")
+        && !entry.isMeta && !entry.isCompactSummary && !entry.isVisibleInTranscriptOnly) {
+        entries.push(entry);
+      }
+    }
+    return entries;
+  }
+  return null;
+}
+// A compaction asked for is saved as a command and its output; neither is a prompt.
+const COMPACTION_ENTRY = /^<command-name>\/compact<\/command-name>|^<local-command-stdout>/;
 
 /** The installed CLI, found on PATH as a shell would; the SDK wants a path. */
 function resolveCommand(command) {
@@ -284,6 +365,8 @@ export class ClaudeCodeAdapter extends EventEmitter {
       generation: null, generationSeq: 0, clients: new Set(), events: [], hostUiRequests: [],
       requests: new Map(), steps: new Map(), stepOrder: [], step: null, tools: new Map(),
       commands: [], models: [], settings: {}, notices: [], stderr: "",
+      steering: [], followUp: [], compacting: false, contextUsage: null, sessionStats: null,
+      counts: { userMessages: 0, assistantMessages: 0, toolCalls: 0, toolResults: 0 },
     });
     record.settings = await this.settingsFor(record.cwd);
     // Only what the chat chose is passed, and the rest is left to the user's
@@ -292,23 +375,13 @@ export class ClaudeCodeAdapter extends EventEmitter {
     // say, so the mode they name is passed on the chat's behalf.
     const startMode = permissionMode || permissionModes(record.settings)
       .find((mode) => mode.id === record.settings.permissions?.defaultMode && mode.allowed)?.id || "";
-    record.input = new InputQueue();
-    record.query = this.sdk.query({ prompt: record.input, options: {
-      cwd: record.cwd,
-      ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}),
-      ...(resume ? { resume: sessionId } : { sessionId }),
-      ...(model ? { model } : {}),
-      ...(EFFORT_LEVELS.has(thinkingLevel) ? { effort: thinkingLevel } : {}),
-      ...(startMode ? { permissionMode: startMode } : {}),
-      allowDangerouslySkipPermissions: true,
-      includePartialMessages: true,
-      thinking: { type: "adaptive", display: "summarized" },
-      canUseTool: (toolName, input, options) => this.canUseTool(record, toolName, input, options),
-      stderr: (data) => { record.stderr = `${record.stderr}${data}`.slice(-8_192); },
-    } });
-    void this.consume(record);
     try {
-      const init = await record.query.initializationResult();
+      const init = await this.openQuery(record, {
+        ...(resume ? { resume: sessionId } : { sessionId }),
+        ...(model ? { model } : {}),
+        ...(EFFORT_LEVELS.has(thinkingLevel) ? { effort: thinkingLevel } : {}),
+        ...(startMode ? { permissionMode: startMode } : {}),
+      });
       record.models = init.models || [];
       record.commands = init.commands || [];
       record.model = modelSpec(record.models, model || record.settings.model || "default");
@@ -336,16 +409,39 @@ export class ClaudeCodeAdapter extends EventEmitter {
     return this.start({ ...options, sessionId, resume: Boolean(saved) });
   }
 
-  async consume(record) {
+  /** A Claude Code for this record, on the session `session` names; the one before it is let go. */
+  openQuery(record, session) {
+    record.input = new InputQueue();
+    const query = record.query = this.sdk.query({ prompt: record.input, options: {
+      cwd: record.cwd,
+      ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}),
+      ...session,
+      allowDangerouslySkipPermissions: true,
+      includePartialMessages: true,
+      thinking: { type: "adaptive", display: "summarized" },
+      canUseTool: (toolName, input, options) => this.canUseTool(record, toolName, input, options),
+      stderr: (data) => { record.stderr = `${record.stderr}${data}`.slice(-8_192); },
+    } });
+    void this.consume(record, query);
+    return query.initializationResult();
+  }
+
+  async consume(record, query) {
     let cause = null;
     try {
-      for await (const message of record.query) this.message(record, message);
+      for await (const message of query) if (record.query === query) this.message(record, message);
     } catch (error) { cause = error; }
-    this.processExited(record, failure(record.stderr.trim() || cause?.message || "Claude Code exited"));
+    // One replaced by a fork ends because it was asked to.
+    if (record.query === query) this.processExited(record, failure(record.stderr.trim() || cause?.message || "Claude Code exited"));
   }
 
   /** Claude Code's stream, in Conduit's words. Subagents' own traffic stays inside their tool. */
   message(record, message) {
+    // A steer Claude Code has taken up is the prompt it now answers.
+    if (message.type === "command_lifecycle") {
+      if (message.state === "started") this.takeSteer(record, message.command_uuid);
+      return;
+    }
     if (message.type === "system" && message.subtype === "init") {
       record.sessionId = message.session_id || record.sessionId;
       record.permissionMode = message.permissionMode || record.permissionMode;
@@ -353,10 +449,12 @@ export class ClaudeCodeAdapter extends EventEmitter {
     }
     // Claude Code changes mode itself -- an approval that turned on accepting
     // edits, a plan approved -- and says so; the chat's picker follows it.
-    if (message.type === "system" && message.subtype === "status" && message.permissionMode
-      && message.permissionMode !== record.permissionMode) {
-      record.permissionMode = message.permissionMode;
-      this.emit("changed", { record, reason: "permission_mode" });
+    if (message.type === "system" && message.subtype === "status") {
+      if (message.permissionMode && message.permissionMode !== record.permissionMode) {
+        record.permissionMode = message.permissionMode;
+        this.emit("changed", { record, reason: "permission_mode" });
+      }
+      if ("status" in message) this.setCompacting(record, message.status === "compacting");
       return;
     }
     if (message.parent_tool_use_id) return;
@@ -368,7 +466,8 @@ export class ClaudeCodeAdapter extends EventEmitter {
       return;
     }
     if (!record.active && ["stream_event", "assistant", "result"].includes(message.type)) {
-      if (message.type === "result") return;
+      // A compaction asked for ends in a result of its own, with no turn.
+      if (message.type === "result") { this.setCompacting(record, false); return; }
       this.beginOwnTurn(record);
     }
     if (!record.active) return;
@@ -388,18 +487,89 @@ export class ClaudeCodeAdapter extends EventEmitter {
    */
   beginOwnTurn(record) {
     const notices = record.notices.splice(0);
-    const prompt = notices.length
-      ? { id: notices[0].id, content: notices.map((notice) => notice.content).join("\n") }
-      : { id: promptId(crypto.randomUUID()), content: "Claude Code went on by itself" };
+    this.beginTurn(record, notices.length
+      ? { id: notices[0].id, content: notices.map((notice) => notice.content).join("\n"), origin: "harness" }
+      : { id: promptId(crypto.randomUUID()), content: "Claude Code went on by itself", origin: "harness" });
+  }
+
+  /** A turn opened on a prompt Conduit did not send just now: the harness's own, or a steer run after the turn it was meant for. */
+  beginTurn(record, prompt) {
     const generationId = crypto.randomUUID();
+    record.counts.userMessages += 1;
     Object.assign(record, { active: true, activity: "working", stopping: false,
       generation: { id: generationId, closed: false, settled: false }, answering: prompt.id,
       steps: new Map(), stepOrder: [], step: null });
     record.tools.clear();
-    this.publish(record, messageOpen({ id: prompt.id, role: "user", origin: "harness", generationId,
-      content: prompt.content, timestamp: new Date().toISOString() }));
+    this.publish(record, messageOpen({ id: prompt.id, role: "user", ...(prompt.origin ? { origin: prompt.origin } : {}),
+      generationId, content: prompt.content, timestamp: new Date().toISOString() }));
     this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.generationSeq,
       status: "working", activity: "working", detail: null });
+  }
+
+  /**
+   * A steer Claude Code folded into the running turn: the prompt that opened
+   * the turn is answered by what came before it, and what follows answers the
+   * steer. One that missed its turn opens the next.
+   */
+  takeSteer(record, uuid) {
+    const steer = record.steering.find((item) => item.uuid === uuid);
+    if (!steer) return;
+    record.steering = record.steering.filter((item) => item !== steer);
+    this.publishQueue(record);
+    if (!record.active) { this.beginTurn(record, { id: steer.id, content: steer.text }); return; }
+    const generationId = record.generation.id;
+    this.closeSteps(record, "toolUse", null);
+    this.publish(record, turnSettle({ promptId: record.answering, generationId, outcome: "complete" }));
+    Object.assign(record, { answering: steer.id, steps: new Map(), stepOrder: [], step: null });
+    record.counts.userMessages += 1;
+    this.publish(record, messageOpen({ id: steer.id, role: "user", generationId, content: steer.text,
+      timestamp: new Date().toISOString() }));
+  }
+
+  setCompacting(record, compacting) {
+    if (record.compacting === compacting) return;
+    record.compacting = compacting;
+    record.activity = compacting ? "compacting" : record.active ? "working" : "idle";
+    this.publish(record, { type: "compaction", generationId: record.generation?.id || null, active: compacting });
+    // Its quick count goes by the last response, which a compaction outdates.
+    if (!compacting) void this.publishUsage(record, null, "full");
+  }
+
+  publishQueue(record) {
+    this.publish(record, { type: "queue_state", generationId: record.generation?.id || null, queue: this.queueState(record) });
+  }
+
+  queueState(record) {
+    return { steering: record.steering.map((item) => item.text), followUp: record.followUp.map((item) => item.text) };
+  }
+
+  /**
+   * What the session has spent: the last request's tokens from its own usage,
+   * the context from Claude Code's count of it, and the running totals from
+   * the turn's result.
+   */
+  async publishUsage(record, result = null, detail = "summary") {
+    const last = [...record.stepOrder].reverse().find((step) => step.usage)?.usage;
+    if (last) record.contextUsage = { ...record.contextUsage, lastRequestUsage: requestUsage(last) };
+    if (result?.modelUsage) {
+      const models = Object.values(result.modelUsage);
+      const sum = (field) => models.reduce((total, model) => total + (model[field] || 0), 0);
+      const tokens = { input: sum("inputTokens"), output: sum("outputTokens"), cacheRead: sum("cacheReadInputTokens"),
+        cacheWrite: sum("cacheCreationInputTokens") };
+      tokens.total = tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite;
+      const { userMessages, assistantMessages, toolCalls, toolResults } = record.counts;
+      record.sessionStats = { userMessages, assistantMessages, toolCalls, toolResults,
+        totalMessages: userMessages + assistantMessages, tokens, cost: result.total_cost_usd || 0 };
+    }
+    try {
+      const context = await record.query.getContextUsage({ detail });
+      record.contextUsage = { ...record.contextUsage, tokens: context.totalTokens, contextWindow: context.maxTokens || null,
+        percent: context.maxTokens ? (context.totalTokens / context.maxTokens) * 100 : null };
+    } catch { /* the last request's count stands */ }
+    if (!record.contextUsage && !record.sessionStats) return null;
+    this.publish(record, { type: "usage", generationId: record.generation?.id || null,
+      contextUsage: record.contextUsage, sessionStats: record.sessionStats, cacheStats: null });
+    return record.contextUsage;
   }
 
   /**
@@ -415,7 +585,8 @@ export class ClaudeCodeAdapter extends EventEmitter {
     const previous = record.step;
     if (previous) this.publish(record, { type: "assistant_content", phase: "final", generationId,
       seq: ++record.generationSeq, messageId: previous.id, stopReason: "toolUse", errorMessage: null, blocks: this.blocksOf(previous) });
-    const step = { id: messageId, blocks: [], json: [], stopReason: null, model: null, streamed: false };
+    const step = { id: messageId, blocks: [], json: [], stopReason: null, model: null, streamed: false, usage: null };
+    record.counts.assistantMessages += 1;
     record.steps.set(messageId, step);
     record.stepOrder.push(step);
     record.step = step;
@@ -441,7 +612,9 @@ export class ClaudeCodeAdapter extends EventEmitter {
 
   streamEvent(record, event) {
     if (event.type === "message_start") {
-      this.openStep(record, event.message.id).model = event.message.model || null;
+      const step = this.openStep(record, event.message.id);
+      step.model = event.message.model || null;
+      step.usage = { ...(event.message.usage || {}) };
       return;
     }
     const step = record.step;
@@ -468,6 +641,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
       this.openTool(record, step, block);
     } else if (event.type === "message_delta") {
       step.stopReason = event.delta?.stop_reason || step.stopReason;
+      if (event.usage) Object.assign(step.usage ||= {}, event.usage);
     }
   }
 
@@ -481,6 +655,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     const step = this.openStep(record, message.message?.id || message.uuid);
     step.model ||= message.message?.model || null;
     step.stopReason = message.message?.stop_reason || step.stopReason;
+    step.usage ||= message.message?.usage || null;
     for (const block of content) {
       if (block.type === "tool_use") {
         let call = step.blocks.find((item) => item?.toolCallId === block.id);
@@ -501,6 +676,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     tool.kind = toolKind(CLAUDE_TOOL_KINDS, tool.name);
     tool.subject = subjectOf(tool.input);
     record.tools.set(tool.id, tool);
+    record.counts.toolCalls += 1;
     this.publish(record, toolOpen({ toolCallId: tool.id, name: tool.name, kind: tool.kind, subject: tool.subject, input: tool.input,
       messageId: step.id, generationId, timestamp: tool.startedAt }));
     this.publish(record, { type: "tool_activity", phase: "start", generationId,
@@ -525,6 +701,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     // A tool the user's stop cut short comes back as an error; it was stopped.
     const cancelled = isError && record.stopping;
     tool.closed = true;
+    record.counts.toolResults += 1;
     tool.output = output;
     tool.completedAt = new Date().toISOString();
     this.publish(record, { type: "tool_activity", phase: "end", generationId,
@@ -597,10 +774,9 @@ export class ClaudeCodeAdapter extends EventEmitter {
   async prompt(id, message, options = {}) {
     const record = this.get(id);
     if (!record?.ready) throw failure("Claude Code session is not ready");
-    if (record.active) throw failure("Claude Code session is busy", "generation_limit", 409);
+    if (record.active || record.compacting) throw failure("Claude Code session is busy", "generation_limit", 409);
     const generationId = crypto.randomUUID();
-    const bare = String(options.clientUserMessageId || "").replace(/^m_/, "");
-    const uuid = UUID.test(bare) ? bare : crypto.randomUUID();
+    const uuid = uuidOf(options.clientUserMessageId);
     const userMessageId = options.clientUserMessageId || promptId(uuid);
     record.active = true;
     record.activity = "working";
@@ -612,15 +788,132 @@ export class ClaudeCodeAdapter extends EventEmitter {
     record.stepOrder = [];
     record.step = null;
     record.tools.clear();
+    record.counts.userMessages += 1;
     this.publish(record, messageOpen({ id: userMessageId, role: "user", generationId,
       content: record.promptText, timestamp: new Date().toISOString() }));
     this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.generationSeq,
       status: "working", activity: "working", detail: null });
     try {
       record.input.push({ type: "user", uuid, session_id: record.sessionId, parent_tool_use_id: null,
-        message: { role: "user", content: [{ type: "text", text: record.promptText }] } });
+        message: { role: "user", content: await promptContent(record.promptText, options.attachments) } });
     } catch (cause) { this.failPrompt(record, cause); throw cause; }
     return { generationId, attachmentIdentity: { messageId: userMessageId } };
+  }
+
+  /**
+   * A steer goes to Claude Code at once, which folds it in between tool calls
+   * and says when it has; a follow-up waits here for the turn to end.
+   */
+  async queue(id, mode, message, { attachments = [], messageId = "" } = {}) {
+    const record = this.get(id);
+    if (!record?.ready) throw failure("Claude Code session is not ready");
+    const text = parseAttachmentEnvelope(message).message;
+    if (!text.trim()) throw failure("Queued message is empty", "invalid_request", 400);
+    const uuid = uuidOf(messageId);
+    const item = { id: messageId || promptId(uuid), uuid, text, attachments };
+    if (mode === "follow_up") {
+      record.followUp.push(item);
+      this.publishQueue(record);
+      return { queued: "follow_up", attachmentIdentity: { messageId: item.id } };
+    }
+    if (!record.active) throw failure("Claude Code is not running a turn to steer", "invalid_request", 409);
+    record.steering.push(item);
+    this.publishQueue(record);
+    record.input.push({ type: "user", uuid, session_id: record.sessionId, parent_tool_use_id: null, priority: "next",
+      message: { role: "user", content: await promptContent(text, attachments) } });
+    return { queued: "steer", attachmentIdentity: { messageId: item.id } };
+  }
+
+  /** Take back what Claude Code has not taken up yet; a steer it already has stays. */
+  async clearQueue(id) {
+    const record = this.get(id);
+    if (!record) throw failure("Claude Code session is not running");
+    const steering = [];
+    for (const item of [...record.steering]) {
+      const cancelled = await Promise.resolve(record.query.cancelAsyncMessage?.(item.uuid)).catch(() => false);
+      if (!cancelled) continue;
+      steering.push(item);
+      record.steering = record.steering.filter((queued) => queued !== item);
+    }
+    const followUp = record.followUp.splice(0);
+    this.publishQueue(record);
+    const taken = [...steering, ...followUp];
+    return { steering: steering.map((item) => item.text), followUp: followUp.map((item) => item.text),
+      discardedMessageIds: taken.map((item) => item.id),
+      discardedAttachmentIdentities: taken.map((item) => ({ messageId: item.id })) };
+  }
+
+  /** The next message that waited for the turn to end, sent as the prompt it was. */
+  async flushFollowUp(record) {
+    const queued = record.followUp.shift();
+    if (!queued) return;
+    this.publishQueue(record);
+    try { await this.prompt(record.id, queued.text, { attachments: queued.attachments, clientUserMessageId: queued.id }); } catch (cause) {
+      this.publish(record, { type: "error", generationId: record.generation?.id || null, scope: "runtime",
+        error: { code: "backend_unavailable", message: cause?.message || "Queued message could not be sent" } });
+    }
+  }
+
+  /** `/compact`, run between turns; Claude Code says when it starts and ends. */
+  async compact(id) {
+    const record = this.get(id);
+    if (!record?.ready) throw failure("Claude Code session is not ready");
+    if (record.active || record.compacting) throw failure("Claude Code session is busy", "generation_limit", 409);
+    this.setCompacting(record, true);
+    record.input.push({ type: "user", uuid: crypto.randomUUID(), session_id: record.sessionId, parent_tool_use_id: null,
+      message: { role: "user", content: [{ type: "text", text: "/compact" }] } });
+    return true;
+  }
+
+  refreshContext(id) {
+    const record = this.get(id);
+    return record ? this.publishUsage(record) : Promise.resolve(null);
+  }
+
+  /**
+   * A new session holding what came before the chosen prompt. Claude Code
+   * copies the saved entries up to it under their own ids, so every message
+   * that stays is named as it was.
+   */
+  async fork(id, { nodeId } = {}) {
+    const record = this.get(id);
+    if (!record?.ready) throw failure("Claude Code session is not ready");
+    if (record.active) throw failure("Claude Code session is busy", "generation_limit", 409);
+    const history = await this.savedHistory(record.sessionId);
+    const index = history.findIndex((entry) => entry.type === "user" && promptId(entry.uuid) === nodeId);
+    const target = history[index];
+    if (!target) throw failure("Claude Code cannot find the selected message in its session", "fork_target_missing", 409);
+    if (target.compacted) throw failure("Claude Code compacted this conversation after that message, so it cannot go back to it", "fork_target_missing", 409);
+    const content = target.message?.content;
+    const text = typeof content === "string" ? content : (Array.isArray(content) ? content : [])
+      .filter((block) => block?.type === "text" && !ATTACHED.test(block.text)).map((block) => block.text).join("\n");
+    const before = target.parentUuid || history[index - 1]?.uuid || null;
+    const sessionId = crypto.randomUUID();
+    const previous = { query: record.query, input: record.input, sessionId: record.sessionId };
+    record.query = null;
+    previous.input?.end();
+    try { previous.query?.close(); } catch { /* already gone */ }
+    record.sessionId = sessionId;
+    record.ready = false;
+    try {
+      await this.openQuery(record, {
+        ...(before ? { resume: previous.sessionId, forkSession: true, resumeSessionAt: before, sessionId } : { sessionId }),
+        ...(record.model ? { model: record.model } : {}),
+        ...(EFFORT_LEVELS.has(record.thinkingLevel) ? { effort: record.thinkingLevel } : {}),
+        ...(record.permissionMode ? { permissionMode: record.permissionMode } : {}),
+      });
+    } catch (cause) {
+      this.processExited(record, failure(record.stderr.trim() || cause.message || String(cause)));
+      throw cause;
+    }
+    record.ready = true;
+    this.emit("changed", { record, reason: "forked" });
+    return { text, sessionId, opaqueSession: sessionId, sourceMessage: { id: nodeId, text } };
+  }
+
+  /** The saved session, from its file where there is one. */
+  async savedHistory(sessionId) {
+    return (await readSavedSession(sessionId)) ?? this.sdk.getSessionMessages(sessionId).catch(() => []);
   }
 
   finish(record, result = {}) {
@@ -651,6 +944,10 @@ export class ClaudeCodeAdapter extends EventEmitter {
     this.publish(record, { type: "status", generationId: record.generation.id, phase: "settled",
       seq: ++record.generationSeq, status: record.activity, activity: record.activity, detail: null });
     this.emit("settled", { record, completed: !stopped && !failed });
+    // A stop takes the steers with it; a turn that ended by itself leaves them to open the next.
+    if (stopped && record.steering.length) { record.steering = []; this.publishQueue(record); }
+    void this.publishUsage(record, result);
+    if (!stopped && !record.steering.length && record.followUp.length) void this.flushFollowUp(record);
   }
 
   failPrompt(record, cause) {
@@ -664,7 +961,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     record.stopping = true;
     record.activity = "stopping";
     this.cancelRequests(record);
-    try { await record.query.interrupt(); } catch { /* settled below either way */ }
+    try { await record.query.interrupt({ cancelQueued: true }); } catch { /* settled below either way */ }
     setTimeout(() => { if (record.active && record.generation === generation) this.finish(record); }, INTERRUPT_SETTLE_MS).unref?.();
     return true;
   }
@@ -736,8 +1033,9 @@ export class ClaudeCodeAdapter extends EventEmitter {
           if (tool) Object.assign(tool, { output: outputText(result.content), isError: Boolean(result.is_error), done: true });
         }
         if (results.length) continue;
-        const text = blocks.filter((block) => block?.type === "text").map((block) => block.text).join("\n");
-        if (!text.trim()) continue;
+        const text = blocks.filter((block) => block?.type === "text" && !ATTACHED.test(block.text))
+          .map((block) => block.text).join("\n");
+        if (!text.trim() || COMPACTION_ENTRY.test(text)) continue;
         // The stop's own marker, not a prompt. A tool it killed is saved as an
         // error; it was stopped.
         const made = harnessPrompt(entry, text);
@@ -753,7 +1051,8 @@ export class ClaudeCodeAdapter extends EventEmitter {
           for (const tool of promptTools) if (tool.isError) Object.assign(tool, { isError: false, cancelled: true });
           continue;
         }
-        prompt = { id: promptId(entry.uuid), role: "user", content: text, outcome: "complete" };
+        prompt = { id: promptId(entry.uuid), role: "user", content: text, outcome: "complete",
+          ...(entry.compacted ? { compacted: true } : {}) };
         messages.push(prompt);
         step = null;
         promptTools = [];
@@ -798,7 +1097,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     const record = liveSessionId ? this.get(liveSessionId) : null;
     const sessionId = record?.sessionId || (typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId);
     if (!sessionId) return { messages: [], tools: [], page: { before: null } };
-    const history = await this.sdk.getSessionMessages(sessionId).catch(() => []);
+    const history = await this.savedHistory(sessionId);
     return { ...ClaudeCodeAdapter.transcript(history), page: { before: null } };
   }
 
@@ -809,7 +1108,9 @@ export class ClaudeCodeAdapter extends EventEmitter {
     for (const message of [...messages].reverse()) {
       const node = { entry: { id: message.id, parentId: null, timestamp: message.timestamp || null,
         type: "message", display: `${message.role}: ${String(message.content || "").replace(/\s+/g, " ").trim().slice(0, 240)}`,
-        kind: message.role, hidden: false, forkable: false, regeneratable: false }, children: child ? [child] : [] };
+        kind: message.role, hidden: false,
+        forkable: message.role === "user" && message.origin !== "harness" && !message.compacted,
+        regeneratable: message.role === "user" && message.origin !== "harness" && !message.compacted }, children: child ? [child] : [] };
       if (child) child.entry.parentId = node.entry.id;
       else leafId = node.entry.id;
       child = node;
@@ -889,7 +1190,11 @@ export class ClaudeCodeAdapter extends EventEmitter {
   getCapabilities() { return CLAUDE_CODE_CAPABILITIES; }
   toClientEvent(event) { return event; }
   waitForSession() { return Promise.resolve(); }
-  replay(id) { return this.sessions.runtimeState(this.get(id)); }
+  replay(id) {
+    const record = this.get(id);
+    return { ...this.sessions.runtimeState(record), ...(record ? { queue: this.queueState(record),
+      contextUsage: record.contextUsage, sessionStats: record.sessionStats, cacheStats: null } : {}) };
+  }
   attach(id, socket) { return this.sessions.attach(id, socket); }
   setFrameInterval(_id, socket, ms) { return this.sessions.setFrameInterval(socket, ms); }
   view(record) { return { ...this.sessions.view(record), hostUiRequests: [...(record?.hostUiRequests || [])] }; }
