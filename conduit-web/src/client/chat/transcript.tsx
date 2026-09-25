@@ -38,6 +38,7 @@ import {
   decideTailScroll,
   rebaseTailFollowState,
   HISTORY_LOAD_TOP_PX,
+  TAIL_NEAR_LATEST_PX,
   shouldFollowAfterHistoryRestore,
   shouldLoadEarlierHistory,
   shouldRestoreHistoryAnchor,
@@ -272,6 +273,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   let layoutEpoch = 0;
   let previousMarkdownRenderer = props.markdownRenderer;
   const [following, setFollowing] = createSignal(true);
+  const [latestDistance, setLatestDistance] = createSignal(0);
   const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
   const [incremarkPacing, setIncremarkPacing] = createSignal<IncremarkPacingMode>(selectedIncremarkPacing());
@@ -402,6 +404,9 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     clientHeight: viewport.clientHeight,
     scrollTop: viewport.scrollTop,
   });
+  const syncLatestDistance = () => {
+    setLatestDistance(Math.max(0, viewportMaxScrollTop() - viewport.scrollTop));
+  };
   const scrollBottomNow = () => {
     if (scrollFrame != null) {
       cancelAnimationFrame(scrollFrame);
@@ -647,6 +652,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     if (loaded !== previousLoaded) {
       if (previousLoaded) rememberScrollPosition(previousLoaded);
       previousLoaded = loaded;
+      requestAnimationFrame(syncLatestDistance);
       previousUserMessageId = trailingUserId;
       const epoch = layoutEpoch;
       if (loaded && restoreScrollPosition(loaded, epoch)) return;
@@ -939,6 +945,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     // matter which one arrived.
     const scrollerResizeObserver = new ResizeObserver(() => {
       holdAgainstKeyboard(viewport.clientHeight);
+      syncLatestDistance();
     });
     scrollerResizeObserver.observe(viewport);
     scrollerResizeObserver.observe(thread);
@@ -978,6 +985,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     };
     const onScroll = () => {
       const maxScrollTop = viewportMaxScrollTop();
+      setLatestDistance(Math.max(0, maxScrollTop - viewport.scrollTop));
       if (empty()) {
         setFollowing(true);
         previousScrollTop = viewport.scrollTop;
@@ -1189,7 +1197,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         * what they are replying to. The click still lands -- only the focus
         * change is refused.
         */}
-      <Show when={!following()}><Button ref={(element) => { latestButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="icon-sm" class="message-scroller-button composer-surface-material" data-composer-surface={composerSurface()} aria-label="Scroll to latest" title="Scroll to latest" onMouseDown={(event) => event.preventDefault()} onClick={() => { if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("user-scroll-to-latest"); else { setFollowing(true); scrollBottom(); } }}><ArrowDownIcon /></Button></Show>
+      <Show when={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX}><Button ref={(element) => { latestButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="icon-sm" class="message-scroller-button composer-surface-material" data-composer-surface={composerSurface()} aria-label="Scroll to latest" title="Scroll to latest" onMouseDown={(event) => event.preventDefault()} onClick={() => viewport.scrollTo({ top: viewport.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })}><ArrowDownIcon /></Button></Show>
     </div>
   </div>;
 }
