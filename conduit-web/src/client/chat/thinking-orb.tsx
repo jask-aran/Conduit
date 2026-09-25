@@ -17,8 +17,8 @@ export type { ModeOpts, OrbState };
  * without a fade.
  */
 const SIZE = 20;
-const DWELL_MS = 800;
-const FADE_MS = 260;
+const DWELL_MS = 250;
+const FADE_MS = 200;
 const STILL_AT = 0.6;
 
 /* A CSS colour, var() included, as the painter's RGB: resolved on the canvas

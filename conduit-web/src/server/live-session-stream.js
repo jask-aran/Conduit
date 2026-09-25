@@ -472,6 +472,15 @@ export function createLiveSessionStream({
     }
     if (command.type === "stop_generation" || command.type === "abort") {
       const stoppedGenerationId = command.generationId || record.activeGeneration?.id || null;
+      // A stop stops. Pi carries its queue through an abort and runs it -- a
+      // message an extension queued as much as one the reader did, so a
+      // background fetch finishing mid-turn started a new turn under the stop
+      // -- and Codex sends its follow-ups once the turn ends. The client puts
+      // the reader's own queued words back in the composer.
+      const capabilities = adapter.getCapabilities();
+      if (capabilities.steer || capabilities.followUpQueue) {
+        await clearQueuedMessages(record, adapter).catch((error) => console.warn("Could not clear the queue before stopping", error.message));
+      }
       const stopped = await adapter.cancel(record.id, stoppedGenerationId);
       await syncTranscript(record, 1, stoppedGenerationId);
       return stopped;

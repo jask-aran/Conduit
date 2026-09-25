@@ -192,6 +192,15 @@ export class MessageIds {
   async bind(project, chat, rows) {
     if (!this.owns(chat)) return null;
     const state = await this.load(project, chat.id);
+    // One at a time: a bind reads which claims and entries are free and then
+    // takes them, so two interleaved -- a turn's checkpoint, and a reader
+    // opening the chat while it runs -- could hand one claim two entries.
+    const run = (state.binding || Promise.resolve()).then(() => this.#bindClaims(state, rows));
+    state.binding = run.catch(() => {});
+    return run;
+  }
+
+  async #bindClaims(state, rows) {
     const list = (rows || []).filter((row) => row && typeof row.id === "string" && state.unbound[row.role]);
     const freeAfter = (role, from) => list.findIndex((row, index) =>
       index > from && row.role === role && !state.byEntry.has(row.id));
