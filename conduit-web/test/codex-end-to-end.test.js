@@ -89,8 +89,10 @@ test("the server states the order, and a second turn does not disturb the first"
   const { messages, rows } = project(stream.messages);
   assert.deepEqual(shape(rows), [
     "user: short first",
+    "trace(complete)",
     "assistant: codex-test medium works",
     "user: short second",
+    "trace(complete)",
     "assistant: codex-test medium works",
   ]);
   // Held in that order too, not merely grouped into it.

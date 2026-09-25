@@ -256,6 +256,7 @@ test("a plain turn reads as prompt then answer", async () => {
 
   assert.deepEqual(shape(chat.rows()), [
     "user: Tell me a long story",
+    "trace(complete)",
     "assistant: Once upon a time.",
   ]);
 });
@@ -274,6 +275,7 @@ test("an answer that begins before its prompt is accepted still sits under it", 
 
   assert.deepEqual(shape(chat.rows()), [
     "user: Tell me a long story",
+    "trace(complete)",
     "assistant: Once upon a time.",
   ]);
 });
@@ -402,8 +404,10 @@ test("a queued message lands where the model took it, with its answer under it",
 
   assert.deepEqual(shape(chat.rows()), [
     "user: Tell me a long story",
+    "trace(complete)",
     "assistant: Once upon a time.",
     "user: make it about kangaroos",
+    "trace(complete)",
     "assistant: A kangaroo, then.",
   ]);
 });
@@ -474,6 +478,7 @@ test("interrupting with what was queued sends it once", async () => {
     "user: Tell me a long story",
     "trace(interrupted) ~The rain fell upward.~",
     "user: now stop",
+    "trace(complete)",
     "assistant: Got it — stopping.",
   ]);
 });
@@ -564,6 +569,7 @@ test("a browser that arrives mid-turn is told the prompt it is watching an answe
   const late = await chat.reattach();
   assert.deepEqual(shape(late.rows()), [
     "user: Output a long story",
+    "trace(complete)",
     "assistant: The Cartographer of Lost Things",
   ]);
 });
@@ -700,9 +706,8 @@ test("a turn stopped before it wrote anything still has a row that says so", asy
   await chat.settle();
 
   const rows = chat.rows();
-  assert.deepEqual(shape(rows), ["user: Tell me a long story", "assistant: "]);
-  assert.equal(rows[1].value.stopped, true);
-  assert.equal(rows[1].traced, false, "no trace above it says so already");
+  assert.deepEqual(shape(rows), ["user: Tell me a long story", "trace(interrupted)"]);
+  assert.equal(rows[1].answerless, true, "its header is what Regenerate hangs off");
 });
 
 test("a discarded answer is its trace's last, struck-through step, not a row of its own", () => {
