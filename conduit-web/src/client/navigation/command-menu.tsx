@@ -359,9 +359,15 @@ export function CommandMenu(props: {
         return out;
       }
       if (scope.kind === "unresolved") return out;
-      if (chatCommands.length) {
-        push({ type: "heading", key: "recent-heading", label: "Recent" });
-        for (const command of chatCommands.slice(0, RECENT_COUNT)) push({ type: "command", key: `recent:${command.id}`, index: index++, command });
+      // The chats outside any folder lead, as in the sidebar; they are not
+      // a folder of their own.
+      const projects = props.context.projects || [];
+      const chatRoot = projects.find((project) => project.slug === "chat");
+      const loose = chatCommands.filter((command) => command.project?.id === chatRoot?.id);
+      if (chatRoot && loose.length) {
+        push({ type: "heading", key: "recent-heading", label: "Chats" });
+        for (const command of loose.slice(0, RECENT_COUNT)) push({ type: "command", key: `recent:${command.id}`, index: index++, command });
+        if (loose.length > RECENT_COUNT) push({ type: "browse-all", key: `browse:${chatRoot.id}`, index: index++, project: chatRoot, count: loose.length });
       }
       const addFolder = (project: Project) => {
         const children = chatCommands.filter((command) => command.project?.id === project.id);
@@ -373,11 +379,7 @@ export function CommandMenu(props: {
         for (const command of preview) push({ type: "command", key: `preview:${command.id}`, index: index++, command, parentId: project.id });
         if (children.length > preview.length) push({ type: "browse-all", key: `browse:${project.id}`, index: index++, project, count: children.length });
       };
-      const projects = props.context.projects || [];
-      const chatRoot = projects.find((project) => project.slug === "chat");
-      // Chats, projects and workspaces are one list of folders.
       push({ type: "heading", key: "folders-heading", label: "Folders" });
-      if (chatRoot) addFolder(chatRoot);
       for (const project of projects.filter((project) => project.slug !== "chat" && !isWorkspace(project))) addFolder(project);
       for (const project of projects.filter((project) => project.slug !== "chat" && isWorkspace(project))) addFolder(project);
       return out;
@@ -927,7 +929,7 @@ export function CommandMenu(props: {
         </Show>
         <Show when={!editing() && command.detail}><small class={command.chat ? "command-chat-meta" : undefined}>
           <Show when={command.chat && chatActivity(command.chat) && chatActivity(command.chat) !== "idle"}><span class="command-chat-activity" data-attention={["waiting_for_user", "failed"].includes(chatActivity(command.chat!) || "") || undefined}>{activityLabel(chatActivity(command.chat!)!)}{props.runtime.stale() ? " (last known)" : ""}</span><span aria-hidden="true">·</span></Show>
-          <Show when={!(chatPage() && chatScope().kind === "project")}><span class="command-chat-project">{command.detail}</span></Show>
+          <Show when={!(chatPage() && chatScope().kind === "project") && command.project?.slug !== "chat"}><span class="command-chat-project">{command.detail}</span></Show>
           <Show when={command.chat}><span class="command-chat-date">{formatChatDate(chatSortStamp(command.chat!, chatSort()))}</span></Show>
         </small></Show>
         <Show when={editing()}><small>Enter to save · Escape to cancel</small></Show>
