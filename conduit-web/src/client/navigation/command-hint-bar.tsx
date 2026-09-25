@@ -1,6 +1,5 @@
 import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { COMMAND_IDS, getCommandDefinition } from "../commands/command-registry";
-import { saveChatSort, useChatSort } from "../preferences/chat-sort";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import {
   formatShortcutBinding, formatShortcutStroke, sameStroke,
@@ -47,16 +46,15 @@ export function CommandHintBar(props: {
   context: CommandHintContext;
   mode: CommandHintMode;
   scoped: boolean;
-  chatView: "all" | "attention" | "progress" | "unread";
-  onChatViewChange: (view: "all" | "attention" | "progress" | "unread") => void;
   selectedCount: number | null;
+  previewOpen?: boolean;
+  onTogglePreview?: () => void;
   pendingSequence?: PendingShortcutSequence | null;
   shortcuts: ShortcutManager;
   onToggleEdit?: () => void;
   onDeleteSelected?: () => void;
   onMoveSelected?: () => void;
 }) {
-  const chatSort = useChatSort();
   const [shortcutRevision, setShortcutRevision] = createSignal(0);
   onCleanup(props.shortcuts.subscribe(() => setShortcutRevision((value) => value + 1)));
 
@@ -113,16 +111,18 @@ export function CommandHintBar(props: {
       fixedHint("Select model", "Enter"),
       fixedHint("Close", "Esc"),
     ];
+    // Actions first; the keys that move through the tree sit at the end.
     if (props.context === "chat") return [
-      fixedHint("Move", "↑", "↓"),
-      fixedHint("Folder", "←", "→"),
-      fixedHint("Open", "Enter"),
-      fixedHint("Search here", "/"),
-      commandHint(COMMAND_IDS.toggleChatEdit, "Edit chats"),
+      commandHint(COMMAND_IDS.toggleChatEdit, "Edit"),
       commandHint(COMMAND_IDS.renameHighlightedChat, "Rename"),
       commandHint(COMMAND_IDS.deleteHighlightedChat, "Delete"),
       commandHint(COMMAND_IDS.moveHighlightedChat, "Move"),
-      fixedHint(props.scoped ? "Back" : "Close", "Esc"),
+      fixedHint("Expand", "→"),
+      fixedHint("Search in", "/"),
+      fixedHint("Project", "Ctrl", "Enter"),
+      fixedHint("Preview", "Ctrl", "P"),
+      fixedHint("Open", "Enter"),
+      fixedHint(props.scoped ? "Out" : "Close", "Esc"),
     ];
     return genericBrowseHints;
   });
@@ -142,23 +142,14 @@ export function CommandHintBar(props: {
   const hintAction = (hint: Hint) => {
     if (props.context !== "chat") return undefined;
     if (hint.commandId === COMMAND_IDS.toggleChatEdit) return props.onToggleEdit;
+    if (hint.label === "Preview") return props.onTogglePreview;
     if (props.mode === "edit" && hint.commandId === COMMAND_IDS.deleteSelectedChats) return props.onDeleteSelected;
     if (props.mode === "edit" && hint.commandId === COMMAND_IDS.moveSelectedChats) return props.onMoveSelected;
     return undefined;
   };
 
   return <div class="command-hint-bar" role="note" aria-label={props.context === "chat" ? "Chat search controls and keyboard shortcuts" : "Keyboard shortcuts"} data-mode={props.mode} data-chat-search={props.context === "chat" || undefined}>
-    <Show when={props.context === "chat" && props.mode !== "move"}>
-      <div class="command-search-footer-controls">
-        <Show when={props.selectedCount !== null}><span class="command-selection-count">{props.selectedCount} selected</span></Show>
-        <label>View: <select aria-label="Chat view" value={props.chatView} onChange={(event) => props.onChatViewChange(event.currentTarget.value as typeof props.chatView)}>
-          <option value="all">All</option><option value="attention">Needs attention</option><option value="progress">In progress</option><option value="unread">Unread</option>
-        </select></label>
-        <label>Sort: <select aria-label="Chat sort" value={chatSort()} onChange={(event) => saveChatSort(event.currentTarget.value === "created" ? "created" : "latest")}>
-          <option value="latest">Latest</option><option value="created">Created</option>
-        </select></label>
-      </div>
-    </Show>
+    <Show when={props.selectedCount !== null}><span class="command-selection-count">{props.selectedCount} selected</span></Show>
     <div class="command-hint-items command-hint-primary">
       <For each={primary()}>{(hint) => <HintItem hint={hint} onClick={hintAction(hint)} />}</For>
     </div>

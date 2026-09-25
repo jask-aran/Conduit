@@ -21,8 +21,8 @@ import {
   parseChatQuery, resolveChatQueryScope, serializeChatQuery,
 } from "../palette/chat-query";
 import { COMMAND_IDS, commandRegistry } from "../commands/command-registry";
-import { chatSortStamp, compareChatsBySort, useChatSort } from "../preferences/chat-sort";
-import { ThreadHarnessMark } from "../harness-brand";
+import { chatSortStamp, compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
+import { harnessLabelFor, ThreadHarnessMark } from "../harness-brand";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import type { ShortcutContext } from "../shortcuts/shortcut-types";
 import { CommandHintBar } from "./command-hint-bar";
@@ -114,6 +114,12 @@ const canonicalPage = (value?: string | null) => value === "goto" ? "chat-search
 const isWorkspace = (project: Project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || "");
 const PREVIEW_COUNT = 5;
 const RECENT_COUNT = 5;
+const PREVIEW_KEY = "conduit.chat-search.preview";
+type ChatView = "all" | "attention" | "progress" | "unread";
+/* An activity view is a chip, typed as is:… or chosen from the rail. */
+const VIEW_TOKENS: Record<string, ChatView> = { unread: "unread", running: "progress", progress: "progress", attention: "attention" };
+const VIEW_LABELS: Record<ChatView, string> = { all: "", unread: "is:unread", progress: "is:running", attention: "is:attention" };
+const readPreviewOpen = () => { try { return localStorage.getItem(PREVIEW_KEY) !== "closed"; } catch { return true; } };
 
 function formatChatDate(value?: string): string {
   if (!value || !Number.isFinite(Date.parse(value))) return "Unknown date";
@@ -148,7 +154,9 @@ export function CommandMenu(props: {
   const [chatMode, setChatMode] = createSignal<ChatSearchMode>({ kind: "browse" });
   const [selectedChatIds, setSelectedChatIds] = createSignal<Set<string>>(new Set());
   const [editingValue, setEditingValue] = createSignal("");
-  const [chatView, setChatView] = createSignal<"all" | "attention" | "progress" | "unread">("all");
+  const [chatView, setChatView] = createSignal<ChatView>("all");
+  const [previewOpen, setPreviewOpen] = createSignal(readPreviewOpen());
+  const togglePreview = () => { const next = !previewOpen(); setPreviewOpen(next); try { localStorage.setItem(PREVIEW_KEY, next ? "open" : "closed"); } catch { /* per-device only */ } };
   const [expandedProjects, setExpandedProjects] = createSignal<Set<string>>(new Set());
   const [scopeReturn, setScopeReturn] = createSignal<ScopeReturn | null>(null);
   const [deleteChoice, setDeleteChoice] = createSignal<"cancel" | "confirm">("cancel");
@@ -355,14 +363,11 @@ export function CommandMenu(props: {
       };
       const projects = props.context.projects || [];
       const chatRoot = projects.find((project) => project.slug === "chat");
-      push({ type: "heading", key: "browse-heading", label: "Browse" });
+      // Chats, projects and workspaces are one list of folders.
+      push({ type: "heading", key: "folders-heading", label: "Folders" });
       if (chatRoot) addFolder(chatRoot);
-      const folders = projects.filter((project) => project.slug !== "chat" && !isWorkspace(project));
-      if (folders.length) push({ type: "heading", key: "projects-heading", label: "Projects" });
-      for (const project of folders) addFolder(project);
-      const workspaces = projects.filter((project) => project.slug !== "chat" && isWorkspace(project));
-      if (workspaces.length) push({ type: "heading", key: "workspaces-heading", label: "Workspaces" });
-      for (const project of workspaces) addFolder(project);
+      for (const project of projects.filter((project) => project.slug !== "chat" && !isWorkspace(project))) addFolder(project);
+      for (const project of projects.filter((project) => project.slug !== "chat" && isWorkspace(project))) addFolder(project);
       return out;
     }
 
@@ -498,11 +503,16 @@ export function CommandMenu(props: {
       listbox?.focus();
     });
   };
+  const lastActivity = (project: Project) => project.sessions.reduce<string | undefined>((latest, chat) => {
+    const stamp = chatSortStamp(chat, chatSort());
+    return stamp && (!latest || Date.parse(stamp) > Date.parse(latest)) ? stamp : latest;
+  }, undefined);
   const toggleFolder = (id: string) => setExpandedProjects((current) => {
     const next = new Set(current);
     if (next.has(id)) next.delete(id); else next.add(id);
     return next;
   });
+  const scopeChipName = () => { const scope = chatScope(); return scope.kind === "project" ? (scope.project.slug === "chat" ? "Chats" : scope.project.name) : scope.kind === "unresolved" ? scope.value : ""; };
   const scopeName = () => { const scope = chatScope(); return scope.kind === "project" ? scope.project.name : "All chats"; };
   const emptyMessage = () => {
     if (modelSelectorPage()) return "No matching models.";
@@ -680,8 +690,7 @@ export function CommandMenu(props: {
     if (row.type === "browse-all") { enterScope(row.project); return; }
     if (row.type === "folder") {
       if (selectionMode()) { toggleFolder(row.project.id); return; }
-      close();
-      requestAnimationFrame(() => props.actions.openProject(row.project));
+      enterScope(row.project);
       return;
     }
     const command = row.command;
@@ -690,6 +699,15 @@ export function CommandMenu(props: {
       setPage(canonicalPage(command.page)); setQuery(""); setMoveMode(false); setSelectionMode(false); setSelectedChatIds(new Set<string>()); directMode = false; return;
     }
     runCommand(command);
+  };
+
+  const rowProject = (row?: SelectableRow) => row?.type === "folder" || row?.type === "browse-all" ? row.project
+    : row?.type === "command" ? row.command.project || null : null;
+  const openRowProject = (row?: SelectableRow) => {
+    const project = rowProject(row);
+    if (!project) return;
+    close();
+    requestAnimationFrame(() => props.actions.openProject(project));
   };
 
   const runPointerRow = (row: SelectableRow, event: MouseEvent) => {
@@ -779,6 +797,8 @@ export function CommandMenu(props: {
       if (row?.type === "command" && row.command.kind === "page") { event.preventDefault(); runRow(row); }
       return;
     }
+    if (chatPage() && (event.ctrlKey || event.metaKey) && !event.altKey && key === "p") { event.preventDefault(); togglePreview(); return; }
+    if (event.key === "Enter" && chatPage() && (event.ctrlKey || event.metaKey) && !selectionMode() && !moveMode()) { event.preventDefault(); openRowProject(selectable()[active()]); return; }
     if (event.key === "Enter") { event.preventDefault(); runRow(selectable()[active()]); return; }
     if (event.key === "Escape") {
       event.preventDefault(); event.stopPropagation();
@@ -801,9 +821,9 @@ export function CommandMenu(props: {
       else if (page() && !directMode) goBack();
       else close();
     }
-    if (event.key === "Backspace" && chatPage() && !parsedQuery().text && chatScope().kind === "project") {
-      event.preventDefault();
-      backScope();
+    if (event.key === "Backspace" && chatPage() && !parsedQuery().text && (event.currentTarget === input || inList)) {
+      if (chatView() !== "all") { event.preventDefault(); setChatView("all"); }
+      else if (chatScope().kind !== "all") { event.preventDefault(); backScope(); }
     }
     // Backspace edits the query. It never exits a page when no filter remains.
   };
@@ -858,7 +878,11 @@ export function CommandMenu(props: {
         </Show>
         <Show when={isWorkspace(row.project)} fallback={<FolderIcon class="command-icon" />}><WorkspaceGlyph appearance={row.project.workspaceAppearance} /></Show>
         <span class="command-label">{row.project.name}</span>
-        <small>{row.count} chat{row.count === 1 ? "" : "s"}<Show when={unread()}> · {unread()} unread</Show><Show when={live()}> · {live()} active</Show></small>
+        <small class="command-folder-meta">
+          <Show when={live() || unread()}><span class="command-folder-dot" data-live={live() ? "" : undefined} title={live() ? `${live()} active` : `${unread()} unread`} /></Show>
+          <span class="command-folder-count">{row.count}</span>
+          <Show when={lastActivity(row.project)}>{(stamp) => <span class="command-chat-date">{formatChatDate(stamp())}</span>}</Show>
+        </small>
         <button type="button" class="command-folder-search" tabIndex={-1} aria-label={`Search in ${row.project.name}`} title={`Search in ${row.project.name}`} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); enterScope(row.project, true); }}><SearchIcon /></button>
       </div>;
     }
@@ -882,13 +906,13 @@ export function CommandMenu(props: {
         </Show>
         <Show when={!editing() && command.detail}><small class={command.chat ? "command-chat-meta" : undefined}>
           <Show when={command.chat && chatActivity(command.chat) && chatActivity(command.chat) !== "idle"}><span class="command-chat-activity" data-attention={["waiting_for_user", "failed"].includes(chatActivity(command.chat!) || "") || undefined}>{activityLabel(chatActivity(command.chat!)!)}{props.runtime.stale() ? " (last known)" : ""}</span><span aria-hidden="true">·</span></Show>
-          <span class="command-chat-project">{command.detail}</span>
-          <Show when={command.chat}><span aria-hidden="true">·</span><span class="command-chat-date">{formatChatDate(chatSortStamp(command.chat!, chatSort()))}</span></Show>
+          <Show when={!(chatPage() && chatScope().kind === "project")}><span class="command-chat-project">{command.detail}</span></Show>
+          <Show when={command.chat}><span class="command-chat-date">{formatChatDate(chatSortStamp(command.chat!, chatSort()))}</span></Show>
         </small></Show>
         <Show when={editing()}><small>Enter to save · Escape to cancel</small></Show>
       </span>
       <Show when={command.kind === "page"}><ChevronRightIcon class="command-chevron" /></Show>
-      <Show when={commandShortcut(command)}>{(shortcut) => <kbd class="command-shortcut">{shortcut()}</kbd>}</Show>
+      <Show when={commandShortcut(command)}>{(shortcut) => <span class="command-shortcut"><For each={shortcut().split(/\s+/)}>{(key) => <kbd>{key}</kbd>}</For></span>}</Show>
     </div>;
   };
 
@@ -896,7 +920,7 @@ export function CommandMenu(props: {
     <KDialog.Root open={props.open} onOpenChange={changeOpen}>
       <KDialog.Portal>
         <KDialog.Content
-          class={`command-dialog${chatPage() ? " command-dialog-chat-search" : ""}${modelSelectorPage() ? " command-dialog-model-selector" : ""}`}
+          class={`command-dialog${chatPage() ? " command-dialog-chat-search" : ""}${chatPage() && previewOpen() && !moveMode() ? " command-dialog-with-preview" : ""}${modelSelectorPage() ? " command-dialog-model-selector" : ""}`}
           onOpenAutoFocus={(event) => { event.preventDefault(); focusInput(); }}
           onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}
           onPointerDown={(event) => { if (event.target === event.currentTarget) close(); }}
@@ -904,17 +928,19 @@ export function CommandMenu(props: {
           <div class="command-shell">
             <KDialog.Title class="sr-only">{modelSelectorPage() ? "Model selector" : chatPage() ? "Chat search" : "Command palette"}</KDialog.Title>
             <KDialog.Description class="sr-only">{modelSelectorPage() ? "Choose the models available in this project." : chatPage() ? "Find and manage chats." : "Search commands, settings, and models."}</KDialog.Description>
-            <Show when={chatPage() && !moveMode()}><div class="command-search-path">
-              <Show when={chatScope().kind === "project"} fallback={<span>All chats</span>}>
-                <button type="button" onClick={backScope}>All</button><span aria-hidden="true">›</span><span>{scopeName()}</span>
-              </Show>
-              <small>{commands().length} chat{commands().length === 1 ? "" : "s"}</small>
-            </div></Show>
             <div class="command-input-row">
               <Show when={moveMode() || (page() && !chatPage() && !modelSelectorPage())}>
                 <Button type="button" variant="ghost" size="icon-sm" class="command-back" aria-label={moveMode() ? "Back to chat results" : "Back to commands"} title="Back" onMouseDown={(event) => event.preventDefault()} onClick={goBack}><ArrowLeftIcon /></Button>
               </Show>
-              <Show when={chatPage()}><SearchIcon class="command-input-icon" aria-hidden="true" /></Show>
+              <Show when={chatPage()}>
+                <SearchIcon class="command-input-icon" aria-hidden="true" />
+                <Show when={!moveMode() && chatScope().kind !== "all"}>
+                  <button type="button" class="command-filter-chip" title="Remove scope (Backspace)" onMouseDown={(event) => event.preventDefault()} onClick={() => { backScope(); focusInput(); }}>in:{scopeChipName()}<span aria-hidden="true">×</span></button>
+                </Show>
+                <Show when={!moveMode() && chatView() !== "all"}>
+                  <button type="button" class="command-filter-chip" title="Remove filter" onMouseDown={(event) => event.preventDefault()} onClick={() => { setChatView("all"); focusInput(); }}>{VIEW_LABELS[chatView()]}<span aria-hidden="true">×</span></button>
+                </Show>
+              </Show>
               <Show when={!chatPage() && !modelSelectorPage() && !pageMeta()}><span class="command-input-glyph" aria-hidden="true">&gt;</span></Show>
               <Show when={!chatPage() && pageMeta()}><span class="command-page-prefix">{pageMeta()!.prefix}</span></Show>
               <input
@@ -930,9 +956,21 @@ export function CommandMenu(props: {
                 placeholder={moveMode() ? "Choose destination…" : chatPage() ? chatScope().kind === "project" ? `Search ${scopeName()} chats…` : "Search chats, projects, workspaces…" : modelSelectorPage() ? "Find models…" : pageMeta()?.placeholder || "Run a command…"}
                 value={moveMode() ? "" : parsedQuery().text}
                 disabled={moveMode()}
-                onInput={(event) => setQuery(serializeChatQuery(parsedQuery().filters, event.currentTarget.value))}
+                onInput={(event) => {
+                  let text = event.currentTarget.value;
+                  // A finished is:… token becomes the activity chip.
+                  const view = chatPage() ? /(^|\s)is:(\w+)\s$/i.exec(text) : null;
+                  if (view && VIEW_TOKENS[view[2]!.toLowerCase()]) { setChatView(VIEW_TOKENS[view[2]!.toLowerCase()]!); text = text.slice(0, view.index); event.currentTarget.value = text; }
+                  setQuery(serializeChatQuery(parsedQuery().filters, text));
+                }}
                 onKeyDown={keydown}
               />
+              <Show when={chatPage() && !moveMode()}>
+                <div class="command-sort-toggle" role="group" aria-label="Chat sort">
+                  <button type="button" aria-pressed={chatSort() === "latest"} onMouseDown={(event) => event.preventDefault()} onClick={() => saveChatSort("latest")}>Latest</button>
+                  <button type="button" aria-pressed={chatSort() === "created"} onMouseDown={(event) => event.preventDefault()} onClick={() => saveChatSort("created")}>Created</button>
+                </div>
+              </Show>
               <Button
                 type="button"
                 variant="ghost"
@@ -946,22 +984,38 @@ export function CommandMenu(props: {
                 <XIcon />
               </Button>
             </div>
+            <div class="command-body">
             <div id="command-listbox" ref={listbox} role={chatPage() && !moveMode() ? "tree" : "listbox"} aria-label={modelSelectorPage() ? "Models" : chatPage() ? "Chat browser" : "Commands"} aria-activedescendant={selectable().length ? optionId(active()) : undefined} class="command-list" tabIndex={chatPage() || selectionMode() || moveMode() ? 0 : -1} onKeyDown={keydown}>
               <Show when={!selectable().length}><p class="command-empty">{emptyMessage()}</p></Show>
               <For each={rows()}>{renderRow}</For>
+            </div>
+            <Show when={chatPage() && previewOpen() && !moveMode()}>
+              <aside class="command-preview" aria-label="Chat preview">
+                <Show when={highlightedChat()} fallback={<p class="command-preview-empty">{rowProject(selectable()[active()]) ? rowProject(selectable()[active()])!.name : "Nothing highlighted"}</p>}>
+                  {(target) => <>
+                    <div class="command-preview-title"><ThreadHarnessMark id={target().chat.harnessId} /><span>{target().chat.title || "Untitled chat"}</span></div>
+                    <div class="command-preview-facts">
+                      <span>{harnessLabelFor(target().chat.harnessId || target().chat.backend?.implementation)}</span>
+                      <span>{target().project.slug === "chat" ? "Chats" : target().project.name}</span>
+                      <span>Updated {formatChatDate(target().chat.lastMessageAt || target().chat.updatedAt)} · created {formatChatDate(target().chat.createdAt)}</span>
+                    </div>
+                  </>}
+                </Show>
+              </aside>
+            </Show>
             </div>
             <CommandHintBar
               context={hintContext()}
               mode={modelSelectorPage() ? "model-selector" : hintMode()}
               pendingSequence={pendingActionSequence()}
               shortcuts={props.shortcuts}
-              scoped={chatScope().kind === "project"}
-              chatView={chatView()}
-              onChatViewChange={setChatView}
+              scoped={chatScope().kind !== "all"}
               selectedCount={selectionMode() ? selectedTargets().length : null}
               onToggleEdit={toggleSelection}
               onDeleteSelected={() => requestDelete()}
               onMoveSelected={() => moveSelected()}
+              previewOpen={previewOpen()}
+              onTogglePreview={togglePreview}
             />
           </div>
           <Show when={props.details}>
