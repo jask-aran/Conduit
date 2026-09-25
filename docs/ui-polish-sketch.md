@@ -780,6 +780,13 @@ maximised, sit awkwardly on a VS Code-style toggle.
   goes home to the open chat's composer: pressing Esc enough always gets
   back to typing.
 
+Chat search uses the same cursor. It opens with recent chats above a tree of
+Chats, projects, and workspaces. Right expands a folder to a short preview;
+Browse all enters its full chat list. Left or Escape returns to the folder row
+and its prior scroll position. Slash scopes search to the selected folder,
+while typing at the root searches chat titles and folder names. The scope path
+stays above the input; the footer keeps navigation keys and activity filters.
+
 The transcript's share of this -- walking and acting on turns -- moved to
 [`transcript-mode.md`](transcript-mode.md): ↑ from the composer already walks
 sent messages, so it becomes a mode of its own, to be designed concretely.

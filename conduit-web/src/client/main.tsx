@@ -1998,6 +1998,7 @@ function App() {
     settings: (section) => openSettings(section),
     workspaceSettings: (id) => openSettings("workspaces", id),
     openChat: (session, project) => { setMobileSidebarOpen(false); void openChat(session, project); },
+    openProject: (project) => { setMobileSidebarOpen(false); void openProject(project); },
     renameChat,
     moveChats,
     copyChatLinks,

@@ -76,6 +76,7 @@ export interface PaletteActions {
   settings: (section: string) => void;
   workspaceSettings?: (id: string) => void;
   openChat: (session: ChatSummary, project: Project) => void | Promise<void>;
+  openProject: (project: Project) => void | Promise<void>;
   renameChat: (chat: ChatSummary, project: Project, name: string) => Promise<boolean>;
   moveChats: (targets: Array<{ chat: ChatSummary; project: Project }>, destination: Project) => Promise<string[]>;
   copyChatLinks: (targets: Array<{ chat: ChatSummary; project: Project }>) => Promise<boolean>;

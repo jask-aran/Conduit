@@ -6,7 +6,6 @@ import {
   formatShortcutBinding, formatShortcutStroke, sameStroke,
 } from "../shortcuts/shortcut-normalize";
 import type { PendingShortcutSequence } from "../shortcuts/shortcut-types";
-import type { Project } from "../api/contracts";
 
 export type CommandHintMode = "browse" | "edit" | "rename" | "move" | "action-prefix" | "model-selector";
 export type CommandHintContext = "chat" | "generic";
@@ -47,9 +46,7 @@ function HintItem(props: { hint: Hint; onClick?: () => void }) {
 export function CommandHintBar(props: {
   context: CommandHintContext;
   mode: CommandHintMode;
-  scope: string;
-  projects: Project[];
-  onScopeChange: (scope: string) => void;
+  scoped: boolean;
   chatView: "all" | "attention" | "progress" | "unread";
   onChatViewChange: (view: "all" | "attention" | "progress" | "unread") => void;
   selectedCount: number | null;
@@ -117,11 +114,15 @@ export function CommandHintBar(props: {
       fixedHint("Close", "Esc"),
     ];
     if (props.context === "chat") return [
+      fixedHint("Move", "↑", "↓"),
+      fixedHint("Folder", "←", "→"),
+      fixedHint("Open", "Enter"),
+      fixedHint("Search here", "/"),
       commandHint(COMMAND_IDS.toggleChatEdit, "Edit chats"),
       commandHint(COMMAND_IDS.renameHighlightedChat, "Rename"),
       commandHint(COMMAND_IDS.deleteHighlightedChat, "Delete"),
       commandHint(COMMAND_IDS.moveHighlightedChat, "Move"),
-      ...genericBrowseHints,
+      fixedHint(props.scoped ? "Back" : "Close", "Esc"),
     ];
     return genericBrowseHints;
   });
@@ -150,11 +151,6 @@ export function CommandHintBar(props: {
     <Show when={props.context === "chat" && props.mode !== "move"}>
       <div class="command-search-footer-controls">
         <Show when={props.selectedCount !== null}><span class="command-selection-count">{props.selectedCount} selected</span></Show>
-        <label>In: <select aria-label="Search in" value={props.scope} onChange={(event) => props.onScopeChange(event.currentTarget.value)}>
-          <option value="all">All projects</option><option value="chats">Chats</option>
-          <For each={props.projects.filter((project) => project.slug !== "chat")}>{(project) => <option value={`project:${project.id}`}>{project.name}</option>}</For>
-          <Show when={props.scope === "unresolved"}><option value="unresolved">Unknown project</option></Show>
-        </select></label>
         <label>View: <select aria-label="Chat view" value={props.chatView} onChange={(event) => props.onChatViewChange(event.currentTarget.value as typeof props.chatView)}>
           <option value="all">All</option><option value="attention">Needs attention</option><option value="progress">In progress</option><option value="unread">Unread</option>
         </select></label>
