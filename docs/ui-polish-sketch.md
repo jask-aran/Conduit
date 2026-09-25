@@ -1,7 +1,7 @@
 # UI polish sketch
 
-Status: 1c (the opened trace as a trail) is agreed and next to build.
-Sections 1 (interrupted turns), 1b (the trace header), 2 (composer hierarchy), 5 (empty
+Status: sections 1 (interrupted turns), 1b (the trace header), 1c (the
+opened trace as a trail), 2 (composer hierarchy), 5 (empty
 states, reduced) and 7 (motion, but for the deferred dashboard transition)
 are built and recorded below as built, as is 8 (keyboard) but for what waits
 on the dashboard redesign and transcript mode; 3 (autosave) is built for
@@ -150,8 +150,9 @@ format live and settled.
 
 ### 1c. The opened trace: a trail
 
-Status: agreed, not built. Replaces the bordered tool cards (name · input,
-"Complete", chevron) that the opened trace is a column of today.
+Status: built as drawn. Replaced the bordered tool cards (name · input,
+"Complete", chevron). A tool with no subject shows its own name in the
+subject's place (Pi's `get_search_content`, which pages a stored result).
 
 The opened trace is one column of light lines on a thin rail, one line per
 step, in the order they happened:

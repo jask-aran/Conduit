@@ -724,6 +724,7 @@ export function toolsFromEntries(entries) {
         ...current,
         name: current.name || message.toolName,
         done: true,
+        ...(entry.timestamp ? { completedAt: entry.timestamp } : {}),
         isError: message.isError === true,
         output: textContent(message.content),
       });

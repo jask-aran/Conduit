@@ -1,0 +1,36 @@
+/* The opened trace is a trail: one light line per step on the body's rail --
+   an icon for its kind, a verb, what it acted on in mono, its time at the
+   right. A line opens in place to what it did (DESIGN.md, Trace). */
+.turn-trace .turn-trace-body { gap: 1px; padding-left: 6px; }
+
+.trail-row-header { display: flex; width: 100%; min-width: 0; align-items: center; gap: 8px; padding: 3px 6px; border: 0; border-radius: 6px; background: none; color: var(--muted-foreground); font-size: 13px; line-height: 1.45; text-align: left; cursor: pointer; }
+.trail-row-header:hover, .trail-row-header:focus-visible { background: var(--accent); outline: none; }
+.trail-row-header .trail-icon { width: 14px; height: 14px; flex: none; }
+.trail-verb { flex: none; color: color-mix(in oklch, var(--foreground), transparent 15%); font-weight: 500; white-space: nowrap; }
+.trail-subject { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.trail-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trail-summary .chat-markdown { display: contents; color: inherit; font-size: inherit; line-height: inherit; }
+.trail-summary :is(.chat-markdown, .incremark) > * { display: inline; margin: 0; }
+.trail-meta { display: flex; flex: none; gap: 8px; margin-left: auto; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.trail-flag { color: var(--foreground); font-weight: 560; }
+.tool-step[data-status="failed"] > .trail-row-header .trail-icon { color: var(--destructive); }
+
+/* The chevron is there when it is wanted: on the cursor, or open. */
+.trail-row-header .disclosure-chevron { width: 12px; height: 12px; flex: none; margin-left: auto; opacity: 0; }
+.trail-meta + .disclosure-chevron { margin-left: 0; }
+.trail-row-header:is(:hover, :focus-visible, [aria-expanded="true"]) .disclosure-chevron { opacity: 1; }
+
+/* What a line opens to sits under its verb, not its icon. */
+.tool-step-content, .text-step-content { margin: 2px 0 6px 28px; }
+.tool-step-content pre { max-height: 420px; margin: 0; overflow: auto; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); white-space: pre-wrap; font: 12px/1.5 ui-monospace, monospace; }
+.text-step-content .chat-markdown { color: var(--muted-foreground); font-size: 13px; }
+
+/* Text a stop discarded, struck where it sits. */
+.text-step[data-discarded="true"] .trail-summary,
+.text-step[data-discarded="true"] .text-step-content .chat-markdown { text-decoration: line-through; opacity: 0.55; }
+
+/* A run of one kind: its steps under it, on a rail of their own beneath the
+   group's icon. */
+.tool-group-steps { display: flex; flex-direction: column; gap: 1px; margin-left: 13px; padding-left: 6px; border-left: 1px solid var(--border); }
+
+.trail-error { padding: 2px 0; }

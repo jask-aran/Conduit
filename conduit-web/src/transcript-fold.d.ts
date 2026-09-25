@@ -31,6 +31,7 @@ export interface TranscriptOp {
   output?: unknown;
   isError?: boolean;
   timestamp?: string;
+  completedAt?: string;
 }
 
 export function displayUserText(message?: ProtocolMessage | Message | null): string;

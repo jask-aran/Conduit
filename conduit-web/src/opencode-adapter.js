@@ -869,7 +869,9 @@ export class OpenCodeAdapter extends EventEmitter {
         const cancelled = stopReason === "aborted" && part.state?.status !== "completed";
         tools.push({ toolCallId: part.id || part.callID, name: part.name || part.tool || "tool",
           kind: kindOf(part.name || part.tool), subject: subjectOf(part.name || part.tool, part.state?.input), input: part.state?.input ?? null, output: toolOutput(part), isError: part.state?.status === "error" && !cancelled,
-          ...(cancelled ? { cancelled } : {}), done: ["completed", "error"].includes(part.state?.status) });
+          ...(cancelled ? { cancelled } : {}), done: ["completed", "error"].includes(part.state?.status),
+          ...(iso(part.state?.time?.start) ? { timestamp: iso(part.state.time.start) } : {}),
+          ...(iso(part.state?.time?.end) ? { completedAt: iso(part.state.time.end) } : {}) });
       }
       const text = blocks.filter((block) => block.kind === "text").map((block) => block.text).join("\n");
       messages.push({ id: row.id, role: "assistant", content: text, blocks, answers: lastUser,

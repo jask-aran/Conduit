@@ -1,8 +1,10 @@
-import { createEffect, createMemo, createSignal, Index, lazy, onCleanup, Show, Suspense } from "solid-js";
-import { BrainIcon, TriangleAlertIcon } from "lucide-solid";
+import { createEffect, createMemo, createSignal, Index, lazy, Match, onCleanup, Show, Suspense, Switch } from "solid-js";
+import { BrainIcon, LightbulbIcon, MessageSquareTextIcon, TriangleAlertIcon } from "lucide-solid";
+import { Spinner } from "@/components/primitives";
 import type { Message, ToolItem, ToolKind } from "../api/contracts";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
-import { ToolCard } from "./tool-card";
+import { KIND_ICONS, stepDuration, ToolStep } from "./tool-card";
+import "./turn-trail.css";
 import { Disclosure } from "./disclosure";
 import type { MarkdownRendererId } from "./markdown-settings";
 import type { IncremarkPacingMode } from "./incremark-pacing";
@@ -40,9 +42,8 @@ function TraceError(props: { message: Message; profileLabel?: string }) {
   </div>;
 }
 
-function TraceSegmentRow(props: {
+type RowProps = {
   onRendered?: () => void;
-  segment: () => TraceSegment;
   sessionId: string | null;
   renderer?: MarkdownRendererId;
   pacing?: IncremarkPacingMode;
@@ -50,45 +51,97 @@ function TraceSegmentRow(props: {
   toolOpen?: (id: string) => boolean;
   onToolOpenChange?: (id: string, open: boolean) => void;
   settled?: boolean;
-}) {
-  const tool = () => {
-    const segment = props.segment();
-    return segment.kind === "tool" ? segment.tool : null;
+};
+
+/* Thinking or narration as one line of the trail: its summary, the whole text
+   a click below it. */
+function TextStep(props: RowProps & { segment: Extract<TraceSegment, { kind: "thinking" | "narration" }> }) {
+  const Icon = () => props.segment.kind === "thinking" ? <LightbulbIcon class="trail-icon" /> : <MessageSquareTextIcon class="trail-icon" />;
+  return <Disclosure class="trail-row text-step" data-kind={props.segment.kind}
+    // Text the model was cut off writing and is not being given back to it:
+    // struck where it sits, and it says so -- the loss is this step's.
+    data-discarded={props.segment.discarded ? "true" : undefined}
+    headerClass="trail-row-header" bodyClass="text-step-content"
+    initialOpen={props.toolOpen?.(props.segment.id)} onOpenChange={(open) => props.onToolOpenChange?.(props.segment.id, open)}
+    header={<>
+      <Icon />
+      <span class="trail-summary">
+        <Suspense fallback={summaryOf(props.segment.text)}><ChatMarkdown inline renderer={props.renderer} pacing={props.pacing}>{summaryOf(props.segment.text) || "\u2026"}</ChatMarkdown></Suspense>
+      </span>
+      <Show when={props.segment.discarded}><span class="trail-meta"><span class="trail-flag" title="Interrupted — the agent has no record of this">Not kept</span></span></Show>
+    </>}
+    body={() => <Suspense fallback={<div class="markdown-skeleton" />}>
+      <ChatMarkdown streaming={Boolean(props.segment.live)} renderer={props.renderer} pacing={props.pacing} onRendered={props.onRendered}>{props.segment.text}</ChatMarkdown>
+    </Suspense>} />;
+}
+
+function ToolRow(props: RowProps & { tool: ToolItem }) {
+  return <ToolStep tool={props.tool} settled={props.settled} sessionId={props.sessionId}
+    initialOpen={props.toolOpen?.(props.tool.toolCallId)} onOpenChange={(open) => props.onToolOpenChange?.(props.tool.toolCallId, open)} />;
+}
+
+/* Two or more steps of one kind in a row are one line that says how many, the
+   steps under it. It starts open -- the steps are the point -- so what is
+   remembered is folding it. */
+const GROUP_WORDS: Record<ToolKind, (count: number) => string> = {
+  command: (count) => `Ran ${count} commands`,
+  read: (count) => `Read ${count} files`,
+  edit: (count) => `Made ${count} edits`,
+  search: (count) => `Ran ${count} searches`,
+  fetch: (count) => `Ran ${count} fetches`,
+  other: (count) => `Used ${count} tools`,
+};
+function ToolGroup(props: RowProps & { kind: ToolKind; tools: ToolItem[] }) {
+  const key = () => `fold:${props.tools[0]!.toolCallId}`;
+  const running = () => !props.settled && props.tools.some((tool) => !tool.done);
+  const KindIcon = () => { const Icon = KIND_ICONS[props.kind]; return <Icon class="trail-icon" />; };
+  return <Disclosure class="trail-row tool-group" headerClass="trail-row-header" bodyClass="tool-group-steps"
+    initialOpen={!props.toolOpen?.(key())} onOpenChange={(open) => props.onToolOpenChange?.(key(), !open)}
+    header={<>
+      <Show when={running()} fallback={<KindIcon />}><Spinner class="trail-icon" /></Show>
+      <span class="trail-verb">{GROUP_WORDS[props.kind](props.tools.length)}</span>
+      <span class="trail-meta">{stepDuration(props.tools[0]!.timestamp, props.tools.at(-1)!.completedAt)}</span>
+    </>}
+    body={() => <Index each={props.tools}>{(tool) => <ToolRow {...props} tool={tool()} />}</Index>} />;
+}
+
+type TrailItem =
+  | { type: "text"; segment: Extract<TraceSegment, { kind: "thinking" | "narration" }> }
+  | { type: "error"; message: Message }
+  | { type: "tool"; tool: ToolItem }
+  | { type: "group"; kind: ToolKind; tools: ToolItem[] };
+
+/* The segments as the trail's lines: a run of tools of one kind becomes a
+   group, anything else its own line. */
+function trailOf(segments: TraceSegment[]): TrailItem[] {
+  const items: TrailItem[] = [];
+  let run: ToolItem[] = [];
+  const flush = () => {
+    if (run.length > 1) items.push({ type: "group", kind: run[0]!.kind || "other", tools: run });
+    else if (run.length) items.push({ type: "tool", tool: run[0]! });
+    run = [];
   };
-  const error = () => {
-    const segment = props.segment();
-    return segment.kind === "error" ? segment.message : null;
-  };
-  const text = () => {
-    const segment = props.segment();
-    return segment.kind === "thinking" || segment.kind === "narration" ? segment.text : "";
-  };
-  const live = () => {
-    const segment = props.segment();
-    return segment.kind === "thinking" || segment.kind === "narration" ? Boolean(segment.live) : false;
-  };
-  // Text the model was cut off mid-way through and is not being given back to
-  // it. Struck through where it sits rather than collapsed: it is already
-  // behind the trace rollup, and folding it away a second time would just lose
-  // work the reader watched happen.
-  const discarded = () => {
-    const segment = props.segment();
-    return (segment.kind === "thinking" || segment.kind === "narration") && segment.discarded === true;
-  };
-  return <Show when={tool()} fallback={
-    <Show when={error()} fallback={
-      <div class="turn-trace-text" data-kind={props.segment().kind} data-discarded={discarded() ? "true" : undefined}
-        title={discarded() ? "Interrupted — the agent has no record of this" : undefined}>
-        {/* The loss is this step's, so it says so here rather than on the turn. */}
-        <Show when={discarded()}><span class="turn-trace-not-kept">Not kept</span></Show>
-        <Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={live()} renderer={props.renderer} pacing={props.pacing} onRendered={props.onRendered}>{text()}</ChatMarkdown></Suspense>
-      </div>
-    }>
-      {(message) => <TraceError message={message()} profileLabel={props.profileLabel} />}
-    </Show>
-  }>
-    {(item) => <ToolCard tool={item()} settled={props.settled} sessionId={props.sessionId} initialOpen={props.toolOpen?.(item().toolCallId)} onOpenChange={(open) => props.onToolOpenChange?.(item().toolCallId, open)} />}
-  </Show>;
+  for (const segment of segments) {
+    if (segment.kind === "tool") {
+      if (run.length && (run[0]!.kind || "other") !== (segment.tool.kind || "other")) flush();
+      run.push(segment.tool);
+      continue;
+    }
+    flush();
+    if (segment.kind === "error") items.push({ type: "error", message: segment.message });
+    else items.push({ type: "text", segment });
+  }
+  flush();
+  return items;
+}
+
+function TrailLine(props: RowProps & { item: TrailItem }) {
+  return <Switch>
+    <Match when={props.item.type === "text" && props.item}>{(item) => <TextStep {...props} segment={item().segment} />}</Match>
+    <Match when={props.item.type === "error" && props.item}>{(item) => <div class="trail-row trail-error"><TraceError message={item().message} profileLabel={props.profileLabel} /></div>}</Match>
+    <Match when={props.item.type === "tool" && props.item}>{(item) => <ToolRow {...props} tool={item().tool} />}</Match>
+    <Match when={props.item.type === "group" && props.item}>{(item) => <ToolGroup {...props} kind={item().kind} tools={item().tools} />}</Match>
+  </Switch>;
 }
 
 /*
@@ -234,12 +287,13 @@ export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sess
       </div>
     </>}
     body={() => {
-      // Steps there when the trace opens unfold with it; one that arrives while
+      // Lines there when the trace opens unfold with it; one that arrives while
       // it is open fades in with a short rise, and moves nothing above it.
-      const opened = props.trace.segments.length;
-      return <Index each={props.trace.segments}>{(segment, index) =>
+      const trail = createMemo(() => trailOf(props.trace.segments));
+      const opened = trail().length;
+      return <Index each={trail()}>{(item, index) =>
         <div class="turn-trace-step" data-arriving={index >= opened || undefined}>
-          <TraceSegmentRow segment={segment} settled={!props.trace.active} sessionId={props.sessionId} renderer={props.renderer} pacing={props.pacing} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />
+          <TrailLine item={item()} settled={!props.trace.active} sessionId={props.sessionId} renderer={props.renderer} pacing={props.pacing} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />
         </div>
       }</Index>;
     }} />;
