@@ -474,7 +474,7 @@ export function ProjectDashboard(props: {
           <button type="button" title="Copy working path" onClick={() => void copyPath()}><code>{copied() ? "Copied" : workingRoot() || "Working path unavailable"}</code></button>,
           git() && <>{git()!.branch}{git()!.upstream ? ` → ${git()!.upstream}` : ""}</>,
           git() && (git()!.ahead || git()!.behind) ? [git()!.ahead && `${git()!.ahead} ahead`, git()!.behind && `${git()!.behind} behind`].filter(Boolean).join(", ") : null,
-          !isWorkspace() && `last active ${relativeActivity(payload()?.stats.lastActivityAt, now()).toLowerCase()}`,
+          !isWorkspace() && payload()?.stats.lastActivityAt && `last active ${relativeActivity(payload()?.stats.lastActivityAt, now()).toLowerCase()}`,
         ]} />}
       shortcuts={<SplitShortcuts>
         <SplitShortcut icon={<FolderOpenIcon />} label="Files" onClick={() => props.onOpenView("files")} />
