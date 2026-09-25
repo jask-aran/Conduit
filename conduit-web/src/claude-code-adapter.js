@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { EventEmitter } from "node:events";
-import { getSessionInfo, getSessionMessages, listSessions, query } from "@anthropic-ai/claude-agent-sdk";
+import { getSessionInfo, getSessionMessages, listSessions, query, resolveSettings } from "@anthropic-ai/claude-agent-sdk";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
@@ -51,14 +51,16 @@ export const CLAUDE_CODE_CAPABILITIES = Object.freeze({
   interruptKeepsPartial: false,
 });
 
-// Claude Code's own modes. Bypass is offered because the query is started
-// allowing it; choosing it is still the user's call, per chat.
+// Claude Code's own modes, as it names them. Bypass is offered because the
+// query is started allowing it; choosing it is still the user's call, per chat.
 const PERMISSION_MODES = Object.freeze([
-  { id: "default", label: "Ask", description: "Ask before anything your Claude Code settings do not allow", allowed: true },
-  { id: "acceptEdits", label: "Accept edits", description: "Apply file edits without asking; still ask for commands", allowed: true },
-  { id: "plan", label: "Plan", description: "Explore and plan without changing anything", allowed: true },
-  { id: "bypassPermissions", label: "Bypass permissions", description: "Run every tool without asking", allowed: true },
+  { id: "default", label: "Default", description: "Ask before anything your settings do not already allow" },
+  { id: "auto", label: "Auto mode", description: "A classifier approves or blocks each action instead of asking" },
+  { id: "acceptEdits", label: "Accept edits", description: "Apply file edits without asking; still ask for commands" },
+  { id: "plan", label: "Plan mode", description: "Research and plan without changing anything" },
+  { id: "bypassPermissions", label: "Bypass permissions", description: "Run every tool without asking" },
 ]);
+const EFFORT_LEVELS = new Set(["low", "medium", "high", "xhigh", "max"]);
 const APPROVE = "Allow";
 const APPROVE_SESSION = "Allow for session";
 const DENY = "Deny";
@@ -85,13 +87,48 @@ function resolveCommand(command) {
   return undefined;
 }
 
-const modelEntry = (model) => ({
+/** What Claude Code's settings say for a folder: model, effort, the mode a session starts in. */
+const settingsFor = (cwd) => resolveSettings({ cwd }).then((resolved) => resolved?.effective || {}, () => ({}));
+
+// `default` is an alias for one of the other rows, so the catalogue leaves it
+// out and lists each model once, under its own name.
+const catalogueRows = (models) => models.filter((model) => model.value !== "default");
+
+/** The row a model name means: its own, or the one an alias or a full id resolves to. */
+const modelSpec = (models, name) => {
+  const rows = catalogueRows(models);
+  if (rows.some((model) => model.value === name)) return name;
+  const resolved = models.find((model) => model.value === name)?.resolvedModel || name;
+  return rows.find((model) => model.resolvedModel === resolved)?.value || rows[0]?.value || name;
+};
+
+const effortLevels = (model) => (model?.supportsEffort ? model.supportedEffortLevels || [] : []);
+
+/** The effort Claude Code would run a model at: that model's setting, then the general one. */
+const effortFor = (model, settings) => {
+  const levels = effortLevels(model);
+  const wanted = settings.modelSettings?.[model?.resolvedModel]?.effortLevel || settings.effortLevel;
+  return levels.includes(wanted) ? wanted : levels.includes("high") ? "high" : levels[0] || "";
+};
+
+const catalogue = (models, settings) => catalogueRows(models).map((model) => ({
   provider: "anthropic", id: model.value, spec: model.value, label: model.displayName || model.value,
-  reasoning: Boolean(model.supportsEffort),
-  // `auto` leaves the effort to Claude Code's own default for the model.
-  thinkingLevels: ["auto", ...(model.supportsEffort ? model.supportedEffortLevels || [] : [])],
-  defaultThinkingLevel: "auto",
-});
+  reasoning: effortLevels(model).length > 0, thinkingLevels: effortLevels(model),
+  defaultThinkingLevel: effortFor(model, settings),
+}));
+
+/**
+ * The modes this folder allows, the one its settings start in first -- which
+ * is the one a chat shows before it has chosen. Auto mode also needs a model
+ * that can run it.
+ */
+const permissionModes = (settings, model = null) => {
+  const starts = settings.permissions?.defaultMode || "default";
+  const refused = (id) => (id === "auto" && (settings.disableAutoMode === "disable" || model?.supportsAutoMode === false))
+    || (id === "bypassPermissions" && settings.permissions?.disableBypassPermissionsMode === "disable");
+  const modes = PERMISSION_MODES.map((mode) => ({ ...mode, allowed: !refused(mode.id) }));
+  return [...modes.filter((mode) => mode.id === starts), ...modes.filter((mode) => mode.id !== starts)];
+};
 
 /** The prompt stream a resident query reads: one message per Conduit prompt. */
 class InputQueue {
@@ -206,20 +243,26 @@ export class ClaudeCodeAdapter extends EventEmitter {
     const record = this.sessions.add({
       id: crypto.randomUUID(), chatId, projectId: project?.id || null,
       cwd: project?.workingRoot, sessionId, status: "starting", ready: false,
-      activity: "starting", active: false, stopping: false, model: model || "default",
-      thinkingLevel: thinkingLevel || "", permissionMode: permissionMode || "default",
+      activity: "starting", active: false, stopping: false, model, thinkingLevel, permissionMode,
       generation: null, generationSeq: 0, clients: new Set(), events: [], hostUiRequests: [],
       requests: new Map(), steps: new Map(), stepOrder: [], step: null, tools: new Map(),
-      commands: [], models: [], stderr: "",
+      commands: [], models: [], settings: {}, stderr: "",
     });
+    record.settings = await settingsFor(record.cwd);
+    // Only what the chat chose is passed, and the rest is left to the user's
+    // own Claude Code settings and read back once it is up. The starting mode is
+    // the exception: an SDK session starts in `default` whatever the settings
+    // say, so the mode they name is passed on the chat's behalf.
+    const startMode = permissionMode || permissionModes(record.settings)
+      .find((mode) => mode.id === record.settings.permissions?.defaultMode && mode.allowed)?.id || "";
     record.input = new InputQueue();
     record.query = query({ prompt: record.input, options: {
       cwd: record.cwd,
       ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}),
       ...(resume ? { resume: sessionId } : { sessionId }),
-      ...(model && model !== "default" ? { model } : {}),
-      ...(thinkingLevel && thinkingLevel !== "auto" ? { effort: thinkingLevel } : {}),
-      permissionMode: record.permissionMode,
+      ...(model ? { model } : {}),
+      ...(EFFORT_LEVELS.has(thinkingLevel) ? { effort: thinkingLevel } : {}),
+      ...(startMode ? { permissionMode: startMode } : {}),
       allowDangerouslySkipPermissions: true,
       includePartialMessages: true,
       thinking: { type: "adaptive", display: "summarized" },
@@ -231,7 +274,10 @@ export class ClaudeCodeAdapter extends EventEmitter {
       const init = await record.query.initializationResult();
       record.models = init.models || [];
       record.commands = init.commands || [];
-      record.permissionMode = init.current_permission_mode || record.permissionMode;
+      record.model = modelSpec(record.models, model || record.settings.model || "default");
+      record.thinkingLevel = EFFORT_LEVELS.has(thinkingLevel) ? thinkingLevel
+        : effortFor(record.models.find((item) => item.value === record.model), record.settings);
+      record.permissionMode = init.current_permission_mode || startMode || "default";
       record.ready = true;
       record.status = "running";
       record.activity = "idle";
@@ -678,7 +724,8 @@ export class ClaudeCodeAdapter extends EventEmitter {
 
   /**
    * Models without a chat open: a throwaway Claude Code asked and closed. It
-   * loads no settings, so no hook of the user's runs to answer a model list.
+   * loads no settings, so no hook of the user's runs to answer a model list;
+   * the settings that say which effort each model runs at are read directly.
    */
   async listAvailableModels(cwd) {
     const input = new InputQueue();
@@ -686,13 +733,15 @@ export class ClaudeCodeAdapter extends EventEmitter {
       cwd, persistSession: false, settingSources: [],
       ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}),
     } });
-    try { return ((await probe.initializationResult()).models || []).map(modelEntry); }
-    finally { input.end(); try { probe.close(); } catch { /* already gone */ } }
+    try {
+      const [init, settings] = await Promise.all([probe.initializationResult(), settingsFor(cwd)]);
+      return catalogue(init.models || [], settings);
+    } finally { input.end(); try { probe.close(); } catch { /* already gone */ } }
   }
 
   listModels(id) {
     const record = this.get(id);
-    if (record?.models?.length) return Promise.resolve(record.models.map(modelEntry));
+    if (record?.models?.length) return Promise.resolve(catalogue(record.models, record.settings));
     return this.listAvailableModels(record?.cwd);
   }
 
@@ -707,15 +756,16 @@ export class ClaudeCodeAdapter extends EventEmitter {
   async setModel(id, model) {
     const record = this.get(id);
     if (!record) throw failure("Claude Code session is not running");
-    await record.query.setModel(model && model !== "default" ? model : undefined);
-    record.model = model || "default";
+    await record.query.setModel(model || undefined);
+    record.model = modelSpec(record.models, model || record.settings.model || "default");
     return record.model;
   }
 
   async setThinkingLevel(id, thinkingLevel) {
     const record = this.get(id);
     if (!record) throw failure("Claude Code session is not running");
-    await record.query.applyFlagSettings({ effortLevel: thinkingLevel && thinkingLevel !== "auto" ? thinkingLevel : null });
+    if (!EFFORT_LEVELS.has(thinkingLevel)) throw failure(`Claude Code has no effort level ${thinkingLevel}`, "invalid_request", 400);
+    await record.query.applyFlagSettings({ effortLevel: thinkingLevel });
     record.thinkingLevel = thinkingLevel;
     return record.thinkingLevel;
   }
@@ -725,8 +775,12 @@ export class ClaudeCodeAdapter extends EventEmitter {
     return { model: record?.model || "", thinkingLevel: record?.thinkingLevel || "" };
   }
 
-  listPermissionModes() { return Promise.resolve(PERMISSION_MODES.map((mode) => ({ ...mode }))); }
-  listAvailablePermissionModes() { return this.listPermissionModes(); }
+  listPermissionModes(id) {
+    const record = this.get(id);
+    return Promise.resolve(permissionModes(record?.settings || {}, record?.models.find((item) => item.value === record.model)));
+  }
+
+  async listAvailablePermissionModes(cwd) { return permissionModes(await settingsFor(cwd)); }
   // Handed the mode the routes chose, as Codex and fx are, not its id.
   async setPermissionMode(id, mode) {
     const record = this.get(id);

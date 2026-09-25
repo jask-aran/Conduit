@@ -8,6 +8,7 @@ import type { HarnessSummary } from "./api/contracts";
  * with `currentColor` so they follow the surrounding theme. Codex is shown in
  * one colour like the rest, except where a surface asks for `artwork`: its
  * official gradient mark, rendered as an image and never tinted or inverted.
+ * Claude Code does the same with its orange mark.
  * `brand` is the colour a one-colour mark is shown in when a surface lights it
  * (the sidebar, on hover); a mark without one lights to the foreground.
  * Entries beyond the shipped adapters are staged for the ones that follow;
@@ -21,7 +22,7 @@ const MARKS: Record<string, Mark> = {
   conduit: { src: "/brand/conduit-mark.svg", tint: true },
   codex: { src: "/brand/codex-mono-mark.svg", tint: true, artwork: "/brand/codex-mark.svg" },
   "chatgpt-web": BLOSSOM,
-  "claude-code": { src: "/brand/claude-code-mark.svg", tint: true, brand: "#d97757" },
+  "claude-code": { src: "/brand/claude-code-mono-mark.svg", tint: true, artwork: "/brand/claude-code-mark.svg", brand: "#d97757" },
   fx: { src: "/brand/fx-mark.svg", tint: true },
   opencode: { src: "/brand/opencode-mark.svg", tint: true },
   pi: { src: "/brand/pi-mark.svg", tint: true },
