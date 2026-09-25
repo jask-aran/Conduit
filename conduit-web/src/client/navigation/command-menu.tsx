@@ -359,16 +359,12 @@ export function CommandMenu(props: {
         return out;
       }
       if (scope.kind === "unresolved") return out;
-      // The chats outside any folder lead, as in the sidebar; they are not
-      // a folder of their own.
+      if (chatCommands.length) {
+        push({ type: "heading", key: "recent-heading", label: "Recent" });
+        for (const command of chatCommands.slice(0, RECENT_COUNT)) push({ type: "command", key: `recent:${command.id}`, index: index++, command });
+      }
       const projects = props.context.projects || [];
       const chatRoot = projects.find((project) => project.slug === "chat");
-      const loose = chatCommands.filter((command) => command.project?.id === chatRoot?.id);
-      if (chatRoot && loose.length) {
-        push({ type: "heading", key: "recent-heading", label: "Chats" });
-        for (const command of loose.slice(0, RECENT_COUNT)) push({ type: "command", key: `recent:${command.id}`, index: index++, command });
-        if (loose.length > RECENT_COUNT) push({ type: "browse-all", key: `browse:${chatRoot.id}`, index: index++, project: chatRoot, count: loose.length });
-      }
       const addFolder = (project: Project) => {
         const children = chatCommands.filter((command) => command.project?.id === project.id);
         push({ type: "folder", key: `folder:${project.id}`, index: index++, project, count: project.sessions.filter(chatNavigable).length });
@@ -379,6 +375,9 @@ export function CommandMenu(props: {
         for (const command of preview) push({ type: "command", key: `preview:${command.id}`, index: index++, command, parentId: project.id });
         if (children.length > preview.length) push({ type: "browse-all", key: `browse:${project.id}`, index: index++, project, count: children.length });
       };
+      // The chats outside any folder are a place of their own, between Recent
+      // and the folders: one row that expands like a folder but is not one.
+      if (chatRoot) { push({ type: "heading", key: "loose-heading", label: "" }); addFolder(chatRoot); }
       push({ type: "heading", key: "folders-heading", label: "Folders" });
       for (const project of projects.filter((project) => project.slug !== "chat" && !isWorkspace(project))) addFolder(project);
       for (const project of projects.filter((project) => project.slug !== "chat" && isWorkspace(project))) addFolder(project);
@@ -860,7 +859,7 @@ export function CommandMenu(props: {
   const changeOpen = (open: boolean) => { if (!open) close(); else props.onOpenChange(true); };
 
   const renderRow = (row: Row) => {
-    if (row.type === "heading") return <p class="command-group-label" role="presentation">{row.label}</p>;
+    if (row.type === "heading") return row.label ? <p class="command-group-label" role="presentation">{row.label}</p> : <span class="command-group-break" role="presentation" />;
     const selected = () => active() === row.index;
     const commonProps = {
       id: optionId(row.index),
@@ -899,7 +898,7 @@ export function CommandMenu(props: {
         <Show when={!row.searchResult} fallback={<span class="command-folder-chevron" aria-hidden="true" />}>
           <button type="button" class="command-folder-toggle" tabIndex={-1} aria-label={`${expanded() ? "Collapse" : "Expand"} ${row.project.name}`} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); toggleFolder(row.project.id); }}><ChevronRightIcon data-expanded={expanded() || undefined} /></button>
         </Show>
-        <Show when={isWorkspace(row.project)} fallback={<FolderIcon class="command-icon" />}><WorkspaceGlyph appearance={row.project.workspaceAppearance} /></Show>
+        <Show when={isWorkspace(row.project)} fallback={row.project.slug === "chat" ? <MessageSquareIcon class="command-icon" /> : <FolderIcon class="command-icon" />}><WorkspaceGlyph appearance={row.project.workspaceAppearance} /></Show>
         <span class="command-label" data-matching={matchedLabel(row.project.name, parsedQuery().text) ? "" : undefined}>{matchedLabel(row.project.name, parsedQuery().text) || row.project.name}</span>
         <small class="command-folder-meta">
           <Show when={live() || unread()}><span class="command-folder-dot" data-live={live() ? "" : undefined} title={live() ? `${live()} active` : `${unread()} unread`} /></Show>
