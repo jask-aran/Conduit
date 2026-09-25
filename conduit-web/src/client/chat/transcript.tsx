@@ -8,8 +8,7 @@ import { AttachmentCards } from "./attachments";
 import { DISCLOSURE_TOGGLE_EVENT } from "./disclosure";
 import { ReviewCommentCards } from "./review-comment-cards";
 import { parseReviewComments } from "./review-comments";
-import { TurnTrace } from "./turn-trace";
-import "./transcript-motion.css";
+import { TraceStarting, TurnTrace } from "./turn-trace";
 import { createTimelineStore } from "../state/timeline-store";
 import type { MarkdownRendererId } from "./markdown-settings";
 import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_OPTIONS, saveComposerSurface, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
@@ -1124,11 +1123,9 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
               </Show></div>;
           }
           if (item.type === "pending") {
-            // Where the answer will be, until its first words replace it: one
-            // line tall, so the text arriving moves nothing.
-            return <div data-slot="message-scroller-item"><article data-slot="message" data-align="start" class="message-assistant">
-              <div data-slot="message-content"><div class="answer-pending" role="status" aria-label="Waiting for the answer"><span /><span /><span /></div></div>
-            </article></div>;
+            // A turn before anything of it shows is the header its trace will
+            // be, starting -- replaced in place when the first step arrives.
+            return <div data-slot="message-scroller-item"><TraceStarting startedAt={item.startedAt} /></div>;
           }
           const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");
