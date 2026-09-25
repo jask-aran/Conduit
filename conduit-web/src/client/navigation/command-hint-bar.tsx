@@ -1,5 +1,6 @@
 import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { COMMAND_IDS, getCommandDefinition } from "../commands/command-registry";
+import { saveChatSort, useChatSort } from "../preferences/chat-sort";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import {
   formatShortcutBinding, formatShortcutStroke, sameStroke,
@@ -45,12 +46,15 @@ function HintItem(props: { hint: Hint; onClick?: () => void }) {
 export function CommandHintBar(props: {
   context: CommandHintContext;
   mode: CommandHintMode;
+  allChats: boolean;
+  onToggleAllChats: () => void;
   pendingSequence?: PendingShortcutSequence | null;
   shortcuts: ShortcutManager;
   onToggleEdit?: () => void;
   onDeleteSelected?: () => void;
   onMoveSelected?: () => void;
 }) {
+  const chatSort = useChatSort();
   const [shortcutRevision, setShortcutRevision] = createSignal(0);
   onCleanup(props.shortcuts.subscribe(() => setShortcutRevision((value) => value + 1)));
 
@@ -137,7 +141,16 @@ export function CommandHintBar(props: {
     return undefined;
   };
 
-  return <div class="command-hint-bar" role="note" aria-label="Keyboard shortcuts" data-mode={props.mode}>
+  return <div class="command-hint-bar" role="note" aria-label={props.context === "chat" ? "Chat search controls and keyboard shortcuts" : "Keyboard shortcuts"} data-mode={props.mode}>
+    <Show when={props.context === "chat" && props.mode === "browse"}>
+      <div class="command-search-footer-controls">
+        <button type="button" class="command-all-chats-toggle" aria-pressed={props.allChats} title={props.allChats ? "Show Chats only" : "Show chats from all projects"} onMouseDown={(event) => event.preventDefault()} onClick={props.onToggleAllChats}>All chats</button>
+        <div class="command-sort-toggle" role="group" aria-label="Chat sort">
+          <button type="button" aria-pressed={chatSort() === "latest"} onClick={() => saveChatSort("latest")}>Latest</button>
+          <button type="button" aria-pressed={chatSort() === "created"} onClick={() => saveChatSort("created")}>Created</button>
+        </div>
+      </div>
+    </Show>
     <div class="command-hint-items command-hint-primary">
       <For each={primary()}>{(hint) => <HintItem hint={hint} onClick={hintAction(hint)} />}</For>
     </div>
