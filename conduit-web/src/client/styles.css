@@ -2566,3 +2566,8 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 /* Typing lights the letters that matched and dims the rest of the label. */
 .command-label[data-matching], .command-model-label[data-matching] { color: var(--muted-foreground); }
 .command-label mark, .command-model-label mark { background: none; color: var(--foreground); font-weight: 700; }
+.command-preview-prompt { justify-self: end; max-width: 92%; margin: 2px 0 0; border: 1px solid oklch(1 0 0 / 10%); border-radius: 12px; background: var(--glass-bg); padding: 6px 10px; color: var(--foreground); font-size: 11.5px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.command-preview-answer { margin: 0; color: color-mix(in oklch, var(--foreground), transparent 20%); font-size: 11.5px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 7; -webkit-box-orient: vertical; overflow: hidden; }
+.command-preview-turn { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.command-preview-turn b { color: var(--foreground); font-weight: 560; }
+.command-preview-turn .thinking-orb { width: 16px; height: 16px; flex: none; }
