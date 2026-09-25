@@ -252,6 +252,7 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
             name: event.name,
             kind: event.kind || "other",
             ...(event.subject ? { subject: event.subject } : {}),
+            timestamp: new Date().toISOString(),
             input: event.input,
             status: "running",
             output: null,
@@ -277,6 +278,7 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
             status: event.isError ? "error" : "complete",
             output: event.output,
             isError: Boolean(event.isError),
+            completedAt: new Date().toISOString(),
           });
           break;
         }

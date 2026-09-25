@@ -96,9 +96,9 @@ export type LiveEvent = EventBase & (
     content: string; blocks: unknown[]; interim: boolean; discarded?: boolean;
     provider?: string; model?: string; timestamp?: string; errorMessage?: string }
   | { type: "transcript_op"; op: "message.drop"; messageId: string; inclusive: boolean; keep: boolean }
-  | { type: "transcript_op"; op: "tool.open"; toolCallId: string; name: string; kind?: ToolKind; subject?: string; input: unknown;
+  | { type: "transcript_op"; op: "tool.open"; toolCallId: string; name: string; kind?: ToolKind; subject?: string; input: unknown; timestamp?: string;
     messageId: string | null }
-  | { type: "transcript_op"; op: "tool.close"; toolCallId: string; output: unknown; isError: boolean; cancelled?: boolean }
+  | { type: "transcript_op"; op: "tool.close"; toolCallId: string; output: unknown; isError: boolean; cancelled?: boolean; completedAt?: string }
   | { type: "transcript_op"; op: "turn.settle"; promptId: string; outcome: TurnOutcome }
   | { type: "log_state"; log: LogStamp }
   | { type: "log_reset" }

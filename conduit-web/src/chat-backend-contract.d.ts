@@ -437,9 +437,13 @@ export type TranscriptOpEvent = EventBase & { type: "transcript_op" } & (
       /** What it did, from the adapter's own table of its tool names. */
       kind: "command" | "read" | "edit" | "search" | "fetch" | "other";
       /** What it acted on, in one line: the command, path, query or page. */
-      subject?: string; input: unknown }
+      subject?: string; input: unknown;
+      /** When it started, stamped as it did. */
+      timestamp: string }
   /** A tool the user's stop killed is `cancelled`, never `isError`. */
-  | { op: "tool.close"; toolCallId: string; output: unknown; isError: boolean; cancelled?: true }
+  | { op: "tool.close"; toolCallId: string; output: unknown; isError: boolean; cancelled?: true;
+      /** When it finished, stamped as it did. */
+      completedAt: string }
   /**
    * How a turn ended, on the prompt it answers: stated by every harness when a
    * turn ends, before the event that ends it. The browser refuses a finished

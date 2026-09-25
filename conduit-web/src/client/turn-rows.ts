@@ -42,6 +42,8 @@ export interface ActiveGenerationView {
     name?: string;
     kind?: ToolKind;
     subject?: string;
+    timestamp?: string;
+    completedAt?: string;
     input?: unknown;
     // What the tool has returned. `status` says whether that is all of it, the
     // same way a block in flight carries its own text and says it is streaming.
@@ -358,6 +360,8 @@ export function buildLiveToolItem(
     name: execution.name || fallback.name || "tool",
     kind: execution.kind || "other",
     ...(execution.subject ? { subject: execution.subject } : {}),
+    ...(execution.timestamp ? { timestamp: execution.timestamp } : {}),
+    ...(execution.completedAt ? { completedAt: execution.completedAt } : {}),
     input: execution.input ?? fallback.input,
     output: execution.output,
     done: execution.status === "complete" || execution.status === "error" || execution.status === "cancelled",

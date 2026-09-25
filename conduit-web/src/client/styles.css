@@ -308,7 +308,6 @@ svg { stroke-width: 1.5; }
 .response-actions [data-slot="button"] { width: 19.2px; height: 19.2px; border-radius: 999px; }
 .response-actions [data-slot="button"] svg { width: 11.2px; height: 11.2px; }
 
-.tool-card { margin-left: 33.6px; }
 /* Turn trace: one collapsed row per turn holding thinking segments, interim
    narration, and tool calls; the header previews the latest item live. */
 .turn-trace { display: flex; flex-direction: column; gap: 4.8px; }
@@ -327,19 +326,12 @@ svg { stroke-width: 1.5; }
 .turn-trace[data-active="true"] .turn-trace-preview { animation: trace-shimmer 1.6s ease-in-out infinite; }
 @keyframes trace-shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
 .turn-trace-body { display: flex; flex-direction: column; gap: 6.4px; margin-left: 5.6px; padding: 1.6px 0 4.8px 11.2px; border-left: 1px solid var(--border); }
-.turn-trace-body .tool-card { margin-left: 0; }
-.turn-trace-text .chat-markdown { color: var(--muted-foreground); font-size: 11.2px; }
 .turn-trace-error { display: grid; gap: 4px; padding: 6.4px 8px; border-left: 1.6px solid color-mix(in oklch, var(--destructive), transparent 25%); border-radius: 0 4.8px 4.8px 0; background: color-mix(in oklch, var(--destructive), transparent 93%); color: var(--muted-foreground); font-size: 9.6px; }
 .turn-trace-error-heading { display: flex; min-width: 0; align-items: center; gap: 4.8px; color: color-mix(in oklch, var(--destructive), white 18%); }
 .turn-trace-error-heading svg { width: 11.2px; height: 11.2px; flex: none; }
 .turn-trace-error-heading time { margin-left: auto; color: var(--muted-foreground); font-size: 8.8px; font-weight: 400; }
 .turn-trace-error-meta { display: flex; flex-wrap: wrap; gap: 3.2px 9.6px; color: var(--muted-foreground); font-size: 8.8px; }
 .turn-trace-error pre { max-height: 96px; margin: 0; overflow: auto; color: var(--foreground); font: 9.6px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; white-space: pre-wrap; }
-/* Text the agent was cut off writing and is not being given back. Inside the
-   trace it is struck where it sits; as an answer it folds to one line. Quiet,
-   never alarming -- nothing failed, it was interrupted on purpose. */
-.turn-trace-text[data-discarded="true"] .chat-markdown { text-decoration: line-through; text-decoration-thickness: 0.8px; opacity: 0.55; }
-.turn-trace-not-kept { display: block; margin-bottom: 1.6px; color: var(--muted-foreground); font-size: 8.8px; font-weight: 600; }
 .response-status { flex: none; margin-right: 4.8px; white-space: nowrap; }
 .response-actions [data-slot="button"].response-continue { width: auto; gap: 4px; padding-inline: 6.4px 8px; font-size: 9.6px; }
 .discarded-answer-header { display: flex; flex: 1; align-items: center; gap: 6.4px; min-width: 0; padding: 3.2px 1.6px; border: none; background: none; color: var(--muted-foreground); font-size: 10.4px; text-align: left; cursor: pointer; border-radius: 4.8px; }
@@ -349,8 +341,6 @@ svg { stroke-width: 1.5; }
 .turn-stop-mark { fill: currentColor; stroke-width: 0; scale: 0.78; }
 .turn-stop-row { cursor: default; }
 .turn-stop-row:hover { color: var(--muted-foreground); }
-.tool-card-content { border: 0.8px solid var(--border); border-top: 0; border-radius: 0 0 var(--radius) var(--radius); background: var(--card); }
-.tool-card pre { max-height: 336px; margin: 0; overflow: auto; padding: 9.6px; white-space: pre-wrap; font: 9.6px/1.5 ui-monospace, monospace; }
 
 /* Runtime transparency indicators (parity with main): spinner while
    starting/stopping/working/compacting, coloured dot otherwise. */
@@ -603,9 +593,9 @@ svg { stroke-width: 1.5; }
 .command-hint-more summary::after { content: "▾"; margin-left: 4px; color: var(--muted-foreground); }
 .command-hint-more[open] summary::after { content: "▴"; }
 .command-hint-more-list { display: flex; flex-wrap: wrap; gap: 4.8px 9.6px; margin-top: 6.4px; border-top: 1px solid var(--border); padding-top: 6.4px; }
-.command-list, .settings-content, .artifact pre, .tool-card pre, .composer textarea, .attachment-tray, .external-link-url, .conduit-modal-card, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
-.command-list::-webkit-scrollbar, .settings-content::-webkit-scrollbar, .artifact pre::-webkit-scrollbar, .tool-card pre::-webkit-scrollbar, .composer textarea::-webkit-scrollbar, .attachment-tray::-webkit-scrollbar, .external-link-url::-webkit-scrollbar, .conduit-modal-card::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 5.6px; height: 5.6px; }
-.command-list::-webkit-scrollbar-thumb, .settings-content::-webkit-scrollbar-thumb, .artifact pre::-webkit-scrollbar-thumb, .tool-card pre::-webkit-scrollbar-thumb, .composer textarea::-webkit-scrollbar-thumb, .attachment-tray::-webkit-scrollbar-thumb, .external-link-url::-webkit-scrollbar-thumb, .conduit-modal-card::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 1.6px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
+.command-list, .settings-content, .artifact pre, .tool-step-content pre, .composer textarea, .attachment-tray, .external-link-url, .conduit-modal-card, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
+.command-list::-webkit-scrollbar, .settings-content::-webkit-scrollbar, .artifact pre::-webkit-scrollbar, .tool-step-content pre::-webkit-scrollbar, .composer textarea::-webkit-scrollbar, .attachment-tray::-webkit-scrollbar, .external-link-url::-webkit-scrollbar, .conduit-modal-card::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 5.6px; height: 5.6px; }
+.command-list::-webkit-scrollbar-thumb, .settings-content::-webkit-scrollbar-thumb, .artifact pre::-webkit-scrollbar-thumb, .tool-step-content pre::-webkit-scrollbar-thumb, .composer textarea::-webkit-scrollbar-thumb, .attachment-tray::-webkit-scrollbar-thumb, .external-link-url::-webkit-scrollbar-thumb, .conduit-modal-card::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 1.6px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 .command-empty { padding: 14.4px 9.6px; color: var(--muted-foreground); font-size: 11.2px; text-align: center; }
 .command-group-label { margin: 6.4px 6.4px 2.4px; color: var(--muted-foreground); font-size: 8.8px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
 .command-list > .command-group-label:first-child { margin-top: 1.6px; }
@@ -654,7 +644,6 @@ svg { stroke-width: 1.5; }
 }
 .composer-queue,
 .workspace-warning,
-.tool-card-content,
 .artifact,
 .attachment-card,
 .settings-cards article,
@@ -758,7 +747,6 @@ svg { stroke-width: 1.5; }
     transform: none;
     background: var(--background);
   }
-  .tool-card { margin-left: 0; }
   .response-actions { opacity: 1; }
   .chat-header {
     position: relative;
@@ -1102,7 +1090,6 @@ svg { stroke-width: 1.5; }
 .response-actions [data-slot="button"] { width: 24px; height: 24px; border-radius: 999px; }
 .response-actions [data-slot="button"] svg { width: 14px; height: 14px; }
 
-.tool-card { margin-left: 42px; }
 /* Turn trace: one collapsed row per turn holding thinking segments, interim
    narration, and tool calls; the header previews the latest item live. */
 .turn-trace { display: flex; flex-direction: column; gap: 6px; }
@@ -1121,15 +1108,11 @@ svg { stroke-width: 1.5; }
 .turn-trace[data-active="true"] .turn-trace-preview { animation: trace-shimmer 1.6s ease-in-out infinite; }
 @keyframes trace-shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
 .turn-trace-body { display: flex; flex-direction: column; gap: 8px; margin-left: 7px; padding: 2px 0 6px 14px; border-left: 1px solid var(--border); }
-.turn-trace-body .tool-card { margin-left: 0; }
-.turn-trace-text .chat-markdown { color: var(--muted-foreground); font-size: 14px; }
 .turn-trace-error { display: grid; gap: 5px; padding: 8px 10px; border-left: 2px solid color-mix(in oklch, var(--destructive), transparent 25%); border-radius: 0 6px 6px 0; background: color-mix(in oklch, var(--destructive), transparent 93%); color: var(--muted-foreground); font-size: 12px; }
 .turn-trace-error-heading { display: flex; min-width: 0; align-items: center; gap: 6px; color: color-mix(in oklch, var(--destructive), white 18%); }
 .turn-trace-error-heading svg { width: 14px; height: 14px; flex: none; }
 .turn-trace-error-heading time { margin-left: auto; color: var(--muted-foreground); font-size: 11px; font-weight: 400; }
 .turn-trace-error-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted-foreground); font-size: 11px; }
-.turn-trace-text[data-discarded="true"] .chat-markdown { text-decoration: line-through; opacity: 0.55; }
-.turn-trace-not-kept { display: block; margin-bottom: 2px; color: var(--muted-foreground); font-size: 11px; font-weight: 600; }
 .response-status { flex: none; margin-right: 6px; white-space: nowrap; }
 .response-actions [data-slot="button"].response-continue { width: auto; gap: 5px; padding-inline: 8px 10px; font-size: 12px; }
 .discarded-answer-header { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; padding: 4px 2px; border: none; background: none; color: var(--muted-foreground); font-size: 13px; text-align: left; cursor: pointer; border-radius: 6px; }
@@ -1139,8 +1122,6 @@ svg { stroke-width: 1.5; }
 .turn-stop-row { cursor: default; }
 .turn-stop-row:hover { color: var(--muted-foreground); }
 .turn-trace-error pre { max-height: 120px; margin: 0; overflow: auto; color: var(--foreground); font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; white-space: pre-wrap; }
-.tool-card-content { border: 1px solid var(--border); border-top: 0; border-radius: 0 0 var(--radius) var(--radius); background: var(--card); }
-.tool-card pre { max-height: 420px; margin: 0; overflow: auto; padding: 12px; white-space: pre-wrap; font: 12px/1.5 ui-monospace, monospace; }
 
 /* Runtime transparency indicators (parity with main): spinner while
    starting/stopping/working/compacting, coloured dot otherwise. */
@@ -1397,9 +1378,9 @@ svg { stroke-width: 1.5; }
 .command-hint-more summary::after { content: "▾"; margin-left: 5px; color: var(--muted-foreground); }
 .command-hint-more[open] summary::after { content: "▴"; }
 .command-hint-more-list { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; }
-.command-list, .settings-content, .artifact pre, .tool-card pre, .composer textarea, .attachment-tray, .external-link-url, .conduit-modal-card, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
-.command-list::-webkit-scrollbar, .settings-content::-webkit-scrollbar, .artifact pre::-webkit-scrollbar, .tool-card pre::-webkit-scrollbar, .composer textarea::-webkit-scrollbar, .attachment-tray::-webkit-scrollbar, .external-link-url::-webkit-scrollbar, .conduit-modal-card::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 7px; height: 7px; }
-.command-list::-webkit-scrollbar-thumb, .settings-content::-webkit-scrollbar-thumb, .artifact pre::-webkit-scrollbar-thumb, .tool-card pre::-webkit-scrollbar-thumb, .composer textarea::-webkit-scrollbar-thumb, .attachment-tray::-webkit-scrollbar-thumb, .external-link-url::-webkit-scrollbar-thumb, .conduit-modal-card::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
+.command-list, .settings-content, .artifact pre, .tool-step-content pre, .composer textarea, .attachment-tray, .external-link-url, .conduit-modal-card, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
+.command-list::-webkit-scrollbar, .settings-content::-webkit-scrollbar, .artifact pre::-webkit-scrollbar, .tool-step-content pre::-webkit-scrollbar, .composer textarea::-webkit-scrollbar, .attachment-tray::-webkit-scrollbar, .external-link-url::-webkit-scrollbar, .conduit-modal-card::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 7px; height: 7px; }
+.command-list::-webkit-scrollbar-thumb, .settings-content::-webkit-scrollbar-thumb, .artifact pre::-webkit-scrollbar-thumb, .tool-step-content pre::-webkit-scrollbar-thumb, .composer textarea::-webkit-scrollbar-thumb, .attachment-tray::-webkit-scrollbar-thumb, .external-link-url::-webkit-scrollbar-thumb, .conduit-modal-card::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 .command-empty { padding: 18px 12px; color: var(--muted-foreground); font-size: 14px; text-align: center; }
 .command-group-label { margin: 8px 8px 3px; color: var(--muted-foreground); font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
 .command-list > .command-group-label:first-child { margin-top: 2px; }
@@ -1448,7 +1429,6 @@ svg { stroke-width: 1.5; }
 }
 .composer-queue,
 .workspace-warning,
-.tool-card-content,
 .artifact,
 .attachment-card,
 .settings-cards article,
@@ -1552,7 +1532,6 @@ svg { stroke-width: 1.5; }
     transform: none;
     background: var(--background);
   }
-  .tool-card { margin-left: 0; }
   .response-actions { opacity: 1; }
   .chat-header {
     position: relative;

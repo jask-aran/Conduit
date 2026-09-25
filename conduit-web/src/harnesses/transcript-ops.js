@@ -214,9 +214,13 @@ export const messageDrop = ({ messageId, inclusive = false, keep = false, genera
  * they ran. Stated here, they travel in the same order as everything else and
  * a replay restores them with it.
  */
-export const toolOpen = ({ toolCallId, name, kind = "other", subject = null, input, messageId = null, generationId = null }) =>
+export const toolOpen = ({ toolCallId, name, kind = "other", subject = null, input, messageId = null, generationId = null,
+  timestamp = new Date().toISOString() }) =>
   assertTranscriptOp({
-    type: "transcript_op", op: "tool.open", toolCallId, name: name || "tool", kind, input,
+    // When it started and, on the close, when it finished -- stamped as they
+    // happen, so a replay says how long a step took rather than when the
+    // replay ran.
+    type: "transcript_op", op: "tool.open", toolCallId, name: name || "tool", kind, input, timestamp,
     ...(subject ? { subject } : {}),
     ...(messageId ? { messageId } : {}),
     ...(generationId ? { generationId } : {}),
@@ -227,9 +231,10 @@ export const toolOpen = ({ toolCallId, name, kind = "other", subject = null, inp
  * failed: harnesses report the kill as an error -- Pi's "Command aborted" -- and
  * the adapter, which knows it asked for the stop, says which it was.
  */
-export const toolClose = ({ toolCallId, output, isError = false, cancelled = false, generationId = null }) =>
+export const toolClose = ({ toolCallId, output, isError = false, cancelled = false, generationId = null,
+  completedAt = new Date().toISOString() }) =>
   assertTranscriptOp({
-    type: "transcript_op", op: "tool.close", toolCallId, output,
+    type: "transcript_op", op: "tool.close", toolCallId, output, completedAt,
     isError: Boolean(isError) && !cancelled,
     ...(cancelled ? { cancelled: true } : {}),
     ...(generationId ? { generationId } : {}),
