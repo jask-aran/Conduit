@@ -1,0 +1,111 @@
+<!doctype html>
+<!--
+  Every candidate for a settled turn's orb, and the thinking-orbs animations
+  they were made from. Serve the repository root and open this page:
+
+    python3 -m http.server -d . 8000
+    http://localhost:8000/docs/orb-stills/contact-sheet.html
+
+  contact-sheet.png beside it is this page, captured.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Orb Stills</title>
+<style>
+  :root { --dark: oklch(0.186 0.005 264); --dark-fg: oklch(0.93 0.003 258); --dark-muted: oklch(0.63 0.006 262); --dark-red: oklch(0.645 0.19 18);
+          --light: oklch(1 0 0); --light-fg: oklch(0.145 0 0); --light-muted: oklch(0.556 0 0); --light-red: oklch(0.577 0.245 27.325); }
+  body { background: var(--dark); color: var(--dark-muted); margin: 0; padding: 20px 24px; font: 12px/1.4 system-ui, sans-serif; }
+  h1 { color: var(--dark-fg); font-size: 16px; font-weight: 600; margin: 0 0 4px; }
+  h2 { color: var(--dark-fg); font-size: 13px; font-weight: 600; margin: 28px 0 8px; }
+  p { margin: 0 0 8px; max-width: 70ch; }
+  table { border-spacing: 14px 6px; margin-left: -14px; }
+  td { vertical-align: middle; }
+  td.label { text-align: right; min-width: 260px; }
+  canvas { display: block; }
+  .header { display: flex; gap: 8px; align-items: center; padding: 6px 10px; border-radius: 6px; white-space: nowrap; }
+  .header.dark { background: var(--dark); color: var(--dark-muted); outline: 1px solid oklch(1 0 0 / 7%); }
+  .header.light { background: var(--light); color: var(--light-muted); }
+  .header b { font-weight: 560; }
+  .header.dark b { color: var(--dark-fg); }
+  .header.light b { color: var(--light-fg); }
+  .moment { text-align: center; font-size: 10px; }
+</style>
+</head>
+<body>
+<h1>Orb stills</h1>
+<p>Every frame considered for a settled turn's orb, each shown enlarged, then at its real 20px size in a dark and a light trace header. The shipped frame is first; the rounds follow in the order they were tried. Below them are the package's own animations at six moments and live, and the options that calm some of them.</p>
+<div id="rounds"></div>
+<h2>The package's animations (20px preset) — at t = 0.3, 0.9, 1.5, 2.1, 2.7, 3.3s, then live</h2>
+<table id="states"></table>
+<h2>Calmed with the package's options, and a custom sphere</h2>
+<table id="calmed"></table>
+<script type="module">
+import { paintFrame } from "../../conduit-web/node_modules/thinking-orbs/dist/engine.es.js";
+import { CALMED, ROUNDS, STATES, animation } from "./candidates.js";
+
+const DPR = 4;
+const MOMENTS = [0.3, 0.9, 1.5, 2.1, 2.7, 3.3];
+
+/* A CSS colour as the painter's RGB, read back off a one-pixel fill -- as the app does. */
+const probe = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+const rgbOf = (color) => { probe.clearRect(0, 0, 1, 1); probe.fillStyle = color; probe.fillRect(0, 0, 1, 1); const [r, g, b] = probe.getImageData(0, 0, 1, 1).data; return { r, g, b }; };
+const css = getComputedStyle(document.documentElement);
+const RED = { dark: rgbOf(css.getPropertyValue("--dark-red")), light: rgbOf(css.getPropertyValue("--light-red")) };
+
+function canvas(frame, px, { dark = true, tint = false, opacity = 1 } = {}) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 20 * DPR;
+  c.style.cssText = `width:${px}px;height:${px}px;opacity:${opacity}`;
+  const ctx = c.getContext("2d");
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  paintFrame(ctx, frame, dark, tint ? RED[dark ? "dark" : "light"] : undefined);
+  return c;
+}
+const cell = (...children) => { const td = document.createElement("td"); td.append(...children); return td; };
+const label = (text) => { const td = cell(text); td.className = "label"; return td; };
+
+function header(frame, verb, show, dark) {
+  const div = document.createElement("div");
+  div.className = `header ${dark ? "dark" : "light"}`;
+  const text = document.createElement("span");
+  text.innerHTML = `<b>${verb}</b> · 7m 16s · 10 fetches, 4 searches`;
+  div.append(canvas(frame, 20, { ...show, dark }), text);
+  return div;
+}
+
+for (const [title, candidates] of ROUNDS) {
+  const h2 = document.createElement("h2"); h2.textContent = title;
+  const table = document.createElement("table");
+  for (const [name, verb, make, show = {}] of candidates) {
+    const frame = make();
+    const tr = document.createElement("tr");
+    tr.append(label(name), cell(canvas(frame, 72, show)), cell(header(frame, verb, show, true)), cell(header(frame, verb, show, false)));
+    table.append(tr);
+  }
+  document.getElementById("rounds").append(h2, table);
+}
+
+/* Six moments, then the frame playing. */
+const live = [];
+function motionRow(table, name, at) {
+  const tr = document.createElement("tr");
+  tr.append(label(name));
+  for (const t of MOMENTS) { const td = cell(canvas(at(t), 40)); td.className = "moment"; td.append(`${t}s`); tr.append(td); }
+  const playing = canvas(at(0), 40);
+  live.push([playing, at]);
+  const td = cell(playing); td.className = "moment"; td.append("live"); tr.append(td);
+  document.getElementById(table).append(tr);
+}
+for (const state of STATES) motionRow("states", state, animation(state));
+for (const [name, at] of CALMED) motionRow("calmed", name, at);
+
+window.done = true;
+const loop = (now) => {
+  for (const [c, at] of live) { const ctx = c.getContext("2d"); ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.clearRect(0, 0, 20, 20); paintFrame(ctx, at(now / 1000), true); }
+  requestAnimationFrame(loop);
+};
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
