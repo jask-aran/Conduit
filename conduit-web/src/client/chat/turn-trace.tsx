@@ -5,7 +5,7 @@ import type { Message, ToolItem, ToolKind } from "../api/contracts";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
 import { KIND_ICONS, stepDuration, ToolStep, VERBS } from "./tool-card";
 import "./turn-trail.css";
-import { ORB_STILLS } from "./orb-stills";
+import { ORB_AT_REST } from "./orb-stills";
 import { ThinkingOrb, type ModeFrame, type OrbState } from "./thinking-orb";
 import { Disclosure } from "./disclosure";
 import type { MarkdownRendererId } from "./markdown-settings";
@@ -225,11 +225,10 @@ const KIND_ORBS: Record<ToolKind, OrbState> = {
 };
 
 function statusOf(trace: TurnTraceData, writing: boolean): { verb: string; orb: OrbState; still?: ModeFrame } {
-  // Settled, the orb is a still: at rest, with how the turn ended pressed
-  // into it.
+  // Settled, the orb is a still: the orb at rest.
   if (!trace.active) {
-    const outcome = trace.status === "interrupted" || trace.status === "failed" ? trace.status : "done";
-    return { verb: { done: "Done", interrupted: "Interrupted", failed: "Failed" }[outcome], orb: "working", still: ORB_STILLS[outcome] };
+    const verb = ({ interrupted: "Interrupted", failed: "Failed" } as Record<string, string>)[trace.status] || "Done";
+    return { verb, orb: "working", still: ORB_AT_REST };
   }
   const running = trace.segments.flatMap((segment) => segment.kind === "tool" && !segment.tool.done ? [segment.tool] : []);
   if (running.length > 1) return { verb: `Running ${running.length} tools`, orb: "solving" };
@@ -313,12 +312,12 @@ export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sess
     initialOpen={props.initialOpen} onOpenChange={props.onOpenChange}
     header={<>
       {/* One box, live and settled, so nothing beside it moves when the turn
-          ends. A failure tints the orb. */}
+          ends. A turn that did not finish -- stopped or failed -- tints the orb. */}
       <span class="turn-trace-mark">
         {/* Settled it is still, pointer or not: movement is what says a turn
             is working. */}
         <ThinkingOrb state={preview().status.orb} frame={preview().status.still} paused={!props.trace.active}
-          tint={!props.trace.active && props.trace.status === "failed" ? "var(--destructive)" : undefined} />
+          tint={!props.trace.active && (props.trace.status === "failed" || props.trace.status === "interrupted") ? "var(--destructive)" : undefined} />
       </span>
       <div class="turn-trace-preview">
         {/* Two lines: what it is doing, and its latest step. The first is
