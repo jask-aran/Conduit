@@ -81,21 +81,20 @@ export function ChatPreview(props: { target: Target | null; folder?: Project | n
     <Show when={props.target} fallback={<p class="command-preview-empty">{props.folder ? props.folder.name : "Nothing highlighted"}</p>}>
       {(target) => <>
         <div class="command-preview-title"><ThreadHarnessMark id={target().chat.harnessId} /><span>{target().chat.title || "Untitled chat"}</span></div>
-        <div class="command-preview-facts">
-          <span>{harnessLabelFor(target().chat.harnessId || target().chat.backend?.implementation)}</span>
-          <span>{target().project.slug === "chat" ? "Chats" : target().project.name}</span>
-          <span>Updated {dateOf(target().chat.lastMessageAt || target().chat.updatedAt)} · created {dateOf(target().chat.createdAt)}</span>
-        </div>
+        <div class="command-preview-facts">{[...new Set([
+          harnessLabelFor(target().chat.harnessId || target().chat.backend?.implementation),
+          target().project.slug === "chat" ? "Chats" : target().project.name,
+        ].filter(Boolean))].join(" · ")} · {dateOf(target().chat.lastMessageAt || target().chat.updatedAt)}</div>
         <Show when={settled()?.chat.id === target().chat.id && !read.loading && !read.error && read()}>
           {(seen) => <>
             <Show when={seen().prompt}><p class="command-preview-prompt">{seen().prompt}</p></Show>
-            <Show when={seen().answer}><p class="command-preview-answer">{seen().answer}</p></Show>
             <Show when={seen().outcome}>
               <div class="command-preview-turn">
                 <ThinkingOrb state="working" frame={seen().outcome === "Done" ? PLAIN_SPHERE : SPUTTERING_SPHERE} tint={seen().outcome === "Done" ? undefined : "var(--destructive)"} />
                 <span><b>{seen().outcome}</b>{seen().took ? ` · ${seen().took}` : ""}{seen().work ? ` · ${seen().work}` : ""}</span>
               </div>
             </Show>
+            <Show when={seen().answer}><p class="command-preview-answer">{seen().answer}</p></Show>
             <Show when={!seen().prompt}><p class="command-preview-empty">No messages yet</p></Show>
           </>}
         </Show>
