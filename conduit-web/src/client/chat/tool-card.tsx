@@ -32,11 +32,12 @@ export const VERBS: Record<ToolKind, [string, string]> = {
   search: ["Searching", "Searched"], fetch: ["Fetching", "Fetched"], other: ["Using", "Used"],
 };
 
-/* How long a step took: tenths under ten seconds, whole seconds under a
-   minute, then minutes and seconds. */
+/* How long a step took: milliseconds under a second, tenths under ten
+   seconds, whole seconds under a minute, then minutes and seconds. */
 export function stepDuration(from?: string, to?: string): string {
   const ms = from && to ? Date.parse(to) - Date.parse(from) : NaN;
   if (!Number.isFinite(ms) || ms < 0) return "";
+  if (ms < 1000) return `${Math.floor(ms)}ms`;
   const seconds = ms / 1000;
   if (seconds < 10) return `${seconds.toFixed(1)}s`;
   if (seconds < 60) return `${Math.round(seconds)}s`;
