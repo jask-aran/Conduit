@@ -6,6 +6,7 @@ import {
   formatShortcutBinding, formatShortcutStroke, sameStroke,
 } from "../shortcuts/shortcut-normalize";
 import type { PendingShortcutSequence } from "../shortcuts/shortcut-types";
+import type { Project } from "../api/contracts";
 
 export type CommandHintMode = "browse" | "edit" | "rename" | "move" | "action-prefix" | "model-selector";
 export type CommandHintContext = "chat" | "generic";
@@ -46,8 +47,12 @@ function HintItem(props: { hint: Hint; onClick?: () => void }) {
 export function CommandHintBar(props: {
   context: CommandHintContext;
   mode: CommandHintMode;
-  allChats: boolean;
-  onToggleAllChats: () => void;
+  scope: string;
+  projects: Project[];
+  onScopeChange: (scope: string) => void;
+  chatView: "all" | "attention" | "progress" | "unread";
+  onChatViewChange: (view: "all" | "attention" | "progress" | "unread") => void;
+  selectedCount: number | null;
   pendingSequence?: PendingShortcutSequence | null;
   shortcuts: ShortcutManager;
   onToggleEdit?: () => void;
@@ -141,14 +146,21 @@ export function CommandHintBar(props: {
     return undefined;
   };
 
-  return <div class="command-hint-bar" role="note" aria-label={props.context === "chat" ? "Chat search controls and keyboard shortcuts" : "Keyboard shortcuts"} data-mode={props.mode}>
-    <Show when={props.context === "chat" && props.mode === "browse"}>
+  return <div class="command-hint-bar" role="note" aria-label={props.context === "chat" ? "Chat search controls and keyboard shortcuts" : "Keyboard shortcuts"} data-mode={props.mode} data-chat-search={props.context === "chat" || undefined}>
+    <Show when={props.context === "chat" && props.mode !== "move"}>
       <div class="command-search-footer-controls">
-        <button type="button" class="command-all-chats-toggle" aria-pressed={props.allChats} title={props.allChats ? "Show Chats only" : "Show chats from all projects"} onMouseDown={(event) => event.preventDefault()} onClick={props.onToggleAllChats}>All chats</button>
-        <div class="command-sort-toggle" role="group" aria-label="Chat sort">
-          <button type="button" aria-pressed={chatSort() === "latest"} onClick={() => saveChatSort("latest")}>Latest</button>
-          <button type="button" aria-pressed={chatSort() === "created"} onClick={() => saveChatSort("created")}>Created</button>
-        </div>
+        <Show when={props.selectedCount !== null}><span class="command-selection-count">{props.selectedCount} selected</span></Show>
+        <label>In: <select aria-label="Search in" value={props.scope} onChange={(event) => props.onScopeChange(event.currentTarget.value)}>
+          <option value="all">All projects</option><option value="chats">Chats</option>
+          <For each={props.projects.filter((project) => project.slug !== "chat")}>{(project) => <option value={`project:${project.id}`}>{project.name}</option>}</For>
+          <Show when={props.scope === "unresolved"}><option value="unresolved">Unknown project</option></Show>
+        </select></label>
+        <label>View: <select aria-label="Chat view" value={props.chatView} onChange={(event) => props.onChatViewChange(event.currentTarget.value as typeof props.chatView)}>
+          <option value="all">All</option><option value="attention">Needs attention</option><option value="progress">In progress</option><option value="unread">Unread</option>
+        </select></label>
+        <label>Sort: <select aria-label="Chat sort" value={chatSort()} onChange={(event) => saveChatSort(event.currentTarget.value === "created" ? "created" : "latest")}>
+          <option value="latest">Latest</option><option value="created">Created</option>
+        </select></label>
       </div>
     </Show>
     <div class="command-hint-items command-hint-primary">

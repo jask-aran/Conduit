@@ -22,10 +22,6 @@ function normalize(value: string): string {
   return value.trim().toLocaleLowerCase();
 }
 
-function filterKey(filter: Pick<ChatQueryFilter, "kind" | "value">): string {
-  return `${filter.kind}:${normalize(filter.value)}`;
-}
-
 function quoteFilterValue(value: string): string {
   return /\s/.test(value) ? `"${value.replaceAll('"', '\\"')}"` : value;
 }
@@ -51,9 +47,8 @@ export function parseChatQuery(raw: string): ParsedChatQuery {
     const end = match.index + match[0].length;
     removals.push([start, end]);
     const filter = { kind, value: value.trim(), raw: source.slice(start, end) };
-    const existing = filters.findIndex((item) => item.kind === kind);
-    if (existing >= 0) filters[existing] = filter;
-    else filters.push(filter);
+    // Scope is one choice, whether it was entered as scope: or in:.
+    filters.splice(0, filters.length, filter);
   }
 
   let text = source;
@@ -66,17 +61,8 @@ export function parseChatQuery(raw: string): ParsedChatQuery {
 
 /** Serialize filters and free text into the raw value owned by the input. */
 export function serializeChatQuery(filters: ChatQueryFilter[], text: string): string {
-  const unique: ChatQueryFilter[] = [];
-  const seen = new Set<string>();
-  for (const filter of filters) {
-    const value = filter.value.trim();
-    if (!value) continue;
-    const key = filterKey({ kind: filter.kind, value });
-    if (seen.has(key)) continue;
-    seen.add(key);
-    unique.push({ ...filter, value });
-  }
-  return [unique.map(tokenText).join(" "), String(text || "").trim()].filter(Boolean).join(" ");
+  const filter = filters.at(-1);
+  return [filter?.value.trim() ? tokenText(filter) : "", String(text || "").trim()].filter(Boolean).join(" ");
 }
 
 export function removeChatQueryFilter(parsed: ParsedChatQuery, index: number): string {

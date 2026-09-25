@@ -6,10 +6,17 @@ import type { ChatSummary, RuntimeProcess } from "../api/contracts";
 
 type Activity = string;
 
-const activityOf = (process: RuntimeProcess | null | undefined): Activity | null => {
+export const runtimeActivity = (process: RuntimeProcess | null | undefined): Activity | null => {
   if (!process) return null;
   const raw = typeof process.activity === "string" ? process.activity : process.activity?.kind;
-  return raw || (process.status === "starting" ? "starting" : process.active ? "working" : "idle");
+  return raw || (process.status === "failed" ? "failed" : process.status === "starting" ? "starting" : process.stopping ? "stopping" : process.active ? "working" : "idle");
+};
+
+export const visibleRuntimeActivity = (process: RuntimeProcess | null | undefined): Activity | null => {
+  if (!process || process.status === "stopped" || process.status === "none") return null;
+  const activity = runtimeActivity(process);
+  if (activity === "idle" && process.status !== "running" && !process.active) return null;
+  return activity;
 };
 
 const activityDetail = (process: RuntimeProcess | null | undefined): string | null => {
@@ -32,14 +39,8 @@ const SPINNING = new Set(["starting", "stopping", "working", "compacting"]);
 
 /** Compact accessible process/activity indicator for sidebar rows, matching main. */
 export function RuntimeIndicator(props: { process?: RuntimeProcess | null; stale?: boolean; unread?: boolean; class?: string; fallback?: JSX.Element }) {
-  const visible = () => {
-    const process = props.process;
-    if (!process || process.status === "stopped" || process.status === "none") return false;
-    const activity = activityOf(process);
-    if (activity === "idle" && process.status !== "running" && !process.active) return false;
-    return true;
-  };
-  const activity = () => activityOf(props.process) || "idle";
+  const visible = () => Boolean(visibleRuntimeActivity(props.process));
+  const activity = () => runtimeActivity(props.process) || "idle";
   const label = () => activityLabel(activity(), activityDetail(props.process));
   const tone = () => TONES[activity()] || "muted";
   // Live and unread are independent facts, so the slot goes to whichever is
