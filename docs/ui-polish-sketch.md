@@ -80,7 +80,8 @@ One anatomy, live and settled:
 ```
 
 - **Status**: one bold word, always shown, in the face "Interrupted" uses now.
-- **time**: muted.
+- **time**: muted, seconds always two digits -- `01s` … `59s`, then
+  `1m 02s` -- live and settled alike.
 - **work**: tool calls as single-word counts by kind; left out when none ran.
 - **thinking preview**: the latest thinking, muted, ellipsised to fit -- the
   provider's own summary where it gives one (GPT), else the start of the
@@ -89,10 +90,10 @@ One anatomy, live and settled:
 Live:
 
 ```
-🧠 Thinking · 0:04 · Let me break this down…
-🧠 Running bash · 0:12 · 1 command · I'll search for something engaging…
-🧠 Used 3 tools · 0:31 · 2 searches, 1 fetch · These are all fascinating…
-🧠 Writing · 0:44 · 3 searches, 2 fetches · I've gathered fascinating material…
+🧠 Thinking · 04s · Let me break this down…
+🧠 Running bash · 12s · 1 command · I'll search for something engaging…
+🧠 Used 3 tools · 31s · 2 searches, 1 fetch · These are all fascinating…
+🧠 Writing · 44s · 3 searches, 2 fetches · I've gathered fascinating material…
 ```
 
 - The status is what is happening now, swapped in place: Thinking; Running
@@ -107,7 +108,7 @@ Settled:
 🧠 Interrupted · 1m 04s · 3 searches, 2 fetches · Let me fetch more details…  ⌄
 23:02  ↻
 
-🧠 Done · 6s · Actually, I'll provide a longer story as it's the most likely…  ⌄
+🧠 Done · 06s · Actually, I'll provide a longer story as it's the most likely…  ⌄
 Did you mean "longer one"? Here's a much longer, detailed story:
 ```
 
@@ -139,8 +140,8 @@ Build:
    prompt's and the last reply's timestamps, already held; no new state.
 4. `DESIGN.md`: the header anatomy, and the status word always shown.
 
-Defaults to confirm when built: "Done" for a clean finish (vs Finished or
-Complete); the timer as `0:44` / `1m 04s` live and `6s` / `1m 04s` settled.
+Decided: "Done" for a clean finish; time as `01s` into `1m 02s`, one
+format live and settled.
 
 ## 2. Clarify composer hierarchy
 
