@@ -1,6 +1,5 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { COMMAND_IDS, getCommandDefinition } from "../commands/command-registry";
-import { COMPOSER_SURFACE_CHANGE_EVENT, selectedComposerSurface, type ComposerSurfaceMode } from "../chat/composer-surface";
 import { LEADER_MENU_PAUSE_MS, leaderMenu } from "../shortcuts/leader-menu";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import { formatShortcutStroke, sameStroke, strokeIdentity } from "../shortcuts/shortcut-normalize";
@@ -31,8 +30,7 @@ const rank = (key: string) => /^\d$/.test(key) ? 0 : /^[a-z]$/i.test(key) ? 1 : 
  *
  * A step back to look, so it dims the page -- all but the region it is
  * about, which stays lit so where focus is reads at a glance -- and shows one
- * small card at the foot of the screen, in the composer's material and the question card's row
- * shape. The path of regions around focus is the heading, outermost first;
+ * small card at the foot of the screen. The path of regions around focus is the heading, outermost first;
  * the list is the innermost region with keys, and ←/→ or Tab -- or a click on
  * the path -- moves it out to the others. A key an inner region claims is not
  * listed again further out, since the inner one is what it would run. By
@@ -45,13 +43,6 @@ export function LeaderPalette(props: { shortcuts: ShortcutManager }) {
   const pending = createMemo<PendingShortcutSequence | null>(() => {
     revision();
     return props.shortcuts.pendingSequence();
-  });
-
-  const [surface, setSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
-  onMount(() => {
-    const changed = (event: Event) => setSurface((event as CustomEvent<ComposerSurfaceMode>).detail);
-    window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, changed);
-    onCleanup(() => window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, changed));
   });
 
   // Shown after the pause, at once, or never; browsing the levels shows it
@@ -131,8 +122,7 @@ export function LeaderPalette(props: { shortcuts: ShortcutManager }) {
       <div class="leader-menu-lit" data-whole={hole() ? undefined : true} style={hole() ?? {}} />
     </div>
     <aside
-      class="leader-menu composer-surface-material"
-      data-composer-surface={surface()}
+      class="leader-menu"
       data-shortcut-leader-palette="true"
       data-leaving={leaving() || undefined}
       role="dialog"

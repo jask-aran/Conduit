@@ -8,6 +8,9 @@ colors:
   foreground: "oklch(0.93 0.003 258)"
   card: "oklch(0.225 0.006 264)"
   popover: "oklch(0.208 0.006 264)"
+  overlay-face: "oklch(0.165 0.005 264)"
+  overlay-face-top: "oklch(0.205 0.005 264)"
+  overlay-rail: "oklch(0.135 0.004 264)"
   primary: "oklch(0.95 0.002 258)"
   primary-foreground: "oklch(0.2 0.006 264)"
   secondary: "oklch(1 0 0 / 6%)"
@@ -137,7 +140,7 @@ components:
 
 Conduit is a self-hosted, always-dark agent control plane. The look is charcoal and quiet: a darker frame, inset rounded panes, plain lists grouped by a heading and space -- the sidebar is the reference -- and frosted glass floating chrome. The hairline tiles Conduit started with are being retired; they remain on the dashboard and in the workspace panel until those are redesigned (`docs/dashboard-redesign.md`). It is not a marketing site, not a light theme, and not a colorful dashboard.
 
-The accepted surfaces are the app dashboard, the chat/workspace split, the frosted composer, the header action pill, and the model-picker palette. Copy those patterns. Frosted glass is the signature material — prefer it for floating, transient, or hero chrome, not just the composer.
+The accepted surfaces are the app dashboard, the chat/workspace split, the frosted composer, the header action pill, and the model-picker palette. Copy those patterns. Frosted glass is the signature material for floating action chrome. Dense command, search, and leader lists use the ink-dark overlay surface so their text stays clear.
 
 Stack: SolidJS, Kobalte primitives, Geist Variable, tokens in `conduit-web/src/client/styles.css`. Do not add React, extra icon kits, or a second palette.
 
@@ -152,7 +155,7 @@ The charcoal is cool-neutral at chroma ~0.004–0.006. That gray is the brand. D
 - **foreground / muted-foreground** — type. Muted for timestamps, hints, empty states, icons at rest.
 - **border** — 1px hairlines: inputs, a header or footer rule, and dividers. Grouping is a heading and space, with at most one hairline between groups -- not a hairline box and not a fill. Do not outline the main or workspace pane with a hairline.
 - **accent** — white at 6–7% opacity. This is hover, pressed, and selected. Selection is a gray wash, never a hue.
-- **card / popover** — slightly raised solids for menus, palettes, modal cards, tool/attachment cards. Frosted glass is preferred wherever the surface floats or overlays content (composer, user bubbles, header pill, floating toolbars); solid popover remains for dense lists like palettes where blur would hurt legibility.
+- **card / popover** — slightly raised solids for menus, modal cards, tool/attachment cards. Command, search, and leader overlays use the deeper ink-dark overlay face, with a subtle neutral shift from top to bottom and a darker shortcut rail. Frosted glass is preferred for floating action chrome (composer, user bubbles, header pill, floating toolbars).
 - **primary** — near-white. Default buttons and the one bright action.
 - **destructive** — errors and destructive actions only.
 - **live / warn** — tiny runtime dots and git-ish status. Never as fills, rails, or card washes.
@@ -218,14 +221,15 @@ Chat composition:
 - Assistant markdown is the full reading column. User messages are a right-aligned frosted glass bubble (~640px max, `{rounded.bubble}`).
 - Composer sits at the bottom of the pane, same column width as dashboard composer — frosted glass, the reference material for all floating chrome.
 
-Menus and pane headers follow the component entries below. Palettes (model picker is the reference):
+Menus and pane headers follow the component entries below. Command and search overlays share one visual language, with separate layouts:
 
-- Centered solid popover, 11px radius, dim 55% behind.
-- Search row, hairline, close at right.
-- Uppercase 9px group labels.
-- Highlighted option = accent wash + 6–7px row radius. No left rail. Model id in muted mono, right-aligned. The current choice keeps a fainter standing wash and a heavier label while the cursor is elsewhere — never a tick.
-- Footer hint bar: keycaps + labels. Actionable hints use foreground; the rest stay muted.
-- Widths: commands 512px, models 576px, chat search 720px. Mobile: fill the visual viewport with a ~6px inset so it remains a dialog, not a new route.
+- Ink-dark opaque face, 16–18px radius, soft outer shadow, no pane-edge inset line. The rest of the app dims behind it.
+- Command palette: compact action rows, `>` at the input, shortcuts right-aligned, grouped under small uppercase labels.
+- Chat search: wider two-line result rows, search icon at the input, filters and sort in a separate strip above the results. Edit mode changes the rows and the shortcut rail, without turning search into a command list.
+- Leader menu: smaller card above the composer, with region path at the top and keys aligned at the left of each action.
+- Highlighted option = one neutral full-row wash. No coloured rail. A current model keeps a fainter standing wash and a heavier label while the cursor is elsewhere.
+- Footer shortcut rail: darker than the face, with keycaps and labels. Keep each view's actions contextual.
+- Widths: commands ~620px, models ~720px, chat search ~860px. Mobile: fill the visual viewport with a small inset so it remains a dialog, not a new route.
 
 Settings pattern (illustrative, non-normative — current shell ~1120×820, rail ~190px):
 
@@ -239,7 +243,7 @@ Settings pattern (illustrative, non-normative — current shell ~1120×820, rail
 Almost none on listed content. Frosted glass carries the depth.
 
 - Panes: hairline only. Lists: nothing.
-- Palettes/modals: one dark shadow `0 24px 70px rgb(0 0 0 / 35–45%)` plus hairline. Solid `{colors.popover}` stays for dense lists where blur would hurt legibility.
+- Palettes/modals: one dark outer shadow and a subtle edge. Dense lists use the opaque ink-dark overlay face where blur would hurt legibility.
 - Frost chrome (the signature): translucent `frost-fill`, 1px white-alpha `frost-stroke`, blur 19–24px, optional top specular inset. No heavy drop. Composer, user bubble (`glass-bg` + blur), header pill, and future floating toolbars share this one material — do not redeclare it per component.
 - Primary buttons: top specular inset + short lift. Ghost buttons: no fill until hover.
 
@@ -280,7 +284,7 @@ Motion explains a change of place: where something went, and what took its place
 
 **List row** — transparent, 7–8px radius. The `{colors.accent}` wash is the **cursor**: the row under the pointer, under keyboard focus, or being pressed, and only one row at a time — pointer and keyboard move the same cursor, as in a palette or menu. Keyboard focus on a row is that wash and nothing else: no focus ring, from the browser or a component. Selecting several rows is the cursor applied to each: every selected row takes the same wash, with no edge bar, tick column or other marker. In the sidebar, the current page is not a wash: every row rests at one weight in grey text, and the current row -- chat, project, workspace or page alike -- is white and semibold (660) with no fill, its Lucide icons at a heavier stroke (2px) and a harness mark lit rather than thickened. The folder or workspace holding the current chat is drawn the same way, collapsed or not, so where you are reads up the tree; a pinned row looks exactly like its unpinned row, marks included, and follows the same rules -- a harness mark in its own colours, but the white text is what must carry it, since most marks have none. The cursor and where you are can always be told apart. A current rail icon is white with a heavier stroke. Never an inset coloured bar.
 
-**Palette / modal** — solid `{colors.popover}`, 11–12px radius. Model picker ergonomics are the standard: type-to-filter, groups, gray highlight, keycap footer.
+**Palette / modal** — opaque ink-dark face, 16–18px radius. Type-to-filter, groups, gray highlight, and the keycap footer remain. Commands and chat search share these elements but keep distinct input and result layouts.
 
 **Message time** — muted caption at the head of a message's action row (the agent's on the left, beside Regenerate; the user's beside the edit pencil), never a line of its own above the message.
 
@@ -294,7 +298,7 @@ Motion explains a change of place: where something went, and what took its place
 
 **Held focus** — a region reached by a go-to-region shortcut (Ctrl+Shift+1/2/3: sidebar, main pane, workspace panel) shows a 1.5px line along its bottom edge in the near-neutral `{colors.ring}` tone, fading out at both ends so it sits inside any corner; the regions' bottoms line up, so it reads as one baseline with the held region lit. No outline, and no coloured title. It stays while focus is in that region or in no region (a menu, a dialog), and goes when focus reaches another region any other way; a click, Tab, or a menu handing focus back never lights one. On that arrival the rest of the app dims slightly (~18%) for ~0.8s around it -- the leader menu's lit region, briefly -- and the line stays; the line may prove enough on its own. Not on a phone.
 
-**Leader menu** — what the leader, Ctrl+G, can do from where you are, shown only after a pause by default. A step back: the page dims -- all but the region the menu is about, which stays lit with its own corners so where focus is reads at a glance, and moves when the level shown changes -- and one small card sits bottom-centre, in the composer's material with the question card's rows (keycap, then a 12px/560 label; the row takes the wash on hover). Its heading is the path of regions in 9px uppercase mono, the level shown as a wash; the go-to chords and Esc sit at the foot under a hairline. It rises ~8px as it arrives and, when a choice or Esc ends it, fades and drops back the same way, quickly.
+**Leader menu** — what the leader, Ctrl+G, can do from where you are, shown only after a pause by default. The page dims except for the current region, which stays lit with its own corners and changes as the shown level changes. A small ink-dark card sits above the composer. The region path is in 9px uppercase mono at the top; action rows align crisp keycaps at the left and use a neutral wash on hover. The go-to chords and Esc stay in the darker shortcut rail at the foot. It rises ~8px as it arrives and fades and drops back when a choice or Esc ends it.
 
 **Dropdown menu** — the common case, more often than a palette: sessions, shortcuts, overflow. Solid `{colors.popover}`, `{rounded.pop}`, ~320px wide. A 9px uppercase group label, then rows of **one line**: an optional leading mark (a harness mark, a drag grip, or nothing), a 12px/560 title, its muted mono meta inline and right-aligned, truncating before the title does, and trailing 13px icon actions that stay muted and appear with the row on hover or keyboard focus (always shown on touch). The whole row takes the `{colors.accent}` wash, not just the part under the pointer. A single footer action row ("+ New …") sits under a hairline. Something edited in place opens as an inline form inside its row — bordered inputs, a two-state toggle with the selected state as the gray wash, Cancel/Done — and saves on Done; the list has no separate Save. Use a popover rather than a menu when the rows hold inputs, so typing is not taken as menu navigation. A one-field rename stays a dialog.
 
