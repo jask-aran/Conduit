@@ -1205,6 +1205,18 @@ function App() {
     }
   };
 
+  // New chat without a project of its own lands on the Conduit dashboard with
+  // the composer focused: the dashboard is the new-chat screen.
+  const startNewChat = async (target?: Project) => {
+    const project = target || selectedProject();
+    if (project && project.slug !== "chat") {
+      await createChat(project);
+      return;
+    }
+    if (routeKind() !== "dashboard") openDashboard();
+    requestAnimationFrame(() => requestAnimationFrame(focusComposer));
+  };
+
   let dashboardDraftRequest: Promise<void> | null = null;
   const ensureDashboardDraft = () => {
     const route = routeKind();
@@ -2032,7 +2044,7 @@ function App() {
     void desktopShell.onNewChat(() => { void createChat(); }).then(remember);
     void desktopShell.onCheckForUpdates(() => { void runPwaUpdate(); }).then(remember);
     void desktopShell.onCommand((commandId) => {
-      if (commandId === COMMAND_IDS.newChatGlobally) void createChat();
+      if (commandId === COMMAND_IDS.newChatGlobally) void startNewChat();
     }).then(remember);
     onCleanup(() => {
       clearTimeout(firstCheck);
@@ -2257,7 +2269,7 @@ function App() {
       shortcutManager.registerHandler(COMMAND_IDS.openModelSelector, "application", openModelSelector),
       shortcutManager.registerHandler(COMMAND_IDS.newChat, "application", () => {
         setMobileSidebarOpen(false);
-        void createChat();
+        void startNewChat();
       }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleSidebar, "application", () => runSidebar("toggle-sidebar")),
       shortcutManager.registerHandler(COMMAND_IDS.toggleWorkspacePanel, "application", togglePanel),
@@ -2485,7 +2497,7 @@ function App() {
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
-      onNewChat={async (project) => { await createChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={openChat} onFocusMainPane={focusMainPane} onEnterMainPane={() => { if (!isMobileLayout()) enterMainPane(); }} onOpenProject={openProject} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
+      onNewChat={async (project) => { await startNewChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={openChat} onFocusMainPane={focusMainPane} onEnterMainPane={() => { if (!isMobileLayout()) enterMainPane(); }} onOpenProject={openProject} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
       onOpenProjectMaximized={openProjectWithMaximizedWorkspace}
       onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
@@ -2531,7 +2543,7 @@ function App() {
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
         : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : "Loading chat…"}</div>}>
         <Show when={routeKind() === "dashboard"}>
-          <ChatHeader title="Conduit Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard />
+          <ChatHeader title="Conduit Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard />
           <AppDashboard
             projects={catalogue.projects()}
             composer={<Composer
@@ -2583,6 +2595,8 @@ function App() {
             onMoveProjectChats={(source, target) => void moveProjectChats(source, target)}
             onOpenChatTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
             onSearchChats={(scope) => openPalette("chat-search", scope === "unscoped" ? "scope:chats " : "", true)}
+            onOpenTerminalView={() => openTerminalRoute()}
+            onOpenSettings={() => openSettings()}
             onOpenTerminal={(terminal) => {
               if ((terminal.projectId === "computer" || terminal.projectId.startsWith("computer:")) && terminal.cwd) {
                 openComputer();
@@ -2613,7 +2627,7 @@ function App() {
           />
         </Show>
         <Show when={routeKind() === "computer"}>
-          <Show when={!computerDriving()}><ChatHeader title="Computer" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard /></Show>
+          <Show when={!computerDriving()}><ChatHeader title="Computer" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard /></Show>
           <ComputerDashboard projects={catalogue.projects()} runtime={runtime} location={computerLocation()} loading={computerLoading()} error={computerError()} selectedHarness={computerHarness()} pendingThread={pendingHarnessThread()} onPendingThreadOpened={() => setPendingHarnessThread(null)} onHarnessDriveChange={setComputerDriving} renderHarnessDrive={({ current, harness, store, onBack, onTrack }) => <div class="harness-drive-shared">
             <ChatHeader project={catalogue.projects().find((project) => project.workingRoot === current.cwd)} title={current.title} runtime={store.chat.runtimeIdentity()} live={store.chat.live() as unknown as Record<string, unknown>} chat={store.chat} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => openComputerHarness(harness.id)} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} onBack={onBack} extraAction={<Button variant="ghost" size="sm" onClick={onTrack}>Track this thread</Button>} />
             <div class="work-area"><section class="work-area-conversation" aria-label="Conversation"><Transcript chat={store.chat} supports={(name) => store.chat.capabilities()?.[name] === true} partialContinue={false} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={harness.label} /><div class="composer-stack" data-question={store.chat.hostUiRequests().length ? "true" : undefined}><HostUiRequests requests={store.chat.hostUiRequests()} onRespond={store.chat.respondHostUi} /><Composer chat={store.chat} attachments={NO_ATTACHMENTS} attachmentsSupported={false} models={store.models} profiles={[]} activeProfile={null} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => {}} onStatusChange={setComposerStatus} /></div></section></div>
@@ -2627,7 +2641,7 @@ function App() {
         </Show>
         <Show when={routeKind() === "project" && selectedProject()} fallback={<>
           <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
-          <ChatHeader project={selectedProject()} title={chat.title() || (chat.status() === "active" ? "Untitled chat" : "New chat")} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} chat={chat} contextMetrics={contextMetrics} composerStatus={composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} />
+          <ChatHeader project={selectedProject()} title={chat.title() || (chat.status() === "active" ? "Untitled chat" : "New chat")} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} chat={chat} contextMetrics={contextMetrics} composerStatus={composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} />
           <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
           <div class="work-area">
             <section class="work-area-conversation" aria-label="Conversation" aria-busy={openingLiveChat()}>
@@ -2637,7 +2651,7 @@ function App() {
             </section>
           </div>
         </>}>
-          <ChatHeader project={selectedProject()} title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void createChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} dashboard />
+          <ChatHeader project={selectedProject()} title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} dashboard />
           <ProjectDashboard project={selectedProject()!} runtime={runtime} onOpenHarnessThread={(harnessId, path, id, title) => { setPendingHarnessThread({ harnessId, path, id, title }); void openComputerHarnessHere(harnessId, path); }}
             composer={<Composer
               chat={chat}

@@ -1,118 +1,35 @@
-.app-dashboard-chat-actions { display: flex; flex: none; align-items: center; gap: 6px; }
-.app-dashboard-list { padding: 4px; }
-.app-dashboard-terminal-list { display: grid; grid-template-columns: 1fr; }
-.app-dashboard-terminal-copy { overflow: hidden; }
-.app-dashboard-terminal-title { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 8px; }
-.app-dashboard-terminal-title em { overflow: hidden; color: var(--muted-foreground); font-size: 8px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
-.app-dashboard-terminal-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.app-dashboard-terminal-copy code { color: inherit; font: inherit; }
-.app-dashboard .project-chat-list { border: 0; border-radius: 0; }
-@media (--conduit-mobile-layout) {
-  .app-dashboard .dashboard-row-meta { display: none; }
-}
+/* The Conduit dashboard (app-dashboard.tsx), on the split layout. */
+.app-dashboard-day { padding: 8px 6.4px 2px; color: var(--muted-foreground); font-size: 9.6px; }
+.app-dashboard-day:first-child { padding-top: 0; }
+.app-dashboard-activity { color: var(--live); }
+.app-dashboard .split-group-actions > button.is-on { background: var(--accent); color: var(--foreground); }
 
-.computer-dashboard { width: 100%; min-height: 0; flex: 1; overflow: hidden; padding: 10px; }
-.computer-dashboard[data-harness="true"] { padding: 0; }
-.computer-dashboard[data-dialog="true"] { height: min(52dvh, 500px); min-height: 360px; flex: none; padding: 0; }
-.computer-dashboard[data-dialog="true"] .computer-explorer { grid-template-columns: minmax(0, 1fr); border: 0; border-radius: 0; }
-.computer-dashboard[data-dialog="true"] .computer-explorer-sidebar,
-.computer-dashboard[data-dialog="true"] .computer-sidebar-resize { display: none; }
-.computer-dashboard[data-dialog="true"] .computer-file-grid { grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); grid-auto-rows: 58px; }
-.computer-dashboard[data-dialog="true"] .computer-repository-summary,
-.computer-dashboard[data-dialog="true"] .computer-actions-spacer { display: none; }
-.computer-dashboard[data-dialog="true"] .computer-explorer-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.computer-dashboard[data-dialog="true"] .computer-explorer-actions > button { width: 100%; justify-content: center; padding-inline: 8px; font-size: 9px; }
-.computer-explorer { display: grid; width: 100%; height: 100%; min-height: 0; grid-template-columns: var(--computer-sidebar-width) 5px minmax(0, 1fr); overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
-.computer-explorer[data-harness="true"] { display: block; overflow: hidden; border: 0; border-radius: 0; }
-.computer-explorer-sidebar { min-width: 0; overflow-y: auto; padding: 8px 6px; background: color-mix(in oklch, var(--background), var(--accent) 18%); }
-.computer-explorer-sidebar h2 { margin: 10px 7px 4px; color: var(--muted-foreground); font-size: 8.5px; font-weight: 620; text-transform: uppercase; }
-.computer-explorer-sidebar > button, .computer-workspace-shortcuts button { display: flex; width: 100%; min-width: 0; min-height: 27px; align-items: center; gap: 7px; border: 0; border-radius: 5px; background: transparent; padding: 4px 7px; color: var(--muted-foreground); text-align: left; }
-.computer-explorer-sidebar button:hover, .computer-explorer-sidebar button[data-active="true"] { background: var(--accent); color: var(--foreground); }
-.computer-explorer-sidebar button span { overflow: hidden; font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; }
-.computer-explorer-sidebar svg, .computer-explorer-sidebar .workspace-glyph { width: 13px; height: 13px; flex: none; }
-.computer-harness-mark { width: 14px; height: 14px; flex: none; object-fit: contain; }
-.computer-harness-menu { min-width: 160px; }
-.computer-explorer-sidebar button > i { width: 5px; height: 5px; flex: none; margin-left: auto; border-radius: 50%; background: var(--live); }
-.computer-explorer-sidebar button > i[data-status="authentication_required"], .computer-explorer-sidebar button > i[data-status="unavailable"] { background: var(--warn); }
-.computer-explorer-sidebar p { margin: 6px 7px; color: var(--muted-foreground); font-size: 9px; }
-.computer-sidebar-resize { position: relative; cursor: col-resize; touch-action: none; }
-.computer-sidebar-resize::after { content: ""; position: absolute; inset-block: 0; left: 2px; width: 1px; background: var(--border); }
-.computer-sidebar-resize:hover::after { background: var(--ring); }
-.computer-explorer-main { position: relative; display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; container-name: computer-explorer-main; container-type: inline-size; }
-.computer-explorer-toolbar { display: flex; min-width: 0; min-height: 36px; align-items: center; gap: 4px; padding: 5px 6px; border-bottom: 1px solid var(--border); }
-.computer-explorer-toolbar > button { display: grid; width: 24px; height: 24px; flex: none; place-items: center; border: 0; border-radius: 5px; background: transparent; color: var(--muted-foreground); }
-.computer-explorer-toolbar > button:hover, .computer-explorer-toolbar > button[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
-.computer-explorer-toolbar svg { width: 12px; height: 12px; }
-.computer-address, .computer-search { height: 24px; min-width: 0; border: 1px solid var(--border); border-radius: 5px; background: var(--background); color: var(--foreground); }
-.computer-address { flex: 1; padding: 3px 7px; font: 9px ui-monospace, monospace; }
-.computer-search { position: relative; display: flex; width: min(180px, 25%); align-items: center; }
-.computer-search svg { position: absolute; left: 6px; color: var(--muted-foreground); }
-.computer-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; padding: 3px 6px 3px 21px; color: inherit; font-size: 9px; }
-.computer-dashboard .computer-explorer-toolbar select { width: auto; height: 24px; min-height: 24px; max-width: 88px; border: 1px solid var(--border); border-radius: 5px; background: var(--background); padding: 2px 4px; color: var(--muted-foreground); font-size: 8.5px; }
-.computer-item-count { flex: none; color: var(--muted-foreground); font-size: 8px; white-space: nowrap; }
-.computer-explorer-actions { display: flex; min-width: 0; min-height: 32px; align-items: center; gap: 4px; padding: 4px 6px; border-bottom: 1px solid var(--border); }
-.computer-explorer-actions > button { display: inline-flex; width: auto; min-height: 24px; flex: none; align-items: center; gap: 4px; border: 0; border-radius: 5px; background: transparent; padding: 3px 6px; color: var(--muted-foreground); font-size: 8.5px; white-space: nowrap; }
-.computer-explorer-actions > button:hover { background: var(--accent); color: var(--foreground); }
-.computer-explorer-actions svg { width: 11px; height: 11px; }
-.computer-actions-spacer { flex: 1; }
-.computer-repository-summary { display: inline-flex; min-width: 0; align-items: center; gap: 4px; color: var(--muted-foreground); font-size: 8.5px; }
-.computer-repository-summary svg { flex: none; }
-.computer-file-grid { display: grid; min-height: 0; flex: 1; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); grid-auto-rows: 62px; align-content: start; gap: 2px; overflow-y: auto; padding: 6px; }
-.computer-file-grid > button { position: relative; display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border: 0; border-radius: 6px; background: transparent; padding: 6px; color: var(--foreground); }
-.computer-file-grid > button:hover, .computer-file-grid > button:focus-visible { background: var(--accent); }
-.computer-file-grid > button > svg, .computer-file-grid .workspace-file-icon { width: 20px; height: 20px; }
-.computer-file-grid > button > svg { color: var(--muted-foreground); }
-.computer-file-grid > button > span { width: 100%; overflow: hidden; font-size: 9px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
-.computer-file-grid > button > .computer-file-workspace-mark { position: absolute; top: 4px; right: 4px; display: grid; width: 14px; height: 14px; place-items: center; overflow: visible; }
-.computer-file-workspace-mark .workspace-glyph { width: 12px; height: 12px; font-size: 7px; }
-.computer-file-grid[data-view="details"] { display: block; overflow: auto; padding: 4px; }
-.computer-detail-heading, .computer-file-grid[data-view="details"] > button { display: grid; width: 100%; min-width: 620px; min-height: 25px; grid-template-columns: minmax(160px, 1fr) 72px 68px 124px 124px; align-items: center; border-radius: 4px; }
-.computer-detail-heading { min-height: 22px; padding: 2px 8px 2px 27px; color: var(--muted-foreground); font-size: 8px; }
-.computer-file-grid[data-view="details"] > button { position: relative; padding: 3px 8px 3px 27px; }
-.computer-file-grid[data-view="details"] > button > svg, .computer-file-grid[data-view="details"] .workspace-file-icon { position: absolute; left: 8px; width: 12px; height: 12px; }
-.computer-file-grid[data-view="details"] > button > span { text-align: left; }
-.computer-file-grid[data-view="details"] > button > .computer-file-workspace-mark { top: 5px; right: auto; left: 8px; }
-.computer-file-grid[data-view="details"] > button:has(.computer-file-workspace-mark) > svg { display: none; }
-.computer-file-grid[data-view="details"] > button > small { overflow: hidden; color: var(--muted-foreground); font-size: 8.5px; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
-.computer-folder-empty { grid-column: 1 / -1; align-self: center; color: var(--muted-foreground); font-size: 10px; text-align: center; }
-.computer-loading { position: absolute; right: 10px; bottom: 8px; color: var(--muted-foreground); font-size: 9px; }
-.computer-load-more { flex: none; min-height: 26px; border: 0; border-top: 1px solid var(--border); background: transparent; color: var(--muted-foreground); font-size: 9px; }
-.computer-load-more:hover { background: var(--accent); color: var(--foreground); }
-.computer-error { margin: 0; padding: 7px 9px; border-bottom: 1px solid var(--border); color: var(--destructive); font-size: 9px; }
-.computer-dashboard button:disabled { opacity: .4; cursor: not-allowed; }
-.computer-dashboard :is(button, input):focus-visible { outline: 1px solid var(--ring); outline-offset: -1px; }
-@container computer-explorer-main (max-width: 720px) {
-  .computer-search { width: 28px; }
-  .computer-search input { padding-inline: 21px 0; }
-  .computer-explorer-actions > button { width: 24px; justify-content: center; padding-inline: 0; font-size: 0; }
-}
-@container computer-explorer-main (max-width: 520px) {
-  .computer-explorer-toolbar select { display: none; }
+/* The folder shelf: project folders as folders, no box, the wash as cursor. */
+.app-folder-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 2px; }
+.app-folder { position: relative; display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 4px; border: 0; border-radius: 9px; background: transparent; padding: 8px 6.4px 7px; color: inherit; text-align: left; text-decoration: none; }
+.app-folder:is(:hover, :focus-visible, [data-expanded]) { outline: none; background: var(--sidebar-accent, var(--accent)); }
+.app-folder-mark { width: 26px; height: 21px; }
+.app-folder-back { fill: color-mix(in oklch, var(--foreground), transparent 80%); }
+.app-folder-front { fill: color-mix(in oklch, var(--foreground), transparent 70%); transition: fill 150ms ease; }
+.app-folder:is(:hover, :focus-visible) .app-folder-front { fill: color-mix(in oklch, var(--foreground), transparent 55%); }
+.app-folder-live { position: absolute; top: 9px; left: 29px; width: 6px; height: 6px; border-radius: 50%; background: var(--live); }
+.app-folder-name { max-width: 100%; overflow: hidden; color: var(--foreground); font-size: 10.4px; text-overflow: ellipsis; white-space: nowrap; }
+.app-folder-meta { max-width: 100%; overflow: hidden; color: var(--muted-foreground); font: 8.8px ui-monospace, SFMono-Regular, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.app-folder-new { color: var(--muted-foreground); }
+.app-folder-new svg { width: 21px; height: 21px; margin: 0 3px; }
+.app-folder-new .app-folder-name { color: var(--muted-foreground); }
+
+/* One column: the shelf is one sideways strip, so it costs a single row. */
+@container split-dashboard (max-width: 759px) {
+  .app-folder-shelf { display: flex; overflow-x: auto; margin-inline: -6px; scrollbar-width: none; }
+  .app-folder { width: 96px; flex: none; }
 }
 @media (--conduit-mobile-layout) {
-  .computer-dashboard { padding: 6px; }
-  .computer-explorer { grid-template-columns: 1fr; }
-  .computer-explorer-sidebar { display: none; }
-  .computer-sidebar-resize { display: none; }
-  .computer-search { width: 28px; }
-  .computer-search input { padding-inline: 21px 0; }
-  .computer-explorer-actions > button { width: 28px; justify-content: center; padding-inline: 0; font-size: 0; }
-  .computer-dashboard[data-dialog="true"] { height: calc(100% - 55px); min-height: 0; padding: 0; }
-  .computer-dashboard[data-dialog="true"] .computer-explorer { grid-template-columns: 1fr; }
-  .computer-dashboard[data-dialog="true"] .computer-explorer-toolbar { min-height: 48px; gap: 5px; padding: 6px; }
-  .computer-dashboard[data-dialog="true"] .computer-explorer-toolbar > button { width: 36px; height: 36px; }
-  .computer-dashboard[data-dialog="true"] .computer-explorer-toolbar svg { width: 16px; height: 16px; }
-  .computer-dashboard[data-dialog="true"] .computer-address,
-  .computer-dashboard[data-dialog="true"] .computer-search { height: 36px; }
-  .computer-dashboard[data-dialog="true"] .computer-address { padding-inline: 10px; font-size: 12px; }
-  .computer-dashboard[data-dialog="true"] .computer-search { width: 36px; }
-  .computer-dashboard[data-dialog="true"] .computer-search svg { left: 10px; }
-  .computer-dashboard[data-dialog="true"] .computer-item-count { font-size: 10px; }
-  .computer-dashboard[data-dialog="true"] .computer-explorer-actions { min-height: 48px; gap: 5px; padding: 5px 6px; }
-  .computer-dashboard[data-dialog="true"] .computer-explorer-actions > button { min-height: 38px; gap: 6px; padding-inline: 7px; font-size: 11px; }
-  .computer-dashboard[data-dialog="true"] .computer-explorer-actions svg { width: 15px; height: 15px; }
-  .computer-dashboard[data-dialog="true"] .computer-file-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); grid-auto-rows: 82px; gap: 4px; padding: 8px; }
-  .computer-dashboard[data-dialog="true"] .computer-file-grid[data-view="tiles"] > button { gap: 5px; font-size: 11px; }
-  .computer-dashboard[data-dialog="true"] .computer-file-grid[data-view="tiles"] > button > svg,
-  .computer-dashboard[data-dialog="true"] .computer-file-grid[data-view="tiles"] .workspace-file-icon { width: 25px; height: 25px; }
+  .app-dashboard-day { padding: 12px 9px 3px; font-size: 12px; }
+  .app-folder { width: 104px; padding: 10px 9px; }
+  .app-folder-mark { width: 30px; height: 24px; }
+  .app-folder-live { left: 34px; top: 11px; }
+  .app-folder-name { font-size: 14px; }
+  .app-folder-meta { font-size: 11.5px; }
 }
+@media (prefers-reduced-motion: reduce) { .app-folder-front { transition: none; } }

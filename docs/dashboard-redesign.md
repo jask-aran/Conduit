@@ -1,6 +1,6 @@
 # Dashboard redesign
 
-Status: project and workspace dashboards built; the app dashboard is not yet designed. Moved out of `ui-polish-sketch.md` on
+Status: the Conduit, project and workspace dashboards are built on the split layout; harness dashboards are designed separately. Moved out of `ui-polish-sketch.md` on
 2026-09-24 because the dashboards need an overhaul rather than more polish:
 the wish is to redesign them and arrive at a more concrete design before
 anything else is fitted to them. Keyboard navigation of their lists was the
@@ -19,8 +19,8 @@ of sections: Recent chats, Recent Workspaces and Live terminals. The project
 project and workspace dashboards are built: a header with the context line
 and text shortcuts, the composer with the threads list under it on the left,
 and Terminals and Changes (or recent Files) on the right; one column on a
-narrow pane. `DESIGN.md` describes the composition. The app dashboard keeps
-the tiles until it is redesigned; harness dashboards are designed separately.
+narrow pane. `DESIGN.md` describes the composition. The Conduit dashboard
+uses the same layout and is also the new-chat screen.
 
 ## Carried over from the polish doc
 

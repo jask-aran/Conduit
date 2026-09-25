@@ -138,7 +138,7 @@ components:
 
 # Overview
 
-Conduit is a self-hosted, always-dark agent control plane. The look is charcoal and quiet: a darker frame, inset rounded panes, plain lists grouped by a heading and space -- the sidebar is the reference -- and frosted glass floating chrome. The hairline tiles Conduit started with are being retired; they remain on the Conduit dashboard and in the workspace panel until those are redesigned (`docs/dashboard-redesign.md`). It is not a marketing site, not a light theme, and not a colorful dashboard.
+Conduit is a self-hosted, always-dark agent control plane. The look is charcoal and quiet: a darker frame, inset rounded panes, plain lists grouped by a heading and space -- the sidebar is the reference -- and frosted glass floating chrome. The hairline tiles Conduit started with are being retired; they remain in the workspace panel and the harness dashboards until those are redesigned (`docs/dashboard-redesign.md`). It is not a marketing site, not a light theme, and not a colorful dashboard.
 
 The accepted surfaces are the app dashboard, the chat/workspace split, the frosted composer, the header action pill, and the model-picker palette. Copy those patterns. Frosted glass is the signature material for floating chrome, the command palette and chat search included. The leader menu keeps the ink-dark overlay surface.
 
@@ -206,13 +206,11 @@ Two pane types:
 1. **Listed content** — the sidebar, settings, and what replaces the dashboard tiles. No box: a small muted heading over plain one-line rows, groups set apart by space and a light `{colors.border}` hairline between them, the wash as the cursor. Hairline tiles (a boxed, divided group at ~10px radius) are the old pattern, left on the dashboard and workspace panel until they are redesigned; do not add new ones.
 2. **Floating chrome** — composer, user bubbles, header icon pill, scroll-to-latest, floating toolbars. Frosted glass, larger radius (~22px for pills, 15px for bubbles), centered on the reading column where applicable. This is the signature material — reach for it first for anything that floats or overlays content.
 
-Dashboard composition (canonical):
+Conduit dashboard composition (`dashboard/app-dashboard.tsx`): the split layout below, and the new-chat screen -- New chat without a project of its own lands here with the composer focused.
 
-- Centered ~880px column.
-- Display title, then a launch row: frost composer | two quiet quick-action tiles.
-- Below: one tall tiled list (recent chats) spanning two rows, two stacked tiles on the right (workspaces, terminals).
-- Section heading is a 48px hairline header: title + 9px muted subtitle, trailing quiet controls.
-- Rows are 43px, icon + copy + chevron, hover = accent wash.
+- Header "Conduit" with a context line (running, unread) and text shortcuts (Search chats, New project, Terminal, Settings).
+- Left: the composer, then every recent chat grouped by day as the search overlay groups them; a row carries the harness mark, title, where it lives (live activity first) and age. All / Unread and the sort are quiet heading actions.
+- Right: the folder shelf -- project folders drawn as folders in a wrapping grid, name and "N chats · age" under each, a live dot when one of its chats runs, ending in New project -- then Workspaces and Terminals as lists. On one column the shelf is a single sideways strip above the chats.
 
 Project and workspace dashboard composition (`dashboard/primitives/split.tsx`), listed content with no tiles:
 
