@@ -1015,6 +1015,22 @@ export function CommandMenu(props: {
               <ChatPreview target={activeChat()} folder={rowProject(selectable()[active()])} active={(chat) => { const activity = chatActivity(chat); return Boolean(activity && activity !== "idle"); }} />
             </Show>
             </div>
+            {/* On a phone the keys mean nothing: the rail gives way to buttons. */}
+            <Show when={chatPage() && !moveMode()}>
+              <div class="command-phone-bar">
+                <Show when={selectionMode()} fallback={<>
+                  <button type="button" onClick={() => enterSelection()}>Edit</button>
+                  <button type="button" onClick={() => saveChatSort(chatSort() === "latest" ? "created" : "latest")}>{chatSort() === "latest" ? "Latest" : "Created"}</button>
+                  <Show when={chatScope().kind === "project"}>
+                    <button type="button" onClick={() => { const scope = chatScope(); if (scope.kind === "project") { close(); requestAnimationFrame(() => props.actions.openProject(scope.project)); } }}>Open {scopeChipName()}</button>
+                  </Show>
+                </>}>
+                  <button type="button" disabled={!selectedTargets().length} onClick={() => moveSelected()}>Move {selectedTargets().length || ""}</button>
+                  <button type="button" class="command-phone-danger" disabled={!selectedTargets().length} onClick={() => requestDelete()}>Delete {selectedTargets().length || ""}</button>
+                  <button type="button" onClick={() => exitSelection()}>Done</button>
+                </Show>
+              </div>
+            </Show>
             <CommandHintBar
               context={hintContext()}
               mode={modelSelectorPage() ? "model-selector" : hintMode()}
