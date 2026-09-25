@@ -445,6 +445,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null): Turn
         key: answerDisplayKey(owner, answerIndex, `live:${generation.id}`),
         displayKey: answerDisplayKey(owner, answerIndex, `live:${generation.id}`),
         type: "message",
+        traced: true,
         live: active(generation),
         streamVersion: generation.lastSeq,
         precedingUserId: owner?.id,
@@ -465,7 +466,9 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null): Turn
     }
   }
   const rows: TurnRow[] = [];
-  if (segments.length) {
+  // Every turn that has shown anything has its trace: one with no thinking
+  // and no tools is its header alone -- the orb, what it is doing, the time.
+  if (segments.length || answers.length) {
     const running = active(generation);
     const latestTool = segments.findLast((segment) => segment.kind === "tool");
     const executingTool = running && latestTool?.kind === "tool" && latestTool.tool.done === false;
@@ -557,12 +560,15 @@ function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById
   }
   const answer = answerAssistants.at(-1) || null;
   const answerText = answerAssistants.map((assistant) => String(assistant.content || "").trim()).filter(Boolean).join("\n\n");
-  // A turn stopped before it wrote anything, with no trace to say so, keeps its
-  // empty answer as the row that does -- and that Regenerate hangs off.
-  const stoppedBare = answer === finalAssistant && Boolean(answer?.stopped) && segments.length === 0;
-  const hasAnswerRow = Boolean(answer && (answerText || (answer === finalAssistant && answer.stopReason === "error") || stoppedBare));
-  if (segments.length > 0) {
-    const outcome = turn.userMessage?.outcome;
+  // Every turn that answered has its trace: one with no thinking and no tools
+  // is its header alone -- the orb, how it ended, the time -- and one stopped
+  // before it wrote anything is that header with nothing under it, so the
+  // header is what says so and what Regenerate hangs off. A turn that finished
+  // having written nothing leaves no row.
+  const hasAnswerRow = Boolean(answer && (answerText || (answer === finalAssistant && answer.stopReason === "error")));
+  const outcome = turn.userMessage?.outcome;
+  const endedEarly = outcome === "interrupted" || outcome === "failed" || Boolean(finalAssistant?.stopped);
+  if (segments.length > 0 || hasAnswerRow || endedEarly) {
     rows.push({
       key: `trace:${turn.userMessage ? turn.userMessage.id : turn.assistants[0]!.id}`,
       type: "trace",
@@ -570,7 +576,9 @@ function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById
       precedingUserId: turn.userMessage?.id,
       answerless: !hasAnswerRow,
       timestamp: finalAssistant?.timestamp || undefined,
-      ...(turn.userMessage && !outcome ? { unstated: true } : {}),
+      // Held to the contract where it always was: a turn with steps must say
+      // how it ended.
+      ...(turn.userMessage && !outcome && segments.length > 0 ? { unstated: true } : {}),
     });
   }
   if (hasAnswerRow && answer) {
@@ -581,7 +589,7 @@ function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById
       type: "message",
       value: answerAssistants.length === 1 ? answer : { ...answer, content: answerText },
       precedingUserId: turn.userMessage?.id,
-      traced: segments.length > 0,
+      traced: true,
     });
   }
   return rows;

@@ -14,8 +14,10 @@
 .turn-trace-header > .turn-trace-mark { display: flex; width: 1.5625rem; height: 1.5625rem; flex: none; align-self: center; align-items: center; justify-content: center; }
 .thinking-orb { position: relative; display: block; width: 100%; height: 100%; }
 .thinking-orb canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-/* The starting header is not a button: it opens nothing. */
-.turn-trace-starting .turn-trace-header { cursor: default; }
+/* The starting header, and the header of a turn with no steps, open nothing. */
+.turn-trace-starting .turn-trace-header, .turn-trace[data-empty] .turn-trace-header { cursor: default; }
+.turn-trace[data-empty] .disclosure-chevron { visibility: hidden; }
+.turn-trace-starting .turn-trace-header:hover, .turn-trace[data-empty] .turn-trace-header:hover { color: var(--muted-foreground); }
 
 .trail-row-header { display: flex; width: 100%; min-width: 0; align-items: center; gap: 0.5rem; padding: 0.1875rem 0.375rem; border: 0; border-radius: 0.375rem; background: none; color: var(--muted-foreground); font-size: 0.8125rem; line-height: 1.5; text-align: left; cursor: pointer; }
 .trail-row-header:hover, .trail-row-header:focus-visible { background: var(--accent); outline: none; }

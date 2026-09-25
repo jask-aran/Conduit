@@ -121,8 +121,8 @@ test("projects partial continuation through Active Generation without a flattene
     },
   });
 
-  assert.deepEqual(rows.map((row) => row.key), ["message:u1", "answer:u1:0"]);
-  assert.equal(rows[1]?.type === "message" && rows[1].value.content, "The answer continues here.");
+  assert.deepEqual(rows.map((row) => row.key), ["message:u1", "trace:u1", "answer:u1:0"]);
+  assert.equal(rows[2]?.type === "message" && rows[2].value.content, "The answer continues here.");
 });
 
 test("keeps the answer display key across live and persisted projections", () => {
@@ -188,8 +188,8 @@ test("projects empty and partial assistant errors as highlighted message rows", 
       errorMessage: "Provider rejected the request",
     },
   ], []);
-  assert.equal(persisted[1]?.type, "message");
-  assert.equal(persisted[1]?.type === "message" && persisted[1].value.errorMessage, "Provider rejected the request");
+  assert.deepEqual(persisted.map((row) => row.type), ["message", "trace", "message"]);
+  assert.equal(persisted[2]?.type === "message" && persisted[2].value.errorMessage, "Provider rejected the request");
 
   const live = buildTurnRows([user], [], {
     activeGeneration: {
@@ -208,12 +208,12 @@ test("projects empty and partial assistant errors as highlighted message rows", 
       }],
     },
   });
-  assert.equal(live[1]?.type === "message" && live[1].value.content, "Partial response");
-  assert.equal(live[1]?.type === "message" && live[1].value.errorMessage, "Connection closed");
-  assert.equal(live[1]?.type === "message" && live[1].value.stopReason, "error");
-  assert.equal(live[1]?.type === "message" && live[1].value.provider, "example-provider");
-  assert.equal(live[1]?.type === "message" && live[1].value.model, "example-model");
-  assert.equal(live[1]?.type === "message" && live[1].value.timestamp, "2026-08-12T09:48:47.341Z");
+  assert.equal(live[2]?.type === "message" && live[2].value.content, "Partial response");
+  assert.equal(live[2]?.type === "message" && live[2].value.errorMessage, "Connection closed");
+  assert.equal(live[2]?.type === "message" && live[2].value.stopReason, "error");
+  assert.equal(live[2]?.type === "message" && live[2].value.provider, "example-provider");
+  assert.equal(live[2]?.type === "message" && live[2].value.model, "example-model");
+  assert.equal(live[2]?.type === "message" && live[2].value.timestamp, "2026-08-12T09:48:47.341Z");
 });
 
 test("keeps a recovered assistant error inside the turn trace", () => {
@@ -350,7 +350,7 @@ test("a tool nothing claims is not handed to a turn by its timestamp", () => {
   const orphan = { toolCallId: "call_1", name: "bash", done: true, timestamp: "2026-01-01T00:00:01.000Z" };
   const rows = buildTurnRows(messages, [orphan]);
   const traces = rows.filter((row) => row.type === "trace");
-  assert.deepEqual(traces, [], "the message claimed no tools, so the turn shows none");
+  assert.deepEqual(traces.map((row) => row.type === "trace" && row.value.segments), [[]], "the message claimed no tools, so the turn shows none");
 });
 
 test("an answer stays an answer when a later message calls a tool", () => {

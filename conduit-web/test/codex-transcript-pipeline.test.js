@@ -182,6 +182,7 @@ test("a plain turn reads as prompt then answer", async () => {
 
   assert.deepEqual(shape(chat.rows()), [
     "user: Fix the build",
+    "trace(complete)",
     "assistant: Built.",
   ]);
 });
@@ -199,6 +200,7 @@ test("an answer that begins before its turn is accepted still sits under its pro
 
   assert.deepEqual(shape(chat.rows()), [
     "user: Fix the build",
+    "trace(complete)",
     "assistant: Built.",
   ]);
   assert.deepEqual(order(chat.messages()), ["user:Fix the build", "assistant:Built."]);
@@ -255,6 +257,7 @@ test("an interrupted answer keeps its text, and the next turn is its own", async
     "user: Tell me a long story",
     "trace(interrupted) ~The rain fell upward.~",
     "user: now stop",
+    "trace(complete)",
     "assistant: Got it — stopping.",
   ]);
   assert.deepEqual(order(chat.messages()), [
@@ -298,6 +301,7 @@ test("a steered message is a message of its own, and the answer answers it", asy
     "user: Tell me a long story",
     "trace(complete)",
     "user: make it shorter",
+    "trace(complete)",
     "assistant: Rain. Upward.",
   ]);
 });
@@ -324,8 +328,10 @@ test("a follow-up sent while the turn runs waits, and then becomes its own turn"
 
   assert.deepEqual(shape(chat.rows()), [
     "user: Fix the build",
+    "trace(complete)",
     "assistant: Built.",
     "user: and run the tests",
+    "trace(complete)",
     "assistant: All green.",
   ]);
 });

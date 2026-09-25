@@ -313,8 +313,11 @@ export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sess
   const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
   const time = turnTime(() => props.trace);
   const unfinished = () => !props.trace.active && (props.trace.status === "failed" || props.trace.status === "interrupted");
-  return <Disclosure class="turn-trace" data-active={props.trace.active ? "true" : "false"} headerClass="turn-trace-header" bodyClass="turn-trace-body"
-    initialOpen={props.initialOpen} onOpenChange={props.onOpenChange}
+  // A turn with no thinking and no tools has nothing to open: its header is
+  // not a button, and it is one line.
+  const empty = () => props.trace.segments.length === 0;
+  return <Disclosure class="turn-trace" data-active={props.trace.active ? "true" : "false"} data-empty={empty() ? "true" : undefined} headerClass="turn-trace-header" bodyClass="turn-trace-body"
+    initialOpen={props.initialOpen} onOpenChange={props.onOpenChange} triggerProps={{ get disabled() { return empty(); } }}
     header={<>
       {/* One box, live and settled, so nothing beside it moves when the turn
           ends. A turn that did not finish -- stopped or failed -- tints the
@@ -332,7 +335,7 @@ export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sess
           <Show when={time()}>{(text) => <span class="turn-trace-time">{"\u00a0· "}{text()}</span>}</Show>
           <Show when={preview().work}>{(text) => <span class="turn-trace-work">{"\u00a0· "}{text()}</span>}</Show>
         </div>
-        <Show when={preview().detail || props.trace.active}>
+        <Show when={preview().detail || (props.trace.active && !empty())}>
           <div class="turn-trace-summary">
             {/* A tool's line is plain text -- a path's underscores are not emphasis. */}
             <Show when={preview().detail} fallback={"\u00a0"}>{(detail) =>
