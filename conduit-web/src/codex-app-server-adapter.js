@@ -1136,9 +1136,6 @@ export class CodexAppServerAdapter extends EventEmitter {
         input: CodexAppServerAdapter.inputItems(message, options?.attachments),
         ...(record.model ? { model: record.model } : {}),
         ...(record.thinkingLevel ? { effort: record.thinkingLevel } : {}),
-        // What the model is thinking, in its own words. Codex's default for
-        // the gpt-6 models is none, and `auto` gives nothing on them either.
-        summary: "detailed",
         ...(record.serviceLevel ? { serviceTier: record.serviceLevel } : {}),
         ...(record.permissionProfile ? { permissions: record.permissionProfile } : {}),
         ...CodexAppServerAdapter.policy(record.approvalPolicy, record.approvalsReviewer),

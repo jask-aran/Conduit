@@ -101,7 +101,6 @@ test("Codex prompt writes the installed app-server turn/start shape", async () =
     threadId: "thread-1", input: [{ type: "text", text: "Test prompt" }],
     model: "codex-other",
     effort: "high",
-    summary: "detailed",
     serviceTier: "priority",
   } });
   adapter.receive(live, JSON.stringify({ id: 1, result: { turn: { id: "turn-1" } } }));
