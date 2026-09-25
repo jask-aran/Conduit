@@ -20,7 +20,8 @@ import {
 } from "../palette/chat-query";
 import type { ChatQueryFilter } from "../palette/chat-query";
 import { COMMAND_IDS, commandRegistry } from "../commands/command-registry";
-import { chatSortStamp, saveChatSort, useChatSort } from "../preferences/chat-sort";
+import { chatSortStamp, useChatSort } from "../preferences/chat-sort";
+import { ThreadHarnessMark } from "../harness-brand";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import type { ShortcutContext } from "../shortcuts/shortcut-types";
 import { CommandHintBar } from "./command-hint-bar";
@@ -49,7 +50,6 @@ const icons: Record<string, (props: { class?: string }) => JSX.Element> = {
   thinking: BrainIcon,
   retry: RefreshCwIcon,
   reload: RefreshCwIcon,
-  back: ArrowLeftIcon,
   logout: LogOutIcon,
   command: TerminalIcon,
   slash: SlashIcon,
@@ -62,10 +62,6 @@ const GROUP_HEADINGS: Record<string, string> = {
   profiles: "Profiles",
   thinking: "Thinking level",
   danger: "Danger zone",
-};
-
-const BACK_COMMAND: PaletteCommand = {
-  id: "page-back", label: "Back", icon: "back", group: "commands", keywords: [], run: () => {},
 };
 
 const FOCUS_MOVING_COMMAND_IDS = new Set<string>([
@@ -234,7 +230,6 @@ export function CommandMenu(props: {
     const push = (row: Row) => out.push(row);
 
     if (moveMode()) {
-      push({ type: "command", key: "page-back", index: index++, command: BACK_COMMAND });
       push({ type: "heading", key: "move-heading", label: "Move selected chats to" });
       for (const project of props.context.projects || []) {
         push({ type: "destination", key: `destination:${project.id}`, index: index++, project });
@@ -283,7 +278,6 @@ export function CommandMenu(props: {
     }
 
     if (currentPage) {
-      push({ type: "command", key: "page-back", index: index++, command: BACK_COMMAND });
       if (!chatPage()) {
         push({ type: "heading", key: "page-heading", label: pageMeta()?.heading || "Results" });
         for (const command of source) push({ type: "command", key: command.id, index: index++, command });
@@ -377,6 +371,12 @@ export function CommandMenu(props: {
   };
   const removeFilter = (index: number) => {
     setQuery(removeChatQueryFilter(parsedQuery(), index));
+    focusInput();
+  };
+  const toggleAllChats = () => {
+    setQuery(chatScope().kind === "all"
+      ? `scope:chats ${parsedQuery().text}`.trim()
+      : parsedQuery().text);
     focusInput();
   };
   const emptyMessage = () => {
@@ -551,7 +551,6 @@ export function CommandMenu(props: {
     }
     if (row.type === "destination") { void chooseDestination(row.project); return; }
     const command = row.command;
-    if (command.id === "page-back") { goBack(); return; }
     if (selectionMode() && command.entity === "chat" && command.chat) { toggleChatSelection(command.chat.id); return; }
     if (command.kind === "page" && command.page) {
       setPage(canonicalPage(command.page)); setQuery(""); setMoveMode(false); setSelectionMode(false); setSelectedChatIds(new Set<string>()); directMode = false; return;
@@ -614,7 +613,9 @@ export function CommandMenu(props: {
       if (editingId()) { setEditingId(null); return; }
       if (moveMode()) { goBack(); return; }
       if (selectionMode()) { exitSelection(); return; }
-      if (page() && !directMode) goBack(); else close();
+      if (chatPage()) close();
+      else if (page() && !directMode) goBack();
+      else close();
     }
     if (event.key === "Backspace" && chatPage() && !parsedQuery().text && parsedQuery().filters.length) {
       event.preventDefault();
@@ -668,7 +669,9 @@ export function CommandMenu(props: {
       <Show when={selectionMode() && command.entity === "chat"}>
         <span class="command-select-mark" aria-hidden="true">{chatSelected() ? <CheckIcon /> : null}</span>
       </Show>
-      <Show when={Icon}>{(resolved) => { const C = resolved(); return <C class="command-icon" />; }}</Show>
+      <Show when={command.chat} fallback={<Show when={Icon}>{(resolved) => { const C = resolved(); return <C class="command-icon" />; }}</Show>}>
+        {(chat) => <ThreadHarnessMark id={chat().harnessId} lively />}
+      </Show>
       <span class="command-copy">
         <Show when={editing()} fallback={<span class="command-label">{command.label}</span>}>
           <input ref={renameInput} class="command-rename-input" value={editingValue()} onInput={(event) => setEditingValue(event.currentTarget.value)} onKeyDown={renameKeydown} onClick={(event) => event.stopPropagation()} aria-label={`Rename ${command.label}`} />
@@ -691,9 +694,12 @@ export function CommandMenu(props: {
           onPointerDown={(event) => { if (event.target === event.currentTarget) close(); }}
         >
           <div class="command-shell">
-            <KDialog.Title class="sr-only">{modelSelectorPage() ? "Model selector" : "Command Palette"}</KDialog.Title>
-            <KDialog.Description class="sr-only">{modelSelectorPage() ? "Choose the models available in this project." : "Search commands, chats, settings, and models."}</KDialog.Description>
+            <KDialog.Title class="sr-only">{modelSelectorPage() ? "Model selector" : chatPage() ? "Chat search" : "Command palette"}</KDialog.Title>
+            <KDialog.Description class="sr-only">{modelSelectorPage() ? "Choose the models available in this project." : chatPage() ? "Find and manage chats." : "Search commands, settings, and models."}</KDialog.Description>
             <div class="command-input-row">
+              <Show when={moveMode() || (page() && !chatPage() && !modelSelectorPage())}>
+                <Button type="button" variant="ghost" size="icon-sm" class="command-back" aria-label={moveMode() ? "Back to chat results" : "Back to commands"} title="Back" onMouseDown={(event) => event.preventDefault()} onClick={goBack}><ArrowLeftIcon /></Button>
+              </Show>
               <Show when={chatPage()}><SearchIcon class="command-input-icon" aria-hidden="true" /></Show>
               <Show when={!chatPage() && !modelSelectorPage() && !pageMeta()}><span class="command-input-glyph" aria-hidden="true">&gt;</span></Show>
               <Show when={!chatPage() && pageMeta()}><span class="command-page-prefix">{pageMeta()!.prefix}</span></Show>
@@ -705,7 +711,7 @@ export function CommandMenu(props: {
                 aria-controls="command-listbox"
                 aria-autocomplete="list"
                 aria-activedescendant={selectable().length ? optionId(active()) : undefined}
-                aria-label={modelSelectorPage() ? "Find models" : "Search commands"}
+                aria-label={modelSelectorPage() ? "Find models" : chatPage() ? "Search chats" : "Search commands"}
                 placeholder={chatPage() ? "Search chats…" : modelSelectorPage() ? "Find models…" : pageMeta()?.placeholder || "Run a command…"}
                 value={parsedQuery().text}
                 onInput={(event) => setQuery(serializeChatQuery(parsedQuery().filters, event.currentTarget.value))}
@@ -716,7 +722,7 @@ export function CommandMenu(props: {
                 variant="ghost"
                 size="icon-sm"
                 class="command-close"
-                aria-label="Close command palette"
+                aria-label={chatPage() ? "Close chat search" : "Close command palette"}
                 title="Close"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => close()}
@@ -724,22 +730,16 @@ export function CommandMenu(props: {
                 <XIcon />
               </Button>
             </div>
-            <Show when={chatPage()}>
+            <Show when={chatPage() && (parsedQuery().filters.length || selectionMode())}>
               <div class="command-search-tools">
                 <div class="command-search-filters" aria-label="Search filters">
-                  <Show when={parsedQuery().filters.length} fallback={<span class="command-search-scope">All chats</span>}>
-                    <For each={parsedQuery().filters}>{(filter, index) => {
-                      const label = () => filterLabel(filter);
-                      return <button type="button" class="command-filter-chip" aria-label={`Remove ${label()} filter`} title={`Remove ${label()} filter`} onMouseDown={(event) => event.preventDefault()} onClick={() => removeFilter(index())}>
-                        {label()} <span aria-hidden="true">×</span>
-                      </button>;
-                    }}</For>
-                  </Show>
+                  <For each={parsedQuery().filters}>{(filter, index) => {
+                    const label = () => filterLabel(filter);
+                    return <button type="button" class="command-filter-chip" aria-label={`Remove ${label()} filter`} title={`Remove ${label()} filter`} onMouseDown={(event) => event.preventDefault()} onClick={() => removeFilter(index())}>
+                      {label()} <span aria-hidden="true">×</span>
+                    </button>;
+                  }}</For>
                   <Show when={selectionMode()}><span class="command-selection-count">{selectedTargets().length} selected</span></Show>
-                </div>
-                <div class="command-sort-toggle" role="group" aria-label="Chat sort">
-                  <button type="button" aria-pressed={chatSort() === "latest"} onClick={() => saveChatSort("latest")}>Latest</button>
-                  <button type="button" aria-pressed={chatSort() === "created"} onClick={() => saveChatSort("created")}>Created</button>
                 </div>
               </div>
             </Show>
@@ -752,6 +752,8 @@ export function CommandMenu(props: {
               mode={modelSelectorPage() ? "model-selector" : hintMode()}
               pendingSequence={pendingActionSequence()}
               shortcuts={props.shortcuts}
+              allChats={chatScope().kind === "all"}
+              onToggleAllChats={toggleAllChats}
               onToggleEdit={toggleSelection}
               onDeleteSelected={() => requestDelete()}
               onMoveSelected={() => moveSelected()}

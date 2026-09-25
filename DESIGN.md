@@ -224,8 +224,8 @@ Chat composition:
 Menus and pane headers follow the component entries below. Command and search overlays share one visual language, with separate layouts:
 
 - Ink-dark opaque face, 16–18px radius, soft outer shadow, no pane-edge inset line. The rest of the app dims behind it.
-- Command palette: compact one-line action rows at roughly the sidebar's text and row scale, `>` at the input, shortcuts right-aligned, grouped under small uppercase labels. Settings results use the same density.
-- Chat search: wider one-line result rows with title, project, and date, search icon at the input, filters and sort in a compact strip above the results. Long text truncates. Edit mode changes the rows and the shortcut rail, without turning search into a command list.
+- Command palette: compact one-line action rows at roughly the sidebar's text and row scale, `>` at the input, shortcuts right-aligned, grouped under small uppercase labels. Settings results use the same density. Drill-down pages put Back in the header, never in a full-width result row.
+- Chat search: wider one-line result rows with title, project, and date, search icon at the input, active filter chips below it, and an All chats scope toggle with sort controls in the shortcut rail. Chat rows use the same harness marks as the sidebar. Long text truncates. Search opens and closes on its own; it has no Back row to the command palette. Edit mode changes the rows and the shortcut rail, without turning search into a command list.
 - Leader menu: smaller card above the composer, with region path at the top and keys aligned at the left of each action.
 - Highlighted option = one neutral full-row wash. No coloured rail. A current model keeps a fainter standing wash and a heavier label while the cursor is elsewhere.
 - Footer shortcut rail: darker than the face, with keycaps and labels. Keep each view's actions contextual.
