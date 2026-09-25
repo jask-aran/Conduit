@@ -128,7 +128,8 @@ export function applyToolOp(tools, event) {
     if (!event.toolCallId) return tools;
     const held = tools.findIndex((tool) => tool.toolCallId === event.toolCallId);
     const incoming = {
-      toolCallId: event.toolCallId, name: event.name || "tool", kind: event.kind || "other", input: event.input,
+      toolCallId: event.toolCallId, name: event.name || "tool", kind: event.kind || "other",
+      ...(event.subject ? { subject: event.subject } : {}), input: event.input,
       done: false, isError: false, timestamp: event.timestamp || new Date().toISOString(),
       seq: held >= 0 ? tools[held].seq : tools.length,
     };

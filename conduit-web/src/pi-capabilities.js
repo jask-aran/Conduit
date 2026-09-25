@@ -1,3 +1,5 @@
+import { toolSubject } from "./harnesses/transcript-ops.js";
+
 /**
  * What Pi can do, apart from the adapter that speaks for it.
  *
@@ -35,3 +37,15 @@ export const PI_TOOL_KINDS = Object.freeze({
   web_search: "search",
   fetch_content: "fetch", get_search_content: "fetch",
 });
+
+/** And the field of each that says what it acted on. */
+const PI_TOOL_SUBJECTS = Object.freeze({
+  bash: "command", read: "path", edit: "path", write: "path", ls: "path",
+  grep: "pattern", find: "pattern",
+  web_search: ["queries", "query"], fetch_content: ["urls", "url"],
+});
+export const piToolSubject = (name, input) => {
+  if (!Object.hasOwn(PI_TOOL_SUBJECTS, name) || !input || typeof input !== "object") return null;
+  const fields = [PI_TOOL_SUBJECTS[name]].flat();
+  return toolSubject(fields.map((field) => input[field]).find((value) => value != null));
+};

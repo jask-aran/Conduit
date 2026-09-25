@@ -4,7 +4,7 @@ import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { assertChatBackendAdapter } from "./chat-backend-contract.js";
 import { formatHistoryTool } from "./harnesses/history-tool.js";
 import { detect } from "./harnesses/probe.js";
-import { PI_CAPABILITIES, PI_TOOL_KINDS } from "./pi-capabilities.js";
+import { PI_CAPABILITIES, PI_TOOL_KINDS, piToolSubject } from "./pi-capabilities.js";
 import { toolKind } from "./harnesses/transcript-ops.js";
 import { launchConduitPi } from "./pi-launch.js";
 
@@ -133,7 +133,7 @@ export function normalizePiBackendEvent(event) {
       return { ...base, type: "tool_activity", seq: event.seq,
         phase: { tool_execution_started: "start", tool_execution_updated: "update", tool_execution_completed: "end" }[event.type],
         toolCallId: event.toolCallId, name: event.name, input: event.input,
-        ...(event.type === "tool_execution_started" ? { kind: toolKind(PI_TOOL_KINDS, event.name) } : {}),
+        ...(event.type === "tool_execution_started" ? { kind: toolKind(PI_TOOL_KINDS, event.name), subject: piToolSubject(event.name, event.input) ?? undefined } : {}),
         output: event.output, isError: event.isError };
     case "extension_ui_request": {
       const request = normalizeHostUiRequest(event);

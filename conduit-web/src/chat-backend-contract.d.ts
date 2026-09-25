@@ -267,6 +267,7 @@ export type ToolActivityEvent = EventBase & {
   name: string;
   /** On `start`: what it did, as `tool.open` states it. */
   kind?: "command" | "read" | "edit" | "search" | "fetch" | "other";
+  subject?: string;
   input?: unknown;
   output?: unknown;
   isError?: boolean;
@@ -434,7 +435,9 @@ export type TranscriptOpEvent = EventBase & { type: "transcript_op" } & (
   | { op: "message.drop"; messageId: string; keep?: boolean; inclusive?: boolean }
   | { op: "tool.open"; toolCallId: string; name: string;
       /** What it did, from the adapter's own table of its tool names. */
-      kind: "command" | "read" | "edit" | "search" | "fetch" | "other"; input: unknown }
+      kind: "command" | "read" | "edit" | "search" | "fetch" | "other";
+      /** What it acted on, in one line: the command, path, query or page. */
+      subject?: string; input: unknown }
   /** A tool the user's stop killed is `cancelled`, never `isError`. */
   | { op: "tool.close"; toolCallId: string; output: unknown; isError: boolean; cancelled?: true }
   /**

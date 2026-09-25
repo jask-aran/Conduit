@@ -16,7 +16,7 @@ import {
 import { createPiEventNormalizer } from "./pi-event-normalizer.js";
 import { projectSessionEntries, readSessionPage } from "./session-store.js";
 import { messageClose, messageDrop, messageOpen, toolClose, toolKind, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
-import { PI_CAPABILITIES, PI_TOOL_KINDS } from "./pi-capabilities.js";
+import { PI_CAPABILITIES, PI_TOOL_KINDS, piToolSubject } from "./pi-capabilities.js";
 import { withConduitNote } from "./attachment-envelope.js";
 import { PiCommandCatalog } from "./pi-command-catalog.js";
 import { ChatLogs, isLoggedEvent } from "./server/chat-log.js";
@@ -1041,7 +1041,7 @@ export class PiManager extends EventEmitter {
       // and got the messages back without the commands underneath them.
       if (event.type === "tool_execution_started" && this.logFor(record)) {
         this.publish(record, toolOpen({ toolCallId: event.toolCallId, name: event.name,
-          kind: toolKind(PI_TOOL_KINDS, event.name), input: event.input, generationId: record.generation?.id || null }));
+          kind: toolKind(PI_TOOL_KINDS, event.name), subject: piToolSubject(event.name, event.input), input: event.input, generationId: record.generation?.id || null }));
       }
       if (event.type === "tool_execution_completed" && this.logFor(record)) {
         // Pi kills a running tool when the turn is stopped and reports it as

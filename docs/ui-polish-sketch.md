@@ -69,8 +69,12 @@ live, before the answer       ▬▬▬ ▬▬ ▬   (breathing, one line tall; 
 
 ### 1b. Trace header: status, time, work, thinking
 
-Status: built. Replaces the header's "N tool calls (M total)" and its
-summary-only finished state. `+N` after three kinds counts the remaining calls.
+Status: built, then revised after use: the header is two lines (status, time
+and work; then the thinking, held open while live); work names every kind,
+most used first, with no "+N"; and a running tool is its verb and subject --
+`Searching “…”`, `Editing notes.md` -- from a `subject` each adapter states
+beside `kind`, in place of "Running bash" / "Used N tools". The drawings below
+are the first version.
 
 One anatomy, live and settled:
 

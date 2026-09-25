@@ -69,8 +69,8 @@ test("does not project persisted partials beside their resumed active generation
     },
   ], [], { activeGeneration: generation });
 
-  // A live turn with no answer yet holds its place with the pending row.
-  assert.deepEqual(rows.map((row) => row.key), ["message:u1", "trace:u1", "pending:u1"]);
+  // Its trace is showing, so it needs no placeholder to say it is working.
+  assert.deepEqual(rows.map((row) => row.key), ["message:u1", "trace:u1"]);
   const trace = rows[1];
   assert.equal(trace?.type === "trace" && trace.value.segments[0]?.kind === "thinking" && trace.value.segments[0].text, "Current plan");
 });

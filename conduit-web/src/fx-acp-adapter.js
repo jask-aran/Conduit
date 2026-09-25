@@ -6,7 +6,7 @@ import { EventEmitter } from "node:events";
 import { promisify } from "node:util";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { messageClose, messageOpen, toolClose, toolKind, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
+import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 const execFile = promisify(execFileCallback);
@@ -24,6 +24,11 @@ const FX_TOOL_KINDS = Object.freeze({
 const ACP_TOOL_KINDS = Object.freeze({
   execute: "command", read: "read", edit: "edit", delete: "edit", move: "edit", search: "search", fetch: "fetch",
 });
+// What a call acted on: fx's tools share their field names, and a search's
+// pattern says more than the directory it searched.
+const subjectOf = (input) => input && typeof input === "object"
+  ? toolSubject(["command", "pattern", "query", "url", "path"].map((field) => input[field]).find((value) => value != null)) ?? undefined
+  : undefined;
 const kindOf = (name, acpKind) => Object.hasOwn(FX_TOOL_KINDS, name)
   ? FX_TOOL_KINDS[name] : toolKind(ACP_TOOL_KINDS, acpKind);
 
@@ -347,12 +352,13 @@ export class FxAcpAdapter extends EventEmitter {
       const tool = { id: update.toolCallId, name: update.name || update.title || "tool",
         input: update.rawInput ?? null, output: "", closed: false };
       tool.kind = kindOf(tool.name, update.kind);
+      tool.subject = subjectOf(tool.input);
       record.tools.set(tool.id, tool);
       answer.tools.add(tool.id);
-      this.publish(record, toolOpen({ toolCallId: tool.id, name: tool.name, kind: tool.kind, input: tool.input,
+      this.publish(record, toolOpen({ toolCallId: tool.id, name: tool.name, kind: tool.kind, subject: tool.subject, input: tool.input,
         messageId: answer.id, generationId }));
       this.publish(record, { type: "tool_activity", phase: "start", generationId,
-        seq: ++record.generationSeq, toolCallId: tool.id, name: tool.name, kind: tool.kind, input: tool.input });
+        seq: ++record.generationSeq, toolCallId: tool.id, name: tool.name, kind: tool.kind, subject: tool.subject, input: tool.input });
       // The turn being painted places a running tool by its block, so the
       // answer says it is calling one now, not when the turn ends.
       this.publish(record, { type: "assistant_content", phase: "final", generationId, seq: ++record.generationSeq,
@@ -590,7 +596,7 @@ export class FxAcpAdapter extends EventEmitter {
           try { input = JSON.parse(input); } catch { /* Keep the native text. */ }
           blocks.push({ kind: "tool_call", toolCallId: call.id, name: call.name, input });
           const result = (step.tool_results || []).find((item) => item.tool_call_id === call.id);
-          tools.push({ toolCallId: call.id, name: call.name, kind: kindOf(call.name), input,
+          tools.push({ toolCallId: call.id, name: call.name, kind: kindOf(call.name), subject: subjectOf(input), input,
             output: result?.output || result?.preview || "", isError: result?.status === "failed", done: Boolean(result) });
         }
       }

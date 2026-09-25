@@ -312,17 +312,19 @@ svg { stroke-width: 1.5; }
 /* Turn trace: one collapsed row per turn holding thinking segments, interim
    narration, and tool calls; the header previews the latest item live. */
 .turn-trace { display: flex; flex-direction: column; gap: 4.8px; }
-.turn-trace-header { display: flex; align-items: center; gap: 6.4px; width: 100%; padding: 3.2px 1.6px; border: none; background: none; color: var(--muted-foreground); font-size: 10.4px; text-align: left; cursor: pointer; border-radius: 4.8px; }
+.turn-trace-header { display: flex; align-items: flex-start; gap: 6.4px; width: 100%; padding: 3.2px 1.6px; border: none; background: none; color: var(--muted-foreground); font-size: 10.4px; text-align: left; cursor: pointer; border-radius: 4.8px; }
 .turn-trace-header:hover { color: var(--foreground); }
-.turn-trace-header > svg { width: 11.2px; height: 11.2px; flex-shrink: 0; }
-.turn-trace-preview { display: flex; flex: 1; min-width: 0; align-items: baseline; overflow: hidden; white-space: nowrap; }
+.turn-trace-header > svg { width: 11.2px; height: 11.2px; flex-shrink: 0; margin-top: calc((1lh - 11.2px) / 2); }
+.turn-trace-preview { display: flex; flex: 1; flex-direction: column; min-width: 0; overflow: hidden; white-space: nowrap; }
+.turn-trace-line { display: flex; min-width: 0; align-items: baseline; overflow: hidden; }
 .turn-trace-preview .chat-markdown { display: contents; font-size: inherit; line-height: inherit; }
 .turn-trace-preview :is(.chat-markdown, .incremark) > * { display: inline; margin: 0; }
 .turn-trace-preview :is(.chat-markdown, .incremark) > *:not(:last-child)::after { content: " "; }
 .turn-trace-time, .turn-trace-work, .turn-trace-status { flex: none; white-space: pre; }
+.turn-trace-subject { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
 .turn-trace-time { font-variant-numeric: tabular-nums; }
 .turn-trace-status { color: var(--foreground); font-weight: 560; }
-.turn-trace-summary { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.turn-trace-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .turn-trace[data-active="true"] .turn-trace-preview { animation: trace-shimmer 1.6s ease-in-out infinite; }
 @keyframes trace-shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
 .turn-trace-body { display: flex; flex-direction: column; gap: 6.4px; margin-left: 5.6px; padding: 1.6px 0 4.8px 11.2px; border-left: 1px solid var(--border); }
@@ -1105,17 +1107,19 @@ svg { stroke-width: 1.5; }
 /* Turn trace: one collapsed row per turn holding thinking segments, interim
    narration, and tool calls; the header previews the latest item live. */
 .turn-trace { display: flex; flex-direction: column; gap: 6px; }
-.turn-trace-header { display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 2px; border: none; background: none; color: var(--muted-foreground); font-size: 13px; text-align: left; cursor: pointer; border-radius: 6px; }
+.turn-trace-header { display: flex; align-items: flex-start; gap: 8px; width: 100%; padding: 4px 2px; border: none; background: none; color: var(--muted-foreground); font-size: 13px; text-align: left; cursor: pointer; border-radius: 6px; }
 .turn-trace-header:hover { color: var(--foreground); }
-.turn-trace-header > svg { width: 14px; height: 14px; flex-shrink: 0; }
-.turn-trace-preview { display: flex; flex: 1; min-width: 0; align-items: baseline; overflow: hidden; white-space: nowrap; }
+.turn-trace-header > svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: calc((1lh - 14px) / 2); }
+.turn-trace-preview { display: flex; flex: 1; flex-direction: column; min-width: 0; overflow: hidden; white-space: nowrap; }
+.turn-trace-line { display: flex; min-width: 0; align-items: baseline; overflow: hidden; }
 .turn-trace-preview .chat-markdown { display: contents; font-size: inherit; line-height: inherit; }
 .turn-trace-preview :is(.chat-markdown, .incremark) > * { display: inline; margin: 0; }
 .turn-trace-preview :is(.chat-markdown, .incremark) > *:not(:last-child)::after { content: " "; }
 .turn-trace-time, .turn-trace-work, .turn-trace-status { flex: none; white-space: pre; }
+.turn-trace-subject { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
 .turn-trace-time { font-variant-numeric: tabular-nums; }
 .turn-trace-status { color: var(--foreground); font-weight: 560; }
-.turn-trace-summary { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.turn-trace-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .turn-trace[data-active="true"] .turn-trace-preview { animation: trace-shimmer 1.6s ease-in-out infinite; }
 @keyframes trace-shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
 .turn-trace-body { display: flex; flex-direction: column; gap: 8px; margin-left: 7px; padding: 2px 0 6px 14px; border-left: 1px solid var(--border); }

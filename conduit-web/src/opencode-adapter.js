@@ -10,7 +10,7 @@ import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { formatHistoryTool } from "./harnesses/history-tool.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { messageClose, messageOpen, toolClose, toolKind, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
+import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 const execFile = promisify(execFileCallback);
@@ -122,6 +122,13 @@ const OPENCODE_TOOL_KINDS = Object.freeze({
   webfetch: "fetch",
 });
 const kindOf = (name) => toolKind(OPENCODE_TOOL_KINDS, name);
+// And the field of each that says what it acted on.
+const OPENCODE_TOOL_SUBJECTS = Object.freeze({
+  bash: "command", read: "filePath", edit: "filePath", write: "filePath", multiedit: "filePath", list: "path",
+  glob: "pattern", grep: "pattern", websearch: "query", codesearch: "query", webfetch: "url",
+});
+const subjectOf = (name, input) => Object.hasOwn(OPENCODE_TOOL_SUBJECTS, name) && input && typeof input === "object"
+  ? toolSubject(input[OPENCODE_TOOL_SUBJECTS[name]]) ?? undefined : undefined;
 // A prompt is saved in OpenCode under the name the browser already drew it
 // with, in the `msg_` form OpenCode requires, so the live row, the chat log and
 // the saved copy are one message. OpenCode's own ids are hex after `msg_`, so a
@@ -517,9 +524,9 @@ export class OpenCodeAdapter extends EventEmitter {
       this.blockIndex(state, `tool:${data.id}`, "tool");
       tool = { id: data.id, name: data.name || "tool", input: data.input ?? null, output: "", status: "running", closed: false };
       state.tools.set(tool.id, tool);
-      this.publish(record, toolOpen({ toolCallId: tool.id, name: tool.name, kind: kindOf(tool.name), input: tool.input, messageId: state.id, generationId }));
+      this.publish(record, toolOpen({ toolCallId: tool.id, name: tool.name, kind: kindOf(tool.name), subject: subjectOf(tool.name, tool.input), input: tool.input, messageId: state.id, generationId }));
       this.publish(record, { type: "tool_activity", phase: "start", generationId, seq: ++record.generationSeq,
-        toolCallId: tool.id, name: tool.name, kind: kindOf(tool.name), input: tool.input });
+        toolCallId: tool.id, name: tool.name, kind: kindOf(tool.name), subject: subjectOf(tool.name, tool.input), input: tool.input });
       this.paintToolUse(record, state, this.rowFromState(state));
     }
     if (tool.closed) return;
@@ -608,10 +615,10 @@ export class OpenCodeAdapter extends EventEmitter {
           tool = { id: toolId, name: part.name || part.tool || "tool", input: part.state?.input ?? null,
             output: "", status: "", closed: false };
           state.tools.set(toolId, tool);
-          this.publish(record, toolOpen({ toolCallId: tool.id, name: tool.name, kind: kindOf(tool.name), input: tool.input,
+          this.publish(record, toolOpen({ toolCallId: tool.id, name: tool.name, kind: kindOf(tool.name), subject: subjectOf(tool.name, tool.input), input: tool.input,
             messageId: row.id, generationId: record.generation?.id || null }));
           this.publish(record, { type: "tool_activity", phase: "start", generationId: record.generation?.id || null,
-            seq: ++record.generationSeq, toolCallId: tool.id, name: tool.name, kind: kindOf(tool.name), input: tool.input });
+            seq: ++record.generationSeq, toolCallId: tool.id, name: tool.name, kind: kindOf(tool.name), subject: subjectOf(tool.name, tool.input), input: tool.input });
           this.paintToolUse(record, state, row);
         }
         // A catch-up rereads every row; only a change is news.
@@ -861,7 +868,7 @@ export class OpenCodeAdapter extends EventEmitter {
         // A step that was stopped took its unfinished commands with it.
         const cancelled = stopReason === "aborted" && part.state?.status !== "completed";
         tools.push({ toolCallId: part.id || part.callID, name: part.name || part.tool || "tool",
-          kind: kindOf(part.name || part.tool), input: part.state?.input ?? null, output: toolOutput(part), isError: part.state?.status === "error" && !cancelled,
+          kind: kindOf(part.name || part.tool), subject: subjectOf(part.name || part.tool, part.state?.input), input: part.state?.input ?? null, output: toolOutput(part), isError: part.state?.status === "error" && !cancelled,
           ...(cancelled ? { cancelled } : {}), done: ["completed", "error"].includes(part.state?.status) });
       }
       const text = blocks.filter((block) => block.kind === "text").map((block) => block.text).join("\n");
