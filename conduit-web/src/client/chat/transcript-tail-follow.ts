@@ -151,7 +151,14 @@ export function shouldLoadEarlierHistory(input: {
   following: boolean;
   maxScrollTop: number;
   scrollTop: number;
+  // Whether what is on screen has laid out -- no markdown still loading.
+  settled?: boolean;
 }) {
+  // A page that barely overflows the screen, or not at all, cannot be scrolled
+  // far enough up to ask for more, so once it has laid out it asks itself. A
+  // chat opens on its latest turn; a turn about a screen tall left the rest of
+  // the chat out of reach.
+  if (input.settled && input.maxScrollTop < HISTORY_LOAD_TOP_PX) return true;
   if (input.following || input.maxScrollTop <= 0) return false;
   return input.scrollTop < HISTORY_LOAD_TOP_PX;
 }
