@@ -1,29 +1,35 @@
 /* The opened trace is a trail: one light line per step on the body's rail --
    an icon for its kind, a verb, what it acted on in mono, its time at the
-   right. A line opens in place to what it did (DESIGN.md, Trace). */
-.turn-trace .turn-trace-body { gap: 1px; padding-left: 6px; }
+   right. A line opens in place to what it did (DESIGN.md, Trace trail).
 
-.trail-row-header { display: flex; width: 100%; min-width: 0; align-items: center; gap: 8px; padding: 3px 6px; border: 0; border-radius: 6px; background: none; color: var(--muted-foreground); font-size: 13px; line-height: 1.45; text-align: left; cursor: pointer; }
+   One size with the header above it, a step under the answer's: sizes are in
+   rem, so the desktop's 12.8px and the phone's 16px base both land where the
+   header's own rules do. What a line opens to reads a step up for prose and a
+   step down for mono, as the trace's text and tool output did before. */
+.turn-trace .turn-trace-body { gap: 1px; padding-left: 0.375rem; }
+
+.trail-row-header { display: flex; width: 100%; min-width: 0; align-items: center; gap: 0.5rem; padding: 0.1875rem 0.375rem; border: 0; border-radius: 0.375rem; background: none; color: var(--muted-foreground); font-size: 0.8125rem; line-height: 1.5; text-align: left; cursor: pointer; }
 .trail-row-header:hover, .trail-row-header:focus-visible { background: var(--accent); outline: none; }
-.trail-row-header .trail-icon { width: 14px; height: 14px; flex: none; }
+.trail-row-header .trail-icon { width: 0.875rem; height: 0.875rem; flex: none; }
 .trail-verb { flex: none; color: color-mix(in oklch, var(--foreground), transparent 15%); font-weight: 500; white-space: nowrap; }
-.trail-subject { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.trail-subject { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font: 0.75rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
 .trail-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trail-summary .chat-markdown { display: contents; color: inherit; font-size: inherit; line-height: inherit; }
 .trail-summary :is(.chat-markdown, .incremark) > * { display: inline; margin: 0; }
-.trail-meta { display: flex; flex: none; gap: 8px; margin-left: auto; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.trail-meta { display: flex; flex: none; gap: 0.5rem; margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .trail-flag { color: var(--foreground); font-weight: 560; }
 .tool-step[data-status="failed"] > .trail-row-header .trail-icon { color: var(--destructive); }
 
 /* The chevron is there when it is wanted: on the cursor, or open. */
-.trail-row-header .disclosure-chevron { width: 12px; height: 12px; flex: none; margin-left: auto; opacity: 0; }
+.trail-row-header .disclosure-chevron { width: 0.75rem; height: 0.75rem; flex: none; margin-left: auto; opacity: 0; }
 .trail-meta + .disclosure-chevron { margin-left: 0; }
 .trail-row-header:is(:hover, :focus-visible, [aria-expanded="true"]) .disclosure-chevron { opacity: 1; }
 
 /* What a line opens to sits under its verb, not its icon. */
-.tool-step-content, .text-step-content { margin: 2px 0 6px 28px; }
-.tool-step-content pre { max-height: 420px; margin: 0; overflow: auto; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); white-space: pre-wrap; font: 12px/1.5 ui-monospace, monospace; }
-.text-step-content .chat-markdown { color: var(--muted-foreground); font-size: 13px; }
+/* Indented by the header's padding, icon and gap. */
+.tool-step-content, .text-step-content { margin: 0.125rem 0 0.375rem 1.75rem; }
+.tool-step-content pre { max-height: 26rem; margin: 0; overflow: auto; padding: 0.625rem 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); white-space: pre-wrap; font: 0.75rem/1.5 ui-monospace, monospace; }
+.text-step-content .chat-markdown { color: var(--muted-foreground); font-size: 0.875rem; }
 
 /* Text a stop discarded, struck where it sits. */
 .text-step[data-discarded="true"] .trail-summary,
@@ -31,6 +37,6 @@
 
 /* A run of one kind: its steps under it, on a rail of their own beneath the
    group's icon. */
-.tool-group-steps { display: flex; flex-direction: column; gap: 1px; margin-left: 13px; padding-left: 6px; border-left: 1px solid var(--border); }
+.tool-group-steps { display: flex; flex-direction: column; gap: 1px; margin-left: 0.8125rem; padding-left: 0.375rem; border-left: 1px solid var(--border); }
 
-.trail-error { padding: 2px 0; }
+.trail-error { padding: 0.125rem 0; }
