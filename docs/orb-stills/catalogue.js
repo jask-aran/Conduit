@@ -229,14 +229,19 @@ const CRUISE = (seconds) => [seconds, SPIN * seconds, linear];
 const SLOW = (seconds) => [seconds, (SPIN * seconds) / 3, easeOut];
 const RECOVER = (seconds) => [seconds, (SPIN * seconds) / 3, easeIn];
 const SPUTTER = [
-  CRUISE(3), SLOW(0.3), [0.6],                                      // turning, then snags
-  [0.14, 0.3, back(2.2)], [0.5],                                    // a jolt
-  [0.08, 0.06, backOut], [0.12], [0.08, 0.06, backOut], [0.12], [0.1, 0.1, backOut], [0.9], // a stutter
-  [0.18, -0.1], [0.4],                                              // kicks back
+  CRUISE(1.2), SLOW(0.3), [0.4],                                    // turning, then snags
+  [0.14, 0.3, back(2.2)], [0.35],                                   // a jolt
+  [0.08, 0.06, backOut], [0.1], [0.08, 0.06, backOut], [0.1], [0.1, 0.1, backOut], [0.5], // a stutter
+  [0.18, -0.1], [0.3],                                              // kicks back
   [0.22, 0.45, spring], [0.3],                                      // a big jolt that rings
-  RECOVER(1.2), CRUISE(2), SLOW(1), [1.2],                          // catches, turns, runs down
-  [0.14, 0.22, back(2.2)], [0.35], [0.16, 0.34, back(2.2)], [0.7],  // two jolts
-  RECOVER(1),                                                       // and catches again
+  RECOVER(0.6), CRUISE(0.8), SLOW(0.3), [0.5],                      // catches, and snags again
+  [0.12, 0.2, back(2.2)], [0.2], [0.16, 0.34, back(2.2)], [0.45],   // two jolts
+  ...Array.from({ length: 5 }, () => [[0.06, 0.04, backOut], [0.08]]).flat(), [0.4], // a burst of small ones
+  [0.14, -0.06], [0.2], [0.14, 0.28, back(2.5)], [0.6],             // back, then forward hard
+  RECOVER(0.5), CRUISE(0.6), SLOW(0.25), [0.35],                    // barely catches
+  [0.2, 0.36, spring], [0.25],                                      // rings again
+  [0.08, 0.06, backOut], [0.1], [0.08, 0.06, backOut], [0.7],       // a short stutter
+  RECOVER(0.8),                                                     // and catches
 ];
 
 /* Prototypes for a turn that did not finish: the plain sphere turning in
@@ -247,7 +252,7 @@ export const PROTOTYPES = [
   ["coasting", "pushed, then slowing to rest before the next push", stopStart(turning([[2.2, 1.5, easeOut], [0.9]]))],
   ["stalling", "turns, stops for a while, starts again, never evenly", stopStart(turning([[1.1, 0.8], [0.9], [0.45, 0.22], [1.3], [0.8, 0.5], [0.5]]))],
   ["sputtering", "short jolts that overshoot and settle, one backwards", stopStart(turning([[0.16, 0.26, backOut], [0.55], [0.12, 0.14, backOut], [1.0], [0.2, -0.07], [0.35], [0.14, 0.3, backOut], [1.2]]))],
-  ["sputtering, long", "turns as the plain sphere does, snags, jolts and stutters, kicks back, recovers; about 15s before it repeats", stopStart(turning(SPUTTER))],
+  ["sputtering, long", "mostly snags, jolts, stutters and kicks back, catching the plain sphere's turn only briefly between; about 15s before it repeats", stopStart(turning(SPUTTER))],
 ];
 
 /* Each state a turn's header shows, the orb it shows it with, and a line of
