@@ -48,7 +48,7 @@ export function MobileComposerOptions(props: {
   const selectedModelLabel = () => selectedModel()?.label || composer.models.model() || "Not selected";
   const selectedProfileLabel = () => composer.activeProfile?.label || composer.activeProfile?.id || "General";
   const selectedPermissionLabel = () => composer.permissions?.profiles().find((profile) => profile.id === composer.permissions?.selected())?.label || "Default";
-  const levels = () => selectedModel()?.thinkingLevels || ["off"];
+  const levels = () => selectedModel()?.thinkingLevels?.length ? selectedModel()!.thinkingLevels! : ["off"];
   const profileLocked = () => composer.chat.status() !== "draft";
   const [panel, setPanel] = createSignal<MobileOptionsPanel>("root");
   const context = () => contextUsagePercent(composer.chat.contextUsage());
