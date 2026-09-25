@@ -173,6 +173,11 @@ export function CommandMenu(props: {
   const [scopeReturn, setScopeReturn] = createSignal<ScopeReturn | null>(null);
   const [deleteChoice, setDeleteChoice] = createSignal<"cancel" | "confirm">("cancel");
   const [shortcutRevision, setShortcutRevision] = createSignal(0);
+  // In chat search the cursor shows only where it acts: in the list, under
+  // the pointer, or on the top result once something is typed. Freshly
+  // opened, focus is in the search field and no row is lit.
+  const [listFocused, setListFocused] = createSignal(false);
+  const [pointerCursor, setPointerCursor] = createSignal(false);
   const selectionMode = () => {
     const mode = chatMode();
     return mode.kind === "select" || ((mode.kind === "move" || mode.kind === "confirmDelete") && mode.returnTo === "select");
@@ -821,6 +826,9 @@ export function CommandMenu(props: {
     }
     if (chatPage() && (event.ctrlKey || event.metaKey) && !event.altKey && key === "p") { event.preventDefault(); togglePreview(); return; }
     if (event.key === "Enter" && chatPage() && (event.ctrlKey || event.metaKey) && !selectionMode() && !moveMode()) { event.preventDefault(); openRowProject(selectable()[active()]); return; }
+    // Nothing is lit from a fresh search field, so Enter there goes to the list
+    // rather than opening a row the reader cannot see chosen.
+    if (event.key === "Enter" && chatPage() && !inList && !searching() && !pointerCursor()) { event.preventDefault(); listbox?.focus(); return; }
     if (event.key === "Enter") { event.preventDefault(); runRow(selectable()[active()]); return; }
     if (event.key === "Escape") {
       event.preventDefault(); event.stopPropagation();
@@ -860,7 +868,8 @@ export function CommandMenu(props: {
 
   const renderRow = (row: Row) => {
     if (row.type === "heading") return row.label ? <p class="command-group-label" role="presentation">{row.label}</p> : <span class="command-group-break" role="presentation" />;
-    const selected = () => active() === row.index;
+    const selected = () => active() === row.index
+      && (!chatPage() || listFocused() || pointerCursor() || searching() || selectionMode() || moveMode());
     const commonProps = {
       id: optionId(row.index),
       role: chatPage() && !moveMode() ? "treeitem" : "option",
@@ -868,7 +877,7 @@ export function CommandMenu(props: {
       class: "command-option",
       // Keep focus in the input or list so keyboard control survives a click.
       onMouseDown: (event: MouseEvent) => event.preventDefault(),
-      onMouseMove: () => setActive(row.index),
+      onMouseMove: () => { setPointerCursor(true); setActive(row.index); },
       onClick: (event: MouseEvent) => runPointerRow(row, event),
     } as const;
     if (row.type === "model") {
@@ -1007,7 +1016,7 @@ export function CommandMenu(props: {
               </Button>
             </div>
             <div class="command-body">
-            <div id="command-listbox" ref={listbox} role={chatPage() && !moveMode() ? "tree" : "listbox"} aria-label={modelSelectorPage() ? "Models" : chatPage() ? "Chat browser" : "Commands"} aria-activedescendant={selectable().length ? optionId(active()) : undefined} class="command-list" tabIndex={chatPage() || selectionMode() || moveMode() ? 0 : -1} onKeyDown={keydown}>
+            <div id="command-listbox" ref={listbox} role={chatPage() && !moveMode() ? "tree" : "listbox"} aria-label={modelSelectorPage() ? "Models" : chatPage() ? "Chat browser" : "Commands"} aria-activedescendant={selectable().length ? optionId(active()) : undefined} class="command-list" onFocus={() => setListFocused(true)} onBlur={() => setListFocused(false)} onMouseLeave={() => setPointerCursor(false)} tabIndex={chatPage() || selectionMode() || moveMode() ? 0 : -1} onKeyDown={keydown}>
               <Show when={!selectable().length}><p class="command-empty">{emptyMessage()}</p></Show>
               <For each={rows()}>{renderRow}</For>
             </div>
