@@ -27,6 +27,9 @@ export function HarnessDashboard(props: {
   onOpenChat?: (chat: ChatSummary, project: Project, prompt?: string) => void;
   composer?: (cwd: string, models: ComposerModels, loading: boolean, permissions: ComposerPermissions, launch: (prompt: string) => Promise<void>) => JSX.Element;
   onDriveChange?: (open: boolean) => void;
+  /** A thread another surface asked to open here, once the harness is known. */
+  pendingThread?: { harnessId: string; path: string; id: string; title: string } | null;
+  onPendingThreadOpened?: () => void;
   renderDrive?: (input: { current: { cwd: string; title: string; nativeSessionId: string }; harness: HarnessSummary; store: DriveChatStore; onBack: () => void; onTrack: () => void }) => JSX.Element;
 }) {
   const relativeTime = (value: number | string | null) => {
@@ -217,6 +220,13 @@ export function HarnessDashboard(props: {
       await attach(live, group.path, thread.title);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Thread could not be opened"); }
   };
+
+  createEffect(() => {
+    const pending = props.pendingThread;
+    if (!pending || props.harness?.id !== pending.harnessId) return;
+    props.onPendingThreadOpened?.();
+    void openThread({ path: pending.path } as HarnessThreadGroup, { id: pending.id, title: pending.title, tracked: false, chatId: null } as HarnessThread);
+  });
 
   const closeDrive = async () => {
     const current = liveId;

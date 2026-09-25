@@ -135,6 +135,10 @@ export interface ProjectDashboardPayload {
     hasUnstaged: boolean;
     changedFiles: number;
   } | null;
+  /** Changed files against HEAD, with line counts where Git gives them. */
+  changes: Array<{ path: string; status: string; added: number | null; removed: number | null }>;
+  /** Top-level files, newest first; empty for a Git repository. */
+  recentFiles: Array<{ name: string; modifiedAt: string }>;
   recentChats: DashboardChat[];
 }
 
