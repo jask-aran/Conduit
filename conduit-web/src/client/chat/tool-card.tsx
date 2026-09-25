@@ -27,7 +27,7 @@ export const KIND_ICONS: Record<ToolKind, Component<{ class?: string }>> = {
   command: SquareTerminalIcon, read: FileTextIcon, edit: FilePenLineIcon,
   search: SearchIcon, fetch: GlobeIcon, other: WrenchIcon,
 };
-const VERBS: Record<ToolKind, [string, string]> = {
+export const VERBS: Record<ToolKind, [string, string]> = {
   command: ["Running", "Ran"], read: ["Reading", "Read"], edit: ["Editing", "Edited"],
   search: ["Searching", "Searched"], fetch: ["Fetching", "Fetched"], other: ["Using", "Used"],
 };

@@ -51,3 +51,7 @@
 .tool-group-steps { display: flex; flex-direction: column; gap: 1px; margin-left: 0.8125rem; padding-left: 0.375rem; border-left: 1px solid var(--border); }
 
 .trail-error { padding: 0.125rem 0; }
+/* A note in the trail, not a step: nothing to open, no cursor. */
+.trail-note .trail-row-header { cursor: default; }
+.trail-note .trail-row-header:hover { background: none; }
+.trail-note .trail-summary { font-style: italic; }

@@ -253,7 +253,7 @@ test("parallel tool executions join independently by toolCallId", () => {
   const state = reduceGenerationEvents(wireFixture("parallelTools"));
 
   assert.deepEqual(Object.keys(state.toolExecutions), ["call_one", "call_two"]);
-  // When it ran is stamped as the fold sees it, so only its shape is pinned.
+  // When it ran is the time its event states, so only that it has one is pinned.
   const { timestamp, completedAt, ...execution } = state.toolExecutions.call_one;
   assert.equal(typeof timestamp, "string");
   assert.equal(typeof completedAt, "string");

@@ -237,6 +237,8 @@ export interface ContentBlock {
   text?: string;
   name?: string;
   input?: unknown;
+  /** Thinking the provider kept to itself: it happened, with no text to show. */
+  redacted?: boolean;
 }
 
 export type TurnOutcome = "complete" | "interrupted" | "failed";

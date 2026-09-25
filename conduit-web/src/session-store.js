@@ -548,7 +548,11 @@ export async function removeProjectSessions(project) {
  */
 export function neutralBlock(block) {
   if (block?.type === "text") return { kind: "text", text: block.text || "" };
-  if (block?.type === "thinking") return { kind: "thinking", text: block.thinking ?? block.text ?? "" };
+  if (block?.type === "thinking") {
+    const text = block.thinking ?? block.text ?? "";
+    // Returned only encrypted -- a signature and no text -- as the live reader says too.
+    return { kind: "thinking", text, ...(block.redacted || (!text && block.thinkingSignature) ? { redacted: true } : {}) };
+  }
   if (block?.type === "toolCall") {
     return { kind: "tool_call", toolCallId: block.id || block.toolCallId, name: block.name, input: block.arguments };
   }

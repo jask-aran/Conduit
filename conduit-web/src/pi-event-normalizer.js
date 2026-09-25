@@ -1,5 +1,5 @@
-import { PI_TOOL_KINDS } from "./pi-capabilities.js";
-import { toolKind } from "./harnesses/transcript-ops.js";
+import { PI_TOOL_KINDS, piSubjectFields } from "./pi-capabilities.js";
+import { toolKind, toolSubject } from "./harnesses/transcript-ops.js";
 function record(value) {
   return value && typeof value === "object" ? value : {};
 }
@@ -25,7 +25,10 @@ function normalizeBlock(block, contentIndex) {
       kind: "thinking",
       contentIndex,
       text: String(block.thinking || ""),
-      redacted: Boolean(block.redacted),
+      // Reasoning the provider returned only encrypted -- a signature and no
+      // text -- is redacted as far as the reader is concerned: it happened,
+      // and there is nothing of it to show.
+      redacted: Boolean(block.redacted) || (!block.thinking && Boolean(block.thinkingSignature)),
     };
   }
   if (block?.type === "text") {
@@ -41,6 +44,24 @@ function normalizeBlock(block, contentIndex) {
       ...(name ? { toolKind: toolKind(PI_TOOL_KINDS, name) } : {}),
       input: block.arguments,
     };
+  }
+  return null;
+}
+
+/*
+ * What a call acts on, read out of its arguments while the model is still
+ * writing them: the first of the tool's subject fields whose string has
+ * closed, or the first item of its list. A write states its path before its
+ * content, so the file is known while the content streams. Tried only near
+ * the start of the arguments, where those fields are, so a long write is not
+ * rescanned on every delta.
+ */
+const SUBJECT_SCAN_LIMIT = 4000;
+function subjectSoFar(name, args) {
+  for (const field of piSubjectFields(name)) {
+    const match = args.match(new RegExp(`"${field}"\\s*:\\s*\\[?\\s*"((?:[^"\\\\]|\\\\.)*)"`));
+    if (!match) continue;
+    try { return toolSubject(JSON.parse(`"${match[1]}"`)); } catch { continue; }
   }
   return null;
 }
@@ -113,6 +134,13 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0, cl
           const call = blockKind === "tool_call"
             ? calls.get(contentIndex) || normalizeBlock(content[contentIndex], contentIndex)
             : null;
+          if (call && calls.has(contentIndex) && !call.subject && call.name) {
+            call.args = `${call.args || ""}${String(update.delta || "")}`;
+            if (call.args.length <= SUBJECT_SCAN_LIMIT) {
+              const subject = subjectSoFar(call.name, call.args);
+              if (subject) call.subject = subject;
+            }
+          }
           return [emit({
             type: "content_block_delta",
             messageId: activeMessageId,
@@ -120,6 +148,7 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0, cl
             contentIndex,
             delta: String(update.delta || ""),
             ...(call?.name ? { name: call.name, toolKind: call.toolKind } : {}),
+            ...(call?.subject ? { subject: call.subject } : {}),
             ...(call?.toolCallId ? { toolCallId: call.toolCallId } : {}),
           })];
         }
@@ -165,6 +194,8 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0, cl
           toolCallId: String(source.toolCallId || ""),
           name: String(source.toolName || ""),
           input: source.args,
+          // When, stated once here, so every fold of it agrees on how long it took.
+          at: new Date().toISOString(),
         })];
       case "tool_execution_update":
         return [emit({
@@ -181,6 +212,7 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0, cl
           name: String(source.toolName || ""),
           output: source.result,
           isError: Boolean(source.isError),
+          at: new Date().toISOString(),
         })];
       case "auto_retry_start":
         return [emit({

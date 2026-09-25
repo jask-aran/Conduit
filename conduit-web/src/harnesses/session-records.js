@@ -183,6 +183,11 @@ export class SessionRecords {
 
   publish(record, event) {
     record.updatedAt = new Date().toISOString();
+    // A tool starting or ending says when, once, here -- every fold of it,
+    // the server's and each browser's, then agrees on how long it took.
+    if (event?.type === "tool_activity" && (event.phase === "start" || event.phase === "end") && !event.at) {
+      event = { ...event, at: record.updatedAt };
+    }
     // Numbered before it is buffered or sent, so the replay a reconnecting
     // browser reads carries the same sequence the live stream did.
     const log = this.logFor(record);
