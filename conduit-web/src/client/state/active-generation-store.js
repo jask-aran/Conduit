@@ -214,6 +214,9 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
             contentIndex: event.contentIndex,
             status: "streaming",
             identity: contentBlockIdentity(event.messageId, event.contentIndex),
+            // A call being written, named as soon as the harness knows which.
+            ...(event.name ? { name: event.name, toolKind: event.toolKind } : {}),
+            ...(event.toolCallId ? { toolCallId: event.toolCallId } : {}),
           });
           if (!block) break;
           const field = event.blockKind === "tool_call" ? "inputText" : "text";

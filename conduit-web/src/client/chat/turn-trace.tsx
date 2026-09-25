@@ -180,9 +180,13 @@ const plural = (count: number, [one, many]: [string, string]) => `${count} ${cou
 
 /* Totals per kind, most used first -- every kind named, since there are only
    six; a narrow header cuts the smallest. */
+/* A call whose name has not arrived yet is not counted: it would read as a
+   tool and then turn into a fetch. */
+const unnamed = (tool: ToolItem) => !tool.name || tool.name === "tool";
+
 function workOf(tools: ToolItem[]): string {
   const counts = new Map<ToolKind, number>();
-  for (const tool of tools) counts.set(tool.kind || "other", (counts.get(tool.kind || "other") || 0) + 1);
+  for (const tool of tools) if (!unnamed(tool)) counts.set(tool.kind || "other", (counts.get(tool.kind || "other") || 0) + 1);
   return [...counts].sort((left, right) => right[1] - left[1])
     .map(([kind, count]) => plural(count, KIND_WORDS[kind])).join(", ");
 }
@@ -218,6 +222,7 @@ function statusOf(trace: TurnTraceData, writing: boolean): { verb: string; orb: 
   if (running.length > 1) return { verb: `Running ${running.length} tools`, orb: "solving" };
   const tool = running[0];
   if (!tool) return writing ? { verb: "Writing", orb: "composing" } : { verb: "Thinking", orb: "working" };
+  if (unnamed(tool)) return { verb: "Calling a tool", orb: "solving" };
   const kind = tool.kind || "other";
   return { verb: kind === "other" ? `Using ${tool.name || "a tool"}` : KIND_VERBS[kind], orb: KIND_ORBS[kind] };
 }

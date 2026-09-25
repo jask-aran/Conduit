@@ -18,6 +18,9 @@ type LiveBlock = {
   text?: string;
   toolCallId?: string;
   name?: string;
+  // Which kind of tool a call is, stated by the adapter while it is still
+  // being written, before the tool runs and states it itself.
+  toolKind?: ToolKind;
   input?: unknown;
   status?: string;
 };
@@ -327,7 +330,7 @@ export function buildLiveToolSegment(
   return {
     kind: "tool",
     id: `tool:${toolCallId}`,
-    tool: buildLiveToolItem(toolCallId, execution, { name: block.name, input: block.input }),
+    tool: buildLiveToolItem(toolCallId, execution, { name: block.name, kind: block.toolKind, input: block.input }),
   };
 }
 
@@ -353,12 +356,12 @@ function buildLiveErrorSegment(
 export function buildLiveToolItem(
   toolCallId: string,
   execution: ActiveGenerationView["toolExecutions"][string] = {},
-  fallback: { name?: string; input?: unknown } = {},
+  fallback: { name?: string; kind?: ToolKind; input?: unknown } = {},
 ): ToolItem {
   return {
     toolCallId,
     name: execution.name || fallback.name || "tool",
-    kind: execution.kind || "other",
+    kind: execution.kind || fallback.kind || "other",
     ...(execution.subject ? { subject: execution.subject } : {}),
     ...(execution.timestamp ? { timestamp: execution.timestamp } : {}),
     ...(execution.completedAt ? { completedAt: execution.completedAt } : {}),
