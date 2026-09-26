@@ -89,6 +89,16 @@ export function ListFilter(props: {
   </Menu>;
 }
 
+type ProfileLike = { id: string; label: string; implementation?: string };
+
+/** The profile a chat runs under: the one it was started from, else, for a
+ *  harness chat that records no template, the profile electing its harness. */
+export function profileOf(profiles: ProfileLike[], chat: { templateId?: string | null; harnessId?: string; backend?: { implementation: string } }) {
+  if (chat.templateId) return chat.templateId;
+  const harness = chat.harnessId || chat.backend?.implementation;
+  return (harness && profiles.find((profile) => profile.implementation === harness)?.id) || "";
+}
+
 /** Filter by the profile a chat was started with. Every profile is listed so
  *  the choice is always visible; one no chat here uses is greyed out. */
 export function ProfileFilter(props: { profiles: Array<{ id: string; label: string; implementation?: string }>; used: Set<string>; value: string; onChange: (id: string) => void }) {
