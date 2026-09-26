@@ -1,5 +1,5 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
-import { CheckIcon, FolderIcon } from "lucide-solid";
+import { FolderIcon } from "lucide-solid";
 import { Button, Popover, PopoverContent, PopoverTrigger } from "@/components/primitives";
 import type { Project } from "../api/contracts";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
@@ -54,7 +54,6 @@ export function PlacePicker(props: {
             <span class="composer-place-lead"><Show when={isWorkspace(project)} fallback={<FolderIcon />}><WorkspaceGlyph appearance={project.workspaceAppearance} /></Show></span>
             <span class="composer-place-label">{project.name}</span>
             <small>{isWorkspace(project) ? "Workspace" : "Project"}</small>
-            <Show when={project.id === props.current?.id}><CheckIcon class="composer-place-check" /></Show>
           </button>}
         </For>
       </div>
