@@ -422,7 +422,7 @@ export function ProjectDashboard(props: {
         ]} />
       </Show>
     </div>} actions={<>
-      <Show when={showOutside()} fallback={<><ProfileFilter profiles={props.profiles} value={profile()} onChange={(id) => { setProfile(id); setLimit(CHAT_PAGE); }} /><ListFilter sort={chatSort()} onSort={saveChatSort} /></>}>
+      <Show when={showOutside()} fallback={<><ProfileFilter profiles={props.profiles} used={new Set(props.project.sessions.filter((chat) => chat.status === "active").map((chat) => chat.templateId || ""))} value={profile()} onChange={(id) => { setProfile(id); setLimit(CHAT_PAGE); }} /><ListFilter sort={chatSort()} onSort={saveChatSort} /></>}>
         <ListFilter harnesses={outsideHarnesses()} harness={outsideFilter()} onHarness={(id) => { setOutsideFilter(id); setLimit(CHAT_PAGE); }} />
       </Show>
       <ListSearch label={`Search chats in ${props.project.name}`} onClick={props.onSearchChats} />
