@@ -1,7 +1,7 @@
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ClipboardCopyIcon, FolderInputIcon, FolderPlusIcon, MessageSquarePlusIcon, PaletteIcon, PencilIcon, PinIcon, PinOffIcon, SearchIcon, Settings2Icon, TerminalIcon, Trash2Icon } from "lucide-solid";
-import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger } from "@/components/primitives";
+import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger, Spinner } from "@/components/primitives";
 import { api, projectPath } from "../api/client";
 import type { ChatSummary, Project, Template } from "../api/contracts";
 import { activityDetail, runtimeActivity, RuntimeIndicator } from "../navigation/runtime-indicator";
@@ -14,7 +14,8 @@ import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
 import { Segmented } from "../settings/settings-controls";
-import { CHAT_PAGE, DayGroups, groupByDay, ListFilter, ListSearch, ProfileFilter, ShowMore } from "./primitives/chat-list";
+import { loadOutsideThreads, type OutsideThread } from "./outside-threads";
+import { CHAT_PAGE, DayGroups, groupByDay, ListFilter, ListSearch, ProfileFilter, profileOf, ShowMore } from "./primitives/chat-list";
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitRow, SplitShortcut, SplitShortcuts } from "./primitives/split";
 import "./app-dashboard.css";
 
@@ -68,6 +69,7 @@ export function AppDashboard(props: {
   onPrefetchTerminal: () => void;
   onSearchChats: (scope: "unscoped" | "all") => void;
   onOpenTerminalView: () => void;
+  onOpenHarnessThread?: (harnessId: string, path: string, threadId: string, title: string) => void;
   onOpenSettings: () => void;
   profiles: Template[];
 }) {
@@ -76,6 +78,22 @@ export function AppDashboard(props: {
   const [now, setNow] = createSignal(Date.now());
   const [unreadOnly, setUnreadOnly] = createSignal(false);
   const [limit, setLimit] = createSignal(CHAT_PAGE);
+  // Conduit's own chats, or the threads the machine's harnesses ran that no
+  // Conduit chat owns. The side is remembered, as a workspace's is.
+  const [side, setSide] = createSignal<"conduit" | "computer">((() => { try { return localStorage.getItem("conduit.dashboard.threads:conduit") === "computer" ? "computer" : "conduit"; } catch { return "conduit"; } })());
+  const [computerThreads, setComputerThreads] = createSignal<OutsideThread[]>([]);
+  const [computerHarnesses, setComputerHarnesses] = createSignal<Array<{ id: string; label: string }>>([]);
+  const [computerLoading, setComputerLoading] = createSignal(true);
+  const [harness, setHarness] = createSignal("");
+  const chooseSide = (value: "conduit" | "computer") => {
+    setSide(value);
+    setLimit(CHAT_PAGE);
+    try { localStorage.setItem("conduit.dashboard.threads:conduit", value); } catch { /* a per-viewer convenience */ }
+  };
+  const computer = () => side() === "computer";
+  const filteredComputer = createMemo(() => unreadOnly() ? [] : harness() ? computerThreads().filter((thread) => thread.harnessId === harness()) : computerThreads());
+  const computerGroups = createMemo(() => groupByDay(filteredComputer().slice(0, limit()), (thread) => thread.at, now()));
+  const folderName = (path: string) => props.projects.find((project) => project.workingRoot === path)?.name || path.replace(/^\/home\/[^/]+/, "~");
   const [profile, setProfile] = createSignal("");
   const chatSort = useChatSort();
 
@@ -92,7 +110,7 @@ export function AppDashboard(props: {
     const sort = chatSort();
     return allChats()
       .filter(({ chat }) => !unreadOnly() || chat.unread)
-      .filter(({ chat }) => !profile() || chat.templateId === profile())
+      .filter(({ chat }) => !profile() || profileOf(props.profiles, chat) === profile())
       .sort((left, right) => compareChatsBySort(left.chat, right.chat, sort));
   });
   const chatTime = (chat: ChatSummary) => Date.parse((chatSort() === "created" ? chat.createdAt : chat.lastMessageAt || chat.createdAt) || "") || 0;
@@ -115,6 +133,10 @@ export function AppDashboard(props: {
     const clock = window.setInterval(() => setNow(Date.now()), 30_000);
     window.addEventListener("conduit:ptys-changed", changed);
     void refresh();
+    void loadOutsideThreads().then((found) => {
+      setComputerHarnesses(found.harnesses);
+      setComputerThreads(found.threads);
+    }).catch(() => setComputerThreads([])).finally(() => setComputerLoading(false));
     onCleanup(() => {
       window.clearInterval(clock);
       window.removeEventListener("conduit:ptys-changed", changed);
@@ -164,14 +186,35 @@ export function AppDashboard(props: {
   };
 
   const chatsGroup = <SplitGroup id="app-dashboard-chats" order="list"
-    heading={<Segmented label="Chats" value={unreadOnly() ? "unread" : "all"} onChange={(value) => { setUnreadOnly(value === "unread"); setLimit(CHAT_PAGE); }} options={[
-      { value: "all", label: "Recent chats", detail: <small>{allChats().length}</small> },
-      { value: "unread", label: "Unread", detail: <small>{unread()}</small> },
-    ]} />}
-    actions={<><ProfileFilter profiles={props.profiles} used={new Set(allChats().map(({ chat }) => chat.templateId || ""))} value={profile()} onChange={(id) => { setProfile(id); setLimit(CHAT_PAGE); }} /><ListFilter sort={chatSort()} onSort={saveChatSort} /><ListSearch label="Search chats" onClick={() => props.onSearchChats("all")} /></>}
-    more={<ShowMore total={chats().length} shown={limit()} onMore={() => setLimit((value) => value + CHAT_PAGE)} />}>
-    <Show when={chats().length} fallback={<SplitEmpty>{unreadOnly() ? "Nothing unread." : "Nothing here yet."}</SplitEmpty>}>
+    heading={<div class="split-heading-switches">
+      <Segmented label="Chats" value={unreadOnly() ? "unread" : "all"} onChange={(value) => { setUnreadOnly(value === "unread"); setLimit(CHAT_PAGE); }} options={[
+        { value: "all", label: "Recent chats", detail: <small>{computer() ? computerThreads().length : allChats().length}</small> },
+        { value: "unread", label: "Unread", detail: <small>{computer() ? 0 : unread()}</small> },
+      ]} />
+      <Segmented label="Threads" value={side()} onChange={(value) => chooseSide(value as "conduit" | "computer")} options={[
+        { value: "conduit", label: "Conduit", detail: <small>{allChats().length}</small> },
+        { value: "computer", label: "Computer", detail: <Show when={!computerLoading()}><small>{computerThreads().length}</small></Show> },
+      ]} />
+    </div>}
+    actions={<>
+      <Show when={computer()} fallback={<><ProfileFilter profiles={props.profiles} used={new Set(allChats().map(({ chat }) => profileOf(props.profiles, chat)))} value={profile()} onChange={(id) => { setProfile(id); setLimit(CHAT_PAGE); }} /><ListFilter sort={chatSort()} onSort={saveChatSort} /></>}>
+        <ListFilter harnesses={computerHarnesses()} harness={harness()} onHarness={(id) => { setHarness(id); setLimit(CHAT_PAGE); }} />
+      </Show>
+      <ListSearch label="Search chats" onClick={() => props.onSearchChats("all")} />
+    </>}
+    more={<ShowMore total={computer() ? filteredComputer().length : chats().length} shown={limit()} onMore={() => setLimit((value) => value + CHAT_PAGE)} />}>
+    <Show when={computer()} fallback={<Show when={chats().length} fallback={<SplitEmpty>{unreadOnly() ? "Nothing unread." : "Nothing here yet."}</SplitEmpty>}>
       <DayGroups groups={grouped()}>{chatRow}</DayGroups>
+    </Show>}>
+      <Show when={!computerLoading()} fallback={<SplitEmpty><Spinner /><span>Looking for threads…</span></SplitEmpty>}>
+        <Show when={filteredComputer().length} fallback={<SplitEmpty>{unreadOnly() ? "Nothing unread." : "No threads outside Conduit."}</SplitEmpty>}>
+          <DayGroups groups={computerGroups()}>{(thread) =>
+            <SplitRow element="button" title={thread.preview || thread.title} onClick={() => props.onOpenHarnessThread?.(thread.harnessId, thread.path, thread.id, thread.title)}
+              lead={<ThreadHarnessMark id={thread.harnessId} lively />} primary={thread.title || "Untitled thread"} context={folderName(thread.path)}
+              trailing={shortAge(thread.at, now())} />}
+          </DayGroups>
+        </Show>
+      </Show>
     </Show>
   </SplitGroup>;
 
