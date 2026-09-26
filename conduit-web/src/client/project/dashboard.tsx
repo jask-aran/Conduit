@@ -20,7 +20,8 @@ import {
 import { ThreadHarnessMark } from "../harness-brand";
 import { activityLabel } from "../../activity.js";
 import { Segmented } from "../settings/settings-controls";
-import { CHAT_PAGE, DayGroups, groupByDay, ListFilter, ListSearch, ProfileFilter, ShowMore } from "../dashboard/primitives/chat-list";
+import { loadOutsideThreads, type OutsideThread } from "../dashboard/outside-threads";
+import { CHAT_PAGE, DayGroups, groupByDay, ListFilter, ListSearch, ProfileFilter, profileOf, ShowMore } from "../dashboard/primitives/chat-list";
 import { FileTypeIcon } from "../workspace/file-type-icon";
 import {
   Button,
@@ -44,7 +45,7 @@ import {
   Spinner,
 } from "@/components/primitives";
 import { api } from "../api/client";
-import type { Template, DashboardChat, HarnessSummary, HarnessThread, HarnessThreadDiscovery, Project, ProjectDashboardPayload, WorkspaceAppearance, WorkspaceOperation } from "../api/contracts";
+import type { Template, DashboardChat, Project, ProjectDashboardPayload, WorkspaceAppearance, WorkspaceOperation } from "../api/contracts";
 import { activityDetail, runtimeActivity, RuntimeIndicator } from "../navigation/runtime-indicator";
 import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
@@ -86,17 +87,11 @@ function kindLabel(project: Project) {
 }
 
 type ThreadSide = "chats" | "outside";
-type OutsideThread = HarnessThread & { harnessId: string; at: number };
 
 function readThreadSide(projectId: string): ThreadSide {
   try { return localStorage.getItem(`conduit.dashboard.threads:${projectId}`) === "outside" ? "outside" : "chats"; } catch { return "chats"; }
 }
 
-// Harnesses report seconds, milliseconds or ISO strings.
-function timestampOf(value: number | string | null | undefined) {
-  if (typeof value === "number") return value < 1e12 ? value * 1000 : value;
-  return Date.parse(value || "") || 0;
-}
 
 function compactDate(value?: string | null) {
   const date = new Date(value || "");
@@ -182,7 +177,7 @@ export function ProjectDashboard(props: {
     const previews = new Map((payload()?.recentChats || []).map((chat) => [chat.id, chat]));
     return props.project.sessions
       .map((chat) => ({ ...chat, lastMessageAt: previews.get(chat.id)?.lastMessageAt || chat.lastMessageAt, lastMessagePreview: previews.get(chat.id)?.lastMessagePreview || "" }))
-      .filter((chat) => chat.status === "active" && (!unreadOnly() || chat.unread) && (!profile() || chat.templateId === profile()))
+      .filter((chat) => chat.status === "active" && (!unreadOnly() || chat.unread) && (!profile() || profileOf(props.profiles, chat) === profile()))
       .sort((left, right) => compareChatsBySort(left, right, sort));
   });
   const chatTime = (chat: DashboardChat) => Date.parse((chatSort() === "created" ? chat.createdAt : chat.lastMessageAt || chat.createdAt) || "") || 0;
@@ -250,18 +245,11 @@ export function ProjectDashboard(props: {
     if (!isWorkspace() || cloning() || !path) { setOutsideThreads([]); setOutsideLoading(false); return; }
     let disposed = false;
     setOutsideLoading(true);
-    void (async () => {
-      const { harnesses } = await api<{ harnesses: HarnessSummary[] }>("/v0/harnesses");
-      const visible = harnesses.filter((harness) => harness.available && harness.discovery === "machine");
-      const found = await Promise.all(visible.map((harness) => api<HarnessThreadDiscovery>(`/v0/harnesses/${encodeURIComponent(harness.id)}/threads?path=${encodeURIComponent(path)}`)
-        .then((discovery) => discovery.groups.flatMap((group) => group.threads)
-          .filter((thread) => !thread.tracked)
-          .map((thread) => ({ ...thread, harnessId: harness.id as string, at: timestampOf(thread.updatedAt ?? thread.createdAt) })))
-        .catch(() => [])));
+    void loadOutsideThreads(path).then((found) => {
       if (disposed) return;
-      setOutsideHarnesses(visible.map((harness) => ({ id: harness.id as string, label: harness.label })));
-      setOutsideThreads(found.flat().sort((left, right) => right.at - left.at));
-    })().catch(() => { if (!disposed) setOutsideThreads([]); })
+      setOutsideHarnesses(found.harnesses);
+      setOutsideThreads(found.threads);
+    }).catch(() => { if (!disposed) setOutsideThreads([]); })
       .finally(() => { if (!disposed) setOutsideLoading(false); });
     onCleanup(() => { disposed = true; });
   });
@@ -422,7 +410,7 @@ export function ProjectDashboard(props: {
         ]} />
       </Show>
     </div>} actions={<>
-      <Show when={showOutside()} fallback={<><ProfileFilter profiles={props.profiles} used={new Set(props.project.sessions.filter((chat) => chat.status === "active").map((chat) => chat.templateId || ""))} value={profile()} onChange={(id) => { setProfile(id); setLimit(CHAT_PAGE); }} /><ListFilter sort={chatSort()} onSort={saveChatSort} /></>}>
+      <Show when={showOutside()} fallback={<><ProfileFilter profiles={props.profiles} used={new Set(props.project.sessions.filter((chat) => chat.status === "active").map((chat) => profileOf(props.profiles, chat)))} value={profile()} onChange={(id) => { setProfile(id); setLimit(CHAT_PAGE); }} /><ListFilter sort={chatSort()} onSort={saveChatSort} /></>}>
         <ListFilter harnesses={outsideHarnesses()} harness={outsideFilter()} onHarness={(id) => { setOutsideFilter(id); setLimit(CHAT_PAGE); }} />
       </Show>
       <ListSearch label={`Search chats in ${props.project.name}`} onClick={props.onSearchChats} />

@@ -2626,6 +2626,7 @@ function App() {
             onOpenTerminalView={() => openTerminalRoute()}
             onOpenSettings={() => openSettings()}
             profiles={profiles()}
+            onOpenHarnessThread={(harnessId, path, id, title) => { setPendingHarnessThread({ harnessId, path, id, title }); void openComputerHarnessHere(harnessId, path); }}
             onOpenTerminal={(terminal) => {
               if ((terminal.projectId === "computer" || terminal.projectId.startsWith("computer:")) && terminal.cwd) {
                 openComputer();
