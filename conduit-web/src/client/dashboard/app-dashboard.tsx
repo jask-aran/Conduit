@@ -14,8 +14,7 @@ import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
 import { Segmented } from "../settings/settings-controls";
-import { loadOutsideThreads, type OutsideThread } from "./outside-threads";
-import { CHAT_PAGE, DayGroups, groupByDay, ListFilter, ListSearch, ProfileFilter, profileOf, ShowMore } from "./primitives/chat-list";
+import { CHAT_PAGE, DayGroups, groupByDay, ListFilter, ListSearch, PlaceFilter, ProfileFilter, profileOf, ShowMore } from "./primitives/chat-list";
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitRow, SplitShortcut, SplitShortcuts } from "./primitives/split";
 import "./app-dashboard.css";
 
@@ -78,22 +77,18 @@ export function AppDashboard(props: {
   const [now, setNow] = createSignal(Date.now());
   const [unreadOnly, setUnreadOnly] = createSignal(false);
   const [limit, setLimit] = createSignal(CHAT_PAGE);
-  // Conduit's own chats, or the threads the machine's harnesses ran that no
-  // Conduit chat owns. The side is remembered, as a workspace's is.
+  // Conduit's chats split by where they live: Conduit is no folder and the
+  // project folders, Computer the workspaces. Threads no Conduit chat owns
+  // stay in each workspace's Not in Conduit. The side is remembered.
   const [side, setSide] = createSignal<"conduit" | "computer">((() => { try { return localStorage.getItem("conduit.dashboard.threads:conduit") === "computer" ? "computer" : "conduit"; } catch { return "conduit"; } })());
-  const [computerThreads, setComputerThreads] = createSignal<OutsideThread[]>([]);
-  const [computerHarnesses, setComputerHarnesses] = createSignal<Array<{ id: string; label: string }>>([]);
-  const [computerLoading, setComputerLoading] = createSignal(true);
-  const [harness, setHarness] = createSignal("");
+  const [place, setPlace] = createSignal("");
   const chooseSide = (value: "conduit" | "computer") => {
     setSide(value);
+    setPlace("");
     setLimit(CHAT_PAGE);
     try { localStorage.setItem("conduit.dashboard.threads:conduit", value); } catch { /* a per-viewer convenience */ }
   };
   const computer = () => side() === "computer";
-  const filteredComputer = createMemo(() => unreadOnly() ? [] : harness() ? computerThreads().filter((thread) => thread.harnessId === harness()) : computerThreads());
-  const computerGroups = createMemo(() => groupByDay(filteredComputer().slice(0, limit()), (thread) => thread.at, now()));
-  const folderName = (path: string) => props.projects.find((project) => project.workingRoot === path)?.name || path.replace(/^\/home\/[^/]+/, "~");
   const [profile, setProfile] = createSignal("");
   const chatSort = useChatSort();
 
@@ -104,18 +99,27 @@ export function AppDashboard(props: {
     .filter(isWorkspace)
     .sort((left, right) => latestActivity(right) - latestActivity(left))
     .slice(0, 8));
-  const allChats = createMemo(() => props.projects
+  const everyChat = createMemo(() => props.projects
     .flatMap((project) => project.sessions.filter((chat) => chat.status === "active").map((chat) => ({ chat, project }))));
+  const conduitChats = createMemo(() => everyChat().filter(({ project }) => !isWorkspace(project)));
+  const computerChats = createMemo(() => everyChat().filter(({ project }) => isWorkspace(project)));
+  const allChats = () => computer() ? computerChats() : conduitChats();
+  // The places the current side's chats live in, for its filter.
+  const places = createMemo(() => props.projects
+    .filter((project) => computer() ? isWorkspace(project) : !isWorkspace(project))
+    .filter((project) => project.sessions.some((chat) => chat.status === "active"))
+    .map((project) => ({ id: project.id, label: project.slug === "chat" ? "No folder" : project.name, project })));
   const chats = createMemo(() => {
     const sort = chatSort();
     return allChats()
       .filter(({ chat }) => !unreadOnly() || chat.unread)
       .filter(({ chat }) => !profile() || profileOf(props.profiles, chat) === profile())
+      .filter(({ project }) => !place() || project.id === place())
       .sort((left, right) => compareChatsBySort(left.chat, right.chat, sort));
   });
   const chatTime = (chat: ChatSummary) => Date.parse((chatSort() === "created" ? chat.createdAt : chat.lastMessageAt || chat.createdAt) || "") || 0;
   const grouped = createMemo(() => groupByDay(chats().slice(0, limit()), (row) => chatTime(row.chat), now()));
-  const running = createMemo(() => allChats().filter(({ chat }) => props.runtime.getProcess(chat.id)?.active).length);
+  const running = createMemo(() => everyChat().filter(({ chat }) => props.runtime.getProcess(chat.id)?.active).length);
   const unread = createMemo(() => allChats().filter(({ chat }) => chat.unread).length);
   const folderLive = (project: Project) => project.sessions.some((chat) => props.runtime.getProcess(chat.id)?.active);
 
@@ -133,10 +137,6 @@ export function AppDashboard(props: {
     const clock = window.setInterval(() => setNow(Date.now()), 30_000);
     window.addEventListener("conduit:ptys-changed", changed);
     void refresh();
-    void loadOutsideThreads().then((found) => {
-      setComputerHarnesses(found.harnesses);
-      setComputerThreads(found.threads);
-    }).catch(() => setComputerThreads([])).finally(() => setComputerLoading(false));
     onCleanup(() => {
       window.clearInterval(clock);
       window.removeEventListener("conduit:ptys-changed", changed);
@@ -188,33 +188,23 @@ export function AppDashboard(props: {
   const chatsGroup = <SplitGroup id="app-dashboard-chats" order="list"
     heading={<div class="split-heading-switches">
       <Segmented label="Chats" value={unreadOnly() ? "unread" : "all"} onChange={(value) => { setUnreadOnly(value === "unread"); setLimit(CHAT_PAGE); }} options={[
-        { value: "all", label: "Recent chats", detail: <small>{computer() ? computerThreads().length : allChats().length}</small> },
-        { value: "unread", label: "Unread", detail: <small>{computer() ? 0 : unread()}</small> },
+        { value: "all", label: "Recent chats", detail: <small>{allChats().length}</small> },
+        { value: "unread", label: "Unread", detail: <small>{unread()}</small> },
       ]} />
-      <Segmented label="Threads" value={side()} onChange={(value) => chooseSide(value as "conduit" | "computer")} options={[
-        { value: "conduit", label: "Conduit", detail: <small>{allChats().length}</small> },
-        { value: "computer", label: "Computer", detail: <Show when={!computerLoading()}><small>{computerThreads().length}</small></Show> },
+      <Segmented label="Where" value={side()} onChange={(value) => chooseSide(value as "conduit" | "computer")} options={[
+        { value: "conduit", label: "Conduit", detail: <small>{conduitChats().length}</small> },
+        { value: "computer", label: "Computer", detail: <small>{computerChats().length}</small> },
       ]} />
     </div>}
     actions={<>
-      <Show when={computer()} fallback={<><ProfileFilter profiles={props.profiles} used={new Set(allChats().map(({ chat }) => profileOf(props.profiles, chat)))} value={profile()} onChange={(id) => { setProfile(id); setLimit(CHAT_PAGE); }} /><ListFilter sort={chatSort()} onSort={saveChatSort} /></>}>
-        <ListFilter harnesses={computerHarnesses()} harness={harness()} onHarness={(id) => { setHarness(id); setLimit(CHAT_PAGE); }} />
-      </Show>
+      <PlaceFilter label={computer() ? "Workspace" : "Project"} all={computer() ? "All workspaces" : "All projects"} places={places()} value={place()} onChange={(id) => { setPlace(id); setLimit(CHAT_PAGE); }} />
+      <ProfileFilter profiles={props.profiles} used={new Set(allChats().map(({ chat }) => profileOf(props.profiles, chat)))} value={profile()} onChange={(id) => { setProfile(id); setLimit(CHAT_PAGE); }} />
+      <ListFilter sort={chatSort()} onSort={saveChatSort} />
       <ListSearch label="Search chats" onClick={() => props.onSearchChats("all")} />
     </>}
-    more={<ShowMore total={computer() ? filteredComputer().length : chats().length} shown={limit()} onMore={() => setLimit((value) => value + CHAT_PAGE)} />}>
-    <Show when={computer()} fallback={<Show when={chats().length} fallback={<SplitEmpty>{unreadOnly() ? "Nothing unread." : "Nothing here yet."}</SplitEmpty>}>
+    more={<ShowMore total={chats().length} shown={limit()} onMore={() => setLimit((value) => value + CHAT_PAGE)} />}>
+    <Show when={chats().length} fallback={<SplitEmpty>{unreadOnly() ? "Nothing unread." : "Nothing here yet."}</SplitEmpty>}>
       <DayGroups groups={grouped()}>{chatRow}</DayGroups>
-    </Show>}>
-      <Show when={!computerLoading()} fallback={<SplitEmpty><Spinner /><span>Looking for threads…</span></SplitEmpty>}>
-        <Show when={filteredComputer().length} fallback={<SplitEmpty>{unreadOnly() ? "Nothing unread." : "No threads outside Conduit."}</SplitEmpty>}>
-          <DayGroups groups={computerGroups()}>{(thread) =>
-            <SplitRow element="button" title={thread.preview || thread.title} onClick={() => props.onOpenHarnessThread?.(thread.harnessId, thread.path, thread.id, thread.title)}
-              lead={<ThreadHarnessMark id={thread.harnessId} lively />} primary={thread.title || "Untitled thread"} context={folderName(thread.path)}
-              trailing={shortAge(thread.at, now())} />}
-          </DayGroups>
-        </Show>
-      </Show>
     </Show>
   </SplitGroup>;
 
