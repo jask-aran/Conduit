@@ -1,11 +1,10 @@
 # UI polish sketch
 
-Status: sections 1 (interrupted turns), 1b (the trace header), 1c (the
-opened trace as a trail), 2 (composer hierarchy), 5 (empty
-states, reduced) and 7 (motion, but for the deferred dashboard transition)
-are built and recorded below as built, as is 8 (keyboard) but for what waits
-on the dashboard redesign and transcript mode; 3 (autosave) is built for
-every settings section; 4 remains a proposal, and 6 goes on surface by surface.
+Status: everything is built but section 4 (the phone file browser), which
+is still a proposal. Section 6 (interaction feedback) is dropped; the design
+language is being consolidated instead. The keyboard checklist for the
+dashboards and transcript mode now lives in their own docs under
+`docs/design/`. Once 4 is done this doc can go.
 
 These proposals cover transcript density, composer hierarchy, mobile file
 browsing, useful empty states, and interaction feedback. A separate autosave

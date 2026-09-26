@@ -49,3 +49,21 @@ the transcript only scrolls, and the composer keeps every key it has today.
 - The actions and their keys, and how edit and fork from a turn hand back
   to the composer.
 - How it behaves while a turn is streaming, and on a phone.
+
+## Keyboard, when built
+
+Move like the sidebar rather than growing keys of its own (from the polish
+doc's section 8):
+
+- The cursor is the wash alone: one row or turn at a time, no focus ring,
+  multi-select as more washes (`DESIGN.md`, List row).
+- The pointer and keyboard move the one cursor; a row under a still pointer
+  draws at rest while the keyboard leads.
+- ↑/↓, Home/End, →/← into and out of a level, Enter acts, Menu or Shift+F10
+  opens the row's menu, Esc steps out and from the top goes home to the
+  composer.
+- Entering from the keyboard lands on a sensible first stop, with the
+  region cue; opening a page enters it at its composer.
+- Its region is in the context tree, and its keys appear in the leader under
+  its own name.
+- Reduced motion and the phone layout behave.
