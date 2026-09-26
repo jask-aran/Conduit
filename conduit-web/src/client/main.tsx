@@ -1479,7 +1479,9 @@ function App() {
 
   const focusChatSurface = (event: PointerEvent) => {
     const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest(".composer,button,a,input,textarea,select,[contenteditable='true'],[role='button'],[role='link'],[role='option']")) return;
+    // A press in a menu or popover belongs to it, and Solid carries portal
+    // events up to where the portal was declared, so skip those as well.
+    if (target?.closest(".composer,button,a,input,textarea,select,[contenteditable='true'],[role='button'],[role='link'],[role='option'],[data-slot='menu-content'],[data-slot='popover-content']")) return;
     if (!(event.currentTarget instanceof HTMLElement)) return;
     event.currentTarget.focus({ preventScroll: true });
   };
