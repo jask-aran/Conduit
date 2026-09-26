@@ -89,6 +89,31 @@ export function ListFilter(props: {
   </Menu>;
 }
 
+/** Filter by the profile a chat was started with; only profiles in use are listed. */
+export function ProfileFilter(props: { profiles: Array<{ id: string; label: string; implementation?: string }>; value: string; onChange: (id: string) => void }) {
+  const label = () => props.profiles.find((item) => item.id === props.value)?.label || "All profiles";
+  return <Show when={props.profiles.length > 1}>
+    <Menu modal={false}>
+      <MenuTrigger class="split-list-filter" title="Filter by profile">{label()}<ChevronDownIcon /></MenuTrigger>
+      <MenuContent class="w-56">
+        <MenuGroup>
+          <MenuLabel>Profile</MenuLabel>
+          <MenuRadioGroup value={props.value} onChange={(value: string) => props.onChange(value)}>
+            <MenuRadioItem value=""><span class="size-4 shrink-0" aria-hidden="true" />All profiles</MenuRadioItem>
+            <For each={props.profiles}>{(item) => <MenuRadioItem value={item.id}><HarnessMark id={item.implementation || "conduit"} class="size-4" />{item.label}</MenuRadioItem>}</For>
+          </MenuRadioGroup>
+        </MenuGroup>
+      </MenuContent>
+    </Menu>
+  </Show>;
+}
+
+/** The profiles the given chats were started with, in the catalogue's order. */
+export function profilesInUse<T extends { templateId?: string }>(templates: Array<{ id: string; label: string; implementation?: string }>, chats: T[]) {
+  const used = new Set(chats.map((chat) => chat.templateId).filter(Boolean));
+  return templates.filter((template) => used.has(template.id));
+}
+
 export function ListSearch(props: { label: string; onClick: () => void }) {
   return <button type="button" aria-label={props.label} title={props.label} onClick={props.onClick}><SearchIcon /></button>;
 }

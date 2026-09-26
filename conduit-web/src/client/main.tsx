@@ -2625,6 +2625,7 @@ function App() {
             onSearchChats={(scope) => openPalette("chat-search", scope === "unscoped" ? "scope:chats " : "", true)}
             onOpenTerminalView={() => openTerminalRoute()}
             onOpenSettings={() => openSettings()}
+            profiles={profiles()}
             onOpenTerminal={(terminal) => {
               if ((terminal.projectId === "computer" || terminal.projectId.startsWith("computer:")) && terminal.cwd) {
                 openComputer();
@@ -2675,7 +2676,7 @@ function App() {
           </div>
         </>}>
           <ChatHeader project={selectedProject()} title="Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} dashboard />
-          <ProjectDashboard project={selectedProject()!} runtime={runtime} onOpenHarnessThread={(harnessId, path, id, title) => { setPendingHarnessThread({ harnessId, path, id, title }); void openComputerHarnessHere(harnessId, path); }}
+          <ProjectDashboard project={selectedProject()!} runtime={runtime} profiles={profiles()} onOpenHarnessThread={(harnessId, path, id, title) => { setPendingHarnessThread({ harnessId, path, id, title }); void openComputerHarnessHere(harnessId, path); }}
             composer={<Composer
               chat={chat}
               place={routeKind() === "dashboard" ? chatPlace() : undefined}

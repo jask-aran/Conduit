@@ -3,7 +3,7 @@ import { createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } fro
 import { ClipboardCopyIcon, FolderInputIcon, FolderPlusIcon, MessageSquarePlusIcon, PaletteIcon, PencilIcon, PinIcon, PinOffIcon, SearchIcon, Settings2Icon, TerminalIcon, Trash2Icon } from "lucide-solid";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger } from "@/components/primitives";
 import { api, projectPath } from "../api/client";
-import type { ChatSummary, Project } from "../api/contracts";
+import type { ChatSummary, Project, Template } from "../api/contracts";
 import { activityDetail, runtimeActivity, RuntimeIndicator } from "../navigation/runtime-indicator";
 import { activityLabel } from "../../activity.js";
 import { ThreadHarnessMark } from "../harness-brand";
@@ -14,7 +14,7 @@ import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
 import { Segmented } from "../settings/settings-controls";
-import { CHAT_PAGE, DayGroups, groupByDay, ListFilter, ListSearch, ShowMore } from "./primitives/chat-list";
+import { CHAT_PAGE, DayGroups, groupByDay, ListFilter, ListSearch, ProfileFilter, profilesInUse, ShowMore } from "./primitives/chat-list";
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitRow, SplitShortcut, SplitShortcuts } from "./primitives/split";
 import "./app-dashboard.css";
 
@@ -69,12 +69,14 @@ export function AppDashboard(props: {
   onSearchChats: (scope: "unscoped" | "all") => void;
   onOpenTerminalView: () => void;
   onOpenSettings: () => void;
+  profiles: Template[];
 }) {
   const [terminals, setTerminals] = createSignal<Pty[]>([]);
   const [loading, setLoading] = createSignal(true);
   const [now, setNow] = createSignal(Date.now());
   const [unreadOnly, setUnreadOnly] = createSignal(false);
   const [limit, setLimit] = createSignal(CHAT_PAGE);
+  const [profile, setProfile] = createSignal("");
   const chatSort = useChatSort();
 
   const folders = createMemo(() => props.projects
@@ -90,6 +92,7 @@ export function AppDashboard(props: {
     const sort = chatSort();
     return allChats()
       .filter(({ chat }) => !unreadOnly() || chat.unread)
+      .filter(({ chat }) => !profile() || chat.templateId === profile())
       .sort((left, right) => compareChatsBySort(left.chat, right.chat, sort));
   });
   const chatTime = (chat: ChatSummary) => Date.parse((chatSort() === "created" ? chat.createdAt : chat.lastMessageAt || chat.createdAt) || "") || 0;
@@ -165,7 +168,7 @@ export function AppDashboard(props: {
       { value: "all", label: "Recent chats", detail: <small>{allChats().length}</small> },
       { value: "unread", label: "Unread", detail: <small>{unread()}</small> },
     ]} />}
-    actions={<><ListFilter sort={chatSort()} onSort={saveChatSort} /><ListSearch label="Search chats" onClick={() => props.onSearchChats("all")} /></>}
+    actions={<><ProfileFilter profiles={profilesInUse(props.profiles, allChats().map(({ chat }) => chat))} value={profile()} onChange={(id) => { setProfile(id); setLimit(CHAT_PAGE); }} /><ListFilter sort={chatSort()} onSort={saveChatSort} /><ListSearch label="Search chats" onClick={() => props.onSearchChats("all")} /></>}
     more={<ShowMore total={chats().length} shown={limit()} onMore={() => setLimit((value) => value + CHAT_PAGE)} />}>
     <Show when={chats().length} fallback={<SplitEmpty>{unreadOnly() ? "Nothing unread." : "Nothing here yet."}</SplitEmpty>}>
       <DayGroups groups={grouped()}>{chatRow}</DayGroups>
