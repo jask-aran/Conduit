@@ -283,6 +283,7 @@ Motion explains a change of place: where something went, and what took its place
 - **A turn starts as its header.** From the prompt until its first step, a live turn is the trace header it will become -- the orb connecting, `Starting · 02s`, one line held under it -- and its trace takes that place at the same height when the first step arrives, moving nothing.
 - **The first open settles, then shows.** Until the page is laid out -- everything that shapes it in place, the workspace panel included -- only the frame shows. Then the composer is simply there and every other region fades in around it, once (~300ms, settling), with no rise, since nothing is changing place. Nothing may arrive or move after the fade starts: a part that decides the layout is loaded before it, not revealed after it.
 - **A send moves at once.** A new chat's first message, or one sent from a dashboard, takes the composer from where it sat to the foot of the chat straight away -- one move (~420ms, settling), started in the frame the layout changes -- rather than when the agent has started. It waits there holding the message beside "Starting agent…", usually done by the time it lands; the empty chat's welcome is hidden meanwhile. From a dashboard, the dashboard around the composer leaves first (~200ms, quick), then the chat fades in as the composer travels.
+- **Cards belong to the composer.** Queued messages and the attachment strip rise out of the composer (~8px and a fade, ~300ms, gentle) and drop back into it when it takes them -- sent, or put back to edit (~200ms, quick); removed by hand, a card fades in place (~150ms), and a failed removal puts it back. In the strip, an added chip fades and scales in at the end, and a removed one fades while the chips after it slide over by transform. Anything keyed for animation is keyed by identity, so a progress update never replays an entrance.
 - **Floating controls follow.** Anything anchored to a surface — scroll-to-latest over the composer — is re-measured when that surface is swapped or lands, never left behind.
 - `prefers-reduced-motion` removes these transitions; the end state is identical.
 
@@ -351,9 +352,29 @@ Choosing in a menu:
 
 **Keycap** — 16px square, hairline, muted mono; in the text colour on the cursor row or a clickable rail action.
 
+**Disclosure** — one component for everything that folds (`chat/disclosure.tsx`): a trace, a tool call, a line of the trail, a discarded answer. A header, one turning chevron, and a body that unfolds in height and folds all the way to nothing, gap included. Opened at the transcript's tail it lets go of the tail rather than being chased, so it opens downward from where it was clicked.
+
+**Attachment strip** — every attachment for the draft in one strip directly above the composer, the queued pill's width and material, never taller than ~64px (~56px on a phone); a queued message sits above it. An image is a 48px square thumbnail, cropped, 8px radius, its name the tooltip; a file is a 48px-tall chip -- type icon, name cut at ~160px, size muted beneath. Remove is a small × at the top-right, on hover or keyboard focus and always on touch. Uploading, a thin progress ring over a slightly dimmed chip; failed, a red outline with a retry mark in its place, tapping retries (one restored with a draft has no file, so it can only be removed). More chips scroll sideways with snap and a soft fade at an edge that has more; new chips go on the end and scroll into view. A quiet ⤢ at the right end always opens the list dialog (a bottom sheet on a phone): large uncropped previews, name, size, type and remove, the count and total size in the heading, Remove all and Done.
+
+**Harness mark** — rests greyed with its row, and shows its own colour on hover, focus, or the current chat (Codex's gradient, Claude Code's orange, the rest at full foreground). Live activity or an unread reply shows in its place first. The Conduit mark is the wordmark's Druk Wide capital C (`public/brand/conduit-mark.svg`).
+
+**Sidebar action** — an action of the sidebar is a row, not a small button beside a heading: New project a wide row under New chat, New workspace one under Files, each also on the collapsed rail.
+
 **Input-quiet** — borderless inside frost composer or palette search.
 
 **Input-bordered** — 1px hairline inside settings/forms, `{rounded.md}` radius, as tall as its row needs: compact inputs (settings rows, the workspace filter, file search) are fine.
+
+# Keyboard
+
+One model for every surface, so no surface grows keys of its own.
+
+- **Regions.** The app is a tree of regions (sidebar, main pane, workspace panel, and what is inside them) following focus. Shortcuts resolve innermost region first, then outward.
+- **Go to a region.** Ctrl+Shift+1/2/3 (⌘⇧ on a Mac) take you to the sidebar, the main pane and the workspace panel in screen order. They open and focus, never close: 1 enters the sidebar at the current row (on a phone, the drawer), 2 lands in the composer when there is one, 3 opens the panel if closed. Ctrl+B and Ctrl+. stay plain show/hide toggles. Arriving shows the held-focus line (Components). F6 is not relied on.
+- **The leader acts where you are.** Ctrl+G, then a key: only actions within the current region, never moves between regions. Its second key is looked for innermost first and then outward, so an outer key works from inside. The menu lists the current region's keys under a breadcrumb path; ←/→ or Tab steps out to outer levels. A key that would do nothing where you are is not listed. Numbers inside a region mean positions (the workspace panel's tabs), never other regions.
+- **Moving in a list.** The cursor is the wash (List row). ↑/↓ move, skipping headings; Home/End go to the ends; →/← step into and out of a level; Shift+↑/↓ extends a selection; Menu or Shift+F10 opens the row's menu. Pointer and keyboard move the one cursor.
+- **Enter acts.** Opening a chat hands focus to its composer, because opening one is usually to write in it.
+- **Esc steps outward** a level at a time, and from the top of a region goes home to the open chat's composer: pressing Esc enough always gets back to typing.
+- Every scoped key can be found in the leader under its region, so nothing is discoverable only from settings.
 
 # Do's and Don'ts
 

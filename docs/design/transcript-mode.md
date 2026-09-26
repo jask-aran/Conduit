@@ -1,6 +1,6 @@
 # Transcript mode
 
-Status: seeded, not designed. Moved out of `ui-polish-sketch.md` on
+Status: seeded, not designed. Moved out of the UI polish sketch (since retired) on
 2026-09-24 because walking and acting on the transcript from the keyboard
 wants a more concrete design of its own, rather than being the last step of
 the polish doc's keyboard section.
@@ -52,8 +52,8 @@ the transcript only scrolls, and the composer keeps every key it has today.
 
 ## Keyboard, when built
 
-Move like the sidebar rather than growing keys of its own (from the polish
-doc's section 8):
+Move like the sidebar rather than growing keys of its own (`DESIGN.md`, Keyboard;
+the checklist from the retired polish sketch):
 
 - The cursor is the wash alone: one row or turn at a time, no focus ring,
   multi-select as more washes (`DESIGN.md`, List row).
