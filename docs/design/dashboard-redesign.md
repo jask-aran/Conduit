@@ -1,96 +1,63 @@
-# Dashboard redesign
+# Dashboards
 
-Status: the Conduit, project and workspace dashboards are built on the split layout; harness dashboards are designed separately. Moved out of `ui-polish-sketch.md` on
-2026-09-24 because the dashboards need an overhaul rather than more polish:
-the wish is to redesign them and arrive at a more concrete design before
-anything else is fitted to them. Keyboard navigation of their lists was the
-next polish step, and was deferred for that reason -- it should come with the
-new design rather than be fitted to the old one.
+How the Conduit, project and workspace dashboards work, what any change must
+keep, and the one piece still to build. `DESIGN.md` has the visual language
+and the composition; harness dashboards are designed separately. The
+sketches are in `docs/design/dashboard-layout/` and
+`docs/design/conduit-home-dashboard/`.
 
-Covers the app dashboard (`dashboard/app-dashboard.tsx`) and the project
-dashboard (`project/dashboard.tsx`). `DESIGN.md` stays the reference for the
-visual language; the design here is to be written.
+## How they work
 
-## What is there today
+- **One layout** (`dashboard/primitives/split.tsx`): a header with a line of
+  context and text shortcuts; the composer with the chats list under it on
+  the left; places and state on the right. One column on a narrow pane; on a
+  phone the shortcuts are large targets and the composer docks at the foot.
+- **The Conduit dashboard is the new-chat screen.** New chat without a place
+  of its own lands here with the composer focused. Its right column is the
+  folder shelf (project folders as folders), then Workspaces and Terminals.
+- **Project and workspace dashboards** show Terminals (workspace) and
+  Changes when the tree is dirty, else the folder's recent files. Manage
+  actions sit behind the header's ⋯.
+- **The chats heading is the same everywhere** (`primitives/chat-list.tsx`):
+  - Left: Recent chats / Unread. A workspace adds Conduit chats / Not in
+    Conduit beside it, remembered per workspace.
+  - Right, in order: the Profile filter, the sort menu (Latest activity /
+    Created), search scoped to where you are. On Not in Conduit the harness
+    filter replaces the profile and sort menus.
+  - Rows are grouped by day as the search overlay groups them, 40 at a time
+    with Show more. A running chat stays in the list, its dot and activity
+    saying so. Not in Conduit threads open in the harness's Drive view,
+    untracked.
+- **The composer's place.** A folder button beside attach (on a phone, the
+  plus menu's Project row) moves the open chat, draft or not, into a project
+  or workspace, and shows that place's own mark once it has one.
+- Empty lists read "Nothing here yet." with no action of their own: the
+  sidebar already holds the ways to start something.
 
-The app dashboard is an intro title ("Start where the work is."), a launch
-row -- the composer, with a Search chats quick action beside it -- and a grid
-of sections: Recent chats, Recent Workspaces and Live terminals. The project
-project and workspace dashboards are built: a header with the context line
-and text shortcuts, the composer with the threads list under it on the left,
-and Terminals and Changes (or recent Files) on the right; one column on a
-narrow pane. `DESIGN.md` describes the composition. The Conduit dashboard
-uses the same layout and is also the new-chat screen.
-
-## Carried over from the polish doc
-
-### Empty states (polish section 5, built reduced)
-
-An empty section does not need its own action: the ways to start a chat or
-add a project or workspace already sit in the sidebar, and a second target
-in every empty section would only repeat them. Empty dashboard chat and
-workspace lists read "Nothing here yet."; Live terminals stays a live
-reference list with no action, since there is nowhere useful for "Open
-terminal" to go. The sidebar's own actions were made rows instead (New
-project under New chat, New workspace under Files). Telling loading and a
-failed request apart from empty was not taken up.
-
-The original sketch, for reference: the dashboard used "No recent chats",
-"No Workspaces yet" and "No live terminals", which describe an absence but
-give no next step. It proposed pairing a short explanation with the
-relevant existing action, keeping each state compact with no tutorial copy
-or illustration, distinguishing empty from loading or a failed request (an
-unavailable server offers recovery rather than suggesting the data does not
-exist), and reviewing both a new account and an established one with an
-empty section.
-
-### Keyboard navigation of the lists (polish section 8, step 4, deferred)
-
-The sidebar's cursor (`navigation/sidebar-cursor.ts`) is the model the lists
-were to follow: the focused row is the wash, with no focus ring; ↑/↓ and
-Home/End move; Enter opens and enters the page at its composer; Menu or
-Shift+F10 opens the row's menu; the pointer and keyboard share one cursor;
-Esc goes back to the composer. The sketch for the dashboards added that a
-dashboard is a grid of sections rather than one list, so ↑/↓ would stay
-within a section and stop at its ends and Tab would move to the next
-section, and it suggested making the sidebar's cursor a shared list cursor
-that takes a region, its rows and its section boundaries, so the sidebar and
-both dashboards use one implementation. All of this waits on the redesign.
-
-### What the redesign must keep
+## What a change must keep
 
 - **The first open.** Only the frame shows until the page is laid out; then
   the composer is simply there and everything around it fades in, once
-  (`DESIGN.md`, Motion). Anything that shapes the layout must be in place
-  before the fade.
+  (`DESIGN.md`, Motion). Anything that shapes the layout is in place first.
 - **Sending from a dashboard.** The message goes at once; the dashboard
-  around the composer leaves (~200ms, quick), and the chat arrives once the
-  message is in it, its composer travelling from the dashboard's spot to the
-  foot in one move (`sendFromDashboard` in `main.tsx`). A new layout keeps a
-  composer the chat's can travel from.
+  leaves (~200ms) and the chat arrives with its composer travelling from the
+  dashboard's spot to the foot in one move (`sendFromDashboard`, `main.tsx`).
 - **Entering the page.** Opening a dashboard from the sidebar, Ctrl+Shift+2,
-  or a route change that drops focus puts focus in its composer.
+  or a route change that drops focus puts focus in its composer. Opening the
+  Conduit dashboard while on it changes nothing.
 
-## To design
+## To build: keyboard
 
-The layout, what each section is for and whether it earns its place, the
-project dashboard's relation to the app dashboard, and then the list cursor
-on top of whatever results.
+Move like the sidebar (`navigation/sidebar-cursor.ts`) rather than growing
+keys of its own, ideally by making its cursor a shared list cursor that takes
+a region and its rows:
 
-## Keyboard, when built
-
-Move like the sidebar rather than growing keys of its own (from the polish
-doc's section 8):
-
-- The cursor is the wash alone: one row or turn at a time, no focus ring,
-  multi-select as more washes (`DESIGN.md`, List row).
-- The pointer and keyboard move the one cursor; a row under a still pointer
-  draws at rest while the keyboard leads.
-- ↑/↓, Home/End, →/← into and out of a level, Enter acts, Menu or Shift+F10
-  opens the row's menu, Esc steps out and from the top goes home to the
+- The cursor is the wash alone, one row at a time, no focus ring; pointer
+  and keyboard move the same cursor.
+- In the chats list ↑/↓ and Home/End move through rows across day headings;
+  Enter opens; Menu or Shift+F10 opens the row's menu; Esc returns to the
   composer.
-- Entering from the keyboard lands on a sensible first stop, with the
-  region cue; opening a page enters it at its composer.
-- Its region is in the context tree, and its keys appear in the leader under
-  its own name.
+- Tab moves between the chats list and each group of the right column, where
+  ↑/↓ stay within the group; the folder shelf moves with ←/→ as well.
+- Its region is in the context tree and its keys show in the leader.
 - Reduced motion and the phone layout behave.
