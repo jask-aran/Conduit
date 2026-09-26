@@ -164,8 +164,31 @@ export function MobileComposerOptions(props: {
     go("root");
   };
 
-  return <div class="composer-mobile-plus">
-    <Menu modal={false} onOpenChange={(open) => { if (!open) setPanel("root"); }}>
+  /* A tap outside the open menu only closes it, as a tap beside a submenu only
+     returns to the options: the tap's own click and the mouse events that
+     follow it never reach the transcript underneath. */
+  let plusRoot: HTMLDivElement | undefined;
+  let stopWatchingOutside: (() => void) | undefined;
+  const swallow = (event: Event) => { event.preventDefault(); event.stopPropagation(); };
+  const watchOutside = () => {
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target || (target instanceof Element && target.closest(".composer-options-menu")) || plusRoot?.contains(target)) return;
+      const kinds = ["pointerup", "mouseup", "click", "touchend"] as const;
+      kinds.forEach((kind) => document.addEventListener(kind, swallow, true));
+      window.setTimeout(() => kinds.forEach((kind) => document.removeEventListener(kind, swallow, true)), 450);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    stopWatchingOutside = () => document.removeEventListener("pointerdown", onPointerDown, true);
+  };
+  onCleanup(() => stopWatchingOutside?.());
+
+  return <div class="composer-mobile-plus" ref={plusRoot}>
+    <Menu modal={false} onOpenChange={(open) => {
+      stopWatchingOutside?.();
+      stopWatchingOutside = undefined;
+      if (open) watchOutside(); else setPanel("root");
+    }}>
       <MobileComposerPlusTrigger
         serverOnline={composer.serverOnline}
         captureComposerFocus={captureComposerFocus}
