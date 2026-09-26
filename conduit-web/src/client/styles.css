@@ -2503,7 +2503,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 }
 
 /* Search and the command palette in the composer's frost (the palette sketch,
-   docs/palette-sketches): pinned near the top, sidebar-weight group labels,
+   docs/design/palette-sketch): pinned near the top, sidebar-weight group labels,
    one-line rows, keycaps on rows as in the rail, scope and activity as chips
    in the bar, and a preview column in chat search. */
 .command-dialog { background: rgb(0 0 0 / 42%); }

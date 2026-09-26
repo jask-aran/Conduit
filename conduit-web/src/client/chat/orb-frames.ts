@@ -5,7 +5,7 @@ import { finalizeFrame, makeProj, radiusScale, type Dot, type ModeFrame } from "
  * built from the engine's own pieces -- its camera, its dot scaling and its
  * z-sort -- in its depth language: near dots larger and brighter, far ones
  * smaller and dimmer. So they are the same object as the library's, moving
- * differently. `t` is seconds. The catalogue in docs/orb-stills shows each
+ * differently. `t` is seconds. The catalogue in docs/design/orb-catalogue shows each
  * beside every other frame the orb can draw, and which state uses each.
  */
 const TAU = Math.PI * 2;

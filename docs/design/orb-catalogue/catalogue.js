@@ -12,7 +12,7 @@
  * and sputtering spheres, the trailed orbits) and the state table in
  * turn-trace.tsx; IN_APP below mirrors them.
  */
-import { MODE_FRAMES, finalizeFrame, makeProj, radiusScale, resolvePreset } from "../../conduit-web/node_modules/thinking-orbs/dist/engine.es.js";
+import { MODE_FRAMES, finalizeFrame, makeProj, radiusScale, resolvePreset } from "../../../conduit-web/node_modules/thinking-orbs/dist/engine.es.js";
 
 const S = 20, C = S / 2, R = C * 0.82, rs = radiusScale(S, 0.6), TAU = Math.PI * 2;
 
