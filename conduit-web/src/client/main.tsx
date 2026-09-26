@@ -27,6 +27,7 @@ import type { BooleanCapability, ChatSummary, DashboardChat, HarnessManifestView
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
 import { AppDashboard } from "./dashboard/app-dashboard";
+import { PlacePicker } from "./chat/place-picker";
 import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_STORAGE_KEY, selectedComposerSurface } from "./chat/composer-surface";
 import type { VoiceDictationSettings } from "./chat/voice-dictation-types";
 import { CONTEXT_METRIC_STORAGE_KEY, formatContextMetrics, saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
@@ -1673,6 +1674,19 @@ function App() {
     }
     return failures.map((failure) => failure.id);
   };
+  // The composer's folder button: the open chat, draft or not, moves to the
+  // chosen place and stays open there.
+  const chatOwner = () => catalogue.projects().find((project) => project.sessions.some((session) => session.id === chat.loadedId()));
+  const placeChat = async (destination: Project) => {
+    const id = chat.loadedId();
+    if (!id) return;
+    try {
+      await api(`/v0/sessions/${id}/move`, { method: "POST", body: JSON.stringify({ projectId: destination.id }) });
+      await refresh();
+      if (routeKind() === "chat") catalogue.selectProject(destination);
+    } catch (error) { showError(error); }
+  };
+  const chatPlace = () => <PlacePicker projects={catalogue.projects()} current={chatOwner()} disabled={!chat.loadedId() || runtime.connectivity() !== "online"} onChoose={(project) => void placeChat(project)} />;
   const moveProjectChats = async (source: Project, destination: Project) => {
     try { await api(`/v0/projects/${source.id}/move-sessions`, { method: "POST", body: JSON.stringify({ projectId: destination.id }) }); await refresh(); }
     catch (error) { showError(error); }
@@ -2558,6 +2572,7 @@ function App() {
             projects={catalogue.projects()}
             composer={<Composer
               chat={chat}
+              place={routeKind() === "dashboard" ? chatPlace() : undefined}
               supports={chatCapability}
               attachments={attachments}
               attachmentsSupported={chatCapability("attachments", true)}
@@ -2576,7 +2591,7 @@ function App() {
               onOpenAttachments={() => attachFileInput?.click()}
               onStatusChange={setComposerStatus}
               onSendDraft={async (prompt) => {
-                const project = catalogue.projects().find((item) => item.slug === "chat");
+                const project = chatOwner() || catalogue.projects().find((item) => item.slug === "chat");
                 const id = chat.loadedId();
                 if (!project || !id) return;
                 // Sending is what ends a draft -- the server flips the status
@@ -2652,7 +2667,7 @@ function App() {
             <section class="work-area-conversation" aria-label="Conversation" aria-busy={openingLiveChat()}>
               <Transcript chat={chat} supports={chatCapability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} projectId={selectedProject()?.id} />
               <div ref={chatComposerStack} class="composer-stack" data-question={chat.hostUiRequests().length ? "true" : undefined}><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-                <Composer chat={chat} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
+                <Composer chat={chat} place={chatPlace()} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
             </section>
           </div>
         </>}>
@@ -2660,6 +2675,7 @@ function App() {
           <ProjectDashboard project={selectedProject()!} runtime={runtime} onOpenHarnessThread={(harnessId, path, id, title) => { setPendingHarnessThread({ harnessId, path, id, title }); void openComputerHarnessHere(harnessId, path); }}
             composer={<Composer
               chat={chat}
+              place={routeKind() === "dashboard" ? chatPlace() : undefined}
               supports={chatCapability}
               attachments={attachments}
               attachmentsSupported={chatCapability("attachments", true)}
