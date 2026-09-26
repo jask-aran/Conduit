@@ -138,7 +138,7 @@ components:
 
 # Overview
 
-Conduit is a self-hosted, always-dark agent control plane. The look is charcoal and quiet: a darker frame, inset rounded panes, plain lists grouped by a heading and space -- the sidebar is the reference -- and frosted glass floating chrome. The hairline tiles Conduit started with are being retired; they remain in the workspace panel and the harness dashboards until those are redesigned (`docs/dashboard-redesign.md`). It is not a marketing site, not a light theme, and not a colorful dashboard.
+Conduit is a self-hosted, always-dark agent control plane. The look is charcoal and quiet: a darker frame, inset rounded panes, plain lists grouped by a heading and space -- the sidebar is the reference -- and frosted glass floating chrome. The hairline tiles Conduit started with are being retired; they remain in the workspace panel and the harness dashboards until those are redesigned (`docs/design/dashboard-redesign.md`). It is not a marketing site, not a light theme, and not a colorful dashboard.
 
 The accepted surfaces are the app dashboard, the chat/workspace split, the frosted composer, the header action pill, and the model-picker palette. Copy those patterns. Frosted glass is the signature material for floating chrome, the command palette and chat search included. The leader menu takes it too.
 

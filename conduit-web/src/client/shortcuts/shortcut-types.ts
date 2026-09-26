@@ -32,7 +32,7 @@ export const SHORTCUT_CONTEXT_PRIORITY = [
   "settings",
   // The regions, each before the ones it sits inside. The main pane is one
   // region whole: its composer and transcript are parts of it, not regions of
-  // their own (transcript mode may bring one back, docs/transcript-mode.md).
+  // their own (transcript mode may bring one back, docs/design/transcript-mode.md).
   "workspace-panel",
   "sidebar",
   "chat",

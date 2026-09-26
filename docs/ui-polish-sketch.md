@@ -515,7 +515,7 @@ keyboard. Desktop density changes are outside this proposal.
 ## 5. Make empty states useful
 
 Status: built, reduced; the dashboard part moved to
-[`dashboard-redesign.md`](dashboard-redesign.md), since the dashboards are to
+[`dashboard-redesign.md`](design/dashboard-redesign.md), since the dashboards are to
 be redesigned rather than polished. What stays here is the sidebar's share:
 its actions were made rows -- **New project** a wide row under New chat and
 **New workspace** one under Files, each also on the collapsed rail --
@@ -788,7 +788,7 @@ while typing at the root searches chat titles and folder names. The scope path
 stays above the input; the footer keeps navigation keys and activity filters.
 
 The transcript's share of this -- walking and acting on turns -- moved to
-[`transcript-mode.md`](transcript-mode.md): ↑ from the composer already walks
+[`transcript-mode.md`](design/transcript-mode.md): ↑ from the composer already walks
 sent messages, so it becomes a mode of its own, to be designed concretely.
 
 ### The leader as the map
@@ -838,8 +838,8 @@ the go-to chords are shown as the way out.
    regions actions of their own -- rename, pin, move on a row -- and without
    them the leader has little to show. The dashboard lists and transcript
    turns were to follow and moved out, each to be designed concretely first:
-   [`dashboard-redesign.md`](dashboard-redesign.md) and
-   [`transcript-mode.md`](transcript-mode.md). The sidebar is built (`navigation/sidebar-cursor.ts`):
+   [`dashboard-redesign.md`](design/dashboard-redesign.md) and
+   [`transcript-mode.md`](design/transcript-mode.md). The sidebar is built (`navigation/sidebar-cursor.ts`):
    the cursor is the focused row; ↑/↓, Home/End; → opens a project then
    steps in, ← steps out then closes; Esc clears a selection, steps out,
    then goes home to the composer; Shift+↑/↓ selects chats as washes; Menu
@@ -878,8 +878,8 @@ Each step is its own change, checked before the next.
 ### Waiting on other designs
 
 The dashboard lists and transcript turns moved to
-[`dashboard-redesign.md`](dashboard-redesign.md) and
-[`transcript-mode.md`](transcript-mode.md). When each is built, come back
+[`dashboard-redesign.md`](design/dashboard-redesign.md) and
+[`transcript-mode.md`](design/transcript-mode.md). When each is built, come back
 here and tick it off against the systems above, so it moves like the
 sidebar rather than growing keys of its own:
 
