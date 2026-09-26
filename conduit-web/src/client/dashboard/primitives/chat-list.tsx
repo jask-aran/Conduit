@@ -62,7 +62,7 @@ export function ListFilter(props: {
     : `${props.sort === "created" ? "Created" : "Latest"}${props.unreadOnly ? " · Unread" : ""}`;
   return <Menu modal={false}>
     <MenuTrigger class="split-list-filter" title="Filter and sort">{summary()}<ChevronDownIcon /></MenuTrigger>
-    <MenuContent class="w-48">
+    <MenuContent class={props.harnesses ? "w-56" : "w-48"}>
       <Show when={props.onSort}>
         <MenuGroup>
           <MenuLabel>Sort by</MenuLabel>
@@ -80,8 +80,8 @@ export function ListFilter(props: {
         <MenuGroup>
           <MenuLabel>Harness</MenuLabel>
           <MenuRadioGroup value={props.harness || ""} onChange={(value: string) => props.onHarness?.(value)}>
-            <MenuRadioItem value="">All harnesses</MenuRadioItem>
-            <For each={props.harnesses}>{(item) => <MenuRadioItem value={item.id}><HarnessMark id={item.id} />{item.label}</MenuRadioItem>}</For>
+            <MenuRadioItem value=""><span class="size-4 shrink-0" aria-hidden="true" />All harnesses</MenuRadioItem>
+            <For each={props.harnesses}>{(item) => <MenuRadioItem value={item.id}><HarnessMark id={item.id} class="size-4" />{item.label}</MenuRadioItem>}</For>
           </MenuRadioGroup>
         </MenuGroup>
       </Show>
