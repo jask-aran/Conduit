@@ -5,20 +5,16 @@ import type { Project } from "../api/contracts";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import "./place-picker.css";
 
-const isWorkspace = (project: Project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || "");
+export type PlaceOptions = { projects: Project[]; current?: Project | null; disabled?: boolean; onChoose: (project: Project) => void };
+
+export const isWorkspace = (project: Project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || "");
 
 /**
  * The composer's folder button: puts the chat in a project or workspace, or
  * takes it out of one. A searchable list of places, as Claude's "Add to
  * project" is, without the menu in front of it.
  */
-export function PlacePicker(props: {
-  projects: Project[];
-  /** The place the chat is in now; the "chat" root means no folder. */
-  current?: Project | null;
-  disabled?: boolean;
-  onChoose: (project: Project) => void;
-}) {
+export function PlacePicker(props: PlaceOptions) {
   const [open, setOpen] = createSignal(false);
   const [query, setQuery] = createSignal("");
   const root = createMemo(() => props.projects.find((project) => project.slug === "chat"));

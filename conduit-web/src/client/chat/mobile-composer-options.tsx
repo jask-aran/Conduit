@@ -5,7 +5,7 @@ import { For, Show, createSignal, createUniqueId, onCleanup } from "solid-js";
 // @ts-expect-error Kobalte does not publish declarations for this internal chunk.
 import { useMenuContext } from "../../../node_modules/@kobalte/core/dist/chunk/L544S5A4.jsx";
 import type { FocusOutsideEvent } from "@kobalte/core";
-import { ChevronRightIcon, PaperclipIcon, PlusIcon, SearchIcon, ShieldCheckIcon } from "lucide-solid";
+import { ChevronRightIcon, FolderIcon, PaperclipIcon, PlusIcon, SearchIcon, ShieldCheckIcon } from "lucide-solid";
 import {
   Menu,
   MenuContent,
@@ -24,9 +24,11 @@ import type { ServiceLevelSettings } from "../state/service-level-settings";
 import { HarnessMark } from "../harness-brand";
 import { StepSlider } from "./step-slider";
 import { contextUsagePercent } from "./context-metrics";
+import { isWorkspace, type PlaceOptions } from "./place-picker";
+import { WorkspaceGlyph } from "../project/workspace-appearance";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
-type MobileOptionsPanel = "root" | "models" | "effort" | "profiles" | "permissions";
+type MobileOptionsPanel = "root" | "models" | "effort" | "profiles" | "permissions" | "places";
 
 export function MobileComposerOptions(props: {
   composer: {
@@ -41,6 +43,7 @@ export function MobileComposerOptions(props: {
     onOpenSettings: (section: string) => void;
     onOpenModelSelector?: () => void;
     onOpenAttachments: () => void;
+    place?: PlaceOptions;
   };
 }) {
   const composer = props.composer;
@@ -206,6 +209,11 @@ export function MobileComposerOptions(props: {
           <MenuItem disabled={!composer.serverOnline} onSelect={composer.onOpenAttachments}>
             <PaperclipIcon /><span>Attach files</span>
           </MenuItem>
+          <Show when={composer.place}>{(place) =>
+            <MenuItem closeOnSelect={false} disabled={place().disabled} onSelect={() => go("places")} class="composer-options-value" aria-label="Add to project">
+              <FolderIcon /><span>{place().current && place().current!.slug !== "chat" ? place().current!.name : "Add to project"}</span><ChevronRightIcon />
+            </MenuItem>}
+          </Show>
          </MenuGroup>
         </div>
         <Show when={panel() === "models"}>
@@ -243,6 +251,25 @@ export function MobileComposerOptions(props: {
             </MenuGroup>
           </div>
         </Show>
+        <Show when={panel() === "places" && composer.place}>{(_) => {
+          const place = composer.place!;
+          const root = () => place.projects.find((project) => project.slug === "chat");
+          const places = () => place.projects.filter((project) => project.slug !== "chat" && project.state !== "cloning")
+            .sort((left, right) => Number(isWorkspace(left)) - Number(isWorkspace(right)) || left.name.localeCompare(right.name));
+          return <div class="composer-options-submenu composer-places-menu">
+            <MenuGroup>
+              <MenuLabel class="composer-options-label">Add to project</MenuLabel>
+              <Show when={place.current && place.current.slug !== "chat" && root()}>
+                <MenuItem onSelect={() => place.onChoose(root()!)}><FolderIcon /><span>No folder</span></MenuItem>
+              </Show>
+              <For each={places()}>{(project) =>
+                <MenuItem class={project.id === place.current?.id ? "composer-place-current" : undefined} onSelect={() => { if (project.id !== place.current?.id) place.onChoose(project); }}>
+                  <Show when={isWorkspace(project)} fallback={<FolderIcon />}><WorkspaceGlyph appearance={project.workspaceAppearance} /></Show><span>{project.name}</span>
+                </MenuItem>}
+              </For>
+            </MenuGroup>
+          </div>;
+        }}</Show>
         <Show when={panel() === "permissions"}>
           <div class="composer-options-submenu composer-permissions-menu">
             <MenuGroup>
