@@ -3,6 +3,8 @@ import { CheckIcon, ChevronDownIcon, LayersIcon, SearchIcon } from "lucide-solid
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@/components/primitives";
 import { HarnessMark } from "../../harness-brand";
 import { SplitGroupMore } from "./split";
+import type { Project } from "../../api/contracts";
+import { PlaceGlyph } from "../../chat/place-picker";
 
 // The chats list at the head of every dashboard's left column, so the Conduit,
 // project and workspace dashboards read and behave alike: the list's name (a
@@ -112,6 +114,25 @@ export function ProfileFilter(props: { profiles: Array<{ id: string; label: stri
           <MenuRadioGroup value={props.value} onChange={(value: string) => props.onChange(value)}>
             <MenuRadioItem value=""><LayersIcon class="size-4" />All profiles</MenuRadioItem>
             <For each={props.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={!props.used.has(item.id) && item.id !== props.value}><HarnessMark id={item.implementation || "conduit"} class="size-4" />{item.label}</MenuRadioItem>}</For>
+          </MenuRadioGroup>
+        </MenuGroup>
+      </MenuContent>
+    </Menu>
+  </Show>;
+}
+
+/** Filter by the project or workspace a chat lives in, each with its own mark. */
+export function PlaceFilter(props: { label: string; all: string; places: Array<{ id: string; label: string; project: Project }>; value: string; onChange: (id: string) => void }) {
+  const current = () => props.places.find((item) => item.id === props.value)?.label || props.all;
+  return <Show when={props.places.length}>
+    <Menu modal={false}>
+      <MenuTrigger class="split-list-filter" title={`Filter by ${props.label.toLowerCase()}`}>{current()}<ChevronDownIcon /></MenuTrigger>
+      <MenuContent class="w-56">
+        <MenuGroup>
+          <MenuLabel>{props.label}</MenuLabel>
+          <MenuRadioGroup value={props.value} onChange={(value: string) => props.onChange(value)}>
+            <MenuRadioItem value=""><LayersIcon class="size-4" />{props.all}</MenuRadioItem>
+            <For each={props.places}>{(item) => <MenuRadioItem value={item.id}><span class="size-4 shrink-0 grid place-items-center"><PlaceGlyph project={item.project} /></span>{item.label}</MenuRadioItem>}</For>
           </MenuRadioGroup>
         </MenuGroup>
       </MenuContent>
