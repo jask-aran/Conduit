@@ -683,6 +683,8 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     setPaneTab(side, next);
     focusTabDefault(next, side);
   };
+  // A key the leader lists must do something here: Source Control only with
+  // a repository, the split only while the panel is wide enough to split.
   const workspaceShortcutAvailable = () => !document.querySelector(
     '.command-dialog[data-state="open"], .settings-dialog[data-state="open"], .conduit-modal[data-state="open"], .external-link-dialog[data-state="open"]',
   );
@@ -703,10 +705,10 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   };
   const releaseShortcutHandlers = [
     props.shortcuts.registerHandler(COMMAND_IDS.workspaceFiles, "workspace-panel", () => selectShortcutTab("files"), { when: workspaceShortcutAvailable }),
-    props.shortcuts.registerHandler(COMMAND_IDS.workspaceSourceControl, "workspace-panel", () => selectShortcutTab("diff"), { when: workspaceShortcutAvailable }),
+    props.shortcuts.registerHandler(COMMAND_IDS.workspaceSourceControl, "workspace-panel", () => selectShortcutTab("diff"), { when: () => props.sourceControlEnabled() && workspaceShortcutAvailable() }),
     props.shortcuts.registerHandler(COMMAND_IDS.workspaceChat, "workspace-panel", () => selectShortcutTab("chat"), { when: workspaceShortcutAvailable }),
     props.shortcuts.registerHandler(COMMAND_IDS.workspaceTerminal, "workspace-panel", () => selectShortcutTab("terminal"), { when: workspaceShortcutAvailable }),
-    props.shortcuts.registerHandler(COMMAND_IDS.workspaceSplit, "workspace-panel", toggleSplit, { when: workspaceShortcutAvailable }),
+    props.shortcuts.registerHandler(COMMAND_IDS.workspaceSplit, "workspace-panel", toggleSplit, { when: () => props.expanded() && workspaceShortcutAvailable() }),
   ];
   onCleanup(() => releaseShortcutHandlers.forEach((release) => release()));
   const selectSourceControlMode = (mode: SourceControlMode) => {
