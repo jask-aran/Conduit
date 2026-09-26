@@ -13,6 +13,7 @@ import { HarnessMark } from "../harness-brand";
 import type { RuntimeStore } from "../state/runtime";
 import { HarnessDashboard } from "./harness-dashboard";
 import "./app-dashboard.css";
+import "./computer-dashboard.css";
 
 type Entry = {
   name: string;
