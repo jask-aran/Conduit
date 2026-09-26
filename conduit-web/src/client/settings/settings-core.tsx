@@ -41,6 +41,7 @@ import { ShortcutsSettings } from "./shortcuts-settings";
 import { Segmented, Switch } from "./settings-controls";
 import { combineSaveStates, createAutosave, type SaveState } from "./autosave";
 import { SaveStatus } from "./save-status";
+import { uiPreferenceSaves } from "../preferences/ui-preferences";
 
 const sectionGroups = [
   { label: "Personal", sections: [{ id: "ui", label: "Appearance", icon: MonitorIcon }, { id: "shortcuts", label: "Shortcuts", icon: KeyboardIcon }] },
@@ -275,6 +276,14 @@ export function Settings(props: {
   const [sessionNameModel, setSessionNameModel] = createSignal("");
   const [sessionNameThinkingLevel, setSessionNameThinkingLevel] = createSignal("off");
   const [generalLoading, setGeneralLoading] = createSignal(false);
+  const namingAutosave = createAutosave<Pick<GeneralPreferences, "sessionNameModel" | "sessionNameThinkingLevel">>({
+    save: (value) => api<GeneralPreferences>("/v0/preferences", { method: "PATCH", body: JSON.stringify(value) }),
+    onSaved: (saved) => { setSessionNameModel(saved.sessionNameModel); setSessionNameThinkingLevel(saved.sessionNameThinkingLevel); },
+  });
+  const defaultProfileAutosave = createAutosave<string>({
+    save: async (id) => { await props.onDefaultTemplateChange(id); return id; },
+    onSaved: () => {},
+  });
   const [prompts, setPrompts] = createSignal<EditablePrompt[]>([]);
   const [promptId, setPromptId] = createSignal("");
   const [promptDraft, setPromptDraft] = createSignal("");
@@ -1011,20 +1020,10 @@ export function Settings(props: {
     } catch (error) { toast.error((error as Error).message); }
     finally { setGeneralLoading(false); }
   };
-  const saveSessionNaming = async (model: string, thinkingLevel: string) => {
+  const saveSessionNaming = (model: string, thinkingLevel: string) => {
     setSessionNameModel(model);
     setSessionNameThinkingLevel(thinkingLevel);
-    try {
-      const saved = await api<GeneralPreferences>("/v0/preferences", {
-        method: "PATCH",
-        body: JSON.stringify({ sessionNameModel: model, sessionNameThinkingLevel: thinkingLevel }),
-      });
-      setSessionNameModel(saved.sessionNameModel);
-      setSessionNameThinkingLevel(saved.sessionNameThinkingLevel);
-    } catch (error) {
-      toast.error((error as Error).message);
-      void loadGeneralPreferences();
-    }
+    namingAutosave.edit({ sessionNameModel: model, sessionNameThinkingLevel: thinkingLevel }, "now");
   };
   const chooseSessionNameModel = (model: string) => {
     const levels = namingModels().find((item) => item.spec === model)?.thinkingLevels || ["off"];
@@ -1063,6 +1062,9 @@ export function Settings(props: {
     runtime: { label: "Runtime settings", saves: [runtimeAutosave] },
     prompts: { label: "Prompt", saves: [promptAutosave] },
     voice: { label: "Voice settings", saves: [voiceAutosave, voiceDraftAutosave] },
+    models: { label: "Model defaults", saves: [defaultProfileAutosave, namingAutosave] },
+    ui: { label: "Appearance", saves: [uiPreferenceSaves] },
+    shortcuts: { label: "Shortcuts", saves: [uiPreferenceSaves] },
   };
   for (const [id, entry] of Object.entries(autosaved) as Array<[Section, NonNullable<(typeof autosaved)[Section]>]>) {
     createEffect(on(() => props.open && section() === id, (showing, wasShowing) => {
@@ -1411,7 +1413,7 @@ export function Settings(props: {
             <section class="settings-group" aria-label="Defaults">
               <h3>Defaults</h3>
               <Show when={!props.templatesLoading} fallback={<div class="settings-line"><span>Default profile<em>loading…</em></span><span /></div>}>
-                <label class="settings-line" for="default-profile"><span>Default profile</span><select id="default-profile" value={props.defaultTemplateId} onChange={(event) => void props.onDefaultTemplateChange(event.currentTarget.value)}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></select></label>
+                <label class="settings-line" for="default-profile"><span>Default profile</span><select id="default-profile" value={props.defaultTemplateId} onChange={(event) => defaultProfileAutosave.edit(event.currentTarget.value, "now")}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></select></label>
               </Show>
               <div class="settings-line"><span>Session naming</span>
                 <ModelSelector

@@ -1,7 +1,7 @@
 /// <reference types="vite-plugin-pwa/client" />
 import { isConduitManagedProject } from "./navigation/sidebar-preferences";
 import type { ComputerLocation, ComputerPrefetchPayload } from "./api/contracts";
-import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, For, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, For, lazy, on, onCleanup, onMount, Show, untrack, type JSX } from "solid-js";
 import { render } from "solid-js/web";
 import { androidShell, desktopShell, isInstalledClient } from "./platform/installed-client.ts";
 import {
@@ -73,7 +73,7 @@ import { isShortcutRegion } from "./shortcuts/shortcut-types";
 import { acknowledgeRegion } from "./shortcuts/region-cue";
 import { globalShortcuts } from "./shortcuts/global-shortcuts";
 import { dropScope, migrateWorkspacePanelStorage, readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace/workspace-panel-storage";
-import { publishUiPreference, saveUiPreference, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
+import { publishUiPreference, queueUiPreferenceSave, uiPreferenceSaves, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
 import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
 import { INCREMARK_PACING_STORAGE_KEY } from "./chat/incremark-pacing";
 import { harnessLabelFor } from "./harness-brand";
@@ -1793,6 +1793,11 @@ function App() {
     publishUiPreference("sidebarChatLimit", value);
   };
   const switchContextMetrics = (next: ContextMetricId[]) => setContextMetrics(saveContextMetrics(next));
+  // Settings says a failed preference save in its header; elsewhere it is a toast.
+  createEffect(() => {
+    const state = uiPreferenceSaves.state();
+    if (state.kind === "failed" && !untrack(settingsOpen)) showError(new Error(`Preferences not saved: ${state.message}`));
+  });
   const saveDefaultTemplate = async (id: string) => {
     const saved = await api<{ defaultTemplateId: string }>("/v0/preferences", { method: "PATCH", body: JSON.stringify({ defaultTemplateId: id }) });
     setDefaultTemplateId(saved.defaultTemplateId || id);
@@ -2088,14 +2093,11 @@ function App() {
 
   onMount(() => {
     let hydratingUiPreferences = false;
-    let preferenceSave = Promise.resolve<unknown>(undefined);
     const persistUiPreference = (event: Event) => {
       if (hydratingUiPreferences) return;
       const detail = (event as CustomEvent<{ key?: UiPreferenceKey; value?: UiPreferences[UiPreferenceKey] }>).detail;
       if (!detail?.key) return;
-      preferenceSave = preferenceSave
-        .then(() => saveUiPreference(detail.key!, detail.value!))
-        .catch((error) => { showError(error); });
+      queueUiPreferenceSave(detail.key, detail.value!);
     };
     window.addEventListener(UI_PREFERENCE_CHANGE_EVENT, persistUiPreference);
     // One reducer for every channel that hands over a chat row: the global

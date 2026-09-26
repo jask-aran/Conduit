@@ -5,7 +5,7 @@ opened trace as a trail), 2 (composer hierarchy), 5 (empty
 states, reduced) and 7 (motion, but for the deferred dashboard transition)
 are built and recorded below as built, as is 8 (keyboard) but for what waits
 on the dashboard redesign and transcript mode; 3 (autosave) is built for
-Runtime, Prompts and Voice; 4 remains a proposal, and 6 goes on surface by surface.
+every settings section; 4 remains a proposal, and 6 goes on surface by surface.
 
 These proposals cover transcript density, composer hierarchy, mobile file
 browsing, useful empty states, and interaction feedback. A separate autosave
@@ -449,7 +449,9 @@ or "Not saved" and Retry in the danger colour. Leaving the section or
 closing Settings sends what is waiting; if that fails where nobody is
 looking, a toast says so. Checked in the browser: three quick edits sent one
 request with the last value; an out-of-range value sent nothing; leaving at
-once still saved. Not yet exercised: a failing save (the path is there).
+once still saved. A failing save was exercised later with the server's
+reply forced to 500: "Not saved" and Retry, then "Saved" once Retry went
+through, and a fresh edit after a failure clears it the same way.
 
 **Prompts** and **Voice** followed, and their Save buttons are gone too.
 A prompt saves after a longer pause (800ms); an empty one is held back with
@@ -466,9 +468,17 @@ sends what is waiting first. Found on the way: saving a prompt redrew its
 option in the selector, which then showed the next prompt while you were
 still editing the first.
 
-Next: the sections that already save on change with no feedback (default
-profile, session naming, context metrics, shortcuts, appearance) take the
-header status. Credentials (API keys, sign-in) are actions, not settings.
+**Appearance**, **Shortcuts** and **Models** followed with no new
+controls, since they already saved on change and only lacked the status.
+Every UI preference now reaches the server through one autosave
+(`uiPreferenceSaves` in `preferences/ui-preferences.ts`): edits made while
+a save is out go together in the next, and a failure keeps them all for
+Retry. Appearance and Shortcuts show its state in their header; outside
+Settings (a sidebar fold, a sort) a failure is a toast. Interface scale is
+this device's alone and saves nothing to the server. Models has two: the
+default profile, and session naming, which no longer reloads the stored
+value when a save fails but keeps the choice for Retry. Credentials (API
+keys, sign-in) stay actions, not settings.
 
 The desired direction is automatic saving whenever a setting changes, with
 feedback in the top bar. This replaces the narrower server-settings proposal.
