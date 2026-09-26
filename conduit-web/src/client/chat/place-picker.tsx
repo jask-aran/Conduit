@@ -7,6 +7,14 @@ import "./place-picker.css";
 
 export type PlaceOptions = { projects: Project[]; current?: Project | null; disabled?: boolean; onChoose: (project: Project) => void };
 
+/** A place's own mark when it has one -- a workspace's identity today, any
+ *  place's later -- else a folder. */
+export function PlaceGlyph(props: { project?: Project | null }) {
+  return <Show when={props.project?.workspaceAppearance || (props.project && isWorkspace(props.project))} fallback={<FolderIcon />}>
+    <WorkspaceGlyph appearance={props.project!.workspaceAppearance} />
+  </Show>;
+}
+
 export const isWorkspace = (project: Project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || "");
 
 /**
@@ -35,7 +43,7 @@ export function PlacePicker(props: PlaceOptions) {
   return <Popover open={open()} onOpenChange={(value) => { setOpen(value); if (!value) setQuery(""); }} placement="top-start">
     <PopoverTrigger as={Button} class="composer-desktop-attachment composer-place-trigger" variant="ghost" size="icon-sm" disabled={props.disabled}
       aria-label={placed() ? `In ${placed()!.name}. Change folder` : "Add to a project or workspace"} title={placed() ? `In ${placed()!.name}` : "Add to project"} data-placed={placed() ? "true" : undefined}>
-      <FolderIcon />
+      <PlaceGlyph project={placed()} />
       <Show when={placed()}><span class="composer-place-name">{placed()!.name}</span></Show>
     </PopoverTrigger>
     <PopoverContent class="composer-place-menu" aria-label="Add to project">
@@ -47,7 +55,7 @@ export function PlacePicker(props: PlaceOptions) {
         </Show>
         <For each={places()} fallback={<div class="composer-place-empty">No matches.</div>}>{(project) =>
           <button type="button" aria-current={project.id === props.current?.id ? "true" : undefined} onClick={() => choose(project)}>
-            <span class="composer-place-lead"><Show when={isWorkspace(project)} fallback={<FolderIcon />}><WorkspaceGlyph appearance={project.workspaceAppearance} /></Show></span>
+            <span class="composer-place-lead"><PlaceGlyph project={project} /></span>
             <span class="composer-place-label">{project.name}</span>
             <small>{isWorkspace(project) ? "Workspace" : "Project"}</small>
           </button>}
