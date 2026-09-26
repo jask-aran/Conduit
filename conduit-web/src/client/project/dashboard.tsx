@@ -415,8 +415,8 @@ export function ProjectDashboard(props: {
       ]} />
       <Show when={isWorkspace()}>
         <Segmented label="Threads" value={threadSide()} onChange={(value) => { saveThreadSide(value as ThreadSide); setLimit(CHAT_PAGE); }} options={[
-          { value: "chats", label: "Conduit chats" },
-          { value: "outside", label: "Not in Conduit" },
+          { value: "chats", label: "Conduit chats", detail: <small>{activeChatCount()}</small> },
+          { value: "outside", label: "Not in Conduit", detail: <Show when={!outsideLoading()}><small>{outsideThreads().length}</small></Show> },
         ]} />
       </Show>
     </div>} actions={<>
