@@ -6,6 +6,9 @@
 .composer-place-list { max-height: 280px; overflow-y: auto; padding: 4px; scrollbar-width: thin; }
 .composer-place-list > button { display: flex; width: 100%; min-height: 32px; align-items: center; gap: 8px; border: 0; border-radius: 7px; background: transparent; padding: 5px 8px; color: color-mix(in oklch, var(--foreground), transparent 32%); font-size: 12.5px; text-align: left; }
 .composer-place-list > button:is(:hover, :focus-visible) { outline: none; background: var(--accent); color: var(--foreground); }
+.composer-places-menu { max-height: 60vh; overflow-y: auto; }
+.composer-places-menu .workspace-glyph { width: 16px; height: 16px; }
+.composer-place-current { font-weight: 680; }
 /* Where the chat is now: white and heavier, no fill and no tick. */
 .composer-place-list > button[aria-current] { color: var(--foreground); font-weight: 680; }
 .composer-place-list > button[aria-current] .composer-place-lead { color: var(--foreground); }

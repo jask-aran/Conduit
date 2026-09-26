@@ -27,7 +27,6 @@ import type { BooleanCapability, ChatSummary, DashboardChat, HarnessManifestView
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
 import { AppDashboard } from "./dashboard/app-dashboard";
-import { PlacePicker } from "./chat/place-picker";
 import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_STORAGE_KEY, selectedComposerSurface } from "./chat/composer-surface";
 import type { VoiceDictationSettings } from "./chat/voice-dictation-types";
 import { CONTEXT_METRIC_STORAGE_KEY, formatContextMetrics, saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
@@ -1686,7 +1685,7 @@ function App() {
       if (routeKind() === "chat") catalogue.selectProject(destination);
     } catch (error) { showError(error); }
   };
-  const chatPlace = () => <PlacePicker projects={catalogue.projects()} current={chatOwner()} disabled={!chat.loadedId() || runtime.connectivity() !== "online"} onChoose={(project) => void placeChat(project)} />;
+  const chatPlace = () => ({ projects: catalogue.projects(), current: chatOwner(), disabled: !chat.loadedId() || runtime.connectivity() !== "online", onChoose: (project: Project) => void placeChat(project) });
   const moveProjectChats = async (source: Project, destination: Project) => {
     try { await api(`/v0/projects/${source.id}/move-sessions`, { method: "POST", body: JSON.stringify({ projectId: destination.id }) }); await refresh(); }
     catch (error) { showError(error); }
