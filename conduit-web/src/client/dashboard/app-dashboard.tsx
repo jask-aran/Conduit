@@ -14,7 +14,7 @@ import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
 import { Segmented } from "../settings/settings-controls";
-import { CHAT_PAGE, DayGroups, groupByDay, ListFilter, ListSearch, ProfileFilter, profilesInUse, ShowMore } from "./primitives/chat-list";
+import { CHAT_PAGE, DayGroups, groupByDay, ListFilter, ListSearch, ProfileFilter, ShowMore } from "./primitives/chat-list";
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitRow, SplitShortcut, SplitShortcuts } from "./primitives/split";
 import "./app-dashboard.css";
 
@@ -168,7 +168,7 @@ export function AppDashboard(props: {
       { value: "all", label: "Recent chats", detail: <small>{allChats().length}</small> },
       { value: "unread", label: "Unread", detail: <small>{unread()}</small> },
     ]} />}
-    actions={<><ProfileFilter profiles={profilesInUse(props.profiles, allChats().map(({ chat }) => chat))} value={profile()} onChange={(id) => { setProfile(id); setLimit(CHAT_PAGE); }} /><ListFilter sort={chatSort()} onSort={saveChatSort} /><ListSearch label="Search chats" onClick={() => props.onSearchChats("all")} /></>}
+    actions={<><ProfileFilter profiles={props.profiles} value={profile()} onChange={(id) => { setProfile(id); setLimit(CHAT_PAGE); }} /><ListFilter sort={chatSort()} onSort={saveChatSort} /><ListSearch label="Search chats" onClick={() => props.onSearchChats("all")} /></>}
     more={<ShowMore total={chats().length} shown={limit()} onMore={() => setLimit((value) => value + CHAT_PAGE)} />}>
     <Show when={chats().length} fallback={<SplitEmpty>{unreadOnly() ? "Nothing unread." : "Nothing here yet."}</SplitEmpty>}>
       <DayGroups groups={grouped()}>{chatRow}</DayGroups>

@@ -89,10 +89,10 @@ export function ListFilter(props: {
   </Menu>;
 }
 
-/** Filter by the profile a chat was started with; only profiles in use are listed. */
+/** Filter by the profile a chat was started with. */
 export function ProfileFilter(props: { profiles: Array<{ id: string; label: string; implementation?: string }>; value: string; onChange: (id: string) => void }) {
   const label = () => props.profiles.find((item) => item.id === props.value)?.label || "All profiles";
-  return <Show when={props.profiles.length > 1}>
+  return <Show when={props.profiles.length}>
     <Menu modal={false}>
       <MenuTrigger class="split-list-filter" title="Filter by profile">{label()}<ChevronDownIcon /></MenuTrigger>
       <MenuContent class="w-56">
