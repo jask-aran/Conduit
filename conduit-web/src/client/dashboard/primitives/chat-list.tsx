@@ -1,5 +1,5 @@
 import { For, Show, type JSX } from "solid-js";
-import { CheckIcon, ChevronDownIcon, SearchIcon } from "lucide-solid";
+import { CheckIcon, ChevronDownIcon, LayersIcon, SearchIcon } from "lucide-solid";
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@/components/primitives";
 import { HarnessMark } from "../../harness-brand";
 import { SplitGroupMore } from "./split";
@@ -80,7 +80,7 @@ export function ListFilter(props: {
         <MenuGroup>
           <MenuLabel>Harness</MenuLabel>
           <MenuRadioGroup value={props.harness || ""} onChange={(value: string) => props.onHarness?.(value)}>
-            <MenuRadioItem value=""><span class="size-4 shrink-0" aria-hidden="true" />All harnesses</MenuRadioItem>
+            <MenuRadioItem value=""><LayersIcon class="size-4" />All harnesses</MenuRadioItem>
             <For each={props.harnesses}>{(item) => <MenuRadioItem value={item.id}><HarnessMark id={item.id} class="size-4" />{item.label}</MenuRadioItem>}</For>
           </MenuRadioGroup>
         </MenuGroup>
@@ -89,8 +89,9 @@ export function ListFilter(props: {
   </Menu>;
 }
 
-/** Filter by the profile a chat was started with. */
-export function ProfileFilter(props: { profiles: Array<{ id: string; label: string; implementation?: string }>; value: string; onChange: (id: string) => void }) {
+/** Filter by the profile a chat was started with. Every profile is listed so
+ *  the choice is always visible; one no chat here uses is greyed out. */
+export function ProfileFilter(props: { profiles: Array<{ id: string; label: string; implementation?: string }>; used: Set<string>; value: string; onChange: (id: string) => void }) {
   const label = () => props.profiles.find((item) => item.id === props.value)?.label || "All profiles";
   return <Show when={props.profiles.length}>
     <Menu modal={false}>
@@ -99,8 +100,8 @@ export function ProfileFilter(props: { profiles: Array<{ id: string; label: stri
         <MenuGroup>
           <MenuLabel>Profile</MenuLabel>
           <MenuRadioGroup value={props.value} onChange={(value: string) => props.onChange(value)}>
-            <MenuRadioItem value=""><span class="size-4 shrink-0" aria-hidden="true" />All profiles</MenuRadioItem>
-            <For each={props.profiles}>{(item) => <MenuRadioItem value={item.id}><HarnessMark id={item.implementation || "conduit"} class="size-4" />{item.label}</MenuRadioItem>}</For>
+            <MenuRadioItem value=""><LayersIcon class="size-4" />All profiles</MenuRadioItem>
+            <For each={props.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={!props.used.has(item.id) && item.id !== props.value}><HarnessMark id={item.implementation || "conduit"} class="size-4" />{item.label}</MenuRadioItem>}</For>
           </MenuRadioGroup>
         </MenuGroup>
       </MenuContent>

@@ -168,7 +168,7 @@ export function AppDashboard(props: {
       { value: "all", label: "Recent chats", detail: <small>{allChats().length}</small> },
       { value: "unread", label: "Unread", detail: <small>{unread()}</small> },
     ]} />}
-    actions={<><ProfileFilter profiles={props.profiles} value={profile()} onChange={(id) => { setProfile(id); setLimit(CHAT_PAGE); }} /><ListFilter sort={chatSort()} onSort={saveChatSort} /><ListSearch label="Search chats" onClick={() => props.onSearchChats("all")} /></>}
+    actions={<><ProfileFilter profiles={props.profiles} used={new Set(allChats().map(({ chat }) => chat.templateId || ""))} value={profile()} onChange={(id) => { setProfile(id); setLimit(CHAT_PAGE); }} /><ListFilter sort={chatSort()} onSort={saveChatSort} /><ListSearch label="Search chats" onClick={() => props.onSearchChats("all")} /></>}
     more={<ShowMore total={chats().length} shown={limit()} onMore={() => setLimit((value) => value + CHAT_PAGE)} />}>
     <Show when={chats().length} fallback={<SplitEmpty>{unreadOnly() ? "Nothing unread." : "Nothing here yet."}</SplitEmpty>}>
       <DayGroups groups={grouped()}>{chatRow}</DayGroups>
