@@ -1,5 +1,5 @@
 /**
- * The sidebar's cursor, from the keyboard (docs/ui-polish-sketch.md, section 8).
+ * The sidebar's cursor, from the keyboard (DESIGN.md, Keyboard).
  *
  * The cursor is the focused row: its wash is the focus wash, so moving the
  * cursor is moving focus between the rows that are showing. ↑/↓ step, Home/End
