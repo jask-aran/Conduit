@@ -189,7 +189,8 @@ export function ProjectDashboard(props: {
     ?? props.project.sessions.filter((chat) => chat.status === "active").length);
   const scopedTerminals = createMemo(() => terminals()
     .filter((terminal) => terminal.projectId === projectId() && terminal.status === "running"));
-  const filteredOutside = createMemo(() => outsideFilter() ? outsideThreads().filter((thread) => thread.harnessId === outsideFilter()) : outsideThreads());
+  // Threads outside Conduit have no read state, so Unread shows none of them.
+  const filteredOutside = createMemo(() => unreadOnly() ? [] : outsideFilter() ? outsideThreads().filter((thread) => thread.harnessId === outsideFilter()) : outsideThreads());
   const outsideGroups = createMemo(() => groupByDay(filteredOutside().slice(0, limit()), (thread) => thread.at, now()));
   createEffect(() => setThreadSide(readThreadSide(projectId())));
   const saveThreadSide = (side: ThreadSide) => {
@@ -407,16 +408,19 @@ export function ProjectDashboard(props: {
     </Show>
   </Show>;
 
-  const threadsGroup = () => <SplitGroup id="dashboard-threads" order="list" heading={<Show when={isWorkspace()} fallback={<Segmented label="Chats" value={unreadOnly() ? "unread" : "all"} onChange={(value) => { setUnreadOnly(value === "unread"); setLimit(CHAT_PAGE); }} options={[
-        { value: "all", label: "Chats", detail: <small>{activeChatCount()}</small> },
-        { value: "unread", label: "Unread", detail: <small>{props.project.sessions.filter((chat) => chat.status === "active" && chat.unread).length}</small> },
-      ]} />}>
-      <Segmented label="Threads" value={threadSide()} onChange={(value) => { saveThreadSide(value as ThreadSide); setLimit(CHAT_PAGE); }} options={[
-        { value: "chats", label: "Chats", detail: <small>{activeChatCount()}</small> },
-        { value: "outside", label: "Not in Conduit", detail: <Show when={!outsideLoading()}><small>{outsideThreads().length}</small></Show> },
+  const threadsGroup = () => <SplitGroup id="dashboard-threads" order="list" heading={<div class="split-heading-switches">
+      <Segmented label="Chats" value={unreadOnly() ? "unread" : "all"} onChange={(value) => { setUnreadOnly(value === "unread"); setLimit(CHAT_PAGE); }} options={[
+        { value: "all", label: "Recent chats", detail: <small>{showOutside() ? filteredOutside().length : activeChatCount()}</small> },
+        { value: "unread", label: "Unread", detail: <small>{showOutside() ? 0 : props.project.sessions.filter((chat) => chat.status === "active" && chat.unread).length}</small> },
       ]} />
-    </Show>} actions={<>
-      <Show when={showOutside()} fallback={<ListFilter sort={chatSort()} onSort={saveChatSort} unreadOnly={isWorkspace() ? unreadOnly() : undefined} onUnreadOnly={isWorkspace() ? (value) => { setUnreadOnly(value); setLimit(CHAT_PAGE); } : undefined} />}>
+      <Show when={isWorkspace()}>
+        <Segmented label="Threads" value={threadSide()} onChange={(value) => { saveThreadSide(value as ThreadSide); setLimit(CHAT_PAGE); }} options={[
+          { value: "chats", label: "Conduit chats" },
+          { value: "outside", label: "Not in Conduit" },
+        ]} />
+      </Show>
+    </div>} actions={<>
+      <Show when={showOutside()} fallback={<ListFilter sort={chatSort()} onSort={saveChatSort} />}>
         <ListFilter harnesses={outsideHarnesses()} harness={outsideFilter()} onHarness={(id) => { setOutsideFilter(id); setLimit(CHAT_PAGE); }} />
       </Show>
       <ListSearch label={`Search chats in ${props.project.name}`} onClick={props.onSearchChats} />

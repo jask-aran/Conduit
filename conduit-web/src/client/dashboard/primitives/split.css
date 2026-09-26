@@ -149,3 +149,4 @@
   .split-day { padding: 12px 9px 3px; font-size: 12px; }
   .split-group-actions .split-list-filter { height: 32px; padding: 0 8px; font-size: 13px; }
 }
+.split-heading-switches { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 6px; }
