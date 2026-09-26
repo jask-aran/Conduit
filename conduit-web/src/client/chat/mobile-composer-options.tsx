@@ -24,8 +24,7 @@ import type { ServiceLevelSettings } from "../state/service-level-settings";
 import { HarnessMark } from "../harness-brand";
 import { StepSlider } from "./step-slider";
 import { contextUsagePercent } from "./context-metrics";
-import { isWorkspace, type PlaceOptions } from "./place-picker";
-import { WorkspaceGlyph } from "../project/workspace-appearance";
+import { isWorkspace, PlaceGlyph, type PlaceOptions } from "./place-picker";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
 type MobileOptionsPanel = "root" | "models" | "effort" | "profiles" | "permissions" | "places";
@@ -209,11 +208,16 @@ export function MobileComposerOptions(props: {
           <MenuItem disabled={!composer.serverOnline} onSelect={composer.onOpenAttachments}>
             <PaperclipIcon /><span>Attach files</span>
           </MenuItem>
-          <Show when={composer.place}>{(place) =>
-            <MenuItem closeOnSelect={false} disabled={place().disabled} onSelect={() => go("places")} class="composer-options-value" aria-label="Add to project">
-              <FolderIcon /><span>{place().current && place().current!.slug !== "chat" ? place().current!.name : "Add to project"}</span><ChevronRightIcon />
-            </MenuItem>}
-          </Show>
+          <Show when={composer.place}>{(place) => {
+            const placed = () => place().current && place().current!.slug !== "chat" ? place().current! : null;
+            return <>
+              <MenuSeparator />
+              <MenuLabel class="composer-options-label">Project</MenuLabel>
+              <MenuItem closeOnSelect={false} disabled={place().disabled} onSelect={() => go("places")} class="composer-options-value" aria-label={placed() ? `Project ${placed()!.name}` : "Add to a project folder"}>
+                <PlaceGlyph project={placed()} /><span>{placed()?.name || "Add to a project folder"}</span><ChevronRightIcon />
+              </MenuItem>
+            </>;
+          }}</Show>
          </MenuGroup>
         </div>
         <Show when={panel() === "models"}>
@@ -258,13 +262,13 @@ export function MobileComposerOptions(props: {
             .sort((left, right) => Number(isWorkspace(left)) - Number(isWorkspace(right)) || left.name.localeCompare(right.name));
           return <div class="composer-options-submenu composer-places-menu">
             <MenuGroup>
-              <MenuLabel class="composer-options-label">Add to project</MenuLabel>
+              <MenuLabel class="composer-options-label">Project</MenuLabel>
               <Show when={place.current && place.current.slug !== "chat" && root()}>
                 <MenuItem onSelect={() => place.onChoose(root()!)}><FolderIcon /><span>No folder</span></MenuItem>
               </Show>
               <For each={places()}>{(project) =>
                 <MenuItem class={project.id === place.current?.id ? "composer-place-current" : undefined} onSelect={() => { if (project.id !== place.current?.id) place.onChoose(project); }}>
-                  <Show when={isWorkspace(project)} fallback={<FolderIcon />}><WorkspaceGlyph appearance={project.workspaceAppearance} /></Show><span>{project.name}</span>
+                  <PlaceGlyph project={project} /><span>{project.name}</span>
                 </MenuItem>}
               </For>
             </MenuGroup>
