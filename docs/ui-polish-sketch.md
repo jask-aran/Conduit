@@ -879,9 +879,9 @@ the go-to chords are shown as the way out.
    the two-key shortcuts, and the Leader menu row shows the key. Found on the way: Ctrl+Shift+3 opened the workspace panel
    without focusing it when the file navigator was folded away (the filter
    it aimed at was hidden); the open file takes focus then, else the Files
-tab, whose focus is the wash rather than the browser's ring. Still open: a
-   row whose command does nothing where you are (Source Control in a chat
-   without a repository) is listed anyway.
+tab, whose focus is the wash rather than the browser's ring. A row whose
+   command would do nothing where you are is not listed: Source Control
+   needs a repository, and the split a panel wide enough to split.
 
 Each step is its own change, checked before the next.
 
