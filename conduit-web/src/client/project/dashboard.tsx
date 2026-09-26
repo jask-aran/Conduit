@@ -20,7 +20,7 @@ import {
 import { ThreadHarnessMark } from "../harness-brand";
 import { activityLabel } from "../../activity.js";
 import { Segmented } from "../settings/settings-controls";
-import { CHAT_PAGE, DayGroups, groupByDay, ListFilter, ListSearch, ShowMore } from "../dashboard/primitives/chat-list";
+import { CHAT_PAGE, DayGroups, groupByDay, ListFilter, ListSearch, ProfileFilter, profilesInUse, ShowMore } from "../dashboard/primitives/chat-list";
 import { FileTypeIcon } from "../workspace/file-type-icon";
 import {
   Button,
@@ -44,7 +44,7 @@ import {
   Spinner,
 } from "@/components/primitives";
 import { api } from "../api/client";
-import type { DashboardChat, HarnessSummary, HarnessThread, HarnessThreadDiscovery, Project, ProjectDashboardPayload, WorkspaceAppearance, WorkspaceOperation } from "../api/contracts";
+import type { Template, DashboardChat, HarnessSummary, HarnessThread, HarnessThreadDiscovery, Project, ProjectDashboardPayload, WorkspaceAppearance, WorkspaceOperation } from "../api/contracts";
 import { activityDetail, runtimeActivity, RuntimeIndicator } from "../navigation/runtime-indicator";
 import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
@@ -132,6 +132,7 @@ export function ProjectDashboard(props: {
   onOpenTerminal: (terminal: Pty) => void;
   onOpenTerminalMaximized: (terminal: Pty) => void;
   onPrefetchTerminal: () => void;
+  profiles: Template[];
   onOpenHarnessThread?: (harnessId: string, path: string, threadId: string, title: string) => void;
   onSearchChats: () => void;
   onRename: () => void;
@@ -164,6 +165,7 @@ export function ProjectDashboard(props: {
   const [outsideFilter, setOutsideFilter] = createSignal("");
   const [threadSide, setThreadSide] = createSignal<ThreadSide>("chats");
   const [unreadOnly, setUnreadOnly] = createSignal(false);
+  const [profile, setProfile] = createSignal("");
   const [limit, setLimit] = createSignal(CHAT_PAGE);
   const chatSort = useChatSort();
   const projectId = createMemo(() => props.project.id);
@@ -180,7 +182,7 @@ export function ProjectDashboard(props: {
     const previews = new Map((payload()?.recentChats || []).map((chat) => [chat.id, chat]));
     return props.project.sessions
       .map((chat) => ({ ...chat, lastMessageAt: previews.get(chat.id)?.lastMessageAt || chat.lastMessageAt, lastMessagePreview: previews.get(chat.id)?.lastMessagePreview || "" }))
-      .filter((chat) => chat.status === "active" && (!unreadOnly() || chat.unread))
+      .filter((chat) => chat.status === "active" && (!unreadOnly() || chat.unread) && (!profile() || chat.templateId === profile()))
       .sort((left, right) => compareChatsBySort(left, right, sort));
   });
   const chatTime = (chat: DashboardChat) => Date.parse((chatSort() === "created" ? chat.createdAt : chat.lastMessageAt || chat.createdAt) || "") || 0;
@@ -420,7 +422,7 @@ export function ProjectDashboard(props: {
         ]} />
       </Show>
     </div>} actions={<>
-      <Show when={showOutside()} fallback={<ListFilter sort={chatSort()} onSort={saveChatSort} />}>
+      <Show when={showOutside()} fallback={<><ProfileFilter profiles={profilesInUse(props.profiles, props.project.sessions.filter((chat) => chat.status === "active"))} value={profile()} onChange={(id) => { setProfile(id); setLimit(CHAT_PAGE); }} /><ListFilter sort={chatSort()} onSort={saveChatSort} /></>}>
         <ListFilter harnesses={outsideHarnesses()} harness={outsideFilter()} onHarness={(id) => { setOutsideFilter(id); setLimit(CHAT_PAGE); }} />
       </Show>
       <ListSearch label={`Search chats in ${props.project.name}`} onClick={props.onSearchChats} />
