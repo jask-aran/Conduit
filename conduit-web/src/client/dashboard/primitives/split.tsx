@@ -116,7 +116,10 @@ export function SplitDashboard(props: {
     if (next === target) return;
     target = next;
     if (!measured) return setOneColumn(next);
-    glide(root, () => setOneColumn(next), shown);
+    // Out of the effect, so the layout changes as glide sets it and it can
+    // measure the result; still before the frame is painted.
+    const from = shown;
+    queueMicrotask(() => { if (target === next) glide(root, () => setOneColumn(next), from); });
   });
   onMount(() => {
     onCleanup(installSplitCursor(root));
