@@ -2659,6 +2659,11 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .menu-row { position: relative; display: flex; width: 100%; align-items: center; gap: 6px; border: 0; border-radius: 6px; background: transparent; padding: 4px 6px; text-align: left; cursor: default; user-select: none; outline: none; }
 .menu-row[data-highlighted] { background: oklch(1 0 0 / 10%); }
 @media (--conduit-mobile-layout) { .menu-row { padding: 6px 8px; } }
+/* PopoverSearchList (primitives.tsx): a search over a list of menu rows. */
+.popover-search { width: 100%; border: 0; border-bottom: 1px solid var(--border); background: transparent; padding: 7px 10px; color: var(--foreground); font: inherit; font-size: 10.4px; outline: none; }
+.popover-search-list { max-height: 240px; overflow-y: auto; padding: 4px; scrollbar-width: thin; }
+.popover-search-empty { padding: 6px; color: var(--muted-foreground); font-size: 10.4px; }
+@media (--conduit-mobile-layout) { .popover-search { font-size: 0.875rem; } }
 
 /* Menu rows rest as the sidebar's do -- a regular weight a step under the
    text colour -- so the cursor (white, on the wash) and the current choice
