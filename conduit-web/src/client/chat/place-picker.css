@@ -1,6 +1,4 @@
 /* The composer's folder button and its list of places (place-picker.tsx). */
-.composer-place-trigger[data-placed] { width: auto; max-width: 150px; gap: 5px; padding-inline: 6px; }
-.composer-place-name { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 /* Sized and weighted as the other frost menus (DESIGN.md, Frost menus). */
 .composer-place-menu { width: 208px; padding: 0; }
 .composer-place-search { width: 100%; border: 0; border-bottom: 1px solid var(--border); background: transparent; padding: 7px 10px; color: var(--foreground); font: inherit; font-size: 10.4px; outline: none; }

@@ -44,7 +44,6 @@ export function PlacePicker(props: PlaceOptions) {
     <PopoverTrigger as={Button} class="composer-desktop-attachment composer-place-trigger" variant="ghost" size="icon-sm" disabled={props.disabled}
       aria-label={placed() ? `In ${placed()!.name}. Change folder` : "Add to a project or workspace"} title={placed() ? `In ${placed()!.name}` : "Add to project"} data-placed={placed() ? "true" : undefined}>
       <PlaceGlyph project={placed()} />
-      <Show when={placed()}><span class="composer-place-name">{placed()!.name}</span></Show>
     </PopoverTrigger>
     <PopoverContent class="composer-place-menu" aria-label="Add to project">
       <input class="composer-place-search" placeholder="Search projects and workspaces" value={query()} onInput={(event) => setQuery(event.currentTarget.value)}
