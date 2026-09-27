@@ -254,7 +254,7 @@ export function SourceControlView(props: {
   chatAvailable: boolean;
   commentChatId: string | null;
   reveal: ReviewNavigationRequest | null;
-  onInspectFile: (path: string, staged: boolean) => void;
+  onInspectFile: (path: string, staged: boolean, beside?: boolean) => void;
   onOpenWorkingFile: (path: string) => void;
 }) {
   const c = props.control;
@@ -284,7 +284,7 @@ export function SourceControlView(props: {
             <header><button type="button" class="workspace-change-disclosure" aria-expanded={c.stagedOpen()} onClick={() => c.setStagedOpen((open) => !open)}><ChevronRightIcon /><CheckIcon /><span>Staged changes</span><small>{c.stagedFiles().length}</small></button><button type="button" aria-label="Unstage all" title="Unstage all" disabled={!c.stagedFiles().length || Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage-all")}><Undo2Icon /></button></header>
             <Show when={c.stagedOpen()}><Show when={c.stagedFiles().length} fallback={<div class="workspace-clean-state">No staged changes</div>}>
               <div class="workspace-changes"><For each={c.stagedFiles()}>{(file) =>
-<div class="workspace-change-row"><button type="button" title={`Inspect changes in ${file.path}`} onClick={() => props.onInspectFile(file.path, true)}><GitFileLabel file={file} staged={true} /></button><button type="button" class="workspace-change-action" aria-label={`Unstage ${file.path}`} title="Unstage" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage", file.path)}><Undo2Icon /></button></div>
+<div class="workspace-change-row"><button type="button" title={`Inspect changes in ${file.path}`} data-change-path={file.path} data-staged="true" onClick={(event) => props.onInspectFile(file.path, true, event.altKey)}><GitFileLabel file={file} staged={true} /></button><button type="button" class="workspace-change-action" aria-label={`Unstage ${file.path}`} title="Unstage" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage", file.path)}><Undo2Icon /></button></div>
               }</For></div>
             </Show></Show>
           </section>
@@ -293,7 +293,7 @@ export function SourceControlView(props: {
             <Show when={c.changesOpen() && c.unstagedFiles().some((file) => file.status === "??" && file.path.endsWith("/"))}><div class="workspace-tree-notice">Untracked folders are grouped. Staging a folder includes its contents.</div></Show>
             <Show when={c.changesOpen()}><Show when={c.unstagedFiles().length} fallback={<div class="workspace-clean-state">Working tree clean</div>}>
               <div class="workspace-changes"><For each={c.unstagedFiles()}>{(file) =>
-                <div class="workspace-change-row"><button type="button" title={`Inspect changes in ${file.path}`} onClick={() => props.onInspectFile(file.path, false)}><GitFileLabel file={file} staged={false} /></button><button type="button" class="workspace-change-action" aria-label={`Stage ${file.path}`} title="Stage" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("stage", file.path)}><CirclePlusIcon /></button></div>
+                <div class="workspace-change-row"><button type="button" title={`Inspect changes in ${file.path}`} data-change-path={file.path} data-staged="false" onClick={(event) => props.onInspectFile(file.path, false, event.altKey)}><GitFileLabel file={file} staged={false} /></button><button type="button" class="workspace-change-action" aria-label={`Stage ${file.path}`} title="Stage" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("stage", file.path)}><CirclePlusIcon /></button></div>
               }</For></div>
             </Show></Show>
           </section>

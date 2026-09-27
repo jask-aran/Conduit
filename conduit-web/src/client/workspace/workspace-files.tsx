@@ -41,7 +41,8 @@ function storedPaths(scopeId: string, name: string) {
 
 /**
  * Files' state for one project: the tree as loaded so far, the two open file
- * slots, and the navigator's geometry. It outlives the view, so a hidden Files
+ * slots -- the view's own, and the file opened beside it in the main pane's
+ * split (`secondary`) -- and the navigator's geometry. It outlives the view, so a hidden Files
  * view keeps its drafts, and the change poll can refresh what is open.
  */
 export function createFiles(options: { projectId: Accessor<string>; requests: RequestScope; settings: WorkspaceSettings; settingsScope: string }) {
@@ -63,7 +64,6 @@ export function createFiles(options: { projectId: Accessor<string>; requests: Re
   const [treeWidth, setTreeWidth] = createSignal(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(settings.geometry("tree-width")) || DEFAULT_TREE_WIDTH)));
   const [treeCollapsed, setTreeCollapsed] = createSignal(settings.geometry("tree-collapsed") === "true");
   const [navigatorOpen, setNavigatorOpen] = createSignal(false);
-  const [fileSplitRatio, setFileSplitRatio] = createSignal(Math.max(25, Math.min(75, Number(settings.geometry("file-split-ratio")) || 50)));
   // The view's elements, for focus and scroll that outlast a single render.
   const elements: { host?: HTMLElement; tree?: HTMLElement; filter?: HTMLInputElement; upload?: HTMLInputElement } = {};
   let treeScrollRaf = 0;
@@ -142,10 +142,11 @@ export function createFiles(options: { projectId: Accessor<string>; requests: Re
   };
   const hideFileNavigator = () => filesWide() ? toggleTreeCollapsed() : setNavigatorOpen(false);
   const showFileNavigator = () => filesWide() ? toggleTreeCollapsed() : setNavigatorOpen(true);
+  // The tree opens into the view's own slot; the file beside is opened only
+  // by asking for it.
   const openFile = (path: string) => {
-    if (openInSlot(focusedSlot(), path)) setNavigatorOpen(false);
+    if (openInSlot("primary", path)) setNavigatorOpen(false);
   };
-  const openFileToSide = (path: string) => openInSlot("secondary", path);
   let pendingEdit: string | null = null;
   const editFile = (path: string) => {
     const slot = slotForPath(path);
@@ -163,29 +164,16 @@ export function createFiles(options: { projectId: Accessor<string>; requests: Re
       slotHandles.get(slot)?.edit();
     }
   };
-  // Closing the left slot promotes the right one so the layout never holds a gap.
+  // The slots sit in different panes, so closing one leaves the other where it is.
   const closeSlot = (slot: FileSlotId) => {
-    if (slot === "secondary") {
-      if (slotHandles.get("secondary")?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and close this file?")) return;
-      setSlotPath("secondary", null);
-      setFocusedSlot("primary");
-      return;
-    }
-    const promoted = openPaths().secondary;
-    const losesDraft = slotHandles.get("primary")?.hasUnsavedChanges() || (promoted && slotHandles.get("secondary")?.hasUnsavedChanges());
-    if (losesDraft && !window.confirm("Discard unsaved changes and close this file?")) return;
-    setSlotPath("primary", promoted);
-    setSlotPath("secondary", null);
+    if (slotHandles.get(slot)?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and close this file?")) return;
+    setSlotPath(slot, null);
     setFocusedSlot("primary");
   };
   const dropOpenPath = (path: string) => {
     if (openPaths().secondary === path) setSlotPath("secondary", null);
-    if (openPaths().primary === path) {
-      const promoted = openPaths().secondary;
-      setSlotPath("primary", promoted);
-      if (promoted) setSlotPath("secondary", null);
-      setFocusedSlot("primary");
-    }
+    if (openPaths().primary === path) setSlotPath("primary", null);
+    setFocusedSlot("primary");
   };
   const pathIsWithin = (candidate: string | null, parent: string) =>
     Boolean(candidate && (candidate === parent || candidate.startsWith(`${parent}/`)));
@@ -211,12 +199,6 @@ export function createFiles(options: { projectId: Accessor<string>; requests: Re
   const openSlotHandles = () => [...slotHandles.entries()]
     .filter(([slot]) => Boolean(openPaths()[slot]))
     .map(([, handle]) => handle);
-  const clampFileSplitRatio = (next: number) => Math.max(25, Math.min(75, Math.round(next)));
-  const saveFileSplitRatio = (next: number) => {
-    const value = clampFileSplitRatio(next);
-    setFileSplitRatio(value);
-    writeSetting(options.settingsScope, "file-split-ratio", String(value));
-  };
   // Downloading works on any tree entry, open or not, so it stays with the tree.
   const downloadPath = async (path: string) => {
     try {
@@ -454,7 +436,7 @@ export function createFiles(options: { projectId: Accessor<string>; requests: Re
   const treeTabStop = () => {
     const visible = visibleTreePaths();
     if (visible.includes(treeFocusPath())) return treeFocusPath();
-    const selected = openPaths()[focusedSlot()];
+    const selected = openPaths().primary;
     return selected && visible.includes(selected) ? selected : visible[0] || "";
   };
   const focusTreeBoundary = (last: boolean) => {
@@ -537,8 +519,6 @@ export function createFiles(options: { projectId: Accessor<string>; requests: Re
     setTreeWidth,
     treeCollapsed,
     navigatorOpen,
-    fileSplitRatio,
-    setFileSplitRatio,
     filesLoading,
     loadDirectory,
     toggleDirectory,
@@ -548,14 +528,12 @@ export function createFiles(options: { projectId: Accessor<string>; requests: Re
     hideFileNavigator,
     showFileNavigator,
     openFile,
-    openFileToSide,
+    setSlotPath,
     editFile,
     noteSlotLoaded,
     closeSlot,
     dropOpenPath,
     openSlotHandles,
-    clampFileSplitRatio,
-    saveFileSplitRatio,
     downloadPath,
     chooseUpload,
     uploadFiles,
@@ -601,7 +579,6 @@ export function createFiles(options: { projectId: Accessor<string>; requests: Re
     restoreGeometry: () => {
       setTreeWidth(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(settings.geometry("tree-width")) || DEFAULT_TREE_WIDTH)));
       setTreeCollapsed(settings.geometry("tree-collapsed") === "true");
-      setFileSplitRatio(Math.max(25, Math.min(75, Number(settings.geometry("file-split-ratio")) || 50)));
       setShowHidden(settings.geometry("show-hidden") === "true");
     },
     /** The open files and kept-visible paths as stored, for a new chat or project. */
@@ -651,7 +628,9 @@ export function FilesView(props: {
   stale: boolean;
   onRetryPoll: () => void;
   onSaved: () => void;
-  onShowDiff: (slot: FileSlotId, staged: boolean) => void;
+  onShowDiff: (slot: FileSlotId, staged: boolean, beside?: boolean) => void;
+  /** Open a file in the other side of the main pane; absent where there is none. */
+  onOpenBeside?: (path: string) => void;
   onBrowseDirectory?: (path: string) => void;
   onBrowseParent?: () => void;
 }) {
@@ -676,7 +655,8 @@ export function FilesView(props: {
         item.focus();
       }
     };
-    if (event.key === "ArrowDown") focus(Math.min(items.length - 1, index + 1));
+    if (event.key === "Enter" && event.altKey && props.onOpenBeside && event.currentTarget.getAttribute("aria-expanded") === null) props.onOpenBeside(event.currentTarget.dataset.path || "");
+    else if (event.key === "ArrowDown") focus(Math.min(items.length - 1, index + 1));
     else if (event.key === "ArrowUp") focus(Math.max(0, index - 1));
     else if (event.key === "Home") focus(0);
     else if (event.key === "End") focus(items.length - 1);
@@ -707,48 +687,6 @@ export function FilesView(props: {
       return;
     } else return;
     event.preventDefault();
-  };
-  const startFileSplitResize = (event: PointerEvent) => {
-    const primary = c.elements.host?.querySelector<HTMLElement>('.workspace-preview[data-slot="primary"]');
-    const secondary = c.elements.host?.querySelector<HTMLElement>('.workspace-preview[data-slot="secondary"]');
-    if (!primary || !secondary) return;
-    event.preventDefault();
-    const left = primary.getBoundingClientRect().left;
-    const width = secondary.getBoundingClientRect().right - left;
-    if (width <= 0) return;
-    // Pointer events arrive faster than the display can show them, and each one
-    // used to write localStorage synchronously. Track the pointer once per
-    // frame, and persist the settled ratio once, when the drag ends.
-    let pending = c.fileSplitRatio();
-    let frame = 0;
-    let stopped = false;
-    const apply = () => {
-      frame = 0;
-      c.setFileSplitRatio(c.clampFileSplitRatio(pending));
-    };
-    const move = (moveEvent: PointerEvent) => {
-      pending = ((moveEvent.clientX - left) / width) * 100;
-      if (!frame) frame = requestAnimationFrame(apply);
-    };
-    const stop = () => {
-      if (stopped) return;
-      stopped = true;
-      if (frame) {
-        cancelAnimationFrame(frame);
-        apply();
-      }
-      c.saveFileSplitRatio(pending);
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-      window.removeEventListener("pointercancel", stop);
-      window.removeEventListener("blur", stop);
-      document.body.classList.remove("workspace-split-resizing");
-    };
-    document.body.classList.add("workspace-split-resizing");
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop, { once: true });
-    window.addEventListener("pointercancel", stop, { once: true });
-    window.addEventListener("blur", stop, { once: true });
   };
   const startTreeResize = (event: PointerEvent) => {
     event.preventDefault();
@@ -841,7 +779,7 @@ export function FilesView(props: {
             data-name={entry.name.toLowerCase()}
             data-path={entry.path}
             data-selected={c.isFileOpen(entry.path)}
-            data-focused-file={c.openPaths()[c.focusedSlot()] === entry.path}
+            data-focused-file={c.openPaths().primary === entry.path}
             tabIndex={c.treeTabStop() === entry.path ? 0 : -1}
             onFocus={() => {
               c.setTreeFocusPath(entry.path);
@@ -852,7 +790,7 @@ export function FilesView(props: {
             }}
             onKeyDown={onTreeKeyDown}
             onDblClick={() => { if (entry.type === "directory") props.onBrowseDirectory?.(entry.path); }}
-            onClick={(event) => entry.type === "directory" ? void c.toggleDirectory(entry.path) : entry.type === "file" ? (event.altKey ? c.openFileToSide(entry.path) : c.openFile(entry.path)) : undefined}
+            onClick={(event) => entry.type === "directory" ? void c.toggleDirectory(entry.path) : entry.type === "file" ? (event.altKey && props.onOpenBeside ? props.onOpenBeside(entry.path) : c.openFile(entry.path)) : undefined}
           >
             <Show when={entry.type === "directory"} fallback={<><span class="workspace-tree-chevron-placeholder" /><FileTypeIcon name={entry.name} /></>}>
               <ChevronRightIcon class="workspace-tree-chevron" data-open={c.directoryIsOpen(entry.path)} /><FolderTypeIcon name={entry.name} expanded={c.directoryIsOpen(entry.path)} />
@@ -864,7 +802,7 @@ export function FilesView(props: {
             <ContextMenuGroup>
               <Show when={entry.type === "file"}>
                 <ContextMenuItem onSelect={() => c.openFile(entry.path)}><FileTypeIcon name={entry.name} />Open preview</ContextMenuItem>
-                <ContextMenuItem onSelect={() => c.openFileToSide(entry.path)}><Columns2Icon />Open as second file</ContextMenuItem>
+                <Show when={props.onOpenBeside}><ContextMenuItem onSelect={() => props.onOpenBeside?.(entry.path)}><Columns2Icon />Open beside</ContextMenuItem></Show>
                 <ContextMenuItem onSelect={() => c.editFile(entry.path)}><PencilIcon />Edit</ContextMenuItem>
                 <ContextMenuItem onSelect={() => void c.downloadPath(entry.path)}><DownloadIcon />Download</ContextMenuItem>
 
@@ -934,13 +872,10 @@ export function FilesView(props: {
         }}
         class="workspace-files"
         data-wide={c.filesWide()}
-        data-files={c.openPaths().secondary ? "2" : "1"}
         data-tree-collapsed={c.treeCollapsed()}
         data-navigator-open={c.navigatorOpen()}
         style={{
           "--workspace-tree-width": `${c.treeWidth()}px`,
-          "--workspace-file-a": `${c.fileSplitRatio()}fr`,
-          "--workspace-file-b": `${100 - c.fileSplitRatio()}fr`,
         }}
       >
         <div class="workspace-tree-pane">
@@ -1022,7 +957,7 @@ export function FilesView(props: {
             projectId={props.projectId}
             path={c.openPaths().primary}
             slot="primary"
-            focused={c.focusedSlot() === "primary" && Boolean(c.openPaths().secondary)}
+            focused={false}
             closable={Boolean(c.openPaths().primary)}
             busy={c.uploading()}
             wrap={c.wrapLines()}
@@ -1037,44 +972,54 @@ export function FilesView(props: {
             onDelete={(path) => void c.deleteFile(path)}
             onLoaded={(file) => c.noteSlotLoaded("primary", file)}
             gitFile={gitFile(c.openPaths().primary)}
-            onShowDiff={(staged) => props.onShowDiff("primary", staged)}
+            onShowDiff={(staged, beside) => props.onShowDiff("primary", staged, beside)}
             onSaved={() => { if (props.sourceControlEnabled) props.onSaved(); }}
             ref={(handle) => c.slotHandles.set("primary", handle)}
             onDispose={() => c.slotHandles.delete("primary")}
           />
-          <Show when={c.openPaths().secondary}>
-            <Show when={c.filesWide()}><div class="workspace-file-split-handle" role="separator" aria-label="Resize open files" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow={c.fileSplitRatio()} tabIndex={0} onPointerDown={startFileSplitResize} onKeyDown={(event) => {
-              if (event.key === "ArrowLeft") c.saveFileSplitRatio(c.fileSplitRatio() - 2);
-              else if (event.key === "ArrowRight") c.saveFileSplitRatio(c.fileSplitRatio() + 2);
-              else if (event.key === "Home") c.saveFileSplitRatio(25);
-              else if (event.key === "End") c.saveFileSplitRatio(75);
-              else return;
-              event.preventDefault();
-            }} /></Show>
-            <WorkspaceFileSlot
-              projectId={props.projectId}
-              path={c.openPaths().secondary}
-              slot="secondary"
-              focused={c.focusedSlot() === "secondary"}
-              closable
-              busy={c.uploading()}
-              wrap={c.wrapLines()}
-              onToggleWrap={c.toggleWrapLines}
-              annotationChatId={props.commentChatId}
-              reveal={props.reveal}
-              onFocus={() => c.setFocusedSlot("secondary")}
-              onClose={() => c.closeSlot("secondary")}
-              onError={reportError}
-              onRemoved={(path, announce) => { c.dropOpenPath(path); if (announce) toast.info(`${path} was removed`); }}
-              onReplace={(path) => c.chooseUpload({ kind: "replacement", path })}
-              onDelete={(path) => void c.deleteFile(path)}
-              onLoaded={(file) => c.noteSlotLoaded("secondary", file)}
-              gitFile={gitFile(c.openPaths().secondary)}
-              onShowDiff={(staged) => props.onShowDiff("secondary", staged)}
-              onSaved={() => { if (props.sourceControlEnabled) props.onSaved(); }}
-              ref={(handle) => c.slotHandles.set("secondary", handle)}
-              onDispose={() => c.slotHandles.delete("secondary")}
-            />
-          </Show>
       </div>;
+}
+
+/**
+ * The file opened beside: Files' second slot, drawn in the main pane's split
+ * rather than beside the first inside the view (docs/design/panes-and-rail.md).
+ */
+export function FileBesideView(props: {
+  control: Files;
+  projectId: string;
+  sourceControlEnabled: boolean;
+  gitFiles: GitChangedFile[];
+  commentChatId: string | null;
+  reveal: ReviewNavigationRequest | null;
+  onSaved: () => void;
+  onShowDiff: (slot: FileSlotId, staged: boolean, beside?: boolean) => void;
+}) {
+  const c = props.control;
+  const gitFile = () => props.sourceControlEnabled ? props.gitFiles.find((file) => file.path === c.openPaths().secondary) : undefined;
+  return <div class="workspace-files workspace-file-beside">
+    <WorkspaceFileSlot
+      projectId={props.projectId}
+      path={c.openPaths().secondary}
+      slot="secondary"
+      focused={false}
+      closable={false}
+      busy={c.uploading()}
+      wrap={c.wrapLines()}
+      onToggleWrap={c.toggleWrapLines}
+      annotationChatId={props.commentChatId}
+      reveal={props.reveal}
+      onFocus={() => c.setFocusedSlot("secondary")}
+      onClose={() => c.closeSlot("secondary")}
+      onError={reportError}
+      onRemoved={(path, announce) => { c.dropOpenPath(path); if (announce) toast.info(`${path} was removed`); }}
+      onReplace={(path) => c.chooseUpload({ kind: "replacement", path })}
+      onDelete={(path) => void c.deleteFile(path)}
+      onLoaded={(file) => c.noteSlotLoaded("secondary", file)}
+      gitFile={gitFile()}
+      onShowDiff={(staged, beside) => props.onShowDiff("secondary", staged, beside)}
+      onSaved={() => { if (props.sourceControlEnabled) props.onSaved(); }}
+      ref={(handle) => c.slotHandles.set("secondary", handle)}
+      onDispose={() => c.slotHandles.delete("secondary")}
+    />
+  </div>;
 }

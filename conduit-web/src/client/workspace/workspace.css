@@ -114,9 +114,6 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-files[data-wide="false"] { display: grid; grid-template-columns: 31px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 .workspace-files[data-wide="false"] > .workspace-preview { grid-column: 2; grid-row: 1; height: auto !important; }
 .workspace-files[data-wide="false"][data-navigator-open="true"] > .workspace-preview { grid-column: 1 / -1; }
-.workspace-files[data-wide="false"][data-files="2"] { grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
-.workspace-files[data-wide="false"] > .workspace-preview[data-slot="secondary"] { grid-column: 2; grid-row: 2; }
-.workspace-files[data-wide="false"][data-navigator-open="true"] > .workspace-preview[data-slot="secondary"] { grid-column: 1 / -1; }
 .workspace-files[data-wide="false"] > .workspace-tree-pane { grid-column: 1 / -1; grid-row: 1 / -1; z-index: 8; width: min(85%, 320px); background: var(--background); border-right: 1px solid var(--border); box-shadow: 12px 0 28px rgb(0 0 0 / 20%); }
 .workspace-files[data-wide="false"] > .workspace-tree-collapsed-rail { grid-column: 1; grid-row: 1 / -1; }
 .workspace-files[data-wide="false"][data-navigator-open="false"] > .workspace-tree-pane { display: none; }
@@ -155,7 +152,6 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-preview pre, .workspace-diff-content { min-height: 0; margin: 0; font: 9.2px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; tab-size: 2; white-space: pre; }
 .workspace-diff-content { flex: 1; overflow: auto; padding: 9.6px; }
 .workspace-preview[data-focused="true"] .workspace-preview-header { background: color-mix(in oklch, var(--background), var(--accent) 48%); box-shadow: inset 0 1.6px 0 0 var(--ring); }
-.workspace-files[data-wide="false"] .workspace-preview[data-slot="secondary"] { border-top: 1px solid var(--border); }
 .workspace-preview-header { position: relative; display: flex; min-height: 28px; flex: none; align-items: center; gap: 6.4px; padding: 3.2px 4.8px 3.2px 8px; border-bottom: 1px solid var(--border); background: color-mix(in oklch, var(--background), var(--accent) 24%); }
 .workspace-preview-file { display: flex; min-width: 0; flex: 1; align-items: center; gap: 5.6px; }
 .workspace-preview-file span { overflow: hidden; color: var(--foreground); font-size: 8.8px; text-overflow: ellipsis; white-space: nowrap; }
@@ -486,12 +482,6 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
   .workspace-files[data-wide="true"] .workspace-preview { height: auto !important; grid-column: 3; grid-row: 1; }
   /* Two open files split the track right of the tree; one file keeps the
      original three-track layout untouched. */
-  .workspace-files[data-wide="true"][data-files="2"] { grid-template-columns: var(--workspace-tree-width, 160px) 9px minmax(0, var(--workspace-file-a, 50fr)) 9px minmax(0, var(--workspace-file-b, 50fr)); }
-  .workspace-files[data-wide="true"][data-files="2"] .workspace-preview[data-slot="secondary"] { height: auto !important; grid-column: 5; grid-row: 1; }
-  .workspace-file-split-handle { position: relative; z-index: 5; grid-column: 4; grid-row: 1; cursor: col-resize; touch-action: none; }
-  .workspace-file-split-handle::after { content: ""; position: absolute; inset-block: 0; left: 4px; width: 1px; background: var(--border); transition: background 120ms; }
-  .workspace-file-split-handle:hover::after, .workspace-file-split-handle:focus-visible::after, .workspace-split-resizing .workspace-file-split-handle::after { background: var(--ring); }
-  .workspace-files[data-wide="true"][data-files="2"][data-tree-collapsed="true"] { grid-template-columns: 31px 0 minmax(0, var(--workspace-file-a, 50fr)) 9px minmax(0, var(--workspace-file-b, 50fr)); }
   .workspace-files[data-wide="true"][data-tree-collapsed="true"] { grid-template-columns: 31px 0 minmax(0, 1fr); }
   .workspace-files[data-wide="true"][data-tree-collapsed="true"] .workspace-tree-pane,
   .workspace-files[data-wide="true"][data-tree-collapsed="true"] .workspace-tree-resize-handle { display: none; }

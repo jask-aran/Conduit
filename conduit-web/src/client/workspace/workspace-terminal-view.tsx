@@ -15,8 +15,10 @@ export function TerminalView(props: {
   terminalId?: string;
   focusRequest: number;
   connectivity?: Accessor<Connectivity>;
+  /** Open one of the place's terminals in the other side of the main pane. */
+  onOpenBeside?: (terminalId: string) => void;
 }) {
   return <section class="workspace-terminal-slot">
-    <TerminalPane projectId={props.computer ? "computer" : props.projectId} projectName={props.computer ? "Computer" : props.projectName} workingRoot={props.computer ? props.workingRoot : undefined} terminalId={props.terminalId} focusRequest={props.focusRequest} connectivity={props.connectivity} />
+    <TerminalPane projectId={props.computer ? "computer" : props.projectId} projectName={props.computer ? "Computer" : props.projectName} workingRoot={props.computer ? props.workingRoot : undefined} terminalId={props.terminalId} focusRequest={props.focusRequest} connectivity={props.connectivity} onOpenBeside={props.onOpenBeside} />
   </section>;
 }
