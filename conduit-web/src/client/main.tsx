@@ -1433,8 +1433,12 @@ function App() {
     const live = driveLiveId;
     driveLiveId = "";
     drive.detach();
-    if (live) void api(`/v0/live-sessions/${encodeURIComponent(live)}/process`, { method: "DELETE" }).catch(() => {});
+    // keepalive, so the close still goes out as the page itself is unloading.
+    if (live) void api(`/v0/live-sessions/${encodeURIComponent(live)}/process`, { method: "DELETE", keepalive: true }).catch(() => {});
   };
+  // A reload or a closed tab leaves the page as surely as navigating does.
+  window.addEventListener("pagehide", closeDriveProcess);
+  onCleanup(() => window.removeEventListener("pagehide", closeDriveProcess));
   // Its process is Conduit's only while its page is open, so leaving closes
   // it -- asking first while a turn is still running.
   const leaveHarnessThread = () => {
