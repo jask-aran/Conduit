@@ -259,7 +259,7 @@ and a page cannot sit on the right. The goal is two equal panes, each a
 first-class consumer of the main pane, holding any view: a chat, a page, a
 file, a terminal or a tool.
 
-- **5a. A chat session.** Everything per-chat that `main.tsx` holds -- the
+- **5a. A chat session** -- built. Everything per-chat that `main.tsx` holds -- the
   `createActiveChat` store, models, permissions, service levels,
   attachments, the manifest and capabilities, the profile and switching it,
   the composer's status and attach input -- moves into one factory
@@ -303,7 +303,9 @@ stage 5 commit is listed below as it lands.
   `panes-pre-side-chat`); other agents' changes to the same files show there
   too and stay.
 
-Stage 5 commits: none yet.
+Stage 5 commits:
+
+- 5a: d6e9c5a (the chat session factory)
 
 ## Open questions
 
