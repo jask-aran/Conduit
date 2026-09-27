@@ -155,3 +155,10 @@
    still pointer draws at rest until the pointer moves, so only the cursor row
    is washed. */
 .split-dashboard[data-keyboard-cursor] :is(.split-row, .split-group-more, .app-folder):hover:not(:focus-visible, [data-expanded]) { background: transparent; }
+
+/* The cursor on a heading's segmented switch: an unchosen segment takes the
+   wash as a row does; the chosen one, already washed, brightens. */
+.split-group-heading .settings-segmented button:is(:hover, :focus-visible, [data-held]):not([aria-checked="true"]) { background: color-mix(in oklch, var(--accent), transparent 35%); color: var(--foreground); }
+.split-group-heading .settings-segmented button[aria-checked="true"]:is(:focus-visible, [data-held]) { background: color-mix(in oklch, var(--accent), var(--foreground) 14%); }
+/* The cursor held while the window is away (split-cursor.ts). */
+.split-dashboard :is(.split-row, .split-group-more, .app-folder, .split-group-actions > button, .split-group-actions [data-slot="menu-trigger"])[data-held] { background: var(--sidebar-accent, var(--accent)); color: var(--foreground); }
