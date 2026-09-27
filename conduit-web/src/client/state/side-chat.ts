@@ -1,22 +1,19 @@
 import { createSignal, type Accessor } from "solid-js";
-import type { ChatSummary, Project } from "../api/contracts";
-import { createActiveChat, type ChatCatalogue } from "./active-chat";
-import { createAttachments } from "./attachments";
+import type { ChatSummary, HarnessManifestView, Project, Template } from "../api/contracts";
+import type { ChatCatalogue } from "./active-chat";
+import { createChatSession } from "./chat-session";
 import type { DraftsStore } from "./drafts";
-import { createModelSettings, notifyModelFallback } from "./model-settings";
-import { createPermissionSettings } from "./permission-settings";
 import type { RuntimeStore } from "./runtime";
-import { createServiceLevelSettings } from "./service-level-settings";
 
 /**
  * The chat open beside the main one, in the main pane's split
  * (docs/design/panes-and-rail.md, stage 4).
  *
- * It is a whole second chat on the same `createActiveChat`: its own
- * transcript, stream, composer, model, attachments and permissions, and the
- * drafts store the main chat uses, which is keyed by chat. What it does not
- * have is the URL or the catalogue's selection -- the left side owns both --
- * so its catalogue is a slice of the real one with a selection of its own.
+ * A chat session of its own -- transcript, stream, composer, model,
+ * attachments and permissions -- on the drafts store the main chat uses,
+ * which is keyed by chat. What it does not have is the URL or the
+ * catalogue's selection -- the left side owns both -- so its catalogue is a
+ * slice of the real one with a selection of its own.
  */
 export function createSideChat(options: {
   runtime: RuntimeStore;
@@ -25,16 +22,14 @@ export function createSideChat(options: {
   patchChat: (chatId: string, patch: Partial<ChatSummary>) => unknown;
   drafts: DraftsStore;
   maxAttachmentBytes: Accessor<number>;
+  harnessCapabilities: Accessor<Record<string, HarnessManifestView>>;
+  profiles: Accessor<Template[]>;
   onError: (error: unknown) => void;
   defaultTemplateId: Accessor<string>;
   saveWorkspaceDefault: (workspaceId: string, templateId: string | null) => Promise<unknown>;
 }) {
   const [selectedId, setSelectedId] = createSignal<string | null>(null);
   const [projectId, setProjectId] = createSignal("");
-  const models = createModelSettings(options.onError, () => {}, notifyModelFallback);
-  const permissions = createPermissionSettings(options.onError);
-  const serviceLevels = createServiceLevelSettings(options.onError);
-  const attachments = createAttachments(options.onError, options.maxAttachmentBytes);
   const catalogue: ChatCatalogue = {
     selectedId,
     projectId,
@@ -42,19 +37,6 @@ export function createSideChat(options: {
     refresh: options.refresh,
     patchChat: options.patchChat,
   };
-  const chat = createActiveChat({
-    catalogue,
-    runtime: options.runtime,
-    models,
-    permissions,
-    serviceLevels,
-    attachments,
-    drafts: options.drafts,
-    onError: options.onError,
-    onModelRecovered: () => {},
-    defaultTemplateId: options.defaultTemplateId,
-    saveWorkspaceDefault: options.saveWorkspaceDefault,
-  });
   /** The open chat as the catalogue lists it, with its place. */
   const selected = () => {
     const id = selectedId();
@@ -65,11 +47,24 @@ export function createSideChat(options: {
     }
     return null;
   };
+  const session = createChatSession({
+    catalogue,
+    selectedChat: () => selected()?.chat,
+    projects: options.projects,
+    runtime: options.runtime,
+    drafts: options.drafts,
+    maxAttachmentBytes: options.maxAttachmentBytes,
+    harnessCapabilities: options.harnessCapabilities,
+    profiles: options.profiles,
+    defaultTemplateId: options.defaultTemplateId,
+    saveWorkspaceDefault: options.saveWorkspaceDefault,
+    onError: options.onError,
+  });
   return {
-    chat, models, permissions, serviceLevels, attachments, selectedId, selected,
-    open: (target: ChatSummary, project: Project) => chat.select(target, project, { history: "none" }),
+    ...session, selectedId, selected,
+    open: (target: ChatSummary, project: Project) => session.chat.select(target, project, { history: "none" }),
     close: () => {
-      chat.reset();
+      session.chat.reset();
       setSelectedId(null);
       setProjectId("");
     },
