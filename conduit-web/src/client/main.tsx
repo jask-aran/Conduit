@@ -23,8 +23,8 @@ import { publishCertificatePins } from "./platform/certificate-pins.ts";
 import { verifyLeaf } from "./platform/server-proof.ts";
 import { publishServerDirectory } from "./platform/server-directory";
 import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
-import { manifestForChat, resolveCapability, resolveHistory } from "./chat-capabilities";
-import type { BooleanCapability, ChatSummary, DashboardChat, HarnessManifestView, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
+import { resolveCapability } from "./chat-capabilities";
+import type { ChatSummary, DashboardChat, HarnessManifestView, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
 import { AppDashboard } from "./dashboard/app-dashboard";
@@ -59,14 +59,12 @@ import { clampSidebarChatLimit, selectedSidebarChatLimit, SIDEBAR_CHAT_LIMIT_STO
 import { CHAT_SORT_STORAGE_KEY, selectedChatSort, useChatSort } from "./preferences/chat-sort";
 import { WorkspaceAppearanceEditor } from "./project/workspace-appearance-editor";
 import { applyPwaUpdate, checkForPwaUpdate, claimPwaUpdateArrival, forcePwaUpdate, pwaUpdateWaiting, resetPwaAppCache, startPwaUpdates } from "./pwa-update";
-import { createActiveChat, type ActiveChatStore } from "./state/active-chat";
-import { createAttachments, DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
+import type { ActiveChatStore } from "./state/active-chat";
+import { createChatSession } from "./state/chat-session";
+import { DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
 import { createDrafts } from "./state/drafts";
 import { createCatalogueStore } from "./state/catalogue";
 import { markChatRead } from "./state/read-receipts";
-import { createModelSettings, notifyModelFallback } from "./state/model-settings";
-import { createPermissionSettings } from "./state/permission-settings";
-import { createServiceLevelSettings } from "./state/service-level-settings";
 import { createSideChat } from "./state/side-chat";
 import { createRuntimeStore } from "./state/runtime";
 import { VoiceWaveform } from "./chat/voice-waveform";
@@ -684,7 +682,6 @@ function App() {
     onCleanup(() => { clearTimeout(fallback); clearTimeout(settle); delete root.dataset.arrival; });
   }
   let dragDepth = 0;
-  let attachFileInput: HTMLInputElement | undefined;
   let workspaceSuggestionsRequest: Promise<void> | null = null;
 
   let diagnosticContext: () => ErrorDiagnosticContext = () => ({ route: location.pathname });
@@ -841,17 +838,6 @@ function App() {
     if (hasConnected) void checkForPwaUpdate().catch(() => {});
     hasConnected = true;
   });
-  const [composerStatus, setComposerStatus] = createSignal<ComposerStatus | null>(null);
-  const models = createModelSettings(showError, ({ from, to }) => {
-    const label = (level: string) => level ? level[0]!.toUpperCase() + level.slice(1) : "Off";
-    toast.info(`Saved thinking level ${label(from)} is no longer available. Using ${label(to)}.`, {
-      id: "thinking-level-recovery",
-      duration: 6_000,
-    });
-  }, notifyModelFallback);
-  const permissions = createPermissionSettings(showError);
-  const serviceLevels = createServiceLevelSettings(showError);
-  const attachments = createAttachments(showError, maxAttachmentBytes);
   const drafts = createDrafts(showError);
 
 
@@ -889,25 +875,39 @@ function App() {
     }
   };
 
-  const chat = createActiveChat({
+  const profiles = createMemo<Template[]>(() => {
+    const ordinary = templates().filter((item) => item.defaultable !== false);
+    return [...ordinary, ...externalProfiles()];
+  });
+  // The main pane's chat, and everything it drives (state/chat-session.ts).
+  const session = createChatSession({
     catalogue,
+    selectedChat: () => catalogue.selected()?.chat,
+    projects: catalogue.projects,
     runtime,
-    models,
-    permissions,
-    serviceLevels,
-    attachments,
     drafts,
+    maxAttachmentBytes,
+    harnessCapabilities,
+    profiles,
+    defaultTemplateId,
+    saveWorkspaceDefault,
     onError: showError,
+    onThinkingLevelRecovered: ({ from, to }) => {
+      const label = (level: string) => level ? level[0]!.toUpperCase() + level.slice(1) : "Off";
+      toast.info(`Saved thinking level ${label(from)} is no longer available. Using ${label(to)}.`, {
+        id: "thinking-level-recovery",
+        duration: 6_000,
+      });
+    },
     onModelRecovered: ({ from, to }) => toast.warning(`This chat's previous model ${from} is no longer scoped. It resumed with ${to}.`, {
       id: "model-scope-recovery",
       duration: 6_000,
     }),
-    defaultTemplateId,
-    saveWorkspaceDefault,
   });
+  const { chat, models, permissions, serviceLevels, attachments, activeProfile, composerStatus, setComposerStatus } = session;
   const side = createSideChat({
     runtime, projects: catalogue.projects, refresh: catalogue.refresh, patchChat: catalogue.patchChat, drafts, maxAttachmentBytes,
-    onError: showError, defaultTemplateId, saveWorkspaceDefault,
+    harnessCapabilities, profiles, onError: showError, defaultTemplateId, saveWorkspaceDefault,
   });
   // Not awaited: a round trip in front of first paint is a poor price for a
   // race that asking again closes. A chat that opened before this landed is
@@ -956,30 +956,9 @@ function App() {
     });
   }
   const selectedProject = createMemo(() => catalogue.projects().find((project) => project.id === catalogue.projectId()));
-  const profiles = createMemo<Template[]>(() => {
-    const ordinary = templates().filter((item) => item.defaultable !== false);
-    return [...ordinary, ...externalProfiles()];
-  });
-  const activeProfile = createMemo(() => profiles().find((item) => item.id === chat.templateId())
-    || profiles().find((item) => item.id === defaultTemplateId()) || null);
-  /**
-   * Whether a capability is on for the chat currently in front of us.
-   *
-   * Two sources describe a session: the harness manifest carried by its
-   * profile, which says what this harness can ever do, and the capabilities the
-   * chat itself reported, which arrive with a live record and refine it. Either
-   * one saying no is enough. Reading them separately is what let a control
-   * survive a chat switch -- a signal belonging to the session before this one
-   * is still a signal, and it lit up a control the new session could not
-   * honour. Capability-gated UI asks here rather than reaching for either
-   * source, so there is one place to be right as more of it appears.
-   */
-  // With no chat yet, as on the dashboard, the composer is the chosen profile's.
-  const chatManifest = createMemo(() => manifestForChat(harnessCapabilities(), catalogue.selected()?.chat)
-    || (activeProfile() ? harnessCapabilities()[activeProfile()!.implementation || "conduit_pi"] : null) || null);
-  const chatCapability = (name: BooleanCapability, fallback = false): boolean =>
-    resolveCapability(chatManifest(), chat.capabilities(), name, fallback);
-  const chatHistory = createMemo(() => resolveHistory(chatManifest(), chat.capabilities()));
+  const chatManifest = session.manifest;
+  const chatCapability = session.capability;
+  const chatHistory = session.history;
   const openingLiveChat = createMemo(() => chat.presentation().kind === "opening_live");
   const withheldLiveChat = createMemo(() => chat.presentation().kind !== "ready");
   const emptyChat = createMemo(() => !withheldLiveChat() && chat.loadedId() === catalogue.selectedId() && !chat.messages().length && !chat.tools().length && !isChatContentActivity(chat.activity()));
@@ -1855,22 +1834,7 @@ function App() {
     else focusChatPane();
   };
 
-  // Either side's chat: the main one, or the one beside it.
-  const switchProfile = async (id: string, target: ActiveChatStore = chat) => {
-    const chatId = target.loadedId();
-    if (!chatId) return;
-    const payload = await api<ChatSummary>(`/v0/chats/${encodeURIComponent(chatId)}`, {
-      method: "PATCH",
-      body: JSON.stringify({ profileId: id }),
-    });
-    const project = catalogue.projects().find((item) => item.id === payload.projectId);
-    if (!project) throw new Error("The selected profile returned a chat outside the current catalogue");
-    // A profile changes the harness and every capability-scoped value below
-    // it. Re-enter the normal selection lifecycle instead of maintaining a
-    // second, incomplete list of stores to refresh here.
-    catalogue.patchChat(chatId, payload);
-    await target.initialize(payload, project, undefined, { warm: true });
-  };
+  const switchProfile = (id: string) => session.switchProfile(id);
 
   const refresh = async () => {
     const projects = await catalogue.refresh();
@@ -2217,11 +2181,7 @@ function App() {
       if (previous && previous.chat.id !== beside.chat.id) saveSplitView(`chat:${previous.chat.id}`);
     });
   };
-  const sideManifest = createMemo(() => manifestForChat(harnessCapabilities(), side.selected()?.chat) || null);
-  const sideCapability = (name: BooleanCapability, fallback = false): boolean => resolveCapability(sideManifest(), side.chat.capabilities(), name, fallback);
-  const sideProfile = createMemo(() => profiles().find((item) => item.id === side.chat.templateId()) || null);
-  const [sideComposerStatus, setSideComposerStatus] = createSignal<ComposerStatus | null>(null);
-  let sideAttachInput: HTMLInputElement | undefined;
+  const { manifest: sideManifest, capability: sideCapability, activeProfile: sideProfile, composerStatus: sideComposerStatus, setComposerStatus: setSideComposerStatus } = side;
   // The transcript learns its width only from geometry motion, so the split
   // announces every change of the room it takes from the chat.
   let splitMotionId = 0;
@@ -2422,7 +2382,7 @@ function App() {
     newFolder: () => runSidebar("new-folder"),
     newWorkspace: () => runSidebar("new-workspace"),
     openRuntimeChat: () => void createChat(undefined, { templateId: "runtime" }),
-    attach: () => attachFileInput?.click(),
+    attach: () => session.openAttachments(),
     stashPrompt,
     toggleDictation: () => window.dispatchEvent(new Event("conduit:toggle-dictation")),
     toggleSidebar: () => runSidebar("toggle-sidebar"),
@@ -2947,7 +2907,7 @@ function App() {
 
   return <>
     <Toaster richColors />
-    <input ref={attachFileInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
+    <input ref={session.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
     <Dialog open={Boolean(workspaceIdentityProject())} onOpenChange={(open) => { if (!open) closeWorkspaceIdentity(); }}>
       <DialogContent class="workspace-appearance-dialog" title="Workspace identity" description="Choose a short mark or a Lucide icon, then choose a preset or custom color.">
         <Show when={workspaceIdentityProject()}>{(project) => <WorkspaceAppearanceEditor compact value={project().workspaceAppearance} saving={workspaceIdentitySaving()} onSave={(appearance) => void saveWorkspaceIdentity(appearance)} />}</Show>
@@ -3032,7 +2992,7 @@ function App() {
               onOpenSettings={openSettings}
               onOpenModelSelector={openModelSelector}
               modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)}
-              onOpenAttachments={() => attachFileInput?.click()}
+              onOpenAttachments={session.openAttachments}
               onStatusChange={setComposerStatus}
               onSendDraft={async (prompt) => {
                 const project = chatOwner() || catalogue.projects().find((item) => item.slug === "chat");
@@ -3118,7 +3078,7 @@ function App() {
                 const use = () => ensureHarnessDraft(harnessId(), input.folder.current, choices());
                 return <div style={{ display: "contents" }}
                   onInput={(event) => { if (event.target instanceof HTMLTextAreaElement) typedBeforeDraft = event.target.value; void use(); }}>
-                  <Composer chat={chat} launches supports={(name) => resolveCapability(manifest(), chat.capabilities(), name, false)} attachments={attachments} attachmentsSupported={Boolean(manifest()?.attachments)} models={drafted() ? models : input.models} modelsLoading={drafted() ? undefined : input.loading} folder={input.folder} permissions={manifest()?.permissionModes ? (drafted() ? permissions : input.permissions) : undefined} serviceLevels={manifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={harnessProfile(harnessId()) ? [harnessProfile(harnessId())!] : []} activeProfile={harnessProfile(harnessId())} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => void use().then(() => attachFileInput?.click())} onStatusChange={setComposerStatus} onSendDraft={(prompt) => sendHarnessDraft(harnessId(), input.folder.current, choices(), prompt)} />
+                  <Composer chat={chat} launches supports={(name) => resolveCapability(manifest(), chat.capabilities(), name, false)} attachments={attachments} attachmentsSupported={Boolean(manifest()?.attachments)} models={drafted() ? models : input.models} modelsLoading={drafted() ? undefined : input.loading} folder={input.folder} permissions={manifest()?.permissionModes ? (drafted() ? permissions : input.permissions) : undefined} serviceLevels={manifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={harnessProfile(harnessId()) ? [harnessProfile(harnessId())!] : []} activeProfile={harnessProfile(harnessId())} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => void use().then(() => session.openAttachments())} onStatusChange={setComposerStatus} onSendDraft={(prompt) => sendHarnessDraft(harnessId(), input.folder.current, choices(), prompt)} />
                 </div>;
               }}
               onStartThread={(launch) => sendHarnessDraft(launch.harnessId, launch.cwd, launch, launch.prompt)} onOpenThread={(thread) => void openHarnessThread(thread)} onOpenChat={(target, project) => void openChat(target, project)} />
@@ -3132,7 +3092,7 @@ function App() {
                   place is missing, since the thread's folder is where it ran. */}
               <Conversation chat={chat} busy={openingLiveChat()} stackRef={(element) => { chatComposerStack = element; }}
                 transcript={<Transcript chat={chat} supports={chatCapability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={label()} projectId={catalogue.projectId()} />}
-                composer={<Composer chat={chat} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} />} />
+                composer={<Composer chat={chat} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={session.openAttachments} onStatusChange={setComposerStatus} />} />
             </>;
           }}</Show>
         </Show>
@@ -3143,7 +3103,7 @@ function App() {
           <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
           <Conversation chat={chat} busy={openingLiveChat()} stackRef={(element) => { chatComposerStack = element; }}
             transcript={<Transcript chat={chat} supports={chatCapability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} projectId={selectedProject()?.id} />}
-            composer={<Composer chat={chat} place={chatPlace()} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} keyboardOwner={() => !sideHasKeyboard()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} />} />
+            composer={<Composer chat={chat} place={chatPlace()} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} keyboardOwner={() => !sideHasKeyboard()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={session.openAttachments} onStatusChange={setComposerStatus} />} />
         </>}>
           <ChatHeader project={selectedProject()} title={selectedProject()!.name} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} dashboard />
           <ProjectDashboard project={selectedProject()!} runtime={runtime} profiles={profiles()} onOpenHarnessThread={(harnessId, path, id, title) => void openHarnessThread({ harnessId, path, id, title })}
@@ -3165,7 +3125,7 @@ function App() {
               onOpenSettings={openSettings}
               onOpenModelSelector={openModelSelector}
               modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)}
-              onOpenAttachments={() => attachFileInput?.click()}
+              onOpenAttachments={session.openAttachments}
               onStatusChange={setComposerStatus}
               onSendDraft={async (prompt) => {
                 const project = selectedProject();
@@ -3205,7 +3165,7 @@ function App() {
         <div class="main-split-resize" role="separator" aria-label="Resize main pane split" aria-orientation="vertical" onPointerDown={startSplitResize} />
         <Show when={sideChatId()}>
           <div class="main-split-chat">
-            <input ref={sideAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) side.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
+            <input ref={side.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) side.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
             <ChatHeader project={side.selected()?.project} onOpenPlace={openPlace} title={side.chat.title() || (side.chat.status() === "active" ? "Untitled chat" : "New chat")} profile={sideProfile()} runtime={side.chat.runtimeIdentity()} live={side.chat.live() as unknown as Record<string, unknown>} chat={side.chat} contextMetrics={contextMetrics} composerStatus={sideComposerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={false} onToggleMobileSidebar={() => {}} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareChat(side.selectedId())} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating}
               actions={<>
                 <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label="Swap with the main chat" title="Swap with the main chat" onClick={swapSideChat}><ArrowLeftRightIcon /></Button>
@@ -3213,7 +3173,7 @@ function App() {
               </>} />
             <Conversation chat={side.chat} busy={side.chat.presentation().kind === "opening_live"}
               transcript={<Transcript chat={side.chat} supports={sideCapability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={sideProfile()?.label || sideProfile()?.id || side.chat.templateId() || undefined} projectId={side.selected()?.project.id} />}
-              composer={<Composer chat={side.chat} supports={sideCapability} attachments={side.attachments} attachmentsSupported={sideCapability("attachments", true)} models={side.models} permissions={sideCapability("permissionModes") ? side.permissions : undefined} serviceLevels={sideManifest()?.serviceLevels?.length ? side.serviceLevels : undefined} profiles={profiles()} activeProfile={sideProfile()} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} keyboardOwner={sideHasKeyboard} onChooseProfile={(id) => void switchProfile(id, side.chat).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={() => sideAttachInput?.click()} onStatusChange={setSideComposerStatus} />} />
+              composer={<Composer chat={side.chat} supports={sideCapability} attachments={side.attachments} attachmentsSupported={sideCapability("attachments", true)} models={side.models} permissions={sideCapability("permissionModes") ? side.permissions : undefined} serviceLevels={sideManifest()?.serviceLevels?.length ? side.serviceLevels : undefined} profiles={profiles()} activeProfile={sideProfile()} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} keyboardOwner={sideHasKeyboard} onChooseProfile={(id) => void side.switchProfile(id).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={side.openAttachments} onStatusChange={setSideComposerStatus} />} />
           </div>
         </Show>
       </section>
