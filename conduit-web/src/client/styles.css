@@ -633,9 +633,8 @@ svg.lucide :where(path, circle, ellipse, line, polyline, polygon, rect) { vector
 .crash-screen { display: grid; min-height: 100dvh; place-items: center; padding: 19.2px; background: var(--background); }
 .crash-card { width: min(368px, 100%); padding: 16px; border: 0.8px solid var(--border); border-radius: 9.6px; background: var(--card); }
 
-/* Overlays, dialogs, and cards share the menu's solid dark surface. The
-   glass treatment is reserved for the composer (and the drop overlay's
-   native blur); everywhere else translucent grey read as flat, not glassy. */
+/* The old solid surface. Palettes, Settings and menus have moved to frost
+   (the frost blocks at the end of this file); dialogs still use it. */
 .command-shell,
 .settings-shell,
 .conduit-modal-card,
@@ -2641,3 +2640,16 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   .settings-dialog .settings-shell .settings-content > header { border-bottom-color: oklch(1 0 0 / 10%); background: oklch(0.24 0.005 264 / 70%); backdrop-filter: blur(24px); padding-top: 12px; }
   .settings-dialog .settings-shell .settings-rail { padding-top: 10px; }
 }
+
+/* Dropdown menus, context menus and popovers are overlays, so they are frost
+   (DESIGN.md, Surfaces): the composer's material at the menu's own radius,
+   the cursor wash a step brighter as on frost rows. The doubled attribute
+   outranks the primitives' utility classes. */
+:is([data-slot="menu-content"], [data-slot="menu-sub-content"], [data-slot="context-menu-content"], [data-slot="context-menu-sub-content"], [data-slot="popover-content"])[data-slot] {
+  border: 1px solid #ffffff4d;
+  background: #ffffff2b;
+  backdrop-filter: blur(24px);
+  box-shadow: 0 18px 50px rgb(0 0 0 / 38%), inset 0 1px 0 rgb(255 255 255 / 45%), inset 0 -1px 0 rgb(255 255 255 / 8%);
+  --tw-ring-shadow: 0 0 #0000;
+}
+:is([data-slot="menu-content"], [data-slot="menu-sub-content"], [data-slot="context-menu-content"], [data-slot="context-menu-sub-content"]) [data-highlighted] { background: oklch(1 0 0 / 10%); }

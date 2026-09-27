@@ -194,7 +194,7 @@ The charcoal is cool-neutral at chroma ~0.004–0.006. That gray is the brand. D
 - **foreground / muted-foreground** — type. Muted for timestamps, hints, empty states, icons at rest.
 - **border** — 1px hairlines: inputs, a header or footer rule, and dividers. Grouping is a heading and space, with at most one hairline between groups -- not a hairline box and not a fill. Do not outline the main or workspace pane with a hairline.
 - **accent** — white at 6–7% opacity. This is hover, pressed, and selected. Selection is a gray wash, never a hue.
-- **card / popover** — slightly raised solids, left on tool cards and on menus and dialogs until they move to frost (Being migrated). Overlays -- palettes, the leader, menus, Settings, dialogs -- are frost (Surfaces). The `overlay-*` tokens are the leader's old ink-dark face; they go once no code uses them.
+- **card / popover** — slightly raised solids, left on tool cards and on dialogs until they move to frost (Being migrated). Overlays -- palettes, the leader, menus, Settings, dialogs -- are frost (Surfaces). The `overlay-*` tokens are the leader's old ink-dark face; they go once no code uses them.
 - **primary** — near-white. Default buttons and the one bright action.
 - **destructive** — errors and destructive actions only.
 - **live / warn** — tiny runtime dots and git-ish status. Never as fills, rails, or card washes.
@@ -341,7 +341,7 @@ Grouped by the surface they live on (Surfaces). Every row in every group follows
 
 **Leader menu** — what the leader, Ctrl+G, can do from where you are, shown only after a pause by default. The page dims except for the current region, which stays lit with its own corners and changes as the shown level changes. A small card in the palettes' frost sits above the composer. The region path is in 9px uppercase mono at the top; action rows align crisp keycaps at the left and use a neutral wash on hover. The go-to chords and Esc sit in the rail at the foot, on the same frost under a faint hairline. It rises ~8px as it arrives and fades and drops back when a choice or Esc ends it.
 
-**Dropdown menu** — the common case, more often than a palette: sessions, shortcuts, overflow. The overlays' frost (solid `{colors.popover}` until migrated), `{rounded.pop}`, ~320px wide. A 9px uppercase group label, then rows of **one line**: an optional leading mark (a harness mark, a drag grip, or nothing), a 12px/560 title, its muted mono meta inline and right-aligned, truncating before the title does, and trailing 13px icon actions that stay muted and appear with the row on hover or keyboard focus (always shown on touch). The whole row takes the `{colors.accent}` wash, not just the part under the pointer. A single footer action row ("+ New …") sits under a hairline. Something edited in place opens as an inline form inside its row — bordered inputs, a two-state toggle with the selected state as the gray wash, Cancel/Done — and saves on Done; the list has no separate Save. Use a popover rather than a menu when the rows hold inputs, so typing is not taken as menu navigation. A one-field rename stays a dialog.
+**Dropdown menu** — the common case, more often than a palette: sessions, shortcuts, overflow. The overlays' frost, `{rounded.pop}`, ~320px wide; context menus, submenus and popovers too. A 9px uppercase group label, then rows of **one line**: an optional leading mark (a harness mark, a drag grip, or nothing), a 12px/560 title, its muted mono meta inline and right-aligned, truncating before the title does, and trailing 13px icon actions that stay muted and appear with the row on hover or keyboard focus (always shown on touch). The whole row takes the `{colors.accent}` wash, not just the part under the pointer. A single footer action row ("+ New …") sits under a hairline. Something edited in place opens as an inline form inside its row — bordered inputs, a two-state toggle with the selected state as the gray wash, Cancel/Done — and saves on Done; the list has no separate Save. Use a popover rather than a menu when the rows hold inputs, so typing is not taken as menu navigation. A one-field rename stays a dialog.
 
 Choosing in a menu:
 
@@ -420,7 +420,6 @@ Choosing in a menu:
 
 Surfaces that do not match the language yet. Do not copy them; when you touch one, move it towards its target, and take it off this list once it is there.
 
-- **Dropdown menus**: solid `{colors.popover}` → the overlays' frost.
 - **Dialogs and confirms**: solid cards → frost.
 - **The model selector and menus with a current choice**: a standing wash on the current item → white and semibold with no fill.
 - **Dashboard lists**: no keyboard yet → the sidebar's cursor (Keyboard), ideally one shared list cursor taking a region and its rows. In the chats list ↑/↓ and Home/End cross day headings, Enter opens, Esc returns to the composer; Tab moves between the chats list and each group of the right column, where ↑/↓ stay in the group and the folder shelf also takes ←/→.
