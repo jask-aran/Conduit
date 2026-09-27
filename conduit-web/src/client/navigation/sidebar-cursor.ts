@@ -12,7 +12,9 @@
  * focus there while the sidebar has it, so arrowing carries on from where the
  * pointer is; arrowing away from a still pointer takes the rows out of hover
  * until it moves again, so the row under it does not keep a second wash --
- * as does any arrival from the keyboard, such as the go-to chord.
+ * as does any arrival from the keyboard, such as the go-to chord. Leaving the
+ * window keeps the cursor where it was (data-held): the browser drops
+ * :focus-visible while the window is away, though focus has not moved.
  */
 
 // The rows the cursor stops on. A project is its link: the chevron beside it
@@ -132,10 +134,23 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
     if (!pointerFocus && row?.matches(STOPS) && row.matches(":focus-visible")) keyboardCursor(true);
   };
 
+  const release = () => root.querySelector("[data-held]")?.removeAttribute("data-held");
+  const away = () => {
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && list.contains(focused) && focused.matches(STOPS)) focused.setAttribute("data-held", "");
+  };
+
   root.addEventListener("keydown", keydown);
   root.addEventListener("pointermove", pointermove);
   root.addEventListener("focusin", focusin);
+  root.addEventListener("focusout", release);
+  window.addEventListener("blur", away);
+  window.addEventListener("focus", release);
   return () => {
+    root.removeEventListener("focusout", release);
+    window.removeEventListener("blur", away);
+    window.removeEventListener("focus", release);
+    release();
     root.removeEventListener("focusin", focusin);
     root.removeEventListener("keydown", keydown);
     root.removeEventListener("pointermove", pointermove);

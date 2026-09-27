@@ -464,3 +464,8 @@
 .conduit-sidebar[data-keyboard-cursor] .sidebar-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] { color: var(--muted-foreground); opacity: .78; }
 .conduit-sidebar[data-keyboard-cursor] .sidebar-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: currentColor; opacity: 1; }
 .conduit-sidebar[data-keyboard-cursor] .sidebar-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 0; }
+
+/* The cursor held while the window is away (sidebar-cursor.ts). */
+.conduit-sidebar :is(.sidebar-row:is([data-held], :has([data-held])), .sidebar-rail-action[data-held], .sidebar-view-more[data-held]) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.conduit-sidebar .sidebar-harness-tile[data-held] { border-color: color-mix(in oklch, var(--border), transparent 20%); background: color-mix(in oklch, var(--sidebar-foreground), transparent 93%); }
+:is(.sidebar-row:is([data-held], :has([data-held])), .split-row[data-held]) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
