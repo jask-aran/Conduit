@@ -1850,8 +1850,9 @@ function App() {
     else focusChatPane();
   };
 
-  const switchProfile = async (id: string) => {
-    const chatId = chat.loadedId();
+  // Either side's chat: the main one, or the one beside it.
+  const switchProfile = async (id: string, target: ActiveChatStore = chat) => {
+    const chatId = target.loadedId();
     if (!chatId) return;
     const payload = await api<ChatSummary>(`/v0/chats/${encodeURIComponent(chatId)}`, {
       method: "PATCH",
@@ -1863,7 +1864,7 @@ function App() {
     // it. Re-enter the normal selection lifecycle instead of maintaining a
     // second, incomplete list of stores to refresh here.
     catalogue.patchChat(chatId, payload);
-    await chat.initialize(payload, project, undefined, { warm: true });
+    await target.initialize(payload, project, undefined, { warm: true });
   };
 
   const refresh = async () => {
@@ -3201,7 +3202,7 @@ function App() {
               </>} />
             <Conversation chat={side.chat} busy={side.chat.presentation().kind === "opening_live"}
               transcript={<Transcript chat={side.chat} supports={sideCapability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={sideProfile()?.label || sideProfile()?.id || side.chat.templateId() || undefined} projectId={side.selected()?.project.id} />}
-              composer={<Composer chat={side.chat} supports={sideCapability} attachments={side.attachments} attachmentsSupported={sideCapability("attachments", true)} models={side.models} permissions={sideCapability("permissionModes") ? side.permissions : undefined} serviceLevels={sideManifest()?.serviceLevels?.length ? side.serviceLevels : undefined} profiles={profiles()} activeProfile={sideProfile()} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} keyboardOwner={sideHasKeyboard} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => sideAttachInput?.click()} onStatusChange={setSideComposerStatus} />} />
+              composer={<Composer chat={side.chat} supports={sideCapability} attachments={side.attachments} attachmentsSupported={sideCapability("attachments", true)} models={side.models} permissions={sideCapability("permissionModes") ? side.permissions : undefined} serviceLevels={sideManifest()?.serviceLevels?.length ? side.serviceLevels : undefined} profiles={profiles()} activeProfile={sideProfile()} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} keyboardOwner={sideHasKeyboard} onChooseProfile={(id) => void switchProfile(id, side.chat).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={() => sideAttachInput?.click()} onStatusChange={setSideComposerStatus} />} />
           </div>
         </Show>
       </section>

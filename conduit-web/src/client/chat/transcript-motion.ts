@@ -19,6 +19,9 @@ function layoutWidth(element: HTMLElement) {
   return element.getBoundingClientRect().width;
 }
 
+// Two views side by side in the main pane (docs/design/panes-and-rail.md).
+const sharesMainPane = () => Boolean(document.querySelector(".main-split"));
+
 export function mountTranscriptPanelMotion(
   transcript: HTMLElement,
   motionShell: HTMLElement,
@@ -29,7 +32,7 @@ export function mountTranscriptPanelMotion(
   const activeIds = new Map<PanelGeometryMotionSource, number>();
   // Edge motions (resize + open/close shell easing) pin a preview width so the
   // heavy transcript does not take natural flex width on every frame.
-  const edgeStarts = new Map<PanelGeometryMotionSource, { size: number; width: number; contentWidth: number; gutter: number; canTranslate: boolean; shift: number }>();
+  const edgeStarts = new Map<PanelGeometryMotionSource, { size: number; width: number; contentWidth: number; gutter: number; canTranslate: boolean; shift: number; paneWidth: number | null }>();
   let transformSource: PanelGeometryMotionSource | null = null;
   const panelMotionMode = usePanelMotion();
 
@@ -103,6 +106,12 @@ export function mountTranscriptPanelMotion(
       // Edge path (resize + open/close): pin width, follow shell on change.
       // targetSize inverse-translate is only for atomic shell commits — it
       // jumps then slides if the shell is already CSS-easing.
+      // Beside another pane, this pane takes only its share of the change, and
+      // from whichever edge moved: an atomic commit just lays out at the end.
+      if (detail.targetSize != null && sharesMainPane()) {
+        activeIds.delete(detail.source);
+        return;
+      }
       if (detail.targetSize != null) {
         edgeStarts.delete(detail.source);
         if (!edgeStarts.size) motionShell.style.removeProperty("width");
@@ -127,6 +136,7 @@ export function mountTranscriptPanelMotion(
       // Preserve the exact rendered shell width. The panel begin event must be
       // geometry-neutral; all visible movement starts with a change event.
       const width = layoutWidth(motionShell);
+      const rect = sharesMainPane() ? transcript.getBoundingClientRect() : null;
       const thread = transcript.querySelector<HTMLElement>(".thread");
       const contentWidth = thread?.getBoundingClientRect().width || width;
       const gutter = thread ? Number.parseFloat(getComputedStyle(thread).getPropertyValue("--transcript-column-gutter")) || 0 : 0;
@@ -138,6 +148,7 @@ export function mountTranscriptPanelMotion(
         gutter,
         canTranslate: contentWidth + gutter < width - 1,
         shift: 0,
+        paneWidth: rect ? rect.width : null,
       });
       transcript.dataset.panelMotion = "edge";
       setTransform(0);
@@ -147,7 +158,12 @@ export function mountTranscriptPanelMotion(
     if (detail.phase === "change") {
       const start = edgeStarts.get(detail.source);
       if (!start) return;
-      const delta = detail.size - start.size;
+      // Alone in the main pane, the panel's change is this pane's. Beside
+      // another pane it takes only a share, so the pane is measured: one read
+      // per frame, with the heavy content held at its pinned width. The shell
+      // sits at the pane's left, so whichever edge moved, the content's centre
+      // is off by half the change.
+      const delta = start.paneWidth == null ? detail.size - start.size : start.paneWidth - transcript.getBoundingClientRect().width;
       const availableWidth = Math.max(0, start.width - delta);
       if (panelMotionMode() === "reflow" || !start.canTranslate) {
         start.shift = 0;
