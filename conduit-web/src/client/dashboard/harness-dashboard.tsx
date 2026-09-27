@@ -11,6 +11,7 @@ import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { activityDetail, runtimeActivity, RuntimeIndicator } from "../navigation/runtime-indicator";
 import { activityLabel } from "../../activity.js";
 import { Segmented } from "../settings/settings-controls";
+import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { notifyModelFallback } from "../state/model-settings";
 import type { RuntimeStore } from "../state/runtime";
 import { timestampOf } from "./outside-threads";
@@ -114,15 +115,13 @@ export function HarnessDashboard(props: {
   };
   createEffect(() => { harness(); scope(); setLimit(CHAT_PAGE); void load(); });
 
-  const folders = createMemo(() => {
+  type Place = { path: string; label: string; missing?: boolean; project?: Project };
+  const discovered = createMemo<Place[]>(() => known().map((group) => ({ path: group.path, label: group.display, missing: group.missing })));
+  const workspacePlaces = createMemo<Place[]>(() => workspaces().map((project) => ({ path: project.workingRoot, label: project.name, project })));
+  // Where a new thread can start: anywhere either list names.
+  const launchFolders = createMemo(() => {
     const seen = new Set<string>();
-    const rows: Array<{ path: string; label: string; missing?: boolean }> = [];
-    const add = (path: string, name: string, missing?: boolean) => { if (!seen.has(path)) { seen.add(path); rows.push({ path, label: name, missing }); } };
-    const current = scope();
-    if (current) add(current, known().find((group) => group.path === current)?.display || current.split("/").at(-1) || current);
-    for (const group of known()) add(group.path, group.display, group.missing);
-    for (const project of workspaces()) add(project.workingRoot, project.name);
-    return rows.slice(0, 10);
+    return [...discovered(), ...workspacePlaces()].filter((row) => !row.missing && !seen.has(row.path) && Boolean(seen.add(row.path)));
   });
   const launchCwd = () => scope() || known().find((group) => !group.missing)?.path || props.home;
 
@@ -147,6 +146,16 @@ export function HarnessDashboard(props: {
       .sort((left, right) => right.at - left.at);
   });
   const showOutside = () => discovers() && side() === "outside";
+  // The right column follows the list. Conduit's places on the Computer are its
+  // workspaces; the threads it does not keep are wherever the harness says it
+  // ran them. The folder in scope stays in view on either side.
+  const folders = createMemo(() => {
+    const rows = showOutside() ? discovered() : workspacePlaces();
+    const current = scope();
+    if (!current || rows.some((row) => row.path === current)) return rows;
+    const name = known().find((group) => group.path === current)?.display || workspaces().find((project) => project.workingRoot === current)?.name;
+    return [{ path: current, label: name || current.split("/").at(-1) || current }, ...rows];
+  });
   const running = createMemo(() => kept().filter(({ chat }) => props.runtime.getProcess(chat.id)?.active).length);
   const total = () => showOutside() ? outside().length : kept().length;
 
@@ -243,7 +252,7 @@ export function HarnessDashboard(props: {
   };
   const pickerDirectories = () => (picker()?.listing.entries || []).filter((entry) => entry.type === "directory");
   const folder: FolderOptions = {
-    get folders() { return folders().filter((row) => !row.missing); },
+    get folders() { return launchFolders(); },
     get current() { return launchCwd(); },
     onChoose: (path) => props.onScope(path),
     onBrowse: () => void browse(launchCwd()),
@@ -297,12 +306,12 @@ export function HarnessDashboard(props: {
     <Show when={showOutside()} fallback={keptRows()}>{outsideRows()}</Show>
   </SplitGroup>;
 
-  const foldersGroup = () => <SplitGroup id="harness-folders" label="Folders" count={folders().length} actions={<button type="button" onClick={() => void browse(launchCwd())}>Browse</button>}>
-    <Show when={folders().length} fallback={<SplitEmpty>{discovers() ? "No folders yet." : `${label()} does not say where it has run.`}</SplitEmpty>}>
+  const foldersGroup = () => <SplitGroup id="harness-folders" label={showOutside() ? "Folders" : "Workspaces"} count={folders().length} actions={showOutside() ? <button type="button" onClick={() => void browse(launchCwd())}>Browse</button> : undefined}>
+    <Show when={folders().length} fallback={<SplitEmpty>{showOutside() ? `${label()} has not said where it ran.` : "No workspaces yet."}</SplitEmpty>}>
       <SplitRow element="button" aria-current={scope() ? undefined : "true"} onClick={() => props.onScope(null)} lead={<LayersIcon />} primary="All folders" />
       <For each={folders()}>{(row) =>
         <SplitRow element="button" aria-current={row.path === scope() ? "true" : undefined} disabled={row.missing} title={row.path} onClick={() => props.onScope(row.path)}
-          lead={<FolderIcon />} primary={row.label} context={row.missing ? "Folder is gone" : row.path} />}
+          lead={row.project ? <WorkspaceGlyph appearance={row.project.workspaceAppearance} /> : <FolderIcon />} primary={row.label} context={row.missing ? "Folder is gone" : row.path} />}
       </For>
     </Show>
   </SplitGroup>;
@@ -324,7 +333,7 @@ export function HarnessDashboard(props: {
       <header><strong>Select working folder</strong><button type="button" aria-label="Cancel" onClick={() => setPicker(null)}><XIcon /></button></header>
       <div class="harness-picker-path"><button type="button" aria-label="Home" onClick={() => void browse(location().home)}><HomeIcon /></button><span title={location().project.workingRoot}>{location().project.workingRoot}</span><Show when={location().project.workingRoot !== location().home}><button type="button" onClick={() => void browse(location().parent)}>Up</button></Show></div>
       <div class="harness-picker-list"><For each={pickerDirectories()}>{(entry) => <button type="button" onClick={() => void browse(`${location().project.workingRoot}/${entry.path}`)}><FolderIcon /><span>{entry.name}</span></button>}</For><Show when={!pickerDirectories().length}><p class="harness-note">No folders here.</p></Show></div>
-      <Show when={folders().length}><div class="harness-picker-recent"><For each={folders()}>{(row) => <button type="button" title={row.path} onClick={() => void browse(row.path)}>{row.label}</button>}</For></div></Show>
+      <Show when={launchFolders().length}><div class="harness-picker-recent"><For each={launchFolders()}>{(row) => <button type="button" title={row.path} onClick={() => void browse(row.path)}>{row.label}</button>}</For></div></Show>
       <footer><small title={location().project.workingRoot}>{location().project.workingRoot}</small><button type="button" disabled={pickerBusy()} onClick={() => { props.onScope(location().project.workingRoot); setPicker(null); }}>Use folder <ArrowRightIcon /></button></footer>
     </div></div>}</Show>
   </>}</Show>;
