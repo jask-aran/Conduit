@@ -51,17 +51,19 @@ let running: Animation[] = [];
  * ones. Never delayed, so a fast resize never catches the old layout squeezed.
  * Instant when motion is reduced.
  */
-function glide(root: HTMLElement, change: () => void) {
+function glide(root: HTMLElement, change: () => void, shown?: DOMRect) {
   for (const animation of running) animation.cancel();
   running = [];
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return change();
   const composer = root.querySelector<HTMLElement>(".split-dashboard-composer");
-  const before = composer?.getBoundingClientRect();
+  // Where the composer was last drawn: by now the pane has already resized
+  // around the old layout, which may have squeezed it.
+  const before = shown ?? composer?.getBoundingClientRect();
   change();
   const after = composer?.getBoundingClientRect();
   // Into two columns the composer narrows out of the right column's way; its
   // sections wait until it mostly has, so it never draws over them.
-  const narrowing = Boolean(before && after && after.width < before.width - 1);
+  const narrowing = !root.hasAttribute("data-one-column") && Boolean(before && after && after.width < before.width - 1);
   for (const section of root.querySelectorAll<HTMLElement>(".split-group, .split-dashboard-notice")) {
     const delay = narrowing && section.closest(".split-dashboard-aside") ? 200 : 0;
     running.push(section.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, delay, easing: "ease-out", fill: "backwards" }));
@@ -108,12 +110,13 @@ export function SplitDashboard(props: {
   // The layout being switched to, so a switch under way is not started again
   // on every frame of a resize.
   let target = false;
+  let shown: DOMRect | undefined;
   createEffect(() => {
     const next = wanted();
     if (next === target) return;
     target = next;
     if (!measured) return setOneColumn(next);
-    glide(root, () => setOneColumn(next));
+    glide(root, () => setOneColumn(next), shown);
   });
   onMount(() => {
     onCleanup(installSplitCursor(root));
@@ -122,7 +125,13 @@ export function SplitDashboard(props: {
     query.addEventListener("change", change);
     onCleanup(() => query.removeEventListener("change", change));
     let frame = 0;
-    const measure = () => { frame = 0; setPaneWidth(root.clientWidth); setNeed(twoColumnWidth(root)); if (!measured) requestAnimationFrame(() => { measured = true; }); };
+    const measure = () => {
+      frame = 0;
+      setPaneWidth(root.clientWidth);
+      setNeed(twoColumnWidth(root));
+      shown = root.querySelector(".split-dashboard-composer")?.getBoundingClientRect();
+      if (!measured) requestAnimationFrame(() => { measured = true; });
+    };
     const schedule = () => { if (!frame) frame = requestAnimationFrame(measure); };
     const sizes = new ResizeObserver(schedule);
     const watch = () => { sizes.disconnect(); sizes.observe(root); for (const element of root.querySelectorAll(WATCHED)) sizes.observe(element); schedule(); };
