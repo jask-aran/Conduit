@@ -190,5 +190,5 @@
   .split-group-toggle svg { transition: none; }
 }
 @media (--conduit-mobile-layout) {
-  .split-group-actions .split-counts { padding-inline: 8px; font-size: 11.5px; }
+  .split-group-actions .split-counts { padding-inline: 8px; font-size: 10.5px; }
 }
