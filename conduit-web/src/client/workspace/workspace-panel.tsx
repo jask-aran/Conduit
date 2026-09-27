@@ -1,4 +1,5 @@
 import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, Show, type Accessor, type JSX } from "solid-js";
+import { MIN_MAIN_PANE_WIDTH } from "../layout-geometry";
 import { Columns2Icon, CheckIcon, ChevronsUpIcon, EllipsisIcon, ListCollapseIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileDiffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, FolderUpIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, HistoryIcon, Maximize2Icon, MessageSquareIcon, Minimize2Icon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, SendIcon, TerminalIcon, Trash2Icon, Undo2Icon, UploadIcon, WrapTextIcon, XIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
 import { Button, ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Menu, MenuContent, MenuItem, MenuRadioGroup, MenuRadioItem, MenuTrigger, Spinner } from "@/components/primitives";
@@ -1372,7 +1373,13 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     }
   };
   const copy = (value?: string) => { if (value) void navigator.clipboard.writeText(value); };
-  const clampWidth = (next: number) => Math.max(MIN_WORKSPACE_PANE_WIDTH, Math.min(Math.floor(window.innerWidth * 0.65), next));
+  // The panel takes room from the main pane only down to its minimum.
+  const room = () => {
+    const main = document.querySelector<HTMLElement>('[data-slot="sidebar-inset"]');
+    if (!main || isMobileLayout()) return Infinity;
+    return main.getBoundingClientRect().width + (props.open() ? shellWidth() + shellGap() : 0) - 8 - MIN_MAIN_PANE_WIDTH;
+  };
+  const clampWidth = (next: number) => Math.max(MIN_WORKSPACE_PANE_WIDTH, Math.min(Math.floor(window.innerWidth * 0.65), room(), next));
   // Every atomic width commit has to announce itself. The transcript learns its
   // own width only from geometry motion, so a commit that skips the event
   // leaves it laid out for the panel's previous size until something unrelated
