@@ -17,7 +17,8 @@
  *
  * Pointer and keyboard move the one cursor: a pointer moving over a row takes
  * focus there while a row has it, and arrowing away from a still pointer
- * takes the rows out of hover until it moves again.
+ * takes the rows out of hover until it moves again. Leaving the window keeps
+ * the cursor where it was (data-held), since focus there is only waiting.
  */
 
 const ROWS = ":is(.split-row:is(button, a), .split-group-more, .app-folder)";
@@ -182,11 +183,25 @@ export function installSplitCursor(root: HTMLElement): () => void {
 
   // Capture, so a heading's own controls -- a segmented switch that selects on
   // arrows, a menu that opens on ↓ -- give way to the cursor.
+  // The browser drops :focus-visible while the window is away; hold the wash.
+  const release = () => root.querySelector("[data-held]")?.removeAttribute("data-held");
+  const away = () => {
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && root.contains(focused) && focused.matches(`${ROWS}, ${CONTROLS}`)) focused.setAttribute("data-held", "");
+  };
+  window.addEventListener("blur", away);
+  window.addEventListener("focus", release);
+  root.addEventListener("focusout", release);
+
   root.addEventListener("keydown", keydown, { capture: true });
   root.addEventListener("pointermove", pointermove);
   root.addEventListener("focusin", focusin);
   return () => {
     installed.delete(go);
+    window.removeEventListener("blur", away);
+    window.removeEventListener("focus", release);
+    root.removeEventListener("focusout", release);
+    release();
     root.removeEventListener("keydown", keydown, { capture: true });
     root.removeEventListener("pointermove", pointermove);
     root.removeEventListener("focusin", focusin);
