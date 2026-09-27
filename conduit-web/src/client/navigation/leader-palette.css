@@ -29,10 +29,6 @@
   width: min(344px, calc(100vw - 24px));
   max-height: min(72dvh, 448px);
   overflow: hidden;
-  border: 1px solid var(--overlay-edge);
-  border-radius: 12px;
-  background: linear-gradient(155deg, var(--overlay-face-top), var(--overlay-face) 45%);
-  box-shadow: 0 24px 72px rgb(0 0 0 / 55%);
   color: var(--foreground);
   translate: -50% 0;
   user-select: none;
@@ -49,18 +45,7 @@
 .leader-menu-scrim[data-leaving] { animation: leader-menu-undim 150ms cubic-bezier(.4, 0, 1, 1) both; pointer-events: none; }
 .leader-menu[data-leaving] { animation: leader-menu-drop 150ms cubic-bezier(.4, 0, 1, 1) both; pointer-events: none; }
 
-.leader-menu kbd {
-  display: inline-grid;
-  min-width: 16px;
-  height: 16px;
-  place-items: center;
-  border: 1px solid var(--overlay-edge);
-  border-radius: 4px;
-  background: oklch(1 0 0 / 5%);
-  padding: 0 4px;
-  color: var(--foreground);
-  font: 550 8px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
-}
+.leader-menu-keys .keycap { color: var(--foreground); }
 
 .leader-menu-top { display: flex; min-height: 32px; align-items: center; gap: 6px; border-bottom: 1px solid var(--overlay-edge); padding: 5px 9px; }
 .leader-menu-top > kbd { flex: none; }
@@ -128,13 +113,7 @@
    the same frost under a faint hairline. */
 .leader-menu {
   width: min(360px, calc(100vw - 24px));
-  border: 1px solid #ffffff4d;
-  border-radius: 14px;
-  background: #ffffff2b;
-  backdrop-filter: blur(24px);
-  box-shadow: 0 24px 70px rgb(0 0 0 / 38%), inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 10%);
 }
-.leader-menu kbd { min-width: 16px; height: 16px; border-color: oklch(1 0 0 / 16%); background: oklch(0 0 0 / 12%); font-size: 9px; }
 .leader-menu-top { min-height: 38px; border-bottom-color: oklch(1 0 0 / 10%); padding: 6px 10px; }
 .leader-menu-path button { font-size: 9.5px; font-weight: 500; letter-spacing: .07em; }
 .leader-menu-path button[aria-current="true"] { background: oklch(1 0 0 / 12%); }
@@ -143,4 +122,5 @@
 .leader-menu-row:hover, .leader-menu-row:focus-visible { background: oklch(1 0 0 / 10%); color: var(--foreground); }
 .leader-menu-label { font-size: 12px; font-weight: 520; }
 .leader-menu-footer { border-top-color: oklch(1 0 0 / 8%); background: transparent; padding: 7px 10px; font-size: 10px; }
+/* Material and keycaps come from the shared frost block (styles.css). */
 .leader-menu-footer kbd { color: var(--muted-foreground); }

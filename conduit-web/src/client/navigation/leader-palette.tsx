@@ -127,14 +127,14 @@ export function LeaderPalette(props: { shortcuts: ShortcutManager }) {
       <div class="leader-menu-lit" data-whole={hole() ? undefined : true} style={hole() ?? {}} />
     </div>
     <aside
-      class="leader-menu"
+      class="leader-menu frost-card"
       data-shortcut-leader-palette="true"
       data-leaving={leaving() || undefined}
       role="dialog"
       aria-label={`Leader: ${contextLabel(shown()!.levels[shown()!.shown]!.context)}`}
     >
       <div class="leader-menu-top">
-        <kbd>{formatShortcutStroke(shown()!.firstStroke, props.shortcuts.environment)}</kbd>
+        <kbd class="keycap">{formatShortcutStroke(shown()!.firstStroke, props.shortcuts.environment)}</kbd>
         <nav class="leader-menu-path" aria-label="Where you are">
           <For each={[...shown()!.levels.entries()].reverse()}>{([index, level], position) => <>
             <Show when={position() > 0}><span class="leader-menu-separator" aria-hidden="true">›</span></Show>
@@ -151,15 +151,15 @@ export function LeaderPalette(props: { shortcuts: ShortcutManager }) {
       <div class="leader-menu-rows" role="list">
         <For each={rows()}>{(row) =>
           <button type="button" class="leader-menu-row" role="listitem" onClick={() => props.shortcuts.runPendingCommand(row.commandId)}>
-            <span class="leader-menu-keys"><For each={row.keys}>{(key) => <kbd>{key}</kbd>}</For></span>
+            <span class="leader-menu-keys"><For each={row.keys}>{(key) => <kbd class="keycap">{key}</kbd>}</For></span>
             <span class="leader-menu-label">{row.label}</span>
           </button>
         }</For>
       </div>
       <div class="leader-menu-footer">
-        <Show when={browsable()}><span><kbd>←</kbd><kbd>→</kbd> level</span></Show>
-        <For each={goTo()}>{(item) => <span><kbd>{item.keys}</kbd> {item.label}</span>}</For>
-        <span class="leader-menu-cancel"><kbd>Esc</kbd> cancel</span>
+        <Show when={browsable()}><span><kbd class="keycap">←</kbd><kbd class="keycap">→</kbd> level</span></Show>
+        <For each={goTo()}>{(item) => <span><kbd class="keycap">{item.keys}</kbd> {item.label}</span>}</For>
+        <span class="leader-menu-cancel"><kbd class="keycap">Esc</kbd> cancel</span>
       </div>
     </aside>
   </Show>;

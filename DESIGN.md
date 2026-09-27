@@ -167,6 +167,8 @@ Every surface is one of three materials. Choose it first, before any colour, bor
 
 Inside frost, content follows the pane's rules: one-line rows, headings and space, no boxes, and never frost on a row of its own.
 
+**Build an overlay from the shared pieces**, not a copy of another overlay: `FrostOverlay` (`components/frost.tsx`) gives the dim, the pinned card, the arrival and the phone bubble; inside it, rows take `frost-row` (the cursor wash on `data-highlighted`, where you are by `aria-current`), keys the `Keycap` / `keycap` class, and the foot `frost-rail`. The styles are the `frost-*` block at the end of `styles.css`. A card that floats without covering the page (the leader menu) takes `frost-card` alone.
+
 **On a phone an overlay is a full-screen bubble:** it fills the visual viewport with a small inset and larger tap targets, and stays a dialog, never a new route -- Settings included. Frost over a full-screen overlay gets a darker core (`linear-gradient(frost-fill, frost-fill)` over the ink at ~72%), because nothing around it is dimmed and the page behind would otherwise show through at full contrast. Desktop overlays keep plain frost over the dim.
 
 # Interaction

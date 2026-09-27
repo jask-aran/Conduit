@@ -28,7 +28,7 @@ const genericBrowseHints = [
 
 function HintContents(props: { hint: Hint }) {
   return <>
-    <For each={props.hint.keys || []}>{(key) => <kbd class="command-hint-key">{key}</kbd>}</For>
+    <For each={props.hint.keys || []}>{(key) => <kbd class="keycap command-hint-key">{key}</kbd>}</For>
     <span class="command-hint-label">{props.hint.label}</span>
   </>;
 }
@@ -152,7 +152,7 @@ export function CommandHintBar(props: {
     return undefined;
   };
 
-  return <div class="command-hint-bar" role="note" aria-label={props.context === "chat" ? "Chat search controls and keyboard shortcuts" : "Keyboard shortcuts"} data-mode={props.mode} data-chat-search={props.context === "chat" || undefined}>
+  return <div class="frost-rail command-hint-bar" role="note" aria-label={props.context === "chat" ? "Chat search controls and keyboard shortcuts" : "Keyboard shortcuts"} data-mode={props.mode} data-chat-search={props.context === "chat" || undefined}>
     <Show when={props.selectedCount !== null}><span class="command-selection-count">{props.selectedCount} selected</span></Show>
     <div class="command-hint-items command-hint-primary">
       <For each={primary()}>{(hint) => <HintItem hint={hint} onClick={hintAction(hint)} />}</For>

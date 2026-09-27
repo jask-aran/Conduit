@@ -9,6 +9,7 @@ import {
   SlashIcon, SlidersHorizontalIcon, SquareIcon, TerminalIcon, Trash2Icon, XIcon,
 } from "lucide-solid";
 import { Button } from "@/components/primitives";
+import { FrostOverlay, Keycap } from "@/components/frost";
 import { activityLabel } from "../../activity.js";
 import type { ChatSummary, ModelOption, Project } from "../api/contracts";
 import {
@@ -874,14 +875,14 @@ export function CommandMenu(props: {
       id: optionId(row.index),
       role: chatPage() && !moveMode() ? "treeitem" : "option",
       "aria-selected": selected(),
-      class: "command-option",
+      class: "command-option frost-row",
       // Keep focus in the input or list so keyboard control survives a click.
       onMouseDown: (event: MouseEvent) => event.preventDefault(),
       onMouseMove: () => { setPointerCursor(true); setActive(row.index); },
       onClick: (event: MouseEvent) => runPointerRow(row, event),
     } as const;
     if (row.type === "model") {
-      if (modelSelectorPage()) return <div {...commonProps} class="command-option command-model-option" data-highlighted={selected() || undefined} data-scoped={row.scoped || undefined}>
+      if (modelSelectorPage()) return <div {...commonProps} class="command-option frost-row command-model-option" data-highlighted={selected() || undefined} data-scoped={row.scoped || undefined}>
         <span class="command-model-label" data-matching={matchedLabel(row.model.label, parsedQuery().text) ? "" : undefined}>{matchedLabel(row.model.label, parsedQuery().text) || row.model.label}</span><small class="command-model-spec">{row.model.spec}</small>
       </div>;
       const Icon = icons.model!;
@@ -903,7 +904,7 @@ export function CommandMenu(props: {
         const activity = chatActivity(chat);
         return activity && activity !== "idle";
       }).length;
-      return <div {...commonProps} class="command-option command-folder-option" role="treeitem" aria-level={1} aria-expanded={row.searchResult ? undefined : expanded()} aria-current={props.context.project?.id === row.project.id ? "page" : undefined} data-highlighted={selected() || undefined}>
+      return <div {...commonProps} class="command-option frost-row command-folder-option" role="treeitem" aria-level={1} aria-expanded={row.searchResult ? undefined : expanded()} aria-current={props.context.project?.id === row.project.id ? "page" : undefined} data-highlighted={selected() || undefined}>
         <Show when={!row.searchResult} fallback={<span class="command-folder-chevron" aria-hidden="true" />}>
           <button type="button" class="command-folder-toggle" tabIndex={-1} aria-label={`${expanded() ? "Collapse" : "Expand"} ${row.project.name}`} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); toggleFolder(row.project.id); }}><ChevronRightIcon data-expanded={expanded() || undefined} /></button>
         </Show>
@@ -917,7 +918,7 @@ export function CommandMenu(props: {
         <button type="button" class="command-folder-search" tabIndex={-1} aria-label={`Search in ${row.project.name}`} title={`Search in ${row.project.name}`} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); enterScope(row.project, true); }}><SearchIcon /></button>
       </div>;
     }
-    if (row.type === "browse-all") return <div {...commonProps} class="command-option command-browse-all" role="treeitem" aria-level={2} data-highlighted={selected() || undefined}>
+    if (row.type === "browse-all") return <div {...commonProps} class="command-option frost-row command-browse-all" role="treeitem" aria-level={2} data-highlighted={selected() || undefined}>
       <span class="command-browse-indent" aria-hidden="true" /><ChevronRightIcon class="command-icon" /><span class="command-label">Browse all {row.count} chats</span>
     </div>;
     const command = row.command;
@@ -943,20 +944,20 @@ export function CommandMenu(props: {
         <Show when={editing()}><small>Enter to save · Escape to cancel</small></Show>
       </span>
       <Show when={command.kind === "page"}><ChevronRightIcon class="command-chevron" /></Show>
-      <Show when={commandShortcut(command)}>{(shortcut) => <span class="command-shortcut"><For each={shortcut().split(/\s+/)}>{(key) => <kbd>{key}</kbd>}</For></span>}</Show>
+      <Show when={commandShortcut(command)}>{(shortcut) => <span class="command-shortcut"><For each={shortcut().split(/\s+/)}>{(key) => <Keycap>{key}</Keycap>}</For></span>}</Show>
     </div>;
   };
 
   return <>
-    <KDialog.Root open={props.open} onOpenChange={changeOpen}>
-      <KDialog.Portal>
-        <KDialog.Content
-          class={`command-dialog${chatPage() ? " command-dialog-chat-search" : ""}${chatPage() && previewOpen() && !moveMode() ? " command-dialog-with-preview" : ""}${modelSelectorPage() ? " command-dialog-model-selector" : ""}`}
-          onOpenAutoFocus={(event) => { event.preventDefault(); focusInput(); }}
-          onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}
-          onPointerDown={(event) => { if (event.target === event.currentTarget) close(); }}
-        >
-          <div class="command-shell">
+    <FrostOverlay
+      open={props.open}
+      onOpenChange={changeOpen}
+      class={`command-dialog${chatPage() ? " command-dialog-chat-search" : ""}${chatPage() && previewOpen() && !moveMode() ? " command-dialog-with-preview" : ""}${modelSelectorPage() ? " command-dialog-model-selector" : ""}`}
+      cardClass="command-shell"
+      onOpenAutoFocus={(event) => { event.preventDefault(); focusInput(); }}
+      onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}
+      aside={<Show when={props.details}><aside class="command-detail-pane" aria-label="Search preview">{props.details}</aside></Show>}
+    >
             <KDialog.Title class="sr-only">{modelSelectorPage() ? "Model selector" : chatPage() ? "Chat search" : "Command palette"}</KDialog.Title>
             <KDialog.Description class="sr-only">{modelSelectorPage() ? "Choose the models available in this project." : chatPage() ? "Find and manage chats." : "Search commands, settings, and models."}</KDialog.Description>
             <div class="command-input-row">
@@ -1053,13 +1054,7 @@ export function CommandMenu(props: {
               previewOpen={previewOpen()}
               onTogglePreview={togglePreview}
             />
-          </div>
-          <Show when={props.details}>
-            <aside class="command-detail-pane" aria-label="Search preview">{props.details}</aside>
-          </Show>
-        </KDialog.Content>
-      </KDialog.Portal>
-    </KDialog.Root>
+    </FrostOverlay>
     <KAlertDialog.Root open={Boolean(pendingDelete())} onOpenChange={(open) => {
       if (!open) {
         setPendingDelete(null);
