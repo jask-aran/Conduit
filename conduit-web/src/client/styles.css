@@ -2676,3 +2676,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-model-option:not([data-scoped]) .command-model-label { font-weight: 450; }
 .command-model-option[data-checked] .command-model-label, .command-model-option[data-highlighted] .command-model-label { color: var(--foreground); }
 .command-model-option[data-checked] .command-model-label { font-weight: 660; }
+/* Menu rows at the sidebar row's size, a step under the old text-sm. */
+[data-slot*="menu"] [role^="menuitem"] { font-size: 10.4px; }
+[data-slot*="menu"] [role^="menuitem"] :is(span, strong):not(.composer-menu-shortcut) { font-size: inherit; }
+@media (--conduit-mobile-layout) { [data-slot*="menu"] [role^="menuitem"] { font-size: 0.875rem; } }
