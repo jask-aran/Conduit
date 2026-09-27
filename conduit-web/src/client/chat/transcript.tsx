@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createRenderEffect, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from "solid-js";
-import { ArrowDownIcon, BellIcon, CheckIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
+import { ArrowDownIcon, BellIcon, CheckIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, SquareIcon, TriangleAlertIcon, XIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { BooleanCapability, Message } from "../api/contracts";
 import { isChatContentActivity, type TranscriptSource } from "./transcript-source";
@@ -174,7 +174,7 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Tran
         the answer below, which already has a button, so there is one way to ask
         for it rather than two that look like different things. */}
     <Show when={!assistant() && !props.message.pending && props.supports("fork")}>
-      <Button variant="ghost" size="icon-sm" aria-label={props.chat.editingEntryId() === props.message.id ? "Cancel editing" : "Edit from here"} onClick={() => props.chat.edit(props.message)}><PencilIcon /></Button>
+      <Button variant="ghost" size="icon-sm" aria-label={props.chat.editingEntryId() === props.message.id ? "Cancel editing" : "Edit from here"} onClick={() => { props.chat.edit(props.message); focusComposerSoon(); }}><PencilIcon /></Button>
     </Show>
     <Show when={continuable()}><Button variant="ghost" size="sm" class="response-continue" onClick={() => void props.chat.continueResponse()}><PlayIcon />Continue</Button></Show>
     <Show when={assistant() && copyable()}>
@@ -216,12 +216,17 @@ function StopLabel(props: { traced?: boolean; detail: string }) {
   </>;
 }
 
+/* The composer is where an edit happens, so starting or leaving one puts the
+   caret there once the draft has been swapped in. */
+const focusComposerSoon = () => requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea:not([disabled])")?.focus({ preventScroll: true }));
+
 export function Transcript(props: { chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; partialContinue: boolean; markdownRenderer: MarkdownRendererId; rendererControlsVisible: boolean; profileLabel?: string; projectId?: string }) {
   let transcriptRoot!: HTMLDivElement;
   let motionShell!: HTMLDivElement;
   let viewport!: HTMLDivElement;
   let thread!: HTMLDivElement;
   let latestButton: HTMLButtonElement | undefined;
+  let cancelEditButton: HTMLButtonElement | undefined;
   let scheduleLatestButtonAnchor = () => {};
   let panelMotion: ReturnType<typeof mountTranscriptPanelMotion> | null = null;
   let transcriptVisibility: ReturnType<typeof mountTranscriptVisibility> | null = null;
@@ -786,7 +791,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       // The horizontal anchor follows the centred composer through CSS. Only
       // its dynamic height needs measurement, and that style belongs on the
       // button rather than the inherited transcript root.
-      if (!latestButton?.isConnected) return;
+      const anchored = [latestButton, cancelEditButton].filter((button): button is HTMLButtonElement => Boolean(button?.isConnected));
+      if (!anchored.length) return;
       const conversation = transcriptRoot.closest<HTMLElement>(".work-area-conversation");
       // A question stands in for the composer, which has slid out of the pane.
       // Its dock is measured rather than the card, whose rise is a transform.
@@ -797,8 +803,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       const composerRect = composerShell.getBoundingClientRect();
       if (shellRect.width <= 0 || shellRect.height <= 0 || composerRect.width <= 0 || composerRect.height <= 0) return;
       const bottom = `${Math.max(isMobileLayout() ? 8 : 6.4, shellRect.bottom - composerRect.top + (isMobileLayout() ? 10 : 8))}px`;
-      if (latestButton.style.getPropertyValue("--message-scroller-button-bottom") !== bottom) {
-        latestButton.style.setProperty("--message-scroller-button-bottom", bottom);
+      for (const button of anchored) {
+        if (button.style.getPropertyValue("--message-scroller-button-bottom") !== bottom) button.style.setProperty("--message-scroller-button-bottom", bottom);
       }
     };
     scheduleLatestButtonAnchor = () => {
@@ -1203,6 +1209,9 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         * change is refused.
         */}
       <Show when={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX}><Button ref={(element) => { latestButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="icon-sm" class="message-scroller-button composer-surface-material" data-composer-surface={composerSurface()} aria-label="Scroll to latest" title="Scroll to latest" onMouseDown={(event) => event.preventDefault()} onClick={() => viewport.scrollTo({ top: viewport.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })}><ArrowDownIcon /></Button></Show>
+      {/* Editing an earlier message: a way out that is always there, floating
+          over the composer where the edit happens, as the pencil would. */}
+      <Show when={props.chat.editingEntryId()}><Button ref={(element) => { cancelEditButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="sm" class="message-scroller-button message-cancel-edit composer-surface-material" data-composer-surface={composerSurface()} data-beside-latest={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "" : undefined} onMouseDown={(event) => event.preventDefault()} onClick={() => { props.chat.cancelEdit(); focusComposerSoon(); }}><XIcon />Cancel editing</Button></Show>
     </div>
   </div>;
 }
