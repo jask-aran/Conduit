@@ -14,7 +14,7 @@ import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
 import { Segmented } from "../settings/settings-controls";
-import { CHAT_PAGE, DayGroups, groupByDay, ListFilter, ListSearch, CompactHeading, FiltersMenu, PlaceFilter, placeChoice, ProfileFilter, profileChoice, profileOf, ShowMore, sortChoice } from "./primitives/chat-list";
+import { CHAT_PAGE, DayGroups, FilterBar, groupByDay, ListSearch, CompactHeading, FiltersMenu, placeChoice, profileChoice, profileOf, ShowMore, sortChoice } from "./primitives/chat-list";
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitRow, SplitShortcut, SplitShortcuts } from "./primitives/split";
 import "./app-dashboard.css";
 
@@ -189,7 +189,7 @@ export function AppDashboard(props: {
   const chatsGroup = () => <SplitGroup id="app-dashboard-chats" order="list"
     heading={<div class="split-heading-switches">
       <Segmented label="Chats" value={unreadOnly() ? "unread" : "all"} onChange={(value) => { setUnreadOnly(value === "unread"); setLimit(CHAT_PAGE); }} options={[
-        { value: "all", label: "Recent chats", detail: <small>{allChats().length}</small> },
+        { value: "all", label: "All", detail: <small>{allChats().length}</small> },
         { value: "unread", label: "Unread", detail: <small>{unread()}</small> },
       ]} />
       <Segmented label="Where" value={side()} onChange={(value) => chooseSide(value as "conduit" | "computer")} options={[
@@ -197,17 +197,16 @@ export function AppDashboard(props: {
         { value: "computer", label: "Computer", detail: <small>{computerChats().length}</small> },
       ]} />
     </div>}
-    actions={<>
-      <PlaceFilter label={computer() ? "Workspace" : "Project"} all={computer() ? "All workspaces" : "All projects"} places={places()} value={place()} onChange={(id) => { setPlace(id); setLimit(CHAT_PAGE); }} />
-      <ProfileFilter profiles={props.profiles} used={new Set(allChats().map(({ chat }) => profileOf(props.profiles, chat)))} value={profile()} onChange={(id) => { setProfile(id); setLimit(CHAT_PAGE); }} />
-      <ListFilter sort={chatSort()} onSort={saveChatSort} />
-      <ListSearch label="Search chats" onClick={() => props.onSearchChats("all")} />
-    </>}
+    actions={<FilterBar choices={[
+      placeChoice(computer() ? "Workspace" : "Project", computer() ? "All workspaces" : "All projects", places(), place(), (id) => { setPlace(id); setLimit(CHAT_PAGE); }),
+      profileChoice(props.profiles, new Set(allChats().map(({ chat }) => profileOf(props.profiles, chat))), profile(), (id) => { setProfile(id); setLimit(CHAT_PAGE); }),
+      sortChoice(chatSort(), saveChatSort),
+    ]}><ListSearch label="Search chats" onClick={() => props.onSearchChats("all")} /></FilterBar>}
     compactHeading={<CompactHeading label={unreadOnly() ? "Unread" : "Recent chats"} count={chats().length} where={computer() ? "Computer" : "Conduit"} />}
     compactActions={<>
       <FiltersMenu choices={[
         { label: "Show", value: unreadOnly() ? "unread" : "all", onChange: (value) => { setUnreadOnly(value === "unread"); setLimit(CHAT_PAGE); }, options: [
-          { value: "all", label: "Recent chats", detail: allChats().length },
+          { value: "all", label: "All", detail: allChats().length },
           { value: "unread", label: "Unread", detail: unread() },
         ] },
         { label: "Where", value: side(), onChange: (value) => chooseSide(value as "conduit" | "computer"), options: [
