@@ -185,7 +185,8 @@ export function AppDashboard(props: {
     props.onOpenProject(project);
   };
 
-  const chatsGroup = <SplitGroup id="app-dashboard-chats" order="list"
+  // Built inside SplitDashboard, so it reads the pane's width.
+  const chatsGroup = () => <SplitGroup id="app-dashboard-chats" order="list"
     heading={<div class="split-heading-switches">
       <Segmented label="Chats" value={unreadOnly() ? "unread" : "all"} onChange={(value) => { setUnreadOnly(value === "unread"); setLimit(CHAT_PAGE); }} options={[
         { value: "all", label: "Recent chats", detail: <small>{allChats().length}</small> },
@@ -227,7 +228,7 @@ export function AppDashboard(props: {
 
   // Project folders, drawn as folders rather than rows: they are places, and
   // it keeps them apart from workspaces, which carry more on a row.
-  const foldersGroup = <SplitGroup id="app-dashboard-projects" label="Projects" count={folders().length} order="first" class="app-dashboard-projects">
+  const foldersGroup = () => <SplitGroup id="app-dashboard-projects" label="Projects" count={folders().length} order="first" class="app-dashboard-projects">
     <div class="app-folder-shelf">
       <For each={folders()}>{(project) =>
         <ContextMenu><ContextMenuTrigger as="a" class="app-folder" href={projectPath(project)} title={project.workingRoot} onPointerEnter={() => props.onPrefetchProject(project)} onFocus={() => props.onPrefetchProject(project)} onClick={(event: MouseEvent) => openProject(event, project)}>
@@ -244,7 +245,7 @@ export function AppDashboard(props: {
     </div>
   </SplitGroup>;
 
-  const workspacesGroup = <SplitGroup id="app-dashboard-workspaces" label="Workspaces" count={props.projects.filter(isWorkspace).length} actions={<button type="button" onClick={() => props.onContextAction("new-workspace", {})}>New</button>}>
+  const workspacesGroup = () => <SplitGroup id="app-dashboard-workspaces" label="Workspaces" count={props.projects.filter(isWorkspace).length} actions={<button type="button" onClick={() => props.onContextAction("new-workspace", {})}>New</button>}>
     <Show when={workspaces().length} fallback={<SplitEmpty>Nothing here yet.</SplitEmpty>}>
       <For each={workspaces()}>{(project) =>
         <ContextMenu><ContextMenuTrigger as={SplitRow} element="a" href={projectPath(project)} onPointerEnter={() => props.onPrefetchProject(project)} onFocus={() => props.onPrefetchProject(project)} onClick={(event: MouseEvent) => openProject(event, project)}
@@ -255,7 +256,7 @@ export function AppDashboard(props: {
     </Show>
   </SplitGroup>;
 
-  const terminalsGroup = <SplitGroup id="app-dashboard-terminals" label="Terminals" collapsible count={terminals().length} busy={loading()} actions={<button type="button" onClick={props.onOpenTerminalView}>Open</button>}>
+  const terminalsGroup = () => <SplitGroup id="app-dashboard-terminals" label="Terminals" collapsible count={terminals().length} busy={loading()} actions={<button type="button" onClick={props.onOpenTerminalView}>Open</button>}>
     <Show when={terminals().length} fallback={<SplitEmpty>{loading() ? "Loading terminals…" : "No live terminals."}</SplitEmpty>}>
       <For each={terminals()}>{(terminal) =>
         <ContextMenu><ContextMenuTrigger as={SplitRow} element="button" onPointerEnter={props.onPrefetchTerminal} onFocus={props.onPrefetchTerminal} onClick={() => props.onOpenTerminal(terminal)}
@@ -280,6 +281,6 @@ export function AppDashboard(props: {
       <SplitShortcut icon={<Settings2Icon />} label="Settings" onClick={props.onOpenSettings} />
     </SplitShortcuts>}
     composer={props.composer}
-    list={chatsGroup}
-    aside={<>{foldersGroup}{workspacesGroup}{terminalsGroup}</>} />;
+    list={chatsGroup()}
+    aside={<>{foldersGroup()}{workspacesGroup()}{terminalsGroup()}</>} />;
 }
