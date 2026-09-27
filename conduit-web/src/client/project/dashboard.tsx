@@ -21,7 +21,7 @@ import { ThreadHarnessMark } from "../harness-brand";
 import { activityLabel } from "../../activity.js";
 import { Segmented } from "../settings/settings-controls";
 import { loadOutsideThreads, type OutsideThread } from "../dashboard/outside-threads";
-import { CHAT_PAGE, CompactHeading, DayGroups, FiltersMenu, groupByDay, harnessChoice, ListFilter, ListSearch, ProfileFilter, profileChoice, profileOf, ShowMore, sortChoice } from "../dashboard/primitives/chat-list";
+import { CHAT_PAGE, CompactHeading, DayGroups, FilterBar, FiltersMenu, groupByDay, harnessChoice, ListSearch, profileChoice, profileOf, ShowMore, sortChoice } from "../dashboard/primitives/chat-list";
 import { FileTypeIcon } from "../workspace/file-type-icon";
 import {
   Button,
@@ -404,7 +404,7 @@ export function ProjectDashboard(props: {
 
   const threadsGroup = () => <SplitGroup id="dashboard-threads" order="list" heading={<div class="split-heading-switches">
       <Segmented label="Chats" value={unreadOnly() ? "unread" : "all"} onChange={(value) => { setUnreadOnly(value === "unread"); setLimit(CHAT_PAGE); }} options={[
-        { value: "all", label: "Recent chats", detail: <small>{showOutside() ? filteredOutside().length : activeChatCount()}</small> },
+        { value: "all", label: "All", detail: <small>{showOutside() ? filteredOutside().length : activeChatCount()}</small> },
         { value: "unread", label: "Unread", detail: <small>{showOutside() ? 0 : props.project.sessions.filter((chat) => chat.status === "active" && chat.unread).length}</small> },
       ]} />
       <Show when={isWorkspace()}>
@@ -413,16 +413,15 @@ export function ProjectDashboard(props: {
           { value: "outside", label: "Not in Conduit", detail: <Show when={!outsideLoading()}><small>{outsideThreads().length}</small></Show> },
         ]} />
       </Show>
-    </div>} actions={<>
-      <Show when={showOutside()} fallback={<><ProfileFilter profiles={props.profiles} used={new Set(props.project.sessions.filter((chat) => chat.status === "active").map((chat) => profileOf(props.profiles, chat)))} value={profile()} onChange={(id) => { setProfile(id); setLimit(CHAT_PAGE); }} /><ListFilter sort={chatSort()} onSort={saveChatSort} /></>}>
-        <ListFilter harnesses={outsideHarnesses()} harness={outsideFilter()} onHarness={(id) => { setOutsideFilter(id); setLimit(CHAT_PAGE); }} />
-      </Show>
+    </div>} actions={<FilterBar choices={showOutside()
+      ? [harnessChoice(outsideHarnesses(), outsideFilter(), (id) => { setOutsideFilter(id); setLimit(CHAT_PAGE); })]
+      : [profileChoice(props.profiles, new Set(activeChats().map((chat) => profileOf(props.profiles, chat))), profile(), (id) => { setProfile(id); setLimit(CHAT_PAGE); }), sortChoice(chatSort(), saveChatSort)]}>
       <ListSearch label={`Search chats in ${props.project.name}`} onClick={props.onSearchChats} />
-    </>} compactHeading={<CompactHeading label={unreadOnly() ? "Unread" : "Recent chats"} count={showOutside() ? filteredOutside().length : visibleChats().length} where={isWorkspace() && (showOutside() ? "Not in Conduit" : "Conduit chats")} />}
+    </FilterBar>} compactHeading={<CompactHeading label={unreadOnly() ? "Unread" : "Recent chats"} count={showOutside() ? filteredOutside().length : visibleChats().length} where={isWorkspace() && (showOutside() ? "Not in Conduit" : "Conduit chats")} />}
     compactActions={<>
       <FiltersMenu choices={[
         { label: "Show", value: unreadOnly() ? "unread" : "all", onChange: (value) => { setUnreadOnly(value === "unread"); setLimit(CHAT_PAGE); }, options: [
-          { value: "all", label: "Recent chats", detail: showOutside() ? filteredOutside().length : activeChatCount() },
+          { value: "all", label: "All", detail: showOutside() ? filteredOutside().length : activeChatCount() },
           { value: "unread", label: "Unread", detail: showOutside() ? 0 : unreadCount() },
         ] },
         isWorkspace() && { label: "Where", value: threadSide(), onChange: (value) => { saveThreadSide(value as ThreadSide); setLimit(CHAT_PAGE); }, options: [
