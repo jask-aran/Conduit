@@ -24,7 +24,8 @@ import "./harness-dashboard.css";
 // workspace's page does, on the same split layout.
 
 export type HarnessLaunch = { harnessId: string; cwd: string; prompt: string; model: string; thinkingLevel: string; permissionMode: string };
-export type HarnessThreadTarget = { harnessId: string; path: string; id: string; title: string };
+/** `chatId` is the hidden chat the thread runs as while its page is open. */
+export type HarnessThreadTarget = { harnessId: string; path: string; id: string; title: string; chatId?: string };
 type Side = "outside" | "conduit";
 
 function shortAge(value: number, currentTime = Date.now()) {

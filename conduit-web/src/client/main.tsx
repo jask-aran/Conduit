@@ -1453,36 +1453,31 @@ function App() {
   // them, and under it each thread Conduit does not keep, at an address of its
   // own.
   const harnessPath = (id: string, cwd?: string | null) => `/computer/harness/${encodeURIComponent(id)}${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ""}`;
-  const threadPath = (thread: HarnessThreadTarget) => `/computer/harness/${encodeURIComponent(thread.harnessId)}/thread/${encodeURIComponent(thread.id)}?cwd=${encodeURIComponent(thread.path)}`;
+  // A thread just started has no id of its own yet, so it is addressed by the
+  // chat it runs as.
+  const threadPath = (thread: HarnessThreadTarget) => `/computer/harness/${encodeURIComponent(thread.harnessId)}/thread/${encodeURIComponent(thread.id || `c:${thread.chatId}`)}?cwd=${encodeURIComponent(thread.path)}`;
   const [harnessScope, setHarnessScope] = createSignal<string | null>(null);
   const [harnessThread, setHarnessThread] = createSignal<HarnessThreadTarget | null>(null);
   const [trackingThread, setTrackingThread] = createSignal(false);
-  // One untracked thread open at a time, on the chat store a Conduit chat
-  // uses. It owns nothing in Conduit until it is tracked.
-  const drive = createDriveChat({ runtime, onError: showError });
   // A harness page's composer: a draft with no chat behind it, so typing there
   // never lands in whichever Conduit chat happens to be loaded.
   const launcher = createDriveChat({ runtime, onError: showError });
-  let driveLiveId = "";
-  const closeDriveProcess = () => {
-    const live = driveLiveId;
-    driveLiveId = "";
-    drive.detach();
-    if (live) void api(`/v0/live-sessions/${encodeURIComponent(live)}/process`, { method: "DELETE" }).catch(() => {});
-  };
-  // A reload or a closed tab leaves too, and asks first as well while a turn
-  // is running; the server closes the process once no page drives it.
-  const holdUnload = (event: BeforeUnloadEvent) => { if (harnessThread() && drive.chat.streaming()) event.preventDefault(); };
+  // An untracked thread runs as a Conduit chat that no list shows, on the same
+  // store and the same page parts as any chat. A reload or a closed tab asks
+  // first while a turn is running.
+  const holdUnload = (event: BeforeUnloadEvent) => { if (harnessThread() && chat.streaming()) event.preventDefault(); };
   window.addEventListener("beforeunload", holdUnload);
   onCleanup(() => window.removeEventListener("beforeunload", holdUnload));
-  // Its process is Conduit's only while its page is open, so leaving closes
-  // it -- asking first while a turn is still running.
+  // Leaving ends that chat, and its process with it -- asking first while a
+  // turn is still running. The thread itself stays with the harness.
   const leaveHarnessThread = () => {
     const open = harnessThread();
     if (!open) return true;
-    if (drive.chat.streaming() && !window.confirm(`${harnessLabelFor(open.harnessId) || "The harness"} is still working in this thread. Leave and stop it?`)) return false;
-    closeDriveProcess();
+    if (chat.streaming() && !window.confirm(`${harnessLabelFor(open.harnessId) || "The harness"} is still working in this thread. Leave and stop it?`)) return false;
     setHarnessThread(null);
+    // Let go of it first, so nothing after this takes it for a draft to discard.
+    if (catalogue.selectedId() === open.chatId) { chat.reset(); catalogue.setSelectedId(null); }
+    if (open.chatId) void api(`/v0/sessions/${encodeURIComponent(open.chatId)}`, { method: "DELETE" }).catch(() => {});
     return true;
   };
   const openComputerHarness = (id: string | null, historyMode: "push" | "replace" | "none" = "push", cwd?: string) => {
@@ -1523,31 +1518,35 @@ function App() {
     if (historyMode === "push") history.pushState({}, "", threadPath(target));
     else if (historyMode === "replace") history.replaceState({}, "", threadPath(target));
   };
-  type DriveRecord = { id: string; nativeSessionId: string; streamUrl: string; threadTitle?: string };
+  type OpenedThread = { chat: ChatSummary; project: Project; tracked: boolean };
+  const openThreadChat = (harnessId: string, body: Record<string, unknown>) => api<OpenedThread>(
+    `/v0/harnesses/${encodeURIComponent(harnessId)}/threads/open`, { method: "POST", body: JSON.stringify(body) });
   const openHarnessThread = async (target: HarnessThreadTarget, historyMode: "push" | "replace" | "none" = "push") => {
     const open = harnessThread();
-    if (open?.harnessId === target.harnessId && open.id === target.id) return;
+    if (open?.harnessId === target.harnessId && (target.id ? open.id === target.id : open.chatId === target.chatId)) return;
     if (!leaveHarnessThread()) return;
     showHarnessThread(target, historyMode);
     try {
-      const live = await api<DriveRecord>(`/v0/harnesses/${encodeURIComponent(target.harnessId)}/drive`, {
-        method: "POST", body: JSON.stringify({ path: target.path, sessionId: target.id }),
-      });
+      const opened = await openThreadChat(target.harnessId, target.chatId ? { chatId: target.chatId } : { path: target.path, sessionId: target.id });
       // Left before it opened: nobody is here to use it.
       if (harnessThread() !== target) {
-        void api(`/v0/live-sessions/${encodeURIComponent(live.id)}/process`, { method: "DELETE" }).catch(() => {});
+        if (!opened.tracked) void api(`/v0/sessions/${encodeURIComponent(opened.chat.id)}`, { method: "DELETE" }).catch(() => {});
         return;
       }
-      driveLiveId = live.id;
-      if (live.threadTitle && live.threadTitle !== target.title) {
-        target = { ...target, title: live.threadTitle };
-        setHarnessThread(target);
+      // Conduit keeps this one already, so it opens as that chat.
+      if (opened.tracked) {
+        const owner = catalogue.projects().find((item) => item.id === opened.chat.projectId) || opened.project;
+        await chat.select(opened.chat, owner, { history: "replace", onCommit: () => {
+          batch(() => { setHarnessThread(null); setRouteKind("chat"); setRouteBootstrapError(""); setRouteBootstrap("ready"); });
+        } });
+        return;
       }
-      await drive.attach(live, target.title);
+      target = { ...target, chatId: opened.chat.id, title: opened.chat.title || target.title };
+      setHarnessThread(target);
+      await chat.select(opened.chat, opened.project, { history: "none" });
     } catch (error) {
       if (harnessThread() !== target) return;
       showError(error);
-      closeDriveProcess();
       setHarnessThread(null);
       openComputerHarness(target.harnessId, "replace", target.path);
     }
@@ -1557,28 +1556,26 @@ function App() {
     // Cleared first, so a second press while the process starts has nothing to send.
     launcher.chat.setDraft("");
     try {
-      const live = await api<DriveRecord>(`/v0/harnesses/${encodeURIComponent(launch.harnessId)}/drive`, {
-        method: "POST",
-        body: JSON.stringify({ path: launch.cwd, newThread: true, model: launch.model, thinkingLevel: launch.thinkingLevel, permissionMode: launch.permissionMode }),
-      });
-      const target = { harnessId: launch.harnessId, path: launch.cwd, id: live.nativeSessionId || "", title: launch.prompt.trim().split("\n")[0]?.slice(0, 80) || "New thread" };
-      showHarnessThread(target, target.id ? "push" : "none");
-      driveLiveId = live.id;
-      await drive.attach(live, target.title);
+      const opened = await openThreadChat(launch.harnessId, { path: launch.cwd, newThread: true,
+        model: launch.model, thinkingLevel: launch.thinkingLevel, permissionMode: launch.permissionMode });
+      const target = { harnessId: launch.harnessId, path: launch.cwd, id: "", chatId: opened.chat.id,
+        title: launch.prompt.trim().split("\n")[0]?.slice(0, 80) || "New thread" };
+      showHarnessThread(target, "push");
+      await chat.select(opened.chat, opened.project, { history: "none" });
       if (launch.prompt.trim()) {
-        drive.chat.setDraft(launch.prompt);
-        await drive.chat.send();
+        chat.setDraft(launch.prompt);
+        await chat.send();
       }
     } catch (error) {
       if (!harnessThread() && !launcher.chat.draft()) launcher.chat.setDraft(launch.prompt);
       showError(error);
     }
   };
-  // Tracking hands the open process to a Conduit chat in the workspace the
-  // thread's folder is -- made one first when it is not.
+  // Tracking keeps the chat the thread already runs as, and makes it Conduit's
+  // in the workspace its folder is -- made one first when it is not.
   const trackHarnessThread = async () => {
     const open = harnessThread();
-    if (!open || trackingThread()) return;
+    if (!open?.chatId || trackingThread()) return;
     setTrackingThread(true);
     try {
       let project = catalogue.projects().find((item) => !isConduitManagedProject(item) && item.workingRoot === open.path);
@@ -1586,17 +1583,14 @@ function App() {
         const created = await api<Project>("/v0/projects", { method: "POST", body: JSON.stringify({ mode: "linked", path: open.path }) });
         project = (await catalogue.refresh()).find((item) => item.id === created.id) || { ...created, sessions: [] };
       }
-      const tracked = await api<ChatSummary>(`/v0/projects/${encodeURIComponent(project.id)}/backend-sessions/${encodeURIComponent(open.id)}/adopt?implementation=${encodeURIComponent(open.harnessId)}`, {
-        method: "POST", body: JSON.stringify({ liveSessionId: driveLiveId }),
+      const tracked = await api<ChatSummary>(`/v0/chats/${encodeURIComponent(open.chatId)}/track`, {
+        method: "POST", body: JSON.stringify({ projectId: project.id }),
       });
-      // The process is the chat's now; nothing to close.
-      driveLiveId = "";
       const owner = (await catalogue.refresh()).find((item) => item.id === tracked.projectId) || project;
       await chat.select(tracked, owner, {
         history: "replace",
         onCommit: () => {
           batch(() => { setHarnessThread(null); setRouteKind("chat"); setRouteBootstrapError(""); setRouteBootstrap("ready"); });
-          drive.detach();
         },
       });
     } catch (error) { showError(error); }
@@ -1614,7 +1608,9 @@ function App() {
     const cwd = new URLSearchParams(location.search).get("cwd") || undefined;
     const harnessId = match?.[1] ? decodeURIComponent(match[1]) : "";
     const threadId = match?.[2] ? decodeURIComponent(match[2]) : "";
-    if (harnessId && threadId && cwd) void openHarnessThread({ harnessId, path: cwd, id: threadId, title: "" }, "none");
+    if (harnessId && threadId && cwd) void openHarnessThread(threadId.startsWith("c:")
+      ? { harnessId, path: cwd, id: "", chatId: threadId.slice(2), title: "" }
+      : { harnessId, path: cwd, id: threadId, title: "" }, "none");
     else if (harnessId) openComputerHarness(harnessId, "none", cwd);
     else openComputer("none");
   };
@@ -2909,13 +2905,13 @@ function App() {
   });
 
   const mainDropHandlers = {
-    onDragEnter: (event: DragEvent) => { if (dockDragging(event)) { event.preventDefault(); setSplitDropActive(true); return; } if (routeKind() === "chat") dropHandlers.onDragEnter(event); },
-    onDragOver: (event: DragEvent) => { if (dockDragging(event)) { event.preventDefault(); setSplitDropActive(true); return; } if (routeKind() === "chat") dropHandlers.onDragOver(event); },
-    onDragLeave: (event: DragEvent) => { if (splitDropActive()) { if (!(event.relatedTarget instanceof Node && (event.currentTarget as Node).contains(event.relatedTarget))) setSplitDropActive(false); return; } if (routeKind() === "chat") dropHandlers.onDragLeave(event); },
+    onDragEnter: (event: DragEvent) => { if (dockDragging(event)) { event.preventDefault(); setSplitDropActive(true); return; } if (routeKind() === "chat" || harnessThread()) dropHandlers.onDragEnter(event); },
+    onDragOver: (event: DragEvent) => { if (dockDragging(event)) { event.preventDefault(); setSplitDropActive(true); return; } if (routeKind() === "chat" || harnessThread()) dropHandlers.onDragOver(event); },
+    onDragLeave: (event: DragEvent) => { if (splitDropActive()) { if (!(event.relatedTarget instanceof Node && (event.currentTarget as Node).contains(event.relatedTarget))) setSplitDropActive(false); return; } if (routeKind() === "chat" || harnessThread()) dropHandlers.onDragLeave(event); },
     onDrop: (event: DragEvent) => {
       const drag = readToolDrag(event);
       if (drag) { event.preventDefault(); setSplitDropActive(false); if (drag.from === "dock") openBeside(drag.tool); return; }
-      if (routeKind() === "chat") dropHandlers.onDrop(event);
+      if (routeKind() === "chat" || harnessThread()) dropHandlers.onDrop(event);
     },
   };
   const dropHandlers = {
@@ -3089,10 +3085,13 @@ function App() {
             const workspace = () => catalogue.projects().find((project) => !isConduitManagedProject(project) && project.workingRoot === thread().path);
             const label = () => harnessLabelFor(thread().harnessId) || thread().harnessId;
             return <>
-              <ChatHeader project={workspace()} placeLabel={label()} onOpenPlace={() => openComputerHarness(thread().harnessId, "push", thread().path)} title={drive.chat.title() || thread().title || "Untitled thread"} badge={<OutsideThreadChip harness={label()} folder={thread().path} workspace={Boolean(workspace())} busy={trackingThread()} onTrack={() => void trackHarnessThread()} />} runtime={drive.chat.runtimeIdentity()} live={drive.chat.live() as unknown as Record<string, unknown>} chat={drive.chat} composerStatus={composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => openComputerHarness(thread().harnessId, "push", thread().path)} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareHarnessThread()} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} />
-              <Conversation chat={drive.chat}
-                transcript={<Transcript chat={drive.chat} supports={(name) => drive.chat.capabilities()?.[name] === true} partialContinue={false} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={label()} />}
-                composer={<Composer chat={drive.chat} attachments={NO_ATTACHMENTS} attachmentsSupported={false} models={drive.models} permissions={harnessCapabilities()[harnessProfile(thread().harnessId)?.implementation || ""]?.permissionModes ? drive.permissions : undefined} serviceLevels={drive.serviceLevels.levels().length ? drive.serviceLevels : undefined} contextMetrics={contextMetrics} profiles={harnessProfile(thread().harnessId) ? [harnessProfile(thread().harnessId)!] : []} activeProfile={harnessProfile(thread().harnessId)} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => {}} onStatusChange={setComposerStatus} />} />
+              <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
+              <ChatHeader project={workspace()} placeLabel={label()} onOpenPlace={() => openComputerHarness(thread().harnessId, "push", thread().path)} title={chat.title() || thread().title || "Untitled thread"} badge={<OutsideThreadChip harness={label()} folder={thread().path} workspace={Boolean(workspace())} busy={trackingThread()} onTrack={() => void trackHarnessThread()} />} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} chat={chat} contextMetrics={contextMetrics} composerStatus={composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => openComputerHarness(thread().harnessId, "push", thread().path)} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareHarnessThread()} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} />
+              {/* The same conversation a chat page has; only moving it to another
+                  place is missing, since the thread's folder is where it ran. */}
+              <Conversation chat={chat} busy={openingLiveChat()} stackRef={(element) => { chatComposerStack = element; }}
+                transcript={<Transcript chat={chat} supports={chatCapability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={label()} projectId={catalogue.projectId()} />}
+                composer={<Composer chat={chat} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} />} />
             </>;
           }}</Show>
         </Show>

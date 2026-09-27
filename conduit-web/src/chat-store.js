@@ -170,6 +170,10 @@ export class ChatStore {
     const reconciled = [];
     const usedIds = new Set();
     for (const item of rows) {
+      // An untracked thread's chat lasts as long as the page that opened it. One
+      // left by a closed tab or a stopped server goes here, rather than coming
+      // back as a chat nobody tracked.
+      if (item.untracked) continue;
       const project = projectById.get(item.projectId);
       if (!project) continue;
       const id = isChatId(item.id) && !usedIds.has(item.id) ? item.id : crypto.randomUUID();
@@ -311,8 +315,11 @@ export class ChatStore {
       .map((entry) => fs.rm(path.join(directory, entry.name), { force: true })));
   }
 
-  list({ includeHidden = false } = {}) {
+  // `untracked` chats stand behind threads that are not in Conduit: they run
+  // like any chat, but no list of Conduit's chats includes them unless asked.
+  list({ includeHidden = false, includeUntracked = includeHidden } = {}) {
     return [...this.chats]
+      .filter((chat) => includeUntracked || !chat.untracked)
       .filter((chat) => includeHidden || chat.status === "active" || this.visibleDrafts.has(chat.id))
       // Creation order is stable: rename/title edits bump mtime/updatedAt and must not reshuffle the sidebar.
       .sort((a, b) => {
@@ -375,7 +382,7 @@ export class ChatStore {
     catch (error) { if (error.code === "ENOENT") return null; throw error; }
   }
 
-  async create(project, { templateId = null, templateVersion = null, runtime = null, backend = null } = {}) {
+  async create(project, { templateId = null, templateVersion = null, runtime = null, backend = null, untracked = false } = {}) {
     const timestamp = new Date(this.now()).toISOString();
     const chat = {
       id: crypto.randomUUID(),
@@ -395,6 +402,7 @@ export class ChatStore {
       lastAssistantCompletedAt: null,
       lastMessageAt: null,
       lastReadAt: null,
+      ...(untracked ? { untracked: true } : {}),
     };
     await this.ensureDirectories(project, chat.id);
     this.chats.push(chat);
@@ -460,6 +468,7 @@ export class ChatStore {
       "lastAssistantCompletedAt",
       "lastMessageAt",
       "lastReadAt",
+      "untracked",
     ];
     for (const key of allowed) if (Object.hasOwn(patch, key)) chat[key] = patch[key];
     // The completion clock is the read watermark's other half, so it never
