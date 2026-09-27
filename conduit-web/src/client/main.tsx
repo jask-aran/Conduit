@@ -50,7 +50,7 @@ import { CommandMenu } from "./navigation/command-menu";
 import { LeaderPalette } from "./navigation/leader-palette";
 import { isLeaderMenuMode, LEADER_MENU_STORAGE_KEY, selectedLeaderMenu, setLeaderMenu } from "./shortcuts/leader-menu";
 import type { PaletteActions, PaletteContext } from "./palette/command-registry";
-import { bindVisualViewportShell, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobileOverlayKind } from "./navigation/mobile-layout";
+import { bindVisualViewportShell, focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobileOverlayKind } from "./navigation/mobile-layout";
 import { toggleKeyboardProbe } from "./navigation/keyboard-probe.ts";
 import { mobileSwipeAction } from "./navigation/mobile-swipe";
 import { bindOverlayScrollbars } from "./navigation/overlay-scrollbars";
@@ -75,7 +75,9 @@ import { isShortcutRegion } from "./shortcuts/shortcut-types";
 import { acknowledgeRegion } from "./shortcuts/region-cue";
 import { globalShortcuts } from "./shortcuts/global-shortcuts";
 import { dropScope, migrateWorkspacePanelStorage, readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace/workspace-panel-storage";
-import { WorkspaceRail } from "./workspace/workspace-rail";
+import { readToolDrag, TOOL_DRAG_TYPE, WorkspaceRail } from "./workspace/workspace-rail";
+import { MIN_MAIN_PANE_WIDTH, MIN_SPLIT_PANE_WIDTH } from "./layout-geometry";
+import { dispatchPanelGeometryMotion } from "./panel-motion";
 import { publishUiPreference, queueUiPreferenceSave, uiPreferenceSaves, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
 import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
 import { INCREMARK_PACING_STORAGE_KEY } from "./chat/incremark-pacing";
@@ -615,6 +617,14 @@ function App() {
   const [workspaceViewRequest, setWorkspaceViewRequest] = createSignal<{ tab: WorkspaceView; terminalId?: string; nonce: number } | null>(null);
   // The tool the dock shows, as the dock reports it, so the rail can mark it
   // before the dock's chunk has loaded.
+  // A tool moved out of the dock into the main pane's split, beside the chat
+  // or page, and the share of the main pane it takes; both per device.
+  const storedTool = (value: string | null): WorkspaceView | null => value === "files" || value === "diff" || value === "chat" || value === "terminal" ? value : null;
+  const [splitTool, setSplitToolState] = createSignal<WorkspaceView | null>(storedTool(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split")));
+  const [splitRatio, setSplitRatio] = createSignal(Math.max(0.2, Math.min(0.8, Number(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratio")) || 0.5)));
+  const [splitHost, setSplitHost] = createSignal<HTMLElement>();
+  const [layoutWidth, setLayoutWidth] = createSignal(window.innerWidth);
+  const [splitDropActive, setSplitDropActive] = createSignal(false);
   const [dockTool, setDockTool] = createSignal<WorkspaceView>((() => {
     const stored = readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "tab");
     return stored === "diff" || stored === "chat" || stored === "terminal" ? stored : stored === "artifacts" ? "chat" : "files";
@@ -2066,11 +2076,93 @@ function App() {
     if (isMobileLayout()) setMobileSidebarOpen(false);
     setPanelOpenForChat(true);
   };
-  // A rail icon opens the dock on its tool; the tool it already shows closes it.
-  const chooseRailTool = (tool: WorkspaceView) => {
+  const dockAvailable = () => routeKind() === "computer" ? Boolean(computerLocation()) : ["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope());
+  // The split shows while the main pane can hold both sides at their minimums;
+  // narrower, the dock gives way first (its own clamp), then the split folds.
+  const splitShown = () => Boolean(splitTool()) && dockAvailable() && !isMobileLayout() && layoutWidth() >= MIN_MAIN_PANE_WIDTH + MIN_SPLIT_PANE_WIDTH + 16;
+  const saveSplitTool = (tool: WorkspaceView | null) => {
+    setSplitToolState(tool);
+    writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split", tool ?? "");
+  };
+  const focusSplit = () => requestAnimationFrame(() => {
+    const content = splitHost()?.querySelector<HTMLElement>(".workspace-panel-content");
+    focusFirst(content);
+    if (!content?.contains(document.activeElement)) content?.focus({ preventScroll: true });
+  });
+  const moveToMainPane = (tool: WorkspaceView) => {
     if (panelOpen() && dockTool() === tool) closePanel();
+    saveSplitTool(tool);
+    focusSplit();
+  };
+  const moveToDock = (tool: WorkspaceView) => {
+    if (splitTool() === tool) saveSplitTool(null);
+    openWorkspaceView(tool);
+    focusWorkspacePanel();
+  };
+  const closeSplit = () => {
+    saveSplitTool(null);
+    focusChatPane();
+  };
+  // A rail icon opens the dock on its tool, or goes to it in the split; the
+  // tool the dock already shows closes it.
+  const chooseRailTool = (tool: WorkspaceView) => {
+    if (splitShown() && splitTool() === tool) focusSplit();
+    else if (panelOpen() && dockTool() === tool) closePanel();
     else openWorkspaceView(tool);
   };
+  // The transcript learns its width only from geometry motion, so the split
+  // announces every change of the room it takes from the chat.
+  let splitMotionId = 0;
+  let splitSize = 0;
+  const announceSplit = (phase: "begin" | "change" | "end", size: number) => dispatchPanelGeometryMotion({ phase, id: splitMotionId, source: "workspace", size });
+  createEffect(on(() => [splitShown(), splitRatio()] as const, () => {
+    requestAnimationFrame(() => {
+      const next = splitHost()?.getBoundingClientRect().width ?? 0;
+      if (Math.abs(next - splitSize) < 0.5) return;
+      splitMotionId += 1;
+      announceSplit("begin", splitSize);
+      announceSplit("end", next);
+      splitSize = next;
+    });
+  }, { defer: true }));
+  const startSplitResize = (event: PointerEvent) => {
+    const main = document.querySelector<HTMLElement>(".chat-main");
+    const host = splitHost();
+    if (!main || !host) return;
+    event.preventDefault();
+    const left = main.getBoundingClientRect().left;
+    const right = host.getBoundingClientRect().right;
+    const width = right - left;
+    const minimum = MIN_SPLIT_PANE_WIDTH / width;
+    const maximum = 1 - (MIN_MAIN_PANE_WIDTH + 8) / width;
+    let pending = splitRatio();
+    let frame = 0;
+    splitMotionId += 1;
+    announceSplit("begin", host.getBoundingClientRect().width);
+    const move = (moveEvent: PointerEvent) => {
+      pending = Math.max(minimum, Math.min(maximum, (right - moveEvent.clientX) / width));
+      if (!frame) frame = requestAnimationFrame(() => {
+        frame = 0;
+        setSplitRatio(pending);
+        announceSplit("change", host.getBoundingClientRect().width);
+      });
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      document.body.classList.remove("workspace-resizing");
+      setSplitRatio(pending);
+      writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratio", String(pending));
+      requestAnimationFrame(() => { splitSize = host.getBoundingClientRect().width; announceSplit("end", splitSize); });
+    };
+    document.body.classList.add("workspace-resizing");
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+  };
+  // A view dragged from the dock onto the main pane lands in its split.
+  const dockDragging = (event: DragEvent) => document.body.dataset.toolDrag === "dock" && Boolean(event.dataTransfer?.types.includes(TOOL_DRAG_TYPE)) && !isMobileLayout();
   const toggleWorkspaceExpanded = () => {
     const next = !workspaceExpanded();
     setWorkspaceExpanded(next);
@@ -2525,6 +2617,9 @@ function App() {
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "application", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "chat", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "workspace-panel", toggleChatWorkspaceFocus),
+      // Moving acts on the tool that has the keyboard: the dock's, or the split's.
+      shortcutManager.registerHandler(COMMAND_IDS.workspaceMoveToMain, "workspace-panel", () => moveToMainPane(dockTool()), { when: () => !isMobileLayout() && panelOpen() && !document.activeElement?.closest(".main-split") }),
+      shortcutManager.registerHandler(COMMAND_IDS.workspaceMoveToDock, "workspace-panel", () => { const tool = splitTool(); if (tool) moveToDock(tool); }, { when: () => splitShown() && Boolean(document.activeElement?.closest(".main-split")) }),
       // A dashboard is the chat's sibling region and keeps what the main pane
       // could do there before regions had names.
       shortcutManager.registerHandler(COMMAND_IDS.stashPrompt, "dashboard", stashPrompt),
@@ -2545,7 +2640,7 @@ function App() {
       const regions: Array<{ name: string; element: Element }> = [];
       for (let node = target instanceof Element ? target.closest("[data-region]") : null; node; node = node.parentElement?.closest("[data-region]") ?? null) {
         const name = node.getAttribute("data-region");
-        if (isShortcutRegion(name) && (name !== "workspace-panel" || panelOpen())) regions.push({ name, element: node });
+        if (isShortcutRegion(name) && (name !== "workspace-panel" || panelOpen() || node.classList.contains("main-split"))) regions.push({ name, element: node });
       }
       releaseFocusedContexts = regions.map((region) => shortcutManager.activateContext(region.name));
       // Main and workspace show their line whenever focus enters. The sidebar
@@ -2722,6 +2817,16 @@ function App() {
     });
   });
 
+  const mainDropHandlers = {
+    onDragEnter: (event: DragEvent) => { if (dockDragging(event)) { event.preventDefault(); setSplitDropActive(true); return; } if (routeKind() === "chat") dropHandlers.onDragEnter(event); },
+    onDragOver: (event: DragEvent) => { if (dockDragging(event)) { event.preventDefault(); setSplitDropActive(true); return; } if (routeKind() === "chat") dropHandlers.onDragOver(event); },
+    onDragLeave: (event: DragEvent) => { if (splitDropActive()) { if (!(event.relatedTarget instanceof Node && (event.currentTarget as Node).contains(event.relatedTarget))) setSplitDropActive(false); return; } if (routeKind() === "chat") dropHandlers.onDragLeave(event); },
+    onDrop: (event: DragEvent) => {
+      const drag = readToolDrag(event);
+      if (drag) { event.preventDefault(); setSplitDropActive(false); if (drag.from === "dock") moveToMainPane(drag.tool); return; }
+      if (routeKind() === "chat") dropHandlers.onDrop(event);
+    },
+  };
   const dropHandlers = {
     onDragEnter: (event: DragEvent) => { if (!event.dataTransfer?.types.includes("Files")) return; event.preventDefault(); dragDepth += 1; setDropActive(true); },
     onDragOver: (event: DragEvent) => { if (event.dataTransfer?.types.includes("Files")) event.preventDefault(); },
@@ -2783,8 +2888,9 @@ function App() {
         void publishServerDirectory(servers()).finally(() => switchToServer(origin, isInstalledClient()));
       }} />
     </Modal>
-    <div class="workspace-layout">
-    <main data-slot="sidebar-inset" data-region={routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
+    <div class="workspace-layout" ref={(element) => { const observer = new ResizeObserver(() => setLayoutWidth(element.clientWidth)); observer.observe(element); onCleanup(() => observer.disconnect()); }}>
+    <main data-slot="sidebar-inset" data-region={routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} style={splitShown() ? { flex: `${1 - splitRatio()} 1 0`, "min-width": `${MIN_MAIN_PANE_WIDTH}px` } : undefined} {...mainDropHandlers}>
+      <Show when={splitDropActive()}><div class="main-split-drop" aria-hidden="true" /></Show>
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
         : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : "Loading chat…"}</div>}>
@@ -2963,11 +3069,16 @@ function App() {
         </Show>
       </Show>
     </main>
-    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
-    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => selectedProject()!.id} projectName={() => selectedProject()!.name} sourceControlEnabled={() => selectedProject()!.kind === "workspace"} workingRoot={() => selectedProject()!.workingRoot} chatId={() => workspacePanelScope()!} artifactChatId={() => routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => chat.loadedId()} historyAvailable={() => routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
+    <Show when={splitShown()}>
+      <section ref={(element) => { setSplitHost(element); onCleanup(() => setSplitHost(undefined)); }} class="main-split" data-region="workspace-panel" aria-label="Main pane split" style={{ flex: `${splitRatio()} 1 0`, "min-width": `${MIN_SPLIT_PANE_WIDTH}px` }}>
+        <div class="main-split-resize" role="separator" aria-label="Resize main pane split" aria-orientation="vertical" onPointerDown={startSplitResize} />
+      </section>
+    </Show>
+    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitTool={() => splitShown() ? splitTool() : null} splitHost={splitHost} onMoveToMain={isMobileLayout() ? undefined : moveToMainPane} onMoveToDock={moveToDock} onCloseSplit={closeSplit} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
+    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => selectedProject()!.id} projectName={() => selectedProject()!.name} sourceControlEnabled={() => selectedProject()!.kind === "workspace"} workingRoot={() => selectedProject()!.workingRoot} chatId={() => workspacePanelScope()!} artifactChatId={() => routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => chat.loadedId()} historyAvailable={() => routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitTool={() => splitShown() ? splitTool() : null} splitHost={splitHost} onMoveToMain={isMobileLayout() ? undefined : moveToMainPane} onMoveToDock={moveToDock} onCloseSplit={closeSplit} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </div>
     <Show when={routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard"].includes(routeKind()) && selectedProject() && workspacePanelScope()}>
-      <WorkspaceRail current={panelOpen() ? dockTool() : null} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : selectedProject()?.kind === "workspace"} onChoose={chooseRailTool} />
+      <WorkspaceRail current={panelOpen() ? dockTool() : null} inSplit={splitShown() ? splitTool() : null} onDock={moveToDock} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : selectedProject()?.kind === "workspace"} onChoose={chooseRailTool} />
     </Show>
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>
