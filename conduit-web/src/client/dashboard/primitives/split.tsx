@@ -1,4 +1,4 @@
-import { createContext, createSignal, For, Index, onCleanup, onMount, Show, splitProps, useContext, type Accessor, type JSX } from "solid-js";
+import { createContext, createEffect, createSignal, For, Index, onCleanup, onMount, Show, splitProps, untrack, useContext, type Accessor, type JSX } from "solid-js";
 import { ChevronRightIcon, EllipsisIcon } from "lucide-solid";
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuSeparator, MenuTrigger } from "@/components/primitives";
 import { Dynamic } from "solid-js/web";
@@ -42,6 +42,33 @@ function rowNeed(row: HTMLElement): number {
   return inner + (parseFloat(style.columnGap) || 0) * Math.max(0, children.length - 1) + edges.reduce((sum, edge) => sum + (parseFloat(style[edge]) || 0), 0);
 }
 
+/** The blocks that move between the two layouts, each glided by the switch. */
+const BLOCKS = ".split-dashboard-head, .split-dashboard-notice, .split-dashboard-composer, .split-group";
+let transitions = 0;
+
+/**
+ * Switches layouts in a view transition: each block glides from its place in
+ * one to its place in the other, cropped rather than stretched while its width
+ * changes (split.css). The rest of the page stays live. Instant where the
+ * browser has no view transitions, or motion is reduced.
+ */
+function glide(root: HTMLElement, change: () => void) {
+  const start = document.startViewTransition?.bind(document);
+  if (!start || matchMedia("(prefers-reduced-motion: reduce)").matches) return change();
+  const token = ++transitions;
+  const blocks = [...root.querySelectorAll<HTMLElement>(BLOCKS)];
+  blocks.forEach((block, index) => {
+    block.style.setProperty("view-transition-name", `split-block-${index}`);
+    block.style.setProperty("view-transition-class", "split-block");
+  });
+  document.documentElement.setAttribute("data-split-transition", "");
+  start(change).finished.finally(() => {
+    if (token !== transitions) return;
+    for (const block of blocks) { block.style.removeProperty("view-transition-name"); block.style.removeProperty("view-transition-class"); }
+    document.documentElement.removeAttribute("data-split-transition");
+  });
+}
+
 /** The narrowest pane that fits both columns. */
 function twoColumnWidth(root: HTMLElement) {
   const body = root.querySelector<HTMLElement>(".split-dashboard-body");
@@ -72,7 +99,15 @@ export function SplitDashboard(props: {
   const [phone, setPhone] = createSignal(isMobileLayout());
   const [paneWidth, setPaneWidth] = createSignal(Infinity);
   const [need, setNeed] = createSignal(0);
-  const oneColumn = () => phone() || paneWidth() < need();
+  const wanted = () => phone() || paneWidth() < need();
+  const [oneColumn, setOneColumn] = createSignal(false);
+  let measured = false;
+  createEffect(() => {
+    const next = wanted();
+    if (next === untrack(oneColumn)) return;
+    if (!measured) return setOneColumn(next);
+    glide(root, () => setOneColumn(next));
+  });
   onMount(() => {
     onCleanup(installSplitCursor(root));
     const query = matchMedia(MOBILE_LAYOUT_QUERY);
@@ -80,7 +115,7 @@ export function SplitDashboard(props: {
     query.addEventListener("change", change);
     onCleanup(() => query.removeEventListener("change", change));
     let frame = 0;
-    const measure = () => { frame = 0; setPaneWidth(root.clientWidth); setNeed(twoColumnWidth(root)); };
+    const measure = () => { frame = 0; setPaneWidth(root.clientWidth); setNeed(twoColumnWidth(root)); if (!measured) requestAnimationFrame(() => { measured = true; }); };
     const schedule = () => { if (!frame) frame = requestAnimationFrame(measure); };
     const sizes = new ResizeObserver(schedule);
     const watch = () => { sizes.disconnect(); sizes.observe(root); for (const element of root.querySelectorAll(WATCHED)) sizes.observe(element); schedule(); };
