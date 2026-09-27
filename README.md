@@ -1,113 +1,68 @@
 # Conduit
 
-![A chat beside the Workspace terminal running OpenCode](docs/images/chat-and-terminal.png)
+One polished home for the coding agents you run. Chats, a real terminal, files and Workspaces for Pi, Codex, Claude Code, OpenCode and more, self-hosted and available on your desktop, phone and browser.
 
-![A Codex chat beside the Workspace file editor](docs/images/chat-and-editor.png)
+![Conduit chat, Workspace changes and terminal](docs/images/hero.gif)
 
-Conduit is a self-hosted, single-user app for working with any coding agent. It
-gives chats, working files, Workspaces, attachments, terminals and live agent
-sessions one authenticated home, reachable from the web, the desktop and your
-phone. Its goal is a durable, personal control plane for agents that work across
-local and remote environments.
+**Every agent, one transcript.** Follow live thinking, tool calls and history in the same chat interface. Use voice dictation, approvals, attachments, model and effort controls where supported; pick up supported CLI threads from the Computer area.
 
-## Features
+**A real terminal, everywhere.** Open a WebGL terminal with a shortcut from a chat or place page. Its tmux session keeps running when you navigate away or the server restarts.
 
-- **Any agent, one chat.** Persistent chats using any harness you have
-  installed, or the prebuilt Pi-based Conduit harness. Every agent gets the same
-  live thinking and tool calls, approvals, attachments, model and effort
-  controls, and history.
+**Workspaces beside your chat.** Link any folder, create a managed folder or clone a Git repository. Browse, edit and search files, then inspect Git status and diffs from the Workspace rail and dock.
 
-- **Workspace panel with file editing.** Beside any chat: browse, preview, edit
-  and search files, see Git status, history and diffs, and review what the agent
-  changed without leaving the conversation.
+**Web, Windows and Android on your own server.** Run one Node server for your agents and files, then connect from multiple clients. Each client can keep several servers; the installed apps can find servers on your LAN.
 
-- **Ultrafast terminal streaming.** A ttyd-style terminal streams the server's
-  own shell straight to the client, one keystroke or tap away from every chat,
-  dashboard and Workspace. It is backed by tmux, so it outlives navigation and
-  server restarts and brings back the commands it was running.
+## Supported agents
 
-- **Any folder is a Workspace.** Link a folder on your computer, create a
-  managed one or clone a Git repository, each with its own dashboard, icon and
-  colour.
+| Harness | How Conduit drives it |
+| --- | --- |
+| Conduit Pi | Bundled Pi agent through its RPC interface |
+| Codex | Installed Codex through `codex app-server` |
+| Claude Code | Installed Claude Code and its saved sessions |
+| OpenCode | Installed OpenCode through its shared service and event stream |
+| fx | Installed fx through ACP |
+| ChatGPT Web | Models from a connected ChatGPT account |
 
-- **Web, Windows and Android.** Browser, desktop and native mobile clients with
-  full feature parity, all running off a single Node server. See
-  [desktop and Android clients](docs/desktop-client.md).
+Capabilities vary by harness. See the [backend contract](docs/chat-backend-contract.md) for details.
 
-- **Voice.** Push-to-talk and toggle dictation through managed local Whisper
-  and Parakeet tiers or OpenAI, Deepgram and Groq.
+## Compare
 
-- **Self-hosted.** A Docker deployment with automatic HTTPS and persistent data
-  and Workspace mounts.
+The tlbx and Garcon entries reflect their public [tlbx README](https://github.com/tlbx-ai/tlbx#readme) and [Garcon README](https://github.com/cfal/garcon#readme).
+
+| Capability | Conduit | tlbx | Garcon |
+| --- | --- | --- | --- |
+| Self-hosted browser access | Yes | Yes | Yes |
+| Structured agent conversations and tool calls | Yes | Agent Controller sessions | Yes |
+| Terminals beside agent work | Yes | Yes | Yes |
+| Files and Git changes beside agent work | Yes | Yes | Yes |
+| Claude Code in a structured conversation | Yes | Terminal session | Yes |
+| First-party Windows and Android clients | Yes | (verify) | (verify) |
+| Several servers in one client | Yes | Hub connects machines | (verify) |
+
+## Screenshots
 
 <p>
-  <img src="docs/images/split-editor-terminal.png" width="49%" alt="Two files side by side with a terminal" />
-  <img src="docs/images/workspace-files.png" width="49%" alt="A Workspace's files beside its chat" />
+  <img src="docs/images/chat-and-terminal.png" width="49%" alt="Chat beside a terminal" />
+  <img src="docs/images/chat-and-editor.png" width="49%" alt="Chat beside the file editor" />
 </p>
-
-## Agents
-
-Each agent runs as its own harness; Conduit translates its events into one chat
-model, so every agent gets the same transcript, trace, approvals and history.
-Adapted today:
-
-- **Conduit Pi** — [Pi](https://github.com/earendil-works/pi) profiles, with
-  forks, regeneration, steering and queued prompts
-- **Codex CLI** — through `codex app-server`
-- **OpenCode** — through its background service and event stream
-- **fx** — through `fx acp`
-- **ChatGPT Web**
-
-A profile picks the harness, model and effort for a chat. The **Computer** area
-opens each installed harness's own sessions, so a thread started in its CLI can
-be picked up here. See the [chat backend contract](docs/chat-backend-contract.md)
-for what each one supports.
-
-## Architecture
-
-```text
-  Pi        Codex CLI     OpenCode       fx        ChatGPT Web     harnesses
-   │            │             │           │             │
-   ▼            ▼             ▼           ▼             ▼
-┌────────────────────────────────────────────────────────────┐
-│                      Conduit server                        │
-│  adapters · chat logs · Workspaces · terminals · auth      │
-└────────────────────────────────────────────────────────────┘
-        │  HTTP + one live WebSocket per chat
-   ┌────┴──────────────┬───────────────────┬─────────────┐
-   ▼                   ▼                   ▼             ▼
- browser / PWA   Windows desktop     Android app     … any number,
-                   (Tauri)          (Capacitor)      at once
-```
-
-One server holds the agents and the files; any number of clients attach to it,
-and a client can hold several servers and move between them
-([servers](docs/servers.md)).
+<p>
+  <img src="docs/images/split-editor-terminal.png" width="49%" alt="Two files and a terminal" />
+  <img src="docs/images/workspace-files.png" width="49%" alt="Workspace files beside a chat" />
+</p>
 
 ## Deploy
 
-Requires a Linux VPS, a public hostname that points to it, and Docker Engine
-with the Compose plugin. On Debian or Ubuntu, the installer can install Docker
-when run as root.
+Use a Linux VPS with a public hostname. The installer can add Docker on Debian or Ubuntu when run as root.
 
 ```bash
-curl -fsSL https://get.jask-aran.com/conduit | bash
-```
-Enter the public hostname and login password when prompted. Open the HTTPS URL
-shown by the installer.
-
-To update an existing deployment:
-
-```bash
-~/conduit/scripts/deploy.sh restart
+curl -fsSL https://raw.githubusercontent.com/jask-aran/Conduit/main/scripts/install.sh | bash
 ```
 
-See [deployment operations](docs/operations/deployment.md) for custom paths,
-release pinning, backup, and restore.
+Enter the hostname and login password when prompted. See [deployment operations](docs/deployment.md) for updates, backup and restore.
 
 ## Start locally
 
-Requires Node.js 22+ and npm.
+Install Node.js and npm, then run:
 
 ```bash
 bash .devcontainer/start-conduit.sh setup
@@ -115,21 +70,17 @@ node scripts/conduit-auth.mjs set-password
 bash .devcontainer/start-conduit.sh restart
 ```
 
-Open <http://127.0.0.1:4310>. Sign in, then open **Settings → Auth** to connect
-a model provider.
+Open <http://127.0.0.1:4310>. Connect a model provider in **Settings > Auth**.
 
 ## Repository map
 
-```text
-conduit-web/  Server, harness adapters, web client, native shells, and tests
-templates/    Pi profiles, tools, and skills
-scripts/      Authentication, deployment, backup, and release tools
-docs/         Architecture, operations, and release documentation
-```
+| Path | What it contains |
+| --- | --- |
+| `conduit-web/` | Server, harness adapters, web UI, native clients and tests |
+| `templates/` | Pi profiles, tools and skills |
+| `scripts/` | Authentication, deployment and release tools |
+| `docs/` | Product, operations and release documentation |
 
-Development guides:
-- [Web runtime and API](conduit-web/README.md)
-- [Deployment operations](docs/operations/deployment.md)
-- [Runtime data](docs/operations/runtime-data.md)
-- [Testing](docs/testing.md)
-- [Contributing](CONTRIBUTING.md)
+Start with the [web runtime and API](conduit-web/README.md), [desktop and Android clients](docs/desktop-client.md), [several servers](docs/servers.md), [testing](docs/testing.md) and [contributing](CONTRIBUTING.md).
+
+See what shipped recently in [release notes](docs/releases/) and [GitHub Releases](https://github.com/jask-aran/Conduit/releases).
