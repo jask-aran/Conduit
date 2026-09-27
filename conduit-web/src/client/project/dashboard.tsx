@@ -5,12 +5,10 @@ import {
   CopyIcon,
   FolderIcon,
   FolderOpenIcon,
-  GitCompareArrowsIcon,
   PaletteIcon,
   PencilIcon,
   PinIcon,
   PinOffIcon,
-  SearchIcon,
   Settings2Icon,
   TerminalIcon,
   Trash2Icon,
@@ -485,14 +483,10 @@ export function ProjectDashboard(props: {
           unreadCount() ? `${unreadCount()} unread` : null,
         ]} />}
       shortcuts={<SplitShortcuts label={isWorkspace() ? "Manage workspace" : "Manage project"} manage={manageItems} items={[
-        { icon: <FolderOpenIcon />, label: "Files", onClick: () => props.onOpenView("files") },
-        isWorkspace()
-          ? { icon: <GitCompareArrowsIcon />, label: "Changes", onClick: () => props.onOpenView("diff") }
-          : { icon: <SearchIcon />, label: "Search chats", onClick: props.onSearchChats },
-        isWorkspace()
-          ? { icon: <TerminalIcon />, label: "Terminal", onClick: () => props.onOpenView("terminal") }
-          : { icon: <CopyIcon />, label: "Copy path", onClick: () => void copyPath() },
-        { icon: <Settings2Icon />, label: "Settings", onClick: () => props.onOpenSettings("workspaces", props.project.id) },
+        // Chats, terminals, changes, the path and settings each have their
+        // place on the page already; Files only while Changes stands in for
+        // the Files section.
+        Boolean(payload()?.changes.length) && { icon: <FolderOpenIcon />, label: "Files", onClick: () => props.onOpenView("files") },
       ]} />}
       notice={cloning() || (error() && !cloning()) ? <>
         <Show when={cloning()}>

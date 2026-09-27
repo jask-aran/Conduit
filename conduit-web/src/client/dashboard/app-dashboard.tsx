@@ -1,6 +1,6 @@
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { ClipboardCopyIcon, FolderInputIcon, FolderPlusIcon, MessageSquarePlusIcon, PaletteIcon, PencilIcon, PinIcon, PinOffIcon, SearchIcon, Settings2Icon, TerminalIcon, Trash2Icon } from "lucide-solid";
+import { ClipboardCopyIcon, FolderInputIcon, FolderPlusIcon, MessageSquarePlusIcon, PaletteIcon, PencilIcon, PinIcon, PinOffIcon, Settings2Icon, TerminalIcon, Trash2Icon } from "lucide-solid";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger, Spinner } from "@/components/primitives";
 import { api, projectPath } from "../api/client";
 import type { ChatSummary, Project, Template } from "../api/contracts";
@@ -286,9 +286,7 @@ export function AppDashboard(props: {
       unread() ? `${unread()} unread` : null,
     ]} />}
     shortcuts={<SplitShortcuts items={[
-      { icon: <SearchIcon />, label: "Search chats", onClick: () => props.onSearchChats("all") },
-      { icon: <FolderPlusIcon />, label: "New project", onClick: () => props.onContextAction("new-folder", {}) },
-      { icon: <TerminalIcon />, label: "Terminal", onClick: props.onOpenTerminalView },
+      // Search, New project, New workspace and Terminal are on the page already.
       { icon: <Settings2Icon />, label: "Settings", onClick: props.onOpenSettings },
     ]} />}
     composer={props.composer}

@@ -157,7 +157,10 @@ export function watchFold(more: HTMLElement, setFit: (count: number) => void) {
 export type SplitShortcutItem = { icon: JSX.Element; label: string; onClick: () => void };
 
 /**
- * Plain words on the title's line, at every desktop width: as room runs out
+ * Plain words on the title's line. A shortcut is a verb for this place that
+ * nothing else on the page already offers -- not a section's own action, the
+ * status row, the chats heading or the top bar -- and managing the place
+ * itself goes in `manage`. At every desktop width, as room runs out
  * they fold, last first, into the ⋯, which also holds the page's `manage`
  * items -- a function, so they are made inside the menu -- and the title truncates only once they all have. A row of large
  * targets on a phone.
