@@ -1,6 +1,8 @@
+import fs from "node:fs/promises";
 import { resolveTemplate } from "../../config.js";
 import { rememberModel } from "../../profile-model-memory.js";
 import { chatView, isChatId } from "../../chat-store.js";
+import { resolveComputerContext } from "../../computer-context.js";
 import { stopSessionProcesses } from "../../session-operations.js";
 import { agentProfiles, conduitPiSessionFile, harnessCapabilities, profileSelection } from "../../chat-backend.js";
 import { manifestForImplementation } from "../../harnesses/index.js";
@@ -124,7 +126,8 @@ export function registerChatRoutes(app, {
       if (!context) return response.status(404).json({ error: "chat_not_found" });
       if (!context.chat.untracked) return response.json(chatView(context.chat));
       const project = await projects.get(String(request.body?.projectId || ""));
-      if (!project || project.workingRoot !== context.project.workingRoot) {
+      const real = (root) => fs.realpath(root).catch(() => root);
+      if (!project || await real(project.workingRoot) !== await real(context.project.workingRoot)) {
         return response.status(400).json({ error: "workspace_mismatch" });
       }
       await registry.update(context.chat.id, { untracked: false, projectId: project.id });
@@ -137,11 +140,18 @@ export function registerChatRoutes(app, {
     profiles: agentProfiles(config.piTemplates, { available: new Set([...backends.adapters.keys()]) }),
     harnesses: harnessCapabilities(),
   }));
+  // A place is a project or workspace, or -- for an untracked thread's chat --
+  // any folder on the Computer.
+  const placeFor = async (id) => {
+    const project = await projects.get(id || "chat");
+    if (!project) return resolveComputerContext(String(id || "")).catch(() => null);
+    await projects.validate(project);
+    return project;
+  };
   app.get("/v0/models", async (request, response, next) => {
     try {
-      const project = await projects.get(request.query.projectId || "chat");
+      const project = await placeFor(request.query.projectId);
       if (!project) return response.status(404).json({ error: "project_not_found" });
-      await projects.validate(project);
       if (request.query.refresh === "true") await modelCatalog.refreshFromNetwork();
       response.json({ installationId: "conduit-pinned", runtimeKind: "conduit_profile", ...await modelCatalog.list(project.workingRoot) });
     } catch (error) {
@@ -151,9 +161,8 @@ export function registerChatRoutes(app, {
 
   app.get("/v0/settings", async (request, response, next) => {
     try {
-      const project = await projects.get(request.query.projectId || "chat");
+      const project = await placeFor(request.query.projectId);
       if (!project) return response.status(404).json({ error: "project_not_found" });
-      await projects.validate(project);
       response.json({ installationId: "conduit-pinned", runtimeKind: "conduit_profile", ...await modelCatalog.getSettings(project.workingRoot) });
     } catch (error) {
       next(error);

@@ -144,56 +144,6 @@ export function registerLiveSessionRoutes(app, {
     } catch (error) { next(error); }
   });
 
-  // A driven thread has no chat to hold a permission mode or a speed, so its
-  // composer asks the process running it, as a chat's asks the chat.
-  const permissionModesFor = async (live) => {
-    const adapter = backends.adapterForRecord(live);
-    if (!adapter.getCapabilities().permissionModes || typeof adapter.listPermissionModes !== "function") return { adapter, modes: [] };
-    return { adapter, modes: await adapter.listPermissionModes(live.id, live.cwd) };
-  };
-  app.get("/v0/live-sessions/:id/permission-profiles", async (request, response, next) => {
-    try {
-      const live = backends.get(request.params.id);
-      if (!live) return response.status(404).json({ error: "live_session_not_found" });
-      const { modes } = await permissionModesFor(live);
-      response.json({ modes, selected: live.permissionMode || (modes.some((mode) => mode.id === "custom") ? "custom" : modes[0]?.id) || "" });
-    } catch (error) { next(error); }
-  });
-  app.patch("/v0/live-sessions/:id/permission-profiles", async (request, response, next) => {
-    try {
-      const live = backends.get(request.params.id);
-      if (!live) return response.status(404).json({ error: "live_session_not_found" });
-      const { adapter, modes } = await permissionModesFor(live);
-      const selected = String(request.body?.permissionMode || "").trim();
-      const mode = modes.find((candidate) => candidate.id === selected && candidate.allowed);
-      if (!mode || typeof adapter.setPermissionMode !== "function") return response.status(400).json({ error: "invalid_permission_mode" });
-      await adapter.setPermissionMode(live.id, mode);
-      response.json({ modes, selected });
-    } catch (error) { next(error); }
-  });
-  app.get("/v0/live-sessions/:id/service-levels", async (request, response, next) => {
-    try {
-      const live = backends.get(request.params.id);
-      if (!live) return response.status(404).json({ error: "live_session_not_found" });
-      const levels = backends.manifestFor?.(live.adapterImplementation)?.serviceLevels || [];
-      response.json({ levels, selected: live.serviceLevel || levels[0]?.id || "" });
-    } catch (error) { next(error); }
-  });
-  app.patch("/v0/live-sessions/:id/service-levels", async (request, response, next) => {
-    try {
-      const live = backends.get(request.params.id);
-      if (!live) return response.status(404).json({ error: "live_session_not_found" });
-      const levels = backends.manifestFor?.(live.adapterImplementation)?.serviceLevels || [];
-      const selected = String(request.body?.serviceLevel || "").trim();
-      const adapter = backends.adapterForRecord(live);
-      if (!levels.some((level) => level.id === selected) || typeof adapter.setServiceLevel !== "function") {
-        return response.status(400).json({ error: "invalid_service_level" });
-      }
-      await adapter.setServiceLevel(live.id, selected);
-      response.json({ levels, selected });
-    } catch (error) { next(error); }
-  });
-
   app.patch("/v0/live-sessions/:id/models", async (request, response, next) => {
     try {
       const live = backends.get(request.params.id);

@@ -559,7 +559,8 @@ starting, and browser-attached processes remain resident.
 - `WS /v0/live-sessions/:id/stream`
 - `GET /v0/harnesses` lists installed adapter dashboards and available controls
 - `GET /v0/harnesses/:implementation/sessions?projectId=...` lists bounded backend metadata for one validated Workspace
-- `POST /v0/harnesses/:implementation/drive` opens an ephemeral backend session without creating a Conduit chat
+- `POST /v0/harnesses/:implementation/threads/open` opens (`sessionId`, or `chatId` again) or starts (`newThread`) a thread not in Conduit as an untracked chat; a thread Conduit already keeps answers as that chat
+- `POST /v0/chats/:id/track` makes an untracked chat an ordinary one in the workspace its folder is
 - `GET|POST /v0/ptys` lists or creates a shell for a chat project
 - `POST /v0/ptys/:id/rename` and `DELETE /v0/ptys/:id` rename or stop/remove it
 - `WS /v0/ptys/:id/attach` attaches a terminal renderer
@@ -682,25 +683,32 @@ profile-assignment path runs. Host Pi has no Conduit profile revision.
 The existing editable prompt service still supplies current prompt content;
 profile revision is identity metadata, not a snapshot of prompt contents.
 
-## Adapter dashboards and drive mode
+## Adapter dashboards and untracked threads
 
 Each installed harness has a page of its own, `/computer/harness/:id`, which
 `?cwd=` scopes to one folder: the threads it ran that no Conduit chat owns, the
 Conduit chats on it, and the folders it ran in. Computer folder actions open a
-harness's page with that folder in scope. A thread started or opened there is
-driven untracked at its own address,
-`/computer/harness/:id/thread/:threadId?cwd=`: the normal backend-neutral
-live-session stream, with no chat, transcript journal or sidebar entry, drawn
-with a chat's transcript and composer. Leaving that page stops and removes its
-resident adapter record, asking first while a turn runs; a record no page has
-driven for 15 seconds (a reload, a closed tab) is stopped by the server. **Track in Conduit**
-adopts the thread through the explicit adoption route, naming its harness, and
-hands the new chat the open driver, so a thread never has two Conduit writers;
-a folder that is not yet a Workspace is linked as one first.
+harness's page with that folder in scope.
+
+A thread opened or started there runs as an **untracked chat**: an ordinary
+chat record marked `untracked`, in the thread's workspace or, outside one, its
+Computer folder (`computer:` project id, resolved by `findChatContext`). No
+list of Conduit's chats includes it -- the catalogue, dashboards, harness
+tracking projections -- but everything else is the chat path: the live-session
+launch, transcript ops and chat log, attachments, message ids, steering and
+queueing, edit, fork, regenerate, turn checkpoints, model, permission mode and
+speed. Its data lives in `<folder>/.conduit/chats/<id>` like any chat's. It is
+shown at `/computer/harness/:id/thread/:threadId?cwd=`, or `thread/c:<chatId>`
+before the harness has named the thread. The harness page's composer is one
+too, made when the composer is first used and moved when its folder changes.
+**Track** keeps the chat and clears `untracked`, in the folder's workspace,
+linking the folder as one first. Leaving the page deletes the chat and stops
+its process; the thread stays with the harness. Untracked chats are not
+reloaded when the server starts, so one a closed tab left behind goes then.
 
 The ChatGPT Web dashboard reports adapter and authentication status. Session
-listing and drive mode stay unavailable because that adapter does not expose
-backend history discovery.
+listing and untracked threads stay unavailable because that adapter does not
+expose backend history discovery.
 
 ## Live session protocol
 

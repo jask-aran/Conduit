@@ -5,28 +5,33 @@ import path from "node:path";
 import assert from "node:assert/strict";
 import { startConduitHarness } from "./helpers/conduit-harness.js";
 
-test("ephemeral Codex drive leaves the chat registry unchanged", async (t) => {
+test("an untracked thread runs as a chat no list shows, until it is tracked", async (t) => {
   const harness = await startConduitHarness();
   t.after(() => harness.stop());
   const project = await harness.createProject("Harness workspace");
-  const before = (await (await harness.request("/v0/projects")).json()).projects
-    .find((item) => item.id === project.id).sessions.length;
-  const sessions = await (await harness.request(`/v0/harnesses/codex/sessions?projectId=${project.id}`)).json();
-  assert.equal(sessions.sessions[0].id, "foreign-thread");
-  assert.deepEqual(sessions.tracked, []);
-  const opened = await (await harness.request("/v0/harnesses/codex/drive", {
-    method: "POST", body: JSON.stringify({ projectId: project.id, sessionId: "foreign-thread" }),
+  const listed = async () => (await (await harness.request("/v0/projects")).json()).projects
+    .find((item) => item.id === project.id).sessions.map((chat) => chat.id);
+  const before = await listed();
+  const opened = await (await harness.request("/v0/harnesses/codex/threads/open", {
+    method: "POST", body: JSON.stringify({ path: project.workingRoot, sessionId: "foreign-thread" }),
   })).json();
-  assert.equal(opened.nativeSessionId, "foreign-thread");
-  assert.match(opened.streamUrl, new RegExp(opened.id));
-  assert.equal((await (await harness.request("/v0/projects")).json()).projects
-    .find((item) => item.id === project.id).sessions.length, before);
-  assert.equal((await harness.request(`/v0/live-sessions/${opened.id}/process`, { method: "DELETE" })).status, 202);
-  assert.equal((await (await harness.request("/v0/live-sessions")).json()).sessions.some((item) => item.id === opened.id), false);
-  assert.equal((await harness.request(`/v0/projects/${project.id}/backend-sessions/foreign-thread/adopt`, { method: "POST" })).status, 201);
+  assert.equal(opened.tracked, false);
+  assert.equal(opened.chat.untracked, true);
+  assert.equal(opened.chat.projectId, project.id);
+  assert.deepEqual(await listed(), before);
+  const sessions = await (await harness.request(`/v0/harnesses/codex/sessions?projectId=${project.id}`)).json();
+  assert.deepEqual(sessions.tracked, [], "an untracked chat does not count as tracking the thread");
+  const again = await (await harness.request("/v0/harnesses/codex/threads/open", {
+    method: "POST", body: JSON.stringify({ path: project.workingRoot, sessionId: "foreign-thread" }),
+  })).json();
+  assert.equal(again.chat.id, opened.chat.id, "opening it again reuses its chat");
+  const tracked = await (await harness.request(`/v0/chats/${opened.chat.id}/track`, {
+    method: "POST", body: JSON.stringify({ projectId: project.id }),
+  })).json();
+  assert.equal(tracked.untracked, false);
+  assert.deepEqual(await listed(), [opened.chat.id, ...before]);
   const mounted = await (await harness.request(`/v0/harnesses/codex/sessions?projectId=${project.id}`)).json();
   assert.equal(mounted.tracked.length, 1);
-  assert.equal(mounted.tracked[0].backend.opaqueSession, undefined);
   assert.deepEqual(mounted.sessions, []);
 });
 
@@ -70,51 +75,20 @@ test("a thread can be started in any folder without registering a workspace", as
   const folder = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-adhoc-"));
   t.after(() => fs.rm(folder, { recursive: true, force: true }));
   const before = (await (await harness.request("/v0/projects")).json()).projects.length;
-  const started = await (await harness.request("/v0/harnesses/codex/drive", {
+  const started = await (await harness.request("/v0/harnesses/codex/threads/open", {
     method: "POST", body: JSON.stringify({ path: folder, newThread: true }),
   })).json();
-  assert.match(started.streamUrl, new RegExp(started.id));
+  assert.match(started.chat.projectId, /^computer:/);
+  assert.equal(started.chat.untracked, true);
   assert.equal((await (await harness.request("/v0/projects")).json()).projects.length, before, "no workspace was registered");
-  assert.equal((await harness.request(`/v0/live-sessions/${started.id}/process`, { method: "DELETE" })).status, 202);
+  assert.equal((await harness.request(`/v0/sessions/${started.chat.id}`, { method: "DELETE" })).status, 204);
 });
 
-test("driving an unknown folder is rejected before a process is spawned", async (t) => {
+test("opening a thread in an unknown folder is rejected before a chat is made", async (t) => {
   const harness = await startConduitHarness();
   t.after(() => harness.stop());
-  const response = await harness.request("/v0/harnesses/codex/drive", {
+  const response = await harness.request("/v0/harnesses/codex/threads/open", {
     method: "POST", body: JSON.stringify({ path: "/definitely/not/here", newThread: true }),
   });
   assert.equal(response.status, 400);
-});
-
-test("a driven thread selects its model against the live record, without a chat", async (t) => {
-  const harness = await startConduitHarness();
-  t.after(() => harness.stop());
-  const folder = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-model-"));
-  t.after(() => fs.rm(folder, { recursive: true, force: true }));
-  const started = await (await harness.request("/v0/harnesses/codex/drive", {
-    method: "POST", body: JSON.stringify({ path: folder, newThread: true }),
-  })).json();
-
-  const catalog = await (await harness.request(`/v0/live-sessions/${started.id}/models`)).json();
-  assert.ok(catalog.models.some((model) => model.spec === "codex-test"), "the harness reports its own catalogue");
-
-  const chosen = await (await harness.request(`/v0/live-sessions/${started.id}/models`, {
-    method: "PATCH", body: JSON.stringify({ model: "codex-other", thinkingLevel: "high" }),
-  })).json();
-  assert.equal(chosen.model, "codex-other");
-  assert.equal(chosen.thinkingLevel, "high");
-
-  const rejected = await harness.request(`/v0/live-sessions/${started.id}/models`, {
-    method: "PATCH", body: JSON.stringify({ model: "not-a-model" }),
-  });
-  assert.equal(rejected.status, 400);
-
-  const badLevel = await harness.request(`/v0/live-sessions/${started.id}/models`, {
-    method: "PATCH", body: JSON.stringify({ model: "codex-other", thinkingLevel: "medium" }),
-  });
-  assert.equal(badLevel.status, 400, "codex-other does not offer a medium effort");
-
-  assert.equal((await harness.request(`/v0/live-sessions/${started.id}/process`, { method: "DELETE" })).status, 202);
-  assert.equal((await harness.request("/v0/live-sessions/missing/models")).status, 404);
 });
