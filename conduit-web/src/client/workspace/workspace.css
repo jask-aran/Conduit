@@ -56,7 +56,7 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 /* Keyboard focus on a tab is the wash, as on a row: no ring. */
 .workspace-panel-tabs button:focus-visible { outline: none; background: var(--accent); color: var(--foreground); }
 .workspace-panel-tabs svg, .workspace-status-strip svg { width: 12px; height: 12px; }
-.workspace-panel-content { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; overflow: hidden; }
+.workspace-panel-content { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; overflow: hidden; outline: none; }
 .workspace-panel-content > * { min-width: 0; flex: 1; }
 .workspace-panel-header-actions { display: flex; flex: none; align-items: center; gap: 1.6px; margin-left: auto; }
 .workspace-split-resizing { cursor: col-resize; user-select: none; }

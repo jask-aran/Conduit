@@ -110,9 +110,12 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   const setPaneTab = (next: PanelTab) => selectTab(next === "diff" && !props.sourceControlEnabled() ? "files" : next);
   const focusTabControl = (next: PanelTab) => {
     const control = panelRoot?.querySelector<HTMLElement>(`[data-workspace-tab="${next}"]`);
-    // On a desktop the rail stands in for the tabs, so focus lands in the view.
-    if (control?.getClientRects().length) control.focus({ preventScroll: true });
-    else focusFirst(panelRoot?.querySelector(".workspace-panel-content"));
+    // On a desktop the rail stands in for the tabs, so focus lands in the
+    // view, or on the view itself while it has nothing to focus yet.
+    if (control?.getClientRects().length) return control.focus({ preventScroll: true });
+    const content = panelRoot?.querySelector<HTMLElement>(".workspace-panel-content");
+    focusFirst(content);
+    if (!content?.contains(document.activeElement)) content?.focus({ preventScroll: true });
   };
   const focusTabDefault = (next: PanelTab) => {
     if (next === "files") {
@@ -160,14 +163,18 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   // The header holds the view's name and its modes. When they stop fitting,
   // the modes drop their labels, then the name goes: measured, not a width.
   const fitHeader = (element: HTMLElement) => {
-    const observer = new ResizeObserver(() => {
+    const fit = () => {
       element.removeAttribute("data-compact");
       if (element.scrollWidth <= element.clientWidth) return;
       element.setAttribute("data-compact", "labels");
       if (element.scrollWidth > element.clientWidth) element.setAttribute("data-compact", "name");
-    });
-    observer.observe(element);
-    onCleanup(() => observer.disconnect());
+    };
+    // Its width changing, or what it holds: another view's name and modes.
+    const resized = new ResizeObserver(fit);
+    const changed = new MutationObserver(fit);
+    resized.observe(element);
+    changed.observe(element, { childList: true, subtree: true, characterData: true });
+    onCleanup(() => { resized.disconnect(); changed.disconnect(); });
   };
   // A key the leader lists must do something here: Source Control only with
   // a repository, the split only while the panel is wide enough to split.
@@ -477,7 +484,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
         <Button variant="ghost" size="icon-sm" aria-label="Close workspace panel" onClick={props.onClose}><XIcon /></Button>
       </div>
     </header>
-    <main class="workspace-panel-content">
+    <main class="workspace-panel-content" tabIndex={-1}>
     <Show when={tabVisible("files")}>
       <FilesView control={files} expanded={props.expanded()} projectId={props.projectId()} workingRoot={props.workingRoot()}
         sourceControlEnabled={props.sourceControlEnabled()} gitFiles={sourceControl.diff()?.files ?? []} commentChatId={commentChatId()} reveal={reviewReveal()}
