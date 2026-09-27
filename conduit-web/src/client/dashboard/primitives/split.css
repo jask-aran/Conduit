@@ -167,6 +167,7 @@
 .split-group-toggle:is(:hover, :focus-visible, [data-held]) { outline: none; background: var(--accent); color: var(--foreground); }
 .split-group[data-folded] .split-group-heading { padding-bottom: 0; }
 /* The chats list's compact heading and the Filters menu's counts. */
+.split-compact-heading { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .split-compact-heading span { margin-left: 6px; color: var(--muted-foreground); font-weight: 400; }
 .split-filter-detail { margin-left: auto; padding-left: 12px; color: var(--muted-foreground); font: 400 11px ui-monospace, SFMono-Regular, Consolas, monospace; }
 @container split-dashboard (max-width: 759px) {
