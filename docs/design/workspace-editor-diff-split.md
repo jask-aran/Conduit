@@ -1,12 +1,12 @@
 # Workspace editor and diff split
 
-> **Status (2026-09-22): outcome delivered, structure not.** The four product
-> views exist and Git review and chat review own separate scopes
-> (`sourceControlScopes` and `chatScopes` in `workspace-panel.tsx`), so the
-> drift this plan set out to prevent is prevented. The component decomposition
-> it proposes did not happen: there is no `FilesView` or `SourceControlView`,
-> and `workspace-panel.tsx` is one file of ~2,260 lines. Treat the target
-> structure below as an unbuilt refactor.
+> **Status (2026-09-27): built.** The four product views exist, Git review
+> and chat review own separate scopes, and the views are their own components:
+> `workspace-files.tsx`, `workspace-source-control.tsx`,
+> `workspace-chat-view.tsx` and `workspace-terminal-view.tsx`, each with a
+> controller the panel creates, around shared `workspace-shared.ts` (request
+> scope, cache) and `workspace-poll.ts`. `workspace-panel.tsx` is the chrome.
+> Where the views go next is `panes-and-rail.md`.
 
 ## Goal
 
@@ -112,8 +112,8 @@ because they depend on chat identity.
 4. **Built:** Rename Artifacts to Chat in code and visible labels. Keep History
    and Agent changes inside it.
 5. **Built:** Remove dead diff props and crossover CSS from the file components.
-6. Extract larger product views from `workspace-panel.tsx` only where the split
-   produces clear ownership. Do not add a general view framework.
+6. **Built:** Extract larger product views from `workspace-panel.tsx` only where
+   the split produces clear ownership. Do not add a general view framework.
 
 Each step must remain buildable and usable before the next step starts.
 
