@@ -355,7 +355,7 @@ export function ProjectDashboard(props: {
   const showOutside = () => isWorkspace() && threadSide() === "outside";
 
   const manageMenu = () => <Menu modal={false}>
-    <MenuTrigger class="workspace-dashboard-manage" aria-label={isWorkspace() ? "Manage workspace" : "Manage project"} title={isWorkspace() ? "Manage workspace" : "Manage project"}><EllipsisIcon /></MenuTrigger>
+    <MenuTrigger class="workspace-dashboard-manage" tabIndex={-1} aria-label={isWorkspace() ? "Manage workspace" : "Manage project"} title={isWorkspace() ? "Manage workspace" : "Manage project"}><EllipsisIcon /></MenuTrigger>
     <MenuContent>
       <MenuGroup>
         <Show when={isWorkspace()}><MenuItem onSelect={() => setAppearanceOpen(true)}><PaletteIcon />Workspace identity</MenuItem></Show>

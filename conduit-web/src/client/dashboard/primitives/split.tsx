@@ -60,7 +60,7 @@ export function SplitShortcuts(props: { children: JSX.Element }) {
 }
 
 export function SplitShortcut(props: { icon: JSX.Element; label: string; onClick: () => void; title?: string }) {
-  return <button type="button" title={props.title} onClick={props.onClick}>{props.icon}<span>{props.label}</span></button>;
+  return <button type="button" tabIndex={-1} title={props.title} onClick={props.onClick}>{props.icon}<span>{props.label}</span></button>;
 }
 
 /**
@@ -80,7 +80,7 @@ export function SplitGroup(props: {
   class?: string;
   busy?: boolean;
 }) {
-  return <section class={classes("split-group", props.class)} data-order={props.order || "rest"} aria-labelledby={props.label ? props.id : undefined} aria-label={props.label ? undefined : props.id} aria-busy={props.busy || undefined}>
+  return <section class={classes("split-group", props.class)} data-section={props.id.replace(/^.*-/, "").replace("threads", "chats")} data-order={props.order || "rest"} aria-labelledby={props.label ? props.id : undefined} aria-label={props.label ? undefined : props.id} aria-busy={props.busy || undefined}>
     <header class="split-group-heading">
       {props.heading ?? <h2 id={props.id}>{props.label}<Show when={props.count != null}><small>{props.count}</small></Show></h2>}
       <Show when={props.actions}><div class="split-group-actions">{props.actions}</div></Show>
