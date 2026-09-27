@@ -312,7 +312,7 @@ export function HarnessDashboard(props: {
       header={<SplitHeader title={current().label} kind="Harness" glyph={<HarnessMark id={current().id} />} context={[
         <span title={scope() || undefined}>{scope() || "All folders"}</span>,
         harnessStatusLabel(current().status),
-        current().version ? `v${current().version}` : null,
+        current().version ? (/^\d/.test(current().version!) ? `v${current().version}` : current().version) : null,
         running() ? `${running()} running` : null,
       ]} />}
       notice={error() ? <p class="harness-error" role="alert">{error()}</p> : undefined}
