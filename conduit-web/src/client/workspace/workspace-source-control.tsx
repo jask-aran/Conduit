@@ -10,6 +10,7 @@ import { ComparisonSourceControls } from "./workspace-comparison-source";
 import { WorkspaceDiffView } from "./workspace-diff-view";
 import { createWorkspaceReview, diffScopes, type DiffScope } from "./workspace-review-source";
 import type { DiffPayload, GitAction, GitActionResult, GitChangedFile, GitCommit, GitCommitDetail, GitRef, SourceControlMode, WorkspaceSettings } from "./workspace-types";
+import { Segmented } from "../settings/settings-controls";
 import "./workspace.css";
 
 const sourceControlScopes = diffScopes.filter((scope) => scope.value === "head" || scope.value === "changes" || scope.value === "staged");
@@ -236,9 +237,18 @@ export function createSourceControl(options: { projectId: Accessor<string>; enab
 }
 export type SourceControl = ReturnType<typeof createSourceControl>;
 
+/** Source Control's modes, a segmented switch in the header of whatever holds the view. */
+export function SourceControlModes(props: { control: SourceControl }) {
+  return <Segmented label="Source Control" value={props.control.mode()} onChange={props.control.selectMode} options={[
+    { value: "changes", label: "Changes", icon: <CheckIcon />, title: "Changes" },
+    { value: "review", label: "Review", icon: <GitCompareArrowsIcon />, title: "Review" },
+    { value: "graph", label: "Graph", icon: <GitCommitHorizontalIcon />, title: "Graph" },
+    { value: "patch", label: "Patch", icon: <FileDiffIcon />, title: "Patch" },
+  ]} />;
+}
+
 export function SourceControlView(props: {
   control: SourceControl;
-  position?: "left" | "right";
   stale: boolean;
   onRetryPoll: () => void;
   chatAvailable: boolean;
@@ -248,14 +258,8 @@ export function SourceControlView(props: {
   onOpenWorkingFile: (path: string) => void;
 }) {
   const c = props.control;
-  return <section class="workspace-diff" data-position={props.position}>
+  return <section class="workspace-diff">
       <header class="workspace-detail-dock-header workspace-source-header">
-        <div class="workspace-source-modes" role="tablist" aria-label="Source Control">
-          <button type="button" role="tab" aria-selected={c.mode() === "changes"} onClick={() => c.selectMode("changes")}><CheckIcon />Changes</button>
-          <button type="button" role="tab" aria-selected={c.mode() === "review"} onClick={() => c.selectMode("review")}><GitCompareArrowsIcon />Review</button>
-          <button type="button" role="tab" aria-selected={c.mode() === "graph"} onClick={() => c.selectMode("graph")}><GitCommitHorizontalIcon />Graph</button>
-          <button type="button" role="tab" aria-selected={c.mode() === "patch"} onClick={() => c.selectMode("patch")}><FileDiffIcon />Patch</button>
-        </div>
         <small>{c.mode() === "graph" ? `${c.diff()?.commits?.length || 0} recent` : `${c.diff()?.files.length || 0} changed`}</small>
         <div class="workspace-source-actions">
           <button type="button" aria-label="Fetch all remotes" title="Fetch all remotes" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("fetch")}><Show when={c.gitAction() === "fetch"} fallback={<RefreshCwIcon />}><Spinner /></Show><span>Fetch</span></button>

@@ -75,6 +75,7 @@ import { isShortcutRegion } from "./shortcuts/shortcut-types";
 import { acknowledgeRegion } from "./shortcuts/region-cue";
 import { globalShortcuts } from "./shortcuts/global-shortcuts";
 import { dropScope, migrateWorkspacePanelStorage, readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace/workspace-panel-storage";
+import { WorkspaceRail } from "./workspace/workspace-rail";
 import { publishUiPreference, queueUiPreferenceSave, uiPreferenceSaves, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
 import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
 import { INCREMARK_PACING_STORAGE_KEY } from "./chat/incremark-pacing";
@@ -483,7 +484,6 @@ function ChatHeader(props: {
         <Show when={!props.appDashboard}>
           <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" tabIndex={-1} aria-label={props.dashboard ? `Copy Tailscale ${placeKind()} link` : "Copy Tailscale chat link"} title={props.dashboard ? `Copy Tailscale ${placeKind()} link` : "Copy Tailscale chat link"} onClick={props.onShare}><ShareIcon /></Button>
         </Show>
-        <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" tabIndex={-1} aria-label="Toggle workspace panel" aria-expanded={props.panelOpen} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
         <Show when={!props.appDashboard}><Menu modal={false}>
           <MenuTrigger class="chat-header-more" tabIndex={-1} aria-label={props.dashboard ? `More ${placeKind()} options` : "More chat options"} title={props.dashboard ? `More ${placeKind()} options` : "More chat options"}><EllipsisIcon /></MenuTrigger>
           <MenuContent class="chat-header-menu">
@@ -503,7 +503,7 @@ function ChatHeader(props: {
               <MenuItem disabled={props.pwaUpdating()} onSelect={props.onUpdatePwa}><RefreshCwIcon class={props.pwaUpdating() ? "pwa-update-icon pwa-update-icon-active" : "pwa-update-icon"} />{props.pwaUpdating() ? "Updating app…" : "Update app"}</MenuItem>
               <MenuSeparator />
             </Show>
-            <MenuItem onSelect={props.onTogglePanel}><PanelRightIcon />Workspace panel</MenuItem>
+            <Show when={isMobileLayout()}><MenuItem onSelect={props.onTogglePanel}><PanelRightIcon />Workspace panel</MenuItem></Show>
             <MenuItem onSelect={props.onShare}><ShareIcon />Share</MenuItem>
             <Show when={props.onRename}>
               <MenuItem onSelect={() => props.onRename?.()}><PencilIcon />{props.dashboard ? `Rename ${placeKind()}` : "Rename"}</MenuItem>
@@ -613,6 +613,12 @@ function App() {
     setWorkspaceExpandedState(next);
   };
   const [workspaceViewRequest, setWorkspaceViewRequest] = createSignal<{ tab: WorkspaceView; terminalId?: string; nonce: number } | null>(null);
+  // The tool the dock shows, as the dock reports it, so the rail can mark it
+  // before the dock's chunk has loaded.
+  const [dockTool, setDockTool] = createSignal<WorkspaceView>((() => {
+    const stored = readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "tab");
+    return stored === "diff" || stored === "chat" || stored === "terminal" ? stored : stored === "artifacts" ? "chat" : "files";
+  })());
   const [workspaceFocusRequest, setWorkspaceFocusRequest] = createSignal(0);
   const [mobileSidebarOpen, setMobileSidebarOpen] = createSignal(false);
   const initialRouteId = pathChatId();
@@ -1086,7 +1092,8 @@ function App() {
 
   const setPanelOpenForChat = (next: boolean) => {
     if (!next && document.activeElement instanceof HTMLElement && document.activeElement.closest(".workspace-panel")) {
-      document.querySelector<HTMLElement>(".chat-header [aria-label='Toggle workspace panel']")?.focus({ preventScroll: true });
+      if (isMobileLayout()) document.querySelector<HTMLElement>(".chat-header .chat-header-more")?.focus({ preventScroll: true });
+      else focusChatPane();
     }
     if (!next) setWorkspaceExpanded(false);
     setPanelOpen(next);
@@ -2059,6 +2066,11 @@ function App() {
     if (isMobileLayout()) setMobileSidebarOpen(false);
     setPanelOpenForChat(true);
   };
+  // A rail icon opens the dock on its tool; the tool it already shows closes it.
+  const chooseRailTool = (tool: WorkspaceView) => {
+    if (panelOpen() && dockTool() === tool) closePanel();
+    else openWorkspaceView(tool);
+  };
   const toggleWorkspaceExpanded = () => {
     const next = !workspaceExpanded();
     setWorkspaceExpanded(next);
@@ -2951,9 +2963,12 @@ function App() {
         </Show>
       </Show>
     </main>
-    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
-    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => selectedProject()!.id} projectName={() => selectedProject()!.name} sourceControlEnabled={() => selectedProject()!.kind === "workspace"} workingRoot={() => selectedProject()!.workingRoot} chatId={() => workspacePanelScope()!} artifactChatId={() => routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => chat.loadedId()} historyAvailable={() => routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
+    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
+    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => selectedProject()!.id} projectName={() => selectedProject()!.name} sourceControlEnabled={() => selectedProject()!.kind === "workspace"} workingRoot={() => selectedProject()!.workingRoot} chatId={() => workspacePanelScope()!} artifactChatId={() => routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => chat.loadedId()} historyAvailable={() => routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </div>
+    <Show when={routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard"].includes(routeKind()) && selectedProject() && workspacePanelScope()}>
+      <WorkspaceRail current={panelOpen() ? dockTool() : null} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : selectedProject()?.kind === "workspace"} onChoose={chooseRailTool} />
+    </Show>
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>
       <TerminalRoute terminalId={terminalRouteId()} connectivity={runtime.connectivity} onOpenConduit={leaveTerminalRoute} />

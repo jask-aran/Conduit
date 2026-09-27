@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, on, Show, type Accessor } from "solid-js";
-import { ChevronDownIcon, HistoryIcon, ListCollapseIcon, WrapTextIcon } from "lucide-solid";
+import { ChevronDownIcon, FileDiffIcon, HistoryIcon, ListCollapseIcon, WrapTextIcon } from "lucide-solid";
 import { api } from "../api/client";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import { readSetting, writeSetting, WORKSPACE_PANEL_GLOBAL_SCOPE } from "./workspace-panel-storage";
@@ -9,6 +9,7 @@ import { WorkspaceDiffView } from "./workspace-diff-view";
 import { createWorkspaceReview, diffScopes, type DiffScope } from "./workspace-review-source";
 import { WorkbenchButton } from "./workspace-workbench";
 import type { ChatMode, GitChangedFile, HistoryNode, HistoryTree, WorkspaceSettings } from "./workspace-types";
+import { Segmented } from "../settings/settings-controls";
 import "./workspace.css";
 
 const chatScopes = diffScopes.filter((scope) => scope.value === "chat" || scope.value === "turn");
@@ -323,9 +324,20 @@ export function createChatReview(options: {
 }
 export type ChatReview = ReturnType<typeof createChatReview>;
 
+/** Chat review's modes, a segmented switch in the header of whatever holds the view. */
+export function ChatModes(props: { control: ChatReview; historyAvailable: boolean }) {
+  const choose = (next: ChatMode) => {
+    if (next === "history") { props.control.selectMode("history"); void props.control.loadHistory(); }
+    else props.control.showAgentChanges();
+  };
+  return <Segmented label="Chat review" value={props.control.mode()} onChange={choose} options={[
+    ...(props.historyAvailable ? [{ value: "history" as const, label: "History", icon: <HistoryIcon />, title: "History" }] : []),
+    { value: "changes" as const, label: "Agent changes", icon: <FileDiffIcon />, title: "Agent changes" },
+  ]} />;
+}
+
 export function ChatView(props: {
   control: ChatReview;
-  position?: "left" | "right";
   historyAvailable: boolean;
   chatId: string | null;
   commentChatId: string | null;
@@ -333,14 +345,13 @@ export function ChatView(props: {
   onOpenWorkingFile: (path: string) => void;
 }) {
   const c = props.control;
-  return <section class="workspace-chat-view" data-position={props.position}>
-      <div class="workspace-chat-modes" role="radiogroup" aria-label="Chat view"><div><Show when={props.historyAvailable}><button role="radio" aria-checked={c.mode() === "history"} onClick={() => { c.selectMode("history"); void c.loadHistory(); }}>History</button></Show><button role="radio" aria-checked={c.mode() === "changes"} onClick={c.showAgentChanges}>Agent changes</button></div>
-        <Show when={c.mode() === "history"}>
+  return <section class="workspace-chat-view">
+      <Show when={c.mode() === "history"}><div class="workspace-chat-modes">
           <div class="workspace-history-toolbar">
             <WorkbenchButton class="workspace-history-toggle" aria-label={c.collapseTools() ? "Expand tool calls" : "Collapse sequential tool calls"} aria-pressed={c.collapseTools()} title={c.collapseTools() ? "Expand tool calls" : "Collapse sequential tool calls"} onClick={c.toggleCollapseTools}><ListCollapseIcon /></WorkbenchButton>
             <WorkbenchButton class="workspace-history-toggle" aria-label={c.historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={c.historyWrap()} title={c.historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} onClick={c.toggleHistoryWrap}><WrapTextIcon /></WorkbenchButton>
           </div>
-        </Show></div>
+        </div></Show>
       <Show when={c.mode() === "history"}><Show when={!c.historyLoading()} fallback={<div class="workspace-panel-empty">Loading history…</div>}><Show when={c.historyTree()?.tree.length} fallback={<div class="workspace-panel-empty"><div><HistoryIcon /><Show when={props.chatId} fallback={<><strong>No chat open</strong><p>Open a chat to see its history.</p></>}><strong>No chat history</strong><p>Send a message to start this tree.</p></Show></div></div>}><div class="workspace-chat-history" role="tree" aria-label="Chat history" data-wrap={c.historyWrap() ? "true" : "false"}
           ref={c.bindHistoryScroller} onScroll={c.trackHistoryScroll}><HistoryNodes nodes={c.historyTree()!.tree} activePath={c.historyActivePath()} leafId={c.historyTree()!.leafId} collapseTools={c.collapseTools()} openRuns={c.openRuns()} onToggleRun={c.toggleRun} /></div></Show></Show></Show>
       <Show when={c.mode() === "changes"}><WorkspaceDiffView
