@@ -32,6 +32,7 @@ import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_STORAGE_KEY, selectedCo
 import type { VoiceDictationSettings } from "./chat/voice-dictation-types";
 import { CONTEXT_METRIC_STORAGE_KEY, formatContextMetrics, saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
 import { HostUiRequests } from "./chat/host-ui-card";
+import { isWorkspace } from "./chat/place-picker";
 import {
   MARKDOWN_RENDERER_STORAGE_KEY,
   RENDERER_CONTROLS_VISIBLE_STORAGE_KEY,
@@ -417,6 +418,8 @@ function ChatHeader(props: {
   /** The page is a place of its own (Computer): no crumb before its title. */
   alone?: boolean;
 }) {
+  // What a project or workspace page calls itself in its own menu.
+  const placeKind = () => props.project && isWorkspace(props.project) ? "workspace" : "project";
   const projectLabel = () => props.placeLabel || (props.appDashboard ? "Conduit" : props.project?.slug === "chat" ? "Chats" : props.project?.name || props.project?.slug || "Chats");
   const runtimeLabel = () => props.runtime ? harnessLabelFor(props.chat?.backendImplementation() || "conduit_pi") : null;
   const profileLabel = () => props.profile?.label || props.profile?.id;
@@ -475,11 +478,11 @@ function ChatHeader(props: {
         <Button variant="ghost" size="icon-sm" class="search-trigger" tabIndex={-1} aria-label="Search chats" title="Search chats" onClick={props.onOpenSearch}><SearchIcon /></Button>
         <Button variant="ghost" size="icon-sm" class="palette-trigger" tabIndex={-1} aria-label="Open command palette" title="Command palette" onClick={props.onOpenPalette}><TerminalIcon /></Button>
         <Show when={!props.appDashboard}>
-          <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" tabIndex={-1} aria-label={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} title={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} onClick={props.onShare}><ShareIcon /></Button>
+          <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" tabIndex={-1} aria-label={props.dashboard ? `Copy Tailscale ${placeKind()} link` : "Copy Tailscale chat link"} title={props.dashboard ? `Copy Tailscale ${placeKind()} link` : "Copy Tailscale chat link"} onClick={props.onShare}><ShareIcon /></Button>
         </Show>
         <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" tabIndex={-1} aria-label="Toggle workspace panel" aria-expanded={props.panelOpen} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
         <Show when={!props.appDashboard}><Menu modal={false}>
-          <MenuTrigger class="chat-header-more" tabIndex={-1} aria-label="More chat options" title="More chat options"><EllipsisIcon /></MenuTrigger>
+          <MenuTrigger class="chat-header-more" tabIndex={-1} aria-label={props.dashboard ? `More ${placeKind()} options` : "More chat options"} title={props.dashboard ? `More ${placeKind()} options` : "More chat options"}><EllipsisIcon /></MenuTrigger>
           <MenuContent class="chat-header-menu">
             <MenuGroup>
               <MenuLabel class="chat-header-menu-title">{props.title}</MenuLabel>
@@ -500,10 +503,10 @@ function ChatHeader(props: {
             <MenuItem onSelect={props.onTogglePanel}><PanelRightIcon />Workspace panel</MenuItem>
             <MenuItem onSelect={props.onShare}><ShareIcon />Share</MenuItem>
             <Show when={props.onRename}>
-              <MenuItem onSelect={() => props.onRename?.()}><PencilIcon />{props.dashboard ? "Rename workspace" : "Rename"}</MenuItem>
+              <MenuItem onSelect={() => props.onRename?.()}><PencilIcon />{props.dashboard ? `Rename ${placeKind()}` : "Rename"}</MenuItem>
             </Show>
             <Show when={props.onDelete}>
-              <MenuItem variant="destructive" onSelect={() => props.onDelete?.()}><Trash2Icon />{props.dashboard ? "Delete workspace" : "Delete"}</MenuItem>
+              <MenuItem variant="destructive" onSelect={() => props.onDelete?.()}><Trash2Icon />{props.dashboard ? (placeKind() === "workspace" ? "Unlink workspace" : "Delete project") : "Delete"}</MenuItem>
             </Show>
           </MenuContent>
         </Menu></Show>

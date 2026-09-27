@@ -498,7 +498,7 @@ export function ProjectDashboard(props: {
           </section>
         </Show>
         <Show when={error() && !cloning()}>
-          <div class="project-dashboard-error" role="alert"><strong>Dashboard details could not be loaded</strong><span>{error()}</span></div>
+          <div class="project-dashboard-error" role="alert"><strong>{isWorkspace() ? "This workspace" : "This project"} could not be loaded</strong><span>{error()}</span></div>
         </Show>
       </> : undefined}
       composer={cloning() ? undefined : props.composer}

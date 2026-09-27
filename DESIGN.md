@@ -438,6 +438,7 @@ Surfaces that do not match the language yet. Do not copy them; when you touch on
 
 - **Workspace panel, Computer page**: hairline tiles (Tiled pane) → the pane. Each waits for its own redesign.
 - **Focus rings in the workspace panel and the Computer page**: `outline: … var(--ring)` → the wash, with their redesigns.
+- **Focus rings on project and workspace pages**: the header's path and ⋯, and the workspace identity editor's grids (`project/dashboard.css`) → the wash, with the dashboard redesign.
 - **Leftover blue** (Forbidden color) wherever it is found.
 
 # Do's and Don'ts
