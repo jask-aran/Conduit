@@ -86,7 +86,7 @@
 .split-group-actions .split-counts { padding-inline: 6px; font-size: 9.6px; }
 
 /* One column (data-one-column; :where keeps the phone's rules below winning). */
-:where(.split-dashboard[data-one-column]) .split-dashboard-body { display: flex; width: calc(100% - 40px); flex-direction: column; }
+:where(.split-dashboard[data-one-column]) .split-dashboard-body { display: flex; width: calc(100% - 48px); flex-direction: column; }
 :where(.split-dashboard[data-one-column]) .split-dashboard-head { order: 0; }
 :where(.split-dashboard[data-one-column]) .split-dashboard-notice { order: 1; }
 :where(.split-dashboard[data-one-column]) :is(.split-dashboard-main, .split-dashboard-aside) { display: contents; }
