@@ -1,25 +1,12 @@
-.harness-dashboard .dashboard-identity-glyph img { width: 28px; height: 28px; }
-.harness-dashboard .dashboard-row.is-active { background: var(--accent); }
-.harness-error { margin: 10px 0 0; color: var(--destructive); font-size: 9px; }
-.harness-empty-copy { display: grid; gap: 6px; padding: 22px; }
-.harness-empty-copy strong { font-size: 11px; }
-.harness-empty-copy p { margin: 0; color: var(--muted-foreground); font-size: 9px; }
-.harness-session-row { padding-inline: 12px; }
-.harness-session-row:disabled { cursor: default; }
-.harness-session-actions { display: flex; align-items: center; gap: 6px; }
-.harness-session-actions input { width: 130px; height: 26px; border: 1px solid var(--border); border-radius: 7px; background: transparent; padding: 0 7px; color: var(--foreground); font-size: 9px; }
-.harness-session-actions input:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
-.harness-session-row .dashboard-row-meta { display: flex; align-items: center; gap: 8px; }
-.harness-tracked-badge { border: 1px solid var(--border); border-radius: 999px; padding: 2px 6px; color: var(--muted-foreground); font-size: 8px; font-style: normal; }
-.harness-note { margin: 0; padding: 18px; color: var(--muted-foreground); font-size: 9px; text-align: center; }
-.harness-drive { display: flex; width: 100%; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
-.computer-dashboard:has(.harness-drive-shared) { padding: 0; }
-.harness-drive-shared { display: flex; width: 100%; height: 100%; min-height: 0; flex-direction: column; }
-.harness-drive > header { display: flex; flex: none; align-items: center; gap: 8px; padding: 10px 14px; }
-.harness-drive > header img { width: 14px; height: 14px; }
-.harness-drive > header button { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); border-radius: 7px; background: transparent; padding: 6px 9px; color: var(--foreground); font-size: 9px; }
-.harness-drive > header svg { width: 12px; height: 12px; }
-.harness-drive [data-slot="message-scroller-viewport"] { min-height: 0; flex: 1; }
+/* A harness's page (harness-dashboard.tsx) on the split layout, and its folder browser. */
+.harness-dashboard .split-header-glyph .harness-mark { width: clamp(21px, 2.4vw, 27px); height: clamp(21px, 2.4vw, 27px); }
+.harness-dashboard .split-row[aria-current="true"] { background: var(--accent); }
+.harness-dashboard .split-row:disabled { cursor: default; opacity: .6; }
+.harness-dashboard-state { display: grid; flex: 1; place-items: center; color: var(--muted-foreground); font-size: 10.4px; }
+.harness-error { margin: 0; color: var(--destructive); font-size: 9.6px; }
+.harness-note { margin: 0; padding: 6px 6.4px; color: var(--muted-foreground); font-size: 9.6px; }
+.harness-search { width: 130px; height: 20px; border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 0 6px; color: var(--foreground); font-size: 9.6px; }
+.harness-search:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 .harness-picker-backdrop { position: fixed; z-index: 60; display: grid; inset: 0; place-items: center; background: color-mix(in oklch, black, transparent 45%); padding: 18px; }
 .harness-picker { display: grid; width: min(420px, 100%); max-height: min(560px, 90vh); grid-template-rows: auto auto minmax(0, 1fr) auto auto; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--background); }
 .harness-picker > header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding: 10px 12px; font-size: 11px; }
@@ -42,4 +29,6 @@
 
 @media (--conduit-mobile-layout) {
   .harness-picker { width: 100%; max-height: 80vh; }
+  .harness-search { height: 32px; font-size: 13px; }
+  .harness-note, .harness-error { font-size: 13px; }
 }

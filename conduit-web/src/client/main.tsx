@@ -6,7 +6,7 @@ import { batch, createEffect, createMemo, createRenderEffect, createSignal, Erro
 import { render } from "solid-js/web";
 import { androidShell, desktopShell, isInstalledClient } from "./platform/installed-client.ts";
 import {
-  ArrowLeftIcon, EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ServerIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
+  EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ServerIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
 } from "lucide-solid";
 import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
@@ -79,6 +79,9 @@ import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
 import { INCREMARK_PACING_STORAGE_KEY } from "./chat/incremark-pacing";
 import { harnessLabelFor } from "./harness-brand";
 import { NO_ATTACHMENTS } from "./chat/composer-attachments";
+import { OutsideThreadBar } from "./chat/outside-thread-bar";
+import { createDriveChat } from "./state/drive-chat";
+import type { HarnessLaunch, HarnessThreadTarget } from "./dashboard/harness-dashboard";
 import {
   applyTranscriptAppearance,
   CODE_BLOCK_COLLAPSE_LINES_STORAGE_KEY,
@@ -148,6 +151,7 @@ const selectedMeteorField = () => localStorage.getItem(METEOR_FIELD_STORAGE_KEY)
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 const ComputerDashboard = lazy(() => import("./dashboard/computer-dashboard").then((module) => ({ default: module.ComputerDashboard })));
 const ProjectDashboard = lazy(() => import("./project/dashboard"));
+const HarnessDashboard = lazy(() => import("./dashboard/harness-dashboard"));
 const TerminalRoute = lazy(() => import("./remotes/terminal-route").then((module) => ({ default: module.TerminalRoute })));
 const Settings = lazy(() => import("./settings/settings").then((module) => ({ default: module.Settings })));
 const prefetchProjectDashboard = (project: Project) => void import("./project/dashboard").then((module) => module.prefetchProjectDashboard(project)).catch(() => {});
@@ -404,16 +408,16 @@ function ChatHeader(props: {
   onDelete?: () => void;
   onUpdatePwa: () => void;
   pwaUpdating: () => boolean;
-  onBack?: () => void;
   /** Opens the place the page sits under, making its crumb a link. */
   onOpenPlace?: (project?: Project) => void;
-  extraAction?: JSX.Element;
+  /** Names the crumb when the page sits under something other than a place: a harness, for its threads. */
+  placeLabel?: string;
   dashboard?: boolean;
   appDashboard?: boolean;
   /** The page is a place of its own (Computer): no crumb before its title. */
   alone?: boolean;
 }) {
-  const projectLabel = () => props.appDashboard ? "Conduit" : props.project?.slug === "chat" ? "Chats" : props.project?.name || props.project?.slug || "Chats";
+  const projectLabel = () => props.placeLabel || (props.appDashboard ? "Conduit" : props.project?.slug === "chat" ? "Chats" : props.project?.name || props.project?.slug || "Chats");
   const runtimeLabel = () => props.runtime ? harnessLabelFor(props.chat?.backendImplementation() || "conduit_pi") : null;
   const profileLabel = () => props.profile?.label || props.profile?.id;
   const posture = () => props.profile?.posture || props.profile?.tools?.join(" / ");
@@ -451,7 +455,6 @@ function ChatHeader(props: {
   const waveformState = () => props.composerStatus?.recorderMonitorState() || "stopped";
   return <>
     <header class="chat-header">
-      <Show when={props.onBack}><Button variant="ghost" size="icon-sm" aria-label="Back to sessions" onClick={props.onBack}><ArrowLeftIcon /></Button></Show>
       <Show when={!props.mobileSidebarOpen}>
         <div class="mobile-header-leading">
           <Button variant="ghost" size="icon-sm" class="mobile-sidebar-trigger" data-mobile-open="false" aria-label="Toggle Sidebar" aria-expanded={false} onClick={props.onToggleMobileSidebar}><PanelLeftIcon /></Button>
@@ -471,7 +474,6 @@ function ChatHeader(props: {
       <HeaderActions>
         <Button variant="ghost" size="icon-sm" class="search-trigger" tabIndex={-1} aria-label="Search chats" title="Search chats" onClick={props.onOpenSearch}><SearchIcon /></Button>
         <Button variant="ghost" size="icon-sm" class="palette-trigger" tabIndex={-1} aria-label="Open command palette" title="Command palette" onClick={props.onOpenPalette}><TerminalIcon /></Button>
-        {props.extraAction}
         <Show when={!props.appDashboard}>
           <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" tabIndex={-1} aria-label={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} title={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} onClick={props.onShare}><ShareIcon /></Button>
         </Show>
@@ -508,6 +510,21 @@ function ChatHeader(props: {
       </HeaderActions>
     </header>
   </>;
+}
+
+/** A chat's transcript with its composer over it: a Conduit chat's and an
+ *  untracked harness thread's alike. */
+function Conversation(props: { chat: ActiveChatStore; busy?: boolean; transcript: JSX.Element; notice?: JSX.Element; composer: JSX.Element; stackRef?: (element: HTMLDivElement) => void }) {
+  return <div class="work-area">
+    <section class="work-area-conversation" aria-label="Conversation" aria-busy={props.busy}>
+      {props.transcript}
+      <div ref={(element) => props.stackRef?.(element)} class="composer-stack" data-question={props.chat.hostUiRequests().length ? "true" : undefined}>
+        <HostUiRequests requests={props.chat.hostUiRequests()} onRespond={props.chat.respondHostUi} />
+        {props.notice}
+        {props.composer}
+      </div>
+    </section>
+  </div>;
 }
 
 function HeaderActions(props: { children: JSX.Element }) {
@@ -601,8 +618,7 @@ function App() {
   const [routeKind, setRouteKind] = createSignal<"chat" | "project" | "dashboard" | "terminal" | "computer">(
     initialComputerRoute ? "computer" : initialTerminalRoute ? "terminal" : initialDashboardRoute ? "dashboard" : initialProjectRouteId ? "project" : "chat",
   );
-  const [computerHarness, setComputerHarness] = createSignal(location.pathname.match(/^\/computer\/harness\/([^/]+)$/)?.[1] || "");
-  const [computerDriving, setComputerDriving] = createSignal(false);
+  const [computerHarness, setComputerHarness] = createSignal(decodeURIComponent(location.pathname.match(/^\/computer\/harness\/([^/]+)/)?.[1] || ""));
   const [terminalRouteId, setTerminalRouteId] = createSignal<string>();
   const [terminalCanReturn, setTerminalCanReturn] = createSignal(false);
   const workspacePanelScope = createMemo(() => routeKind() === "computer" ? "computer"
@@ -1166,6 +1182,7 @@ function App() {
 
   const createChat = async (target?: Project, launch: { templateId?: string; runtimeKind?: string } = {}, options: { reportFailure?: boolean } = {}) => {
     const reportFailure = options.reportFailure !== false;
+    if (!leaveHarnessThread()) return null;
     const project = target || selectedProject() || catalogue.projects().find((item) => item.slug === "chat") || catalogue.projects()[0];
     if (!project) return null;
     const requestEpoch = ++newChatRequestEpoch;
@@ -1271,6 +1288,7 @@ function App() {
       setMobileSidebarOpen(false);
       return;
     }
+    if (!leaveHarnessThread()) return;
     leaveChat(historyMode === "none");
     chat.reset();
     const chatRoot = catalogue.projects().find((project) => project.slug === "chat");
@@ -1385,8 +1403,8 @@ function App() {
   };
 
   const openComputer = (historyMode: "push" | "none" = "push") => {
+    if (!leaveHarnessThread()) return;
     leaveChat(historyMode === "none");
-    setComputerDriving(false);
     chat.reset();
     const chatRoot = catalogue.projects().find((project) => project.slug === "chat");
     if (chatRoot) catalogue.selectProject(chatRoot);
@@ -1399,27 +1417,161 @@ function App() {
     if (!computerLocation()) void browseComputer();
     if (historyMode === "push") history.pushState({}, "", "/computer");
   };
-  const openComputerHarness = (id: string | null, historyMode: "push" | "none" = "push", cwd?: string) => {
-    if (!id) return openComputer(historyMode);
+  // A harness's page, scoped to one of the folders it ran in or to all of
+  // them, and under it each thread Conduit does not keep, at an address of its
+  // own.
+  const harnessPath = (id: string, cwd?: string | null) => `/computer/harness/${encodeURIComponent(id)}${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ""}`;
+  const threadPath = (thread: HarnessThreadTarget) => `/computer/harness/${encodeURIComponent(thread.harnessId)}/thread/${encodeURIComponent(thread.id)}?cwd=${encodeURIComponent(thread.path)}`;
+  const [harnessScope, setHarnessScope] = createSignal<string | null>(null);
+  const [harnessThread, setHarnessThread] = createSignal<HarnessThreadTarget | null>(null);
+  const [trackingThread, setTrackingThread] = createSignal(false);
+  // One untracked thread open at a time, on the chat store a Conduit chat
+  // uses. It owns nothing in Conduit until it is tracked.
+  const drive = createDriveChat({ runtime, onError: showError });
+  let driveLiveId = "";
+  const closeDriveProcess = () => {
+    const live = driveLiveId;
+    driveLiveId = "";
+    drive.detach();
+    if (live) void api(`/v0/live-sessions/${encodeURIComponent(live)}/process`, { method: "DELETE" }).catch(() => {});
+  };
+  // Its process is Conduit's only while its page is open, so leaving closes
+  // it -- asking first while a turn is still running.
+  const leaveHarnessThread = () => {
+    const open = harnessThread();
+    if (!open) return true;
+    if (drive.chat.streaming() && !window.confirm(`${harnessLabelFor(open.harnessId) || "The harness"} is still working in this thread. Leave and stop it?`)) return false;
+    closeDriveProcess();
+    setHarnessThread(null);
+    return true;
+  };
+  const openComputerHarness = (id: string | null, historyMode: "push" | "replace" | "none" = "push", cwd?: string) => {
+    if (!id) return openComputer(historyMode === "none" ? "none" : "push");
+    if (!leaveHarnessThread()) return;
     leaveChat(historyMode === "none");
     chat.reset();
-    setComputerDriving(false);
     setMobileSidebarOpen(false);
     setWorkspaceViewRequest(null);
     setRouteKind("computer");
     setComputerHarness(id);
+    setHarnessScope(cwd || null);
     setRouteBootstrapError("");
     setRouteBootstrap("ready");
     if (cwd) void browseComputer(cwd);
     else if (!computerLocation()) void browseComputer();
-    if (historyMode === "push") history.pushState({}, "", `/computer/harness/${encodeURIComponent(id)}${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ""}`);
+    if (historyMode === "push") history.pushState({}, "", harnessPath(id, cwd));
+    else if (historyMode === "replace") history.replaceState({}, "", harnessPath(id, cwd));
   };
-  const [pendingHarnessThread, setPendingHarnessThread] = createSignal<{ harnessId: string; path: string; id: string; title: string } | null>(null);
-  const openComputerHarnessHere = async (id: string, cwd: string) => {
-    await browseComputer(cwd);
-    openComputerHarness(id, "push", cwd);
+  const openComputerHarnessHere = (id: string, cwd: string) => openComputerHarness(id, "push", cwd);
+  const scopeHarness = (path: string | null) => {
+    setHarnessScope(path);
+    history.replaceState({}, "", harnessPath(computerHarness(), path));
+    if (path) void browseComputer(path);
   };
+  const showHarnessThread = (target: HarnessThreadTarget, historyMode: "push" | "replace" | "none") => {
+    leaveChat(historyMode === "none");
+    chat.reset();
+    setMobileSidebarOpen(false);
+    setWorkspaceViewRequest(null);
+    setRouteKind("computer");
+    setComputerHarness(target.harnessId);
+    setHarnessScope(target.path);
+    setHarnessThread(target);
+    setRouteBootstrapError("");
+    setRouteBootstrap("ready");
+    void browseComputer(target.path);
+    if (historyMode === "push") history.pushState({}, "", threadPath(target));
+    else if (historyMode === "replace") history.replaceState({}, "", threadPath(target));
+  };
+  type DriveRecord = { id: string; nativeSessionId: string; streamUrl: string; threadTitle?: string };
+  const openHarnessThread = async (target: HarnessThreadTarget, historyMode: "push" | "replace" | "none" = "push") => {
+    const open = harnessThread();
+    if (open?.harnessId === target.harnessId && open.id === target.id) return;
+    if (!leaveHarnessThread()) return;
+    showHarnessThread(target, historyMode);
+    try {
+      const live = await api<DriveRecord>(`/v0/harnesses/${encodeURIComponent(target.harnessId)}/drive`, {
+        method: "POST", body: JSON.stringify({ path: target.path, sessionId: target.id }),
+      });
+      // Left before it opened: nobody is here to use it.
+      if (harnessThread() !== target) {
+        void api(`/v0/live-sessions/${encodeURIComponent(live.id)}/process`, { method: "DELETE" }).catch(() => {});
+        return;
+      }
+      driveLiveId = live.id;
+      await drive.attach(live, live.threadTitle || target.title);
+    } catch (error) {
+      if (harnessThread() !== target) return;
+      showError(error);
+      closeDriveProcess();
+      setHarnessThread(null);
+      openComputerHarness(target.harnessId, "replace", target.path);
+    }
+  };
+  // A thread started from a harness's page opens straight on its own page.
+  const startHarnessThread = async (launch: HarnessLaunch) => {
+    try {
+      const live = await api<DriveRecord>(`/v0/harnesses/${encodeURIComponent(launch.harnessId)}/drive`, {
+        method: "POST",
+        body: JSON.stringify({ path: launch.cwd, newThread: true, model: launch.model, thinkingLevel: launch.thinkingLevel, permissionMode: launch.permissionMode }),
+      });
+      const target = { harnessId: launch.harnessId, path: launch.cwd, id: live.nativeSessionId || "", title: launch.prompt.trim().split("\n")[0]?.slice(0, 80) || "New thread" };
+      showHarnessThread(target, target.id ? "push" : "none");
+      driveLiveId = live.id;
+      await drive.attach(live, target.title);
+      if (launch.prompt.trim()) {
+        drive.chat.setDraft(launch.prompt);
+        await drive.chat.send();
+      }
+    } catch (error) { showError(error); }
+  };
+  // Tracking hands the open process to a Conduit chat in the workspace the
+  // thread's folder is -- made one first when it is not.
+  const trackHarnessThread = async () => {
+    const open = harnessThread();
+    if (!open || trackingThread()) return;
+    setTrackingThread(true);
+    try {
+      let project = catalogue.projects().find((item) => !isConduitManagedProject(item) && item.workingRoot === open.path);
+      if (!project) {
+        const created = await api<Project>("/v0/projects", { method: "POST", body: JSON.stringify({ mode: "linked", path: open.path }) });
+        project = (await catalogue.refresh()).find((item) => item.id === created.id) || { ...created, sessions: [] };
+      }
+      const tracked = await api<ChatSummary>(`/v0/projects/${encodeURIComponent(project.id)}/backend-sessions/${encodeURIComponent(open.id)}/adopt?implementation=${encodeURIComponent(open.harnessId)}`, {
+        method: "POST", body: JSON.stringify({ liveSessionId: driveLiveId }),
+      });
+      // The process is the chat's now; nothing to close.
+      driveLiveId = "";
+      const owner = (await catalogue.refresh()).find((item) => item.id === tracked.projectId) || project;
+      await chat.select(tracked, owner, {
+        history: "replace",
+        onCommit: () => {
+          batch(() => { setHarnessThread(null); setRouteKind("chat"); setRouteBootstrapError(""); setRouteBootstrap("ready"); });
+          drive.detach();
+        },
+      });
+    } catch (error) { showError(error); }
+    finally { setTrackingThread(false); }
+  };
+  const shareHarnessThread = async () => {
+    try {
+      const { origin } = await api<{ origin: string }>("/v0/share-origin");
+      await navigator.clipboard.writeText(`${origin}${location.pathname}${location.search}`);
+      toast.success("Tailscale thread link copied");
+    } catch (error) { showError(error); }
+  };
+  const openComputerRoute = () => {
+    const match = location.pathname.match(/^\/computer\/harness\/([^/]+)(?:\/thread\/([^/]+))?$/);
+    const cwd = new URLSearchParams(location.search).get("cwd") || undefined;
+    const harnessId = match?.[1] ? decodeURIComponent(match[1]) : "";
+    const threadId = match?.[2] ? decodeURIComponent(match[2]) : "";
+    if (harnessId && threadId && cwd) void openHarnessThread({ harnessId, path: cwd, id: threadId, title: "" }, "none");
+    else if (harnessId) openComputerHarness(harnessId, "none", cwd);
+    else openComputer("none");
+  };
+  const harnessProfile = (id: string) => profiles().find((profile) => profile.id === id) || null;
   const openTerminalRoute = (historyMode: "push" | "replace" | "none" = "push", terminalId?: string) => {
+    if (!leaveHarnessThread()) return;
     leaveChat(historyMode === "none");
     if (historyMode !== "none" && routeKind() !== "terminal") setTerminalCanReturn(true);
     setMobileSidebarOpen(false);
@@ -1451,6 +1603,7 @@ function App() {
   };
 
   const openChat = async (target: ChatSummary, project: Project) => {
+    if (!leaveHarnessThread()) return;
     abandonPendingNewChat();
     // Clicking a chat already open short-circuits below, so the receipt goes
     // first; every other way in is covered inside chat.select.
@@ -1474,6 +1627,7 @@ function App() {
   // A breadcrumb's place: a project or workspace opens its page, loose chats the dashboard.
   const openPlace = (target?: Project) => { if (target && target.slug !== "chat") void openProject(target); else openDashboard(); };
   const openProject = async (target: Project, historyMode: "push" | "replace" | "none" = "push") => {
+    if (!leaveHarnessThread()) return;
     abandonPendingNewChat();
     if (routeKind() === "project" && catalogue.projectId() === target.id) return;
     const abandonedDraftId = currentDraftId();
@@ -2404,13 +2558,19 @@ function App() {
     onCleanup(() => media?.removeEventListener("change", onViewportChange));
     const onPopState = () => {
       void (async () => {
+        // Back off an untracked thread still at work asks first, as any other
+        // way off it does; staying puts its address back.
+        const open = harnessThread();
+        if (open && `${location.pathname}${location.search}` !== threadPath(open) && !leaveHarnessThread()) {
+          history.pushState({}, "", threadPath(open));
+          return;
+        }
         if (location.pathname === "/") {
           openDashboard("none");
           return;
         }
         if (location.pathname === "/computer" || location.pathname.startsWith("/computer/harness/")) {
-          const id = location.pathname.match(/^\/computer\/harness\/([^/]+)$/)?.[1];
-          if (id) openComputerHarness(decodeURIComponent(id), "none", new URLSearchParams(location.search).get("cwd") || undefined); else openComputer("none");
+          openComputerRoute();
           return;
         }
         if (location.pathname === "/terminal") {
@@ -2506,8 +2666,7 @@ function App() {
         setRouteKind("project");
         setRouteBootstrap("ready");
       } else if (initialComputerRoute) {
-        const id = location.pathname.match(/^\/computer\/harness\/([^/]+)$/)?.[1];
-        if (id) openComputerHarness(decodeURIComponent(id), "none", new URLSearchParams(location.search).get("cwd") || undefined); else openComputer("none");
+        openComputerRoute();
       } else if (initialTerminalRoute) {
         setRouteKind("terminal");
         setRouteBootstrap("ready");
@@ -2599,7 +2758,7 @@ function App() {
       }} />
     </Modal>
     <div class="workspace-layout">
-    <main data-slot="sidebar-inset" data-region={routeKind() === "chat" ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
+    <main data-slot="sidebar-inset" data-region={routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
         : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : "Loading chat…"}</div>}>
@@ -2665,7 +2824,6 @@ function App() {
             onOpenTerminalView={() => openTerminalRoute()}
             onOpenSettings={() => openSettings()}
             profiles={profiles()}
-            onOpenHarnessThread={(harnessId, path, id, title) => { setPendingHarnessThread({ harnessId, path, id, title }); void openComputerHarnessHere(harnessId, path); }}
             onOpenTerminal={(terminal) => {
               if ((terminal.projectId === "computer" || terminal.projectId.startsWith("computer:")) && terminal.cwd) {
                 openComputer();
@@ -2696,27 +2854,37 @@ function App() {
           />
         </Show>
         <Show when={routeKind() === "computer"}>
-          <Show when={!computerDriving()}><ChatHeader title="Computer" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard alone /></Show>
-          <ComputerDashboard projects={catalogue.projects()} runtime={runtime} location={computerLocation()} loading={computerLoading()} error={computerError()} selectedHarness={computerHarness()} pendingThread={pendingHarnessThread()} onPendingThreadOpened={() => setPendingHarnessThread(null)} onHarnessDriveChange={setComputerDriving} renderHarnessDrive={({ current, harness, store, onBack, onTrack }) => <div class="harness-drive-shared">
-            <ChatHeader project={catalogue.projects().find((project) => project.workingRoot === current.cwd)} onOpenPlace={openPlace} title={current.title} runtime={store.chat.runtimeIdentity()} live={store.chat.live() as unknown as Record<string, unknown>} chat={store.chat} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => openComputerHarness(harness.id)} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} onBack={onBack} extraAction={<Button variant="ghost" size="sm" onClick={onTrack}>Track this thread</Button>} />
-            <div class="work-area"><section class="work-area-conversation" aria-label="Conversation"><Transcript chat={store.chat} supports={(name) => store.chat.capabilities()?.[name] === true} partialContinue={false} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={harness.label} /><div class="composer-stack" data-question={store.chat.hostUiRequests().length ? "true" : undefined}><HostUiRequests requests={store.chat.hostUiRequests()} onRespond={store.chat.respondHostUi} /><Composer chat={store.chat} attachments={NO_ATTACHMENTS} attachmentsSupported={false} models={store.models} profiles={[]} activeProfile={null} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => {}} onStatusChange={setComposerStatus} /></div></section></div>
-          </div>} onOpenHarness={(id) => openComputerHarness(id)} onOpenHarnessHere={(id, cwd) => void openComputerHarnessHere(id, cwd)} harnessComposer={computerHarness() ? (cwd, harnessModels, modelsLoading, harnessPermissions, launch) => <Composer chat={chat} attachments={NO_ATTACHMENTS} attachmentsSupported={false} models={harnessModels} modelsLoading={modelsLoading} permissions={harnessCapabilities()[profiles().find((profile) => profile.id === computerHarness())?.implementation || ""]?.permissionModes ? harnessPermissions : undefined} profiles={profiles().filter((profile) => profile.id === computerHarness())} activeProfile={profiles().find((profile) => profile.id === computerHarness()) || null} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => {}} onSendDraft={(prompt) => launch(prompt)} /> : undefined} onOpenHarnessChat={(target, project, prompt) => { void openChat(target, project).then(() => { if (prompt) { chat.setDraft(prompt); void chat.send(); } }); }} onBrowse={(path) => void browseComputer(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => void designateComputerWorkspace()} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProject(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={(path) => { setComputerFile({ path }); openWorkspaceView("files"); }} />
+          <Show when={harnessThread()} fallback={<Show when={computerHarness()} fallback={<>
+            <ChatHeader title="Computer" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard alone />
+            <ComputerDashboard projects={catalogue.projects()} location={computerLocation()} loading={computerLoading()} error={computerError()} onOpenHarnessHere={openComputerHarnessHere} onBrowse={(path) => void browseComputer(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => void designateComputerWorkspace()} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProject(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={(path) => { setComputerFile({ path }); openWorkspaceView("files"); }} />
+          </>}>{(harnessId) => <>
+            <ChatHeader title={harnessLabelFor(harnessId()) || harnessId()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard alone />
+            <HarnessDashboard harnessId={harnessId()} projects={catalogue.projects()} runtime={runtime} scope={harnessScope()} onScope={scopeHarness} home={computerLocation()?.home || ""}
+              composer={(input) => <Composer chat={chat} attachments={NO_ATTACHMENTS} attachmentsSupported={false} models={input.models} modelsLoading={input.loading} folder={input.folder} permissions={harnessCapabilities()[harnessProfile(harnessId())?.implementation || ""]?.permissionModes ? input.permissions : undefined} profiles={harnessProfile(harnessId()) ? [harnessProfile(harnessId())!] : []} activeProfile={harnessProfile(harnessId())} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => {}} onSendDraft={(prompt) => input.launch(prompt)} />}
+              onStartThread={startHarnessThread} onOpenThread={(thread) => void openHarnessThread(thread)} onOpenChat={(target, project) => void openChat(target, project)} />
+          </>}</Show>}>{(thread) => {
+            const workspace = () => catalogue.projects().find((project) => !isConduitManagedProject(project) && project.workingRoot === thread().path);
+            const label = () => harnessLabelFor(thread().harnessId) || thread().harnessId;
+            return <>
+              <ChatHeader project={workspace()} placeLabel={label()} onOpenPlace={() => openComputerHarness(thread().harnessId, "push", thread().path)} title={drive.chat.title() || thread().title || "Untitled thread"} runtime={drive.chat.runtimeIdentity()} live={drive.chat.live() as unknown as Record<string, unknown>} chat={drive.chat} composerStatus={composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => openComputerHarness(thread().harnessId, "push", thread().path)} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareHarnessThread()} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} />
+              <Conversation chat={drive.chat}
+                transcript={<Transcript chat={drive.chat} supports={(name) => drive.chat.capabilities()?.[name] === true} partialContinue={false} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={label()} />}
+                notice={<OutsideThreadBar harness={label()} folder={thread().path} workspace={Boolean(workspace())} busy={trackingThread()} onTrack={() => void trackHarnessThread()} />}
+                composer={<Composer chat={drive.chat} attachments={NO_ATTACHMENTS} attachmentsSupported={false} models={drive.models} profiles={harnessProfile(thread().harnessId) ? [harnessProfile(thread().harnessId)!] : []} activeProfile={harnessProfile(thread().harnessId)} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => {}} onStatusChange={setComposerStatus} />} />
+            </>;
+          }}</Show>
         </Show>
         <Show when={routeKind() !== "dashboard" && routeKind() !== "computer"}>
         <Show when={routeKind() === "project" && selectedProject()} fallback={<>
           <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
           <ChatHeader project={selectedProject()} onOpenPlace={openPlace} title={chat.title() || (chat.status() === "active" ? "Untitled chat" : "New chat")} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} chat={chat} contextMetrics={contextMetrics} composerStatus={composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} />
           <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
-          <div class="work-area">
-            <section class="work-area-conversation" aria-label="Conversation" aria-busy={openingLiveChat()}>
-              <Transcript chat={chat} supports={chatCapability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} projectId={selectedProject()?.id} />
-              <div ref={chatComposerStack} class="composer-stack" data-question={chat.hostUiRequests().length ? "true" : undefined}><HostUiRequests requests={chat.hostUiRequests()} onRespond={chat.respondHostUi} />
-                <Composer chat={chat} place={chatPlace()} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} /></div>
-            </section>
-          </div>
+          <Conversation chat={chat} busy={openingLiveChat()} stackRef={(element) => { chatComposerStack = element; }}
+            transcript={<Transcript chat={chat} supports={chatCapability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} projectId={selectedProject()?.id} />}
+            composer={<Composer chat={chat} place={chatPlace()} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} />} />
         </>}>
           <ChatHeader project={selectedProject()} title={selectedProject()!.name} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} dashboard />
-          <ProjectDashboard project={selectedProject()!} runtime={runtime} profiles={profiles()} onOpenHarnessThread={(harnessId, path, id, title) => { setPendingHarnessThread({ harnessId, path, id, title }); void openComputerHarnessHere(harnessId, path); }}
+          <ProjectDashboard project={selectedProject()!} runtime={runtime} profiles={profiles()} onOpenHarnessThread={(harnessId, path, id, title) => void openHarnessThread({ harnessId, path, id, title })}
             composer={<Composer
               chat={chat}
               place={routeKind() === "dashboard" ? chatPlace() : undefined}

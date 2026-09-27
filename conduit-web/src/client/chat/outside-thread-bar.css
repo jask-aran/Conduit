@@ -1,0 +1,9 @@
+/* The strip over an untracked thread's composer (outside-thread-bar.tsx). */
+.outside-thread-bar { display: flex; width: min(var(--composer-desktop-reference-width), 100%); min-width: 0; align-items: center; justify-content: space-between; gap: 8px; margin: 0 auto 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); padding: 3px 3px 3px 12px; color: var(--muted-foreground); font-size: 10.4px; }
+.outside-thread-bar-copy { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.outside-thread-bar strong { color: var(--foreground); font-weight: 600; }
+.outside-thread-bar [data-slot="button"] { flex: none; }
+
+@media (--conduit-mobile-layout) {
+  .outside-thread-bar { font-size: 13px; }
+}

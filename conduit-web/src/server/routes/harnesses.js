@@ -260,7 +260,8 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
         project,
       });
       record.ephemeral = true;
-      response.status(201).json({ ...adapter.view(record), nativeSessionId: session.id,
+      // The thread's own title, since a reopened address carries only its id.
+      response.status(201).json({ ...adapter.view(record), nativeSessionId: session.id, threadTitle: session.title || "",
         streamUrl: `/v0/live-sessions/${record.id}/stream` });
     } catch (error) { next(error); }
   });

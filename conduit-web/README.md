@@ -684,16 +684,18 @@ profile revision is identity metadata, not a snapshot of prompt contents.
 
 ## Adapter dashboards and drive mode
 
-Computer shows one dashboard row for each installed adapter. The Codex
-dashboard lists session metadata for the selected Workspace and can start a
-tracked chat or drive an existing native thread. Computer folder actions can
-open an installed harness with that exact directory preset; starting a chat
-links the directory as a Workspace first when required. Drive mode uses the normal
-backend-neutral live-session stream but creates no chat, transcript journal, or
-sidebar entry. It renders assistant content through Conduit's shared Markdown
-renderer and uses the standard message and composer visual language. Closing drive mode stops and removes its resident adapter
-record. **Track this thread** closes the ephemeral driver before it uses the
-explicit adoption route, so a thread never has two Conduit writers.
+Each installed harness has a page of its own, `/computer/harness/:id`, which
+`?cwd=` scopes to one folder: the threads it ran that no Conduit chat owns, the
+Conduit chats on it, and the folders it ran in. Computer folder actions open a
+harness's page with that folder in scope. A thread started or opened there is
+driven untracked at its own address,
+`/computer/harness/:id/thread/:threadId?cwd=`: the normal backend-neutral
+live-session stream, with no chat, transcript journal or sidebar entry, drawn
+with a chat's transcript and composer. Leaving that page stops and removes its
+resident adapter record, asking first while a turn runs. **Track in Conduit**
+adopts the thread through the explicit adoption route, naming its harness, and
+hands the new chat the open driver, so a thread never has two Conduit writers;
+a folder that is not yet a Workspace is linked as one first.
 
 The ChatGPT Web dashboard reports adapter and authentication status. Session
 listing and drive mode stay unavailable because that adapter does not expose
