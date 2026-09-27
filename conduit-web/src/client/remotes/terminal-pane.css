@@ -522,9 +522,8 @@
   padding: 4px 6px;
 }
 
-/* The session on screen is the row's wash, not a tick. */
-.terminal-menu-row[data-current="true"] { background: var(--accent); }
-.terminal-menu-row[data-current="true"] .terminal-menu-copy strong { font-weight: 650; }
+/* The session on screen is bold, not a wash or a tick (DESIGN.md, Interaction). */
+.terminal-menu-row[data-current="true"] .terminal-menu-copy strong { color: var(--foreground); font-weight: 660; }
 
 .terminal-menu-copy {
   display: flex;

@@ -421,7 +421,6 @@ Choosing in a menu:
 Surfaces that do not match the language yet. Do not copy them; when you touch one, move it towards its target, and take it off this list once it is there.
 
 - **Dialogs and confirms**: solid cards → frost.
-- **The model selector and menus with a current choice**: a standing wash on the current item → white and semibold with no fill.
 - **Dashboard lists**: no keyboard yet → the sidebar's cursor (Keyboard), ideally one shared list cursor taking a region and its rows. In the chats list ↑/↓ and Home/End cross day headings, Enter opens, Esc returns to the composer; Tab moves between the chats list and each group of the right column, where ↑/↓ stay in the group and the folder shelf also takes ←/→.
 - **Workspace panel, Computer page, harness dashboards**: hairline tiles (Tiled pane) → the pane. Each waits for its own redesign.
 - **Leftover blue** (Forbidden color) wherever it is found.
