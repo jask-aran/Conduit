@@ -66,6 +66,9 @@
 .split-counts { display: inline-flex; gap: 5px; font: 8.8px ui-monospace, SFMono-Regular, Consolas, monospace; }
 .split-counts [data-change="removed"] { color: var(--destructive); }
 .split-counts [data-change="added"] { color: var(--workspace-git-added, #98c379); }
+/* A heading's totals keep their colour, a step up, and end where the
+   heading's text actions end. */
+.split-group-actions .split-counts { padding-inline: 6px; font-size: 9.6px; }
 
 @container split-dashboard (max-width: 759px) {
   .split-dashboard-body { display: flex; width: min(var(--composer-desktop-reference-width), calc(100% - 40px)); flex-direction: column; }
@@ -174,7 +177,7 @@
   /* Under the muted chats, changes keep their colour only as a hint. */
   .split-change-row > svg { opacity: .7; filter: grayscale(1); }
   .split-change-row .workspace-change-name { color: color-mix(in oklch, var(--foreground), transparent 32%); }
-  .split-change-row :is(.workspace-git-removed, .workspace-git-added), .split-change-row code[data-status], .split-group .split-counts [data-change] { color: var(--muted-foreground); }
+  .split-change-row :is(.workspace-git-removed, .workspace-git-added), .split-change-row code[data-status] { color: var(--muted-foreground); }
 }
 @media (--conduit-mobile-layout) {
   .split-change-row { min-height: 34px; font-size: 13px; }
@@ -185,4 +188,7 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .split-group-toggle svg { transition: none; }
+}
+@media (--conduit-mobile-layout) {
+  .split-group-actions .split-counts { padding-inline: 8px; font-size: 11.5px; }
 }
