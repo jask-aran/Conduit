@@ -2668,7 +2668,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 [data-slot*="menu"] [role^="menuitem"]:not([data-variant="destructive"]) { color: color-mix(in oklch, var(--foreground), transparent 38%); font-weight: 450; }
 /* Unavailable is struck through as well as greyed, so it cannot pass for a resting row. */
 [data-slot*="menu"] [role^="menuitem"][data-disabled]:not([data-variant="destructive"]) { color: color-mix(in oklch, var(--foreground), transparent 22%); }
-[data-slot*="menu"] [role^="menuitem"][data-disabled] { text-decoration: line-through; text-decoration-color: color-mix(in oklch, currentColor, transparent 30%); }
+[data-slot*="menu"] [role^="menuitem"][data-disabled] { text-decoration: line-through 1.5px; text-decoration-color: currentColor; }
 /* Meta and keys are not struck: an inline-block stops the line reaching them. */
 [data-slot*="menu"] [role^="menuitem"][data-disabled] :is(small, kbd) { display: inline-block; text-decoration: none; }
 [data-slot*="menu"] [role^="menuitem"] :is(span, strong):not(.composer-menu-shortcut) { font-weight: inherit; }
