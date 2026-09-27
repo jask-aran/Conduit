@@ -1,15 +1,15 @@
 import { For } from "solid-js";
 import { FolderIcon, GitCompareArrowsIcon, MessageSquareIcon, TerminalIcon } from "lucide-solid";
-import type { PanelTab } from "./workspace-types";
+import { isSplitView, type PanelTab, type SplitView } from "./workspace-types";
 
 export const WORKSPACE_TOOL_LABELS: Record<PanelTab, string> = { files: "Files", diff: "Source Control", chat: "Chat review", terminal: "Terminal" };
 
 /** A view dragged by its header, between the dock and the main pane's split. */
 export const TOOL_DRAG_TYPE = "application/x-conduit-tool";
-export function readToolDrag(event: DragEvent): { tool: PanelTab; from: "dock" | "split" } | null {
+export function readToolDrag(event: DragEvent): { tool: SplitView; from: "dock" | "split" } | null {
   try {
     const value = JSON.parse(event.dataTransfer?.getData(TOOL_DRAG_TYPE) || "null");
-    return value && (value.tool in WORKSPACE_TOOL_LABELS) && (value.from === "dock" || value.from === "split") ? value : null;
+    return value && isSplitView(value.tool) && (value.from === "dock" || value.from === "split") ? value : null;
   } catch {
     return null;
   }
@@ -32,7 +32,7 @@ export function WorkspaceRail(props: {
   inSplit: PanelTab | null;
   sourceControlEnabled: boolean;
   onChoose: (tool: PanelTab) => void;
-  onDock: (tool: PanelTab) => void;
+  onDock: (view: SplitView) => void;
 }) {
   return <nav class="workspace-rail" aria-label="Workspace tools"
     onDragOver={(event) => { if (document.body.dataset.toolDrag === "split" && event.dataTransfer?.types.includes(TOOL_DRAG_TYPE)) event.preventDefault(); }}

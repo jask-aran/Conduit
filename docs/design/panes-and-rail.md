@@ -1,6 +1,6 @@
 # The dock, the rail and main-pane splits
 
-> **Status (2026-09-28): stages 0, 1 and 2 built.** Rules this produces move
+> **Status (2026-09-28): stages 0 to 3 built, but a chat beside a page waits for stage 4.** Rules this produces move
 > into `DESIGN.md` as each stage lands; this file stays the plan and is
 > deleted once the last stage is built.
 
@@ -229,7 +229,10 @@ navigation between views. No visible change.
   in the dock, all live; keys reach each side; a narrow window folds the dock,
   then the split.
 
-### 3. Open beside
+### 3. Open beside -- built, except a chat beside a page
+
+A chat beside its project page needs a second chat state and composer, which
+is stage 4's work, so it moves there.
 
 - Files, diffs, terminals and chats open in the other side of the main pane.
   Two files side by side are two sides, and the Files view's second editor
@@ -244,6 +247,7 @@ navigation between views. No visible change.
 - The sidebar's current row is the focused side's chat; the other open chat
   is marked open without being current.
 - The left side still owns the URL.
+- A chat can open beside its project page (moved from stage 3).
 
 ## Open questions
 

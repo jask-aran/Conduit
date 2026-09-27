@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, Index, on, onCleanup, onMount, Show } from "solid-js";
-import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, EllipsisIcon, FocusIcon, KeyboardIcon, Maximize2Icon, Minimize2Icon, GripVerticalIcon, PencilIcon, PlusIcon, Settings2Icon, TerminalIcon, Trash2Icon, UnplugIcon } from "lucide-solid";
+import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, Columns2Icon, EllipsisIcon, FocusIcon, KeyboardIcon, Maximize2Icon, Minimize2Icon, GripVerticalIcon, PencilIcon, PlusIcon, Settings2Icon, TerminalIcon, Trash2Icon, UnplugIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
 import {
   Button,
@@ -74,7 +74,7 @@ function sessionMetadata(record: Pty) {
 type StandaloneTerminalControls = { onOpenConduit: () => void };
 type KeyboardLockNavigator = Navigator & { keyboard?: { lock?: (codes?: string[]) => Promise<void>; unlock?: () => void } };
 
-export function TerminalPane(props: { projectId: string; projectName?: string; workingRoot?: string; terminalId?: string; active?: boolean; autoStart?: boolean; focusRequest?: number; connectivity?: () => Connectivity; standaloneControls?: StandaloneTerminalControls }) {
+export function TerminalPane(props: { projectId: string; projectName?: string; workingRoot?: string; terminalId?: string; active?: boolean; autoStart?: boolean; focusRequest?: number; connectivity?: () => Connectivity; standaloneControls?: StandaloneTerminalControls; onOpenBeside?: (terminalId: string) => void }) {
   const [pty, setPty] = createSignal<Pty | null>(null);
   const [sessions, setSessions] = createSignal<Pty[]>([]);
   const [error, setError] = createSignal("");
@@ -1217,6 +1217,11 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
                       <span class="terminal-menu-copy"><strong>{name()}</strong><small>{sessionMetadata(session)}</small></span>
                     </MenuItem>
                     <span class="terminal-menu-actions">
+                      <Show when={props.onOpenBeside}>
+                        <MenuItem class="terminal-menu-action" aria-label={`Open ${name()} beside`} textValue={`Open ${name()} beside`} onSelect={() => props.onOpenBeside?.(session.id)}>
+                          <Columns2Icon />
+                        </MenuItem>
+                      </Show>
                       <MenuItem class="terminal-menu-action" aria-label={`Rename ${name()}`} textValue={`Rename ${name()}`} onSelect={() => requestRename(session)}>
                         <PencilIcon />
                       </MenuItem>

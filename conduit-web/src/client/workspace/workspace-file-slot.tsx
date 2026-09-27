@@ -168,7 +168,7 @@ export default function WorkspaceFileSlot(props: {
   onLoaded?: (file: FileSummary | null) => void;
   onSaved?: () => void;
   gitFile?: { status: string; stagedCounts?: { added: number; removed: number } | null; workingCounts?: { added: number; removed: number } | null };
-  onShowDiff?: (staged: boolean) => void;
+  onShowDiff?: (staged: boolean, beside?: boolean) => void;
   onDispose?: () => void;
   ref?: (handle: FileSlotHandle) => void;
 }) {
@@ -450,8 +450,8 @@ export default function WorkspaceFileSlot(props: {
   const hasChanges = () => Boolean(props.gitFile && (props.gitFile.status === "??" || props.gitFile.status[1] !== " "));
   const hasStaged = () => Boolean(props.gitFile && props.gitFile.status[0] !== " " && props.gitFile.status[0] !== "?");
   const fileActions = () => <div class="workspace-file-actions">
-    <Show when={hasChanges()}><WorkbenchButton type="button" aria-label="Review unstaged changes" title="Review unstaged changes" onClick={() => props.onShowDiff?.(false)}><FileDiffIcon /></WorkbenchButton></Show>
-    <Show when={hasStaged()}><WorkbenchButton type="button" aria-label="Review staged changes" title="Review staged changes" onClick={() => props.onShowDiff?.(true)}><GitCompareArrowsIcon /></WorkbenchButton></Show>
+    <Show when={hasChanges()}><WorkbenchButton type="button" aria-label="Review unstaged changes" title="Review unstaged changes" onClick={(event) => props.onShowDiff?.(false, event.altKey)}><FileDiffIcon /></WorkbenchButton></Show>
+    <Show when={hasStaged()}><WorkbenchButton type="button" aria-label="Review staged changes" title="Review staged changes" onClick={(event) => props.onShowDiff?.(true, event.altKey)}><GitCompareArrowsIcon /></WorkbenchButton></Show>
     <WorkbenchButton type="button" aria-label="Copy contents" title="Copy contents" onClick={() => copy(currentText())}><CopyIcon /></WorkbenchButton>
     <WorkbenchButton type="button" aria-label="Copy path" title="Copy path" onClick={() => copy(props.path ?? "")}><FileCode2Icon /></WorkbenchButton>
     <WorkbenchButton type="button" aria-label="Download working file" title="Download working file" onClick={() => void download()}><DownloadIcon /></WorkbenchButton>
