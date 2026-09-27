@@ -17,6 +17,9 @@ import { applyMessageIds } from "../message-ids.js";
 const CLIENT_MESSAGE_ID = /^m_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const offeredMessageId = (value) => (typeof value === "string" && CLIENT_MESSAGE_ID.test(value) ? value : null);
 
+/** How long an untracked thread's process outlives its last page. */
+const UNDRIVEN_THREAD_GRACE_MS = 15_000;
+
 export function interruptedPromptInput(taken, message, attachmentIds = []) {
   const queued = [...(taken?.steering || []), ...(taken?.followUp || [])]
     .map((item) => parseAttachmentEnvelope(typeof item === "string" ? item : item?.message || ""));
@@ -575,6 +578,18 @@ export function createLiveSessionStream({
     // A chat can be written to without anyone prompting from here, so naming is
     // set up on attach rather than waiting for the first prompt.
     if (record.chatId) void findChatContext(record.chatId).then((context) => bindNaming(record, context)).catch(() => {});
+    // An untracked thread is Conduit's only while a page drives it. Once the
+    // last one has gone -- a reload, a closed tab, a lost connection -- and
+    // none is back within the grace, its process closes; the page's own
+    // close cannot be relied on to leave as it unloads. Tracking clears
+    // `ephemeral`, and a chat's process is residency's to decide.
+    ws.on("close", () => {
+      if (!record.ephemeral) return;
+      setTimeout(() => {
+        const current = backends.get(id);
+        if (current?.ephemeral && !current.clients?.size) void backends.stop(id).catch(() => {});
+      }, UNDRIVEN_THREAD_GRACE_MS).unref?.();
+    });
     // One browser connection is one ordered command stream. Native harness
     // operations can be asynchronous, but a later clear, steer, or prompt must
     // not overtake an earlier one while attachment paths or an abort resolve.

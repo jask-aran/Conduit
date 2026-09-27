@@ -692,7 +692,8 @@ driven untracked at its own address,
 `/computer/harness/:id/thread/:threadId?cwd=`: the normal backend-neutral
 live-session stream, with no chat, transcript journal or sidebar entry, drawn
 with a chat's transcript and composer. Leaving that page stops and removes its
-resident adapter record, asking first while a turn runs. **Track in Conduit**
+resident adapter record, asking first while a turn runs; a record no page has
+driven for 15 seconds (a reload, a closed tab) is stopped by the server. **Track in Conduit**
 adopts the thread through the explicit adoption route, naming its harness, and
 hands the new chat the open driver, so a thread never has two Conduit writers;
 a folder that is not yet a Workspace is linked as one first.
