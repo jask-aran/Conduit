@@ -5,7 +5,9 @@
    own so one long list cannot stretch the page. Narrower, one column filling
    the pane. */
 .split-dashboard { position: relative; z-index: 1; container: split-dashboard / inline-size; display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: auto; scrollbar-width: var(--native-scrollbar-width); }
-.split-dashboard-body { --split-aside-width: 280px; display: grid; width: min(calc(var(--composer-desktop-reference-width) + 32px + var(--split-aside-width)), calc(100% - 48px)); min-width: 380px; min-height: 0; flex: 1; grid-template-areas: "head head" "notice notice" "main aside"; grid-template-columns: minmax(0, var(--composer-desktop-reference-width)) var(--split-aside-width); grid-template-rows: auto auto minmax(280px, 1fr); column-gap: 32px; margin: 0 auto; padding: 22px 0 16px; }
+/* Centred when there is room; otherwise its left gutter holds at 24px and a
+   body at its minimum runs off the right, so nothing drifts sideways. */
+.split-dashboard-body { --split-aside-width: 280px; --split-body-max: calc(var(--composer-desktop-reference-width) + 32px + var(--split-aside-width)); display: grid; width: min(var(--split-body-max), calc(100% - 48px)); min-width: 380px; min-height: 0; flex: 1; grid-template-areas: "head head" "notice notice" "main aside"; grid-template-columns: minmax(0, var(--composer-desktop-reference-width)) var(--split-aside-width); grid-template-rows: auto auto minmax(280px, 1fr); column-gap: 32px; margin: 0 0 0 max(24px, calc((100% - var(--split-body-max)) / 2)); padding: 22px 0 16px; }
 /* The header is one grid: the mark centred on both lines, the title with the
    quick actions at the right of its line, and the status row under both, the
    header's full width. The title keeps its size and the quick actions fold
@@ -101,7 +103,7 @@
 /* A phone: the sidebar's phone sizes, quick actions as large targets, and the
    composer docked at the foot as it is in a chat. */
 @media (--conduit-mobile-layout) {
-  .split-dashboard-body { width: calc(100% - 32px); padding: 12px 0 calc(100px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
+  .split-dashboard-body { width: calc(100% - 32px); margin-inline: auto; padding: 12px 0 calc(100px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
   .split-dashboard-composer { position: fixed; right: 0; bottom: 0; left: 0; z-index: 4; padding: 18px 12px calc(10px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); background: linear-gradient(to bottom, color-mix(in oklch, var(--background), transparent 100%), var(--background) 45%); }
   .split-header h1 { font-size: 27px; }
   .split-header-context { margin-top: 5px; font-size: 12.5px; line-height: 1.55; }
