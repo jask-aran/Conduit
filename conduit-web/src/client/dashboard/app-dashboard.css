@@ -16,13 +16,12 @@
 .app-folder-new svg { width: 21px; height: 21px; margin: 0 3px; }
 .app-folder-new .app-folder-name { color: var(--muted-foreground); }
 
-/* One column: the shelf is one sideways strip, so it costs a single row. */
-@container split-dashboard (max-width: 759px) {
-  .app-folder-shelf { display: flex; overflow-x: auto; margin-inline: -6px; scrollbar-width: none; }
-  .app-folder { width: 96px; flex: none; }
-}
+/* Two rows at most: later rows take no height and are clipped, until Show all.
+   Rows carry no gap so the clipped ones add nothing. */
+.app-folder-shelf:not([data-all]) { grid-template-rows: repeat(2, auto); grid-auto-rows: 0; row-gap: 0; overflow: hidden; }
 @media (--conduit-mobile-layout) {
-  .app-folder { width: 104px; padding: 10px 9px; }
+  .app-folder-shelf { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+  .app-folder { padding: 10px 9px; }
   .app-folder-mark { width: 30px; height: 24px; }
   .app-folder-live { left: 34px; top: 11px; }
   .app-folder-name { font-size: 14px; }
