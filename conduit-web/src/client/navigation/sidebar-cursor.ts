@@ -23,7 +23,7 @@
 
 // The rows the cursor stops on. A project is its link: the chevron beside it
 // is what → and ← press.
-const STOPS = ".sidebar-rail-action, .sidebar-row:not(.sidebar-project), .sidebar-project-link, .sidebar-view-more, .sidebar-harness-tile";
+const STOPS = ".sidebar-rail-action, .sidebar-row:not(.sidebar-project), .sidebar-project-link, .sidebar-view-more";
 // The Conduit / Computer switch in the header, above the rows.
 const SWITCH = ".sidebar-area-toggle button";
 
@@ -101,7 +101,6 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
       }
       move(next);
     };
-    const tile = current.matches(".sidebar-harness-tile");
     const body = current.closest(".sidebar-project-body");
     const link = current.matches(".sidebar-project-link") ? current : null;
     switch (event.key) {
@@ -113,14 +112,12 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
       case "Home": anchor = null; move(all[0]); break;
       case "End": anchor = null; move(all[all.length - 1]); break;
       case "ArrowRight":
-        if (tile) move(current.nextElementSibling?.matches(STOPS) ? current.nextElementSibling as HTMLElement : undefined);
-        else if (link && !expanded(link)) toggleOf(link)?.click();
+        if (link && !expanded(link)) toggleOf(link)?.click();
         else if (link) move([...(link.closest(".sidebar-project-block")?.querySelectorAll<HTMLElement>(`.sidebar-project-body :is(${STOPS})`) ?? [])].find(visible));
         else return;
         break;
       case "ArrowLeft":
-        if (tile) move(current.previousElementSibling?.matches(STOPS) ? current.previousElementSibling as HTMLElement : undefined);
-        else if (body) move(body.closest(".sidebar-project-block")?.querySelector<HTMLElement>(".sidebar-project-link") ?? undefined);
+        if (body) move(body.closest(".sidebar-project-block")?.querySelector<HTMLElement>(".sidebar-project-link") ?? undefined);
         else if (link && expanded(link)) toggleOf(link)?.click();
         else return;
         break;

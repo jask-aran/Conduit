@@ -1178,9 +1178,10 @@ export function Sidebar(props: {
         <div ref={sidebarList} data-sidebar="content" class="sidebar-content">
           <div data-sidebar="rail-actions" class="sidebar-rail-actions" aria-label="Quick navigation">
             <Show when={area() === "computer"}>
-            <RailAction label="Computer" current={props.computer} onClick={() => { setArea("computer"); closeMobile(); props.onOpenComputer(); enterPane(); }}><MonitorIcon /></RailAction>
+            <RailAction label="Computer" current={props.computer && !props.selectedHarness} onClick={() => { setArea("computer"); closeMobile(); props.onOpenComputer(); enterPane(); }}><MonitorIcon /></RailAction>
             <RailAction label="New workspace" onClick={() => openNewDialog("workspace")}><FolderPlusIcon /></RailAction>
             <RailAction label="Terminal View" current={props.terminal} onClick={() => { setArea("computer"); closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /></RailAction>
+            <For each={harnesses()}>{(harness) => <RailAction label={`${harness.label} · ${harnessStatusLabel(harness.status)}`} current={props.selectedHarness === harness.id} onClick={() => { setArea("computer"); closeMobile(); props.onOpenHarness(harness.id); enterPane(); }}><HarnessMark id={harness.id} class="sidebar-harness-mark" artwork /></RailAction>}</For>
             <Show when={railWorkspaces().length}>
               <div data-sidebar="rail-section" data-sidebar-section="workspaces" class="sidebar-rail-section">
                 <For each={railWorkspaces()}>{(project) => <RailAction
@@ -1216,19 +1217,17 @@ export function Sidebar(props: {
             </Show>
           </div>
           <Show when={area() === "computer"}>
-            <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.computer ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenComputer(); enterPane(); }}><MonitorIcon /><span>Files</span></button>
+            <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.computer && !props.selectedHarness ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenComputer(); enterPane(); }}><MonitorIcon /><span>Files</span></button>
             <button type="button" class="sidebar-row sidebar-dashboard" onClick={() => openNewDialog("workspace")}><FolderPlusIcon /><span>New workspace</span></button>
             <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.terminal ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /><span>Terminal View</span><span class="sidebar-action-slot"><ExternalLinkIcon class="sidebar-route-indicator" /></span></button>
-            <Show when={harnesses().length}>
-              <div class="sidebar-harness-tiles">
-                <For each={harnesses()}>{(harness) =>
-                  <button type="button" class="sidebar-harness-tile" aria-current={props.selectedHarness === harness.id ? "page" : undefined} aria-label={`${harness.label} · ${harnessStatusLabel(harness.status)}`} title={`${harness.label} · ${harnessStatusLabel(harness.status)}`} onClick={() => { closeMobile(); props.onOpenHarness(harness.id); enterPane(); }}>
-                    <HarnessMark id={harness.id} class="sidebar-harness-mark" artwork />
-                    <i class="sidebar-harness-status" data-status={harness.status || "ready"} aria-hidden="true" />
-                  </button>
-                }</For>
-              </div>
-            </Show>
+            {/* Each harness's page, a row as the ones above are, its mark in its own
+                colours; a dot only when it is not ready to use. */}
+            <For each={harnesses()}>{(harness) =>
+              <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.selectedHarness === harness.id ? "page" : undefined} title={`${harness.label} · ${harnessStatusLabel(harness.status)}`} onClick={() => { closeMobile(); props.onOpenHarness(harness.id); enterPane(); }}>
+                <HarnessMark id={harness.id} class="sidebar-harness-mark" artwork /><span>{harness.label}</span>
+                <Show when={harness.status && harness.status !== "ready"}><span class="sidebar-action-slot"><i class="sidebar-harness-status" data-status={harness.status} role="img" aria-label={harnessStatusLabel(harness.status)} /></span></Show>
+              </button>
+            }</For>
             <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" />
             <section class="sidebar-group">
               <div class="sidebar-group-header"><div data-sidebar="group-label">Terminals</div></div>
