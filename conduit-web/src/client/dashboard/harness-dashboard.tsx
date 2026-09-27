@@ -24,6 +24,8 @@ import "./harness-dashboard.css";
 // workspace's page does, on the same split layout.
 
 export type HarnessLaunch = { harnessId: string; cwd: string; prompt: string; model: string; thinkingLevel: string; permissionMode: string };
+/** What the page has chosen for a thread it has not started yet. */
+export type HarnessChoices = { model: string; thinkingLevel: string; permissionMode: string };
 /** `chatId` is the hidden chat the thread runs as while its page is open. */
 export type HarnessThreadTarget = { harnessId: string; path: string; id: string; title: string; chatId?: string };
 type Side = "outside" | "conduit";
@@ -50,7 +52,7 @@ export function HarnessDashboard(props: {
   onScope: (path: string | null) => void;
   /** Where a thread starts when nothing else says: the Computer's home. */
   home: string;
-  composer?: (input: { models: ComposerModels; loading: boolean; permissions: ComposerPermissions; folder: FolderOptions; launch: (prompt: string) => Promise<void> }) => JSX.Element;
+  composer?: (input: { models: ComposerModels; loading: boolean; permissions: ComposerPermissions; folder: FolderOptions; choices: HarnessChoices; launch: (prompt: string) => Promise<void> }) => JSX.Element;
   onStartThread: (launch: HarnessLaunch) => Promise<void>;
   onOpenThread: (thread: HarnessThreadTarget) => void;
   onOpenChat: (chat: ChatSummary, project: Project) => void;
@@ -326,7 +328,7 @@ export function HarnessDashboard(props: {
         running() ? `${running()} running` : null,
       ]} />}
       notice={error() ? <p class="harness-error" role="alert">{error()}</p> : undefined}
-      composer={current().drive ? props.composer?.({ models: catalog, get loading() { return catalogLoading(); }, permissions, folder, launch }) : undefined}
+      composer={current().drive ? props.composer?.({ models: catalog, get loading() { return catalogLoading(); }, permissions, folder, get choices() { return { model: catalogModel(), thinkingLevel: catalogEffort(), permissionMode: permissionMode() }; }, launch }) : undefined}
       list={threadsGroup()}
       aside={foldersGroup()} />
 
