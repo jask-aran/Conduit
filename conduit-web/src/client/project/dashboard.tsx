@@ -475,7 +475,7 @@ export function ProjectDashboard(props: {
       header={<SplitHeader title={props.project.name} kind={kindLabel(props.project)}
         glyph={<Show when={isWorkspace()} fallback={<FolderIcon />}><WorkspaceGlyph appearance={activeAppearance()} /></Show>}
         context={[
-          <button type="button" title="Copy working path" onClick={() => void copyPath()}><code>{copied() ? "Copied" : workingRoot() || "Working path unavailable"}</code></button>,
+          <button type="button" title="Copy working path" onClick={() => void copyPath()}><code><bdi>{copied() ? "Copied" : workingRoot() || "Working path unavailable"}</bdi></code></button>,
           git() && <>{git()!.branch}{git()!.upstream ? ` → ${git()!.upstream}` : ""}</>,
           git() && (git()!.ahead || git()!.behind) ? [git()!.ahead && `${git()!.ahead} ahead`, git()!.behind && `${git()!.behind} behind`].filter(Boolean).join(", ") : null,
           !isWorkspace() && payload()?.stats.lastActivityAt && `last active ${relativeActivity(payload()?.stats.lastActivityAt, now()).toLowerCase()}`,
