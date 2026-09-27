@@ -1,6 +1,6 @@
 # The dock, the rail and main-pane splits
 
-> **Status (2026-09-28): stages 0 to 4 built.** Rules this produces move
+> **Status (2026-09-28): stages 0 to 4 built; stage 5 (equal panes) next.** Rules this produces move
 > into `DESIGN.md` as each stage lands; this file stays the plan and is
 > deleted once the last stage is built.
 
@@ -248,6 +248,62 @@ is stage 4's work, so it moves there.
   is marked open without being current.
 - The left side still owns the URL.
 - A chat can open beside its project page (moved from stage 3).
+
+### 5. Equal panes
+
+Stage 4 built the second chat as a *side chat*: `state/side-chat.ts` repeats
+the main chat's stores, `main.tsx` repeats its header, transcript and
+composer, and the left pane is still the real chat -- leader commands act on
+it whatever has focus, tools reach the main pane only borrowed from the dock,
+and a page cannot sit on the right. The goal is two equal panes, each a
+first-class consumer of the main pane, holding any view: a chat, a page, a
+file, a terminal or a tool.
+
+- **5a. A chat session.** Everything per-chat that `main.tsx` holds -- the
+  `createActiveChat` store, models, permissions, service levels,
+  attachments, the manifest and capabilities, the profile and switching it,
+  the composer's status and attach input -- moves into one factory
+  (`state/chat-session.ts`). The main chat is built from it; no visible
+  change.
+- **5b. One chat view.** Header, transcript and composer become one
+  component that takes a session. The main pane renders it; no visible
+  change.
+- **5c. Panes.** The main pane holds two panes, A and B, each a view plus
+  (for a chat) its own session. The split's `chat:<id>` becomes pane B's
+  chat on the same component; `side-chat.ts` and the repeated markup go.
+  Leader commands, the model selector, stash and the rest act on the focused
+  pane's session.
+- **5d. Pages as pane views.** The dashboard, project pages, Computer and
+  harness pages can sit on either side, their composers on that pane's
+  session.
+- **5e. Tools as pane views.** Files, Source Control, Chat review and
+  Terminal get state per place that a pane can host directly; the dock
+  becomes one more host instead of the owner the split borrows from.
+- **5f. The URL and restore.** The URL keeps pane A; pane B rides a query
+  parameter, so reload, back/forward and a shared link restore both.
+
+Each step builds, ships and is usable before the next, as the stages are.
+
+**Going back.** Two local tags mark the states to return to:
+
+- `panes-side-chat` (c94ab5f) -- stage 4 with its fixes: the side chat.
+- `panes-pre-side-chat` (fe579fb) -- stage 3: files, changes and terminals
+  beside, no second chat.
+
+Other work lands on main between these commits, so going back is `git
+revert` of the pane commits, newest first, never a reset to a tag. Each
+stage 5 commit is listed below as it lands.
+
+- *Back to the side chat:* revert every stage 5 commit listed here.
+- *Back to before the side chat:* that, then `git revert 5d5ab96` (the side
+  chat), then reverse the `main.tsx` half of c94ab5f
+  (`git show c94ab5f -- conduit-web/src/client/main.tsx | git apply -R`),
+  keeping its transcript-motion half, which file and tool splits need too.
+- Check with `git diff panes-side-chat -- <the pane files>` (or
+  `panes-pre-side-chat`); other agents' changes to the same files show there
+  too and stay.
+
+Stage 5 commits: none yet.
 
 ## Open questions
 
