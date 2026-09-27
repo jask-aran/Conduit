@@ -2506,16 +2506,6 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
    docs/design/palette-sketch): pinned near the top, sidebar-weight group labels,
    one-line rows, keycaps on rows as in the rail, scope and activity as chips
    in the bar, and a preview column in chat search. */
-.command-dialog { background: rgb(0 0 0 / 42%); }
-.command-shell, .command-dialog .command-shell {
-  border: 1px solid #ffffff4d;
-  border-radius: 14px;
-  background: #ffffff2b;
-  backdrop-filter: blur(24px);
-  box-shadow: 0 24px 70px rgb(0 0 0 / 38%), inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 10%);
-  animation: command-arrive 220ms cubic-bezier(.2, .8, .2, 1) both;
-}
-@keyframes command-arrive { from { opacity: 0; transform: translateY(8px); } }
 .command-dialog-with-preview .command-shell { width: min(1040px, calc(100vw - 22px)); }
 .command-input-row { border-bottom-color: oklch(1 0 0 / 10%); }
 .command-input { font-size: 13px; font-weight: 450; }
@@ -2529,8 +2519,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-body { display: flex; min-height: 0; flex: 1; }
 .command-body .command-list { min-width: 0; flex: 1; }
 .command-group-label { margin: 10px 8px 4px; color: color-mix(in oklch, var(--foreground), transparent 50%); font-size: 9.6px; font-weight: 700; letter-spacing: 0; text-transform: none; }
-.command-option { min-height: 30px; border-radius: 9px; padding: 4px 8px; gap: 10px; }
-.command-option[data-highlighted], .command-option[data-chat-selected="true"] { background: oklch(1 0 0 / 10%); box-shadow: none; }
+.command-option[data-chat-selected="true"] { background: oklch(1 0 0 / 10%); box-shadow: none; }
 .command-label, .command-dialog-chat-search .command-option[data-chat-row="true"] .command-label { font-size: 12px; font-weight: 520; }
 .command-dialog-chat-search .command-option[data-chat-row="true"][aria-current="page"] .command-label, .command-folder-option[aria-current="page"] .command-label { font-weight: 680; }
 .command-copy small, .command-folder-option small, .command-dialog-chat-search .command-option[data-chat-row="true"] .command-copy small { font-size: 10px; }
@@ -2544,7 +2533,6 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-icon { width: 14px; height: 14px; }
 .command-shortcut { display: inline-flex; flex: none; gap: 3px; opacity: .75; }
 .command-option[data-highlighted] .command-shortcut { opacity: 1; }
-.command-shortcut kbd, .command-hint-key { display: inline-grid; min-width: 16px; height: 16px; place-items: center; border: 1px solid oklch(1 0 0 / 16%); border-radius: 4px; background: oklch(0 0 0 / 12%); padding: 0 4px; color: var(--muted-foreground); font: 550 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .command-option[data-highlighted] .command-shortcut kbd { color: var(--foreground); }
 .command-rename-input { border: 1px solid oklch(1 0 0 / 16%); border-radius: 7px; background: oklch(0 0 0 / 18%); padding: 3px 7px; }
 .command-select-mark { border-color: oklch(1 0 0 / 24%); border-radius: 4px; }
@@ -2553,7 +2541,6 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-preview-title .thread-harness-mark { width: 14px; height: 14px; flex: none; margin-top: 1px; }
 .command-preview-facts { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: 10px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
 .command-preview-empty { margin: auto 0; text-align: center; }
-.command-hint-bar, .command-hint-bar[data-chat-search] { min-height: 34px; flex-wrap: nowrap; gap: 12px; overflow: hidden; border-top-color: oklch(1 0 0 / 8%); background: transparent; padding: 6px 10px; font-size: 10px; }
 .command-hint-secondary { flex-wrap: nowrap; justify-content: flex-end; overflow: hidden; }
 .command-hint-key { color: var(--muted-foreground); }
 .command-hint-action, .command-hint-action:hover { min-height: 0; border: 0; border-radius: 6px; background: transparent; margin: -2px -4px; padding: 2px 4px; }
@@ -2562,7 +2549,6 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-selection-count { color: var(--foreground); font-size: 10px; }
 @media (max-width: 1000px) { .command-preview { display: none; } .command-dialog-with-preview .command-shell { width: min(720px, calc(100vw - 22px)); } }
 @media (--conduit-mobile-layout) { .command-preview { display: none; } .command-dialog-with-preview .command-shell { width: 100%; } .command-label, .command-dialog-chat-search .command-option[data-chat-row="true"] .command-label { font-size: 14px; } }
-@media (prefers-reduced-motion: reduce) { .command-shell { animation: none; } }
 /* Typing lights the letters that matched and dims the rest of the label. */
 .command-label[data-matching], .command-model-label[data-matching] { color: var(--muted-foreground); }
 .command-label mark, .command-model-label mark { background: none; color: var(--foreground); font-weight: 700; }
@@ -2602,9 +2588,6 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   .command-folder-search { display: none; }
   .command-list { padding-bottom: 8px; }
 }
-/* Full-screen on a phone, the frost sits over whole lines of text: a darker
-   core under it keeps the rows clear. */
-@media (--conduit-mobile-layout) { .command-dialog .command-shell { background: linear-gradient(#ffffff2b, #ffffff2b), oklch(0.19 0.005 264 / 72%); } }
 /* Models: scoped is the white of a place you use, unscoped the sidebar's grey,
    not bold throughout. */
 .command-model-option[data-scoped] .command-model-label { font-weight: 560; color: var(--foreground); }
@@ -2612,3 +2595,32 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-model-option[data-highlighted] .command-model-label { color: var(--foreground); }
 .command-model-label { font-size: 12px; }
 .command-model-spec { font-size: 10px; }
+
+/* The frost overlay (DESIGN.md, Surfaces; components/frost.tsx): anything that
+   opens on top of the app. The page dims, the card is pinned near the top in
+   the composer's frost and rises in; on a phone it is a full-screen bubble
+   whose frost gets a darker core, since nothing around it is dimmed. Rows
+   take the one cursor wash and show where you are by weight; keys are
+   keycaps; the foot is a rail on the same frost. Last in the file so it wins
+   over the older per-density shells. */
+.frost-overlay { align-items: start; padding-top: clamp(40px, 10vh, 92px); background: rgb(0 0 0 / 42%); }
+.frost-card {
+  border: 1px solid var(--frost-stroke, #ffffff4d);
+  border-radius: 14px;
+  background: var(--frost-fill, #ffffff2b);
+  backdrop-filter: blur(24px);
+  box-shadow: 0 24px 70px rgb(0 0 0 / 38%), inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 10%);
+}
+.frost-overlay .frost-card { animation: frost-arrive 220ms cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes frost-arrive { from { opacity: 0; transform: translateY(8px); } }
+@media (--conduit-mobile-layout) {
+  .frost-overlay { align-items: stretch; padding: 8px; }
+  .frost-overlay .frost-card { width: 100%; height: 100%; max-height: none; background: linear-gradient(#ffffff2b, #ffffff2b), oklch(0.19 0.005 264 / 72%); }
+}
+@media (prefers-reduced-motion: reduce) { .frost-overlay .frost-card { animation: none; } }
+.frost-row { min-height: 30px; gap: 10px; border-radius: 9px; padding: 4px 8px; }
+.frost-row[data-highlighted] { background: oklch(1 0 0 / 10%); box-shadow: none; color: var(--foreground); }
+.frost-row[aria-current="page"] { color: var(--foreground); }
+.keycap { display: inline-grid; min-width: 16px; height: 16px; place-items: center; border: 1px solid oklch(1 0 0 / 16%); border-radius: 4px; background: oklch(0 0 0 / 12%); padding: 0 4px; color: var(--muted-foreground); font: 550 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.frost-row[data-highlighted] .keycap { color: var(--foreground); }
+.frost-rail { display: flex; min-height: 34px; flex-wrap: nowrap; align-items: center; gap: 12px; overflow: hidden; border-top: 1px solid oklch(1 0 0 / 8%); background: transparent; padding: 6px 10px; font-size: 10px; }
