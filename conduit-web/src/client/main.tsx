@@ -1,4 +1,5 @@
 /// <reference types="vite-plugin-pwa/client" />
+import { focusSplitSection } from "./dashboard/primitives/split-cursor";
 import { isConduitManagedProject } from "./navigation/sidebar-preferences";
 import type { ComputerLocation, ComputerPrefetchPayload } from "./api/contracts";
 import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, For, lazy, on, onCleanup, onMount, Show, untrack, type JSX } from "solid-js";
@@ -462,15 +463,15 @@ function ChatHeader(props: {
         </span>
       </Show>
       <HeaderActions>
-        <Button variant="ghost" size="icon-sm" class="search-trigger" aria-label="Search chats" title="Search chats" onClick={props.onOpenSearch}><SearchIcon /></Button>
-        <Button variant="ghost" size="icon-sm" class="palette-trigger" aria-label="Open command palette" title="Command palette" onClick={props.onOpenPalette}><TerminalIcon /></Button>
+        <Button variant="ghost" size="icon-sm" class="search-trigger" tabIndex={-1} aria-label="Search chats" title="Search chats" onClick={props.onOpenSearch}><SearchIcon /></Button>
+        <Button variant="ghost" size="icon-sm" class="palette-trigger" tabIndex={-1} aria-label="Open command palette" title="Command palette" onClick={props.onOpenPalette}><TerminalIcon /></Button>
         {props.extraAction}
         <Show when={!props.appDashboard}>
-          <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" aria-label={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} title={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} onClick={props.onShare}><ShareIcon /></Button>
+          <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" tabIndex={-1} aria-label={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} title={props.dashboard ? "Copy Tailscale workspace link" : "Copy Tailscale chat link"} onClick={props.onShare}><ShareIcon /></Button>
         </Show>
-        <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" aria-label="Toggle workspace panel" aria-expanded={props.panelOpen} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
+        <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" tabIndex={-1} aria-label="Toggle workspace panel" aria-expanded={props.panelOpen} onClick={props.onTogglePanel}><PanelRightIcon /></Button>
         <Show when={!props.appDashboard}><Menu modal={false}>
-          <MenuTrigger class="chat-header-more" aria-label="More chat options" title="More chat options"><EllipsisIcon /></MenuTrigger>
+          <MenuTrigger class="chat-header-more" tabIndex={-1} aria-label="More chat options" title="More chat options"><EllipsisIcon /></MenuTrigger>
           <MenuContent class="chat-header-menu">
             <MenuGroup>
               <MenuLabel class="chat-header-menu-title">{props.title}</MenuLabel>
@@ -2312,6 +2313,11 @@ function App() {
       // A dashboard is the chat's sibling region and keeps what the main pane
       // could do there before regions had names.
       shortcutManager.registerHandler(COMMAND_IDS.stashPrompt, "dashboard", stashPrompt),
+      shortcutManager.registerHandler(COMMAND_IDS.dashboardComposer, "dashboard", () => { focusSplitSection("composer"); }),
+      shortcutManager.registerHandler(COMMAND_IDS.dashboardChats, "dashboard", () => { focusSplitSection("chats"); }),
+      shortcutManager.registerHandler(COMMAND_IDS.dashboardProjects, "dashboard", () => { focusSplitSection("projects"); }),
+      shortcutManager.registerHandler(COMMAND_IDS.dashboardWorkspaces, "dashboard", () => { focusSplitSection("workspaces"); }),
+      shortcutManager.registerHandler(COMMAND_IDS.dashboardTerminals, "dashboard", () => { focusSplitSection("terminals"); }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "dashboard", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
     ];
     const uninstallShortcuts = shortcutManager.install(window);
