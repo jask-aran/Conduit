@@ -64,7 +64,7 @@ export function HarnessDashboard(props: {
   const [searching, setSearching] = createSignal(false);
   const [limit, setLimit] = createSignal(CHAT_PAGE);
   const [now, setNow] = createSignal(Date.now());
-  const [side, setSide] = createSignal<Side>("outside");
+  const [side, setSide] = createSignal<Side>("conduit");
   const [catalogLoading, setCatalogLoading] = createSignal(false);
   const [catalogModels, setCatalogModels] = createSignal<ModelOption[]>([]);
   const [catalogModel, setCatalogModel] = createSignal("");
@@ -276,8 +276,8 @@ export function HarnessDashboard(props: {
 
   const chooseSide = (value: Side) => { setSide(value); setLimit(CHAT_PAGE); };
   const sideChoice = () => ({ label: "Show", value: side(), onChange: (value: string) => chooseSide(value as Side), options: [
-    { value: "outside", label: "Not in Conduit", detail: loading() ? undefined : outside().length },
     { value: "conduit", label: "In Conduit", detail: kept().length },
+    { value: "outside", label: "Not in Conduit", detail: loading() ? undefined : outside().length },
   ] });
   const search = () => <Show when={searching()} fallback={<button type="button" aria-label="Search threads" title="Search threads" onClick={() => setSearching(true)}><SearchIcon /></button>}>
     <input class="harness-search" type="search" aria-label="Search threads" placeholder="Search" autofocus value={query()} onInput={(event) => setQuery(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Escape") { setQuery(""); setSearching(false); } }} />
@@ -286,8 +286,8 @@ export function HarnessDashboard(props: {
   const threadsGroup = () => <SplitGroup id="harness-threads" order="list" busy={loading()}
     heading={<div class="split-heading-switches"><Show when={discovers()} fallback={<h2 id="harness-threads">Chats<small>{kept().length}</small></h2>}>
       <Segmented label="Threads" value={side()} onChange={chooseSide} options={[
-        { value: "outside", label: "Not in Conduit", detail: <Show when={!loading()}><small>{outside().length}</small></Show> },
         { value: "conduit", label: "In Conduit", detail: <small>{kept().length}</small> },
+        { value: "outside", label: "Not in Conduit", detail: <Show when={!loading()}><small>{outside().length}</small></Show> },
       ]} />
     </Show></div>}
     actions={<FilterBar choices={[sortChoice(chatSort(), saveChatSort)]}>{search()}</FilterBar>}

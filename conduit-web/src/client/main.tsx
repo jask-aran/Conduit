@@ -80,7 +80,7 @@ import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
 import { INCREMARK_PACING_STORAGE_KEY } from "./chat/incremark-pacing";
 import { harnessLabelFor } from "./harness-brand";
 import { NO_ATTACHMENTS } from "./chat/composer-attachments";
-import { OutsideThreadBar } from "./chat/outside-thread-bar";
+import { OutsideThreadChip } from "./chat/outside-thread-chip";
 import { createDriveChat } from "./state/drive-chat";
 import type { HarnessLaunch, HarnessThreadTarget } from "./dashboard/harness-dashboard";
 import {
@@ -413,6 +413,8 @@ function ChatHeader(props: {
   onOpenPlace?: (project?: Project) => void;
   /** Names the crumb when the page sits under something other than a place: a harness, for its threads. */
   placeLabel?: string;
+  /** Beside the breadcrumb: what the page is, when that needs saying. */
+  badge?: JSX.Element;
   dashboard?: boolean;
   appDashboard?: boolean;
   /** The page is a place of its own (Computer): no crumb before its title. */
@@ -467,6 +469,7 @@ function ChatHeader(props: {
       {/* A project or workspace page is that place, named as the sidebar names it; a
           chat or the Conduit dashboard sits under its place. */}
       <nav aria-label="breadcrumb" class="chat-header-title"><Show when={!props.dashboard && !props.alone}><Show when={props.onOpenPlace} fallback={<span>{projectLabel()}</span>}><button type="button" class="breadcrumb-link" tabIndex={-1} onClick={() => props.onOpenPlace!(props.project)}>{projectLabel()}</button></Show><span class="breadcrumb-separator" aria-hidden="true" /></Show><strong>{props.title}</strong></nav>
+      {props.badge}
       <Show when={!props.dashboard && props.chat}>
         <span class="chat-status-line" data-state={statusTone()} role="status" aria-label={`Runtime status: ${statusLabel()}`} aria-live="polite">
           <Show when={recording()} fallback={<span class="chat-status-label">{statusLabel()}</span>}>
@@ -517,13 +520,12 @@ function ChatHeader(props: {
 
 /** A chat's transcript with its composer over it: a Conduit chat's and an
  *  untracked harness thread's alike. */
-function Conversation(props: { chat: ActiveChatStore; busy?: boolean; transcript: JSX.Element; notice?: JSX.Element; composer: JSX.Element; stackRef?: (element: HTMLDivElement) => void }) {
+function Conversation(props: { chat: ActiveChatStore; busy?: boolean; transcript: JSX.Element; composer: JSX.Element; stackRef?: (element: HTMLDivElement) => void }) {
   return <div class="work-area">
     <section class="work-area-conversation" aria-label="Conversation" aria-busy={props.busy}>
       {props.transcript}
       <div ref={(element) => props.stackRef?.(element)} class="composer-stack" data-question={props.chat.hostUiRequests().length ? "true" : undefined}>
         <HostUiRequests requests={props.chat.hostUiRequests()} onRespond={props.chat.respondHostUi} />
-        {props.notice}
         {props.composer}
       </div>
     </section>
@@ -2878,10 +2880,9 @@ function App() {
             const workspace = () => catalogue.projects().find((project) => !isConduitManagedProject(project) && project.workingRoot === thread().path);
             const label = () => harnessLabelFor(thread().harnessId) || thread().harnessId;
             return <>
-              <ChatHeader project={workspace()} placeLabel={label()} onOpenPlace={() => openComputerHarness(thread().harnessId, "push", thread().path)} title={drive.chat.title() || thread().title || "Untitled thread"} runtime={drive.chat.runtimeIdentity()} live={drive.chat.live() as unknown as Record<string, unknown>} chat={drive.chat} composerStatus={composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => openComputerHarness(thread().harnessId, "push", thread().path)} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareHarnessThread()} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} />
+              <ChatHeader project={workspace()} placeLabel={label()} onOpenPlace={() => openComputerHarness(thread().harnessId, "push", thread().path)} title={drive.chat.title() || thread().title || "Untitled thread"} badge={<OutsideThreadChip harness={label()} folder={thread().path} workspace={Boolean(workspace())} busy={trackingThread()} onTrack={() => void trackHarnessThread()} />} runtime={drive.chat.runtimeIdentity()} live={drive.chat.live() as unknown as Record<string, unknown>} chat={drive.chat} composerStatus={composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => openComputerHarness(thread().harnessId, "push", thread().path)} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareHarnessThread()} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} />
               <Conversation chat={drive.chat}
                 transcript={<Transcript chat={drive.chat} supports={(name) => drive.chat.capabilities()?.[name] === true} partialContinue={false} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={label()} />}
-                notice={<OutsideThreadBar harness={label()} folder={thread().path} workspace={Boolean(workspace())} busy={trackingThread()} onTrack={() => void trackHarnessThread()} />}
                 composer={<Composer chat={drive.chat} attachments={NO_ATTACHMENTS} attachmentsSupported={false} models={drive.models} profiles={harnessProfile(thread().harnessId) ? [harnessProfile(thread().harnessId)!] : []} activeProfile={harnessProfile(thread().harnessId)} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => {}} onStatusChange={setComposerStatus} />} />
             </>;
           }}</Show>
