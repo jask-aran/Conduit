@@ -64,7 +64,7 @@ export function installSplitCursor(root: HTMLElement): () => void {
   let pointerFocus = false;
 
   const groups = () => [...root.querySelectorAll<HTMLElement>(".split-group")]
-    .filter((group) => visible(group) && group.querySelector(ROWS))
+    .filter((group) => visible(group) && (rowsIn(group).length || controlsIn(group).length))
     // The chats list reads first, then the right column, top to bottom.
     .sort((a, b) => Number(b.dataset.order === "list") - Number(a.dataset.order === "list"));
   const rowsIn = (group: Element) => [...group.querySelectorAll<HTMLElement>(ROWS)].filter(visible);
@@ -91,7 +91,8 @@ export function installSplitCursor(root: HTMLElement): () => void {
   const enter = (group: Element | undefined) => {
     if (!group) return false;
     const remembered = last.get(group);
-    return move(remembered?.isConnected && visible(remembered) ? remembered : rowsIn(group)[0]);
+    // A folded group is entered at its heading.
+    return move(remembered?.isConnected && visible(remembered) ? remembered : rowsIn(group)[0] ?? controlsIn(group)[0]);
   };
   // Tab's round: the composer, then each group.
   const tab = (from: Element | null, back: boolean) => {

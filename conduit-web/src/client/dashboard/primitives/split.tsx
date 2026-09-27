@@ -1,4 +1,5 @@
-import { For, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
+import { createContext, createSignal, For, onCleanup, onMount, Show, splitProps, useContext, type Accessor, type JSX } from "solid-js";
+import { ChevronRightIcon } from "lucide-solid";
 import { Dynamic } from "solid-js/web";
 import { installSplitCursor, type SplitPage } from "./split-cursor";
 import "./split.css";
@@ -10,6 +11,11 @@ import "./split.css";
 // the way a narrow window does. The Conduit dashboard still uses ./dashboard.
 
 const classes = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
+
+// One column: the pane below 760px, as the container query in split.css has
+// it. Groups read it to trade their heading for a compact one and to fold.
+const NARROW = 760;
+const Narrow = createContext<Accessor<boolean>>(() => false);
 
 export function SplitDashboard(props: {
   label: string;
@@ -24,8 +30,14 @@ export function SplitDashboard(props: {
   aside?: JSX.Element;
 }) {
   let root!: HTMLElement;
-  onMount(() => onCleanup(installSplitCursor(root)));
-  return <section ref={root} class={classes("split-dashboard", props.class)} data-page={props.page} aria-label={props.label}>
+  const [narrow, setNarrow] = createSignal(false);
+  onMount(() => {
+    onCleanup(installSplitCursor(root));
+    const observer = new ResizeObserver(([entry]) => setNarrow((entry?.contentRect.width ?? NARROW) < NARROW));
+    observer.observe(root);
+    onCleanup(() => observer.disconnect());
+  });
+  return <Narrow.Provider value={narrow}><section ref={root} class={classes("split-dashboard", props.class)} data-page={props.page} aria-label={props.label}>
     <div class="split-dashboard-body">
       <div class="split-dashboard-head">{props.header}{props.shortcuts}</div>
       <Show when={props.notice}><div class="split-dashboard-notice">{props.notice}</div></Show>
@@ -35,7 +47,7 @@ export function SplitDashboard(props: {
       </div>
       <div class="split-dashboard-aside">{props.aside}</div>
     </div>
-  </section>;
+  </section></Narrow.Provider>;
 }
 
 /** The page's mark, centred on its name and, under the name, its kind and
@@ -70,7 +82,10 @@ export function SplitShortcut(props: { icon: JSX.Element; label: string; onClick
 /**
  * A heading and plain one-line rows, drawn as the sidebar draws its groups.
  * `order` places it on one column: Running comes first, then the threads
- * list, then the rest.
+ * list, then the rest. On one column a group can trade its heading and
+ * actions for compact ones (the chats list's Filters menu), and a
+ * `collapsible` group folds under its heading, folded until opened; the
+ * choice is remembered per device.
  */
 export function SplitGroup(props: {
   id: string;
@@ -83,13 +98,29 @@ export function SplitGroup(props: {
   order?: "first" | "list" | "rest";
   class?: string;
   busy?: boolean;
+  compactHeading?: JSX.Element;
+  compactActions?: JSX.Element;
+  collapsible?: boolean;
 }) {
-  return <section class={classes("split-group", props.class)} data-section={props.id.replace(/^.*-/, "").replace("threads", "chats")} data-order={props.order || "rest"} aria-labelledby={props.label ? props.id : undefined} aria-label={props.label ? undefined : props.id} aria-busy={props.busy || undefined}>
+  const narrow = useContext(Narrow);
+  const key = `conduit.dashboard.open:${props.id}`;
+  const [open, setOpen] = createSignal((() => { try { return localStorage.getItem(key) === "1"; } catch { return false; } })());
+  const toggle = () => {
+    setOpen((value) => !value);
+    try { localStorage.setItem(key, open() ? "1" : "0"); } catch { /* a per-viewer convenience */ }
+  };
+  const folds = () => Boolean(props.collapsible && narrow());
+  const title = () => <>{props.label}<Show when={props.count != null}><small>{props.count}</small></Show></>;
+  const heading = () => narrow() && props.compactHeading ? props.compactHeading
+    : folds() ? <h2 id={props.id}><button type="button" class="split-group-toggle" aria-expanded={open()} onClick={toggle}><ChevronRightIcon />{title()}</button></h2>
+    : props.heading ?? <h2 id={props.id}>{title()}</h2>;
+  const actions = () => narrow() && props.compactActions ? props.compactActions : props.actions;
+  return <section class={classes("split-group", props.class)} data-folded={folds() && !open() ? "" : undefined} data-section={props.id.replace(/^.*-/, "").replace("threads", "chats")} data-order={props.order || "rest"} aria-labelledby={props.label ? props.id : undefined} aria-label={props.label ? undefined : props.id} aria-busy={props.busy || undefined}>
     <header class="split-group-heading">
-      {props.heading ?? <h2 id={props.id}>{props.label}<Show when={props.count != null}><small>{props.count}</small></Show></h2>}
-      <Show when={props.actions}><div class="split-group-actions">{props.actions}</div></Show>
+      {heading()}
+      <Show when={actions()}><div class="split-group-actions">{actions()}</div></Show>
     </header>
-    <div class="split-group-rows">{props.children}{props.more}</div>
+    <div class="split-group-rows" hidden={folds() && !open()}>{props.children}{props.more}</div>
   </section>;
 }
 

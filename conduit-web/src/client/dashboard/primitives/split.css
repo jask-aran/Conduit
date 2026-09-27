@@ -158,3 +158,30 @@
 .split-group-heading .settings-segmented button[aria-checked="true"]:is(:focus-visible, [data-held]) { background: color-mix(in oklch, var(--accent), var(--foreground) 14%); }
 /* The cursor held while the window is away (split-cursor.ts). */
 .split-dashboard :is(.split-row, .split-group-more, .app-folder, .split-group-actions > button, .split-group-actions [data-slot="menu-trigger"])[data-held] { background: var(--sidebar-accent, var(--accent)); color: var(--foreground); }
+
+/* A group that folds on one column (Terminals, Changes): its heading is the
+   toggle, a chevron turning as it opens. */
+.split-group-toggle { display: inline-flex; align-items: center; gap: 4px; margin-left: -3px; border: 0; border-radius: 6px; background: transparent; padding: 2px 4px 2px 2px; color: inherit; font: inherit; letter-spacing: inherit; }
+.split-group-toggle svg { width: 11px; height: 11px; transition: transform 160ms ease; }
+.split-group-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+.split-group-toggle:is(:hover, :focus-visible, [data-held]) { outline: none; background: var(--accent); color: var(--foreground); }
+.split-group[data-folded] .split-group-heading { padding-bottom: 0; }
+/* The chats list's compact heading and the Filters menu's counts. */
+.split-compact-heading span { margin-left: 6px; color: var(--muted-foreground); font-weight: 400; }
+.split-filter-detail { margin-left: auto; padding-left: 12px; color: var(--muted-foreground); font: 400 11px ui-monospace, SFMono-Regular, Consolas, monospace; }
+@container split-dashboard (max-width: 759px) {
+  /* Under the muted chats, changes keep their colour only as a hint. */
+  .split-change-row > svg { opacity: .7; filter: grayscale(1); }
+  .split-change-row .workspace-change-name { color: color-mix(in oklch, var(--foreground), transparent 32%); }
+  .split-change-row :is(.workspace-git-removed, .workspace-git-added), .split-change-row code[data-status], .split-group .split-counts [data-change] { color: var(--muted-foreground); }
+}
+@media (--conduit-mobile-layout) {
+  .split-change-row { min-height: 34px; font-size: 13px; }
+  .split-change-row > svg { width: 13px; height: 13px; }
+  .split-change-row .workspace-change-counts, .split-change-row code { font-size: 10.5px; }
+  .split-group-toggle svg { width: 14px; height: 14px; }
+  .split-filter-detail { font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .split-group-toggle svg { transition: none; }
+}

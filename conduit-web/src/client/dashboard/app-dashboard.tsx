@@ -14,7 +14,7 @@ import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
 import { Segmented } from "../settings/settings-controls";
-import { CHAT_PAGE, DayGroups, groupByDay, ListFilter, ListSearch, PlaceFilter, ProfileFilter, profileOf, ShowMore } from "./primitives/chat-list";
+import { CHAT_PAGE, DayGroups, groupByDay, ListFilter, ListSearch, CompactHeading, FiltersMenu, PlaceFilter, placeChoice, ProfileFilter, profileChoice, profileOf, ShowMore, sortChoice } from "./primitives/chat-list";
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitRow, SplitShortcut, SplitShortcuts } from "./primitives/split";
 import "./app-dashboard.css";
 
@@ -202,6 +202,23 @@ export function AppDashboard(props: {
       <ListFilter sort={chatSort()} onSort={saveChatSort} />
       <ListSearch label="Search chats" onClick={() => props.onSearchChats("all")} />
     </>}
+    compactHeading={<CompactHeading label={unreadOnly() ? "Unread" : "Recent chats"} count={chats().length} where={computer() ? "Computer" : "Conduit"} />}
+    compactActions={<>
+      <FiltersMenu choices={[
+        { label: "Show", value: unreadOnly() ? "unread" : "all", onChange: (value) => { setUnreadOnly(value === "unread"); setLimit(CHAT_PAGE); }, options: [
+          { value: "all", label: "Recent chats", detail: allChats().length },
+          { value: "unread", label: "Unread", detail: unread() },
+        ] },
+        { label: "Where", value: side(), onChange: (value) => chooseSide(value as "conduit" | "computer"), options: [
+          { value: "conduit", label: "Conduit", detail: conduitChats().length },
+          { value: "computer", label: "Computer", detail: computerChats().length },
+        ] },
+        placeChoice(computer() ? "Workspace" : "Project", computer() ? "All workspaces" : "All projects", places(), place(), (id) => { setPlace(id); setLimit(CHAT_PAGE); }),
+        profileChoice(props.profiles, new Set(allChats().map(({ chat }) => profileOf(props.profiles, chat))), profile(), (id) => { setProfile(id); setLimit(CHAT_PAGE); }),
+        sortChoice(chatSort(), saveChatSort),
+      ]} />
+      <ListSearch label="Search chats" onClick={() => props.onSearchChats("all")} />
+    </>}
     more={<ShowMore total={chats().length} shown={limit()} onMore={() => setLimit((value) => value + CHAT_PAGE)} />}>
     <Show when={chats().length} fallback={<SplitEmpty>{unreadOnly() ? "Nothing unread." : "Nothing here yet."}</SplitEmpty>}>
       <DayGroups groups={grouped()}>{chatRow}</DayGroups>
@@ -238,7 +255,7 @@ export function AppDashboard(props: {
     </Show>
   </SplitGroup>;
 
-  const terminalsGroup = <SplitGroup id="app-dashboard-terminals" label="Terminals" count={terminals().length} busy={loading()} actions={<button type="button" onClick={props.onOpenTerminalView}>Open</button>}>
+  const terminalsGroup = <SplitGroup id="app-dashboard-terminals" label="Terminals" collapsible count={terminals().length} busy={loading()} actions={<button type="button" onClick={props.onOpenTerminalView}>Open</button>}>
     <Show when={terminals().length} fallback={<SplitEmpty>{loading() ? "Loading terminals…" : "No live terminals."}</SplitEmpty>}>
       <For each={terminals()}>{(terminal) =>
         <ContextMenu><ContextMenuTrigger as={SplitRow} element="button" onPointerEnter={props.onPrefetchTerminal} onFocus={props.onPrefetchTerminal} onClick={() => props.onOpenTerminal(terminal)}

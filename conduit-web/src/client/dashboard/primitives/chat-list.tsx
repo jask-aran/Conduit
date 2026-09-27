@@ -140,6 +140,70 @@ export function PlaceFilter(props: { label: string; all: string; places: Array<{
   </Show>;
 }
 
+/** One choice in the Filters menu: a name and its options, one in force. */
+export type ListChoice = {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string; detail?: JSX.Element; icon?: JSX.Element; disabled?: boolean }>;
+};
+
+/** On one column the heading's switches and filters fold into one menu:
+ *  each choice a group, the current option bold (no tick). */
+export function FiltersMenu(props: { choices: Array<ListChoice | false | null | undefined> }) {
+  const choices = () => props.choices.filter(Boolean) as ListChoice[];
+  return <Menu modal={false}>
+    <MenuTrigger class="split-list-filter" title="Filters">Filters<ChevronDownIcon /></MenuTrigger>
+    <MenuContent class="w-64">
+      <For each={choices()}>{(choice, index) => <>
+        <Show when={index() > 0}><MenuSeparator /></Show>
+        <MenuGroup>
+          <MenuLabel>{choice.label}</MenuLabel>
+          <MenuRadioGroup value={choice.value} onChange={(value: string) => choice.onChange(value)}>
+            <For each={choice.options}>{(option) => <MenuRadioItem value={option.value} disabled={option.disabled}>
+              {option.icon}{option.label}<Show when={option.detail != null}><small class="split-filter-detail">{option.detail}</small></Show>
+            </MenuRadioItem>}</For>
+          </MenuRadioGroup>
+        </MenuGroup>
+      </>}</For>
+    </MenuContent>
+  </Menu>;
+}
+
+export const sortChoice = (sort: "latest" | "created", onSort: (sort: "latest" | "created") => void): ListChoice => ({
+  label: "Sort by", value: sort, onChange: (value) => onSort(value as "latest" | "created"),
+  options: [{ value: "latest", label: "Latest activity" }, { value: "created", label: "Created" }],
+});
+
+export const profileChoice = (profiles: ProfileLike[], used: Set<string>, value: string, onChange: (id: string) => void): ListChoice | null => profiles.length ? {
+  label: "Profile", value, onChange,
+  options: [
+    { value: "", label: "All profiles", icon: <LayersIcon class="size-4" /> },
+    ...profiles.map((item) => ({ value: item.id, label: item.label, icon: <HarnessMark id={item.implementation || "conduit"} class="size-4" />, disabled: !used.has(item.id) && item.id !== value })),
+  ],
+} : null;
+
+export const placeChoice = (label: string, all: string, places: Array<{ id: string; label: string; project: Project }>, value: string, onChange: (id: string) => void): ListChoice | null => places.length ? {
+  label, value, onChange,
+  options: [
+    { value: "", label: all, icon: <LayersIcon class="size-4" /> },
+    ...places.map((item) => ({ value: item.id, label: item.label, icon: <span class="size-4 shrink-0 grid place-items-center"><PlaceGlyph project={item.project} /></span> })),
+  ],
+} : null;
+
+export const harnessChoice = (harnesses: Array<{ id: string; label: string }>, value: string, onChange: (id: string) => void): ListChoice => ({
+  label: "Harness", value, onChange,
+  options: [
+    { value: "", label: "All harnesses", icon: <LayersIcon class="size-4" /> },
+    ...harnesses.map((item) => ({ value: item.id, label: item.label, icon: <HarnessMark id={item.id} class="size-4" /> })),
+  ],
+});
+
+/** The chats list's compact heading: the list showing and its count. */
+export function CompactHeading(props: { label: string; count: number; where?: string | false }) {
+  return <h2 class="split-compact-heading">{props.label}<small>{props.count}</small><Show when={props.where}><span>{props.where}</span></Show></h2>;
+}
+
 /** The profiles the given chats were started with, in the catalogue's order. */
 export function profilesInUse<T extends { templateId?: string }>(templates: Array<{ id: string; label: string; implementation?: string }>, chats: T[]) {
   const used = new Set(chats.map((chat) => chat.templateId).filter(Boolean));
