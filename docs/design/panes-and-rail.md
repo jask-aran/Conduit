@@ -107,6 +107,40 @@ and the leader, so nothing is drag-only.
 - The side with the keyboard is the current region: the composer, the leader
   and Esc resolve inside it first.
 
+## Design language
+
+Every stage builds to `DESIGN.md`; read it before each one. What it means here:
+
+- **Surfaces.** The rail is frame. The dock and each split side are panes: no
+  hairline boxes, one-line rows grouped by heading and space. Drop targets,
+  menus and anything that floats while dragging are frost. Choose the surface
+  before any colour, border or radius.
+- **Interaction.** The rail, tool headers and every list in a tool follow the
+  one grammar: grey at rest, the wash as the one cursor, the current item
+  white and semibold (its icon at an eighth-of-size stroke) with no fill. No
+  focus rings, outlines, coloured bars or blue: a drop target shows where a
+  tool will land with the wash, not an outline or a tint.
+- **Migrating the panel.** The workspace panel is on DESIGN.md's Being
+  migrated list (hairline tiles and `outline: var(--ring)` focus rings). Each
+  view moves to the pane language as it is touched in stage 1 or 2, and comes
+  off that list once it is there.
+- **Headers.** Tool headers follow Pane header and share the top line of the
+  app: 14px icons centred on the breadcrumb's capitals. A mode switch is the
+  Segmented choice and takes ↑ from its list's first row (Keyboard).
+- **Breakpoints.** Side and dock minimums are measured from each view's
+  controls; controls never squeeze, they draw together and then fold into a
+  ⋯. DESIGN.md's "~420px" for the main pane becomes that measured minimum.
+- **Motion.** The dock leaves toward the rail and returns from it; a tool
+  moving between dock and split fades in where it lands rather than crossing
+  the pane (A layout switch); a split side slides over its neighbour instead
+  of squeezing it. Transform and opacity only, removed under reduced motion.
+- **Held focus.** Each split side is a region, so it gets the held-focus line
+  along its bottom like the dock does.
+- **DESIGN.md changes with each stage.** Stage 1 rewrites its workspace panel
+  lines (the "tiled split" in Layout, "the workspace panel's tabs" in
+  Keyboard) for the dock and rail; stage 2 adds the split. Anything cut from
+  DESIGN.md is confirmed first.
+
 ## Keyboard
 
 - **Ctrl+Shift+1/2/3** stay sidebar, main pane, dock. In a split, 2 goes to
@@ -151,6 +185,39 @@ navigation between views. No visible change.
 - Tool headers take the layout above.
 - Acceptance: everything the panel does today is reachable from the rail;
   keys, held focus and the leader work as before; phone unchanged.
+
+**Starting stage 1** (paths under `conduit-web/src/client/`):
+
+- Read first: `DESIGN.md` (whole), `AGENTS.md`, the Design language section
+  above.
+- `workspace/workspace-panel.tsx` is the dock. Its tab strip is the
+  `role="tab"` buttons (`changePaneTab`); its internal split is
+  `secondaryTab`, `splitRatio`, `splitActive`, `panePosition`, the
+  `workspace-split-resize-handle` and `toggleSplit`. The views (`FilesView`,
+  `SourceControlView`, `ChatView`, `TerminalView`) and their controllers do
+  not need to change beyond the `position`/`expanded` props the split fed.
+- `main.tsx` mounts the panel (`lazy(() => import("./workspace/workspace-panel"))`)
+  and owns `panelOpen`, `togglePanel`, `toggleWorkspaceExpanded`,
+  `maximizeWorkspacePanel`, `focusWorkspacePanel` and the header's
+  `PanelRightIcon` toggle (desktop button and the ⋯ menu item). The rail
+  mounts here, beside the panel, and the panel's `requestedTab` is how it
+  asks for a tool.
+- `commands/command-registry.ts`: `workspaceSplit` goes; the per-tool
+  commands stay and show their tool as the rail does.
+- `workspace/workspace-panel-storage.ts` holds the remembered tab, split and
+  widths per scope; drop the split's keys and keep reading old values
+  harmlessly.
+- Styles: `workspace/workspace.css`. The sidebar's collapsed rail
+  (`navigation/sidebar.tsx`, `navigation/sidebar.css`) is the reference for
+  the right rail's size, icons and fade-in.
+- The Computer page mounts the same panel with a `computer` scope
+  (`initialDirectory`); it keeps working, with or without a rail of its own.
+- Validate per `AGENTS.md`: one surgical probe of the touched behaviour (the
+  panel's Playwright probe pattern: open each tool from the rail, maximise,
+  Ctrl+Shift+3, Esc), no new tests, then
+  `bash .devcontainer/start-conduit.sh restart` from the repository root.
+- Update `DESIGN.md` (Layout, Keyboard and Being migrated lines for the
+  panel) in the same change, and this file's status.
 
 ### 2. Main-pane splits
 
