@@ -11,8 +11,3 @@ export const NON_PHONE_LAYOUT_QUERY = `(min-width: ${MOBILE_LAYOUT_BREAKPOINT_PX
  *  least (split.css) and its gutters. The workspace panel stops growing here. */
 export const MIN_MAIN_PANE_WIDTH = 420;
 
-/** Below this a desktop dashboard takes its phone arrangement -- the Filters
- *  menu, folding groups, quiet changes -- in the main pane alone. Lower than
- *  the phone breakpoint: a mouse and keyboard make the desktop controls usable
- *  narrower than touch does. */
-export const COMPACT_DASHBOARD_WIDTH = 560;
