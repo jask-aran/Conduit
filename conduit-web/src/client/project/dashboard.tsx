@@ -461,7 +461,7 @@ export function ProjectDashboard(props: {
   </SplitGroup>;
 
   return <>
-    <SplitDashboard class="workspace-dashboard" label={`${props.project.name} dashboard`}
+    <SplitDashboard class="workspace-dashboard" page={isWorkspace() ? "Workspace" : "Project"} label={`${props.project.name} dashboard`}
       header={<SplitHeader title={props.project.name} kind={kindLabel(props.project)}
         glyph={<Show when={isWorkspace()} fallback={<FolderGit2Icon />}><WorkspaceGlyph appearance={activeAppearance()} /></Show>}
         context={[

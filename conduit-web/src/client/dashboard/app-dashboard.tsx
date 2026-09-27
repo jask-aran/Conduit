@@ -251,7 +251,7 @@ export function AppDashboard(props: {
     </Show>
   </SplitGroup>;
 
-  return <SplitDashboard class="app-dashboard" label="Conduit dashboard"
+  return <SplitDashboard class="app-dashboard" page="Dashboard" label="Conduit dashboard"
     header={<SplitHeader title="Conduit" context={[
       running() ? `${running()} running` : "Nothing running",
       unread() ? `${unread()} unread` : null,

@@ -1,5 +1,5 @@
 /// <reference types="vite-plugin-pwa/client" />
-import { focusSplitSection } from "./dashboard/primitives/split-cursor";
+import { focusSplitSection, splitSections } from "./dashboard/primitives/split-cursor";
 import { isConduitManagedProject } from "./navigation/sidebar-preferences";
 import type { ComputerLocation, ComputerPrefetchPayload } from "./api/contracts";
 import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, For, lazy, on, onCleanup, onMount, Show, untrack, type JSX } from "solid-js";
@@ -2313,11 +2313,9 @@ function App() {
       // A dashboard is the chat's sibling region and keeps what the main pane
       // could do there before regions had names.
       shortcutManager.registerHandler(COMMAND_IDS.stashPrompt, "dashboard", stashPrompt),
-      shortcutManager.registerHandler(COMMAND_IDS.dashboardComposer, "dashboard", () => { focusSplitSection("composer"); }),
-      shortcutManager.registerHandler(COMMAND_IDS.dashboardChats, "dashboard", () => { focusSplitSection("chats"); }),
-      shortcutManager.registerHandler(COMMAND_IDS.dashboardProjects, "dashboard", () => { focusSplitSection("projects"); }),
-      shortcutManager.registerHandler(COMMAND_IDS.dashboardWorkspaces, "dashboard", () => { focusSplitSection("workspaces"); }),
-      shortcutManager.registerHandler(COMMAND_IDS.dashboardTerminals, "dashboard", () => { focusSplitSection("terminals"); }),
+      // Each page declares its sections; the leader offers the ones it has.
+      ...([["dashboardComposer", "composer"], ["dashboardChats", "chats"], ["dashboardProjects", "projects"], ["dashboardWorkspaces", "workspaces"], ["dashboardTerminals", "terminals"], ["dashboardChanges", "changes"], ["dashboardFiles", "files"]] as const)
+        .map(([id, section]) => shortcutManager.registerHandler(COMMAND_IDS[id], "dashboard", () => { focusSplitSection(section); }, { when: () => splitSections().has(section) })),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "dashboard", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
     ];
     const uninstallShortcuts = shortcutManager.install(window);
