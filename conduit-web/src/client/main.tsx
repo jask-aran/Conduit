@@ -1499,7 +1499,11 @@ function App() {
         return;
       }
       driveLiveId = live.id;
-      await drive.attach(live, live.threadTitle || target.title);
+      if (live.threadTitle && live.threadTitle !== target.title) {
+        target = { ...target, title: live.threadTitle };
+        setHarnessThread(target);
+      }
+      await drive.attach(live, target.title);
     } catch (error) {
       if (harnessThread() !== target) return;
       showError(error);

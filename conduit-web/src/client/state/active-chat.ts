@@ -1347,7 +1347,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     // chat and the spawn reaching the runtime stream, and the transcript has
     // already painted from cache by then. Anything the server does report wins,
     // because `derived` is consulted first.
-    if (derived.kind === "idle" && !process && session.launching() === selectedId()) {
+    if (derived.kind === "idle" && !process && selectedId() && session.launching() === selectedId()) {
       return { kind: "starting", label: "Starting agent…" };
     }
     if (derived.kind === "idle") {
