@@ -16,6 +16,7 @@ import { MessageIds, applyArtifactMessageIds, applyMessageIds, entryMessageRows 
 import { PiManager } from "./pi-manager.js";
 import { manifestForImplementation } from "./harnesses/index.js";
 import { ChatStore, chatView, isChatId } from "./chat-store.js";
+import { resolveComputerContext } from "./computer-context.js";
 import { AttachmentStore } from "./attachment-store.js";
 import { RuntimeHub } from "./runtime-hub.js";
 import { defaultsFromEnv, RuntimeSettingsStore } from "./runtime-settings.js";
@@ -483,9 +484,11 @@ async function findChatContext(chatId) {
   if (!isChatId(chatId)) return null;
   let chat = registry.metadata(chatId);
   if (!chat) return null;
-  const project = await projects.get(chat.projectId);
+  // An untracked thread's chat can sit in any folder on the Computer, not only
+  // in a workspace.
+  const project = await projects.get(chat.projectId) || await resolveComputerContext(chat.projectId).catch(() => null);
   if (!project) return null;
-  await projects.validate(project);
+  if (!chat.projectId.startsWith("computer:")) await projects.validate(project);
   chat = await ensureChatTemplate(chat, project) || chat;
   return { chat, project };
 }

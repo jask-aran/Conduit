@@ -68,7 +68,7 @@ export function registerChatRoutes(app, {
       }
       const adapter = backends.forImplementation(implementation);
       const sessions = await adapter.listSessions({ cwd: project.workingRoot });
-      const projection = projectBackendSessions({ chats: registry.list({ includeHidden: true }), sessions,
+      const projection = projectBackendSessions({ chats: registry.list({ includeHidden: true, includeUntracked: false }), sessions,
         projectId: project.id, implementation });
       response.json({ implementation, replayFidelity: "full",
         ...projection });
@@ -93,7 +93,7 @@ export function registerChatRoutes(app, {
         const session = (await adapter.listSessions({ cwd: project.workingRoot }))
           .find((item) => item.id === request.params.sessionId);
         if (!session) return response.status(404).json({ error: "backend_session_not_found" });
-        const alreadyTracked = registry.list({ includeHidden: true }).find((chat) =>
+        const alreadyTracked = registry.list({ includeHidden: true, includeUntracked: false }).find((chat) =>
           chat.backend?.implementation === implementation && opaqueSessionId(chat) === session.id);
         if (alreadyTracked) return response.status(409).json({ error: "backend_session_already_tracked", chatId: alreadyTracked.id });
         const chat = await registry.create(project, { backend: {
@@ -112,6 +112,23 @@ export function registerChatRoutes(app, {
         }
         response.status(201).json(chatView(registry.metadata(chat.id)));
       });
+    } catch (error) { next(error); }
+  });
+
+  // Tracking an untracked thread keeps its chat and everything in it, and only
+  // makes it Conduit's: it stops being hidden and belongs to the workspace its
+  // folder is, which the caller has made one if it was not.
+  app.post("/v0/chats/:chatId/track", async (request, response, next) => {
+    try {
+      const context = await findChatContext(request.params.chatId);
+      if (!context) return response.status(404).json({ error: "chat_not_found" });
+      if (!context.chat.untracked) return response.json(chatView(context.chat));
+      const project = await projects.get(String(request.body?.projectId || ""));
+      if (!project || project.workingRoot !== context.project.workingRoot) {
+        return response.status(400).json({ error: "workspace_mismatch" });
+      }
+      await registry.update(context.chat.id, { untracked: false, projectId: project.id });
+      response.json(chatView(registry.metadata(context.chat.id)));
     } catch (error) { next(error); }
   });
 

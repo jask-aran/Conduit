@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { rememberModel, rememberedModel } from "../../profile-model-memory.js";
 import fs from "node:fs/promises";
 import { chatView } from "../../chat-store.js";
-import { computerContext } from "../../computer-context.js";
+import { computerContext, resolveComputerContext } from "../../computer-context.js";
 import { groupThreadsByFolder, trackedByThread } from "../../harness-threads.js";
 import { MANIFESTS } from "../../harnesses/index.js";
 
@@ -94,7 +94,7 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
       const adapter = backends.forImplementation(implementation);
       if (!adapter.listSessions) return response.json({ tracked: [], sessions: [], replayFidelity: "from-now" });
       const sessions = await adapter.listSessions({ cwd: project.workingRoot });
-      const tracked = registry.list({ includeHidden: true }).filter((chat) =>
+      const tracked = registry.list({ includeHidden: true, includeUntracked: false }).filter((chat) =>
         chat.projectId === project.id && chat.backend?.implementation === implementation);
       const trackedIds = new Set(tracked.map(opaqueSessionId).filter(Boolean));
       response.json({ tracked: tracked.map(chatView), sessions: sessions.filter((session) => !trackedIds.has(session.id)), replayFidelity: "full" });
@@ -115,7 +115,7 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
       const requested = typeof request.query.path === "string" && request.query.path ? request.query.path : null;
       const cwd = requested ? (await resolveFolder(requested)).workingRoot : undefined;
       const threads = await adapter.listThreads({ cwd, limit });
-      const tracked = trackedByThread(registry.list({ includeHidden: true }), implementation);
+      const tracked = trackedByThread(registry.list({ includeHidden: true, includeUntracked: false }), implementation);
       const groups = groupThreadsByFolder(threads, { tracked });
       await Promise.all(groups.map(async (group) => { group.missing = !(await isDirectory(group.path)); }));
       response.json({ scope: requested ? "folder" : "machine", groups, truncated: threads.length >= limit });
@@ -210,6 +210,73 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
       else modes = await refreshPermissionModes(implementation, cwd, adapter);
       const selected = (modes.some((mode) => mode.id === "custom") ? "custom" : modes[0]?.id) || "";
       response.json({ modes, selected });
+    } catch (error) { next(error); }
+  });
+
+  /*
+   * Open a thread that is not in Conduit, or start one.
+   *
+   * It runs as a Conduit chat that no list shows, so everything a tracked chat
+   * does -- attachments, steering, editing, forking, checkpoints -- works the
+   * same way here. Tracking it only stops hiding it; leaving deletes it and the
+   * thread stays with the harness. A thread Conduit already tracks opens as
+   * that chat instead, and one already open is opened again, not duplicated.
+   */
+  app.post("/v0/harnesses/:implementation/threads/open", async (request, response, next) => {
+    try {
+      const implementation = request.params.implementation;
+      const manifest = backends.manifestFor?.(implementation);
+      if (!manifest?.drive || !backends.adapters.has(implementation)) {
+        return response.status(409).json({ error: "harness_drive_unavailable" });
+      }
+      const adapter = backends.forImplementation(implementation);
+      const every = registry.list({ includeHidden: true, includeUntracked: true })
+        .filter((chat) => chat.backend?.implementation === implementation);
+      const reply = async (chat, tracked = false) => {
+        const project = await projects.get(chat.projectId) || await resolveComputerContext(chat.projectId);
+        return response.json({ chat: chatView(chat), project: { ...project, sessions: [] }, tracked });
+      };
+      const chatId = typeof request.body?.chatId === "string" ? request.body.chatId : "";
+      if (chatId) {
+        const open = every.find((chat) => chat.id === chatId);
+        return open ? reply(open, !open.untracked) : response.status(404).json({ error: "chat_not_found" });
+      }
+      const folder = await resolveFolder(String(request.body?.path || ""));
+      const sessionId = typeof request.body?.sessionId === "string" ? request.body.sessionId : "";
+      if (sessionId) {
+        const known = every.find((chat) => opaqueSessionId(chat) === sessionId && !chat.untracked)
+          || every.find((chat) => opaqueSessionId(chat) === sessionId);
+        if (known) return reply(known, !known.untracked);
+      }
+      const workspace = (await projects.list()).find((project) => project.kind === "workspace" && project.workingRoot === folder.workingRoot);
+      const project = workspace || folder;
+      const backend = { profileId: implementation, profileRevision: null, management: "agent", protocol: manifest.protocol,
+        implementation, installationId: manifest.installationId };
+      if (sessionId) {
+        const session = (await adapter.listThreads({ cwd: folder.workingRoot })).find((item) => item.id === sessionId);
+        if (!session) return response.status(404).json({ error: "backend_session_not_found" });
+        const chat = await registry.create(project, { backend: { ...backend, opaqueSession: { threadId: session.id } }, untracked: true });
+        const timestamp = new Date().toISOString();
+        await registry.update(chat.id, { status: "active", title: session.title || "",
+          lastMessageAt: session.updatedAt || timestamp, lastReadAt: timestamp });
+        return reply(registry.metadata(chat.id));
+      }
+      // A new thread carries what the harness's page chose for it, as a new
+      // chat carries what its composer chose.
+      const model = String(request.body?.model || "").trim();
+      const thinkingLevel = String(request.body?.thinkingLevel || "").trim();
+      const requestedMode = String(request.body?.permissionMode || "").trim();
+      const mode = requestedMode && typeof adapter.listAvailablePermissionModes === "function"
+        ? (await adapter.listAvailablePermissionModes(folder.workingRoot)).find((candidate) => candidate.id === requestedMode && candidate.allowed)
+        : null;
+      const chat = await registry.create(project, { untracked: true, backend: { ...backend,
+        ...(model ? { model } : {}),
+        ...(mode ? { permissionMode: mode.id, ...(mode.profile ? { permissionProfile: mode.profile } : {}),
+          ...(mode.approvalPolicy ? { approvalPolicy: mode.approvalPolicy } : {}),
+          ...(mode.approvalsReviewer ? { approvalsReviewer: mode.approvalsReviewer } : {}) } : {}),
+      } });
+      if (model && thinkingLevel) await registry.update(chat.id, { modelThinkingLevels: { [model]: thinkingLevel } });
+      return reply(registry.metadata(chat.id));
     } catch (error) { next(error); }
   });
 
