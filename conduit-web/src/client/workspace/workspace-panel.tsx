@@ -602,7 +602,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     <Show when={requests.loading()}><div class="workspace-panel-loading"><Spinner /><span>Loading workspace</span></div></Show>
     </div>
   </aside>
-    <Show when={props.splitHost?.() && props.splitView?.()}>{(tool) =>
+    <Show when={props.splitHost?.() && props.splitView?.() && !props.splitView()!.startsWith("chat:") && props.splitView()}>{(tool) =>
       <Portal mount={props.splitHost!()!}>
         <div class="workspace-split-surface">
           {toolHeader(tool, "split")}

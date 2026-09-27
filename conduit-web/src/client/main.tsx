@@ -6,7 +6,7 @@ import { batch, createEffect, createMemo, createRenderEffect, createSignal, Erro
 import { render } from "solid-js/web";
 import { androidShell, desktopShell, isInstalledClient } from "./platform/installed-client.ts";
 import {
-  EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ServerIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon,
+  ArrowLeftRightIcon, EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ServerIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon, XIcon,
 } from "lucide-solid";
 import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
@@ -67,6 +67,7 @@ import { markChatRead } from "./state/read-receipts";
 import { createModelSettings, notifyModelFallback } from "./state/model-settings";
 import { createPermissionSettings } from "./state/permission-settings";
 import { createServiceLevelSettings } from "./state/service-level-settings";
+import { createSideChat } from "./state/side-chat";
 import { createRuntimeStore } from "./state/runtime";
 import { VoiceWaveform } from "./chat/voice-waveform";
 import { browserShortcutEnvironmentProvider } from "./shortcuts/shortcut-environment";
@@ -423,6 +424,8 @@ function ChatHeader(props: {
   appDashboard?: boolean;
   /** The page is a place of its own (Computer): no crumb before its title. */
   alone?: boolean;
+  /** Last in the actions: a chat beside the main one swaps or closes here. */
+  actions?: JSX.Element;
 }) {
   // What a project or workspace page calls itself in its own menu.
   const placeKind = () => props.project && isWorkspace(props.project) ? "workspace" : "project";
@@ -516,6 +519,7 @@ function ChatHeader(props: {
             </Show>
           </MenuContent>
         </Menu></Show>
+        {props.actions}
       </HeaderActions>
     </header>
   </>;
@@ -901,6 +905,10 @@ function App() {
     }),
     defaultTemplateId,
     saveWorkspaceDefault,
+  });
+  const side = createSideChat({
+    runtime, projects: catalogue.projects, refresh: catalogue.refresh, patchChat: catalogue.patchChat, drafts, maxAttachmentBytes,
+    onError: showError, defaultTemplateId, saveWorkspaceDefault,
   });
   // Not awaited: a round trip in front of first paint is a poor price for a
   // race that asking again closes. A chat that opened before this landed is
@@ -1718,7 +1726,10 @@ function App() {
     if (handled) event.preventDefault();
   };
   const focusComposer = () => {
-    document.querySelector<HTMLTextAreaElement>(".composer textarea:not([disabled])")?.focus({ preventScroll: true });
+    const composer = ".composer textarea:not([disabled])";
+    ((sideHasKeyboard() ? document.querySelector<HTMLTextAreaElement>(`.main-split ${composer}`) : null)
+      ?? document.querySelector<HTMLTextAreaElement>(`.chat-main ${composer}`)
+      ?? document.querySelector<HTMLTextAreaElement>(composer))?.focus({ preventScroll: true });
   };
   const focusChatPane = () => {
     const target = document.querySelector<HTMLElement>(".chat-main");
@@ -2105,7 +2116,7 @@ function App() {
     return true;
   };
   const focusSplit = () => requestAnimationFrame(() => {
-    const content = splitHost()?.querySelector<HTMLElement>(".workspace-panel-content");
+    const content = splitHost()?.querySelector<HTMLElement>(".workspace-panel-content, .composer textarea:not([disabled])");
     focusFirst(content);
     if (!content?.contains(document.activeElement)) content?.focus({ preventScroll: true });
   });
@@ -2136,6 +2147,61 @@ function App() {
     else if (panelOpen() && dockTool() === tool) closePanel();
     else openWorkspaceView(tool);
   };
+  /*
+   * A second chat beside the main one (stage 4). The left side keeps the URL
+   * and the catalogue's selection; the side with the keyboard owns the
+   * composer's keys, dictation and the sidebar's current row, and the other
+   * chat is marked open there.
+   */
+  const sideChatId = () => { const view = splitView(); return view?.startsWith("chat:") ? view.slice("chat:".length) : null; };
+  const [keyboardSide, setKeyboardSide] = createSignal<"main" | "side">("main");
+  const sideHasKeyboard = () => keyboardSide() === "side" && splitShown() && Boolean(sideChatId());
+  const noteKeyboardSide = (event: FocusEvent) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest(".main-split")) setKeyboardSide("side");
+    else if (target?.closest(".chat-main")) setKeyboardSide("main");
+  };
+  document.addEventListener("focusin", noteKeyboardSide);
+  onCleanup(() => document.removeEventListener("focusin", noteKeyboardSide));
+  const mainChatId = () => routeKind() === "chat" ? catalogue.selectedId() : null;
+  const openChatBeside = (target: ChatSummary, project: Project) => {
+    if (isMobileLayout()) return void openChat(target, project);
+    if (target.id === mainChatId()) return;
+    markChatRead(catalogue, target);
+    openBeside(`chat:${target.id}`);
+  };
+  // Alt on the click or key that opened a chat, from a page that has no way
+  // to say so itself.
+  const altActivation = () => { const event = window.event; return (event instanceof MouseEvent || event instanceof KeyboardEvent) && event.altKey; };
+  const openChatFromPage = async (target: ChatSummary, project: Project) => { if (altActivation()) openChatBeside(target, project); else await openChat(target, project); };
+  // The side's chat follows the split: opened when it names one, let go when
+  // it names something else, and the split closed when the chat is gone.
+  createEffect(on(() => [sideChatId(), catalogue.loaded()] as const, ([id, loaded]) => {
+    if (!id) {
+      if (untrack(side.selectedId)) side.close();
+      return;
+    }
+    if (untrack(side.selectedId) === id || !loaded) return;
+    const found = untrack(catalogue.projects).flatMap((project) => project.sessions.map((item) => ({ chat: item, project }))).find((item) => item.chat.id === id);
+    if (found) void side.open(found.chat, found.project).catch(showError);
+    else saveSplitView(null);
+  }));
+  // The same chat on both sides is one chat: the main pane taking it closes the side.
+  createEffect(() => { if (sideChatId() && sideChatId() === mainChatId()) saveSplitView(null); });
+  // The side's chat takes the main pane; the chat there, if any, moves beside.
+  const swapSideChat = () => {
+    const beside = side.selected();
+    if (!beside) return;
+    const previous = routeKind() === "chat" ? catalogue.selected() : null;
+    void openChat(beside.chat, beside.project).then(() => {
+      if (previous && previous.chat.id !== beside.chat.id) saveSplitView(`chat:${previous.chat.id}`);
+    });
+  };
+  const sideManifest = createMemo(() => manifestForChat(harnessCapabilities(), side.selected()?.chat) || null);
+  const sideCapability = (name: BooleanCapability, fallback = false): boolean => resolveCapability(sideManifest(), side.chat.capabilities(), name, fallback);
+  const sideProfile = createMemo(() => profiles().find((item) => item.id === side.chat.templateId()) || null);
+  const [sideComposerStatus, setSideComposerStatus] = createSignal<ComposerStatus | null>(null);
+  let sideAttachInput: HTMLInputElement | undefined;
   // The transcript learns its width only from geometry motion, so the split
   // announces every change of the room it takes from the chat.
   let splitMotionId = 0;
@@ -2194,8 +2260,7 @@ function App() {
     setWorkspaceExpanded(next);
     if (next) focusWorkspacePanel();
   };
-  const shareChat = async () => {
-    const chatId = catalogue.selectedId();
+  const shareChat = async (chatId = catalogue.selectedId()) => {
     if (!chatId) return;
     try {
       const { origin } = await api<{ origin: string }>("/v0/share-origin");
@@ -2869,7 +2934,7 @@ function App() {
       </DialogContent>
     </Dialog>
     <Show when={routeKind() !== "terminal"}>
-    <Sidebar projects={catalogue.projects()} catalogueLoaded={catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard"} project={routeKind() === "project"} computer={routeKind() === "computer"} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
+    <Sidebar projects={catalogue.projects()} catalogueLoaded={catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={sideHasKeyboard() ? sideChatId() : null} openId={splitShown() && sideChatId() ? (sideHasKeyboard() ? mainChatId() : sideChatId()) : null} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard"} project={routeKind() === "project"} computer={routeKind() === "computer"} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
@@ -2967,7 +3032,7 @@ function App() {
               }}
             />}
             runtime={runtime}
-            onOpenChat={(target, project) => void openChat(target, project)}
+            onOpenChat={(target, project) => void openChatFromPage(target, project)}
             onPrefetchChat={chat.prefetch}
             onOpenProject={(project) => void openProject(project)}
             onPrefetchProject={prefetchProjectDashboard}
@@ -3038,7 +3103,7 @@ function App() {
           <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
           <Conversation chat={chat} busy={openingLiveChat()} stackRef={(element) => { chatComposerStack = element; }}
             transcript={<Transcript chat={chat} supports={chatCapability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} projectId={selectedProject()?.id} />}
-            composer={<Composer chat={chat} place={chatPlace()} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} />} />
+            composer={<Composer chat={chat} place={chatPlace()} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} keyboardOwner={() => !sideHasKeyboard()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={() => attachFileInput?.click()} onStatusChange={setComposerStatus} />} />
         </>}>
           <ChatHeader project={selectedProject()} title={selectedProject()!.name} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} dashboard />
           <ProjectDashboard project={selectedProject()!} runtime={runtime} profiles={profiles()} onOpenHarnessThread={(harnessId, path, id, title) => void openHarnessThread({ harnessId, path, id, title })}
@@ -3079,7 +3144,7 @@ function App() {
                 await sendFromDashboard();
               }}
             />}
-            onOpenChat={(target: DashboardChat, project) => openChat(target, project)}
+            onOpenChat={(target: DashboardChat, project) => openChatFromPage(target, project)}
             onOpenChatTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
             onPrefetchChat={chat.prefetch}
             onContextAction={(type, target) => runSidebar(type, target)}
@@ -3096,8 +3161,21 @@ function App() {
       </Show>
     </main>
     <Show when={splitShown()}>
-      <section ref={(element) => { setSplitHost(element); onCleanup(() => setSplitHost(undefined)); }} class="main-split" data-region="workspace-panel" aria-label="Main pane split" style={{ flex: `${splitRatio()} 1 0`, "min-width": `${MIN_SPLIT_PANE_WIDTH}px` }}>
+      <section ref={(element) => { setSplitHost(element); onCleanup(() => setSplitHost(undefined)); }} class="main-split" data-region={sideChatId() ? "chat" : "workspace-panel"} aria-label="Main pane split" style={{ flex: `${splitRatio()} 1 0`, "min-width": `${MIN_SPLIT_PANE_WIDTH}px` }}>
         <div class="main-split-resize" role="separator" aria-label="Resize main pane split" aria-orientation="vertical" onPointerDown={startSplitResize} />
+        <Show when={sideChatId()}>
+          <div class="main-split-chat">
+            <input ref={sideAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) side.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
+            <ChatHeader project={side.selected()?.project} onOpenPlace={openPlace} title={side.chat.title() || (side.chat.status() === "active" ? "Untitled chat" : "New chat")} profile={sideProfile()} runtime={side.chat.runtimeIdentity()} live={side.chat.live() as unknown as Record<string, unknown>} chat={side.chat} contextMetrics={contextMetrics} composerStatus={sideComposerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={false} onToggleMobileSidebar={() => {}} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareChat(side.selectedId())} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating}
+              actions={<>
+                <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label="Swap with the main chat" title="Swap with the main chat" onClick={swapSideChat}><ArrowLeftRightIcon /></Button>
+                <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label="Close this chat" title="Close" onClick={() => closeSplit()}><XIcon /></Button>
+              </>} />
+            <Conversation chat={side.chat} busy={side.chat.presentation().kind === "opening_live"}
+              transcript={<Transcript chat={side.chat} supports={sideCapability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={sideProfile()?.label || sideProfile()?.id || side.chat.templateId() || undefined} projectId={side.selected()?.project.id} />}
+              composer={<Composer chat={side.chat} supports={sideCapability} attachments={side.attachments} attachmentsSupported={sideCapability("attachments", true)} models={side.models} permissions={sideCapability("permissionModes") ? side.permissions : undefined} serviceLevels={sideManifest()?.serviceLevels?.length ? side.serviceLevels : undefined} profiles={profiles()} activeProfile={sideProfile()} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} keyboardOwner={sideHasKeyboard} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => sideAttachInput?.click()} onStatusChange={setSideComposerStatus} />} />
+          </div>
+        </Show>
       </section>
     </Show>
     <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={splitView} splitHost={splitHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>

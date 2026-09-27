@@ -70,6 +70,8 @@ export function Composer(props: {
   contextMetrics?: () => readonly ContextMetricId[];
   serverOnline: boolean;
   voiceSettings: VoiceDictationSettings;
+  /** With two chats side by side, whether this composer's side has the keyboard, and with it the dictation key. */
+  keyboardOwner?: () => boolean;
   onChooseProfile: (id: string) => void;
   onOpenSettings: (section: string) => void;
   onOpenModelSelector?: () => void;
@@ -472,6 +474,7 @@ export function Composer(props: {
     const composerSurfaceChanged = (event: Event) => setComposerSurface((event as CustomEvent<ComposerSurfaceMode>).detail);
     const voiceKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || document.querySelector('.settings-dialog[data-state="open"]')) return;
+      if (props.keyboardOwner && !props.keyboardOwner()) return;
       if (!matchesShortcut(event, props.voiceSettings.shortcut)) return;
       event.preventDefault();
       event.stopPropagation();
@@ -495,7 +498,7 @@ export function Composer(props: {
       pushToTalkActive = false;
       voiceClient.stop();
     };
-    const voiceToggle = () => toggleDictation();
+    const voiceToggle = () => { if (!props.keyboardOwner || props.keyboardOwner()) toggleDictation(); };
     window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, composerSurfaceChanged);
     window.addEventListener("keydown", voiceKeyDown, true);
     window.addEventListener("keyup", voiceKeyUp, true);

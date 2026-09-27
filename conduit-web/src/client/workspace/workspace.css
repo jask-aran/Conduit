@@ -79,6 +79,8 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .main-split { position: relative; display: flex; min-width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 8px 6.4px 0; flex-direction: column; border-radius: 12.8px; background: var(--background); }
 .main-split > div:not(.main-split-resize) { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; }
 .workspace-split-surface { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; container-name: workspace-surface; container-type: inline-size; }
+/* A chat beside the main one: laid out as the main pane's chat is, measured by its own width. */
+.main-split-chat { --chat-header-height: 44.8px; position: relative; isolation: isolate; container-type: inline-size; container-name: chat-main; color: var(--foreground); }
 .main-split-resize { position: absolute; z-index: 5; inset-block: 0; left: -8px; width: 8px; cursor: col-resize; touch-action: none; }
 /* Where a view dragged from the dock will land: the chat's right half, washed. */
 .main-split-drop { position: absolute; z-index: 30; inset: 8px 8px 8px 50%; border-radius: 10px; background: var(--accent); pointer-events: none; }
