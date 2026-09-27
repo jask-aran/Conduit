@@ -1,5 +1,6 @@
 /* Project and workspace dashboards (split.tsx). Two columns while the pane is
-   760px or wider: the composer and the threads list at the composer's width
+   648px or wider -- the composer's width and one column's gutters, so one
+   column starts already filling the pane: the composer and the threads list at the composer's width
    on the left, what is live and what changed on the right, each scrolling on
    its own so one long list cannot stretch the page. Narrower, one column. */
 .split-dashboard { position: relative; z-index: 1; container: split-dashboard / inline-size; display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: auto; scrollbar-width: var(--native-scrollbar-width); }
@@ -70,7 +71,7 @@
    heading's text actions end. */
 .split-group-actions .split-counts { padding-inline: 6px; font-size: 9.6px; }
 
-@container split-dashboard (max-width: 759px) {
+@container split-dashboard (max-width: 647px) {
   .split-dashboard-body { display: flex; width: min(var(--composer-desktop-reference-width), calc(100% - 40px)); flex-direction: column; }
   .split-dashboard-head { flex-direction: column; align-items: stretch; gap: 10px; order: 0; }
   .split-dashboard-notice { order: 1; }

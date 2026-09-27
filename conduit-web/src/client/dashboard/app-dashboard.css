@@ -21,7 +21,7 @@
 .app-folder-shelf:not([data-all]) { grid-template-rows: repeat(2, auto); grid-auto-rows: 0; row-gap: 0; overflow: hidden; }
 /* One column on desktop: four to a row whatever the width, so the tiles
    narrow rather than reflow. */
-@container split-dashboard (max-width: 759px) {
+@container split-dashboard (max-width: 647px) {
   .app-folder-shelf { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (--conduit-mobile-layout) {
