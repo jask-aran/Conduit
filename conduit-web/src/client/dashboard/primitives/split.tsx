@@ -62,8 +62,14 @@ async function glide(root: HTMLElement, change: () => void) {
   const before = composer?.getBoundingClientRect();
   change();
   for (const animation of out) animation.cancel();
-  for (const section of sections()) section.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: "ease-out" });
   const after = composer?.getBoundingClientRect();
+  // Into two columns the composer narrows out of the right column's way; its
+  // sections wait until it mostly has, so it never draws over them.
+  const narrowing = Boolean(before && after && after.width < before.width - 1);
+  for (const section of sections()) {
+    const delay = narrowing && section.closest(".split-dashboard-aside") ? 220 : 0;
+    section.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, delay, easing: "ease-out", fill: "backwards" });
+  }
   if (composer && before && after && Math.abs(before.width - after.width) > 1) composer.animate([
     { width: `${before.width}px`, transform: `translate(${before.left - after.left}px, ${before.top - after.top}px)` },
     { width: `${after.width}px`, transform: "none" },
