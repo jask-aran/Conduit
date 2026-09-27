@@ -60,8 +60,8 @@ function createFullscreenPortalMount() {
 export function DialogContent(props: ParentProps<{ class?: string; title?: string; description?: string; closeLabel?: string }>) {
   const portalMount = createFullscreenPortalMount();
   return <KDialog.Portal mount={portalMount()}>
-    <KDialog.Overlay class="fixed inset-0 z-[150] bg-black/50 data-[expanded]:animate-in data-[closed]:animate-out" />
-    <KDialog.Content class={cn("fixed left-1/2 top-1/2 z-[150] grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-lg border bg-background p-6 shadow-lg outline-none", props.class)}>
+    <KDialog.Overlay class="conduit-dialog-overlay fixed inset-0 z-[150] data-[expanded]:animate-in data-[closed]:animate-out" />
+    <KDialog.Content class={cn("conduit-dialog fixed left-1/2 top-1/2 z-[150] grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto p-6 outline-none", props.class)}>
       <Show when={props.title}><KDialog.Title class="text-lg font-semibold">{props.title}</KDialog.Title></Show>
       <Show when={props.description}><KDialog.Description class="text-sm text-muted-foreground">{props.description}</KDialog.Description></Show>
       {props.children}

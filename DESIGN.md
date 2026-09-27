@@ -194,7 +194,7 @@ The charcoal is cool-neutral at chroma ~0.004–0.006. That gray is the brand. D
 - **foreground / muted-foreground** — type. Muted for timestamps, hints, empty states, icons at rest.
 - **border** — 1px hairlines: inputs, a header or footer rule, and dividers. Grouping is a heading and space, with at most one hairline between groups -- not a hairline box and not a fill. Do not outline the main or workspace pane with a hairline.
 - **accent** — white at 6–7% opacity. This is hover, pressed, and selected. Selection is a gray wash, never a hue.
-- **card / popover** — slightly raised solids, left on tool cards and on dialogs until they move to frost (Being migrated). Overlays -- palettes, the leader, menus, Settings, dialogs -- are frost (Surfaces). The `overlay-*` tokens are the leader's old ink-dark face; they go once no code uses them.
+- **card / popover** — slightly raised solids, left on tool cards. Overlays -- palettes, the leader, menus, Settings, dialogs -- are frost (Surfaces). The `overlay-*` tokens are the leader's old ink-dark face; they go once no code uses them.
 - **primary** — near-white. Default buttons and the one bright action.
 - **destructive** — errors and destructive actions only.
 - **live / warn** — tiny runtime dots and git-ish status. Never as fills, rails, or card washes.
@@ -375,6 +375,8 @@ Choosing in a menu:
 
 **Keycap** — 16px square, hairline, muted mono; in the text colour on the cursor row or a clickable rail action.
 
+**Dialog** — confirms and small prompts: a narrow frost card (~320px) over the dim, centred, a small card on a phone too (the attachment list keeps its bottom sheet). The title and the choice, nothing else: no explanatory paragraph (it stays for screen readers), and a one-field prompt drops its label since the title names it. The menus' text size, 26px buttons, an outline button as its hairline alone, and an input as a faint hairline that brightens on focus, never a ring.
+
 **Input-quiet** — borderless inside frost composer or palette search.
 
 ## Pane
@@ -421,7 +423,6 @@ Choosing in a menu:
 
 Surfaces that do not match the language yet. Do not copy them; when you touch one, move it towards its target, and take it off this list once it is there.
 
-- **Dialogs and confirms**: solid cards → frost.
 - **Workspace panel, Computer page, harness dashboards**: hairline tiles (Tiled pane) → the pane. Each waits for its own redesign.
 - **Leftover blue** (Forbidden color) wherever it is found.
 
