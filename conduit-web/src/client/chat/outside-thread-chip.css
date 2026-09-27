@@ -1,0 +1,11 @@
+/* The pill beside an untracked thread's breadcrumb (outside-thread-chip.tsx).
+   Its material is the composer's (composer-surface-material). */
+.outside-thread-chip { display: inline-flex; height: 20px; flex: none; align-items: center; gap: 2px; border-radius: 999px; padding: 0 2px 0 9px; color: var(--muted-foreground); font-size: 9.6px; white-space: nowrap; }
+.outside-thread-chip > button { height: 16px; border: 0; border-radius: 999px; background: transparent; padding: 0 7px; color: var(--foreground); font-size: inherit; font-weight: 600; }
+.outside-thread-chip > button:is(:hover, :focus-visible) { outline: none; background: oklch(1 0 0 / 12%); }
+.outside-thread-chip > button:disabled { color: var(--muted-foreground); }
+
+@media (--conduit-phone-layout) {
+  .outside-thread-chip { height: 28px; padding-left: 11px; font-size: 12px; }
+  .outside-thread-chip > button { height: 24px; padding: 0 10px; }
+}
