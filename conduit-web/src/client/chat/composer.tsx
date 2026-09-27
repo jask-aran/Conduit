@@ -77,6 +77,8 @@ export function Composer(props: {
   onOpenAttachments: () => void;
   onStatusChange?: (status: ComposerStatus | null) => void;
   onSendDraft?: (text: string) => Promise<void>;
+  /** Sending starts the chat (through `onSendDraft`), so there is none to wait for. */
+  launches?: boolean;
   /** The folder button beside attach: where this chat lives. */
   place?: PlaceOptions;
   /** A harness thread's folder, in the place button's slot. */
@@ -109,7 +111,7 @@ export function Composer(props: {
   let historyDraft = "";
 
   const busy = createMemo(() => props.chat.streaming());
-  const interactive = () => props.chat.interactionReady();
+  const interactive = () => Boolean(props.launches) || props.chat.interactionReady();
   const supports = (capability: BooleanCapability) => props.supports?.(capability)
     ?? props.chat.capabilities()?.[capability] !== false;
   const comments = createMemo(() => reviewComments(props.chat.loadedId() ?? ""));
@@ -123,7 +125,7 @@ export function Composer(props: {
   const dictating = createMemo(() => ["starting", "listening", "finishing", "waiting", "transcribing"].includes(dictationState()));
   const recording = createMemo(() => dictationState() === "listening");
   const recorderMonitorState = createMemo(() => dictationState() === "starting" ? "connecting" : dictationState() === "listening" ? "listening" : "stopped");
-  const canSend = createMemo(() => hasPayload() && props.serverOnline && props.chat.interactionReady() && props.chat.generation() !== "stopping"
+  const canSend = createMemo(() => hasPayload() && props.serverOnline && interactive() && props.chat.generation() !== "stopping"
     && (!busy() || supports("steer") || supports("followUpQueue")) && !dictating());
   const activity = createMemo(() => props.chat.activity());
   const sentPrompts = createMemo(() => props.chat.messages()

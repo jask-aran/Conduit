@@ -409,10 +409,15 @@ export function Sidebar(props: {
     media.addEventListener("change", sync);
     onCleanup(() => media.removeEventListener("change", sync));
   });
-  onMount(() => {
+  // Asked again each time the server is back, so a load that landed in a
+  // restart does not leave the harness rows missing until a reload.
+  createEffect(() => {
+    if (props.runtime.connectivity() !== "online") return;
     void api<{ harnesses: HarnessSummary[] }>("/v0/harnesses")
       .then((result) => setHarnesses(result.harnesses.filter((item) => item.available)))
       .catch(() => {});
+  });
+  onMount(() => {
     const loadTerminals = () => void api<{ ptys: Pty[] }>("/v0/ptys")
       .then(({ ptys }) => setTerminals(ptys.filter((item) => item.status === "running" && !item.paneDead)))
       .catch(() => {});

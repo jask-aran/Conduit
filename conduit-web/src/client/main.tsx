@@ -1450,6 +1450,9 @@ function App() {
   // One untracked thread open at a time, on the chat store a Conduit chat
   // uses. It owns nothing in Conduit until it is tracked.
   const drive = createDriveChat({ runtime, onError: showError });
+  // A harness page's composer: a draft with no chat behind it, so typing there
+  // never lands in whichever Conduit chat happens to be loaded.
+  const launcher = createDriveChat({ runtime, onError: showError });
   let driveLiveId = "";
   const closeDriveProcess = () => {
     const live = driveLiveId;
@@ -1541,6 +1544,8 @@ function App() {
   };
   // A thread started from a harness's page opens straight on its own page.
   const startHarnessThread = async (launch: HarnessLaunch) => {
+    // Cleared first, so a second press while the process starts has nothing to send.
+    launcher.chat.setDraft("");
     try {
       const live = await api<DriveRecord>(`/v0/harnesses/${encodeURIComponent(launch.harnessId)}/drive`, {
         method: "POST",
@@ -1554,7 +1559,10 @@ function App() {
         drive.chat.setDraft(launch.prompt);
         await drive.chat.send();
       }
-    } catch (error) { showError(error); }
+    } catch (error) {
+      if (!harnessThread() && !launcher.chat.draft()) launcher.chat.setDraft(launch.prompt);
+      showError(error);
+    }
   };
   // Tracking hands the open process to a Conduit chat in the workspace the
   // thread's folder is -- made one first when it is not.
@@ -2992,7 +3000,7 @@ function App() {
           </>}>{(harnessId) => <>
             <ChatHeader title={harnessLabelFor(harnessId()) || harnessId()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard alone />
             <HarnessDashboard harnessId={harnessId()} projects={catalogue.projects()} runtime={runtime} scope={harnessScope()} onScope={scopeHarness} home={computerLocation()?.home || ""}
-              composer={(input) => <Composer chat={chat} attachments={NO_ATTACHMENTS} attachmentsSupported={false} models={input.models} modelsLoading={input.loading} folder={input.folder} permissions={harnessCapabilities()[harnessProfile(harnessId())?.implementation || ""]?.permissionModes ? input.permissions : undefined} profiles={harnessProfile(harnessId()) ? [harnessProfile(harnessId())!] : []} activeProfile={harnessProfile(harnessId())} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => {}} onSendDraft={(prompt) => input.launch(prompt)} />}
+              composer={(input) => <Composer chat={launcher.chat} launches attachments={NO_ATTACHMENTS} attachmentsSupported={false} models={input.models} modelsLoading={input.loading} folder={input.folder} permissions={harnessCapabilities()[harnessProfile(harnessId())?.implementation || ""]?.permissionModes ? input.permissions : undefined} profiles={harnessProfile(harnessId()) ? [harnessProfile(harnessId())!] : []} activeProfile={harnessProfile(harnessId())} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => {}} onSendDraft={(prompt) => input.launch(prompt)} />}
               onStartThread={startHarnessThread} onOpenThread={(thread) => void openHarnessThread(thread)} onOpenChat={(target, project) => void openChat(target, project)} />
           </>}</Show>}>{(thread) => {
             const workspace = () => catalogue.projects().find((project) => !isConduitManagedProject(project) && project.workingRoot === thread().path);
