@@ -449,7 +449,7 @@ svg.lucide { stroke-width: 2.4; }
 .review-comment-chip { display: inline-flex; min-width: 0; max-width: min(360px, 100%); align-items: center; gap: 4px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); font-size: 10px; line-height: 1.2; }
 .review-comment-chip-link { display: inline-flex; min-width: 0; align-items: center; gap: 4px; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .review-comment-chip-link:disabled { cursor: default; }
-.review-comment-chip-link:focus-visible { border-radius: 3px; outline: 1px solid var(--ring); outline-offset: 2px; }
+.review-comment-chip-link:focus-visible { border-radius: 3px; outline: none; background: var(--accent); color: var(--foreground); }
 .review-comment-chip-link > svg { width: 11px; height: 11px; flex: none; color: var(--muted-foreground); }
 .review-comment-chip-link strong { flex: none; font-weight: 600; }
 .review-comment-chip-link > span { overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
@@ -629,7 +629,6 @@ svg.lucide { stroke-width: 2.4; }
 .command-rename-input { min-width: 0; width: 100%; border: 0.8px solid var(--ring); border-radius: 4px; outline: 0; background: var(--background); padding: 1.6px 4px; color: inherit; font: inherit; }
 .command-detail-pane { width: min(256px, calc(100vw - 22.4px)); max-height: min(480px, calc(100dvh - 22.4px)); overflow: auto; border: 0.8px solid var(--border); border-left: 0; border-radius: 0 11.2px 11.2px 0; background: var(--popover); padding: 12.8px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 6.4px; margin-top: 14.4px; }
-.delete-dialog-choice:focus-visible { box-shadow: inset 0 0 0 0.8px color-mix(in oklch, var(--ring), transparent 55%); }
 .delete-dialog-choice[data-selected="true"][data-variant="outline"] { background: var(--accent); color: var(--accent-foreground); }
 .delete-dialog-confirm[data-variant="outline"] { border-color: color-mix(in oklch, var(--destructive), var(--border) 58%); background: transparent; color: var(--destructive); }
 .palette-move-list { display: flex; flex-direction: column; gap: 1.6px; max-height: 256px; overflow-y: auto; margin-top: 9.6px; }
@@ -1406,7 +1405,6 @@ svg.lucide { stroke-width: 2.4; }
 .command-rename-input { min-width: 0; width: 100%; border: 1px solid var(--ring); border-radius: 5px; outline: 0; background: var(--background); padding: 2px 5px; color: inherit; font: inherit; }
 .command-detail-pane { width: min(320px, calc(100vw - 28px)); max-height: min(600px, calc(100dvh - 28px)); overflow: auto; border: 1px solid var(--border); border-left: 0; border-radius: 0 14px 14px 0; background: var(--popover); padding: 16px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
-.delete-dialog-choice:focus-visible { box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--ring), transparent 55%); }
 .delete-dialog-choice[data-selected="true"][data-variant="outline"] { background: var(--accent); color: var(--accent-foreground); }
 .delete-dialog-confirm[data-variant="outline"] { border-color: color-mix(in oklch, var(--destructive), var(--border) 58%); background: transparent; color: var(--destructive); }
 .palette-move-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; margin-top: 12px; }

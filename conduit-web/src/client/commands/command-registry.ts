@@ -332,7 +332,7 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
   command({
     id: COMMAND_IDS.dashboardComposer,
     label: "Go to composer",
-    description: "Move the dashboard's cursor to the composer",
+    description: "Move the page's cursor to the composer",
     group: "navigation",
     icon: "chat",
     keywords: ["dashboard", "section", "focus", "composer"],
@@ -343,7 +343,7 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
   command({
     id: COMMAND_IDS.dashboardChats,
     label: "Go to chats",
-    description: "Move the dashboard's cursor to the chats list",
+    description: "Move the page's cursor to the chats list",
     group: "navigation",
     icon: "chat",
     keywords: ["dashboard", "section", "focus", "chats"],
@@ -354,7 +354,7 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
   command({
     id: COMMAND_IDS.dashboardProjects,
     label: "Go to Projects",
-    description: "Move the dashboard's cursor to the project folders",
+    description: "Move the page's cursor to the project folders",
     group: "navigation",
     icon: "new-folder",
     keywords: ["dashboard", "section", "focus", "projects"],
@@ -365,7 +365,7 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
   command({
     id: COMMAND_IDS.dashboardWorkspaces,
     label: "Go to Workspaces",
-    description: "Move the dashboard's cursor to the workspaces",
+    description: "Move the page's cursor to the workspaces",
     group: "navigation",
     icon: "workspace-panel",
     keywords: ["dashboard", "section", "focus", "workspaces"],
@@ -376,7 +376,7 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
   command({
     id: COMMAND_IDS.dashboardTerminals,
     label: "Go to Terminals",
-    description: "Move the dashboard's cursor to the terminals",
+    description: "Move the page's cursor to the terminals",
     group: "navigation",
     icon: "terminal",
     keywords: ["dashboard", "section", "focus", "terminals"],
@@ -387,7 +387,7 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
   command({
     id: COMMAND_IDS.dashboardChanges,
     label: "Go to Changes",
-    description: "Move the dashboard's cursor to the working tree's changes",
+    description: "Move the page's cursor to the working tree's changes",
     group: "navigation",
     icon: "workspace-panel",
     keywords: ["dashboard", "section", "focus", "changes"],
@@ -398,7 +398,7 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
   command({
     id: COMMAND_IDS.dashboardFiles,
     label: "Go to Files",
-    description: "Move the dashboard's cursor to the folder's recent files",
+    description: "Move the page's cursor to the folder's recent files",
     group: "navigation",
     icon: "new-folder",
     keywords: ["dashboard", "section", "focus", "files"],
@@ -409,7 +409,7 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
   command({
     id: COMMAND_IDS.focusMainPane,
     label: "Go to main pane",
-    description: "Move focus to the chat or dashboard, at its composer",
+    description: "Move focus to the chat or page, at its composer",
     group: "navigation",
     icon: "chat",
     keywords: ["chat", "dashboard", "main", "focus", "composer"],
