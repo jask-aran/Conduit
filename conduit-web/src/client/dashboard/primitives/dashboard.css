@@ -21,7 +21,7 @@
 .dashboard-quick-actions > span { position: absolute; bottom: calc(100% + 5px); left: 0; color: var(--muted-foreground); font-size: 9px; }
 .dashboard-quick-actions button { display: grid; min-width: 0; grid-template-columns: 15px minmax(0, 1fr) 11px; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 8px; background: transparent; padding: 7px; color: var(--foreground); text-align: left; }
 .dashboard-quick-actions button:hover { background: var(--accent); }
-.dashboard-quick-actions button:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.dashboard-quick-actions button:focus-visible { outline: none; background: var(--accent); }
 .dashboard-quick-actions button svg { width: 12px; height: 12px; color: var(--muted-foreground); }
 .dashboard-quick-actions button strong { overflow: hidden; font-size: 9.5px; font-weight: 560; text-overflow: ellipsis; white-space: nowrap; }
 .dashboard-grid { margin-top: 18px; }
@@ -40,14 +40,14 @@
 .dashboard-control-group { display: flex; flex: none; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: 7px; padding: 2px; }
 .dashboard-control-group button { min-height: 20px; border: 0; border-radius: 5px; background: transparent; padding: 2px 6px; color: var(--muted-foreground); font-size: 8.5px; }
 .dashboard-control-group button[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
-.dashboard-control-group button:focus-visible, .dashboard-search-button:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.dashboard-control-group button:focus-visible, .dashboard-search-button:focus-visible { outline: none; background: var(--accent); }
 .dashboard-search-button { display: grid !important; width: 26px; height: 26px; place-items: center; border: 1px solid var(--border) !important; border-radius: 7px; background: transparent; color: var(--muted-foreground); }
 .dashboard-search-button:hover { background: var(--accent); color: var(--foreground); }
 .dashboard-search-button svg { width: 12px; height: 12px; }
 .dashboard-row { display: grid; width: 100%; min-width: 0; min-height: 43px; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; border: 0; border-top: 1px solid var(--border); background: transparent; padding: 6px 8px; color: inherit; text-align: left; text-decoration: none; }
 .dashboard-row:first-child { border-top: 0; }
 .dashboard-row:is(button, a):hover { background: var(--accent); }
-.dashboard-row:is(button, a):focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.dashboard-row:is(button, a):focus-visible { outline: none; background: var(--accent); }
 .dashboard-row-leading, .dashboard-row-trailing { display: grid; min-width: 18px; place-items: center; color: var(--muted-foreground); }
 .dashboard-row-leading { grid-column: 1; }
 .dashboard-row-content { grid-column: 2; }

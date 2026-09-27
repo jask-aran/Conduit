@@ -23,7 +23,6 @@ export function Button(props: ButtonProps) {
     data-size={local.size || "default"}
     class={cn(
       "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium transition-colors outline-none disabled:pointer-events-none disabled:opacity-50",
-      "focus-visible:ring-ring/50 focus-visible:ring-[3px]",
       local.variant === "outline" && "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground",
       local.variant === "ghost" && "hover:bg-accent hover:text-accent-foreground",
       local.variant === "destructive" && "bg-destructive text-white hover:bg-destructive/90",
@@ -147,5 +146,5 @@ export function TooltipContent(props: ParentProps<{ class?: string }>) {
 export function Field(props: ParentProps<{ class?: string }>) { return <div data-slot="field" class={cn("flex flex-col gap-2", props.class)}>{props.children}</div>; }
 export function FieldGroup(props: ParentProps<{ class?: string }>) { return <div data-slot="field-group" class={cn("flex flex-col gap-4", props.class)}>{props.children}</div>; }
 export function FieldLabel(props: ParentProps<JSX.LabelHTMLAttributes<HTMLLabelElement>>) { const [local, rest] = splitProps(props, ["class", "children"]); return <label {...rest} class={cn("text-sm font-medium", local.class)}>{local.children}</label>; }
-export function Input(props: JSX.InputHTMLAttributes<HTMLInputElement>) { return <input {...props} class={cn("h-9 w-full rounded-md border bg-transparent px-3 text-sm outline-none focus:ring-2 focus:ring-ring/50", props.class)} />; }
-export function Textarea(props: JSX.TextareaHTMLAttributes<HTMLTextAreaElement>) { return <textarea {...props} class={cn("min-h-16 w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring/50", props.class)} />; }
+export function Input(props: JSX.InputHTMLAttributes<HTMLInputElement>) { return <input {...props} class={cn("h-9 w-full rounded-md border bg-transparent px-3 text-sm outline-none focus:border-foreground/30", props.class)} />; }
+export function Textarea(props: JSX.TextareaHTMLAttributes<HTMLTextAreaElement>) { return <textarea {...props} class={cn("min-h-16 w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus:border-foreground/30", props.class)} />; }

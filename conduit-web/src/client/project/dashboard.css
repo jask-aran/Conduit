@@ -26,7 +26,7 @@
 .workspace-appearance-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6.4px; margin-top: 14.4px; }
 .workspace-appearance-modes button { display: flex; min-width: 0; align-items: center; gap: 8px; border: 0.8px solid var(--border); border-radius: 8px; background: color-mix(in oklch, var(--background), transparent 35%); padding: 8px 9.6px; color: inherit; text-align: left; }
 .workspace-appearance-modes button:hover, .workspace-appearance-modes button[data-selected="true"] { border-color: color-mix(in oklch, var(--accent-cool), var(--border) 42%); background: color-mix(in oklch, var(--accent-cool), var(--background) 92%); }
-.workspace-appearance-modes button[data-selected="true"] { box-shadow: inset 2.4px 0 0 var(--accent-cool); }
+.workspace-appearance-modes button[data-selected="true"] { color: var(--foreground); font-weight: 660; }
 .workspace-appearance-mode-mark { display: grid; width: 22.4px; height: 22.4px; flex: none; place-items: center; border-radius: 6.4px; background: var(--accent); color: var(--accent-foreground); font-size: 8.8px; font-weight: 750; }
 .workspace-appearance-mode-mark svg { width: 12.8px; height: 12.8px; }
 .workspace-appearance-modes button > span:last-child { display: grid; min-width: 0; gap: 1.6px; }
@@ -105,7 +105,7 @@
 .workspace-appearance-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 18px; }
 .workspace-appearance-modes button { display: flex; min-width: 0; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 10px; background: color-mix(in oklch, var(--background), transparent 35%); padding: 10px 12px; color: inherit; text-align: left; }
 .workspace-appearance-modes button:hover, .workspace-appearance-modes button[data-selected="true"] { border-color: color-mix(in oklch, var(--accent-cool), var(--border) 42%); background: color-mix(in oklch, var(--accent-cool), var(--background) 92%); }
-.workspace-appearance-modes button[data-selected="true"] { box-shadow: inset 3px 0 0 var(--accent-cool); }
+.workspace-appearance-modes button[data-selected="true"] { color: var(--foreground); font-weight: 660; }
 .workspace-appearance-mode-mark { display: grid; width: 28px; height: 28px; flex: none; place-items: center; border-radius: 8px; background: var(--accent); color: var(--accent-foreground); font-size: 11px; font-weight: 750; }
 .workspace-appearance-mode-mark svg { width: 16px; height: 16px; }
 .workspace-appearance-modes button > span:last-child { display: grid; min-width: 0; gap: 2px; }

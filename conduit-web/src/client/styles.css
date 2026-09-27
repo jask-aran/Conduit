@@ -125,7 +125,7 @@ svg.lucide :where(path, circle, ellipse, line, polyline, polygon, rect) { vector
 .chat-context-trigger { position: relative; display: inline-flex; height: 22.4px; flex: none; align-items: center; justify-content: center; gap: 3.2px; padding: 0 4.8px 0 3.2px; border: 0; border-radius: 8px; background: transparent; color: var(--foreground); outline: none; }
 .chat-context-percent { font-size: 10.4px; font-variant-numeric: tabular-nums; line-height: 1; }
 .chat-context-trigger:hover { background: var(--accent); color: var(--foreground); }
-.chat-context-trigger:focus-visible { box-shadow: 0 0 0 2.4px color-mix(in oklch, var(--ring), transparent 50%); }
+.chat-context-trigger:focus-visible { outline: none; background: var(--accent); }
 .chat-context-trigger[data-state="idle"] { color: var(--muted-foreground); }
 .chat-context-trigger[data-state="warning"] { color: var(--warning, #d99a22); }
 .chat-context-trigger[data-state="critical"] { color: var(--destructive); }
@@ -265,7 +265,7 @@ svg.lucide :where(path, circle, ellipse, line, polyline, polygon, rect) { vector
 .assistant-error-meta time { color: inherit; font-size: inherit; }
 .assistant-error pre { max-height: 144px; margin: 7.2px 0 0; overflow: auto; color: var(--foreground); font: 9.6px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; white-space: pre-wrap; }
 .bubble-assistant[data-error="true"] .chat-markdown { margin-bottom: 8px; }
-.bubble[data-editing="true"] { outline: 1px solid var(--ring); outline-offset: 1.6px; }
+.bubble[data-editing="true"] { color: var(--muted-foreground); font-style: italic; }
 .markdown-skeleton { min-height: 4em; }
 .welcome { display: grid; min-height: 56vh; place-content: center; color: var(--muted-foreground); text-align: center; }
 .welcome h1 { margin: 0; color: var(--foreground); font-size: clamp(17.6px, 3vw, 20.8px); font-weight: 600; letter-spacing: -0.04em; }
@@ -577,7 +577,7 @@ svg.lucide :where(path, circle, ellipse, line, polyline, polygon, rect) { vector
 .command-sort-toggle { display: flex; flex: none; align-items: center; gap: 1.6px; border: 0.8px solid var(--border); border-radius: 5.6px; padding: 1.6px; }
 .command-sort-toggle button { min-height: 16px; border: 0; border-radius: 4px; background: transparent; padding: 1.6px 4.8px; color: var(--muted-foreground); font-size: 8px; }
 .command-sort-toggle button[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
-.command-sort-toggle button:focus-visible { outline: 1.6px solid var(--ring); outline-offset: 0.8px; }
+.command-sort-toggle button:focus-visible { outline: none; background: oklch(1 0 0 / 10%); }
 .command-hint-items { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 4.8px 9.6px; }
 .command-hint-primary { flex: none; }
 .command-hint-secondary { min-width: 0; flex: 1; }
@@ -587,7 +587,7 @@ svg.lucide :where(path, circle, ellipse, line, polyline, polygon, rect) { vector
 .command-hint-action { min-height: 22.4px; border: 0.8px solid color-mix(in oklch, var(--border), var(--foreground) 10%); border-radius: 4.8px; background: transparent; padding: 2.4px 5.6px 2.4px 3.2px; color: inherit; }
 .command-hint-action .command-hint-label { color: var(--foreground); font-weight: 550; }
 .command-hint-action:hover { border-color: color-mix(in oklch, var(--border), var(--foreground) 22%); background: var(--accent); }
-.command-hint-action:focus-visible { outline: 1px solid var(--ring); outline-offset: 0.8px; }
+.command-hint-action:focus-visible { outline: none; background: oklch(1 0 0 / 10%); }
 .command-hint-key { display: inline-grid; min-width: 16px; height: 16px; place-items: center; border: 0.8px solid color-mix(in oklch, var(--border), var(--foreground) 12%); border-radius: 3.2px; background: var(--background); padding: 0 4px; color: var(--muted-foreground); font: 500 8px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .command-hint-more { display: none; margin-left: auto; }
 .command-hint-more summary { cursor: pointer; list-style: none; color: var(--muted-foreground); }
@@ -922,7 +922,7 @@ svg { stroke-width: 1.5; }
 .chat-context-trigger { position: relative; display: inline-flex; height: 28px; flex: none; align-items: center; justify-content: center; gap: 4px; padding: 0 6px 0 4px; border: 0; border-radius: 10px; background: transparent; color: var(--foreground); outline: none; }
 .chat-context-percent { font-size: 13px; font-variant-numeric: tabular-nums; line-height: 1; }
 .chat-context-trigger:hover { background: var(--accent); color: var(--foreground); }
-.chat-context-trigger:focus-visible { box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring), transparent 50%); }
+.chat-context-trigger:focus-visible { outline: none; background: var(--accent); }
 .chat-context-trigger[data-state="idle"] { color: var(--muted-foreground); }
 .chat-context-trigger[data-state="warning"] { color: var(--warning, #d99a22); }
 .chat-context-trigger[data-state="critical"] { color: var(--destructive); }
@@ -1038,7 +1038,7 @@ svg { stroke-width: 1.5; }
 .assistant-error-meta time { color: inherit; font-size: inherit; }
 .assistant-error pre { max-height: 180px; margin: 9px 0 0; overflow: auto; color: var(--foreground); font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; white-space: pre-wrap; }
 .bubble-assistant[data-error="true"] .chat-markdown { margin-bottom: 10px; }
-.bubble[data-editing="true"] { outline: 2px solid var(--ring); outline-offset: 2px; }
+.bubble[data-editing="true"] { color: var(--muted-foreground); font-style: italic; }
 .markdown-skeleton { min-height: 5em; }
 .welcome { display: grid; min-height: 56vh; place-content: center; color: var(--muted-foreground); text-align: center; }
 .welcome h1 { margin: 0; color: var(--foreground); font-size: clamp(22px, 3vw, 26px); font-weight: 600; letter-spacing: -0.04em; }
@@ -1353,7 +1353,7 @@ svg { stroke-width: 1.5; }
 .command-sort-toggle { display: flex; flex: none; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: 7px; padding: 2px; }
 .command-sort-toggle button { min-height: 20px; border: 0; border-radius: 5px; background: transparent; padding: 2px 6px; color: var(--muted-foreground); font-size: 8.5px; }
 .command-sort-toggle button[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
-.command-sort-toggle button:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.command-sort-toggle button:focus-visible { outline: none; background: oklch(1 0 0 / 10%); }
 .command-hint-items { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .command-hint-primary { flex: none; }
 .command-hint-secondary { min-width: 0; flex: 1; }
@@ -1363,7 +1363,7 @@ svg { stroke-width: 1.5; }
 .command-hint-action { min-height: 28px; border: 1px solid color-mix(in oklch, var(--border), var(--foreground) 10%); border-radius: 6px; background: transparent; padding: 3px 7px 3px 4px; color: inherit; }
 .command-hint-action .command-hint-label { color: var(--foreground); font-weight: 550; }
 .command-hint-action:hover { border-color: color-mix(in oklch, var(--border), var(--foreground) 22%); background: var(--accent); }
-.command-hint-action:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.command-hint-action:focus-visible { outline: none; background: oklch(1 0 0 / 10%); }
 .command-hint-key { display: inline-grid; min-width: 20px; height: 20px; place-items: center; border: 1px solid color-mix(in oklch, var(--border), var(--foreground) 12%); border-radius: 4px; background: var(--background); padding: 0 5px; color: var(--muted-foreground); font: 500 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .command-hint-more { display: none; margin-left: auto; }
 .command-hint-more summary { cursor: pointer; list-style: none; color: var(--muted-foreground); }
@@ -2381,23 +2381,14 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   .settings-dialog .settings-save-status { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: 48px; min-width: 0; height: 32px; margin: 0; }
 }
 
-/* Command, search, and leader overlays share an ink-dark surface and key rail.
-   Their layouts remain distinct: actions are compact, chats carry metadata,
-   and the leader sits above the composer. */
-.dark {
-  --overlay-face: oklch(0.165 0.005 264);
-  --overlay-face-top: oklch(0.205 0.005 264);
-  --overlay-rail: oklch(0.135 0.004 264);
-  --overlay-edge: oklch(1 0 0 / 12%);
-  --overlay-cursor: oklch(1 0 0 / 10%);
-}
+/* Command and search overlays: layout. The material is the frost block at
+   the end of this file. */
 .command-dialog { align-items: start; padding-top: clamp(40px, 10vh, 92px); }
 .command-shell {
   width: min(512px, calc(100vw - 22px));
   max-height: min(480px, 72dvh);
-  border: 1px solid var(--overlay-edge);
+  border: 1px solid oklch(1 0 0 / 10%);
   border-radius: 12px;
-  background: linear-gradient(155deg, var(--overlay-face-top), var(--overlay-face) 42%);
   box-shadow: 0 28px 84px rgb(0 0 0 / 55%);
 }
 .command-dialog-chat-search .command-shell { width: min(720px, calc(100vw - 22px)); max-height: min(576px, 76dvh); }
@@ -2407,7 +2398,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-search-path > span:last-of-type { color: var(--foreground); }
 .command-search-path small { margin-left: auto; color: var(--muted-foreground); font-size: inherit; }
 .command-dialog-model-selector .command-shell { width: min(576px, calc(100vw - 22px)); }
-.command-input-row { min-height: 44px; gap: 8px; padding: 4px 11px; border-bottom-color: var(--overlay-edge); }
+.command-input-row { min-height: 44px; gap: 8px; padding: 4px 11px; border-bottom-color: oklch(1 0 0 / 10%); }
 .command-input { min-height: 36px; font-size: 12px; font-weight: 520; }
 .command-input::placeholder { color: oklch(0.65 0.004 264); }
 .command-input-glyph { color: var(--foreground); font: 600 16px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -2415,21 +2406,21 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-back { width: 24px; min-width: 24px; height: 24px; min-height: 24px; flex: none; color: var(--muted-foreground); }
 .command-back svg { width: 12px; height: 12px; }
 .command-page-prefix { font-weight: 580; }
-.command-search-tools { display: flex; min-height: 32px; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--overlay-edge); padding: 4px 11px; }
+.command-search-tools { display: flex; min-height: 32px; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid oklch(1 0 0 / 10%); padding: 4px 11px; }
 .command-search-filters { display: flex; min-width: 0; overflow-x: auto; align-items: center; gap: 5px; white-space: nowrap; }
-.command-filter-chip { border-color: var(--overlay-edge); background: var(--overlay-cursor); }
-.command-filter-chip:hover, .command-filter-chip:focus-visible { outline: none; border-color: color-mix(in oklch, var(--overlay-edge), var(--foreground) 24%); }
-.command-sort-toggle { border-color: var(--overlay-edge); }
+.command-filter-chip { border-color: oklch(1 0 0 / 10%); background: oklch(1 0 0 / 10%); }
+.command-filter-chip:hover, .command-filter-chip:focus-visible { outline: none; border-color: color-mix(in oklch, oklch(1 0 0 / 10%), var(--foreground) 24%); }
+.command-sort-toggle { border-color: oklch(1 0 0 / 10%); }
 .command-sort-toggle button { min-height: 18px; padding: 2px 5px; font-size: 8.5px; }
-.command-sort-toggle button:focus-visible { outline: none; background: var(--overlay-cursor); }
+.command-sort-toggle button:focus-visible { outline: none; background: oklch(1 0 0 / 10%); }
 .command-search-footer-controls { display: flex; flex: none; align-items: center; gap: 5px; }
-.command-all-chats-toggle { min-height: 22px; border: 1px solid var(--overlay-edge); border-radius: 5px; background: transparent; padding: 2px 7px; color: var(--muted-foreground); font-size: 8.8px; cursor: pointer; }
-.command-all-chats-toggle[aria-pressed="true"], .command-all-chats-toggle:is(:hover, :focus-visible) { outline: none; background: var(--overlay-cursor); color: var(--foreground); }
+.command-all-chats-toggle { min-height: 22px; border: 1px solid oklch(1 0 0 / 10%); border-radius: 5px; background: transparent; padding: 2px 7px; color: var(--muted-foreground); font-size: 8.8px; cursor: pointer; }
+.command-all-chats-toggle[aria-pressed="true"], .command-all-chats-toggle:is(:hover, :focus-visible) { outline: none; background: oklch(1 0 0 / 10%); color: var(--foreground); }
 .command-list { padding: 5px 6px; }
 .command-group-label { margin: 8px 7px 3px; color: oklch(0.68 0.004 264); font-size: 8.8px; font-weight: 650; letter-spacing: .08em; }
 .command-list > .command-group-label:first-child { margin-top: 2px; }
 .command-option { min-height: 29px; gap: 8px; border-radius: 7px; padding: 5px 8px; }
-.command-option[data-highlighted], .command-option[data-chat-selected="true"] { background: var(--overlay-cursor); }
+.command-option[data-highlighted], .command-option[data-chat-selected="true"] { background: oklch(1 0 0 / 10%); }
 .command-option:not(.command-model-option):not([data-danger]) { color: color-mix(in oklch, var(--foreground), transparent 32%); }
 .command-option:not(.command-model-option):is([data-highlighted], [data-chat-selected="true"], :hover, [aria-current="page"]) { color: var(--foreground); }
 .command-icon { width: 12px; height: 12px; }
@@ -2455,7 +2446,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-folder-search { display: inline-grid; width: 17px; height: 17px; flex: none; place-items: center; border: 0; border-radius: 4px; background: transparent; padding: 0; color: var(--muted-foreground); opacity: 0; cursor: pointer; }
 .command-folder-search svg { width: 12px; height: 12px; }
 .command-folder-option:is([data-highlighted], :hover) .command-folder-search { opacity: 1; }
-.command-folder-search:hover, .command-folder-search:focus-visible { outline: none; background: var(--overlay-cursor); color: var(--foreground); opacity: 1; }
+.command-folder-search:hover, .command-folder-search:focus-visible { outline: none; background: oklch(1 0 0 / 10%); color: var(--foreground); opacity: 1; }
 .command-browse-all { padding-left: 29px; color: var(--muted-foreground); }
 .command-browse-all .command-label { font-size: 10px; }
 .command-browse-indent { display: none; }
@@ -2465,7 +2456,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-option[data-chat-row="true"]:is([data-highlighted], [data-chat-selected="true"], [aria-current="page"], :hover) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; }
 .command-chat-status { position: relative; display: inline-flex; width: 16px; height: 16px; flex: none; align-items: center; justify-content: center; }
 .command-chat-status .runtime-indicator { width: 16px; height: 16px; }
-.command-chat-unread { position: absolute; right: -2px; bottom: 0; width: 5px; height: 5px; border-radius: 50%; background: oklch(0.68 0.17 250); box-shadow: 0 0 0 2px var(--overlay-face); }
+.command-chat-unread { position: absolute; right: -2px; bottom: 0; width: 5px; height: 5px; border-radius: 50%; background: oklch(0.68 0.17 250); box-shadow: none; }
 .command-chat-meta { display: flex; min-width: 0; align-items: center; gap: 4px; }
 .command-chat-activity, .command-chat-project { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .command-chat-activity { max-width: 116px; }
@@ -2477,15 +2468,15 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-hint-bar[data-chat-search] .command-search-footer-controls { width: 100%; min-height: 22px; gap: 12px; }
 .command-search-footer-controls label { display: inline-flex; min-width: 0; align-items: center; gap: 3px; white-space: nowrap; }
 .command-search-footer-controls select { max-width: 170px; border: 0; border-radius: 4px; outline: none; background: transparent; padding: 2px 12px 2px 2px; color: var(--foreground); color-scheme: dark; font: inherit; cursor: pointer; }
-.command-search-footer-controls select:hover, .command-search-footer-controls select:focus-visible { background: var(--overlay-cursor); }
-.command-search-footer-controls select option { background: var(--overlay-face); color: var(--foreground); }
+.command-search-footer-controls select:hover, .command-search-footer-controls select:focus-visible { background: oklch(1 0 0 / 10%); }
+.command-search-footer-controls select option { background: var(--popover); color: var(--foreground); }
 .command-hint-bar[data-chat-search] .command-hint-primary { min-height: 20px; }
 .command-shortcut, .command-model-spec { font: 500 8.5px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .command-empty { padding: 16px 9px; }
-.command-hint-bar { min-height: 32px; gap: 9px; border-top-color: var(--overlay-edge); background: var(--overlay-rail); padding: 5px 10px; font-size: 8.8px; }
-.command-hint-key { min-width: 16px; height: 16px; border-color: var(--overlay-edge); border-radius: 4px; background: oklch(1 0 0 / 5%); color: var(--foreground); font-size: 8px; }
-.command-hint-action { min-height: 20px; border-color: var(--overlay-edge); padding: 2px 5px 2px 3px; }
-.command-hint-action:hover, .command-hint-action:focus-visible { outline: none; border-color: var(--overlay-edge); background: var(--overlay-cursor); }
+.command-hint-bar { min-height: 32px; gap: 9px; border-top-color: oklch(1 0 0 / 10%); padding: 5px 10px; font-size: 8.8px; }
+.command-hint-key { min-width: 16px; height: 16px; border-color: oklch(1 0 0 / 10%); border-radius: 4px; background: oklch(1 0 0 / 5%); color: var(--foreground); font-size: 8px; }
+.command-hint-action { min-height: 20px; border-color: oklch(1 0 0 / 10%); padding: 2px 5px 2px 3px; }
+.command-hint-action:hover, .command-hint-action:focus-visible { outline: none; background: oklch(1 0 0 / 10%); }
 
 @media (--conduit-mobile-layout) {
   .command-dialog { align-items: stretch; padding: 8px; }
@@ -2720,3 +2711,9 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 :is(.conduit-modal-card, .external-link-dialog-card, .conduit-dialog) :is(input, select, textarea):focus { border-color: oklch(1 0 0 / 30%); box-shadow: none; outline: none; }
 /* A one-field prompt's title already names the field. */
 .conduit-modal-card label:has(+ input:only-of-type), .conduit-modal-card label:has(+ [data-slot="input"]) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+/* Keyboard focus on a button is the wash (quiet buttons) or a slight lift
+   (filled ones), never a ring (DESIGN.md, Interaction). */
+[data-slot="button"]:focus-visible { outline: none; box-shadow: none; }
+[data-slot="button"]:is([data-variant="ghost"], [data-variant="outline"]):focus-visible { background: var(--accent); color: var(--accent-foreground); }
+[data-slot="button"]:is([data-variant="default"], [data-variant="destructive"]):focus-visible { filter: brightness(1.12); }
