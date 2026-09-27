@@ -4,7 +4,7 @@ import type { PermissionMode, PermissionModeState } from "../api/contracts";
 
 type ErrorHandler = (error: unknown) => void;
 
-export function createPermissionSettings(onError: ErrorHandler) {
+export function createPermissionSettings(onError: ErrorHandler, base = "/v0/chats") {
   const [profiles, setProfiles] = createSignal<PermissionMode[]>([]);
   const [selected, setSelected] = createSignal("");
   let activeChatId = "";
@@ -20,7 +20,7 @@ export function createPermissionSettings(onError: ErrorHandler) {
     // -- offering a choice this chat cannot make.
     if (changed) { setProfiles([]); setSelected(""); }
     try {
-      const state = await apiWhenServed<PermissionModeState>(`/v0/chats/${encodeURIComponent(chatId)}/permission-profiles`);
+      const state = await apiWhenServed<PermissionModeState>(`${base}/${encodeURIComponent(chatId)}/permission-profiles`);
       if (activeChatId !== chatId || requestId !== requestSequence) return;
       setProfiles(asList<PermissionMode>(state.modes));
       setSelected(state.selected || "");
@@ -38,7 +38,7 @@ export function createPermissionSettings(onError: ErrorHandler) {
     const previous = selected();
     setSelected(permissionMode);
     try {
-      const state = await api<PermissionModeState>(`/v0/chats/${encodeURIComponent(activeChatId)}/permission-profiles`, {
+      const state = await api<PermissionModeState>(`${base}/${encodeURIComponent(activeChatId)}/permission-profiles`, {
         method: "PATCH",
         body: JSON.stringify({ permissionMode }),
       });

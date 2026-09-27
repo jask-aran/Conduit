@@ -202,7 +202,9 @@ export class CodexAppServerAdapter extends EventEmitter {
       });
       record.sessionId = result.thread.id;
       record.model = result.model || model;
-      record.thinkingLevel = result.thread?.reasoningEffort || thinkingLevel;
+      // Codex answers with its configured effort, not the one asked for; every
+      // turn sends the record's, so the one asked for is the one kept.
+      record.thinkingLevel = thinkingLevel || result.reasoningEffort || result.thread?.reasoningEffort || "";
       // An omitted profile is meaningful: Codex must continue to resolve the
       // effective config instead of Conduit freezing its current result.
       record.permissionProfile = permissionProfile;

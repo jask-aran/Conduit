@@ -3,6 +3,8 @@ import { api } from "../api/client";
 import type { ChatSummary, LiveRecord, ModelOption, ModelState, TranscriptDetail } from "../api/contracts";
 import type { RuntimeStore } from "./runtime";
 import { createActiveChat, HARNESS_OWNED_MODELS, NO_CHAT_ATTACHMENTS, type ChatCatalogue } from "./active-chat";
+import { createPermissionSettings } from "./permission-settings";
+import { createServiceLevelSettings } from "./service-level-settings";
 
 /**
  * A chat store for an ephemeral harness thread.
@@ -25,6 +27,9 @@ export function createDriveChat(options: {
   const [model, setModel] = createSignal("");
   const [effort, setEffort] = createSignal("");
   const [notice, setNotice] = createSignal("");
+  // No chat holds these either: the composer asks the process running the thread.
+  const permissions = createPermissionSettings(options.onError, "/v0/live-sessions");
+  const serviceLevels = createServiceLevelSettings(options.onError, "/v0/live-sessions");
 
   // The harness owns the catalogue and the selection, both keyed to the live
   // record. Nothing here touches a chat, because there isn't one.
@@ -103,6 +108,8 @@ export function createDriveChat(options: {
     const detail = await loadTranscript(record.id) || { id, projectId: "", status: "active" as const, title, messages: [], tools: [] };
     await chat.ensureAgent({ record, detail });
     void loadModels(record.id);
+    void permissions.select(record.id);
+    void serviceLevels.select(record.id);
   };
 
   const detach = () => {
@@ -114,7 +121,7 @@ export function createDriveChat(options: {
     setEffort("");
   };
 
-  return { chat, models, attach, detach, chatId };
+  return { chat, models, permissions, serviceLevels, attach, detach, chatId };
 }
 
 export type DriveChatStore = ReturnType<typeof createDriveChat>;
