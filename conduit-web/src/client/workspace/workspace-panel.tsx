@@ -1,4 +1,4 @@
-import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, Show, type Accessor, type JSX } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type Accessor, type JSX } from "solid-js";
 import { MIN_MAIN_PANE_WIDTH } from "../layout-geometry";
 import { Columns2Icon, CheckIcon, ChevronsUpIcon, EllipsisIcon, ListCollapseIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileDiffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, FolderUpIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, HistoryIcon, Maximize2Icon, MessageSquareIcon, Minimize2Icon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, SendIcon, TerminalIcon, Trash2Icon, Undo2Icon, UploadIcon, WrapTextIcon, XIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
@@ -563,7 +563,8 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   let panelWasOpen = false;
   const animatePanelGeometry = (open: boolean) => {
     const mobile = isMobileLayout();
-    const targetWidth = open ? width() : 0;
+    // A width saved while there was more room opens at what fits now.
+    const targetWidth = open ? (mobile ? width() : clampWidth(width())) : 0;
     const targetGap = open && !mobile ? 8 : 0;
     batch(() => {
       setShellWidth(targetWidth);
@@ -1405,6 +1406,19 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     writeSetting(projectScope(), "width", String(commitWidth(next)));
   };
   let stopResize: (() => void) | undefined;
+  // The window narrowing or the sidebar opening takes room from the main
+  // pane; the panel gives it back down to the main pane's minimum.
+  onMount(() => {
+    const main = document.querySelector<HTMLElement>('[data-slot="sidebar-inset"]');
+    if (!main) return;
+    const observer = new ResizeObserver(() => {
+      if (!props.open() || isMobileLayout() || stopResize) return;
+      const fitted = clampWidth(width());
+      if (fitted < shellWidth() - 0.5) commitWidth(fitted);
+    });
+    observer.observe(main);
+    onCleanup(() => observer.disconnect());
+  });
   createEffect(() => {
     const open = props.open();
     if (open !== panelWasOpen) {
