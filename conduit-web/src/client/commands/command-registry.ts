@@ -55,7 +55,6 @@ export const COMMAND_IDS = {
   // Persistent alias for existing shortcut settings.
   workspaceArtifacts: "workspace-panel.artifacts",
   workspaceTerminal: "workspace-panel.terminal",
-  workspaceSplit: "workspace-panel.split",
   copyTranscript: "copy-transcript",
   renameChat: "rename",
   autoNameChat: "rename-from-context",
@@ -494,17 +493,6 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     keywords: ["workspace", "terminal", "shell", "tab"],
     contexts: ["workspace-panel"],
     defaultBindings: [scopedBinding("Digit4", "4")],
-    allowInExclusiveTarget: true,
-  }),
-  command({
-    id: COMMAND_IDS.workspaceSplit,
-    label: "Toggle workspace split pane",
-    description: "Open or close the second pane of the maximized workspace panel",
-    group: "workspace-panel",
-    icon: "workspace-panel",
-    keywords: ["workspace", "split", "pane", "side by side"],
-    contexts: ["workspace-panel"],
-    defaultBindings: [scopedBinding("Backslash", "\\")],
     allowInExclusiveTarget: true,
   }),
   command({

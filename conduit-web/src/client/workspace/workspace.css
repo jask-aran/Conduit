@@ -21,15 +21,31 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 /* Surface keeps settled panel width, right-anchored inside the shell. */
 .workspace-panel-surface { position: absolute; inset: 0; display: flex; min-width: 0; height: 100%; contain: layout paint; container-name: workspace-surface; container-type: inline-size; flex: none; flex-direction: column; overflow: hidden; border-radius: 12.8px; background: var(--background); }
 .workspace-panel-surface > * { max-width: 100%; }
-.workspace-panel-header { display: flex; min-height: 32px; flex: none; align-items: center; gap: 6.4px; padding: 3.2px 6.4px 3.2px 11.2px; border-bottom: 1px solid var(--border); container-type: inline-size; }
-.workspace-panel-header strong { font-size: 11.2px; }
+/* The dock's header shares the top line of the app: the main header's height
+   and padding, the name at the breadcrumb's size, 14px icons, no hairline. */
+.workspace-panel-header { display: flex; height: 44.8px; flex: none; align-items: center; gap: 6.4px; overflow: hidden; padding: 6.4px 11.2px; }
+.workspace-panel-header strong { overflow: hidden; flex: none; font-size: 11.2px; font-weight: 600; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-panel-header[data-compact="name"] strong { display: none; }
+.workspace-panel-header [data-slot="button"] svg { width: 14px; height: 14px; }
+/* Its modes are the dashboard heading's switch (split.css), folding to icons
+   when the header runs out of room. */
+.workspace-panel-header .settings-segmented { flex: none; grid-template-columns: repeat(var(--segments), auto); padding: 1px; border-radius: 7px; }
+.workspace-panel-header .settings-segmented-thumb { display: none; }
+.workspace-panel-header .settings-segmented button { min-height: 20px; gap: 5px; border-radius: 5px; padding: 0 8px; font-size: 9.6px; font-weight: 560; white-space: nowrap; transition: background 200ms cubic-bezier(.2, .8, .2, 1), color 200ms; }
+.workspace-panel-header .settings-segmented button svg { width: 12px; height: 12px; }
+.workspace-panel-header .settings-segmented button[aria-checked="true"] { background: var(--accent); }
+.workspace-panel-header .settings-segmented button:is(:hover, :focus-visible):not([aria-checked="true"]) { background: color-mix(in oklch, var(--accent), transparent 35%); color: var(--foreground); }
+.workspace-panel-header .settings-segmented button[aria-checked="true"]:focus-visible { background: color-mix(in oklch, var(--accent), var(--foreground) 14%); }
+.workspace-panel-header[data-compact] .settings-segmented button span { display: none; }
+.workspace-panel-header[data-compact] .settings-segmented button { padding: 0 6px; }
 .chat-main { flex: 1 1 auto; min-width: 0; }
 .chat-main.workspace-expanded { margin-inline: 0; pointer-events: none; }
 .workspace-layout { position: relative; overflow: hidden; container-type: inline-size; }
 .workspace-panel-surface { right: 0; left: auto; width: 100%; transition: width 260ms var(--panel-motion-easing); }
 .workspace-panel-expanded .workspace-panel-surface { width: calc(100cqw - 8px); }
 .workspace-panel-expanded .workspace-resize-handle { display: none; }
-.workspace-panel-tabs-space { display: flex; min-width: 0; flex: 1; justify-content: flex-end; overflow: hidden; }
+/* The rail stands in for the tabs on a desktop; a phone keeps them. */
+.workspace-panel-tabs-space { display: none; min-width: 0; flex: 1; justify-content: flex-end; overflow: hidden; }
 .workspace-panel-tabs { display: flex; width: max-content; flex: none; }
 .workspace-panel-tabs button { flex: none; }
 .workspace-panel-tabs-space[data-icons-only] .workspace-panel-tabs span { display: none; }
@@ -39,26 +55,21 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-panel-tabs button:disabled { opacity: .4; cursor: not-allowed; }
 /* Keyboard focus on a tab is the wash, as on a row: no ring. */
 .workspace-panel-tabs button:focus-visible { outline: none; background: var(--accent); color: var(--foreground); }
-.workspace-panel-tabs svg, .workspace-panel-header svg, .workspace-status-strip svg { width: 12px; height: 12px; }
+.workspace-panel-tabs svg, .workspace-status-strip svg { width: 12px; height: 12px; }
 .workspace-panel-content { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; overflow: hidden; }
 .workspace-panel-content > * { min-width: 0; flex: 1; }
-.workspace-panel-expanded .workspace-panel-content[data-split="true"] { display: grid; grid-template-columns: minmax(0, var(--workspace-split-ratio)) 9px minmax(0, calc(100% - var(--workspace-split-ratio) - 9px)); }
-.workspace-panel-content[data-split="true"] > [data-position="left"] { grid-column: 1; grid-row: 1; }
-.workspace-panel-content[data-split="true"] > [data-position="right"] { grid-column: 3; grid-row: 1; }
-/* Split panes get one tab strip each, inside the existing header row: the
-   header borrows the content grid so a strip sits exactly above its pane. */
-.workspace-pane-strip { display: flex; min-width: 0; align-items: center; gap: 6.4px; }
-.workspace-pane-strip[data-position="left"] { flex: 1; }
-.workspace-panel-header-actions { display: flex; flex: none; align-items: center; gap: 6.4px; }
-.workspace-panel-header[data-split="true"] { display: grid; padding-inline: 0; grid-template-columns: minmax(0, var(--workspace-split-ratio)) 9px minmax(0, calc(100% - var(--workspace-split-ratio) - 9px)); }
-.workspace-panel-header[data-split="true"] > [data-position="left"] { grid-column: 1; padding-left: 11.2px; }
-.workspace-panel-header[data-split="true"] > [data-position="right"] { grid-column: 3; padding-right: 6.4px; }
-.workspace-panel-header[data-split="true"] .workspace-panel-tabs-space { justify-content: flex-start; }
-.workspace-pane-strip > strong { flex: none; }
-.workspace-split-resize-handle { position: relative; z-index: 5; grid-column: 2; grid-row: 1; cursor: col-resize; touch-action: none; }
-.workspace-split-resize-handle::after { content: ""; position: absolute; inset-block: 0; left: 4px; width: 1px; background: var(--border); transition: background 120ms; }
-.workspace-split-resize-handle:hover::after, .workspace-split-resize-handle:focus-visible::after, .workspace-split-resizing .workspace-split-resize-handle::after { background: var(--ring); }
+.workspace-panel-header-actions { display: flex; flex: none; align-items: center; gap: 1.6px; margin-left: auto; }
 .workspace-split-resizing { cursor: col-resize; user-select: none; }
+/* The right edge's rail mirrors the sidebar's collapsed one: on the frame,
+   28.8px targets 8px from the pane and 6.4px from the window's edge, the
+   cursor the wash, the current tool white at the heavier stroke. */
+.workspace-rail { display: flex; width: 35.2px; flex: none; flex-direction: column; align-items: flex-start; gap: 1.6px; padding: 14.4px 6.4px 0 0; }
+.workspace-rail-action { display: grid; width: 28.8px; height: 28.8px; flex: none; place-items: center; border: 0; border-radius: var(--radius-md); background: transparent; color: color-mix(in oklch, var(--sidebar-foreground), transparent 20%); }
+.workspace-rail-action:is(:hover, :focus-visible, :active):not(:disabled) { outline: none; background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.workspace-rail-action[aria-current="true"] { color: var(--sidebar-accent-foreground); }
+.workspace-rail-action[aria-current="true"] svg { stroke-width: 3; }
+.workspace-rail-action:disabled { opacity: .4; cursor: not-allowed; }
+.workspace-rail-action svg { width: 14px; height: 14px; }
 .workspace-files { position: relative; display: flex; min-height: 0; flex: 1; flex-direction: column; }
 .workspace-tree-pane { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
 .workspace-tree-collapsed-rail { display: flex; flex-direction: column; align-items: center; gap: 2px; border-right: 1px solid var(--border); padding-block: 4px; }
@@ -479,6 +490,10 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 }
 
 @media (--conduit-phone-layout) {
+  .workspace-rail { display: none; }
+  .workspace-panel-tabs-space { display: flex; }
+  .workspace-panel-header { height: auto; min-height: 32px; flex-wrap: wrap; }
+  .workspace-panel-header .settings-segmented { order: 1; flex-basis: 100%; margin-bottom: 4px; }
   .chat-main.workspace-expanded { display: flex; }
   .workspace-expand-toggle { display: none; }
   .workspace-panel {

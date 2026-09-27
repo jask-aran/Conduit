@@ -153,7 +153,7 @@ Every surface is one of three materials. Choose it first, before any colour, bor
 
 | Surface | Material | Reference | Holds |
 |---|---|---|---|
-| **Frame** | near-black `{colors.frame}` | the sidebar | permanent navigation: the sidebar, the collapsed rail |
+| **Frame** | near-black `{colors.frame}` | the sidebar | permanent navigation: the sidebar, the collapsed rail, the workspace rail |
 | **Pane** | charcoal `{colors.background}`, no borders, single-line rows grouped by heading and space | the dashboards | where you work: the chat, the dashboards, the workspace panel |
 | **Frost** | the composer's frost (Elevation & Depth) | chat search and the palette | anything that floats |
 
@@ -241,7 +241,7 @@ Desktop is a darker **frame** with **inset rounded panes** (chat ~16px radius, 8
 Chat composition:
 
 - Sidebar on the frame (transparent).
-- Chat pane inset; workspace pane is a second full-bleed tiled split (tree | preview), not a floating card.
+- Chat pane inset; the workspace panel is the **dock**, a second inset pane at the right showing one tool at a time -- Files, Source Control, Chat review, Terminal -- not a floating card. On a desktop the **workspace rail** on the right edge opens it (Components); a phone keeps the tools as tabs in the dock's header.
 - Assistant markdown is the full reading column. User messages are a right-aligned frosted glass bubble (~640px max, `{rounded.bubble}`).
 - Composer sits at the bottom of the pane, same column width as dashboard composer — frosted glass, the reference material for all floating chrome.
 
@@ -334,7 +334,7 @@ One model for every surface, so no surface grows keys of its own.
 
 - **Regions.** The app is a tree of regions (sidebar, main pane, workspace panel, and what is inside them) following focus. Shortcuts resolve innermost region first, then outward.
 - **Go to a region.** Ctrl+Shift+1/2/3 (⌘⇧ on a Mac) take you to the sidebar, the main pane and the workspace panel in screen order. They open and focus, never close: 1 enters the sidebar at the current row (on a phone, the drawer), 2 lands in the composer when there is one, 3 opens the panel if closed. Ctrl+B and Ctrl+. stay plain show/hide toggles. Arriving shows the held-focus line (Components). F6 is not relied on.
-- **The leader acts where you are.** Ctrl+G, then a key: only actions within the current region, never moves between regions. Its second key is looked for innermost first and then outward, so an outer key works from inside. The menu lists the current region's keys under a breadcrumb path; ←/→ or Tab steps out to outer levels. A key that would do nothing where you are is not listed. Numbers inside a region mean positions (the workspace panel's tabs), never other regions.
+- **The leader acts where you are.** Ctrl+G, then a key: only actions within the current region, never moves between regions. Its second key is looked for innermost first and then outward, so an outer key works from inside. The menu lists the current region's keys under a breadcrumb path; ←/→ or Tab steps out to outer levels. A key that would do nothing where you are is not listed. Numbers inside a region mean positions (the dock's tools, in the rail's order), never other regions.
 - **Moving in a list.** The cursor is the wash (List row). ↑/↓ move, skipping headings; Home/End go to the ends; →/← step into and out of a level; Shift+↑/↓ extends a selection; Menu or Shift+F10 opens the row's menu. Pointer and keyboard move the one cursor.
 - **↑ from the top reaches the switch above.** A list headed by a segmented switch -- a dashboard section's heading, the sidebar's Conduit / Computer -- takes ↑ from its first row onto the switch's chosen side; ←/→ move between sides, Enter or Space picks, ↓ returns to the rows. The cursor there follows Interaction: an unchosen side takes the wash, the chosen side brightens its wash.
 - **Enter acts.** Opening a chat hands focus to its composer, because opening one is usually to write in it.
@@ -405,6 +405,8 @@ Choosing in a menu:
 **Switch** — on or off: a small pill, the track near-white with a dark knob when on, the input gray with a muted knob when off. For a setting that is one or the other; a checkbox is for choosing items, not settings.
 
 **Input-bordered** — 1px hairline inside settings/forms, `{rounded.md}` radius, as tall as its row needs: compact inputs (settings rows, the workspace filter, file search) are fine.
+
+**Workspace rail and dock** — the rail mirrors the sidebar's collapsed rail on the right edge, on the frame: one 14px icon per tool at the same size, spacing and gap to the pane, grey at rest, the wash as the cursor, and the tool the open dock shows white at the heavier stroke with no fill. Pressing that tool again closes the dock; a tool that cannot be used here (Source Control without Git) is dimmed. It is out of the tab order, as the header's icons are: the tool keys and Ctrl+Shift+3 reach the dock. The dock's header shares the top line of the app: the tool's name at the breadcrumb's size, its modes as the dashboard heading's segmented switch (Source Control's Changes / Review / Graph / Patch, Chat review's History / Agent changes), then maximise and close, with no hairline. When they stop fitting the modes drop their labels, then the name goes -- measured, not a width. The plan it belongs to is `docs/design/panes-and-rail.md`.
 
 **Pane header** — a hairline-bottomed strip across a pane (terminal today). Left: route buttons if any, then the status indicator, the name (semibold), and one muted mono context line joined with ` · `. Right: groups of quiet ghost controls separated by a 1px, ~14px hairline, in the order the person reaches for them, with anything that does not fit collapsing into a `⋯` menu rather than scrolling.
 

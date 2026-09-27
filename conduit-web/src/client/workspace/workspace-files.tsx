@@ -640,7 +640,6 @@ export type Files = ReturnType<typeof createFiles>;
 
 export function FilesView(props: {
   control: Files;
-  position?: "left" | "right";
   /** The panel is expanded, which lowers the width at which the tree sits beside the file. */
   expanded: boolean;
   projectId: string;
@@ -934,7 +933,6 @@ export function FilesView(props: {
           c.elements.host = element;
         }}
         class="workspace-files"
-        data-position={props.position}
         data-wide={c.filesWide()}
         data-files={c.openPaths().secondary ? "2" : "1"}
         data-tree-collapsed={c.treeCollapsed()}

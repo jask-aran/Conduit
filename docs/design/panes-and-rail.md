@@ -1,6 +1,6 @@
 # The dock, the rail and main-pane splits
 
-> **Status (2026-09-27): proposed; stage 0 built.** Rules this produces move
+> **Status (2026-09-27): stages 0 and 1 built.** Rules this produces move
 > into `DESIGN.md` as each stage lands; this file stays the plan and is
 > deleted once the last stage is built.
 
@@ -177,7 +177,7 @@ being hidden: `workspace-files.tsx`, `workspace-source-control.tsx`,
 and `workspace-poll.ts` (the change poll). The panel keeps its chrome and the
 navigation between views. No visible change.
 
-### 1. The rail and the dock
+### 1. The rail and the dock -- built
 
 - The rail on the right edge opens the dock on a tool. The dock's tab strip
   and the header's panel toggle go.

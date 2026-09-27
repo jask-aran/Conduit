@@ -1,6 +1,6 @@
 import { batch, createEffect, createSignal, For, on, onCleanup, onMount, Show, type Accessor } from "solid-js";
 import { MIN_MAIN_PANE_WIDTH } from "../layout-geometry";
-import { Columns2Icon, FolderIcon, GitCompareArrowsIcon, Maximize2Icon, MessageSquareIcon, Minimize2Icon, TerminalIcon, XIcon } from "lucide-solid";
+import { FolderIcon, GitCompareArrowsIcon, Maximize2Icon, MessageSquareIcon, Minimize2Icon, TerminalIcon, XIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import { COMMAND_IDS } from "../commands/command-registry";
 import { focusFirst, isMobileLayout, restoreFocus } from "../navigation/mobile-layout";
@@ -14,18 +14,21 @@ import { REVIEW_NAVIGATION_EVENT, type ReviewNavigationRequest } from "../chat/r
 import { TURN_ARTIFACT_NAVIGATION_EVENT, type TurnArtifactNavigationRequest } from "../chat/turn-artifact-navigation";
 import { cachedWorkspace, cacheWorkspace, createRequestScope, reportError } from "./workspace-shared";
 import { createFiles, FilesView } from "./workspace-files";
-import { createSourceControl, SourceControlView } from "./workspace-source-control";
-import { ChatView, createChatReview } from "./workspace-chat-view";
+import { createSourceControl, SourceControlModes, SourceControlView } from "./workspace-source-control";
+import { ChatModes, ChatView, createChatReview } from "./workspace-chat-view";
 import { TerminalView } from "./workspace-terminal-view";
 import { createWorkspacePoll } from "./workspace-poll";
 import type { DirectoryListing, FileSlotId, PanelTab, WorkspaceSettings } from "./workspace-types";
+import { WORKSPACE_TOOL_LABELS } from "./workspace-rail";
 
 /*
- * The workspace panel: the chrome around the four workspace views (Files,
- * Source Control, Chat, Terminal) -- its tabs, its own two-pane split, its
- * width, opening and closing, phone focus and shortcuts -- and the navigation
- * between the views. Each view and its state live in their own files, so a
- * view can be shown outside the panel (docs/design/panes-and-rail.md).
+ * The workspace panel, the dock: the chrome around the four workspace views
+ * (Files, Source Control, Chat review, Terminal), one at a time -- its header,
+ * its width, opening and closing, phone focus and shortcuts -- and the
+ * navigation between the views. On a desktop the rail beside it chooses the
+ * view; a phone keeps the tabs in its header. Each view and its state live in
+ * their own files, so a view can be shown outside the dock
+ * (docs/design/panes-and-rail.md).
  */
 
 const PANEL_TABS = ["files", "chat", "terminal", "diff"] satisfies PanelTab[];
@@ -36,13 +39,10 @@ function panelTab(value: string): PanelTab | null {
 }
 
 const MIN_WORKSPACE_PANE_WIDTH = 240;
-const WORKSPACE_SPLIT_GUTTER_WIDTH = 9;
 
-export default function WorkspacePanel(props: { connectivity?: () => Connectivity; projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; commentChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; onFocusRequestComplete?: () => void; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onRequestOpen?: () => void; onToggleExpanded: () => void; onClose: () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing> }) {
+export default function WorkspacePanel(props: { connectivity?: () => Connectivity; projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; commentChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; onFocusRequestComplete?: () => void; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onRequestOpen?: () => void; onToggleExpanded: () => void; onClose: () => void; onTabChange?: (tab: PanelTab) => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing> }) {
   let panelRoot: HTMLElement | undefined;
   let resizeHandle: HTMLDivElement | undefined;
-  let splitHost: HTMLElement | undefined;
-  let splitResizeObserver: ResizeObserver | undefined;
   let panelMotionId = 0;
   let mobileReturnFocus: HTMLElement | null = null;
   let mobileWasOpen = false;
@@ -62,34 +62,24 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     const value = readPanelSetting("tab") || "";
     return panelTab(value) ?? "files";
   };
-  const storedSecondary = () => {
-    const stored = readPanelSetting("secondary-tab") || "";
-    return panelTab(stored);
-  };
   const [tab, setTab] = createSignal<PanelTab>(storedTab());
-  const [secondaryTab, setSecondaryTab] = createSignal<PanelTab | null>(storedSecondary());
   // The comment a chip asked to reveal, carried down to whichever view shows it.
   const [reviewReveal, setReviewReveal] = createSignal<ReviewNavigationRequest | null>(null);
   const [width, setWidth] = createSignal(Math.max(MIN_WORKSPACE_PANE_WIDTH, Math.min(496, Number(readGeometrySetting("width")) || 336)));
   const [shellWidth, setShellWidth] = createSignal(props.open() ? width() : 0);
   const [shellGap, setShellGap] = createSignal(props.open() && !isMobileLayout() ? 8 : 0);
-  const [splitRatio, setSplitRatio] = createSignal(Math.max(0, Math.min(100, Number(readGeometrySetting("split-ratio")) || 50)));
-  const [splitWidth, setSplitWidth] = createSignal(0);
   const [terminalFocusRequest, setTerminalFocusRequest] = createSignal(0);
   // Review comments ride the composer, which a dashboard has before its chat
   // exists, so they follow the loaded chat rather than the panel's own scope.
   const commentChatId = () => props.commentChatId?.() ?? props.artifactChatId?.() ?? null;
 
-  const splitActive = () => props.expanded() && secondaryTab() !== null;
-  const tabVisible = (candidate: PanelTab) => (candidate !== "diff" || props.sourceControlEnabled()) && (tab() === candidate || (props.expanded() && secondaryTab() === candidate));
-  const panePosition = (candidate: PanelTab) => tab() === candidate ? "left" : secondaryTab() === candidate ? "right" : undefined;
+  const tabVisible = (candidate: PanelTab) => (candidate !== "diff" || props.sourceControlEnabled()) && tab() === candidate;
 
   const requests = createRequestScope(props.projectId);
   const sourceControl = createSourceControl({ projectId: props.projectId, enabled: props.sourceControlEnabled, chatId: () => props.artifactChatId?.() ?? null, requests, settings, settingsScope: panelScope() });
   createEffect(() => {
     if (props.sourceControlEnabled()) return;
     if (tab() === "diff") setTab("files");
-    if (secondaryTab() === "diff") setSecondaryTab("terminal");
   });
   const chat = createChatReview({ projectId: props.projectId, chatId: () => props.artifactChatId?.() ?? null, historyAvailable: () => Boolean(props.historyAvailable?.()),
     visible: () => tabVisible("chat"), gitFiles: () => sourceControl.diff()?.files ?? [], settings, settingsScope: panelScope() });
@@ -115,67 +105,28 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     setTab(next);
     writeSetting(panelScope(), "tab", next);
   };
-  const saveSecondaryTab = (next: PanelTab | null) => {
-    setSecondaryTab(next);
-    writeSetting(panelScope(), "secondary-tab", next);
+  createEffect(() => props.onTabChange?.(tab()));
+  const tabLabel = (candidate: PanelTab) => WORKSPACE_TOOL_LABELS[candidate];
+  const setPaneTab = (next: PanelTab) => selectTab(next === "diff" && !props.sourceControlEnabled() ? "files" : next);
+  const focusTabControl = (next: PanelTab) => {
+    const control = panelRoot?.querySelector<HTMLElement>(`[data-workspace-tab="${next}"]`);
+    // On a desktop the rail stands in for the tabs, so focus lands in the view.
+    if (control?.getClientRects().length) control.focus({ preventScroll: true });
+    else focusFirst(panelRoot?.querySelector(".workspace-panel-content"));
   };
-  const toggleSplit = () => {
-    if (!props.expanded()) return;
-    if (splitActive()) {
-      saveSecondaryTab(null);
-      focusTabDefault(tab());
-      return;
-    }
-    const next: PanelTab = tab() === "files" ? "diff" : "files";
-    saveSecondaryTab(next);
-    focusTabDefault(next, "right");
-  };
-  // Keyboard retargets whichever pane holds focus: unlike a click, focus already
-  // says which half you are working in.
-  const focusedPane = (): "left" | "right" => {
-    if (!splitActive()) return "left";
-    const active = document.activeElement;
-    if (!(active instanceof Element)) return "left";
-    const owner = active.closest("[data-pane],[data-position]");
-    const side = owner?.getAttribute("data-pane") || owner?.getAttribute("data-position");
-    return side === "right" ? "right" : "left";
-  };
-  const tabLabel = (candidate: PanelTab) => candidate === "files" ? "Files" : candidate === "diff" ? "Source Control" : candidate === "chat" ? "Chat" : "Terminal";
-  const setPaneTab = (side: "left" | "right", next: PanelTab) => {
-    if (next === "diff" && !props.sourceControlEnabled()) next = "files";
-    if (!splitActive()) {
-      selectTab(next);
-      return;
-    }
-    const left = tab();
-    const right = secondaryTab() || (left === "files" ? "diff" : "files");
-    if (side === "left") {
-      if (next === right) saveSecondaryTab(left);
-      selectTab(next);
-    } else if (next === left) {
-      selectTab(right);
-      saveSecondaryTab(left);
-    } else {
-      saveSecondaryTab(next);
-    }
-  };
-  const focusTabControl = (next: PanelTab, side: "left" | "right" = "left") => {
-    const control = panelRoot?.querySelector<HTMLElement>(`[data-pane="${side}"][data-workspace-tab="${next}"]`);
-    control?.focus({ preventScroll: true });
-  };
-  const focusTabDefault = (next: PanelTab, side: "left" | "right" = "left") => {
+  const focusTabDefault = (next: PanelTab) => {
     if (next === "files") {
       if (!files.directories()[""]) void files.loadDirectory();
       // The filter lives in the file navigator, which a narrow panel folds
       // away; focus on a hidden input goes nowhere, so the open file takes it
       // then, and the tab only when there is none.
       queueMicrotask(() => {
-        if (!files.focusDefault()) focusTabControl("files", side);
+        if (!files.focusDefault()) focusTabControl("files");
       });
       return;
     }
     queueMicrotask(() => {
-      focusTabControl(next, side);
+      focusTabControl(next);
       if (next === "terminal") setTerminalFocusRequest((request) => request + 1);
     });
   };
@@ -183,9 +134,8 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     : candidate === "diff" ? <GitCompareArrowsIcon />
     : candidate === "chat" ? <MessageSquareIcon />
     : <TerminalIcon />;
-  // One strip per pane: the tabs you click always belong to the pane below them,
-  // so a split needs no notion of an "active" pane.
-  const paneTabs = (side: "left" | "right") => (
+  // A phone has no rail, so its header keeps a strip of the views.
+  const tabStrip = () => (
     <div class="workspace-panel-tabs-space" ref={(element) => {
       const observer = new ResizeObserver(() => {
         element.removeAttribute("data-icons-only");
@@ -195,20 +145,29 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       observer.observe(element);
       onCleanup(() => observer.disconnect());
     }}>
-      <div class="workspace-panel-tabs" role="toolbar" aria-label={splitActive() ? `${side === "left" ? "Left" : "Right"} workspace pane views` : "Workspace views"}>
+      <div class="workspace-panel-tabs" role="toolbar" aria-label="Workspace views">
         <For each={PANEL_TABS}>{(item) => {
-          const label = () => splitActive() ? `${tabLabel(item)} (${side === "left" ? "left" : "right"} pane)` : tabLabel(item);
           const disabled = () => item === "diff" && !props.sourceControlEnabled();
-          return <button type="button" role="tab" data-pane={side} data-workspace-tab={item} disabled={disabled()} aria-label={disabled() ? `${label()}: ${props.onBrowseDirectory ? "open a Git folder" : "unavailable for Chats and managed projects"}` : label()} title={disabled() ? (props.onBrowseDirectory ? "Open a Git folder to use Source Control" : "Source Control is available only for Workspaces") : label()} aria-selected={(side === "left" ? tab() : secondaryTab()) === item} onClick={() => changePaneTab(side, item)}>{tabIcon(item)}<span>{tabLabel(item)}</span></button>;
+          return <button type="button" role="tab" data-workspace-tab={item} disabled={disabled()} aria-label={disabled() ? `${tabLabel(item)}: ${props.onBrowseDirectory ? "open a Git folder" : "unavailable for Chats and managed projects"}` : tabLabel(item)} title={disabled() ? (props.onBrowseDirectory ? "Open a Git folder to use Source Control" : "Source Control is available only for Workspaces") : tabLabel(item)} aria-selected={tab() === item} onClick={() => changePaneTab(item)}>{tabIcon(item)}<span>{tabLabel(item)}</span></button>;
         }}</For>
       </div>
     </div>
   );
-  const changePaneTab = (side: "left" | "right", value: string) => {
-    const next = panelTab(value);
-    if (!next) return;
-    setPaneTab(side, next);
-    focusTabDefault(next, side);
+  const changePaneTab = (next: PanelTab) => {
+    setPaneTab(next);
+    focusTabDefault(next);
+  };
+  // The header holds the view's name and its modes. When they stop fitting,
+  // the modes drop their labels, then the name goes: measured, not a width.
+  const fitHeader = (element: HTMLElement) => {
+    const observer = new ResizeObserver(() => {
+      element.removeAttribute("data-compact");
+      if (element.scrollWidth <= element.clientWidth) return;
+      element.setAttribute("data-compact", "labels");
+      if (element.scrollWidth > element.clientWidth) element.setAttribute("data-compact", "name");
+    });
+    observer.observe(element);
+    onCleanup(() => observer.disconnect());
   };
   // A key the leader lists must do something here: Source Control only with
   // a repository, the split only while the panel is wide enough to split.
@@ -216,9 +175,8 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     '.command-dialog[data-state="open"], .settings-dialog[data-state="open"], .conduit-modal[data-state="open"], .external-link-dialog[data-state="open"]',
   );
   const selectShortcutTab = (next: PanelTab) => {
-    const side = focusedPane();
-    setPaneTab(side, next);
-    focusTabDefault(next, side);
+    setPaneTab(next);
+    focusTabDefault(next);
   };
   const focusWorkspaceSurface = (event: PointerEvent) => {
     const target = event.target instanceof Element ? event.target : null;
@@ -235,7 +193,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     props.shortcuts.registerHandler(COMMAND_IDS.workspaceSourceControl, "workspace-panel", () => selectShortcutTab("diff"), { when: () => props.sourceControlEnabled() && workspaceShortcutAvailable() }),
     props.shortcuts.registerHandler(COMMAND_IDS.workspaceChat, "workspace-panel", () => selectShortcutTab("chat"), { when: workspaceShortcutAvailable }),
     props.shortcuts.registerHandler(COMMAND_IDS.workspaceTerminal, "workspace-panel", () => selectShortcutTab("terminal"), { when: workspaceShortcutAvailable }),
-    props.shortcuts.registerHandler(COMMAND_IDS.workspaceSplit, "workspace-panel", toggleSplit, { when: () => props.expanded() && workspaceShortcutAvailable() }),
   ];
   onCleanup(() => releaseShortcutHandlers.forEach((release) => release()));
 
@@ -243,9 +200,8 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   // file, and a comment chip or turn artifact to whichever view shows it.
   const openSourceControlReview = async (scope: DiffScope, path: string) => {
     if (!files.confirmDiscard(path, "Discard unsaved changes and review this file?")) return;
-    const side = panePosition("files") ?? focusedPane();
     sourceControl.showReview(scope);
-    setPaneTab(side, "diff");
+    setPaneTab("diff");
     await sourceControl.refreshReview(path);
   };
   const inspectFileDiff = (path: string, staged: boolean) => void openSourceControlReview(staged ? "staged" : "changes", path);
@@ -254,11 +210,9 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     if (path) { files.setFocusedSlot(slot); void openSourceControlReview(staged ? "staged" : "changes", path); }
   };
   const openWorkingFile = (path: string) => {
-    const diffSide = panePosition("diff") ?? focusedPane();
     if (!files.openInSlot(files.focusedSlot(), path)) return;
-    if (!tabVisible("files")) setPaneTab(diffSide, "files");
-    const filesSide = panePosition("files") ?? diffSide;
-    queueMicrotask(() => focusTabDefault("files", filesSide));
+    if (!tabVisible("files")) setPaneTab("files");
+    queueMicrotask(() => focusTabDefault("files"));
   };
   const resolveReviewNavigation = (event: Event) => {
     const request = (event as CustomEvent<ReviewNavigationRequest>).detail;
@@ -274,9 +228,8 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       void openSourceControlReview(request.scope, request.path);
       return;
     }
-    const side = panePosition("chat") ?? focusedPane();
     chat.selectMode("changes");
-    setPaneTab(side, "chat");
+    setPaneTab("chat");
     chat.review.setScope(request.scope === "session" ? "chat" : "turn");
     void chat.review.refresh(request.path);
   };
@@ -286,10 +239,9 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     const request = (event as CustomEvent<TurnArtifactNavigationRequest>).detail;
     if (!request || request.chatId !== props.artifactChatId?.()) return;
     props.onRequestOpen?.();
-    const side = panePosition("chat") ?? focusedPane();
     setReviewReveal(null);
     chat.selectMode("changes");
-    setPaneTab(side, "chat");
+    setPaneTab("chat");
     chat.review.setScope("turn", request.checkpointId);
     void chat.review.refresh(request.path);
   };
@@ -429,7 +381,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   onCleanup(() => {
     requests.reset();
     stopResize?.();
-    splitResizeObserver?.disconnect();
     document.body.classList.remove("workspace-resizing");
     document.body.classList.remove("workspace-detail-resizing");
     document.body.classList.remove("workspace-tree-resizing");
@@ -451,10 +402,8 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       if (projectChanged) {
         pendingWidthCommit = Number(readGeometrySetting("width")) || 336;
         files.restoreGeometry();
-        setSplitRatio(Math.max(0, Math.min(100, Number(readGeometrySetting("split-ratio")) || 50)));
       }
       setTab(nextTab);
-      setSecondaryTab(storedSecondary());
       files.restoreOpenFiles();
     });
     if (pendingWidthCommit != null) commitWidth(pendingWidthCommit);
@@ -471,8 +420,8 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     }
   }));
   createEffect(on(
-    () => [props.projectId(), tab(), secondaryTab(), props.open(), props.expanded(), sourceControl.mode()] as const,
-    ([projectId, activeTab, companionTab, open, panelExpanded]) => {
+    () => [props.projectId(), tab(), props.open(), sourceControl.mode()] as const,
+    ([projectId, activeTab, open]) => {
       if (!open) return;
       const projectChanged = loadedProjectId !== projectId;
       if (projectChanged) {
@@ -484,9 +433,9 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
           sourceControl.setDiff(cached?.diff || null);
         });
       }
-      const filesVisible = activeTab === "files" || (panelExpanded && companionTab === "files");
-      const diffVisible = activeTab === "diff" || (panelExpanded && companionTab === "diff");
-      const chatVisible = activeTab === "chat" || (panelExpanded && companionTab === "chat");
+      const filesVisible = activeTab === "files";
+      const diffVisible = activeTab === "diff";
+      const chatVisible = activeTab === "chat";
       if (filesVisible && !files.directories()[""] && !files.filesLoading()) void files.loadDirectory("", false);
       if (diffVisible || (filesVisible && props.sourceControlEnabled())) {
         const includePatch = sourceControl.mode() === "patch";
@@ -509,68 +458,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     if (file && open) files.openFile(file.path);
   }));
 
-  const splitRatioBounds = (hostWidth = splitWidth()) => {
-    if (hostWidth <= MIN_WORKSPACE_PANE_WIDTH * 2 + WORKSPACE_SPLIT_GUTTER_WIDTH) {
-      const middle = hostWidth > 0
-        ? ((hostWidth - WORKSPACE_SPLIT_GUTTER_WIDTH) / 2 / hostWidth) * 100
-        : 50;
-      return { minimum: middle, maximum: middle };
-    }
-    return {
-      minimum: (MIN_WORKSPACE_PANE_WIDTH / hostWidth) * 100,
-      maximum: ((hostWidth - WORKSPACE_SPLIT_GUTTER_WIDTH - MIN_WORKSPACE_PANE_WIDTH) / hostWidth) * 100,
-    };
-  };
-  const clampSplitRatio = (next: number, hostWidth = splitWidth()) => {
-    const bounds = splitRatioBounds(hostWidth);
-    return Math.max(bounds.minimum, Math.min(bounds.maximum, next));
-  };
-  const saveSplitRatio = (next: number, hostWidth = splitWidth()) => {
-    const value = clampSplitRatio(next, hostWidth);
-    setSplitRatio(value);
-    writeSetting(projectScope(), "split-ratio", String(value));
-  };
-  createEffect(() => {
-    if (!splitActive() || splitWidth() <= 0) return;
-    const value = clampSplitRatio(splitRatio());
-    if (Math.abs(value - splitRatio()) > 0.001) saveSplitRatio(value);
-  });
-  const startSplitResize = (event: PointerEvent) => {
-    if (!splitHost) return;
-    event.preventDefault();
-    const bounds = splitHost.getBoundingClientRect();
-    let pending = splitRatio();
-    let frame = 0;
-    let stopped = false;
-    const apply = () => {
-      frame = 0;
-      setSplitRatio(clampSplitRatio(pending, bounds.width));
-    };
-    const move = (moveEvent: PointerEvent) => {
-      pending = ((moveEvent.clientX - bounds.left) / bounds.width) * 100;
-      if (!frame) frame = requestAnimationFrame(apply);
-    };
-    const stop = () => {
-      if (stopped) return;
-      stopped = true;
-      if (frame) {
-        cancelAnimationFrame(frame);
-        apply();
-      }
-      saveSplitRatio(pending, bounds.width);
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-      window.removeEventListener("pointercancel", stop);
-      window.removeEventListener("blur", stop);
-      document.body.classList.remove("workspace-split-resizing");
-    };
-    document.body.classList.add("workspace-split-resizing");
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop, { once: true });
-    window.addEventListener("pointercancel", stop, { once: true });
-    window.addEventListener("blur", stop, { once: true });
-  };
-
   return <>
     <Show when={props.open()}>
       <button type="button" class="mobile-panel-backdrop" data-mobile-backdrop="workspace" data-for="workspace" aria-label="Dismiss workspace panel" onClick={props.onClose} />
@@ -578,60 +465,35 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     <aside ref={panelRoot} class="workspace-panel" data-region="workspace-panel" classList={{ "workspace-panel-open": props.open() || shellWidth() > 0.5, "workspace-panel-expanded": props.expanded() }} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
     <div ref={resizeHandle} class="workspace-resize-handle" role="separator" aria-label="Resize workspace panel" aria-orientation="vertical" aria-valuemin={MIN_WORKSPACE_PANE_WIDTH} aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 16); if (event.key === "ArrowRight") saveWidth(width() - 16); }} />
     <div class="workspace-panel-surface" onPointerDown={focusWorkspaceSurface}>
-    <header class="workspace-panel-header" data-split={splitActive() ? "true" : undefined} style={{ "--workspace-split-ratio": `${splitRatio()}%` }}>
-      <div class="workspace-pane-strip" data-position="left"><strong title={props.workingRoot()}>Workspace</strong>{paneTabs("left")}</div>
-      <div class="workspace-pane-strip" data-position="right">
-        <Show when={splitActive()}>{paneTabs("right")}</Show>
-        <div class="workspace-panel-header-actions">
-          <Show when={props.expanded()}>
-            <Button variant="ghost" size="icon-sm" class="workspace-split-toggle" title={splitActive() ? "Close second pane" : "Split into two panes"} aria-label={splitActive() ? "Close second pane" : "Split into two panes"} aria-pressed={splitActive()} onClick={toggleSplit}><Columns2Icon /></Button>
-          </Show>
-          <Button variant="ghost" size="icon-sm" class="workspace-expand-toggle" title={props.expanded() ? "Restore split view" : "Expand Workspace"} aria-label={props.expanded() ? "Restore split view" : "Expand Workspace"} aria-pressed={props.expanded()} onClick={props.onToggleExpanded}>
-            <Show when={props.expanded()} fallback={<Maximize2Icon />}><Minimize2Icon /></Show>
-          </Button>
-          <Button variant="ghost" size="icon-sm" aria-label="Close workspace panel" onClick={props.onClose}><XIcon /></Button>
-        </div>
+    <header ref={fitHeader} class="workspace-panel-header">
+      <strong title={props.workingRoot()}>{tabLabel(tab())}</strong>
+      <Show when={tab() === "diff" && props.sourceControlEnabled()}><SourceControlModes control={sourceControl} /></Show>
+      <Show when={tab() === "chat"}><ChatModes control={chat} historyAvailable={Boolean(props.historyAvailable?.())} /></Show>
+      {tabStrip()}
+      <div class="workspace-panel-header-actions">
+        <Button variant="ghost" size="icon-sm" class="workspace-expand-toggle" title={props.expanded() ? "Restore" : "Maximise"} aria-label={props.expanded() ? "Restore workspace panel" : "Maximise workspace panel"} aria-pressed={props.expanded()} onClick={props.onToggleExpanded}>
+          <Show when={props.expanded()} fallback={<Maximize2Icon />}><Minimize2Icon /></Show>
+        </Button>
+        <Button variant="ghost" size="icon-sm" aria-label="Close workspace panel" onClick={props.onClose}><XIcon /></Button>
       </div>
     </header>
-    <main ref={(element) => {
-      splitHost = element;
-      splitResizeObserver?.disconnect();
-      const updateSplitWidth = (nextWidth: number) => {
-        setSplitWidth(nextWidth);
-      };
-      updateSplitWidth(element.clientWidth);
-      splitResizeObserver = new ResizeObserver((entries) => {
-        const box = entries[entries.length - 1]?.contentBoxSize?.[0];
-        updateSplitWidth(box ? box.inlineSize : element.clientWidth);
-      });
-      splitResizeObserver.observe(element);
-    }} class="workspace-panel-content" data-split={splitActive()} style={{ "--workspace-split-ratio": `${splitRatio()}%` }}>
-    <Show when={props.expanded() && secondaryTab()}>
-      <div class="workspace-split-resize-handle" role="separator" aria-label="Resize workspace panes" aria-orientation="vertical" aria-valuemin={Math.round(splitRatioBounds().minimum)} aria-valuemax={Math.round(splitRatioBounds().maximum)} aria-valuenow={Math.round(splitRatio())} tabIndex={0} onPointerDown={startSplitResize} onKeyDown={(event) => {
-        if (event.key === "ArrowLeft") saveSplitRatio(splitRatio() - 2);
-        else if (event.key === "ArrowRight") saveSplitRatio(splitRatio() + 2);
-        else if (event.key === "Home") saveSplitRatio(splitRatioBounds().minimum);
-        else if (event.key === "End") saveSplitRatio(splitRatioBounds().maximum);
-        else return;
-        event.preventDefault();
-      }} />
-    </Show>
+    <main class="workspace-panel-content">
     <Show when={tabVisible("files")}>
-      <FilesView control={files} position={panePosition("files")} expanded={props.expanded()} projectId={props.projectId()} workingRoot={props.workingRoot()}
+      <FilesView control={files} expanded={props.expanded()} projectId={props.projectId()} workingRoot={props.workingRoot()}
         sourceControlEnabled={props.sourceControlEnabled()} gitFiles={sourceControl.diff()?.files ?? []} commentChatId={commentChatId()} reveal={reviewReveal()}
         stale={poll.stale()} onRetryPoll={poll.retry} onSaved={() => void sourceControl.loadDiff(false, false)} onShowDiff={showFileDiff}
         onBrowseDirectory={props.onBrowseDirectory} onBrowseParent={props.onBrowseParent} />
     </Show>
     <Show when={tabVisible("diff")}>
-      <SourceControlView control={sourceControl} position={panePosition("diff")} stale={poll.stale()} onRetryPoll={poll.retry} chatAvailable={Boolean(props.artifactChatId?.())}
+      <SourceControlView control={sourceControl} stale={poll.stale()} onRetryPoll={poll.retry} chatAvailable={Boolean(props.artifactChatId?.())}
         commentChatId={commentChatId()} reveal={reviewReveal()} onInspectFile={inspectFileDiff} onOpenWorkingFile={openWorkingFile} />
     </Show>
     <Show when={tabVisible("chat")}>
-      <ChatView control={chat} position={panePosition("chat")} historyAvailable={Boolean(props.historyAvailable?.())} chatId={props.artifactChatId?.() ?? null}
+      <ChatView control={chat} historyAvailable={Boolean(props.historyAvailable?.())} chatId={props.artifactChatId?.() ?? null}
         commentChatId={commentChatId()} reveal={reviewReveal()} onOpenWorkingFile={openWorkingFile} />
     </Show>
     <Show when={tabVisible("terminal")}>
-      <TerminalView position={panePosition("terminal")} computer={props.settingsScope?.() === "computer"} projectId={props.projectId()} projectName={props.projectName()}
+      <TerminalView computer={props.settingsScope?.() === "computer"} projectId={props.projectId()} projectName={props.projectName()}
         workingRoot={props.workingRoot()} terminalId={props.requestedTab?.()?.terminalId} focusRequest={terminalFocusRequest()} connectivity={props.connectivity} />
     </Show>
     </main>

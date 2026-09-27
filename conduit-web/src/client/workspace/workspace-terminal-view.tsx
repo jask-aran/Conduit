@@ -8,7 +8,6 @@ import "./workspace.css";
  * rooted at the folder being browsed, rather than to a project.
  */
 export function TerminalView(props: {
-  position?: "left" | "right";
   computer: boolean;
   projectId: string;
   projectName: string;
@@ -17,7 +16,7 @@ export function TerminalView(props: {
   focusRequest: number;
   connectivity?: Accessor<Connectivity>;
 }) {
-  return <section class="workspace-terminal-slot" data-position={props.position}>
+  return <section class="workspace-terminal-slot">
     <TerminalPane projectId={props.computer ? "computer" : props.projectId} projectName={props.computer ? "Computer" : props.projectName} workingRoot={props.computer ? props.workingRoot : undefined} terminalId={props.terminalId} focusRequest={props.focusRequest} connectivity={props.connectivity} />
   </section>;
 }
