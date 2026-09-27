@@ -1,4 +1,4 @@
-import { createContext, createEffect, createSignal, For, Index, onCleanup, onMount, Show, splitProps, untrack, useContext, type Accessor, type JSX } from "solid-js";
+import { createContext, createEffect, createSignal, For, Index, onCleanup, onMount, Show, splitProps, useContext, type Accessor, type JSX } from "solid-js";
 import { ChevronRightIcon, EllipsisIcon } from "lucide-solid";
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuSeparator, MenuTrigger } from "@/components/primitives";
 import { Dynamic } from "solid-js/web";
@@ -42,31 +42,32 @@ function rowNeed(row: HTMLElement): number {
   return inner + (parseFloat(style.columnGap) || 0) * Math.max(0, children.length - 1) + edges.reduce((sum, edge) => sum + (parseFloat(style[edge]) || 0), 0);
 }
 
-/** The blocks that move between the two layouts, each glided by the switch. */
-const BLOCKS = ".split-dashboard-head, .split-dashboard-notice, .split-dashboard-composer, .split-group";
-let transitions = 0;
+let switches = 0;
 
 /**
- * Switches layouts in a view transition: each block glides from its place in
- * one to its place in the other, cropped rather than stretched while its width
- * changes (split.css). The rest of the page stays live. Instant where the
- * browser has no view transitions, or motion is reduced.
+ * Switches layouts without anything crossing the pane: the sections fade out,
+ * the layout changes, and they fade in at their new places (as the collapsed
+ * sidebar's rail does), while the composer eases from its old width and place
+ * to its new ones. Instant when motion is reduced.
  */
-function glide(root: HTMLElement, change: () => void) {
-  const start = document.startViewTransition?.bind(document);
-  if (!start || matchMedia("(prefers-reduced-motion: reduce)").matches) return change();
-  const token = ++transitions;
-  const blocks = [...root.querySelectorAll<HTMLElement>(BLOCKS)];
-  blocks.forEach((block, index) => {
-    block.style.setProperty("view-transition-name", `split-block-${index}`);
-    block.style.setProperty("view-transition-class", "split-block");
-  });
-  document.documentElement.setAttribute("data-split-transition", "");
-  start(change).finished.finally(() => {
-    if (token !== transitions) return;
-    for (const block of blocks) { block.style.removeProperty("view-transition-name"); block.style.removeProperty("view-transition-class"); }
-    document.documentElement.removeAttribute("data-split-transition");
-  });
+async function glide(root: HTMLElement, change: () => void) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return change();
+  const token = ++switches;
+  const sections = () => [...root.querySelectorAll<HTMLElement>(".split-group, .split-dashboard-notice")];
+  const out = sections().map((section) => section.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, easing: "ease-in", fill: "forwards" }));
+  await Promise.all(out.map((animation) => animation.finished.catch(() => undefined)));
+  // A newer switch has taken over, holding the sections out itself.
+  if (token !== switches) { for (const animation of out) animation.cancel(); return; }
+  const composer = root.querySelector<HTMLElement>(".split-dashboard-composer");
+  const before = composer?.getBoundingClientRect();
+  change();
+  for (const animation of out) animation.cancel();
+  for (const section of sections()) section.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: "ease-out" });
+  const after = composer?.getBoundingClientRect();
+  if (composer && before && after && Math.abs(before.width - after.width) > 1) composer.animate([
+    { width: `${before.width}px`, transform: `translate(${before.left - after.left}px, ${before.top - after.top}px)` },
+    { width: `${after.width}px`, transform: "none" },
+  ], { duration: 320, easing: "cubic-bezier(.2, .8, .2, 1)" });
 }
 
 /** The narrowest pane that fits both columns. */
@@ -102,11 +103,15 @@ export function SplitDashboard(props: {
   const wanted = () => phone() || paneWidth() < need();
   const [oneColumn, setOneColumn] = createSignal(false);
   let measured = false;
+  // The layout being switched to, so a switch under way is not started again
+  // on every frame of a resize.
+  let target = false;
   createEffect(() => {
     const next = wanted();
-    if (next === untrack(oneColumn)) return;
+    if (next === target) return;
+    target = next;
     if (!measured) return setOneColumn(next);
-    glide(root, () => setOneColumn(next));
+    void glide(root, () => setOneColumn(next));
   });
   onMount(() => {
     onCleanup(installSplitCursor(root));
