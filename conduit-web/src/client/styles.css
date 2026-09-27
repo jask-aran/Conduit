@@ -2630,6 +2630,8 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
    full-screen bubble. Centred rather than pinned, since it does not filter
    and shrink. Its rows keep the settings-list rules. */
 .settings-dialog.frost-overlay { align-items: center; padding: 16px; }
+/* As wide as the rail plus the settings list's 640px column, no wider. */
+.settings-dialog .frost-card.settings-shell { width: min(900px, calc(100vw - 32px)); }
 .settings-dialog .frost-card.settings-shell { border: 1px solid #ffffff4d; border-radius: 14px; background: #ffffff2b; box-shadow: 0 24px 70px rgb(0 0 0 / 38%), inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 10%); }
 .settings-dialog .settings-shell .settings-rail { border-right-color: oklch(1 0 0 / 10%); background: transparent; }
 .settings-dialog .settings-shell .settings-content > header { background: transparent; }
