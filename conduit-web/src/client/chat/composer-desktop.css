@@ -1,7 +1,10 @@
 /* Desktop hierarchy; mobile keeps its existing layout. */
 @media (--conduit-wide-layout) {
   .composer-actions-left { flex: 1; }
-  .composer-actions-left > .composer-desktop-setting { min-width: 0; }
+  /* The controls never squeeze; they only draw together as the composer
+     narrows, and a layout that cannot fit them changes before they would
+     have to (the dashboard's one column, split.tsx). */
+  .composer-actions-left > *, .composer-actions-right > * { flex-shrink: 0; }
   .composer-actions-right { flex: none; }
   /* Attach and the microphone are live actions, so they wear the text colour;
      muted is kept for settings and for an action that is off (an empty Send). */

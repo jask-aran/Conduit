@@ -355,6 +355,7 @@ Choosing in a menu:
 
 **Composer row** — the controls under the draft, in three tiers by how often they are reached for mid-conversation. Nothing leaves the row; lower tiers get quieter, not hidden.
 
+- Desktop controls never squeeze: as the composer narrows they only draw together, and a layout too narrow for them changes instead.
 - Desktop, left to right: attach, the context ring, the profile as its harness mark, the model-and-effort chip, permissions; then status, the dictation level while recording, the mic, and the primary slot. The chip and the slot are the only controls at full weight; settings show their value muted; attach and the mic are live actions in the text colour.
 - Phone: one row — +, the draft, mic, primary slot. Every setting lives in the + menu, which shows each value rather than its name. The mic and Send stack the moment a draft reaches its third line, and stay stacked until it fits on one.
 - The primary slot is one fixed-size button: Send (muted while there is nothing to send), Stop while the agent works, Send again once a draft is typed, with Stop stepping to its left. Its icon scales in ~150ms; the label changes at once.
@@ -435,6 +436,7 @@ Do:
 - Choose the surface first: frost for anything that floats -- overlays and floating chrome alike -- pane for where you work, frame for navigation. Frost is the signature material.
 - Follow Interaction everywhere: grey at rest, the wash as the one cursor, the current item white and semibold with no fill.
 - Keep the composer at the centre of every dashboard; it is the home-screen pattern.
+- Let content set the breakpoints. Controls keep their size and only draw together; when they stop fitting, the layout changes or the least-used fold into a ⋯, at the width measured from the controls themselves -- never a px width tuned by eye.
 - Stay dark. Match existing Solid/Kobalte slots (`data-slot="button"`, menu, dialog).
 - Hide the transcript scrollbar; keep thin thumbs on panes that scroll as ledgers.
 - Respect `prefers-reduced-motion` except the existing meteor field.

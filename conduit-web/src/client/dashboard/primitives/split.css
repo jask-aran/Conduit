@@ -84,9 +84,7 @@
 :where(.split-dashboard[data-one-column]) .split-group[data-order="first"] { order: 3; }
 :where(.split-dashboard[data-one-column]) .split-group[data-order="list"] { order: 4; }
 :where(.split-dashboard[data-one-column]) .split-group[data-order="rest"] { order: 5; }
-/* The composer's controls never squeeze; they only draw together as it
-   narrows, and the layout goes to one column before they would have to. */
-.split-dashboard :is(.composer-actions-left, .composer-actions-right) > * { flex-shrink: 0; }
+
 
 /* A phone: the sidebar's phone sizes, shortcuts as large targets, and the
    composer docked at the foot as it is in a chat. */
