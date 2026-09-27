@@ -298,6 +298,14 @@
   .conduit-sidebar[data-visual-state="collapsed"] .server-status-indicator { margin-left: 0; }
 }
 .conduit-sidebar[data-visual-state="collapsed"] .sidebar-harness-tiles { display: none; }
+/* The rail's icons fade in once the sidebar has folded, rather than snapping in. */
+@keyframes sidebar-rail-in { from { opacity: 0; } to { opacity: 1; } }
+@media (--conduit-wide-layout) {
+  .conduit-sidebar[data-visual-state="collapsed"] :is(.sidebar-rail-actions, .sidebar-area-toggle, .sidebar-user) { animation: sidebar-rail-in 180ms ease-out both; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .conduit-sidebar[data-visual-state="collapsed"] :is(.sidebar-rail-actions, .sidebar-area-toggle, .sidebar-user) { animation: none; }
+}
 
 @media (--conduit-phone-layout) {
   .sidebar-area-toggle { grid-template-columns: 36px 36px; }
