@@ -41,6 +41,7 @@ import { ShortcutsSettings } from "./shortcuts-settings";
 import { Segmented, Switch } from "./settings-controls";
 import { combineSaveStates, createAutosave, type SaveState } from "./autosave";
 import { SaveStatus } from "./save-status";
+import { FrostOverlay } from "@/components/frost";
 import { uiPreferenceSaves } from "../preferences/ui-preferences";
 
 const sectionGroups = [
@@ -1082,9 +1083,15 @@ export function Settings(props: {
     return entry ? { state: combineSaveStates(entry.saves.map((save) => save.state())), retry: () => entry.saves.forEach((save) => save.retry()) } : null;
   };
 
-  return <KDialog.Root open={props.open} onOpenChange={props.onOpenChange}>
-    <KDialog.Portal><KDialog.Content data-state={props.open ? "open" : "closed"} class="settings-dialog" onEscapeKeyDown={dismissEscape} onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}>
-      <div class="settings-shell" data-view={showingIndex() ? "index" : "detail"}>
+  return <FrostOverlay
+    open={props.open}
+    onOpenChange={props.onOpenChange}
+    class="settings-dialog"
+    cardClass="settings-shell"
+    cardAttrs={{ "data-view": showingIndex() ? "index" : "detail" }}
+    onEscapeKeyDown={dismissEscape}
+    onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}
+  >
         <div class="settings-rail">
           <div class="settings-rail-header">
             <KDialog.Title>Settings</KDialog.Title>
@@ -1483,7 +1490,5 @@ export function Settings(props: {
             </section>
           </div></Show>
         </main>
-      </div>
-    </KDialog.Content></KDialog.Portal>
-  </KDialog.Root>;
+  </FrostOverlay>;
 }
