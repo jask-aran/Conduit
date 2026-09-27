@@ -4,7 +4,7 @@ import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import {
   CopyIcon,
   EllipsisIcon,
-  FolderGit2Icon,
+  FolderIcon,
   FolderOpenIcon,
   GitCompareArrowsIcon,
   PaletteIcon,
@@ -467,7 +467,7 @@ export function ProjectDashboard(props: {
   return <>
     <SplitDashboard class="workspace-dashboard" page={isWorkspace() ? "Workspace" : "Project"} label={`${props.project.name} dashboard`}
       header={<SplitHeader title={props.project.name} kind={kindLabel(props.project)}
-        glyph={<Show when={isWorkspace()} fallback={<FolderGit2Icon />}><WorkspaceGlyph appearance={activeAppearance()} /></Show>}
+        glyph={<Show when={isWorkspace()} fallback={<FolderIcon />}><WorkspaceGlyph appearance={activeAppearance()} /></Show>}
         context={[
           <button type="button" title="Copy working path" onClick={() => void copyPath()}><code>{copied() ? "Copied" : workingRoot() || "Working path unavailable"}</code></button>,
           git() && <>{git()!.branch}{git()!.upstream ? ` → ${git()!.upstream}` : ""}</>,

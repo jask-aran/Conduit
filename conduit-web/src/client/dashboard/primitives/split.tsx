@@ -38,8 +38,8 @@ export function SplitDashboard(props: {
   </section>;
 }
 
-/** One line: the page's mark at the title's size, its name, then its kind and
- *  context, small and muted, on the title's baseline. */
+/** The page's mark, centred on its name and, under the name, its kind and
+ *  context, small and muted. */
 export function SplitHeader(props: {
   title: string;
   kind?: string;
@@ -49,7 +49,7 @@ export function SplitHeader(props: {
   const items = () => [props.kind, ...(props.context ?? [])].filter(Boolean);
   return <header class="split-header">
     <Show when={props.glyph}><span class="split-header-glyph">{props.glyph}</span></Show>
-    <div class="split-header-line">
+    <div class="split-header-copy">
       <h1>{props.title}</h1>
       <Show when={items().length}>
         <p class="split-header-context"><For each={items()}>{(item) => <span>{item}</span>}</For></p>
