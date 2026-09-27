@@ -2661,3 +2661,18 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 [data-slot*="menu"] [data-checked] > span:first-of-type, .command-option[data-checked] .command-label { font-weight: 660; }
 [data-slot*="menu"] [data-checked] svg, .command-option[data-checked] svg { stroke-width: 2; }
 .command-option[data-checked]:not([data-highlighted]) { background: transparent; }
+
+/* Menu rows rest as the sidebar's do -- a regular weight a step under the
+   text colour -- so the cursor (white, on the wash) and the current choice
+   (white and semibold) each have something to step up from. */
+[data-slot*="menu"] [role^="menuitem"]:not([data-variant="destructive"]) { color: color-mix(in oklch, var(--foreground), transparent 22%); font-weight: 450; }
+[data-slot*="menu"] [role^="menuitem"] :is(span, strong):not(.composer-menu-shortcut) { font-weight: inherit; }
+[data-slot*="menu"] [role^="menuitem"]:not([data-variant="destructive"]):is([data-highlighted], [data-expanded], [data-checked]) { color: var(--foreground); }
+[data-slot*="menu"] [role^="menuitem"][data-checked] { font-weight: 660; }
+[data-slot*="menu"] [role^="menuitem"] small { font-weight: 400; }
+/* The model selector: scoped and unscoped differ by colour, at one weight;
+   the current model is the only bold one. */
+.command-model-option[data-scoped] .command-model-label { font-weight: 450; color: color-mix(in oklch, var(--foreground), transparent 12%); }
+.command-model-option:not([data-scoped]) .command-model-label { font-weight: 450; }
+.command-model-option[data-checked] .command-model-label, .command-model-option[data-highlighted] .command-model-label { color: var(--foreground); }
+.command-model-option[data-checked] .command-model-label { font-weight: 660; }

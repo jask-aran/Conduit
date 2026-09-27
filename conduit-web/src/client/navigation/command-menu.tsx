@@ -153,6 +153,8 @@ export function CommandMenu(props: {
   runtime: RuntimeStore;
   actions: PaletteActions;
   onChooseModel: (spec: string) => void;
+  /** The model in use, drawn as where you are. */
+  currentModel?: string;
   scopeModels: ModelOption[];
   enabledModelSpecs: string[];
   onToggleModelScope: (spec: string) => void;
@@ -882,7 +884,7 @@ export function CommandMenu(props: {
       onClick: (event: MouseEvent) => runPointerRow(row, event),
     } as const;
     if (row.type === "model") {
-      if (modelSelectorPage()) return <div {...commonProps} class="command-option frost-row command-model-option" data-highlighted={selected() || undefined} data-scoped={row.scoped || undefined}>
+      if (modelSelectorPage()) return <div {...commonProps} class="command-option frost-row command-model-option" data-highlighted={selected() || undefined} data-scoped={row.scoped || undefined} data-checked={row.model.spec === props.currentModel || undefined}>
         <span class="command-model-label" data-matching={matchedLabel(row.model.label, parsedQuery().text) ? "" : undefined}>{matchedLabel(row.model.label, parsedQuery().text) || row.model.label}</span><small class="command-model-spec">{row.model.spec}</small>
       </div>;
       const Icon = icons.model!;
