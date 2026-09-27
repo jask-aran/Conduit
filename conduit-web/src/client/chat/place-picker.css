@@ -1,8 +1,6 @@
 /* The composer's folder button and its list of places (place-picker.tsx). */
-/* Rows are the shared `menu-row` (styles.css), so they match the menus. */
+/* The list itself is PopoverSearchList (primitives.tsx). */
 .composer-place-menu { width: 208px; padding: 0; }
-.composer-place-search { width: 100%; border: 0; border-bottom: 1px solid var(--border); background: transparent; padding: 7px 10px; color: var(--foreground); font: inherit; font-size: 10.4px; outline: none; }
-.composer-place-list { max-height: 240px; overflow-y: auto; padding: 4px; scrollbar-width: thin; }
 .composer-places-menu { max-height: 60vh; overflow-y: auto; }
 :is(.composer-places-menu, .composer-options-value) .workspace-glyph { width: 16px; height: 16px; flex: none; }
 .composer-place-trigger .workspace-glyph { width: 14px; height: 14px; }
@@ -11,6 +9,5 @@
 .composer-place-lead > :is(svg, img), .composer-place-lead .workspace-glyph { width: 13px; height: 13px; }
 .menu-row:is([data-checked], [data-highlighted]) .composer-place-lead { color: var(--foreground); }
 .composer-place-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.composer-place-list small { color: var(--muted-foreground); font-size: 9.6px; font-weight: 400; }
-@media (--conduit-mobile-layout) { .composer-place-menu { width: 260px; } .composer-place-search { font-size: 0.875rem; } }
-.composer-place-empty { padding: 6px; color: var(--muted-foreground); font-size: 10.4px; }
+.composer-place-menu small { color: var(--muted-foreground); font-size: 9.6px; font-weight: 400; }
+@media (--conduit-mobile-layout) { .composer-place-menu { width: 260px; } }
