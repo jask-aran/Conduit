@@ -2665,7 +2665,12 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 /* Menu rows rest as the sidebar's do -- a regular weight a step under the
    text colour -- so the cursor (white, on the wash) and the current choice
    (white and semibold) each have something to step up from. */
-[data-slot*="menu"] [role^="menuitem"]:not([data-variant="destructive"]) { color: color-mix(in oklch, var(--foreground), transparent 22%); font-weight: 450; }
+[data-slot*="menu"] [role^="menuitem"]:not([data-variant="destructive"]) { color: color-mix(in oklch, var(--foreground), transparent 38%); font-weight: 450; }
+/* Unavailable is struck through as well as greyed, so it cannot pass for a resting row. */
+[data-slot*="menu"] [role^="menuitem"][data-disabled]:not([data-variant="destructive"]) { color: color-mix(in oklch, var(--foreground), transparent 22%); }
+[data-slot*="menu"] [role^="menuitem"][data-disabled] { text-decoration: line-through; text-decoration-color: color-mix(in oklch, currentColor, transparent 30%); }
+/* Meta and keys are not struck: an inline-block stops the line reaching them. */
+[data-slot*="menu"] [role^="menuitem"][data-disabled] :is(small, kbd) { display: inline-block; text-decoration: none; }
 [data-slot*="menu"] [role^="menuitem"] :is(span, strong):not(.composer-menu-shortcut) { font-weight: inherit; }
 [data-slot*="menu"] [role^="menuitem"]:not([data-variant="destructive"]):is([data-highlighted], [data-expanded], [data-checked]) { color: var(--foreground); }
 [data-slot*="menu"] [role^="menuitem"][data-checked] { font-weight: 660; }
