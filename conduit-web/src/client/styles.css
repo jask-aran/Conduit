@@ -2648,24 +2648,31 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 /* Where you are, in every menu and picker, is white and semibold with its
    icon at a heavier stroke and no fill (DESIGN.md, Interaction); the wash is
    only the cursor. */
-[data-slot*="menu"] [data-checked], .command-option[data-checked] { color: var(--foreground); font-weight: 660; }
+[data-slot*="menu"] [data-checked], .command-option[data-checked], .menu-row[data-checked] { color: var(--foreground); font-weight: 660; }
 [data-slot*="menu"] [data-checked] > span:first-of-type, .command-option[data-checked] .command-label { font-weight: 660; }
-[data-slot*="menu"] [data-checked] svg, .command-option[data-checked] svg { stroke-width: 2; }
+[data-slot*="menu"] [data-checked] svg, .command-option[data-checked] svg, .menu-row[data-checked] svg { stroke-width: 2; }
 .command-option[data-checked]:not([data-highlighted]) { background: transparent; }
+
+/* `menu-row` is the menu row for lists that are not a Kobalte menu (a
+   searchable picker in a popover): same geometry, and every rule below
+   covers it, so it cannot drift from the menus. */
+.menu-row { position: relative; display: flex; width: 100%; align-items: center; gap: 6px; border: 0; border-radius: 6px; background: transparent; padding: 4px 6px; text-align: left; cursor: default; user-select: none; outline: none; }
+.menu-row[data-highlighted] { background: oklch(1 0 0 / 10%); }
+@media (--conduit-mobile-layout) { .menu-row { padding: 6px 8px; } }
 
 /* Menu rows rest as the sidebar's do -- a regular weight a step under the
    text colour -- so the cursor (white, on the wash) and the current choice
    (white and semibold) each have something to step up from. */
-[data-slot*="menu"] [role^="menuitem"]:not([data-variant="destructive"]) { color: color-mix(in oklch, var(--foreground), transparent 38%); font-weight: 450; }
+:is([data-slot*="menu"] [role^="menuitem"], .menu-row):not([data-variant="destructive"]) { color: color-mix(in oklch, var(--foreground), transparent 38%); font-weight: 450; }
 /* Unavailable is struck through as well as greyed, so it cannot pass for a resting row. */
-[data-slot*="menu"] [role^="menuitem"][data-disabled]:not([data-variant="destructive"]) { color: color-mix(in oklch, var(--foreground), transparent 22%); }
-[data-slot*="menu"] [role^="menuitem"][data-disabled] { text-decoration: line-through 1.5px; text-decoration-color: currentColor; }
+:is([data-slot*="menu"] [role^="menuitem"], .menu-row)[data-disabled]:not([data-variant="destructive"]) { color: color-mix(in oklch, var(--foreground), transparent 22%); }
+:is([data-slot*="menu"] [role^="menuitem"], .menu-row)[data-disabled] { text-decoration: line-through 1.5px; text-decoration-color: currentColor; }
 /* Meta and keys are not struck: an inline-block stops the line reaching them. */
-[data-slot*="menu"] [role^="menuitem"][data-disabled] :is(small, kbd) { display: inline-block; text-decoration: none; }
-[data-slot*="menu"] [role^="menuitem"] :is(span, strong):not(.composer-menu-shortcut) { font-weight: inherit; }
-[data-slot*="menu"] [role^="menuitem"]:not([data-variant="destructive"]):is([data-highlighted], [data-expanded], [data-checked]) { color: var(--foreground); }
-[data-slot*="menu"] [role^="menuitem"][data-checked] { font-weight: 660; }
-[data-slot*="menu"] [role^="menuitem"] small { font-weight: 400; }
+:is([data-slot*="menu"] [role^="menuitem"], .menu-row)[data-disabled] :is(small, kbd) { display: inline-block; text-decoration: none; }
+:is([data-slot*="menu"] [role^="menuitem"], .menu-row) :is(span, strong):not(.composer-menu-shortcut) { font-weight: inherit; }
+:is([data-slot*="menu"] [role^="menuitem"], .menu-row):not([data-variant="destructive"]):is([data-highlighted], [data-expanded], [data-checked]) { color: var(--foreground); }
+:is([data-slot*="menu"] [role^="menuitem"], .menu-row)[data-checked] { font-weight: 660; }
+:is([data-slot*="menu"] [role^="menuitem"], .menu-row) small { font-weight: 400; }
 /* The model selector: scoped and unscoped differ by colour, at one weight;
    the current model is the only bold one. */
 .command-model-option[data-scoped] .command-model-label { font-weight: 450; color: color-mix(in oklch, var(--foreground), transparent 12%); }
@@ -2673,9 +2680,9 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-model-option[data-checked] .command-model-label, .command-model-option[data-highlighted] .command-model-label { color: var(--foreground); }
 .command-model-option[data-checked] .command-model-label { font-weight: 660; }
 /* Menu rows at the sidebar row's size, a step under the old text-sm. */
-[data-slot*="menu"] [role^="menuitem"] { font-size: 10.4px; }
-[data-slot*="menu"] [role^="menuitem"] :is(span, strong):not(.composer-menu-shortcut) { font-size: inherit; }
-@media (--conduit-mobile-layout) { [data-slot*="menu"] [role^="menuitem"] { font-size: 0.875rem; } }
+:is([data-slot*="menu"] [role^="menuitem"], .menu-row) { font-size: 10.4px; }
+:is([data-slot*="menu"] [role^="menuitem"], .menu-row) :is(span, strong):not(.composer-menu-shortcut) { font-size: inherit; }
+@media (--conduit-mobile-layout) { :is([data-slot*="menu"] [role^="menuitem"], .menu-row) { font-size: 0.875rem; } }
 
 /* Dialogs and confirms are overlays, so they are frost (DESIGN.md, Surfaces):
    the page dims as it does under a palette and the card takes the
