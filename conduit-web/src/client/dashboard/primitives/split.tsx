@@ -1,5 +1,6 @@
-import { For, Show, splitProps, type JSX } from "solid-js";
+import { For, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
+import { installSplitCursor } from "./split-cursor";
 import "./split.css";
 
 // The project and workspace dashboards: a header across the top, then the
@@ -20,7 +21,9 @@ export function SplitDashboard(props: {
   list?: JSX.Element;
   aside?: JSX.Element;
 }) {
-  return <section class={classes("split-dashboard", props.class)} aria-label={props.label}>
+  let root!: HTMLElement;
+  onMount(() => onCleanup(installSplitCursor(root)));
+  return <section ref={root} class={classes("split-dashboard", props.class)} aria-label={props.label}>
     <div class="split-dashboard-body">
       <div class="split-dashboard-head">{props.header}{props.shortcuts}</div>
       <Show when={props.notice}><div class="split-dashboard-notice">{props.notice}</div></Show>

@@ -150,3 +150,8 @@
   .split-group-actions .split-list-filter { height: 32px; padding: 0 8px; font-size: 13px; }
 }
 .split-heading-switches { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+/* While the keyboard moves the cursor (split-cursor.ts), a row left under a
+   still pointer draws at rest until the pointer moves, so only the cursor row
+   is washed. */
+.split-dashboard[data-keyboard-cursor] :is(.split-row, .split-group-more, .app-folder):hover:not(:focus-visible, [data-expanded]) { background: transparent; }
