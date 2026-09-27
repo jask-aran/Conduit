@@ -94,10 +94,14 @@ export function createDriveChat(options: {
   /** Point the store at a live record the harness drive endpoint just opened. */
   const attach = async (record: LiveRecord & { nativeSessionId?: string }, title: string) => {
     chat.reset();
-    setChatId(record.chatId || record.id);
+    const id = record.chatId || record.id;
+    setChatId(id);
     setLiveId(record.id);
     chat.setTitle(title);
-    await chat.ensureAgent({ record, detail: await loadTranscript(record.id) });
+    // A thread just started has no history to load; an empty one still opens
+    // the store on it, which is what lets its composer take the next prompt.
+    const detail = await loadTranscript(record.id) || { id, projectId: "", status: "active" as const, title, messages: [], tools: [] };
+    await chat.ensureAgent({ record, detail });
     void loadModels(record.id);
   };
 
