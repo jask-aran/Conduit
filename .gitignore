@@ -23,3 +23,7 @@ conduit-web/native/transcribe-rs-worker/target/
 working-files/.venv/
 .wp10-rust/
 .cptr
+.hero-data/
+.hero-demo/
+.hero-state/
+.hero-tools/
