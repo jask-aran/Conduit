@@ -83,7 +83,7 @@ function kindLabel(project: Project) {
   if (project.origin === "cloned") return "Cloned workspace";
   if (project.origin === "created") return "Created workspace";
   if (workspaceProject(project)) return "Linked workspace";
-  return "Managed folder";
+  return "Project";
 }
 
 type ThreadSide = "chats" | "outside";
@@ -160,6 +160,10 @@ export function ProjectDashboard(props: {
   const [outsideFilter, setOutsideFilter] = createSignal("");
   const [threadSide, setThreadSide] = createSignal<ThreadSide>("chats");
   const [unreadOnly, setUnreadOnly] = createSignal(false);
+  // The header's indicators, as the Conduit dashboard's, for this place's chats.
+  const activeChats = () => props.project.sessions.filter((chat) => chat.status === "active");
+  const running = createMemo(() => activeChats().filter((chat) => props.runtime.getProcess(chat.id)?.active).length);
+  const unreadCount = createMemo(() => activeChats().filter((chat) => chat.unread).length);
   const [profile, setProfile] = createSignal("");
   const [limit, setLimit] = createSignal(CHAT_PAGE);
   const chatSort = useChatSort();
@@ -469,6 +473,8 @@ export function ProjectDashboard(props: {
           git() && <>{git()!.branch}{git()!.upstream ? ` → ${git()!.upstream}` : ""}</>,
           git() && (git()!.ahead || git()!.behind) ? [git()!.ahead && `${git()!.ahead} ahead`, git()!.behind && `${git()!.behind} behind`].filter(Boolean).join(", ") : null,
           !isWorkspace() && payload()?.stats.lastActivityAt && `last active ${relativeActivity(payload()?.stats.lastActivityAt, now()).toLowerCase()}`,
+          running() ? `${running()} running` : "Nothing running",
+          unreadCount() ? `${unreadCount()} unread` : null,
         ]} />}
       shortcuts={<SplitShortcuts>
         <SplitShortcut icon={<FolderOpenIcon />} label="Files" onClick={() => props.onOpenView("files")} />
