@@ -159,10 +159,10 @@ export type SplitShortcutItem = { icon: JSX.Element; label: string; onClick: () 
 /**
  * Plain words on the title's line, at every desktop width: as room runs out
  * they fold, last first, into the ⋯, which also holds the page's `manage`
- * items, and the title truncates only once they all have. A row of large
+ * items -- a function, so they are made inside the menu -- and the title truncates only once they all have. A row of large
  * targets on a phone.
  */
-export function SplitShortcuts(props: { items: Array<SplitShortcutItem | false | null | undefined>; manage?: JSX.Element; label?: string }) {
+export function SplitShortcuts(props: { items: Array<SplitShortcutItem | false | null | undefined>; manage?: () => JSX.Element; label?: string }) {
   const items = () => props.items.filter(Boolean) as SplitShortcutItem[];
   const [fit, setFit] = createSignal(Infinity);
   const folded = () => items().slice(fit());
@@ -178,7 +178,7 @@ export function SplitShortcuts(props: { items: Array<SplitShortcutItem | false |
             <MenuGroup><For each={folded()}>{(item) => <MenuItem onSelect={() => item.onClick()}>{item.icon}{item.label}</MenuItem>}</For></MenuGroup>
             <Show when={props.manage}><MenuSeparator /></Show>
           </Show>
-          {props.manage}
+          {props.manage?.()}
         </MenuContent>
       </Menu>
     </span>
