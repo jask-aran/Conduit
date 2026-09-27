@@ -21,7 +21,7 @@ import { ThreadHarnessMark } from "../harness-brand";
 import { activityLabel } from "../../activity.js";
 import { Segmented } from "../settings/settings-controls";
 import { loadOutsideThreads, type OutsideThread } from "../dashboard/outside-threads";
-import { CHAT_PAGE, DayGroups, groupByDay, ListFilter, ListSearch, ProfileFilter, profileOf, ShowMore } from "../dashboard/primitives/chat-list";
+import { CHAT_PAGE, CompactHeading, DayGroups, FiltersMenu, groupByDay, harnessChoice, ListFilter, ListSearch, ProfileFilter, profileChoice, profileOf, ShowMore, sortChoice } from "../dashboard/primitives/chat-list";
 import { FileTypeIcon } from "../workspace/file-type-icon";
 import {
   Button,
@@ -418,11 +418,27 @@ export function ProjectDashboard(props: {
         <ListFilter harnesses={outsideHarnesses()} harness={outsideFilter()} onHarness={(id) => { setOutsideFilter(id); setLimit(CHAT_PAGE); }} />
       </Show>
       <ListSearch label={`Search chats in ${props.project.name}`} onClick={props.onSearchChats} />
+    </>} compactHeading={<CompactHeading label={unreadOnly() ? "Unread" : "Recent chats"} count={showOutside() ? filteredOutside().length : visibleChats().length} where={isWorkspace() && (showOutside() ? "Not in Conduit" : "Conduit chats")} />}
+    compactActions={<>
+      <FiltersMenu choices={[
+        { label: "Show", value: unreadOnly() ? "unread" : "all", onChange: (value) => { setUnreadOnly(value === "unread"); setLimit(CHAT_PAGE); }, options: [
+          { value: "all", label: "Recent chats", detail: showOutside() ? filteredOutside().length : activeChatCount() },
+          { value: "unread", label: "Unread", detail: showOutside() ? 0 : unreadCount() },
+        ] },
+        isWorkspace() && { label: "Where", value: threadSide(), onChange: (value) => { saveThreadSide(value as ThreadSide); setLimit(CHAT_PAGE); }, options: [
+          { value: "chats", label: "Conduit chats", detail: activeChatCount() },
+          { value: "outside", label: "Not in Conduit", detail: outsideLoading() ? undefined : outsideThreads().length },
+        ] },
+        ...(showOutside()
+          ? [harnessChoice(outsideHarnesses(), outsideFilter(), (id) => { setOutsideFilter(id); setLimit(CHAT_PAGE); })]
+          : [profileChoice(props.profiles, new Set(activeChats().map((chat) => profileOf(props.profiles, chat))), profile(), (id) => { setProfile(id); setLimit(CHAT_PAGE); }), sortChoice(chatSort(), saveChatSort)]),
+      ]} />
+      <ListSearch label={`Search chats in ${props.project.name}`} onClick={props.onSearchChats} />
     </>} more={<ShowMore total={showOutside() ? filteredOutside().length : visibleChats().length} shown={limit()} onMore={() => setLimit((value) => value + CHAT_PAGE)} />}>
     <Show when={showOutside()} fallback={chatRows()}>{outsideRows()}</Show>
   </SplitGroup>;
 
-  const terminalsGroup = () => <SplitGroup id="dashboard-terminals" label="Terminals" count={scopedTerminals().length} busy={terminalsLoading()} actions={<button type="button" onClick={() => props.onOpenView("terminal")}>Open</button>}>
+  const terminalsGroup = () => <SplitGroup id="dashboard-terminals" label="Terminals" collapsible count={scopedTerminals().length} busy={terminalsLoading()} actions={<button type="button" onClick={() => props.onOpenView("terminal")}>Open</button>}>
     <Show when={scopedTerminals().length} fallback={<SplitEmpty>{terminalsLoading() ? "Loading terminals…" : "No live terminals."}</SplitEmpty>}>
       <For each={scopedTerminals()}>{(terminal) =>
         <ContextMenu><ContextMenuTrigger as={SplitRow} element="button" onPointerEnter={props.onPrefetchTerminal} onFocus={props.onPrefetchTerminal} onClick={() => props.onOpenTerminal(terminal)}
@@ -437,7 +453,7 @@ export function ProjectDashboard(props: {
 
   // Uncommitted work against HEAD, staged and unstaged together, drawn with
   // the workspace panel's change rows.
-  const changesGroup = () => <SplitGroup id="dashboard-changes" label="Changes" count={git()?.changedFiles ?? 0} actions={<Show when={git()?.changedFiles}><SplitCounts {...changeTotals()} /></Show>}>
+  const changesGroup = () => <SplitGroup id="dashboard-changes" label="Changes" collapsible count={git()?.changedFiles ?? 0} actions={<Show when={git()?.changedFiles}><SplitCounts {...changeTotals()} /></Show>}>
     <Show when={payload()?.changes.length} fallback={<SplitEmpty>{payload() ? "Working tree clean." : "Loading…"}</SplitEmpty>}>
       <For each={payload()!.changes}>{(file) => {
         const name = file.path.replace(/\/$/, "").split("/").at(-1) ?? file.path;
