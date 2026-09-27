@@ -198,13 +198,11 @@
   .split-dashboard-body { min-width: 0; }
 }
 
-/* A heading with switches (the chats list) is two rows at every desktop
-   width: the switches, then its filters and search at the right. Nothing in
-   it wraps or squeezes as the pane narrows; they only draw closer. */
-.split-group-heading:has(> .split-heading-switches) { flex-wrap: wrap; row-gap: 4px; }
+/* A heading with switches (the chats list) is one line at every desktop
+   width: the switches at the left keep their size, and the filters take the
+   rest, folding into ⋯ from the last as it runs out (FilterBar). */
 .split-group-heading > .split-heading-switches { flex: none; flex-wrap: nowrap; }
-.split-group-heading:has(> .split-heading-switches) > .split-group-actions { flex-basis: 100%; justify-content: flex-end; }
+.split-group-heading:has(> .split-heading-switches) > .split-group-actions { position: relative; min-width: 0; flex: 1 1 0; justify-content: flex-end; }
 .split-heading-switches .settings-segmented, .split-heading-switches .settings-segmented button, .split-group-actions > * { flex: none; white-space: nowrap; }
-@media (--conduit-mobile-layout) {
-  .split-group-heading:has(> .split-heading-switches) > .split-group-actions { flex-basis: auto; }
-}
+.split-group-actions > :is([data-filter], [data-filter-more]) { display: inline-flex; }
+.split-group-actions > :is([data-filter], [data-filter-more])[data-folded] { position: absolute; top: 0; right: 0; visibility: hidden; pointer-events: none; }

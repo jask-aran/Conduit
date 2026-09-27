@@ -1,6 +1,6 @@
-import { For, Show, type JSX } from "solid-js";
-import { CheckIcon, ChevronDownIcon, LayersIcon, SearchIcon } from "lucide-solid";
-import { Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@/components/primitives";
+import { createSignal, For, Index, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { ChevronDownIcon, EllipsisIcon, LayersIcon, SearchIcon } from "lucide-solid";
+import { Menu, MenuContent, MenuGroup, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@/components/primitives";
 import { HarnessMark } from "../../harness-brand";
 import { SplitGroupMore } from "./split";
 import type { Project } from "../../api/contracts";
@@ -46,51 +46,6 @@ export function ShowMore(props: { total: number; shown: number; onMore: () => vo
   return <Show when={props.total > props.shown}><SplitGroupMore onClick={props.onMore}>Show more <small>{props.total - props.shown}</small></SplitGroupMore></Show>;
 }
 
-/**
- * Sort, unread and harness choices behind one quiet trigger that names what
- * is in force, so the heading keeps its shape whichever list is showing.
- */
-export function ListFilter(props: {
-  sort?: "latest" | "created";
-  onSort?: (sort: "latest" | "created") => void;
-  unreadOnly?: boolean;
-  onUnreadOnly?: (value: boolean) => void;
-  harnesses?: Array<{ id: string; label: string }>;
-  harness?: string;
-  onHarness?: (id: string) => void;
-}) {
-  const summary = () => props.harnesses
-    ? props.harnesses.find((item) => item.id === props.harness)?.label || "All harnesses"
-    : `${props.sort === "created" ? "Created" : "Latest"}${props.unreadOnly ? " · Unread" : ""}`;
-  return <Menu modal={false}>
-    <MenuTrigger class="split-list-filter" title="Filter and sort">{summary()}<ChevronDownIcon /></MenuTrigger>
-    <MenuContent class={props.harnesses ? "w-56" : "w-48"}>
-      <Show when={props.onSort}>
-        <MenuGroup>
-          <MenuLabel>Sort by</MenuLabel>
-          <MenuRadioGroup value={props.sort} onChange={(value: string) => props.onSort!(value as "latest" | "created")}>
-            <MenuRadioItem value="latest">Latest activity</MenuRadioItem>
-            <MenuRadioItem value="created">Created</MenuRadioItem>
-          </MenuRadioGroup>
-        </MenuGroup>
-      </Show>
-      <Show when={props.onUnreadOnly}>
-        <MenuSeparator />
-        <MenuItem closeOnSelect={false} onSelect={() => props.onUnreadOnly!(!props.unreadOnly)}><span class="split-check">{props.unreadOnly ? <CheckIcon /> : null}</span>Unread only</MenuItem>
-      </Show>
-      <Show when={props.harnesses}>
-        <MenuGroup>
-          <MenuLabel>Harness</MenuLabel>
-          <MenuRadioGroup value={props.harness || ""} onChange={(value: string) => props.onHarness?.(value)}>
-            <MenuRadioItem value=""><LayersIcon class="size-4" />All harnesses</MenuRadioItem>
-            <For each={props.harnesses}>{(item) => <MenuRadioItem value={item.id}><HarnessMark id={item.id} class="size-4" />{item.label}</MenuRadioItem>}</For>
-          </MenuRadioGroup>
-        </MenuGroup>
-      </Show>
-    </MenuContent>
-  </Menu>;
-}
-
 type ProfileLike = { id: string; label: string; implementation?: string };
 
 /** The profile a chat runs under: the one it was started from, else, for a
@@ -101,70 +56,83 @@ export function profileOf(profiles: ProfileLike[], chat: { templateId?: string |
   return (harness && profiles.find((profile) => profile.implementation === harness)?.id) || "";
 }
 
-/** Filter by the profile a chat was started with. Every profile is listed so
- *  the choice is always visible; one no chat here uses is greyed out. */
-export function ProfileFilter(props: { profiles: Array<{ id: string; label: string; implementation?: string }>; used: Set<string>; value: string; onChange: (id: string) => void }) {
-  const label = () => props.profiles.find((item) => item.id === props.value)?.label || "All profiles";
-  return <Show when={props.profiles.length}>
-    <Menu modal={false}>
-      <MenuTrigger class="split-list-filter" title="Filter by profile">{label()}<ChevronDownIcon /></MenuTrigger>
-      <MenuContent class="w-56">
-        <MenuGroup>
-          <MenuLabel>Profile</MenuLabel>
-          <MenuRadioGroup value={props.value} onChange={(value: string) => props.onChange(value)}>
-            <MenuRadioItem value=""><LayersIcon class="size-4" />All profiles</MenuRadioItem>
-            <For each={props.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={!props.used.has(item.id) && item.id !== props.value}><HarnessMark id={item.implementation || "conduit"} class="size-4" />{item.label}</MenuRadioItem>}</For>
-          </MenuRadioGroup>
-        </MenuGroup>
-      </MenuContent>
-    </Menu>
-  </Show>;
-}
-
-/** Filter by the project or workspace a chat lives in, each with its own mark. */
-export function PlaceFilter(props: { label: string; all: string; places: Array<{ id: string; label: string; project: Project }>; value: string; onChange: (id: string) => void }) {
-  const current = () => props.places.find((item) => item.id === props.value)?.label || props.all;
-  return <Show when={props.places.length}>
-    <Menu modal={false}>
-      <MenuTrigger class="split-list-filter" title={`Filter by ${props.label.toLowerCase()}`}>{current()}<ChevronDownIcon /></MenuTrigger>
-      <MenuContent class="w-56">
-        <MenuGroup>
-          <MenuLabel>{props.label}</MenuLabel>
-          <MenuRadioGroup value={props.value} onChange={(value: string) => props.onChange(value)}>
-            <MenuRadioItem value=""><LayersIcon class="size-4" />{props.all}</MenuRadioItem>
-            <For each={props.places}>{(item) => <MenuRadioItem value={item.id}><span class="size-4 shrink-0 grid place-items-center"><PlaceGlyph project={item.project} /></span>{item.label}</MenuRadioItem>}</For>
-          </MenuRadioGroup>
-        </MenuGroup>
-      </MenuContent>
-    </Menu>
-  </Show>;
-}
-
 /** One choice in the Filters menu: a name and its options, one in force. */
 export type ListChoice = {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  options: Array<{ value: string; label: string; detail?: JSX.Element; icon?: JSX.Element; disabled?: boolean }>;
+  options: Array<{ value: string; label: string; short?: string; detail?: JSX.Element; icon?: JSX.Element; disabled?: boolean }>;
 };
+
+function ChoiceGroup(props: { choice: ListChoice }) {
+  return <MenuGroup>
+    <MenuLabel>{props.choice.label}</MenuLabel>
+    <MenuRadioGroup value={props.choice.value} onChange={(value: string) => props.choice.onChange(value)}>
+      <For each={props.choice.options}>{(option) => <MenuRadioItem value={option.value} disabled={option.disabled}>
+        {option.icon}{option.label}<Show when={option.detail != null}><small class="split-filter-detail">{option.detail}</small></Show>
+      </MenuRadioItem>}</For>
+    </MenuRadioGroup>
+  </MenuGroup>;
+}
+
+/** One choice as its own quiet dropdown, naming the option in force. */
+function ChoiceFilter(props: { choice: ListChoice }) {
+  const current = () => props.choice.options.find((option) => option.value === props.choice.value) ?? props.choice.options[0];
+  return <Menu modal={false}>
+    <MenuTrigger class="split-list-filter" title={props.choice.label}>{current()?.short ?? current()?.label}<ChevronDownIcon /></MenuTrigger>
+    <MenuContent class="w-56"><ChoiceGroup choice={props.choice} /></MenuContent>
+  </Menu>;
+}
+
+/**
+ * The heading's filters on its one line, beside the switches: each choice its
+ * own dropdown, and as room runs out the last ones fold, in order, into a ⋯
+ * menu before search (the children). A folded filter stays laid out, hidden,
+ * so its width is known when room comes back.
+ */
+export function FilterBar(props: { choices: Array<ListChoice | false | null | undefined>; children?: JSX.Element }) {
+  const choices = () => props.choices.filter(Boolean) as ListChoice[];
+  const [fit, setFit] = createSignal(Infinity);
+  let more!: HTMLSpanElement;
+  onMount(() => {
+    const bar = more.parentElement;
+    if (!bar) return;
+    const measure = () => {
+      const gap = parseFloat(getComputedStyle(bar).columnGap) || 0;
+      const children = [...bar.children] as HTMLElement[];
+      const widths = children.filter((child) => child.hasAttribute("data-filter")).map((child) => child.offsetWidth + gap);
+      let used = children.filter((child) => !child.matches("[data-filter], [data-filter-more]")).reduce((sum, child) => sum + child.offsetWidth + gap, 0);
+      const room = bar.clientWidth + gap + .5;
+      if (used + widths.reduce((sum, width) => sum + width, 0) <= room) return setFit(widths.length);
+      used += more.offsetWidth + gap;
+      let count = 0;
+      while (count < widths.length && used + widths[count]! <= room) used += widths[count++]!;
+      setFit(count);
+    };
+    const observer = new ResizeObserver(measure);
+    const observeAll = () => { observer.disconnect(); observer.observe(bar); for (const child of bar.children) observer.observe(child); measure(); };
+    const mutations = new MutationObserver(observeAll);
+    mutations.observe(bar, { childList: true });
+    observeAll();
+    onCleanup(() => { observer.disconnect(); mutations.disconnect(); });
+  });
+  return <>
+    <Index each={choices()}>{(choice, index) => <span data-filter data-folded={index >= fit() ? "" : undefined}><ChoiceFilter choice={choice()} /></span>}</Index>
+    <span ref={more} data-filter-more data-folded={fit() >= choices().length ? "" : undefined}><FiltersMenu title="More filters" trigger={<EllipsisIcon />} choices={choices().slice(fit())} /></span>
+    {props.children}
+  </>;
+}
 
 /** On one column the heading's switches and filters fold into one menu:
  *  each choice a group, the current option bold (no tick). */
-export function FiltersMenu(props: { choices: Array<ListChoice | false | null | undefined> }) {
+export function FiltersMenu(props: { choices: Array<ListChoice | false | null | undefined>; title?: string; trigger?: JSX.Element }) {
   const choices = () => props.choices.filter(Boolean) as ListChoice[];
   return <Menu modal={false}>
-    <MenuTrigger class="split-list-filter" title="Filters">Filters<ChevronDownIcon /></MenuTrigger>
+    <MenuTrigger class="split-list-filter" title={props.title ?? "Filters"}>{props.trigger ?? <>Filters<ChevronDownIcon /></>}</MenuTrigger>
     <MenuContent class="w-64">
       <For each={choices()}>{(choice, index) => <>
         <Show when={index() > 0}><MenuSeparator /></Show>
-        <MenuGroup>
-          <MenuLabel>{choice.label}</MenuLabel>
-          <MenuRadioGroup value={choice.value} onChange={(value: string) => choice.onChange(value)}>
-            <For each={choice.options}>{(option) => <MenuRadioItem value={option.value} disabled={option.disabled}>
-              {option.icon}{option.label}<Show when={option.detail != null}><small class="split-filter-detail">{option.detail}</small></Show>
-            </MenuRadioItem>}</For>
-          </MenuRadioGroup>
-        </MenuGroup>
+        <ChoiceGroup choice={choice} />
       </>}</For>
     </MenuContent>
   </Menu>;
@@ -172,7 +140,7 @@ export function FiltersMenu(props: { choices: Array<ListChoice | false | null | 
 
 export const sortChoice = (sort: "latest" | "created", onSort: (sort: "latest" | "created") => void): ListChoice => ({
   label: "Sort by", value: sort, onChange: (value) => onSort(value as "latest" | "created"),
-  options: [{ value: "latest", label: "Latest activity" }, { value: "created", label: "Created" }],
+  options: [{ value: "latest", label: "Latest activity", short: "Latest" }, { value: "created", label: "Created" }],
 });
 
 export const profileChoice = (profiles: ProfileLike[], used: Set<string>, value: string, onChange: (id: string) => void): ListChoice | null => profiles.length ? {
