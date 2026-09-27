@@ -17,11 +17,12 @@ export type PanelTab = "files" | "diff" | "chat" | "terminal";
 /**
  * What the main pane's split holds: a tool moved out of the dock, the file
  * opened beside ("file", the path is Files' second slot), or one terminal
- * opened beside ("shell:<id>").
+ * opened beside ("shell:<id>"), or a second chat ("chat:<id>"), which the
+ * main pane draws itself.
  */
-export type SplitView = PanelTab | "file" | `shell:${string}`;
+export type SplitView = PanelTab | "file" | `shell:${string}` | `chat:${string}`;
 export const isPanelTab = (value: unknown): value is PanelTab => value === "files" || value === "diff" || value === "chat" || value === "terminal";
-export const isSplitView = (value: unknown): value is SplitView => isPanelTab(value) || value === "file" || (typeof value === "string" && value.startsWith("shell:") && value.length > 6);
+export const isSplitView = (value: unknown): value is SplitView => isPanelTab(value) || value === "file" || (typeof value === "string" && /^(shell|chat):./.test(value));
 export type ChatMode = "history" | "changes";
 // `discarded`: the harness kept this step in its tree but builds every later
 // request without it -- an answer it was interrupted writing. The row is shown

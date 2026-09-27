@@ -1,6 +1,6 @@
 # The dock, the rail and main-pane splits
 
-> **Status (2026-09-28): stages 0 to 3 built, but a chat beside a page waits for stage 4.** Rules this produces move
+> **Status (2026-09-28): stages 0 to 4 built.** Rules this produces move
 > into `DESIGN.md` as each stage lands; this file stays the plan and is
 > deleted once the last stage is built.
 
@@ -239,7 +239,7 @@ is stage 4's work, so it moves there.
   slot goes.
 - A chat can open beside its project page.
 
-### 4. Two chats
+### 4. Two chats -- built
 
 - A second chat state per chat side, on the existing `createActiveChat`. The
   composer, drafts, attachments and dictation belong to the side with the

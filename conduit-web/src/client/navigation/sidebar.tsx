@@ -17,6 +17,7 @@ import {
   MonitorIcon,
   MessageSquareIcon,
   MessageSquarePlusIcon,
+  Columns2Icon,
   Maximize2Icon,
   PanelLeftIcon,
   PaletteIcon,
@@ -223,6 +224,11 @@ export function Sidebar(props: {
   catalogueLoaded: boolean;
   projectId: string;
   selectedId: string | null;
+  /** With two chats side by side: the one with the keyboard, current in place of the selection, and the other, marked open. */
+  focusedId?: string | null;
+  openId?: string | null;
+  /** Open a chat beside the main pane's (Alt+click, or its menu); absent where there is no split. */
+  onOpenChatBeside?: (chat: ChatSummary, project: Project) => void;
   navigatingId?: string | null;
   dashboard: boolean;
   project: boolean;
@@ -875,7 +881,8 @@ export function Sidebar(props: {
       as="button"
       class="sidebar-row sidebar-chat"
       data-chat-id={menuProps.chat.id}
-      aria-current={props.selectedId === menuProps.chat.id ? "page" : undefined}
+      aria-current={(props.focusedId || props.selectedId) === menuProps.chat.id ? "page" : undefined}
+      data-open={props.openId === menuProps.chat.id ? "true" : undefined}
       aria-label={`${chatTitle(menuProps.chat)}, ${menuProps.chat.harnessId || "conduit"} harness${menuProps.chat.unread ? ", unread" : ""}${selected() ? ", selected" : ""}`}
       data-selected={selected() ? "true" : undefined}
       onPointerEnter={() => props.onPrefetchChat(menuProps.chat)}
@@ -889,6 +896,11 @@ export function Sidebar(props: {
           return;
         }
         clearSelection();
+        if (event.altKey && props.onOpenChatBeside) {
+          event.preventDefault();
+          props.onOpenChatBeside(menuProps.chat, menuProps.project);
+          return;
+        }
         closeMobile();
         void props.onOpenChat(menuProps.chat, menuProps.project).then(enterPane);
       }}
@@ -911,6 +923,7 @@ export function Sidebar(props: {
             </ContextMenuSubContent>
           </ContextMenuSub>
           <ContextMenuItem onSelect={() => void props.onCopyTranscript(menuProps.chat)}><ClipboardCopyIcon />{commandLabel(COMMAND_IDS.copyTranscript)}</ContextMenuItem>
+          <Show when={props.onOpenChatBeside}><ContextMenuItem onSelect={() => props.onOpenChatBeside?.(menuProps.chat, menuProps.project)}><Columns2Icon />Open beside</ContextMenuItem></Show>
           <ContextMenuItem onSelect={() => props.onOpenTerminal(menuProps.chat, menuProps.project)}><TerminalIcon />Open terminal</ContextMenuItem>
           <Show when={processFor(menuProps.chat)?.id}><ContextMenuItem onSelect={() => void props.onStopProcess(menuProps.chat)}><SquareIcon />Stop process</ContextMenuItem></Show>
           <Show when={isConduitManagedProject(menuProps.project)}><ContextMenuItem onSelect={() => void togglePin("chat", menuProps.chat.id)}>

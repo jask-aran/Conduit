@@ -12,8 +12,8 @@
    --transcript-composer-inset, so anything that makes the stack taller - a
    multi-line draft, attachments, the queued-message card - pushes the last
    output up instead of being covered by it. */
-.chat-main:not(.chat-main-empty) .thread { padding-bottom: var(--transcript-composer-inset, 147.2px); }
-.chat-main:not(.chat-main-empty) .composer-stack {
+:is(.chat-main:not(.chat-main-empty), .main-split-chat) .thread { padding-bottom: var(--transcript-composer-inset, 147.2px); }
+:is(.chat-main:not(.chat-main-empty), .main-split-chat) .composer-stack {
   position: absolute;
   right: 0;
   bottom: 0;
@@ -25,7 +25,7 @@
   background: transparent;
   pointer-events: none;
 }
-.chat-main:not(.chat-main-empty) .composer-stack > * { pointer-events: auto; }
+:is(.chat-main:not(.chat-main-empty), .main-split-chat) .composer-stack > * { pointer-events: auto; }
 
 .composer-wrap { position: relative; width: min(var(--composer-desktop-reference-width), 100%); margin-inline: auto; }
 .composer-surface-shell { position: relative; width: 100%; border-radius: var(--composer-radius); }
@@ -41,10 +41,10 @@
 .composer-actions { position: relative; z-index: 2; }
 
 @media (--conduit-phone-layout) {
-  .chat-main:not(.chat-main-empty) .thread { padding-bottom: var(--transcript-composer-inset, 128px); }
+  :is(.chat-main:not(.chat-main-empty), .main-split-chat) .thread { padding-bottom: var(--transcript-composer-inset, 128px); }
   .composer-stack,
   .chat-main-empty .composer-stack { background: transparent; }
-  .chat-main:not(.chat-main-empty) .composer-stack {
+  :is(.chat-main:not(.chat-main-empty), .main-split-chat) .composer-stack {
     padding: 8px 9.6px calc(9.6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
     background: linear-gradient(to top, var(--background) calc(9.6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))),
       transparent calc(27.2px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))));
@@ -62,8 +62,8 @@
    panel-motion subtree. */
 .work-area-conversation { position: relative; }
 .transcript { position: relative; z-index: 1; }
-.chat-main:not(.chat-main-empty) .thread { padding-bottom: var(--transcript-composer-inset, 184px); }
-.chat-main:not(.chat-main-empty) .composer-stack {
+:is(.chat-main:not(.chat-main-empty), .main-split-chat) .thread { padding-bottom: var(--transcript-composer-inset, 184px); }
+:is(.chat-main:not(.chat-main-empty), .main-split-chat) .composer-stack {
   position: absolute;
   right: 0;
   bottom: 0;
@@ -75,7 +75,7 @@
   background: transparent;
   pointer-events: none;
 }
-.chat-main:not(.chat-main-empty) .composer-stack > * { pointer-events: auto; }
+:is(.chat-main:not(.chat-main-empty), .main-split-chat) .composer-stack > * { pointer-events: auto; }
 
 .composer-wrap { position: relative; width: min(var(--composer-desktop-reference-width), 100%); margin-inline: auto; }
 .composer-surface-shell { position: relative; width: 100%; border-radius: var(--composer-radius); }
@@ -91,10 +91,10 @@
 .composer-actions { position: relative; z-index: 2; }
 
 @media (--conduit-phone-layout) {
-  .chat-main:not(.chat-main-empty) .thread { padding-bottom: var(--transcript-composer-inset, 160px); }
+  :is(.chat-main:not(.chat-main-empty), .main-split-chat) .thread { padding-bottom: var(--transcript-composer-inset, 160px); }
   .composer-stack,
   .chat-main-empty .composer-stack { background: transparent; }
-  .chat-main:not(.chat-main-empty) .composer-stack {
+  :is(.chat-main:not(.chat-main-empty), .main-split-chat) .composer-stack {
     padding: 10px 12px calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
     background: linear-gradient(to top, var(--background) calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))),
       transparent calc(34px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))));
