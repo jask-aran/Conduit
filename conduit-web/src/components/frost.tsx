@@ -15,6 +15,8 @@ export function FrostOverlay(props: {
   /** Extra classes on the dimmed overlay, e.g. a surface's own layout. */
   class?: string;
   cardClass?: string;
+  /** Attributes on the card, e.g. a surface's own data- state. */
+  cardAttrs?: Record<string, string | undefined>;
   onOpenAutoFocus?: (event: Event) => void;
   onCloseAutoFocus?: (event: Event) => void;
   onEscapeKeyDown?: (event: KeyboardEvent) => void;
@@ -25,13 +27,14 @@ export function FrostOverlay(props: {
   return <KDialog.Root open={props.open} onOpenChange={props.onOpenChange}>
     <KDialog.Portal>
       <KDialog.Content
+        data-state={props.open ? "open" : "closed"}
         class={`frost-overlay${props.class ? ` ${props.class}` : ""}`}
         onOpenAutoFocus={props.onOpenAutoFocus}
         onCloseAutoFocus={props.onCloseAutoFocus}
         onEscapeKeyDown={props.onEscapeKeyDown}
         onPointerDown={(event) => { if (event.target === event.currentTarget) props.onOpenChange(false); }}
       >
-        <div class={`frost-card${props.cardClass ? ` ${props.cardClass}` : ""}`}>{props.children}</div>
+        <div {...props.cardAttrs} class={`frost-card${props.cardClass ? ` ${props.cardClass}` : ""}`}>{props.children}</div>
         {props.aside}
       </KDialog.Content>
     </KDialog.Portal>

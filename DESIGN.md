@@ -214,7 +214,7 @@ application controls.
 - a gradient wash on a selected control
 - status strips, current-item cards, or "this is active" surfaces
 - focus (focus is the `{colors.accent}` wash, never a ring or an outline, in any colour)
-- runtime dots, waveform bars, audio/connecting states, success text, icon tints
+- runtime dots, waveform bars, audio/connecting states, success text, icon tints -- except a status dot that already carries its own colour (the unread/recent dot on a chat row): the rule is against blue injected into chrome, not a state's own mark
 
 Replacements: active/connecting states use `{colors.muted-foreground}`; live stays `{colors.live}` green, warn amber, danger red; success/ready text uses `{colors.foreground}` or `{colors.live}`; waveform bars and audio chrome use foreground/muted tints.
 
@@ -271,7 +271,7 @@ Menus and pane headers follow the component entries below. The command palette, 
 - **Widths.** Commands ~512px, models ~576px, chat search ~720px (~1040px with the preview). Mobile: the full-screen bubble with the darker core (Surfaces). Chat search on a phone swaps the key rail for a bar of buttons at the foot -- Edit, the sort, and Open <folder> once scoped; in edit mode Move N, Delete N and Done -- chips scroll sideways, a tap on a folder scopes into it and its chevron expands it.
 - **Leader menu**: a smaller card (360px) above the composer, in the same frost, with the region path in the crumb style at the top and keys aligned at the left of each 12px/520 action row.
 
-Settings pattern (illustrative, non-normative — current shell ~1120×820, rail ~190px). Settings is an overlay and moves to frost -- on a phone, the full-screen bubble (Being migrated); what follows is its content, which stays:
+Settings pattern (illustrative, non-normative — current shell ~1120×820, rail ~190px). Settings is a frost overlay (`FrostOverlay`), centred rather than pinned since it does not filter, and on a phone the full-screen bubble. Its content:
 
 - **Nav = the app sidebar.** The rail is drawn as the sidebar is, at its sizes, with About (versions, how it is running) in quiet lines at its foot as the connection is at the sidebar's: sentence-case group labels (9.6px/700, about half the text colour), rows of grey text (10.4px/400) with 12px Lucide icons 6.4px from their label, left edges on one line with the title. The current section is white and semibold (660) with its icon white at a heavier stroke, and no fill; the wash is only the cursor. On a phone the rail is a screen of its own, at the sidebar's phone sizes, with no current row. No sliver, gradient or border emphasis.
 - **Content = a settings list** (Components): muted group headings over one-line rows, as the sidebar is drawn. Some sections are still hairline tiles from before; they move over. No status-strip card, no multi-column card grid as chrome.
@@ -412,7 +412,7 @@ Choosing in a menu:
 
 **Harness mark** — rests greyed with its row, and shows its own colour on hover, focus, or the current chat (Codex's gradient, Claude Code's orange, the rest at full foreground). Live activity or an unread reply shows in its place first. The Conduit mark is the wordmark's Druk Wide capital C (`public/brand/conduit-mark.svg`).
 
-**Runtime dot** — 6–8px, live green / warn amber / danger red / muted. Color on the dot only. Never blue. A healthy indicator is the dot alone; it gains a label only when it has something to say ("Updating", "Reconnecting", "Read only"), and a busy state is a small spinner in the dot's place. One indicator per surface: fold "server" and "this connection" into one, worst state first.
+**Runtime dot** — 6–8px, live green / warn amber / danger red / muted. Color on the dot only. Never blue for runtime state (the chat row's unread/recent status dot keeps its own colour; Forbidden color). A healthy indicator is the dot alone; it gains a label only when it has something to say ("Updating", "Reconnecting", "Read only"), and a busy state is a small spinner in the dot's place. One indicator per surface: fold "server" and "this connection" into one, worst state first.
 
 **Held focus** — a region reached by a go-to-region shortcut (Ctrl+Shift+1/2/3: sidebar, main pane, workspace panel) shows a 1.5px line along its bottom edge in the near-neutral `{colors.ring}` tone, fading out at both ends so it sits inside any corner; the regions' bottoms line up, so it reads as one baseline with the held region lit. No outline, and no coloured title. It stays while focus is in that region or in no region (a menu, a dialog), and goes when focus reaches another region any other way; a click, Tab, or a menu handing focus back never lights one. On that arrival the rest of the app dims slightly (~18%) for ~0.8s around it -- the leader menu's lit region, briefly -- and the line stays; the line may prove enough on its own. Not on a phone.
 
@@ -421,7 +421,6 @@ Choosing in a menu:
 Surfaces that do not match the language yet. Do not copy them; when you touch one, move it towards its target, and take it off this list once it is there.
 
 - **Dropdown menus**: solid `{colors.popover}` → the overlays' frost.
-- **Settings**: an inset pane → a frost overlay; on a phone the full-screen bubble.
 - **Dialogs and confirms**: solid cards → frost.
 - **The model selector and menus with a current choice**: a standing wash on the current item → white and semibold with no fill.
 - **Dashboard lists**: no keyboard yet → the sidebar's cursor (Keyboard), ideally one shared list cursor taking a region and its rows. In the chats list ↑/↓ and Home/End cross day headings, Enter opens, Esc returns to the composer; Tab moves between the chats list and each group of the right column, where ↑/↓ stay in the group and the folder shelf also takes ←/→.

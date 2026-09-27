@@ -2624,3 +2624,18 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .keycap { display: inline-grid; min-width: 16px; height: 16px; place-items: center; border: 1px solid oklch(1 0 0 / 16%); border-radius: 4px; background: oklch(0 0 0 / 12%); padding: 0 4px; color: var(--muted-foreground); font: 550 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .frost-row[data-highlighted] .keycap { color: var(--foreground); }
 .frost-rail { display: flex; min-height: 34px; flex-wrap: nowrap; align-items: center; gap: 12px; overflow: hidden; border-top: 1px solid oklch(1 0 0 / 8%); background: transparent; padding: 6px 10px; font-size: 10px; }
+
+/* Settings is a frost overlay (DESIGN.md, Surfaces): the card is the frost,
+   the near-black ground it had as a pane is gone, and on a phone it is the
+   full-screen bubble. Centred rather than pinned, since it does not filter
+   and shrink. Its rows keep the settings-list rules. */
+.settings-dialog.frost-overlay { align-items: center; padding: 16px; }
+.settings-dialog .frost-card.settings-shell { border: 1px solid #ffffff4d; border-radius: 14px; background: #ffffff2b; box-shadow: 0 24px 70px rgb(0 0 0 / 38%), inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 10%); }
+.settings-dialog .settings-shell .settings-rail { border-right-color: oklch(1 0 0 / 10%); background: transparent; }
+.settings-dialog .settings-shell .settings-content > header { background: transparent; }
+@media (--conduit-mobile-layout) {
+  .settings-dialog.frost-overlay { align-items: stretch; padding: 8px; }
+  .settings-dialog .frost-card.settings-shell { width: 100%; height: 100%; background: linear-gradient(#ffffff2b, #ffffff2b), oklch(0.19 0.005 264 / 72%); }
+  .settings-dialog .settings-shell .settings-content > header { border-bottom-color: oklch(1 0 0 / 10%); background: oklch(0.24 0.005 264 / 70%); backdrop-filter: blur(24px); padding-top: 12px; }
+  .settings-dialog .settings-shell .settings-rail { padding-top: 10px; }
+}
