@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { rememberModel, rememberedModel } from "../../profile-model-memory.js";
 import fs from "node:fs/promises";
 import { chatView } from "../../chat-store.js";
@@ -248,7 +247,10 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
           || every.find((chat) => opaqueSessionId(chat) === sessionId);
         if (known) return reply(known, !known.untracked);
       }
-      const workspace = (await projects.list()).find((project) => project.kind === "workspace" && project.workingRoot === folder.workingRoot);
+      // The folder's own place when Conduit has one, compared as real paths.
+      const registered = await Promise.all((await projects.list()).map(async (project) =>
+        ({ project, root: await fs.realpath(project.workingRoot).catch(() => null) })));
+      const workspace = registered.find((entry) => entry.root === folder.workingRoot)?.project;
       const project = workspace || folder;
       const backend = { profileId: implementation, profileRevision: null, management: "agent", protocol: manifest.protocol,
         implementation, installationId: manifest.installationId };
@@ -277,59 +279,6 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
       } });
       if (model && thinkingLevel) await registry.update(chat.id, { modelThinkingLevels: { [model]: thinkingLevel } });
       return reply(registry.metadata(chat.id));
-    } catch (error) { next(error); }
-  });
-
-  app.post("/v0/harnesses/:implementation/drive", async (request, response, next) => {
-    try {
-      const implementation = request.params.implementation;
-      if (!backends.manifestFor?.(implementation)?.drive || !backends.adapters.has(implementation)) {
-        return response.status(409).json({ error: "harness_drive_unavailable" });
-      }
-      // A drive target is either a registered project or any folder on the
-      // Computer - threads live wherever the harness was run, not only in
-      // workspaces Conduit knows about.
-      const requestedPath = typeof request.body?.path === "string" && request.body.path ? request.body.path : null;
-      const project = requestedPath ? await resolveFolder(requestedPath) : await projects.get(request.body?.projectId);
-      if (!project) return response.status(404).json({ error: "project_not_found" });
-      if (!requestedPath) await projects.validate(project);
-      const adapter = backends.forImplementation(implementation);
-      const chatId = `drive:${crypto.randomUUID()}`;
-      if (request.body?.newThread) {
-        // The dashboard's pickers chose a model and a permission mode before
-        // any thread existed. They travel with the launch, because an untracked
-        // thread has no chat to PATCH them onto afterwards.
-        const requestedMode = String(request.body?.permissionMode || "").trim();
-        const mode = requestedMode && typeof adapter.listAvailablePermissionModes === "function"
-          ? (await adapter.listAvailablePermissionModes(project.workingRoot))
-            .find((candidate) => candidate.id === requestedMode && candidate.allowed)
-          : null;
-        const started = await adapter.create({
-          chatId, project,
-          model: String(request.body?.model || "").trim(),
-          thinkingLevel: String(request.body?.thinkingLevel || "").trim(),
-          ...(mode ? {
-            permissionMode: mode.id,
-            permissionProfile: mode.profile || "",
-            approvalPolicy: mode.approvalPolicy || "",
-            approvalsReviewer: mode.approvalsReviewer || "",
-          } : {}),
-        });
-        started.ephemeral = true;
-        return response.status(201).json({ ...adapter.view(started), nativeSessionId: started.sessionId,
-          streamUrl: `/v0/live-sessions/${started.id}/stream` });
-      }
-      const session = (await adapter.listThreads({ cwd: project.workingRoot }))
-        .find((item) => item.id === request.body?.sessionId);
-      if (!session) return response.status(404).json({ error: "backend_session_not_found" });
-      const record = await adapter.restore({ threadId: session.id }, {
-        chatId,
-        project,
-      });
-      record.ephemeral = true;
-      // The thread's own title, since a reopened address carries only its id.
-      response.status(201).json({ ...adapter.view(record), nativeSessionId: session.id, threadTitle: session.title || "",
-        streamUrl: `/v0/live-sessions/${record.id}/stream` });
     } catch (error) { next(error); }
   });
 }

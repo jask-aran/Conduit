@@ -576,16 +576,6 @@ function checkpointNativeAdapter(adapter, record, completed = true) {
     })
     .catch((cause) => console.error("Could not checkpoint native chat", cause));
 }
-// A driven thread has no chat, so no order to state its transcript in: the
-// browser draws the turn as it streams and, when it ends, clears that for the
-// transcript. Here that is the harness's own history of the thread, sent whole.
-async function syncDrivenThread(adapter, record) {
-  try {
-    const transcript = await adapter.readTranscript({ liveSessionId: record.id, chatId: record.chatId });
-    adapter.publish(record, { type: "transcript_sync", replace: true, generationId: record.generation?.id || null,
-      messages: transcript.messages || [], tools: transcript.tools || [] });
-  } catch (cause) { console.warn("Could not sync a driven thread", cause.message); }
-}
 async function applyBackendName(adapter, record, name) {
   if (!await registry.fallbackTitle(record.chatId, name)) return;
   const chat = registry.metadata(record.chatId);
@@ -597,8 +587,8 @@ async function applyBackendName(adapter, record, name) {
 // emitter and simply has no `on`, so this covers the backends that need it.
 for (const adapter of adapterInstances()) {
   adapter.on?.("settled", ({ record, completed }) => {
-    if (record.ephemeral) void syncDrivenThread(adapter, record);
-    else checkpointNativeAdapter(adapter, record, completed !== false);
+    // An ephemeral record -- a probe -- has no chat to checkpoint.
+    if (!record.ephemeral) checkpointNativeAdapter(adapter, record, completed !== false);
   });
   adapter.on?.("changed", ({ record, reason, name }) => {
     publishProcessChange(adapter.view(record), record, reason);
