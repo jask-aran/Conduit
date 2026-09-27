@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
+import { splitPage } from "../dashboard/primitives/split-cursor";
 import { COMMAND_IDS, getCommandDefinition } from "../commands/command-registry";
 import { LEADER_MENU_PAUSE_MS, leaderMenu } from "../shortcuts/leader-menu";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
@@ -17,7 +18,8 @@ const CONTEXT_LABELS: Record<string, string> = {
   terminal: "Terminal",
   "workspace-panel": "Workspace panel",
 };
-const contextLabel = (context: ShortcutContext) => CONTEXT_LABELS[context]
+// A dashboard says which it is: the Conduit dashboard, a project or a workspace.
+const contextLabel = (context: ShortcutContext) => (context === "dashboard" ? splitPage() : undefined) ?? CONTEXT_LABELS[context]
   ?? context.replace(/[-.]/g, " ").replace(/^\w/, (first) => first.toUpperCase());
 
 type Row = { commandId: string; label: string; keys: string[] };

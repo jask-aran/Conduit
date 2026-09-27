@@ -24,13 +24,33 @@ const ROWS = ":is(.split-row:is(button, a), .split-group-more, .app-folder)";
 const CONTROLS = ".split-group-heading :is(button, a[href])";
 const INPUT = ".split-dashboard-composer :is(textarea, [contenteditable='true'])";
 
-export type SplitSection = "composer" | "chats" | "projects" | "workspaces" | "terminals";
+export type SplitSection = "composer" | "chats" | "projects" | "workspaces" | "terminals" | "changes" | "files";
+export type SplitPage = "Dashboard" | "Project" | "Workspace";
 
 const visible = (element: Element) => typeof element.checkVisibility === "function"
   ? element.checkVisibility({ visibilityProperty: true })
   : element.getClientRects().length > 0;
 
 const installed = new Set<(section: SplitSection) => boolean>();
+
+// The page showing, which declares what it is (data-page) and its sections
+// (each group's data-section), so the leader offers only what is there.
+const showing = () => [...document.querySelectorAll<HTMLElement>(".split-dashboard")].find(visible);
+
+/** What the showing page is, for the leader's path. */
+export function splitPage() {
+  return showing()?.dataset.page as SplitPage | undefined;
+}
+
+/** The sections the showing page has. */
+export function splitSections() {
+  const root = showing();
+  const sections = new Set<SplitSection>();
+  if (!root) return sections;
+  if (root.querySelector(INPUT)) sections.add("composer");
+  for (const group of root.querySelectorAll<HTMLElement>(".split-group[data-section]")) if (visible(group)) sections.add(group.dataset.section as SplitSection);
+  return sections;
+}
 
 /** Leader's go-to: move the showing dashboard's cursor to a section. */
 export function focusSplitSection(section: SplitSection) {

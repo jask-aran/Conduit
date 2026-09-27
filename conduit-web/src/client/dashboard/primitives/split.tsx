@@ -1,6 +1,6 @@
 import { For, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
-import { installSplitCursor } from "./split-cursor";
+import { installSplitCursor, type SplitPage } from "./split-cursor";
 import "./split.css";
 
 // The project and workspace dashboards: a header across the top, then the
@@ -13,6 +13,8 @@ const classes = (...values: Array<string | false | null | undefined>) => values.
 
 export function SplitDashboard(props: {
   label: string;
+  /** What the page is, for the leader. */
+  page: SplitPage;
   class?: string;
   header: JSX.Element;
   shortcuts?: JSX.Element;
@@ -23,7 +25,7 @@ export function SplitDashboard(props: {
 }) {
   let root!: HTMLElement;
   onMount(() => onCleanup(installSplitCursor(root)));
-  return <section ref={root} class={classes("split-dashboard", props.class)} aria-label={props.label}>
+  return <section ref={root} class={classes("split-dashboard", props.class)} data-page={props.page} aria-label={props.label}>
     <div class="split-dashboard-body">
       <div class="split-dashboard-head">{props.header}{props.shortcuts}</div>
       <Show when={props.notice}><div class="split-dashboard-notice">{props.notice}</div></Show>
