@@ -1,6 +1,6 @@
 # The dock, the rail and main-pane splits
 
-> **Status (2026-09-27): stages 0 and 1 built.** Rules this produces move
+> **Status (2026-09-28): stages 0, 1 and 2 built.** Rules this produces move
 > into `DESIGN.md` as each stage lands; this file stays the plan and is
 > deleted once the last stage is built.
 
@@ -219,7 +219,7 @@ navigation between views. No visible change.
 - Update `DESIGN.md` (Layout, Keyboard and Being migrated lines for the
   panel) in the same change, and this file's status.
 
-### 2. Main-pane splits
+### 2. Main-pane splits -- built
 
 - The main pane holds one view or two. A tool moves from the dock into a
   split by drag or command, and back.

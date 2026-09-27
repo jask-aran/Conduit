@@ -11,3 +11,7 @@ export const NON_PHONE_LAYOUT_QUERY = `(min-width: ${MOBILE_LAYOUT_BREAKPOINT_PX
  *  least (split.css) and its gutters. The workspace panel stops growing here. */
 export const MIN_MAIN_PANE_WIDTH = 420;
 
+/** The narrowest a workspace view goes beside the chat in the main pane's
+ *  split, as the dock's own minimum. */
+export const MIN_SPLIT_PANE_WIDTH = 240;
+

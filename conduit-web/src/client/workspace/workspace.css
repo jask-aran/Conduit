@@ -4,7 +4,7 @@
   --workspace-git-modified: #d19a66;
 }
 
-.workspace-panel {
+.workspace-panel, .main-split {
   --workbench-bar-height: 28px;
   --workbench-control-size: 22.4px;
   --workbench-gap: 2.4px;
@@ -70,6 +70,18 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-rail-action[aria-current="true"] svg { stroke-width: 3; }
 .workspace-rail-action:disabled { opacity: .4; cursor: not-allowed; }
 .workspace-rail-action svg { width: 14px; height: 14px; }
+/* A tool in the main pane's split is open there without being the dock's. */
+.workspace-rail-action[data-open="true"] { color: var(--sidebar-accent-foreground); }
+
+/* The main pane's split: a view moved out of the dock, its own sheet on the
+   frame beside the chat, as the dock is. The chat's 8px right margin is the
+   gutter; the drag edge sits in it. */
+.main-split { position: relative; display: flex; min-width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 8px 6.4px 0; flex-direction: column; border-radius: 12.8px; background: var(--background); }
+.main-split > div:not(.main-split-resize) { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; }
+.workspace-split-surface { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; container-name: workspace-surface; container-type: inline-size; }
+.main-split-resize { position: absolute; z-index: 5; inset-block: 0; left: -8px; width: 8px; cursor: col-resize; touch-action: none; }
+/* Where a view dragged from the dock will land: the chat's right half, washed. */
+.main-split-drop { position: absolute; z-index: 30; inset: 8px 8px 8px 50%; border-radius: 10px; background: var(--accent); pointer-events: none; }
 .workspace-files { position: relative; display: flex; min-height: 0; flex: 1; flex-direction: column; }
 .workspace-tree-pane { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
 .workspace-tree-collapsed-rail { display: flex; flex-direction: column; align-items: center; gap: 2px; border-right: 1px solid var(--border); padding-block: 4px; }
@@ -490,7 +502,7 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 }
 
 @media (--conduit-phone-layout) {
-  .workspace-rail { display: none; }
+  .workspace-rail, .main-split, .workspace-move-toggle { display: none; }
   .workspace-panel-tabs-space { display: flex; }
   .workspace-panel-header { height: auto; min-height: 32px; flex-wrap: wrap; }
   .workspace-panel-header .settings-segmented { order: 1; flex-basis: 100%; margin-bottom: 4px; }
