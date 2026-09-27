@@ -109,12 +109,13 @@ button, textarea, input, select { font: inherit; }
   background: var(--frame);
 }
 /* Understated line-icons: thin, quiet stroke everywhere by default. */
-svg { stroke-width: 1.25; }
-/* An icon's stroke is 1.25 screen pixels at any size. Lucide draws in a 24-unit
-   box, so the same 1.5 in its own units thinned to 0.7px at the 11px the
-   trace uses -- a hairline that did not render cleanly. Rules that set a
-   heavier stroke on an icon set it in pixels too. */
-svg.lucide :where(path, circle, ellipse, line, polyline, polygon, rect) { vector-effect: non-scaling-stroke; }
+svg { stroke-width: 1.5; }
+/* An icon's weight is its stroke against its size, so the stroke scales with
+   the icon: 2.4 in Lucide's 24-unit box is a tenth of the icon -- 1.2px at
+   12px, 1.7px at 17px -- and one weight at every size, with no per-size
+   tuning. A current icon is 3 (an eighth). Rules that set a stroke on an
+   icon set it in those units. */
+svg.lucide { stroke-width: 2.4; }
 
 .model-trigger { display: flex; min-width: 0; align-items: center; gap: 6.4px; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
 .chat-header [data-slot="button"] svg { width: 12.8px; height: 12.8px; }
@@ -913,7 +914,8 @@ body { margin: 0; overflow: hidden; background: var(--frame); }
 button, textarea, input, select { font: inherit; }
 #root { display: flex; min-width: 0; background: var(--frame); }
 /* Understated line-icons: thin, quiet stroke everywhere by default. */
-svg { stroke-width: 1.25; }
+svg { stroke-width: 1.5; }
+svg.lucide { stroke-width: 2.4; }
 
 .model-trigger { display: flex; min-width: 0; align-items: center; gap: 8px; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
 .chat-header [data-slot="button"] svg { width: 16px; height: 16px; }
@@ -2650,7 +2652,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
    only the cursor. */
 [data-slot*="menu"] [data-checked], .command-option[data-checked], .menu-row[data-checked] { color: var(--foreground); font-weight: 660; }
 [data-slot*="menu"] [data-checked] > span:first-of-type, .command-option[data-checked] .command-label { font-weight: 660; }
-[data-slot*="menu"] [data-checked] svg, .command-option[data-checked] svg, .menu-row[data-checked] svg { stroke-width: 1.6; }
+[data-slot*="menu"] [data-checked] svg, .command-option[data-checked] svg, .menu-row[data-checked] svg { stroke-width: 3; }
 .command-option[data-checked]:not([data-highlighted]) { background: transparent; }
 
 /* `menu-row` is the menu row for lists that are not a Kobalte menu (a
