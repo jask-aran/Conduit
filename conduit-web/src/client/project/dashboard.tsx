@@ -43,7 +43,7 @@ import type { Template, DashboardChat, Project, ProjectDashboardPayload, Workspa
 import { activityDetail, runtimeActivity, RuntimeIndicator } from "../navigation/runtime-indicator";
 import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
-import { SplitCounts, SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitRow, SplitShortcuts } from "../dashboard/primitives/split";
+import { SplitCounts, SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitRow, SplitQuickActions } from "../dashboard/primitives/split";
 import type { Pty } from "../remotes/terminal-pane";
 import type { RuntimeStore } from "../state/runtime";
 import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
@@ -482,7 +482,7 @@ export function ProjectDashboard(props: {
           running() ? `${running()} running` : "Nothing running",
           unreadCount() ? `${unreadCount()} unread` : null,
         ]} />}
-      shortcuts={<SplitShortcuts label={isWorkspace() ? "Manage workspace" : "Manage project"} manage={manageItems} items={[
+      quickActions={<SplitQuickActions label={isWorkspace() ? "Manage workspace" : "Manage project"} manage={manageItems} items={[
         // Chats, terminals, changes, the path and settings each have their
         // place on the page already; Files only while Changes stands in for
         // the Files section.

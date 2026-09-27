@@ -62,7 +62,7 @@ export function SplitDashboard(props: {
   page: SplitPage;
   class?: string;
   header: JSX.Element;
-  shortcuts?: JSX.Element;
+  quickActions?: JSX.Element;
   notice?: JSX.Element;
   composer?: JSX.Element;
   list?: JSX.Element;
@@ -91,7 +91,7 @@ export function SplitDashboard(props: {
   });
   return <Phone.Provider value={phone}><section ref={root} class={classes("split-dashboard", props.class)} data-compact={phone() ? "" : undefined} data-one-column={oneColumn() ? "" : undefined} data-page={props.page} aria-label={props.label}>
     <div class="split-dashboard-body">
-      <div class="split-dashboard-head">{props.header}{props.shortcuts}</div>
+      <div class="split-dashboard-head">{props.header}{props.quickActions}</div>
       <Show when={props.notice}><div class="split-dashboard-notice">{props.notice}</div></Show>
       <div class="split-dashboard-main">
         <Show when={props.composer}><div class="split-dashboard-composer">{props.composer}</div></Show>
@@ -154,10 +154,10 @@ export function watchFold(more: HTMLElement, setFit: (count: number) => void) {
   onCleanup(() => { observer.disconnect(); mutations.disconnect(); });
 }
 
-export type SplitShortcutItem = { icon: JSX.Element; label: string; onClick: () => void };
+export type SplitQuickAction = { icon: JSX.Element; label: string; onClick: () => void };
 
 /**
- * Plain words on the title's line. A shortcut is a verb for this place that
+ * Plain words on the title's line. A quick action is a verb for this place that
  * nothing else on the page already offers -- not a section's own action, the
  * status row, the chats heading or the top bar -- and managing the place
  * itself goes in `manage`. At every desktop width, as room runs out
@@ -165,13 +165,13 @@ export type SplitShortcutItem = { icon: JSX.Element; label: string; onClick: () 
  * items -- a function, so they are made inside the menu -- and the title truncates only once they all have. A row of large
  * targets on a phone.
  */
-export function SplitShortcuts(props: { items: Array<SplitShortcutItem | false | null | undefined>; manage?: () => JSX.Element; label?: string }) {
-  const items = () => props.items.filter(Boolean) as SplitShortcutItem[];
+export function SplitQuickActions(props: { items: Array<SplitQuickAction | false | null | undefined>; manage?: () => JSX.Element; label?: string }) {
+  const items = () => props.items.filter(Boolean) as SplitQuickAction[];
   const [fit, setFit] = createSignal(Infinity);
   const folded = () => items().slice(fit());
   let more!: HTMLSpanElement;
   onMount(() => watchFold(more, setFit));
-  return <nav class="split-shortcuts" aria-label="Shortcuts">
+  return <nav class="split-quick-actions" aria-label="Quick actions">
     <Index each={items()}>{(item, index) => <button type="button" tabIndex={-1} data-fold data-folded={index >= fit() ? "" : undefined} onClick={() => item().onClick()}>{item().icon}<span>{item().label}</span></button>}</Index>
     <span ref={more} data-fold-more data-fold-keep={props.manage ? "" : undefined} data-folded={!props.manage && !folded().length ? "" : undefined}>
       <Menu modal={false}>

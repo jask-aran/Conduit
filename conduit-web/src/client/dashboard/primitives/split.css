@@ -32,10 +32,10 @@
 .split-header-context button:is(:hover, :focus-visible) code { color: var(--foreground); }
 .split-header-context button:focus-visible { outline: none; background: var(--accent); }
 
-.split-shortcuts { position: relative; display: flex; min-width: 24px; flex: 1 1 0; justify-content: flex-end; margin-right: -7px; }
-.split-shortcuts button { display: inline-flex; height: 24px; align-items: center; gap: 6px; border: 0; border-radius: 7px; background: transparent; padding: 0 7px; color: color-mix(in oklch, var(--foreground), transparent 32%); font-size: 10.4px; }
-.split-shortcuts button:is(:hover, :focus-visible) { outline: none; background: var(--accent); color: var(--foreground); }
-.split-shortcuts button svg { display: none; }
+.split-quick-actions { position: relative; display: flex; min-width: 24px; flex: 1 1 0; justify-content: flex-end; margin-right: -7px; }
+.split-quick-actions button { display: inline-flex; height: 24px; align-items: center; gap: 6px; border: 0; border-radius: 7px; background: transparent; padding: 0 7px; color: color-mix(in oklch, var(--foreground), transparent 32%); font-size: 10.4px; }
+.split-quick-actions button:is(:hover, :focus-visible) { outline: none; background: var(--accent); color: var(--foreground); }
+.split-quick-actions button svg { display: none; }
 
 .split-group { display: flex; min-width: 0; flex-direction: column; }
 .split-group-heading { display: flex; min-height: 26px; align-items: center; justify-content: space-between; gap: 8px; padding: 0 3px 3px 6.4px; }
@@ -85,7 +85,7 @@
 :where(.split-dashboard[data-one-column]) .split-group[data-order="rest"] { order: 5; }
 
 
-/* A phone: the sidebar's phone sizes, shortcuts as large targets, and the
+/* A phone: the sidebar's phone sizes, quick actions as large targets, and the
    composer docked at the foot as it is in a chat. */
 @media (--conduit-mobile-layout) {
   .split-dashboard-body { width: calc(100% - 32px); padding: 12px 0 calc(100px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
@@ -94,9 +94,9 @@
   .split-header-context { margin-top: 5px; font-size: 12.5px; line-height: 1.55; }
   .split-header-context code { font-size: 11.5px; }
   .split-dashboard-head { flex-direction: column; align-items: stretch; gap: 10px; }
-  .split-shortcuts { display: grid; flex: none; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: 4px; margin: 6px -6px 0; }
-  .split-shortcuts button { height: 60px; flex-direction: column; justify-content: center; gap: 7px; border-radius: 12px; font-size: 12px; }
-  .split-shortcuts button svg { display: block; width: 19px; height: 19px; color: var(--muted-foreground); }
+  .split-quick-actions { display: grid; flex: none; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: 4px; margin: 6px -6px 0; }
+  .split-quick-actions button { height: 60px; flex-direction: column; justify-content: center; gap: 7px; border-radius: 12px; font-size: 12px; }
+  .split-quick-actions button svg { display: block; width: 19px; height: 19px; color: var(--muted-foreground); }
   .split-group-heading { min-height: 36px; padding: 0 0 4px 9px; }
   .split-group-heading h2 { font-size: 13px; }
   .split-group-heading h2 small, .split-group-heading .settings-segmented small { font-size: 11.5px; }
@@ -127,14 +127,14 @@
 .split-change-row code:is([data-status="M"], [data-status="T"]) { color: var(--workspace-git-modified, #e5c07b); }
 .split-change-row code:is([data-status="A"], [data-status="U"], [data-status="R"], [data-status="C"]) { color: var(--workspace-git-added, #98c379); }
 .split-change-row code[data-status="D"] { color: var(--destructive); }
-.split-shortcuts .workspace-dashboard-manage { display: inline-grid; width: 24px; height: 24px; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted-foreground); }
-.split-shortcuts .workspace-dashboard-manage:is(:hover, :focus-visible, [data-expanded]) { outline: none; background: var(--accent); color: var(--foreground); }
-.split-shortcuts .workspace-dashboard-manage svg { display: block; width: 14px; height: 14px; }
+.split-quick-actions .workspace-dashboard-manage { display: inline-grid; width: 24px; height: 24px; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted-foreground); }
+.split-quick-actions .workspace-dashboard-manage:is(:hover, :focus-visible, [data-expanded]) { outline: none; background: var(--accent); color: var(--foreground); }
+.split-quick-actions .workspace-dashboard-manage svg { display: block; width: 14px; height: 14px; }
 @media (--conduit-mobile-layout) {
   .split-change-row .workspace-change-counts, .split-change-row code { font-size: 12px; }
   .split-change-row > svg { width: 15px; height: 15px; }
   /* The ⋯ sits in the chat header on a phone; the header stays one line. */
-  .split-shortcuts .workspace-dashboard-manage { display: none; }
+  .split-quick-actions .workspace-dashboard-manage { display: none; }
   .split-header h1 { font-size: 24px; }
 }
 
@@ -207,5 +207,5 @@
 .split-group-heading:has(> .split-heading-switches) > .split-group-actions { position: relative; min-width: 0; flex: 1 1 0; justify-content: flex-end; }
 .split-heading-switches .settings-segmented, .split-heading-switches .settings-segmented button, .split-group-actions > * { flex: none; white-space: nowrap; }
 /* Folding rows (watchFold): a folded item stays laid out, hidden. */
-:is(.split-group-actions, .split-shortcuts) > :is([data-fold], [data-fold-more]) { display: inline-flex; }
-:is(.split-group-actions, .split-shortcuts) > [data-folded] { position: absolute; top: 0; right: 0; visibility: hidden; pointer-events: none; }
+:is(.split-group-actions, .split-quick-actions) > :is([data-fold], [data-fold-more]) { display: inline-flex; }
+:is(.split-group-actions, .split-quick-actions) > [data-folded] { position: absolute; top: 0; right: 0; visibility: hidden; pointer-events: none; }

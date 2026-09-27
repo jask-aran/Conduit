@@ -15,7 +15,7 @@ import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
 import { Segmented } from "../settings/settings-controls";
 import { CHAT_PAGE, DayGroups, FilterBar, groupByDay, ListSearch, CompactHeading, FiltersMenu, placeChoice, profileChoice, profileOf, ShowMore, sortChoice } from "./primitives/chat-list";
-import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitRow, SplitShortcuts } from "./primitives/split";
+import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitRow } from "./primitives/split";
 import "./app-dashboard.css";
 
 // The Conduit dashboard is also where New chat lands: the composer, every
@@ -284,10 +284,6 @@ export function AppDashboard(props: {
     header={<SplitHeader title="Conduit" context={[
       running() ? `${running()} running` : "Nothing running",
       unread() ? `${unread()} unread` : null,
-    ]} />}
-    shortcuts={<SplitShortcuts items={[
-      // Search, New project, New workspace and Terminal are on the page already.
-      { icon: <Settings2Icon />, label: "Settings", onClick: props.onOpenSettings },
     ]} />}
     composer={props.composer}
     list={chatsGroup()}
