@@ -1,8 +1,9 @@
-/* Project and workspace dashboards (split.tsx). Two columns while the pane is
-   648px or wider -- the composer's width and one column's gutters, so one
-   column starts already filling the pane: the composer and the threads list at the composer's width
-   on the left, what is live and what changed on the right, each scrolling on
-   its own so one long list cannot stretch the page. Narrower, one column. */
+/* Project and workspace dashboards (split.tsx). Two columns while the left
+   one holds the composer's controls and the chats heading at full size beside
+   the right one (split.tsx measures it): the composer and the threads list on
+   the left, what is live and what changed on the right, each scrolling on its
+   own so one long list cannot stretch the page. Narrower, one column filling
+   the pane. */
 .split-dashboard { position: relative; z-index: 1; container: split-dashboard / inline-size; display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: auto; scrollbar-width: var(--native-scrollbar-width); }
 .split-dashboard-body { --split-aside-width: 280px; display: grid; width: min(calc(var(--composer-desktop-reference-width) + 32px + var(--split-aside-width)), calc(100% - 48px)); min-width: 380px; min-height: 0; flex: 1; grid-template-areas: "head head" "notice notice" "main aside"; grid-template-columns: minmax(0, var(--composer-desktop-reference-width)) var(--split-aside-width); grid-template-rows: auto auto minmax(280px, 1fr); column-gap: 32px; margin: 0 auto; padding: 22px 0 16px; }
 .split-dashboard-head { display: flex; min-width: 0; grid-area: head; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
@@ -71,19 +72,21 @@
    heading's text actions end. */
 .split-group-actions .split-counts { padding-inline: 6px; font-size: 9.6px; }
 
-@container split-dashboard (max-width: 647px) {
-  .split-dashboard-body { display: flex; width: min(var(--composer-desktop-reference-width), calc(100% - 40px)); flex-direction: column; }
-  .split-dashboard-head { flex-direction: column; align-items: stretch; gap: 10px; order: 0; }
-  .split-dashboard-notice { order: 1; }
-  .split-dashboard-main, .split-dashboard-aside { display: contents; }
-  .split-dashboard-composer { order: 2; }
-  .split-shortcuts { margin: 0 0 0 -7px; }
-  .split-dashboard-body .split-group, .split-dashboard-aside > .split-group + .split-group { min-height: auto; flex: none; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
-  .split-dashboard-main > .split-group > .split-group-rows { overflow: visible; }
-  .split-group[data-order="first"] { order: 3; }
-  .split-group[data-order="list"] { order: 4; }
-  .split-group[data-order="rest"] { order: 5; }
-}
+/* One column (data-one-column; :where keeps the phone's rules below winning). */
+:where(.split-dashboard[data-one-column]) .split-dashboard-body { display: flex; width: calc(100% - 40px); flex-direction: column; }
+:where(.split-dashboard[data-one-column]) .split-dashboard-head { flex-direction: column; align-items: stretch; gap: 10px; order: 0; }
+:where(.split-dashboard[data-one-column]) .split-dashboard-notice { order: 1; }
+:where(.split-dashboard[data-one-column]) :is(.split-dashboard-main, .split-dashboard-aside) { display: contents; }
+:where(.split-dashboard[data-one-column]) .split-dashboard-composer { order: 2; }
+:where(.split-dashboard[data-one-column]) .split-shortcuts { margin: 0 0 0 -7px; }
+:where(.split-dashboard[data-one-column]) :is(.split-dashboard-body .split-group, .split-dashboard-aside > .split-group + .split-group) { min-height: auto; flex: none; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+:where(.split-dashboard[data-one-column]) .split-dashboard-main > .split-group > .split-group-rows { overflow: visible; }
+:where(.split-dashboard[data-one-column]) .split-group[data-order="first"] { order: 3; }
+:where(.split-dashboard[data-one-column]) .split-group[data-order="list"] { order: 4; }
+:where(.split-dashboard[data-one-column]) .split-group[data-order="rest"] { order: 5; }
+/* The composer's controls never squeeze; they only draw together as it
+   narrows, and the layout goes to one column before they would have to. */
+.split-dashboard :is(.composer-actions-left, .composer-actions-right) > * { flex-shrink: 0; }
 
 /* A phone: the sidebar's phone sizes, shortcuts as large targets, and the
    composer docked at the foot as it is in a chat. */

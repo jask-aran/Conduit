@@ -17,6 +17,44 @@ const classes = (...values: Array<string | false | null | undefined>) => values.
 // fold; on desktop a narrow pane only stacks its columns (split.css).
 const Phone = createContext<Accessor<boolean>>(() => false);
 
+// Two columns only while the left one holds its controls at full size: the
+// composer's (which never squeeze, split.css) and the chats heading's
+// switches, ⋯ and search. The breakpoint is measured from them, not tuned.
+const BODY_GUTTERS = 48; // .split-dashboard-body: calc(100% - 48px)
+const WATCHED = [
+  ".composer-actions-left > *", ".composer-actions-right",
+  ".split-group[data-order='list'] > .split-group-heading > *", ".split-group[data-order='list'] .split-group-actions > *",
+].join(", ");
+
+/** The width a flex row needs with nothing in it squeezed: its fixed
+ *  children at their size, a growing one by what it holds. Filters that fold
+ *  into ⋯ are left out. */
+function rowNeed(row: HTMLElement): number {
+  const style = getComputedStyle(row);
+  const children = ([...row.children] as HTMLElement[]).filter((child) => !child.hasAttribute("data-filter") && getComputedStyle(child).display !== "none");
+  const inner = children.reduce((sum, child) => {
+    const own = getComputedStyle(child);
+    const grows = parseFloat(own.flexGrow) > 0 && own.display.includes("flex");
+    return sum + (grows ? rowNeed(child) : child.getBoundingClientRect().width) + parseFloat(own.marginLeft) + parseFloat(own.marginRight);
+  }, 0);
+  const edges = ["paddingLeft", "paddingRight", "borderLeftWidth", "borderRightWidth"] as const;
+  return inner + (parseFloat(style.columnGap) || 0) * Math.max(0, children.length - 1) + edges.reduce((sum, edge) => sum + (parseFloat(style[edge]) || 0), 0);
+}
+
+/** The narrowest pane that fits both columns. */
+function twoColumnWidth(root: HTMLElement) {
+  const body = root.querySelector<HTMLElement>(".split-dashboard-body");
+  if (!body) return 0;
+  const style = getComputedStyle(body);
+  const needs = [0];
+  const composer = root.querySelector<HTMLElement>(".split-dashboard-composer");
+  const actions = composer?.querySelector<HTMLElement>(".composer-actions");
+  if (composer && actions) needs.push(rowNeed(actions) + composer.getBoundingClientRect().width - actions.getBoundingClientRect().width);
+  const heading = root.querySelector<HTMLElement>(".split-group[data-order='list'] > .split-group-heading");
+  if (heading) needs.push(rowNeed(heading) + heading.parentElement!.getBoundingClientRect().width - heading.getBoundingClientRect().width);
+  return Math.max(...needs) + (parseFloat(style.columnGap) || 0) + (parseFloat(style.getPropertyValue("--split-aside-width")) || 0) + BODY_GUTTERS;
+}
+
 export function SplitDashboard(props: {
   label: string;
   /** What the page is, for the leader. */
@@ -31,14 +69,26 @@ export function SplitDashboard(props: {
 }) {
   let root!: HTMLElement;
   const [phone, setPhone] = createSignal(isMobileLayout());
+  const [paneWidth, setPaneWidth] = createSignal(Infinity);
+  const [need, setNeed] = createSignal(0);
+  const oneColumn = () => phone() || paneWidth() < need();
   onMount(() => {
     onCleanup(installSplitCursor(root));
     const query = matchMedia(MOBILE_LAYOUT_QUERY);
     const change = () => setPhone(query.matches);
     query.addEventListener("change", change);
     onCleanup(() => query.removeEventListener("change", change));
+    let frame = 0;
+    const measure = () => { frame = 0; setPaneWidth(root.clientWidth); setNeed(twoColumnWidth(root)); };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(measure); };
+    const sizes = new ResizeObserver(schedule);
+    const watch = () => { sizes.disconnect(); sizes.observe(root); for (const element of root.querySelectorAll(WATCHED)) sizes.observe(element); schedule(); };
+    const tree = new MutationObserver(watch);
+    tree.observe(root, { childList: true, subtree: true });
+    watch();
+    onCleanup(() => { cancelAnimationFrame(frame); sizes.disconnect(); tree.disconnect(); });
   });
-  return <Phone.Provider value={phone}><section ref={root} class={classes("split-dashboard", props.class)} data-compact={phone() ? "" : undefined} data-page={props.page} aria-label={props.label}>
+  return <Phone.Provider value={phone}><section ref={root} class={classes("split-dashboard", props.class)} data-compact={phone() ? "" : undefined} data-one-column={oneColumn() ? "" : undefined} data-page={props.page} aria-label={props.label}>
     <div class="split-dashboard-body">
       <div class="split-dashboard-head">{props.header}{props.shortcuts}</div>
       <Show when={props.notice}><div class="split-dashboard-notice">{props.notice}</div></Show>
