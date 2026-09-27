@@ -24,10 +24,13 @@
 .conduit-sidebar[data-visual-state="collapsed"] .sidebar-empty,
 .conduit-sidebar[data-visual-state="collapsed"] .sidebar-chevron,
 .conduit-sidebar[data-visual-state="collapsed"] .workspace-cloning-badge { display: none; }
-[data-sidebar="header"] { display: flex; align-items: center; gap: 1.6px; padding: 9.6px 8px 4.8px; }
+/* The header row centres on the main panel header's line (28.8px down), so the
+   sidebar's icons sit level with the breadcrumb's and the wordmark shares its
+   baseline. */
+[data-sidebar="header"] { display: flex; align-items: center; gap: 1.6px; padding: 12px 8px 2.4px; }
 [data-sidebar="header"] > [data-sidebar="brand"] { display: flex; order: 1; min-width: 0; height: 33.6px; flex: 1; align-items: stretch; justify-content: flex-start; gap: 8px; border: 0; border-radius: var(--radius-md); background: transparent; padding: 0 4.8px; color: inherit; }
 [data-sidebar="header"] > [data-sidebar="trigger"] { order: 0; margin-left: 0; }
-[data-sidebar="header"] > [data-sidebar="brand"] > span { display: flex; height: 100%; align-items: center; font-family: "Conduit Wordmark", sans-serif; font-size: 15px; font-weight: 400; letter-spacing: 0; line-height: 1; transform: translateY(0.16em); }
+[data-sidebar="header"] > [data-sidebar="brand"] > span { display: flex; height: 100%; align-items: center; font-family: "Conduit Wordmark", sans-serif; font-size: 15px; font-weight: 400; letter-spacing: 0; line-height: 1; }
 .sidebar-content { min-height: 0; flex: 1; overflow-y: auto; padding: 5.6px 6.4px; scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
 .sidebar-content::-webkit-scrollbar { width: 5.6px; height: 5.6px; }
 .sidebar-content::-webkit-scrollbar-thumb { border: 1.6px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
