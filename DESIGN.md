@@ -8,9 +8,6 @@ colors:
   foreground: "oklch(0.93 0.003 258)"
   card: "oklch(0.225 0.006 264)"
   popover: "oklch(0.208 0.006 264)"
-  overlay-face: "oklch(0.165 0.005 264)"
-  overlay-face-top: "oklch(0.205 0.005 264)"
-  overlay-rail: "oklch(0.135 0.004 264)"
   primary: "oklch(0.95 0.002 258)"
   primary-foreground: "oklch(0.2 0.006 264)"
   secondary: "oklch(1 0 0 / 6%)"
@@ -194,7 +191,7 @@ The charcoal is cool-neutral at chroma ~0.004–0.006. That gray is the brand. D
 - **foreground / muted-foreground** — type. Muted for timestamps, hints, empty states, icons at rest.
 - **border** — 1px hairlines: inputs, a header or footer rule, and dividers. Grouping is a heading and space, with at most one hairline between groups -- not a hairline box and not a fill. Do not outline the main or workspace pane with a hairline.
 - **accent** — white at 6–7% opacity. This is hover, pressed, and selected. Selection is a gray wash, never a hue.
-- **card / popover** — slightly raised solids, left on tool cards. Overlays -- palettes, the leader, menus, Settings, dialogs -- are frost (Surfaces). The `overlay-*` tokens are the leader's old ink-dark face; they go once no code uses them.
+- **card / popover** — slightly raised solids, left on tool cards. Overlays -- palettes, the leader, menus, Settings, dialogs -- are frost (Surfaces).
 - **primary** — near-white. Default buttons and the one bright action.
 - **destructive** — errors and destructive actions only.
 - **live / warn** — tiny runtime dots and git-ish status. Never as fills, rails, or card washes.
@@ -214,6 +211,7 @@ application controls.
 - a gradient wash on a selected control
 - status strips, current-item cards, or "this is active" surfaces
 - focus (focus is the `{colors.accent}` wash, never a ring or an outline, in any colour)
+- links in an answer (they are the text colour with a muted underline)
 - runtime dots, waveform bars, audio/connecting states, success text, icon tints -- except a status dot that already carries its own colour (the unread/recent dot on a chat row): the rule is against blue injected into chrome, not a state's own mark
 
 Replacements: active/connecting states use `{colors.muted-foreground}`; live stays `{colors.live}` green, warn amber, danger red; success/ready text uses `{colors.foreground}` or `{colors.live}`; waveform bars and audio chrome use foreground/muted tints.
@@ -369,7 +367,7 @@ Choosing in a menu:
 - It takes the keyboard while it is up: arrows move, a number or Enter chooses, Tab turns the page, Esc dismisses. One footer line explains the keys in keycaps; touch hides it and keeps the Next/Submit button.
 - A single question with a single answer skips tabs and Submit: choosing is answering.
 
-**User bubble** — frosted glass (`glass-bg` + blur), `{rounded.bubble}` radius, right-aligned. Assistant has no bubble. The bubble and composer are the same material family — keep them visually related.
+**User bubble** — frosted glass (`glass-bg` + blur), `{rounded.bubble}` radius, right-aligned. A message being edited goes muted and italic in its bubble, with no outline: the composer, where the editing happens, is what draws the eye. Assistant has no bubble. The bubble and composer are the same material family — keep them visually related.
 
 **Attachment strip** — every attachment for the draft in one strip directly above the composer, the queued pill's width and material, never taller than ~64px (~56px on a phone); a queued message sits above it. An image is a 48px square thumbnail, cropped, 8px radius, its name the tooltip; a file is a 48px-tall chip -- type icon, name cut at ~160px, size muted beneath. Remove is a small × at the top-right, on hover or keyboard focus and always on touch. Uploading, a thin progress ring over a slightly dimmed chip; failed, a red outline with a retry mark in its place, tapping retries (one restored with a draft has no file, so it can only be removed). More chips scroll sideways with snap and a soft fade at an edge that has more; new chips go on the end and scroll into view. A quiet ⤢ at the right end always opens the list dialog (a bottom sheet on a phone): large uncropped previews, name, size, type and remove, the count and total size in the heading, Remove all and Done.
 
@@ -424,6 +422,7 @@ Choosing in a menu:
 Surfaces that do not match the language yet. Do not copy them; when you touch one, move it towards its target, and take it off this list once it is there.
 
 - **Workspace panel, Computer page, harness dashboards**: hairline tiles (Tiled pane) → the pane. Each waits for its own redesign.
+- **Focus rings in the workspace panel and the Computer page**: `outline: … var(--ring)` → the wash, with their redesigns.
 - **Leftover blue** (Forbidden color) wherever it is found.
 
 # Do's and Don'ts

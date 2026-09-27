@@ -53,7 +53,7 @@
 }
 .attachment-chip[data-kind="file"] .attachment-chip-body { height: 36px; gap: 6px; padding: 0 10px 0 8px; }
 .attachment-chip[data-kind="file"] .attachment-chip-media { width: auto; height: auto; background: none; }
-.attachment-chip-body:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.attachment-chip-body:focus-visible { outline: none; background: var(--accent); filter: brightness(1.12); }
 .attachment-chip-media { position: relative; display: grid; width: 46px; height: 46px; flex: none; place-items: center; background: var(--muted); color: var(--muted-foreground); }
 .attachment-chip-media :is(.workspace-file-icon, .workspace-file-icon-generic, svg:not(.attachment-chip-ring):not(.attachment-chip-retry)) { display: block; width: 16px; height: 16px; }
 .attachment-chip-media img { width: 100%; height: 100%; object-fit: cover; }

@@ -83,7 +83,8 @@
 .chat-markdown th, .chat-markdown td code { overflow-wrap: anywhere; }
 .chat-markdown[data-renderer^="incremark"] th, .chat-markdown[data-renderer^="incremark"] td { vertical-align: top; }
 .chat-markdown :not(pre) > code { border-radius: 3.2px; background: var(--muted); padding: 0.12em 0.35em; font-family: ui-monospace, monospace; }
-.external-markdown-link { border: 0; background: none; padding: 0; color: oklch(0.7 0.16 250); text-decoration: underline; }
+.external-markdown-link { border: 0; background: none; padding: 0; color: inherit; text-decoration: underline; text-decoration-color: color-mix(in oklch, currentColor, transparent 55%); text-underline-offset: 2px; }
+.external-markdown-link:is(:hover, :focus-visible) { outline: none; text-decoration-color: currentColor; }
 /* Citation chip. A link whose visible text is its own URL is a reference, not
    prose: shown in full it sets the paragraph's line length and buries the
    sentence it supports. The chip carries the host, which is the part a reader
@@ -195,7 +196,8 @@
 .chat-markdown th, .chat-markdown td { padding: 7px 9px; border: 1px solid var(--border); text-align: left; }
 .chat-markdown[data-renderer^="incremark"] th, .chat-markdown[data-renderer^="incremark"] td { vertical-align: top; }
 .chat-markdown :not(pre) > code { border-radius: 4px; background: var(--muted); padding: 0.12em 0.35em; font-family: ui-monospace, monospace; }
-.external-markdown-link { border: 0; background: none; padding: 0; color: oklch(0.7 0.16 250); text-decoration: underline; }
+.external-markdown-link { border: 0; background: none; padding: 0; color: inherit; text-decoration: underline; text-decoration-color: color-mix(in oklch, currentColor, transparent 55%); text-underline-offset: 2px; }
+.external-markdown-link:is(:hover, :focus-visible) { outline: none; text-decoration-color: currentColor; }
 /* Citation chip. A link whose visible text is its own URL is a reference, not
    prose: shown in full it sets the paragraph's line length and buries the
    sentence it supports. The chip carries the host, which is the part a reader

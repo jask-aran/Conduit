@@ -14,8 +14,8 @@
 .step-slider-input::-moz-range-progress { height: 4px; border-radius: 999px; background: var(--foreground); }
 .step-slider-input::-webkit-slider-thumb { width: 16px; height: 16px; margin-top: -6px; border: 2px solid var(--popover); border-radius: 50%; background: var(--foreground); -webkit-appearance: none; box-shadow: 0 1px 4px rgb(0 0 0 / 35%); }
 .step-slider-input::-moz-range-thumb { width: 12px; height: 12px; border: 2px solid var(--popover); border-radius: 50%; background: var(--foreground); box-shadow: 0 1px 4px rgb(0 0 0 / 35%); }
-.step-slider-input:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--ring); }
-.step-slider-input:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--ring); }
+.step-slider-input:focus-visible::-webkit-slider-thumb { box-shadow: 0 1px 4px rgb(0 0 0 / 35%), 0 0 0 5px oklch(1 0 0 / 12%); }
+.step-slider-input:focus-visible::-moz-range-thumb { box-shadow: 0 1px 4px rgb(0 0 0 / 35%), 0 0 0 5px oklch(1 0 0 / 12%); }
 /* Ticks sit under the track, inset by half the thumb so each marks a stop. */
 .step-slider-ticks { display: flex; justify-content: space-between; margin-top: -4px; padding-inline: 7px; }
 .step-slider-ticks i { width: 2px; height: 4px; border-radius: 1px; background: var(--border); }
