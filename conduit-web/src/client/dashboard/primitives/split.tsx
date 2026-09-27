@@ -2,6 +2,7 @@ import { createContext, createSignal, For, onCleanup, onMount, Show, splitProps,
 import { ChevronRightIcon } from "lucide-solid";
 import { Dynamic } from "solid-js/web";
 import { installSplitCursor, type SplitPage } from "./split-cursor";
+import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../../navigation/mobile-layout";
 import "./split.css";
 
 // The project and workspace dashboards: a header across the top, then the
@@ -12,10 +13,9 @@ import "./split.css";
 
 const classes = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
 
-// One column: the pane below 760px, as the container query in split.css has
-// it. Groups read it to trade their heading for a compact one and to fold.
-const NARROW = 760;
-const Narrow = createContext<Accessor<boolean>>(() => false);
+// A phone. Groups read it to trade their heading for a compact one and to
+// fold; a narrow desktop pane only stacks its columns (split.css).
+const Phone = createContext<Accessor<boolean>>(() => false);
 
 export function SplitDashboard(props: {
   label: string;
@@ -30,14 +30,15 @@ export function SplitDashboard(props: {
   aside?: JSX.Element;
 }) {
   let root!: HTMLElement;
-  const [narrow, setNarrow] = createSignal(false);
+  const [phone, setPhone] = createSignal(isMobileLayout());
   onMount(() => {
     onCleanup(installSplitCursor(root));
-    const observer = new ResizeObserver(([entry]) => setNarrow((entry?.contentRect.width ?? NARROW) < NARROW));
-    observer.observe(root);
-    onCleanup(() => observer.disconnect());
+    const query = matchMedia(MOBILE_LAYOUT_QUERY);
+    const change = () => setPhone(query.matches);
+    query.addEventListener("change", change);
+    onCleanup(() => query.removeEventListener("change", change));
   });
-  return <Narrow.Provider value={narrow}><section ref={root} class={classes("split-dashboard", props.class)} data-page={props.page} aria-label={props.label}>
+  return <Phone.Provider value={phone}><section ref={root} class={classes("split-dashboard", props.class)} data-page={props.page} aria-label={props.label}>
     <div class="split-dashboard-body">
       <div class="split-dashboard-head">{props.header}{props.shortcuts}</div>
       <Show when={props.notice}><div class="split-dashboard-notice">{props.notice}</div></Show>
@@ -47,7 +48,7 @@ export function SplitDashboard(props: {
       </div>
       <div class="split-dashboard-aside">{props.aside}</div>
     </div>
-  </section></Narrow.Provider>;
+  </section></Phone.Provider>;
 }
 
 /** The page's mark, centred on its name and, under the name, its kind and
@@ -82,7 +83,7 @@ export function SplitShortcut(props: { icon: JSX.Element; label: string; onClick
 /**
  * A heading and plain one-line rows, drawn as the sidebar draws its groups.
  * `order` places it on one column: Running comes first, then the threads
- * list, then the rest. On one column a group can trade its heading and
+ * list, then the rest. On a phone a group can trade its heading and
  * actions for compact ones (the chats list's Filters menu), and a
  * `collapsible` group folds under its heading, folded until opened; the
  * choice is remembered per device.
@@ -102,7 +103,7 @@ export function SplitGroup(props: {
   compactActions?: JSX.Element;
   collapsible?: boolean;
 }) {
-  const narrow = useContext(Narrow);
+  const narrow = useContext(Phone);
   const key = `conduit.dashboard.open:${props.id}`;
   const [open, setOpen] = createSignal((() => { try { return localStorage.getItem(key) === "1"; } catch { return false; } })());
   const toggle = () => {
