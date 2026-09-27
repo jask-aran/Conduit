@@ -201,6 +201,12 @@ export function createAgentSession(deps: {
     const supplied = request.record;
     if (!supplied) {
       if (isOpen() && deps.chatId() === chatId) return pendingRecord;
+      // A record handed over -- a driven thread -- has no chat to launch, so a
+      // prompt sent while its stream is still opening waits for that stream.
+      if (socket?.readyState === WebSocket.CONNECTING && pendingRecord && deps.chatId() === chatId) {
+        await waitForSocket();
+        return pendingRecord;
+      }
       if (pending?.chatId === chatId) return pending.attempt;
     }
     const era = epoch;

@@ -4,7 +4,7 @@ import type { ServiceLevel, ServiceLevelState } from "../api/contracts";
 
 type ErrorHandler = (error: unknown) => void;
 
-export function createServiceLevelSettings(onError: ErrorHandler) {
+export function createServiceLevelSettings(onError: ErrorHandler, base = "/v0/chats") {
   const [levels, setLevels] = createSignal<ServiceLevel[]>([]);
   const [selected, setSelected] = createSignal("");
   let activeChatId = "";
@@ -16,7 +16,7 @@ export function createServiceLevelSettings(onError: ErrorHandler) {
     const requestId = ++requestSequence;
     if (changed) { setLevels([]); setSelected(""); }
     try {
-      const state = await apiWhenServed<ServiceLevelState>(`/v0/chats/${encodeURIComponent(chatId)}/service-levels`);
+      const state = await apiWhenServed<ServiceLevelState>(`${base}/${encodeURIComponent(chatId)}/service-levels`);
       if (activeChatId !== chatId || requestId !== requestSequence) return;
       setLevels(asList<ServiceLevel>(state.levels));
       setSelected(state.selected || "");
@@ -33,7 +33,7 @@ export function createServiceLevelSettings(onError: ErrorHandler) {
     const previous = selected();
     setSelected(serviceLevel);
     try {
-      const state = await api<ServiceLevelState>(`/v0/chats/${encodeURIComponent(activeChatId)}/service-levels`, {
+      const state = await api<ServiceLevelState>(`${base}/${encodeURIComponent(activeChatId)}/service-levels`, {
         method: "PATCH",
         body: JSON.stringify({ serviceLevel }),
       });
