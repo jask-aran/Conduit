@@ -484,7 +484,7 @@ export function ProjectDashboard(props: {
           running() ? `${running()} running` : "Nothing running",
           unreadCount() ? `${unreadCount()} unread` : null,
         ]} />}
-      shortcuts={<SplitShortcuts label={isWorkspace() ? "Manage workspace" : "Manage project"} manage={manageItems()} items={[
+      shortcuts={<SplitShortcuts label={isWorkspace() ? "Manage workspace" : "Manage project"} manage={manageItems} items={[
         { icon: <FolderOpenIcon />, label: "Files", onClick: () => props.onOpenView("files") },
         isWorkspace()
           ? { icon: <GitCompareArrowsIcon />, label: "Changes", onClick: () => props.onOpenView("diff") }
