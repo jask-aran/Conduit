@@ -1203,9 +1203,13 @@ export function createActiveChat(options: ActiveChatOptions) {
     finally { if (selection === selectionToken) setLoadingOlder(false); }
   };
 
+  const cancelEdit = () => {
+    if (!editingEntryId()) return;
+    setDraft(""); setEditingEntryId(null); attachments.restore([]); clearReviewComments(loadedId() ?? "");
+  };
   const edit = (message: Message) => {
     const chatId = loadedId() ?? "";
-    if (editingEntryId() === message.id) { setDraft(""); setEditingEntryId(null); attachments.restore([]); clearReviewComments(chatId); return; }
+    if (editingEntryId() === message.id) return cancelEdit();
     const review = parseReviewComments(message.content || "");
     setDraft(review.text);
     restoreReviewComments(chatId, review.comments);
@@ -1369,7 +1373,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     generation, editingEntryId, contextUsage, sessionStats, cacheStats, compacting, hostUiRequests, queue, pendingMessages, capabilities, harnessCommands, activeGeneration, activeGenerationChange, turnArtifacts,
     navigatingId, presentation, interactionReady: () => presentation().kind === "ready" && Boolean(loadedId()), streaming, stopping, activity,
     initialize, select, prefetch, loadDetail, ensureAgent, reset, send, stop, regenerate, rehydrateDraft,
-    continueResponse, compact, loadHarnessCommands, loadOlder, edit, respondHostUi, clearQueue, interruptAndSend, editQueued, discardQueued,
+    continueResponse, compact, loadHarnessCommands, loadOlder, edit, cancelEdit, respondHostUi, clearQueue, interruptAndSend, editQueued, discardQueued,
   };
 }
 

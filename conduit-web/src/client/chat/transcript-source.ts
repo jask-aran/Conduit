@@ -26,6 +26,7 @@ export interface TranscriptSource {
   capabilities: Accessor<ChatCapabilities | null>;
   /** Unavailable without a Conduit chat; a read-only source may no-op these. */
   edit: (message: Message) => void;
+  cancelEdit: () => void;
   regenerate: (userMessageId: string) => Promise<unknown> | void;
   continueResponse: () => Promise<unknown> | void;
   loadOlder: () => Promise<boolean | undefined>;
