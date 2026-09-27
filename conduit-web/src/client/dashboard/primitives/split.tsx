@@ -3,7 +3,6 @@ import { ChevronRightIcon } from "lucide-solid";
 import { Dynamic } from "solid-js/web";
 import { installSplitCursor, type SplitPage } from "./split-cursor";
 import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../../navigation/mobile-layout";
-import { COMPACT_DASHBOARD_WIDTH } from "../../layout-geometry";
 import "./split.css";
 
 // The project and workspace dashboards: a header across the top, then the
@@ -14,10 +13,8 @@ import "./split.css";
 
 const classes = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
 
-// Compact: a phone, or a desktop main pane narrower than
-// COMPACT_DASHBOARD_WIDTH. Groups read it to trade their heading for a
-// compact one and to fold; wider than that, a narrow pane only stacks its
-// columns (split.css).
+// A phone. Groups read it to trade their heading for a compact one and to
+// fold; on desktop a narrow pane only stacks its columns (split.css).
 const Phone = createContext<Accessor<boolean>>(() => false);
 
 export function SplitDashboard(props: {
@@ -34,19 +31,14 @@ export function SplitDashboard(props: {
 }) {
   let root!: HTMLElement;
   const [phone, setPhone] = createSignal(isMobileLayout());
-  const [paneWidth, setPaneWidth] = createSignal(Infinity);
-  const compact = () => phone() || paneWidth() < COMPACT_DASHBOARD_WIDTH;
   onMount(() => {
     onCleanup(installSplitCursor(root));
     const query = matchMedia(MOBILE_LAYOUT_QUERY);
     const change = () => setPhone(query.matches);
     query.addEventListener("change", change);
     onCleanup(() => query.removeEventListener("change", change));
-    const observer = new ResizeObserver(([entry]) => { if (entry) setPaneWidth(entry.contentRect.width); });
-    observer.observe(root);
-    onCleanup(() => observer.disconnect());
   });
-  return <Phone.Provider value={compact}><section ref={root} class={classes("split-dashboard", props.class)} data-compact={compact() ? "" : undefined} data-page={props.page} aria-label={props.label}>
+  return <Phone.Provider value={phone}><section ref={root} class={classes("split-dashboard", props.class)} data-compact={phone() ? "" : undefined} data-page={props.page} aria-label={props.label}>
     <div class="split-dashboard-body">
       <div class="split-dashboard-head">{props.header}{props.shortcuts}</div>
       <Show when={props.notice}><div class="split-dashboard-notice">{props.notice}</div></Show>
