@@ -296,7 +296,7 @@ export function SplitEmpty(props: { children: JSX.Element }) {
   return <div class="split-group-empty">{props.children}</div>;
 }
 
-// One flat props type, as DashboardRow has, so Kobalte's polymorphic `as`
+// One flat props type, so Kobalte's polymorphic `as`
 // keeps the anchor- and button-specific attributes.
 type SplitRowProps = {
   lead?: JSX.Element;

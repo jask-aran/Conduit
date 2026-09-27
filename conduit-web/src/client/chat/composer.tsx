@@ -42,7 +42,7 @@ import "./composer-desktop.css";
 
 export const SPINNING_ACTIVITY = new Set(["starting", "reconnecting", "thinking", "responding", "using_tool", "retrying", "compacting", "stopping", "waiting_for_model"]);
 
-import { PlacePicker, type PlaceOptions } from "./place-picker";
+import { FolderPicker, PlacePicker, type FolderOptions, type PlaceOptions } from "./place-picker";
 const MobileComposerOptions = lazy(() => import("./mobile-composer-options"));
 
 export interface ComposerStatus {
@@ -79,6 +79,8 @@ export function Composer(props: {
   onSendDraft?: (text: string) => Promise<void>;
   /** The folder button beside attach: where this chat lives. */
   place?: PlaceOptions;
+  /** A harness thread's folder, in the place button's slot. */
+  folder?: FolderOptions;
   supports?: (capability: BooleanCapability) => boolean;
 }) {
   let input!: HTMLTextAreaElement;
@@ -533,6 +535,7 @@ export function Composer(props: {
             <div class="composer-actions-left">
               <Show when={props.attachmentsSupported !== false}><Button class="composer-desktop-attachment" variant="ghost" size="icon-sm" aria-label={`Attach files${props.attachments.items().length ? ` (${props.attachments.items().length})` : ""}`} disabled={!props.serverOnline || !interactive()} onClick={attach}><PaperclipIcon /></Button></Show>
               <Show when={props.place}>{(place) => <PlacePicker {...place()} />}</Show>
+              <Show when={props.folder}>{(folder) => <FolderPicker {...folder()} />}</Show>
               <div class="composer-desktop-setting"><ContextGauge chat={props.chat} metrics={props.contextMetrics} compact /></div>
               <Show when={props.profiles.length}><div class="composer-desktop-setting"><Menu><MenuTrigger class="model-trigger composer-profile-trigger" title={props.activeProfile?.label || "Profile"} aria-label={`Profile ${props.activeProfile?.label || "General"}`} disabled={!props.serverOnline || !interactive()}><HarnessMark id={props.activeProfile?.implementation || "conduit"} class="size-4" /><ChevronDownIcon /></MenuTrigger><MenuContent class="w-72"><MenuGroup><MenuLabel>Profile</MenuLabel><MenuRadioGroup value={props.activeProfile?.id || ""} onChange={props.onChooseProfile}><For each={props.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={(props.chat.status() !== "draft" && item.id !== props.activeProfile?.id) || item.disabled}><HarnessMark id={item.implementation || "conduit"} class="size-4" /><span class="composer-profile-copy"><span>{item.label}</span><small>{item.implementation || "conduit"}</small></span></MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></MenuContent></Menu></div></Show>
               <div class="composer-desktop-setting">

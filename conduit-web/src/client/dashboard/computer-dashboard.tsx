@@ -1,17 +1,12 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { ArrowUpIcon, ChevronDownIcon, CopyIcon, EyeIcon, EyeOffIcon, FolderIcon, GitBranchIcon, Grid2X2Icon, HomeIcon, ListIcon, PaletteIcon, PencilIcon, PlusIcon, RefreshCwIcon, SearchIcon, TerminalIcon, UnlinkIcon } from "lucide-solid";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, Menu, MenuContent, MenuGroup, MenuItem, MenuTrigger } from "@/components/primitives";
 import { api } from "../api/client";
-import type { ChatSummary, ComputerLocation, HarnessSummary, Project } from "../api/contracts";
-import type { ComposerModels } from "../chat/composer-models";
-import type { ComposerPermissions } from "../chat/composer-permissions";
-import type { DriveChatStore } from "../state/drive-chat";
+import type { ComputerLocation, HarnessSummary, Project } from "../api/contracts";
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { FileTypeIcon } from "../workspace/file-type-icon";
 import { HarnessMark } from "../harness-brand";
-import type { RuntimeStore } from "../state/runtime";
-import { HarnessDashboard } from "./harness-dashboard";
 import "./app-dashboard.css";
 import "./computer-dashboard.css";
 
@@ -62,16 +57,7 @@ export function ComputerDashboard(props: {
   onOpenTerminalView?: () => void;
   onOpenTerminalHere?: () => void;
   onOpenFile: (path: string) => void;
-  runtime?: RuntimeStore;
-  selectedHarness?: string | null;
-  pendingThread?: { harnessId: string; path: string; id: string; title: string } | null;
-  onPendingThreadOpened?: () => void;
-  onOpenHarness?: (id: string | null) => void;
   onOpenHarnessHere?: (id: string, cwd: string) => void;
-  onOpenHarnessChat?: (chat: ChatSummary, project: Project, prompt?: string) => void;
-  harnessComposer?: (cwd: string, models: ComposerModels, loading: boolean, permissions: ComposerPermissions, launch: (prompt: string) => Promise<void>) => JSX.Element;
-  onHarnessDriveChange?: (open: boolean) => void;
-  renderHarnessDrive?: (input: { current: { cwd: string; title: string; nativeSessionId: string }; harness: HarnessSummary; store: DriveChatStore; onBack: () => void; onTrack: () => void }) => JSX.Element;
   dialog?: boolean;
   onSelectFolder?: () => void;
   onCreateFolder?: () => void;
@@ -88,11 +74,6 @@ export function ComputerDashboard(props: {
   const [order, setOrder] = createSignal<ComputerOrder>(storedComputerOrder());
   const [sidebarWidth, setSidebarWidth] = createSignal(Number(localStorage.getItem("conduit.computer.sidebar-width")) || 168);
   const [harnesses, setHarnesses] = createSignal<HarnessSummary[]>([]);
-  // Whether the catalogue has answered at all. Without it an empty list reads
-  // as "this harness does not exist", and the dashboard said so while the
-  // request -- which probes each harness's health, and can take a while -- was
-  // still in flight.
-  const [harnessesLoaded, setHarnessesLoaded] = createSignal(false);
   let controller: AbortController | undefined;
   let stopSidebarResize: (() => void) | undefined;
 
@@ -123,8 +104,7 @@ export function ComputerDashboard(props: {
     if (props.dialog) return;
     void api<{ harnesses: HarnessSummary[] }>("/v0/harnesses")
       .then((result) => setHarnesses(result.harnesses))
-      .catch(() => setHarnesses([]))
-      .finally(() => setHarnessesLoaded(true));
+      .catch(() => setHarnesses([]));
   });
   createEffect(() => localStorage.setItem("conduit.computer.view", view()));
   createEffect(() => localStorage.setItem("conduit.computer.order", order()));
@@ -172,8 +152,6 @@ export function ComputerDashboard(props: {
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop, { once: true });
   };
-  const [harnessScope, setHarnessScope] = createSignal<string | null>(null);
-  createEffect(() => { props.selectedHarness; setHarnessScope(null); });
 
   const WorkspaceActions = () => <>
     <button type="button" disabled={!props.location || props.loading} onClick={() => props.dialog ? props.onSelectFolder?.() : props.onMakeWorkspace()}><FolderIcon />{props.dialog ? "Select folder" : designated() ? "Open workspace" : "Make workspace"}</button>
@@ -181,9 +159,9 @@ export function ComputerDashboard(props: {
     <button type="button" disabled={!props.location || props.loading} onClick={() => props.dialog ? props.onCloneRepository?.() : props.onStartWorkspaceAction("cloned", props.location!.project.workingRoot)}><GitBranchIcon />Clone repository</button>
   </>;
 
-  return <div class="computer-dashboard" data-dialog={props.dialog ? "true" : undefined} data-harness={props.selectedHarness ? "true" : undefined}>
-    <section class="computer-explorer" data-harness={props.selectedHarness ? "true" : undefined} aria-label={props.selectedHarness ? undefined : "Computer files"} style={{ "--computer-sidebar-width": `${sidebarWidth()}px` }}>
-      <Show when={!props.selectedHarness}><aside class="computer-explorer-sidebar">
+  return <div class="computer-dashboard" data-dialog={props.dialog ? "true" : undefined}>
+    <section class="computer-explorer" aria-label="Computer files" style={{ "--computer-sidebar-width": `${sidebarWidth()}px` }}>
+      <aside class="computer-explorer-sidebar">
         <h2>Locations</h2>
         <ContextMenu><ContextMenuTrigger as="button" type="button" data-active={props.location?.project.workingRoot === props.location?.home} onClick={() => props.onBrowse()}><HomeIcon /><span>Home</span></ContextMenuTrigger><ContextMenuContent><ContextMenuGroup><ContextMenuItem onSelect={() => props.onBrowse()}><FolderIcon />Open</ContextMenuItem><ContextMenuItem onSelect={() => copyPath(props.location?.home || "")}><CopyIcon />Copy path</ContextMenuItem></ContextMenuGroup></ContextMenuContent></ContextMenu>
         <Show when={!props.dialog}><button type="button" onClick={props.onOpenTerminalView}><TerminalIcon /><span>Terminal</span></button></Show>
@@ -199,10 +177,9 @@ export function ComputerDashboard(props: {
           </ContextMenuGroup></ContextMenuContent></ContextMenu>
         }</For></div>
         <Show when={!workspaces().length}><p>No workspaces</p></Show>
-      </aside></Show>
-      <Show when={!props.selectedHarness}><div class="computer-sidebar-resize" role="separator" aria-label="Resize locations sidebar" aria-orientation="vertical" aria-valuemin="120" aria-valuemax="280" aria-valuenow={sidebarWidth()} onPointerDown={startSidebarResize} /></Show>
+      </aside>
+      <div class="computer-sidebar-resize" role="separator" aria-label="Resize locations sidebar" aria-orientation="vertical" aria-valuemin="120" aria-valuemax="280" aria-valuenow={sidebarWidth()} onPointerDown={startSidebarResize} />
 
-      <Show when={!props.selectedHarness} fallback={<HarnessDashboard harness={harnesses().find((item) => item.id === props.selectedHarness)} catalogueLoaded={harnessesLoaded()} projects={workspaces()} cwd={props.location?.project.workingRoot || ""} runtime={props.runtime} scope={harnessScope()} onScope={setHarnessScope} onOpenChat={props.onOpenHarnessChat} composer={props.harnessComposer} onDriveChange={props.onHarnessDriveChange} pendingThread={props.pendingThread} onPendingThreadOpened={props.onPendingThreadOpened} renderDrive={props.renderHarnessDrive} />}>
       <div class="computer-explorer-main">
         <div class="computer-explorer-toolbar">
           <button type="button" aria-label="Home folder" title="Home folder" disabled={props.loading} onClick={() => props.onBrowse()}><HomeIcon /></button>
@@ -268,7 +245,6 @@ export function ComputerDashboard(props: {
         <Show when={props.loading || refreshing()}><div class="computer-loading" role="status">Loading…</div></Show>
         <Show when={cursor()}><button type="button" class="computer-load-more" disabled={refreshing()} onClick={() => void refresh(cursor()!)}>Load more</button></Show>
       </div>
-      </Show>
     </section>
   </div>;
 }

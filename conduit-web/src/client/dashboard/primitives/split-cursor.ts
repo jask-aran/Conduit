@@ -25,8 +25,8 @@ const ROWS = ":is(.split-row:is(button, a), .split-group-more, .app-folder)";
 const CONTROLS = ".split-group-heading :is(button, a[href])";
 const INPUT = ".split-dashboard-composer :is(textarea, [contenteditable='true'])";
 
-export type SplitSection = "composer" | "chats" | "projects" | "workspaces" | "terminals" | "changes" | "files";
-export type SplitPage = "Dashboard" | "Project" | "Workspace";
+export type SplitSection = "composer" | "chats" | "projects" | "workspaces" | "terminals" | "changes" | "files" | "folders";
+export type SplitPage = "Dashboard" | "Project" | "Workspace" | "Harness";
 
 const visible = (element: Element) => typeof element.checkVisibility === "function"
   ? element.checkVisibility({ visibilityProperty: true })

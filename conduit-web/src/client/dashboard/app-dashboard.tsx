@@ -68,7 +68,6 @@ export function AppDashboard(props: {
   onPrefetchTerminal: () => void;
   onSearchChats: (scope: "unscoped" | "all") => void;
   onOpenTerminalView: () => void;
-  onOpenHarnessThread?: (harnessId: string, path: string, threadId: string, title: string) => void;
   onOpenSettings: () => void;
   profiles: Template[];
 }) {
