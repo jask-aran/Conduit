@@ -93,7 +93,8 @@ export function MenuItem(props: ParentProps<{ class?: string; disabled?: boolean
 }
 /* The current choice is the row's wash and a heavier weight -- never a tick,
    which costs a column the label could use. */
-const checkedItemClass = "data-[checked]:bg-accent data-[checked]:font-medium data-[checked]:text-accent-foreground";
+// The current choice is shown by weight, not a wash (DESIGN.md, Interaction): styles.css.
+const checkedItemClass = "";
 export function MenuRadioItem(props: ParentProps<{ class?: string; value: string; disabled?: boolean; closeOnSelect?: boolean; onSelect?: () => void }>) {
   /* Conduit menus close after a selection by default; persistent pickers can
      opt out so the user can change several values before clicking away. */

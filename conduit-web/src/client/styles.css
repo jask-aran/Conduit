@@ -2653,3 +2653,11 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   --tw-ring-shadow: 0 0 #0000;
 }
 :is([data-slot="menu-content"], [data-slot="menu-sub-content"], [data-slot="context-menu-content"], [data-slot="context-menu-sub-content"]) [data-highlighted] { background: oklch(1 0 0 / 10%); }
+
+/* Where you are, in every menu and picker, is white and semibold with its
+   icon at a heavier stroke and no fill (DESIGN.md, Interaction); the wash is
+   only the cursor. */
+[data-slot*="menu"] [data-checked], .command-option[data-checked] { color: var(--foreground); font-weight: 660; }
+[data-slot*="menu"] [data-checked] > span:first-of-type, .command-option[data-checked] .command-label { font-weight: 660; }
+[data-slot*="menu"] [data-checked] svg, .command-option[data-checked] svg { stroke-width: 2; }
+.command-option[data-checked]:not([data-highlighted]) { background: transparent; }
