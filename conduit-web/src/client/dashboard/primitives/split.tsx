@@ -70,7 +70,8 @@ function glide(root: HTMLElement, change: () => void, shown?: DOMRect) {
   }
   if (composer && before && after && Math.abs(before.width - after.width) > 1) running.push(composer.animate([
     { width: `${before.width}px`, transform: `translate(${before.left - after.left}px, ${before.top - after.top}px)` },
-    { width: `${after.width}px`, transform: "none" },
+    // Its column's live width, so a resize still under way carries it along.
+    { width: "100%", transform: "none" },
   ], { duration: 320, easing: "cubic-bezier(.2, .8, .2, 1)" }));
 }
 
