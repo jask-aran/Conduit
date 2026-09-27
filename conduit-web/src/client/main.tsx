@@ -1487,6 +1487,27 @@ function App() {
     event.currentTarget.focus({ preventScroll: true });
   };
   const hasComposer = () => Boolean(document.querySelector(".composer textarea:not([disabled])"));
+  // A click on empty space leaves focus on the main pane itself; the next key
+  // decides where it goes. Typing, Enter and Esc go to the composer (the
+  // character typed lands there); on a dashboard ↑/↓ start the cursor in the
+  // chats list, else the first section with rows, and Tab starts the round.
+  const paneKeydown = (event: KeyboardEvent) => {
+    if (event.target !== event.currentTarget || event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
+    const dashboard = routeKind() !== "chat" && routeKind() !== "terminal";
+    const rows = () => [...splitSections()].filter((section) => section !== "composer");
+    const toComposer = () => { if (!hasComposer()) return false; focusComposer(); return true; };
+    let handled = false;
+    if (event.key.length === 1) { toComposer(); return; }
+    if (event.key === "Enter" || event.key === "Escape") handled = toComposer();
+    else if (dashboard && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+      const sections = rows();
+      handled = focusSplitSection(sections.includes("chats") ? "chats" : sections[0] ?? "composer");
+    } else if (event.key === "Tab") {
+      const last = rows().at(-1);
+      handled = dashboard && event.shiftKey && last ? focusSplitSection(last) : toComposer();
+    }
+    if (handled) event.preventDefault();
+  };
   const focusComposer = () => {
     document.querySelector<HTMLTextAreaElement>(".composer textarea:not([disabled])")?.focus({ preventScroll: true });
   };
@@ -2564,7 +2585,7 @@ function App() {
       }} />
     </Modal>
     <div class="workspace-layout">
-    <main data-slot="sidebar-inset" data-region={routeKind() === "chat" ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
+    <main data-slot="sidebar-inset" data-region={routeKind() === "chat" ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} {...(routeKind() === "chat" ? dropHandlers : {})}>
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
         : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : "Loading chat…"}</div>}>
