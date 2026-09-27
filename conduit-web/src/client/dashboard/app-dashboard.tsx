@@ -227,9 +227,21 @@ export function AppDashboard(props: {
   </SplitGroup>;
 
   // Project folders, drawn as folders rather than rows: they are places, and
-  // it keeps them apart from workspaces, which carry more on a row.
-  const foldersGroup = () => <SplitGroup id="app-dashboard-projects" label="Projects" count={folders().length} order="first" class="app-dashboard-projects">
-    <div class="app-folder-shelf">
+  // it keeps them apart from workspaces, which carry more on a row. The shelf
+  // wraps to two rows at most; Show all opens the rest.
+  const [shelfAll, setShelfAll] = createSignal(false);
+  const [shelfOver, setShelfOver] = createSignal(false);
+  const watchShelf = (shelf: HTMLDivElement) => {
+    const measure = () => setShelfOver(shelf.scrollHeight > shelf.clientHeight + 1);
+    const observer = new ResizeObserver(measure);
+    observer.observe(shelf);
+    const mutations = new MutationObserver(measure);
+    mutations.observe(shelf, { childList: true });
+    onCleanup(() => { observer.disconnect(); mutations.disconnect(); });
+  };
+  const foldersGroup = () => <SplitGroup id="app-dashboard-projects" label="Projects" count={folders().length} order="first" class="app-dashboard-projects"
+    actions={<Show when={shelfOver() || shelfAll()}><button type="button" onClick={() => setShelfAll((value) => !value)}>{shelfAll() ? "Show less" : "Show all"}</button></Show>}>
+    <div class="app-folder-shelf" ref={watchShelf} data-all={shelfAll() ? "" : undefined}>
       <For each={folders()}>{(project) =>
         <ContextMenu><ContextMenuTrigger as="a" class="app-folder" href={projectPath(project)} title={project.workingRoot} onPointerEnter={() => props.onPrefetchProject(project)} onFocus={() => props.onPrefetchProject(project)} onClick={(event: MouseEvent) => openProject(event, project)}>
           <FolderMark />
