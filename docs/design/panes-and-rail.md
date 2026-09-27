@@ -1,71 +1,83 @@
-# Panes and the rail
+# The dock, the rail and main-pane splits
 
-> **Status (2026-09-27): proposed.** Stage 0 is under way. Nothing below is
-> built past it. Rules this produces move into `DESIGN.md` as each stage lands;
-> this file stays the plan and is deleted once the last stage is built.
+> **Status (2026-09-27): proposed; stage 0 built.** Rules this produces move
+> into `DESIGN.md` as each stage lands; this file stays the plan and is
+> deleted once the last stage is built.
 
 ## Decision
 
-Retire the workspace panel as a component of its own. The main area becomes a
-row of **panes**, each showing one **view**, and the panel's four parts --
-Files, Source Control, Chat review, Terminal -- become kinds of view that any
-pane can show. A **rail** of icons on the right edge opens them. The first
-visible step reproduces today's behaviour (a chat on the left, a tool on the
-right); the model underneath is what later lets a chat sit beside a chat, a
-file beside a chat, or two files side by side.
+Keep the workspace panel, as the **dock**: the place tools open by default,
+on the right. A **rail** of icons on the right edge opens it. The dock's
+tools -- Files, Source Control, Chat review, Terminal -- are views that can
+also be **dragged into the main pane**, where they take one side of a
+**main-pane split**. The main pane splits in two, so a chat can sit beside a
+file, a file beside a file, and later a chat beside a chat, while the dock
+stays the quick place a tool opens without disturbing the chat.
 
 ## Why
 
 Every pairing asked for so far -- chat and file, two files, two chats -- is
-one pane beside another. Today there are several unrelated ways of putting two
-things side by side, and each new pairing would need building again:
+one view beside another. Today the only way to get two things side by side is
+the panel itself, and it does it several unrelated ways:
 
-- **Main pane and panel** are asymmetric. The main pane follows the route; the
-  panel follows the open chat's place, has its own width, its own "expanded"
-  mode that covers the main pane, and its own open state.
+- **Main pane and panel** are asymmetric. The main pane follows the route;
+  the panel follows the open chat's place, with its own width, its own
+  "expanded" mode that covers the main pane, and its own open state.
 - **The panel splits itself.** Expanded, it shows two of its tabs side by side
   with their own gutter and ratio (`secondaryTab`, `splitRatio`).
 - **Files split themselves again.** The Files tab holds two editor slots
   (`primary`, `secondary`) with a third gutter and ratio.
-- **The same views live in several places.** The Computer page's file browser
-  is the panel mounted with a `computer` scope; Terminal View is a route of
-  its own; dashboards list terminals and changes that open the panel.
+- **Some views live in several places.** The Computer page's file browser is
+  the panel mounted with a `computer` scope; Terminal View is a route of its
+  own.
 
-The pieces are ready for it. The chat state already runs twice: the Computer
-page drives a harness thread on a second `createActiveChat` beside the main
-one (`state/drive-chat.ts`). Keys already follow a tree of regions that tracks
-focus, so a pane is one more region.
+The dock is worth keeping: a tool beside the chat, opened and closed from one
+edge without rearranging anything, is the common case. What changes is that
+the dock stops being the only place a tool can be.
+
+The pieces are ready. Since stage 0 each tool is a component with its own
+state owner that can mount anywhere. The chat state already runs twice: the
+Computer page drives a harness thread on a second `createActiveChat` beside
+the main one (`state/drive-chat.ts`). Keys already follow a tree of regions
+that tracks focus, so a split side is one more region.
 
 ## The model
 
-**A pane shows one view.** A view is a kind plus what it shows:
+**Views.** A view is a kind plus what it shows:
 
-| Kind | Shows | Today |
+| Kind | Shows | Lives in |
 |---|---|---|
-| Chat | a chat id (or a new-chat draft) | the main pane on `/chat/:id` |
-| Page | the Conduit dashboard, a project or workspace page, Computer, a harness page | the main pane on those routes |
-| Files | a place's tree and an open file | panel tab, Computer page |
-| Source Control | a place's Git state and review | panel tab |
-| Chat review | a chat's history and agent changes | panel tab |
-| Terminal | a place's shells, or one terminal | panel tab, Terminal View |
+| Chat | a chat id (or a new-chat draft) | main pane |
+| Page | the Conduit dashboard, a project or workspace page, Computer, a harness page | main pane |
+| Files | a place's tree and an open file | dock, or a main-pane split |
+| Source Control | a place's Git state and review | dock, or a main-pane split |
+| Chat review | a chat's history and agent changes | dock, or a main-pane split |
+| Terminal | a place's shells, or one terminal | dock, or a main-pane split |
 
 **What a tool looks at.** Files, Source Control and Terminal belong to a
-place; Chat review belongs to a chat. A tool opened from the rail is
-**attached**: it looks at the place (or chat) of the pane beside it and
-follows that pane when it moves, which is how the panel behaves today. A tool
-opened for something specific -- a file link from another project, "open
-terminal" on a project row -- is **pinned** to that place until closed.
+place; Chat review belongs to a chat. A tool is **attached** by default: it
+looks at the place (or chat) of the main pane's chat or page and follows it,
+as the panel does today. A tool opened for something specific -- a file link
+from another project, "open terminal" on a project row -- is **pinned** to
+that place until closed.
 
-**Panes on desktop: one or two.** The model allows more; the first stages cap
-it at two, side by side, split by a gutter that drags. Minimum widths come
-from the views' own controls, measured, never tuned (DESIGN.md, Do's). When
-the window cannot hold two at their minimums, the second pane gives way
-before the first squeezes. One pane can be **maximised** to fill the area,
-which replaces the panel's "expanded" mode.
+**The dock** shows one tool at a time, opened from the rail. It keeps its
+width, its resize edge and maximise (today's "expanded", covering the main
+pane). Its own two-pane split goes: two tools at once is a tool in the dock
+and one in the main pane, or two in the main pane.
 
-**The left pane owns the URL.** Back and forward move it. The second pane's
-view and the split ratio are remembered per device, as the panel's open state
-and width are today.
+**The main pane** holds one view, or two side by side split by a gutter that
+drags. The left side owns the URL; back and forward move it. The right side's
+view and the ratio are remembered per device, as the panel's open state and
+width are today. Minimum widths come from the views' own controls, measured,
+never tuned (DESIGN.md, Do's); when the window cannot hold both sides and the
+dock at their minimums, the dock gives way first, then the right side.
+
+**Moving a tool.** A tool's header is its handle. Dragged from the dock onto
+the main pane, it shows where it will land (the left or right half) and drops
+into a split there; dragged from a split onto the dock, it docks. The same
+moves are commands -- "Move to main pane", "Move to dock" -- in the tool's ⋯
+and the leader, so nothing is drag-only.
 
 ## The rail
 
@@ -74,104 +86,104 @@ and width are today.
   stroke, the same wash and current rules (DESIGN.md, Interaction).
 - **What:** one icon per tool -- Files, Source Control, Chat review,
   Terminal. Source Control is disabled without a repository, as its tab is.
-- **Behaviour:** an icon opens its tool in the second pane, making the split
-  if there is one pane. The tool showing is the current icon (white, the
-  heavier stroke, no fill). Pressing the current icon closes that pane. The
-  rail replaces the header's panel toggle and the panel's tab strip.
-- **Held focus and arrival** use the existing region cues; the rail itself is
-  not a region, its icons are reached from the pane beside it.
+- **Behaviour:** an icon shows its tool where it is: in the dock by default,
+  opening the dock; in its split if it has been moved into the main pane. The
+  tool the dock shows is the current icon (white, the heavier stroke, no
+  fill); a tool open in a split is marked open without being current.
+  Pressing the current icon closes the dock. The rail replaces the header's
+  panel toggle and the dock's tab strip.
+- It is not a region of its own; its icons are reached from the dock.
 
-## Panes
+## Surfaces and headers
 
-- **Surface:** each pane is the grey pane surface with the main pane's
-  corners, separated by the frame gutter, so two panes read as two sheets on
-  the frame rather than one sheet divided.
-- **Header:** a Chat or Page pane keeps the header it has today (breadcrumb,
-  actions). A tool pane gets a header in the same row: the tool's name, its
-  modes as the heading's segmented switch (Source Control's Changes / Review /
-  Graph / Patch; Chat review's History / Agent changes), and close. The
-  headers of side-by-side panes share one line, as the sidebar and main
-  header now do.
-- **Focus:** the pane with the keyboard is the current region; the composer,
-  the leader and Esc resolve inside it first.
+- The dock and each side of a split are the grey pane surface with the main
+  pane's corners, separated by the frame gutter, so side-by-side views read as
+  sheets on the frame rather than one sheet divided.
+- A Chat or Page keeps the header it has today. A tool's header, in the dock
+  or a split, sits in the same row: the tool's name, its modes as the
+  heading's segmented switch (Source Control's Changes / Review / Graph /
+  Patch; Chat review's History / Agent changes), its ⋯ and close. Headers side
+  by side share one line, as the sidebar and main header now do.
+- The side with the keyboard is the current region: the composer, the leader
+  and Esc resolve inside it first.
 
 ## Keyboard
 
-- **Ctrl+Shift+1/2/3** become sidebar, left pane, right pane. 3 with one pane
-  opens the last tool used, as it opens the panel today.
-- **Tool keys** (the leader's Files, Source Control, Chat, Terminal) open that
-  tool in the right pane, or switch the right pane to it.
-- **Open beside** (stage 2): a command, and Alt+click where it exists today,
-  opens a file, diff, chat or terminal in the other pane.
-- **Esc** from a tool pane goes to the left pane's composer, as from the panel.
+- **Ctrl+Shift+1/2/3** stay sidebar, main pane, dock. In a split, 2 goes to
+  the side last used, and a key moves between the sides.
+- **Tool keys** (the leader's Files, Source Control, Chat, Terminal) show that
+  tool where it is, as the rail does.
+- **Open beside** (stage 3): a command, and Alt+click where it exists today,
+  opens a file, diff, chat or terminal in the other side of the main pane.
+- **Esc** from a tool goes to the main pane's composer, as from the panel.
 
 ## Phone
 
-One pane at a time, no split. The tools stay reachable the way the panel is
-today, as a full-screen view over the chat. Nothing here commits the phone to
-more than that.
+No splits and no drag. The dock stays a full-screen view over the chat, as
+the panel is today. Nothing here commits the phone to more than that.
 
 ## Tabs: not now
 
 The sidebar, chat search and the command palette already switch between
 chats; tabs would repeat them and add the chrome the design language keeps
-out. Splits answer the actual need, two things at once. If tabs come later
-they are per pane, and they come only after splits have been lived with.
+out. The dock and a two-way split answer the need, two things at once. If
+tabs come later they are per side, after splits have been lived with.
 
 ## Stages
 
 Each stage builds, ships and is usable before the next starts.
 
-### 0. The panel's views stand alone
+### 0. The views stand alone -- built
 
-Split `workspace/workspace-panel.tsx` (~2,300 lines) into its views, each with
-its own state owner, mountable outside the panel. No visible change. This
-finishes step 6 of `workspace-editor-diff-split.md`.
+`workspace-panel.tsx` was one file of ~2,300 lines. Each view is now its own
+component with a controller the panel creates, so its state survives the view
+being hidden: `workspace-files.tsx`, `workspace-source-control.tsx`,
+`workspace-chat-view.tsx`, `workspace-terminal-view.tsx`. Shared machinery is
+`workspace-shared.ts` (the per-project request scope, the workspace cache)
+and `workspace-poll.ts` (the change poll). The panel keeps its chrome and the
+navigation between views. No visible change.
 
-- Files, Source Control, Chat review and Terminal are components in their own
-  files; each view's state lives in a controller the panel creates, so it
-  survives the view being hidden, as it does now.
-- Shared machinery -- the per-project request scope, the workspace cache, the
-  change poll -- is its own module.
-- The panel file keeps only its chrome: tabs, its internal split, width and
-  resize, open and close, phone focus, shortcuts, and the navigation between
-  views (review a file, open the working file, reveal a comment).
+### 1. The rail and the dock
 
-### 1. Panes and the rail
-
-- The main area becomes a row of one or two panes. The right pane shows a
-  tool; the rail opens it. The workspace panel component, its header toggle
-  and its tab strip are removed.
-- "Expanded" becomes maximise. The panel's internal split goes: two tools at
-  once is two panes.
-- The Computer page shows the Files view directly instead of mounting the
-  panel.
+- The rail on the right edge opens the dock on a tool. The dock's tab strip
+  and the header's panel toggle go.
+- The dock shows one tool at a time; its internal split goes.
+- Tool headers take the layout above.
 - Acceptance: everything the panel does today is reachable from the rail;
-  keys, held focus and the leader work per pane; the second pane gives way on
-  a narrow window; phone unchanged.
+  keys, held focus and the leader work as before; phone unchanged.
 
-### 2. Open beside
+### 2. Main-pane splits
 
-- Files, diffs and terminals open in either pane. Two files side by side are
-  two panes, and the Files view's second editor slot goes.
-- A chat can open beside a page (a chat next to its project page).
+- The main pane holds one view or two. A tool moves from the dock into a
+  split by drag or command, and back.
+- The split's right side is remembered per device; the dock gives way before
+  either side squeezes.
+- Acceptance: a chat with Files beside it in the main pane and Source Control
+  in the dock, all live; keys reach each side; a narrow window folds the dock,
+  then the split.
 
-### 3. Two chats
+### 3. Open beside
 
-- A second chat state, created per chat pane on the existing
-  `createActiveChat`. The composer, drafts, attachments and dictation belong
-  to the pane with the keyboard.
-- The sidebar's current row is the focused pane's chat; the other open chat
-  is marked as open without being current.
-- The left pane still owns the URL.
+- Files, diffs, terminals and chats open in the other side of the main pane.
+  Two files side by side are two sides, and the Files view's second editor
+  slot goes.
+- A chat can open beside its project page.
+
+### 4. Two chats
+
+- A second chat state per chat side, on the existing `createActiveChat`. The
+  composer, drafts, attachments and dictation belong to the side with the
+  keyboard.
+- The sidebar's current row is the focused side's chat; the other open chat
+  is marked open without being current.
+- The left side still owns the URL.
 
 ## Open questions
 
-- **Two or three panes.** Two is the cap for stages 1-3; whether a third is
-  ever worth its chrome is for after stage 3.
-- **Pages in the right pane.** Whether a project page can sit beside a chat,
+- **Two or three sides.** Two is the cap through stage 4.
+- **Pages in the right side.** Whether a project page can sit beside a chat,
   or only chats and tools can.
-- **Remembered layouts.** One layout per device (as the panel is now), or one
-  per place.
-- **Phone tool switcher.** Whether the phone gets the rail's icons in its
-  header, or keeps the current panel overlay.
+- **Remembered layouts.** One per device (as the panel is now), or one per
+  place.
+- **Dock and split at once on a narrow desktop.** Whether a split folds the
+  dock automatically, or the reader chooses.

@@ -1,313 +1,51 @@
-import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type Accessor, type JSX } from "solid-js";
+import { batch, createEffect, createSignal, For, on, onCleanup, onMount, Show, type Accessor } from "solid-js";
 import { MIN_MAIN_PANE_WIDTH } from "../layout-geometry";
-import { Columns2Icon, CheckIcon, ChevronsUpIcon, EllipsisIcon, ListCollapseIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileDiffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, FolderUpIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, HistoryIcon, Maximize2Icon, MessageSquareIcon, Minimize2Icon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, SendIcon, TerminalIcon, Trash2Icon, Undo2Icon, UploadIcon, WrapTextIcon, XIcon } from "lucide-solid";
-import { toast } from "solid-sonner";
-import { Button, ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Menu, MenuContent, MenuItem, MenuRadioGroup, MenuRadioItem, MenuTrigger, Spinner } from "@/components/primitives";
-import { api, asList } from "../api/client";
-import { authorizedFetch } from "../api/native-auth-client";
-import { httpUrl } from "../api/transport";
+import { Columns2Icon, FolderIcon, GitCompareArrowsIcon, Maximize2Icon, MessageSquareIcon, Minimize2Icon, TerminalIcon, XIcon } from "lucide-solid";
+import { Button, Spinner } from "@/components/primitives";
 import { COMMAND_IDS } from "../commands/command-registry";
 import { focusFirst, isMobileLayout, restoreFocus } from "../navigation/mobile-layout";
-import { ownsWorkspaceRequest, type WorkspaceRequest } from "./request-ownership";
-import { TerminalPane } from "../remotes/terminal-pane";
 import type { Connectivity } from "../state/runtime";
 import { dispatchPanelGeometryMotion } from "../panel-motion";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
-import { FileTypeIcon, FolderTypeIcon } from "./file-type-icon";
-import WorkspaceFileSlot, { preloadWorkspaceEditor, type FileSlotHandle, type FileSummary } from "./workspace-file-slot";
 import { readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace-panel-storage";
 import "./workspace.css";
-import { createWorkspaceReview, diffScopes, isDiffScope, type DiffScope } from "./workspace-review-source";
-import { WorkbenchButton } from "./workspace-workbench";
-import { WorkspaceDiffView } from "./workspace-diff-view";
+import type { DiffScope } from "./workspace-review-source";
 import { REVIEW_NAVIGATION_EVENT, type ReviewNavigationRequest } from "../chat/review-navigation";
 import { TURN_ARTIFACT_NAVIGATION_EVENT, type TurnArtifactNavigationRequest } from "../chat/turn-artifact-navigation";
+import { cachedWorkspace, cacheWorkspace, createRequestScope, reportError } from "./workspace-shared";
+import { createFiles, FilesView } from "./workspace-files";
+import { createSourceControl, SourceControlView } from "./workspace-source-control";
+import { ChatView, createChatReview } from "./workspace-chat-view";
+import { TerminalView } from "./workspace-terminal-view";
+import { createWorkspacePoll } from "./workspace-poll";
+import type { DirectoryListing, FileSlotId, PanelTab, WorkspaceSettings } from "./workspace-types";
 
-
-interface TreeEntry { name: string; path: string; type: "directory" | "file" | "other"; }
-interface DirectoryListing { entries: TreeEntry[]; truncated: boolean; cursor?: string | null; total?: number | null; oversize?: boolean; }
-interface FileWriteResult { path: string; size: number; modifiedAt: number; revision: string; }
-interface WorkspaceVersion { version: number; changedPaths: string[] | null; }
-interface MovedEntry { path: string; destination: string; type: TreeEntry["type"]; }
-interface GitActionResult { ok: true; output?: string; }
-interface GitCommit { graph: string; hash: string; shortHash: string; subject: string; author: string; authoredAt: string; }
-interface GitRef { name: string; hash: string; upstream: string | null; kind: "local" | "remote" | "tag"; }
-interface GitLineCounts { added: number; removed: number; }
-interface GitChangedFile { status: string; path: string; stagedCounts?: GitLineCounts | null; workingCounts?: GitLineCounts | null; headCounts?: GitLineCounts | null; }
-interface DiffPayload { repository: boolean; branch?: string; upstream?: string | null; ahead?: number; behind?: number; commits?: GitCommit[]; refs?: GitRef[]; files: GitChangedFile[]; diff: string; }
-interface GitCommitDetail { hash: string; content: string; }
-type PanelTab = "files" | "diff" | "chat" | "terminal";
-type ChatMode = "history" | "changes";
-// `discarded`: the harness kept this step in its tree but builds every later
-// request without it -- an answer it was interrupted writing. The row is shown
-// struck through so the history reads as what the agent actually has.
-interface HistoryEntry { id: string; parentId: string | null; timestamp: string; type: string; display: string; kind: "user" | "assistant" | "tool" | "summary" | "system"; hidden: boolean; discarded?: boolean; forkable: boolean; regeneratable: boolean; }
-interface HistoryNode { entry: HistoryEntry; children: HistoryNode[]; label?: string; }
-interface HistoryTree { mode: "linear" | "tree"; tree: HistoryNode[]; leafId: string | null; }
-type SourceControlMode = "changes" | "review" | "graph" | "patch";
-type GitAction = "stage" | "stage-all" | "unstage" | "unstage-all" | "commit" | "fetch" | "pull" | "push";
-type FileSlotId = "primary" | "secondary";
-type OpenFiles = { primary: string | null; secondary: string | null };
-type UploadTarget = { kind: "directory"; path: string } | { kind: "replacement"; path: string };
+/*
+ * The workspace panel: the chrome around the four workspace views (Files,
+ * Source Control, Chat, Terminal) -- its tabs, its own two-pane split, its
+ * width, opening and closing, phone focus and shortcuts -- and the navigation
+ * between the views. Each view and its state live in their own files, so a
+ * view can be shown outside the panel (docs/design/panes-and-rail.md).
+ */
 
 const PANEL_TABS = ["files", "chat", "terminal", "diff"] satisfies PanelTab[];
-function historyEntryLabel(node: HistoryNode): string {
-  if (node.label) return node.label;
-  return node.entry.display || node.entry.type.replaceAll("_", " ");
-}
-
-function historyLength(node: HistoryNode): number {
-  return 1 + Math.max(0, ...node.children.map(historyLength));
-}
-
-function primaryHistoryIndex(nodes: HistoryNode[], activePath: Set<string>): number {
-  const activeIndex = nodes.findIndex((node) => activePath.has(node.entry.id));
-  return Math.max(0, activeIndex >= 0
-    ? activeIndex
-    : nodes.reduce((best, node, index) => historyLength(node) > historyLength(nodes[best]!) ? index : best, 0));
-}
-
-function historyEntryTime(entry: HistoryEntry): string {
-  const at = new Date(entry.timestamp);
-  return Number.isNaN(at.getTime()) ? "" : at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
-}
-
-/**
- * The longest chain of tool entries starting at this node. Sequential tool
- * calls are nested one per level rather than listed as siblings, so the run is
- * found by walking down; a fork or a non-tool entry ends it.
- */
-function historyToolRun(node: HistoryNode): HistoryNode[] {
-  if (node.entry.kind !== "tool" || node.entry.hidden) return [];
-  const run = [node];
-  let current = node;
-  for (;;) {
-    let next: HistoryNode | undefined = current.children.length === 1 ? current.children[0] : undefined;
-    // Pi threads hidden assistant and system entries between visible tool
-    // calls. They are never drawn, so walk straight through them: a run the
-    // reader sees as consecutive has to be one run here too.
-    while (next?.entry.hidden && next.children.length === 1) next = next.children[0];
-    if (!next || next.entry.hidden || next.entry.kind !== "tool") break;
-    run.push(next);
-    current = next;
-  }
-  return run;
-}
-
-/**
- * A run of tool calls, folded into one line the reader can open.
- *
- * The button in the header is the blunt instrument: it flips every run at once
- * and forgets whatever was opened by hand, which is what makes it read as
- * "collapse all" rather than as a setting arguing with each row. This is the
- * fine one -- open this run, leave the rest alone.
- */
-function HistoryToolRun(props: {
-  run: HistoryNode[]; activePath: Set<string>; leafId: string | null; connected: boolean;
-  open: boolean; onToggle: () => void;
-}) {
-  // The run stands for a span of time, so it carries the last stamp in it.
-  const last = () => props.run[props.run.length - 1]!;
-  const active = () => props.run.some((node) => props.activePath.has(node.entry.id));
-  const leaf = () => props.run.some((node) => props.leafId === node.entry.id);
-  const detail = () => props.run.map((node) => historyEntryLabel(node)).join("\n");
-  return <button type="button" class="workspace-history-row workspace-history-run" data-kind="tool"
-    data-collapsed={props.open ? undefined : "true"} data-active={active()} data-leaf={leaf()}
-    aria-expanded={props.open} title={detail()} onClick={props.onToggle}>
-      <Show when={props.connected}><span class="workspace-history-branch-tick" aria-hidden="true" /></Show>
-      <Show when={historyEntryTime(last().entry)}>{(time) => <time class="workspace-history-time" datetime={last().entry.timestamp}>{time()}</time>}</Show>
-      <span class="workspace-history-text">
-        <ChevronDownIcon class="workspace-history-run-chevron" data-open={props.open ? "true" : "false"} aria-hidden="true" />
-        {`${props.run.length} tool calls`}
-      </span>
-    </button>;
-}
-
-function HistoryNodeRow(props: { node: HistoryNode; activePath: Set<string>; leafId: string | null; connected: boolean }) {
-  const node = () => props.node;
-  const time = () => historyEntryTime(node().entry);
-  return <div class="workspace-history-row" data-kind={node().entry.kind} data-discarded={node().entry.discarded ? "true" : undefined} data-active={props.activePath.has(node().entry.id)} data-leaf={props.leafId === node().entry.id} title={`${node().entry.discarded ? "Interrupted, not kept · " : ""}${time() ? `${new Date(node().entry.timestamp).toLocaleString()} · ` : ""}${historyEntryLabel(node())}`}>
-      <Show when={props.connected}><span class="workspace-history-branch-tick" aria-hidden="true" /></Show>
-      <Show when={time()}><time class="workspace-history-time" datetime={node().entry.timestamp}>{time()}</time></Show>
-      <span class="workspace-history-text"><Show when={node().entry.kind === "user" || node().entry.kind === "assistant"} fallback={historyEntryLabel(node())}><strong>{node().entry.kind}:</strong>{` ${historyEntryLabel(node()).replace(/^\w+:\s*/, "")}`}</Show></span>
-    </div>;
-}
-
-function HistoryNodes(props: { nodes: HistoryNode[]; activePath: Set<string>; leafId: string | null; connected?: boolean; depth?: number; collapseTools?: boolean; openRuns?: Set<string>; onToggleRun?: (id: string) => void }) {
-  const primary = () => primaryHistoryIndex(props.nodes, props.activePath);
-  const depth = () => props.depth ?? 0;
-  const content = (node: HistoryNode, connected: boolean, level: number) => {
-    const run = props.collapseTools ? historyToolRun(node) : [];
-    if (run.length > 1) {
-      // The run is named after the entry it starts at, so opening one survives
-      // the tree being reprojected around it.
-      const runId = run[0]!.entry.id;
-      const open = () => Boolean(props.openRuns?.has(runId));
-      return <>
-        <HistoryToolRun run={run} activePath={props.activePath} leafId={props.leafId} connected={connected}
-          open={open()} onToggle={() => props.onToggleRun?.(runId)} />
-        <Show when={open()}>
-          <For each={run}>{(step) =>
-            <HistoryNodeRow node={step} activePath={props.activePath} leafId={props.leafId} connected={connected} />
-          }</For>
-        </Show>
-        <HistoryNodes nodes={run[run.length - 1]!.children} activePath={props.activePath} leafId={props.leafId} connected={connected} depth={level} collapseTools={props.collapseTools} openRuns={props.openRuns} onToggleRun={props.onToggleRun} />
-      </>;
-    }
-    return <>
-      <Show when={!node.entry.hidden}><HistoryNodeRow node={node} activePath={props.activePath} leafId={props.leafId} connected={connected} /></Show>
-      <HistoryNodes nodes={node.children} activePath={props.activePath} leafId={props.leafId} connected={connected} depth={level} collapseTools={props.collapseTools} openRuns={props.openRuns} onToggleRun={props.onToggleRun} />
-    </>;
-  };
-  // Nesting is published as a depth rather than as padding on the wrapper: the
-  // timestamp column has to stay at the far left, so only the text and the
-  // tree lines may move right.
-  return <For each={props.nodes}>{(node, index) => <Show when={index() !== primary()} fallback={content(node, Boolean(props.connected), depth())}>
-    <div class="workspace-history-branch" style={{ "--history-depth": String(depth() + 1) }}>
-      <span class="workspace-history-branch-rail" aria-hidden="true" />
-      <div class="workspace-history-branch-content">{content(node, true, depth() + 1)}</div>
-    </div>
-  </Show>}</For>;
-}
-
-function GitFileLabel(props: { file: GitChangedFile; staged: boolean }) {
-  const name = () => props.file.path.replace(/\/$/, "").split("/").at(-1) ?? props.file.path;
-  const directory = () => props.file.path.replace(/\/$/, "").split("/").slice(0, -1).join("/");
-  const status = () => props.file.status === "??" ? "U" : props.file.status[props.staged ? 0 : 1] ?? "";
-  const statusLabels: Record<string, string> = { M: "Modified", A: "Added", D: "Deleted", R: "Renamed", C: "Copied", U: "Unmerged", T: "Type changed" };
-  const counts = () => props.staged ? props.file.stagedCounts : props.file.workingCounts;
-  return <>
-    <Show when={props.file.path.endsWith("/")} fallback={<FileTypeIcon name={name()} />}><FolderTypeIcon name={name()} expanded={false} /></Show>
-    <span class="workspace-change-name">{name()}</span>
-    <span class="workspace-change-directory">{directory()}</span>
-    <Show when={counts()} fallback={<small class="workspace-change-counts" title="Line counts unavailable for this entry">—</small>}>{(count) =>
-      <small class="workspace-change-counts" aria-label={`${count().added} added, ${count().removed} removed`}><span class="workspace-git-removed">−{count().removed}</span><span class="workspace-git-added">+{count().added}</span></small>
-    }</Show>
-    <code data-status={status()} data-conflict={props.file.status !== "??" && props.file.status.includes("U")} title={props.file.status === "??" ? "Untracked" : statusLabels[status()] ?? status()}>{status()}</code>
-  </>;
-}
 
 function panelTab(value: string): PanelTab | null {
   if (value === "artifacts") return "chat";
   return value === "files" || value === "diff" || value === "chat" || value === "terminal" ? value : null;
 }
 
-function isSourceControlMode(value: string | null): value is SourceControlMode {
-  return value === "changes" || value === "review" || value === "graph" || value === "patch";
-}
-
-interface WorkspaceCacheEntry {
-  directories: Record<string, DirectoryListing>;
-  diff: DiffPayload | null;
-  expanded: Set<string>;
-  treeScrollTop: number;
-}
-
-const MAX_CACHED_WORKSPACES = 6;
-const workspaceCache = new Map<string, WorkspaceCacheEntry>();
 const MIN_WORKSPACE_PANE_WIDTH = 240;
 const WORKSPACE_SPLIT_GUTTER_WIDTH = 9;
-const WIDE_FILES_MIN_WIDTH = 720;
-const DEFAULT_TREE_WIDTH = 160;
-const MIN_TREE_WIDTH = 128;
-const MAX_TREE_WIDTH = 320;
-const FILE_POLL_INTERVAL_MS = 1_500;
-
-function directoryListingsEqual(left: DirectoryListing | undefined, right: DirectoryListing): boolean {
-  return Boolean(left
-    && left.truncated === right.truncated
-    && left.cursor === right.cursor && left.total === right.total && left.oversize === right.oversize
-    && left.entries.length === right.entries.length
-    && left.entries.every((entry, index) => {
-      const other = right.entries[index];
-      return entry.name === other?.name && entry.path === other.path && entry.type === other.type;
-    }));
-}
-
-function CommitHistory(props: { commits: GitCommit[]; refs: GitRef[]; branch?: string; onCopy: (hash: string) => void; onInspect: (commit: GitCommit) => void; labelled?: boolean }) {
-  return <section class="workspace-history">
-    <Show when={props.labelled}><header><div><GitCommitHorizontalIcon /><span>History</span></div><small>{props.commits.length} recent</small></header></Show>
-    <div class="workspace-history-list">
-      <For each={props.commits}>{(commit) =>
-        <div class="workspace-commit">
-          <code class="workspace-graph-rail" aria-hidden="true">{commit.graph || "*"}</code>
-          <ContextMenu>
-          <ContextMenuTrigger as="button" type="button" title={`Copy ${commit.hash} · ${commit.author} · ${new Date(commit.authoredAt).toLocaleString()}`} onClick={() => props.onCopy(commit.hash)}>
-            <div class="workspace-commit-copy"><span>{commit.subject}</span><Show when={props.refs.some((ref) => ref.hash === commit.hash)}><div class="workspace-commit-refs"><For each={props.refs.filter((ref) => ref.hash === commit.hash)}>{(ref) => <code data-kind={ref.kind} data-current={ref.kind === "local" && ref.name === props.branch}>{ref.kind === "local" && ref.name === props.branch ? `HEAD · ${ref.name}` : ref.name}</code>}</For></div></Show></div>
-            <small>{commit.author}</small>
-            <code>{commit.shortHash}</code>
-          </ContextMenuTrigger>
-          <ContextMenuContent shortcutScope="workspace-panel" class="w-48 workspace-file-menu"><ContextMenuGroup>
-            <ContextMenuItem onSelect={() => props.onInspect(commit)}><EyeIcon />Inspect commit</ContextMenuItem>
-            <ContextMenuItem onSelect={() => props.onCopy(commit.hash)}><CopyIcon />Copy commit ID</ContextMenuItem>
-          </ContextMenuGroup></ContextMenuContent>
-          </ContextMenu>
-        </div>
-      }</For>
-    </div>
-  </section>;
-}
-
-function PatchView(props: { content: string }) {
-  const [page, setPage] = createSignal(0);
-  const lines = createMemo(() => props.content.split("\n"));
-  createEffect(on(() => props.content, () => setPage(0)));
-  return <><Show when={lines().length > 400}><div>
-    <button type="button" disabled={page() === 0} onClick={() => setPage(page() - 1)}>Previous lines</button>
-    <span> · Lines {page() * 400 + 1}–{Math.min((page() + 1) * 400, lines().length)} of {lines().length} · </span>
-    <button type="button" disabled={(page() + 1) * 400 >= lines().length} onClick={() => setPage(page() + 1)}>Next lines</button>
-  </div></Show><pre class="workspace-diff-content"><code><For each={lines().slice(page() * 400, (page() + 1) * 400)}>{(line) =>
-    <span class="workspace-patch-line" data-kind={line.startsWith("+") && !line.startsWith("+++") ? "addition" : line.startsWith("-") && !line.startsWith("---") ? "deletion" : line.startsWith("@@") ? "hunk" : line.startsWith("# ") || line.startsWith("diff ") ? "heading" : "context"}>{line || " "}</span>
-  }</For></code></pre></>;
-}
-
-function storedPaths(scopeId: string, name: string) {
-  try {
-    const value: unknown = JSON.parse(readSetting(scopeId, name) || "[]");
-    return new Set(Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []);
-  } catch {
-    return new Set<string>();
-  }
-}
-
-function cachedWorkspace(projectId: string) {
-  const cached = workspaceCache.get(projectId);
-  if (!cached) return null;
-  workspaceCache.delete(projectId);
-  workspaceCache.set(projectId, cached);
-  return cached;
-}
-
-function cacheWorkspace(projectId: string, patch: Partial<WorkspaceCacheEntry>) {
-  const current = workspaceCache.get(projectId) || { directories: {}, diff: null, expanded: new Set<string>(), treeScrollTop: 0 };
-  workspaceCache.delete(projectId);
-  workspaceCache.set(projectId, { ...current, ...patch });
-  while (workspaceCache.size > MAX_CACHED_WORKSPACES) workspaceCache.delete(workspaceCache.keys().next().value!);
-}
 
 export default function WorkspacePanel(props: { connectivity?: () => Connectivity; projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; commentChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; onFocusRequestComplete?: () => void; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onRequestOpen?: () => void; onToggleExpanded: () => void; onClose: () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing> }) {
-  let projectGeneration = 0;
-  let requestVersion = 0;
-  let projectController = new AbortController();
-  const requests = new Map<string, WorkspaceRequest>();
-  const requestControllers = new Map<number, AbortController>();
   let panelRoot: HTMLElement | undefined;
   let resizeHandle: HTMLDivElement | undefined;
-  let filesHost: HTMLElement | undefined;
-  let treeElement: HTMLElement | undefined;
-  let treeResizeHandle: HTMLDivElement | undefined;
   let splitHost: HTMLElement | undefined;
-  let fileFilterInput: HTMLInputElement | undefined;
-  let fileUploadInput: HTMLInputElement | undefined;
-  let filesResizeObserver: ResizeObserver | undefined;
   let splitResizeObserver: ResizeObserver | undefined;
   let panelMotionId = 0;
-  let treeScrollRaf = 0;
-  let treeTypeaheadTimer = 0;
-  let treeTypeahead = "";
   let mobileReturnFocus: HTMLElement | null = null;
   let mobileWasOpen = false;
-  const [pending, setPending] = createSignal(new Map<number, { foreground: boolean }>());
   const panelScope = () => WORKSPACE_PANEL_GLOBAL_SCOPE;
   const projectScope = () => WORKSPACE_PANEL_GLOBAL_SCOPE;
   const fileScope = () => props.settingsScope ? props.projectId() : props.chatId();
@@ -319,6 +57,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     return legacyValue;
   };
   const readGeometrySetting = (name: string) => readPanelSetting(name, props.settingsScope?.() || props.projectId());
+  const settings: WorkspaceSettings = { panel: (name) => readPanelSetting(name), geometry: readGeometrySetting, fileScope };
   const storedTab = () => {
     const value = readPanelSetting("tab") || "";
     return panelTab(value) ?? "files";
@@ -329,237 +68,37 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   };
   const [tab, setTab] = createSignal<PanelTab>(storedTab());
   const [secondaryTab, setSecondaryTab] = createSignal<PanelTab | null>(storedSecondary());
-  const [directories, setDirectories] = createSignal<Record<string, DirectoryListing>>({});
-  const [expanded, setExpanded] = createSignal<Set<string>>(new Set());
-  const [fileFilter, setFileFilter] = createSignal("");
-  const [treeFocusPath, setTreeFocusPath] = createSignal("");
-  const [showHidden, setShowHidden] = createSignal(false);
-  const [keptVisible, setKeptVisible] = createSignal(new Set<string>());
-  const [filesWide, setFilesWide] = createSignal(false);
-  const [uploading, setUploading] = createSignal(false);
-  const [uploadTarget, setUploadTarget] = createSignal<UploadTarget>({ kind: "directory", path: "" });
   // The comment a chip asked to reveal, carried down to whichever view shows it.
   const [reviewReveal, setReviewReveal] = createSignal<ReviewNavigationRequest | null>(null);
-  const [openPaths, setOpenPaths] = createSignal<OpenFiles>({ primary: readSetting(fileScope(), "file"), secondary: readSetting(fileScope(), "file-secondary") });
-  const [focusedSlot, setFocusedSlot] = createSignal<FileSlotId>("primary");
-  const slotHandles = new Map<FileSlotId, FileSlotHandle>();
-  const [wrapLines, setWrapLines] = createSignal(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines") === "true");
-  // History wraps independently of the editors: one is prose, the other code.
-  const [historyWrap, setHistoryWrap] = createSignal(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "history-wrap") === "true");
-  const toggleHistoryWrap = () => {
-    const next = !historyWrap();
-    setHistoryWrap(next);
-    writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "history-wrap", String(next));
-    stickHistoryToBottom();
-  };
-  const [collapseTools, setCollapseTools] = createSignal(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "history-collapse-tools") === "true");
-  // Runs the reader has opened by hand. Not persisted: it is a way of looking
-  // at the chat in front of you, not a preference about every chat.
-  const [openRuns, setOpenRuns] = createSignal<Set<string>>(new Set());
-  const toggleRun = (id: string) => setOpenRuns((current) => {
-    const next = new Set(current);
-    if (!next.delete(id)) next.add(id);
-    return next;
-  });
-  /**
-   * Collapse all, or expand all.
-   *
-   * It takes everything with it rather than reading what the reader has opened
-   * one run at a time: a button that had to work out whether "collapse all"
-   * meant anything from the current mix would sometimes do nothing when
-   * pressed, which is worse than blunt.
-   */
-  const toggleCollapseTools = () => {
-    const next = !collapseTools();
-    setCollapseTools(next);
-    setOpenRuns(new Set<string>());
-    writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "history-collapse-tools", String(next));
-    stickHistoryToBottom();
-  };
-  const [diff, setDiff] = createSignal<DiffPayload | null>(null);
-  const [commitDetail, setCommitDetail] = createSignal<GitCommitDetail | null>(null);
-  const [commitDetailLoading, setCommitDetailLoading] = createSignal(false);
-  const [commitMessage, setCommitMessage] = createSignal("");
-  const [gitAction, setGitAction] = createSignal("");
-  const [stagedOpen, setStagedOpen] = createSignal(true);
-  const [changesOpen, setChangesOpen] = createSignal(true);
-  const [documentVisible, setDocumentVisible] = createSignal(document.visibilityState === "visible");
-  const [networkOnline, setNetworkOnline] = createSignal(navigator.onLine);
-  const [workspaceStale, setWorkspaceStale] = createSignal(false);
-  const [pollRetry, setPollRetry] = createSignal(0);
-  // Foreground failures surface as toasts; background refreshes stay silent so a
-  // failing file cannot spam the corner every poll.
-  const reportError = (message: string) => { if (message) toast.error(message); };
-  const storedOpenFiles = (): OpenFiles => ({ primary: readSetting(fileScope(), "file"), secondary: readSetting(fileScope(), "file-secondary") });
   const [width, setWidth] = createSignal(Math.max(MIN_WORKSPACE_PANE_WIDTH, Math.min(496, Number(readGeometrySetting("width")) || 336)));
   const [shellWidth, setShellWidth] = createSignal(props.open() ? width() : 0);
   const [shellGap, setShellGap] = createSignal(props.open() && !isMobileLayout() ? 8 : 0);
-  const [treeWidth, setTreeWidth] = createSignal(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(readGeometrySetting("tree-width")) || DEFAULT_TREE_WIDTH)));
-  const [treeCollapsed, setTreeCollapsed] = createSignal(readGeometrySetting("tree-collapsed") === "true");
-  const sourceControlScopes = diffScopes.filter((scope) => scope.value === "head" || scope.value === "changes" || scope.value === "staged");
-  const chatScopes = diffScopes.filter((scope) => scope.value === "chat" || scope.value === "turn");
+  const [splitRatio, setSplitRatio] = createSignal(Math.max(0, Math.min(100, Number(readGeometrySetting("split-ratio")) || 50)));
+  const [splitWidth, setSplitWidth] = createSignal(0);
+  const [terminalFocusRequest, setTerminalFocusRequest] = createSignal(0);
   // Review comments ride the composer, which a dashboard has before its chat
   // exists, so they follow the loaded chat rather than the panel's own scope.
   const commentChatId = () => props.commentChatId?.() ?? props.artifactChatId?.() ?? null;
-  const chatReview = createWorkspaceReview({ projectId: props.projectId, chatId: () => props.artifactChatId?.() ?? null, gitFiles: () => diff()?.files ?? [],
-    scopes: chatScopes.map((scope) => scope.value), scopeKey: "chat:review-scope" });
-  const sourceReview = createWorkspaceReview({ projectId: props.projectId, chatId: () => props.artifactChatId?.() ?? null, gitFiles: () => diff()?.files ?? [],
-    scopes: sourceControlScopes.map((scope) => scope.value), scopeKey: "diff:review-scope" });
-  const [navigatorOpen, setNavigatorOpen] = createSignal(false);
-  const [splitRatio, setSplitRatio] = createSignal(Math.max(0, Math.min(100, Number(readGeometrySetting("split-ratio")) || 50)));
-  const [splitWidth, setSplitWidth] = createSignal(0);
-  const [fileSplitRatio, setFileSplitRatio] = createSignal(Math.max(25, Math.min(75, Number(readGeometrySetting("file-split-ratio")) || 50)));
-  const storedChatMode = (): ChatMode => readPanelSetting("chat:mode") === "changes" ? "changes" : "history";
-  const [chatMode, setChatMode] = createSignal<ChatMode>(storedChatMode());
-  const selectChatMode = (next: ChatMode) => {
-    setChatMode(next);
-    writeSetting(panelScope(), "chat:mode", next);
-  };
-  const [historyTree, setHistoryTree] = createSignal<HistoryTree | null>(null);
-  const [historyLoading, setHistoryLoading] = createSignal(false);
-  let historyChatId: string | null = null;
-  let historyScroller: HTMLDivElement | undefined;
-  // Newest entries are at the bottom, so the list follows them — but only for a
-  // reader who is already there. Scrolling up to read is never interrupted.
-  let historyPinned = true;
-  const HISTORY_BOTTOM_SLACK = 24;
-  const trackHistoryScroll = () => {
-    const element = historyScroller;
-    if (!element) return;
-    historyPinned = element.scrollHeight - element.scrollTop - element.clientHeight <= HISTORY_BOTTOM_SLACK;
-  };
-  const stickHistoryToBottom = () => {
-    // After the rows this update produced are in the DOM.
-    queueMicrotask(() => {
-      const element = historyScroller;
-      if (element?.isConnected && historyPinned) element.scrollTop = element.scrollHeight;
-    });
-  };
-  // `token` identifies one load attempt. Comparing the promise itself would
-  // read the binding from inside its own initializer, and comparing chatId
-  // would let a finished load clear a newer load of the same chat.
-  let historyLoad: { chatId: string; token: object; promise: Promise<void> } | null = null;
-  const loadHistory = async () => {
-    const chatId = props.artifactChatId?.();
-    if (!chatId || !props.historyAvailable?.()) {
-      historyChatId = null;
-      setHistoryTree(null);
-      return;
-    }
-    if (historyLoad?.chatId === chatId) return historyLoad.promise;
-    const initialLoad = historyChatId !== chatId || !historyTree();
-    if (initialLoad) {
-      historyPinned = true;
-      setHistoryLoading(true);
-    }
-    const token = {};
-    const promise = (async () => {
-      try {
-        const result = await api<HistoryTree>(`/v0/chats/${encodeURIComponent(chatId)}/history`, { cache: "no-store" });
-        if (props.artifactChatId?.() === chatId) {
-          historyChatId = chatId;
-          setHistoryTree(result);
-        }
-      } catch (cause) {
-        reportError((cause as Error).message);
-      } finally {
-        if (props.artifactChatId?.() === chatId) setHistoryLoading(false);
-        if (historyLoad?.token === token) historyLoad = null;
-      }
-    })();
-    historyLoad = { chatId, token, promise };
-    return promise;
-  };
-  // A tree belongs to one chat. The effect that reloads the panel watches the
-  // project and the tabs but not the chat, so stepping from a chat to its
-  // project's dashboard -- same project, no chat -- left the previous chat's
-  // history sitting on screen under a heading that no longer described it.
-  createEffect(on(() => props.artifactChatId?.() ?? null, (chatId, previous) => {
-    if (previous !== undefined && chatId === previous) return;
-    if (!chatId) {
-      historyChatId = null;
-      setHistoryTree(null);
-      return;
-    }
-    if (chatMode() === "history" && tabVisible("chat")) void loadHistory();
-  }));
-  createEffect(on(historyTree, stickHistoryToBottom));
-  const historyActivePath = createMemo(() => {
-    const result = new Set<string>();
-    const tree = historyTree();
-    if (!tree?.leafId) return result;
-    const parents = new Map<string, string | null>();
-    const pending = [...tree.tree];
-    while (pending.length) {
-      const node = pending.pop()!;
-      parents.set(node.entry.id, node.entry.parentId);
-      pending.push(...node.children);
-    }
-    let current: string | null = tree.leafId;
-    while (current) {
-      result.add(current);
-      current = parents.get(current) || null;
-    }
-    return result;
+
+  const splitActive = () => props.expanded() && secondaryTab() !== null;
+  const tabVisible = (candidate: PanelTab) => (candidate !== "diff" || props.sourceControlEnabled()) && (tab() === candidate || (props.expanded() && secondaryTab() === candidate));
+  const panePosition = (candidate: PanelTab) => tab() === candidate ? "left" : secondaryTab() === candidate ? "right" : undefined;
+
+  const requests = createRequestScope(props.projectId);
+  const sourceControl = createSourceControl({ projectId: props.projectId, enabled: props.sourceControlEnabled, chatId: () => props.artifactChatId?.() ?? null, requests, settings, settingsScope: panelScope() });
+  createEffect(() => {
+    if (props.sourceControlEnabled()) return;
+    if (tab() === "diff") setTab("files");
+    if (secondaryTab() === "diff") setSecondaryTab("terminal");
   });
-  const [terminalFocusRequest, setTerminalFocusRequest] = createSignal(0);
-  const detailOpenFor = (nextTab: PanelTab) => readPanelSetting(`${nextTab}:detail-open`)
-    ?? (nextTab === "chat" ? readPanelSetting("artifacts:detail-open") : null)
-    ?? (nextTab === "diff" ? "false" : "true");
-  const storedSourceControlMode = (): SourceControlMode => {
-    const stored = readPanelSetting("diff:mode");
-    if (isSourceControlMode(stored)) return stored;
-    if (readPanelSetting("diff:source-detail-open") !== "true") return "changes";
-    return detailOpenFor("diff") === "true" ? "patch" : "graph";
-  };
-  const [sourceControlMode, setSourceControlMode] = createSignal<SourceControlMode>(storedSourceControlMode());
-  const hasPending = (operation?: string) => [...pending().keys()].some((version) => !operation || requests.get(operation)?.version === version);
-  const diffLoading = () => hasPending("diff");
-  const filesLoading = () => [...requests.keys()].some((operation) => operation.startsWith("directory:") && hasPending(operation));
-  const loading = () => [...pending().values()].some((entry) => entry.foreground);
-  const stagedFiles = createMemo(() => (diff()?.files || []).filter((file) => file.status[0] !== " " && file.status[0] !== "?"));
-  const unstagedFiles = createMemo(() => (diff()?.files || []).filter((file) => file.status[1] !== " " || file.status === "??"));
-  const ownsRequest = (request: WorkspaceRequest) => ownsWorkspaceRequest({
-    projectId: props.projectId(),
-    generation: projectGeneration,
-    operation: request.operation,
-    version: requests.get(request.operation)?.version || -1,
-  }, request);
-  const finishRequest = (request: WorkspaceRequest) => {
-    if (requests.get(request.operation)?.version === request.version) requests.delete(request.operation);
-    requestControllers.delete(request.version);
-    setPending((current) => {
-      const next = new Map(current);
-      next.delete(request.version);
-      return next;
-    });
-  };
-  const startRequest = (operation: string, foreground: boolean) => {
-    requests.get(operation) && requestControllers.get(requests.get(operation)!.version)?.abort();
-    const controller = new AbortController();
-    projectController.signal.addEventListener("abort", () => controller.abort(), { once: true });
-    const request: WorkspaceRequest = { projectId: props.projectId(), generation: projectGeneration, operation, version: ++requestVersion };
-    requests.set(operation, request);
-    requestControllers.set(request.version, controller);
-    setPending((current) => new Map(current).set(request.version, { foreground }));
-    return { request, controller };
-  };
-  const resetRequestScope = () => {
-    projectController.abort();
-    diffLoadPromise = undefined;
-    projectController = new AbortController();
-    projectGeneration += 1;
-    requests.clear();
-    requestControllers.clear();
-    setPending(new Map());
-  };
-  const wasAborted = (cause: unknown) => (cause as { name?: string })?.name === "AbortError";
-  const updateDocumentVisibility = () => setDocumentVisible(document.visibilityState === "visible");
-  const updateNetworkOnline = () => setNetworkOnline(true);
-  const updateNetworkOffline = () => setNetworkOnline(false);
-  document.addEventListener("visibilitychange", updateDocumentVisibility);
-  window.addEventListener("online", updateNetworkOnline);
-  window.addEventListener("offline", updateNetworkOffline);
+  const chat = createChatReview({ projectId: props.projectId, chatId: () => props.artifactChatId?.() ?? null, historyAvailable: () => Boolean(props.historyAvailable?.()),
+    visible: () => tabVisible("chat"), gitFiles: () => sourceControl.diff()?.files ?? [], settings, settingsScope: panelScope() });
+  const files = createFiles({ projectId: props.projectId, requests, settings, settingsScope: projectScope() });
+  const poll = createWorkspacePoll({ projectId: props.projectId, requests, files, sourceControl, sourceControlEnabled: props.sourceControlEnabled,
+    hasInitialDirectory: Boolean(props.initialDirectory),
+    shown: () => props.open() && (tabVisible("files") || tabVisible("diff") || tabVisible("chat")),
+    filesShown: () => tabVisible("files"), diffShown: () => tabVisible("diff") });
+
   let panelWasOpen = false;
   const animatePanelGeometry = (open: boolean) => {
     const mobile = isMobileLayout();
@@ -576,7 +115,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     setTab(next);
     writeSetting(panelScope(), "tab", next);
   };
-  const splitActive = () => props.expanded() && secondaryTab() !== null;
   const saveSecondaryTab = (next: PanelTab | null) => {
     setSecondaryTab(next);
     writeSetting(panelScope(), "secondary-tab", next);
@@ -602,15 +140,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     const side = owner?.getAttribute("data-pane") || owner?.getAttribute("data-position");
     return side === "right" ? "right" : "left";
   };
-  createEffect(() => {
-    if (props.sourceControlEnabled()) return;
-    if (tab() === "diff") setTab("files");
-    if (secondaryTab() === "diff") setSecondaryTab("terminal");
-    setSourceControlMode("changes");
-    setDiff(null);
-  });
-  const tabVisible = (candidate: PanelTab) => (candidate !== "diff" || props.sourceControlEnabled()) && (tab() === candidate || (props.expanded() && secondaryTab() === candidate));
-  const panePosition = (candidate: PanelTab) => tab() === candidate ? "left" : secondaryTab() === candidate ? "right" : undefined;
   const tabLabel = (candidate: PanelTab) => candidate === "files" ? "Files" : candidate === "diff" ? "Source Control" : candidate === "chat" ? "Chat" : "Terminal";
   const setPaneTab = (side: "left" | "right", next: PanelTab) => {
     if (next === "diff" && !props.sourceControlEnabled()) next = "files";
@@ -636,16 +165,12 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   };
   const focusTabDefault = (next: PanelTab, side: "left" | "right" = "left") => {
     if (next === "files") {
-      if (!directories()[""]) void loadDirectory();
+      if (!files.directories()[""]) void files.loadDirectory();
       // The filter lives in the file navigator, which a narrow panel folds
       // away; focus on a hidden input goes nowhere, so the open file takes it
       // then, and the tab only when there is none.
       queueMicrotask(() => {
-        const shown = (element: Element | null | undefined): element is HTMLElement => element instanceof HTMLElement && element.checkVisibility({ visibilityProperty: true });
-        const file = [...(filesHost?.querySelectorAll(".cm-content") ?? [])].find(shown);
-        if (shown(fileFilterInput)) fileFilterInput.focus({ preventScroll: true });
-        else if (file) file.focus({ preventScroll: true });
-        else focusTabControl("files", side);
+        if (!files.focusDefault()) focusTabControl("files", side);
       });
       return;
     }
@@ -713,175 +238,24 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     props.shortcuts.registerHandler(COMMAND_IDS.workspaceSplit, "workspace-panel", toggleSplit, { when: () => props.expanded() && workspaceShortcutAvailable() }),
   ];
   onCleanup(() => releaseShortcutHandlers.forEach((release) => release()));
-  const selectSourceControlMode = (mode: SourceControlMode) => {
-    setSourceControlMode(mode);
-    writeSetting(panelScope(), "diff:mode", mode);
-    setCommitDetail(null);
-    if (mode === "review") void sourceReview.refresh();
-    if (mode === "patch" && !diff()?.diff) void loadDiff(true, false, true);
-    if (mode === "graph" && !diff()?.commits) void loadDiff(false, true, true);
-  };
-  const loadDirectory = async (directory = "", background = false, more = false) => {
-    if (background && requests.has(`directory:${directory}`)) return false;
-    const previous = directories()[directory];
-    if (more && !previous?.cursor) return false;
-    const { request, controller } = startRequest(`directory:${directory}`, !background);
-    try {
-      let cursor = more ? previous?.cursor : null;
-      let entries = more ? [...(previous?.entries || [])] : [];
-      let listing: DirectoryListing;
-      do {
-        const payload = await api<DirectoryListing>(`/v0/projects/${encodeURIComponent(request.projectId)}/tree?path=${encodeURIComponent(directory)}${cursor ? `&after=${encodeURIComponent(cursor)}` : ""}`, { signal: controller.signal });
-        if (!ownsRequest(request)) return false;
-        entries = [...entries, ...asList<TreeEntry>(payload.entries)];
-        listing = { ...payload, entries, truncated: payload.truncated === true };
-        const nextCursor = payload.cursor;
-        if (!nextCursor || nextCursor === cursor) break;
-        cursor = nextCursor;
-      } while (!more && entries.length < (previous?.entries.length || 0));
-      if (!ownsRequest(request)) return false;
-      let changed = false;
-      setDirectories((current) => {
-        if (directoryListingsEqual(current[directory], listing)) return current;
-        changed = Boolean(current[directory]);
-        const next = { ...current, [directory]: listing };
-        cacheWorkspace(request.projectId, { directories: next });
-        return next;
-      });
-      return changed;
-    } catch (cause) {
-      if (ownsRequest(request) && !background && !wasAborted(cause)) reportError((cause as Error).message);
-    } finally {
-      finishRequest(request);
-    }
-    return false;
-  };
-  const toggleDirectory = async (directory: string) => {
-    const next = new Set(expanded());
-    if (next.has(directory)) next.delete(directory);
-    else { next.add(directory); if (!directories()[directory]) await loadDirectory(directory); }
-    setExpanded(next);
-    cacheWorkspace(props.projectId(), { expanded: next });
-  };
-  const isFileOpen = (path: string) => openPaths().primary === path || openPaths().secondary === path;
-  const slotForPath = (path: string): FileSlotId | null =>
-    openPaths().primary === path ? "primary" : openPaths().secondary === path ? "secondary" : null;
-  const setSlotPath = (slot: FileSlotId, path: string | null) => {
-    setOpenPaths((current) => ({ ...current, [slot]: path }));
-    writeSetting(fileScope(), slot === "primary" ? "file" : "file-secondary", path);
-  };
-  // Only the slot being retargeted can lose a draft, so editing on one side is
-  // never discarded by opening a file on the other.
-  const openInSlot = (slot: FileSlotId, path: string) => {
-    const handle = slotHandles.get(slot);
-    if (openPaths()[slot] === path) {
-      setFocusedSlot(slot);
-      return true;
-    }
-    if (handle?.hasUnsavedChanges()) {
-      if (!window.confirm("Discard unsaved changes and open another file?")) return false;
-      handle.discardChanges();
-    }
-    setSlotPath(slot, path);
-    setFocusedSlot(slot);
-    return true;
-  };
-  const hideFileNavigator = () => filesWide() ? toggleTreeCollapsed() : setNavigatorOpen(false);
-  const showFileNavigator = () => filesWide() ? toggleTreeCollapsed() : setNavigatorOpen(true);
-  type ReviewOpener = (scope: DiffScope, path?: string, checkpoint?: string | null) => void;
-  type WorkspaceReviewController = ReturnType<typeof createWorkspaceReview>;
-  // Times alone read as out of order once the list crosses midnight.
-  const turnTime = (value: string) => {
-    const moment = new Date(value);
-    const time = moment.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-    return moment.toDateString() === new Date().toDateString() ? time : `${moment.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`;
-  };
-  const comparisonSourceControls = (source: WorkspaceReviewController, open: ReviewOpener, scopes: typeof diffScopes) => <div class="workspace-comparison-source-controls">
-    <Menu>
-      <MenuTrigger class="workspace-scope-picker" aria-label="Comparison source">{diffScopes.find((scope) => scope.value === source.scope())?.label}<ChevronDownIcon /></MenuTrigger>
-      <MenuContent>
-        <MenuRadioGroup value={source.scope()} onChange={(value) => { if (isDiffScope(value) && scopes.some((scope) => scope.value === value)) open(value); }}>
-          <For each={scopes}>{(scope) => <MenuRadioItem value={scope.value} disabled={(scope.value === "chat" || scope.value === "turn") && !props.artifactChatId?.()}>{scope.label}</MenuRadioItem>}</For>
-        </MenuRadioGroup>
-      </MenuContent>
-    </Menu>
-    <Show when={source.scope() === "chat" || source.scope() === "turn"}>
-      <div class="workspace-turn-navigation" aria-label="Turn navigation">
-        <WorkbenchButton aria-label="Older turn" title="Older turn" disabled={source.loading() || source.turnIndex() >= source.timeline().length - 1} onClick={() => void source.stepTurn(1, source.turnIndex() + 1)}><ChevronLeftIcon /></WorkbenchButton>
-        <Menu>
-          <MenuTrigger class="workspace-scope-picker" aria-label="Select turn">{source.timeline().length ? `${source.scope() === "chat" ? "Through turn" : "Turn"} ${source.turnNumber(source.turnIndex())}` : "Latest turn"}<ChevronDownIcon /></MenuTrigger>
-          <MenuContent><For each={source.timeline()}>{(turn, index) => <MenuItem onSelect={() => void source.stepTurn(1, index())}>{`${source.scope() === "chat" ? "Through turn" : "Turn"} ${source.turnNumber(index())}`} · {turnTime(turn.createdAt)}</MenuItem>}</For></MenuContent>
-        </Menu>
-        <WorkbenchButton aria-label="Newer turn" title="Newer turn" disabled={source.loading() || source.turnIndex() <= 0} onClick={() => void source.stepTurn(-1, source.turnIndex() - 1)}><ChevronRightIcon /></WorkbenchButton>
-      </div>
-    </Show>
-    <span class="workspace-editor-metadata" title="Comparison endpoints">{source.rangeLabel()}</span>
-    <Show when={source.loading()}><Spinner /></Show>
-    <Show when={source.error()}><WorkbenchButton class="workspace-review-retry" title={source.error()} onClick={() => open(source.scope(), undefined, source.checkpointId())}>Retry</WorkbenchButton></Show>
-  </div>;
-  const openEmbeddedReview: ReviewOpener = (scope, _path, checkpoint = null) => {
-    if (scope !== "chat" && scope !== "turn") return;
-    chatReview.setScope(scope, checkpoint);
-    void chatReview.refresh();
-  };
-  const showAgentChanges = () => {
-    selectChatMode("changes");
-    openEmbeddedReview(chatReview.scope() === "turn" ? "turn" : "chat", undefined, chatReview.checkpointId());
-  };
-  // A review belongs to one project and chat. Moving to either a different
-  // project or a different chat drops what is on screen before reloading, and
-  // a context with no chat at all leaves the view blank. The one exception is
-  // stepping from a chat to its own project's dashboard, which keeps showing
-  // the chat that was just open.
-  createEffect(on(
-    () => [props.projectId(), props.artifactChatId?.() ?? null, chatMode(), tabVisible("chat")] as const,
-    ([projectId, chatId, mode, visible], previous) => {
-      const movedProject = previous ? previous[0] !== projectId : false;
-      const movedChat = previous ? previous[1] !== chatId : false;
-      if (movedChat && !movedProject && !chatId) return;
-      if (movedChat || movedProject) chatReview.reset();
-      if (movedProject) sourceReview.reset();
-      if (!visible || mode !== "changes" || !chatId) return;
-      if (chatReview.scope() !== "chat" && chatReview.scope() !== "turn") chatReview.setScope("chat");
-      void chatReview.refresh();
-    },
-  ));
-  const selectEmbeddedReviewFile = (path: string) => {
-    void chatReview.select(path);
-  };
-  const openEmbeddedSourceReview: ReviewOpener = (scope, _path, checkpoint = null) => {
-    if (scope !== "head" && scope !== "changes" && scope !== "staged") return;
-    sourceReview.setScope(scope, checkpoint);
-    void sourceReview.refresh();
-  };
+
+  // Moving between views: a file to its review, a review back to the working
+  // file, and a comment chip or turn artifact to whichever view shows it.
   const openSourceControlReview = async (scope: DiffScope, path: string) => {
-    const slot = slotForPath(path);
-    const handle = slot ? slotHandles.get(slot) : undefined;
-    if (handle?.hasUnsavedChanges()) {
-      if (!window.confirm("Discard unsaved changes and review this file?")) return;
-      handle.discardChanges();
-    }
+    if (!files.confirmDiscard(path, "Discard unsaved changes and review this file?")) return;
     const side = panePosition("files") ?? focusedPane();
-    setSourceControlMode("review");
-    writeSetting(panelScope(), "diff:mode", "review");
-    setCommitDetail(null);
-    sourceReview.setScope(scope);
+    sourceControl.showReview(scope);
     setPaneTab(side, "diff");
-    if (!diff()) await loadDiff(false, false);
-    await sourceReview.refresh(path);
+    await sourceControl.refreshReview(path);
   };
   const inspectFileDiff = (path: string, staged: boolean) => void openSourceControlReview(staged ? "staged" : "changes", path);
   const showFileDiff = (slot: FileSlotId, staged: boolean) => {
-    const path = openPaths()[slot];
-    if (path) { setFocusedSlot(slot); void openSourceControlReview(staged ? "staged" : "changes", path); }
+    const path = files.openPaths()[slot];
+    if (path) { files.setFocusedSlot(slot); void openSourceControlReview(staged ? "staged" : "changes", path); }
   };
-  const openFile = (path: string) => {
-    if (openInSlot(focusedSlot(), path)) setNavigatorOpen(false);
-  };
-  const openFileToSide = (path: string) => openInSlot("secondary", path);
   const openWorkingFile = (path: string) => {
     const diffSide = panePosition("diff") ?? focusedPane();
-    if (!openInSlot(focusedSlot(), path)) return;
+    if (!files.openInSlot(files.focusedSlot(), path)) return;
     if (!tabVisible("files")) setPaneTab(diffSide, "files");
     const filesSide = panePosition("files") ?? diffSide;
     queueMicrotask(() => focusTabDefault("files", filesSide));
@@ -901,10 +275,10 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       return;
     }
     const side = panePosition("chat") ?? focusedPane();
-    selectChatMode("changes");
+    chat.selectMode("changes");
     setPaneTab(side, "chat");
-    chatReview.setScope(request.scope === "session" ? "chat" : "turn");
-    void chatReview.refresh(request.path);
+    chat.review.setScope(request.scope === "session" ? "chat" : "turn");
+    void chat.review.refresh(request.path);
   };
   window.addEventListener(REVIEW_NAVIGATION_EVENT, resolveReviewNavigation);
   onCleanup(() => window.removeEventListener(REVIEW_NAVIGATION_EVENT, resolveReviewNavigation));
@@ -914,466 +288,14 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     props.onRequestOpen?.();
     const side = panePosition("chat") ?? focusedPane();
     setReviewReveal(null);
-    selectChatMode("changes");
+    chat.selectMode("changes");
     setPaneTab(side, "chat");
-    chatReview.setScope("turn", request.checkpointId);
-    void chatReview.refresh(request.path);
+    chat.review.setScope("turn", request.checkpointId);
+    void chat.review.refresh(request.path);
   };
   window.addEventListener(TURN_ARTIFACT_NAVIGATION_EVENT, resolveTurnArtifactNavigation);
   onCleanup(() => window.removeEventListener(TURN_ARTIFACT_NAVIGATION_EVENT, resolveTurnArtifactNavigation));
-  let pendingEdit: string | null = null;
-  const editFile = (path: string) => {
-    const slot = slotForPath(path);
-    if (slot) {
-      setFocusedSlot(slot);
-      slotHandles.get(slot)?.edit();
-      return;
-    }
-    pendingEdit = path;
-    openFile(path);
-  };
-  const noteSlotLoaded = (slot: FileSlotId, file: FileSummary | null) => {
-    if (file && pendingEdit === file.path) {
-      pendingEdit = null;
-      slotHandles.get(slot)?.edit();
-    }
-  };
-  // Closing the left slot promotes the right one so the layout never holds a gap.
-  const closeSlot = (slot: FileSlotId) => {
-    if (slot === "secondary") {
-      if (slotHandles.get("secondary")?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and close this file?")) return;
-      setSlotPath("secondary", null);
-      setFocusedSlot("primary");
-      return;
-    }
-    const promoted = openPaths().secondary;
-    const losesDraft = slotHandles.get("primary")?.hasUnsavedChanges() || (promoted && slotHandles.get("secondary")?.hasUnsavedChanges());
-    if (losesDraft && !window.confirm("Discard unsaved changes and close this file?")) return;
-    setSlotPath("primary", promoted);
-    setSlotPath("secondary", null);
-    setFocusedSlot("primary");
-  };
-  const dropOpenPath = (path: string) => {
-    if (openPaths().secondary === path) setSlotPath("secondary", null);
-    if (openPaths().primary === path) {
-      const promoted = openPaths().secondary;
-      setSlotPath("primary", promoted);
-      if (promoted) setSlotPath("secondary", null);
-      setFocusedSlot("primary");
-    }
-  };
-  const pathIsWithin = (candidate: string | null, parent: string) =>
-    Boolean(candidate && (candidate === parent || candidate.startsWith(`${parent}/`)));
-  const hasUnsavedPath = (path: string) => [...slotHandles.entries()]
-    .some(([slot, handle]) => pathIsWithin(openPaths()[slot], path) && handle.hasUnsavedChanges());
-  const remapWorkspacePath = (candidate: string | null, source: string, destination: string) =>
-    pathIsWithin(candidate, source) ? `${destination}${candidate!.slice(source.length)}` : candidate;
-  const resetFileTree = async () => {
-    const nextExpanded = new Set<string>();
-    setDirectories({});
-    setExpanded(nextExpanded);
-    cacheWorkspace(props.projectId(), { directories: {}, expanded: nextExpanded });
-    await loadDirectory("", true);
-  };
-  const remapOpenPaths = (source: string, destination: string) => {
-    const current = openPaths();
-    setSlotPath("primary", remapWorkspacePath(current.primary, source, destination));
-    setSlotPath("secondary", remapWorkspacePath(current.secondary, source, destination));
-    const nextKept = new Set([...keptVisible()].map((path) => remapWorkspacePath(path, source, destination) || path));
-    setKeptVisible(nextKept);
-    writeSetting(props.projectId(), "kept-visible", JSON.stringify([...nextKept]));
-  };
-  const openSlotHandles = () => [...slotHandles.entries()]
-    .filter(([slot]) => Boolean(openPaths()[slot]))
-    .map(([, handle]) => handle);
-  const clampFileSplitRatio = (next: number) => Math.max(25, Math.min(75, Math.round(next)));
-  const saveFileSplitRatio = (next: number) => {
-    const value = clampFileSplitRatio(next);
-    setFileSplitRatio(value);
-    writeSetting(projectScope(), "file-split-ratio", String(value));
-  };
-  const startFileSplitResize = (event: PointerEvent) => {
-    const primary = filesHost?.querySelector<HTMLElement>('.workspace-preview[data-slot="primary"]');
-    const secondary = filesHost?.querySelector<HTMLElement>('.workspace-preview[data-slot="secondary"]');
-    if (!primary || !secondary) return;
-    event.preventDefault();
-    const left = primary.getBoundingClientRect().left;
-    const width = secondary.getBoundingClientRect().right - left;
-    if (width <= 0) return;
-    // Pointer events arrive faster than the display can show them, and each one
-    // used to write localStorage synchronously. Track the pointer once per
-    // frame, and persist the settled ratio once, when the drag ends.
-    let pending = fileSplitRatio();
-    let frame = 0;
-    let stopped = false;
-    const apply = () => {
-      frame = 0;
-      setFileSplitRatio(clampFileSplitRatio(pending));
-    };
-    const move = (moveEvent: PointerEvent) => {
-      pending = ((moveEvent.clientX - left) / width) * 100;
-      if (!frame) frame = requestAnimationFrame(apply);
-    };
-    const stop = () => {
-      if (stopped) return;
-      stopped = true;
-      if (frame) {
-        cancelAnimationFrame(frame);
-        apply();
-      }
-      saveFileSplitRatio(pending);
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-      window.removeEventListener("pointercancel", stop);
-      window.removeEventListener("blur", stop);
-      document.body.classList.remove("workspace-split-resizing");
-    };
-    document.body.classList.add("workspace-split-resizing");
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop, { once: true });
-    window.addEventListener("pointercancel", stop, { once: true });
-    window.addEventListener("blur", stop, { once: true });
-  };
-  // Downloading works on any tree entry, open or not, so it stays in the panel.
-  const downloadPath = async (path: string) => {
-    try {
-      const response = await authorizedFetch(httpUrl(`/v0/projects/${encodeURIComponent(props.projectId())}/file?path=${encodeURIComponent(path)}&download=1`));
-      if (!response.ok) {
-        const body: unknown = await response.json().catch(() => ({}));
-        const message = body && typeof body === "object" && "message" in body ? String(body.message) : "Download failed";
-        throw new Error(message);
-      }
-      const url = URL.createObjectURL(await response.blob());
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = path.split("/").at(-1) || "download";
-      link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 0);
-    } catch (cause) {
-      reportError((cause as Error).message);
-    }
-  };
-  const chooseUpload = (target: UploadTarget = { kind: "directory", path: "" }) => {
-    setUploadTarget(target);
-    if (fileUploadInput) {
-      fileUploadInput.value = "";
-      fileUploadInput.click();
-    }
-  };
-  const uploadFiles = async (files: FileList | null) => {
-    if (!files?.length) return;
-    const target = uploadTarget();
-    const replacement = files.item(0);
-    if (!replacement) return;
-    if (target.kind === "replacement" && !window.confirm(`Replace "${target.path}" with "${replacement.name}"?`)) return;
-    setUploading(true);
-    try {
-      if (target.kind === "replacement") {
-        await api<FileWriteResult>(`/v0/projects/${encodeURIComponent(props.projectId())}/file?path=${encodeURIComponent(target.path)}`, {
-          method: "PUT",
-          headers: { "content-type": "application/octet-stream", "if-match": "*" },
-          body: replacement,
-        });
-        await loadDirectory(target.path.split("/").slice(0, -1).join("/"), true);
-        const reloading = slotForPath(target.path);
-        if (reloading) await slotHandles.get(reloading)?.reload();
-        toast.success(`Replaced ${target.path}`);
-        return;
-      }
-      for (const file of files) {
-        const path = target.path ? `${target.path}/${file.name}` : file.name;
-        await api<FileWriteResult>(`/v0/projects/${encodeURIComponent(props.projectId())}/file?path=${encodeURIComponent(path)}`, {
-          method: "PUT",
-          headers: { "content-type": "application/octet-stream" },
-          body: file,
-        });
-      }
-      await loadDirectory(target.path, true);
-    } catch (cause) {
-      reportError((cause as Error).message);
-      await loadDirectory(target.kind === "directory" ? target.path : target.path.split("/").slice(0, -1).join("/"), true);
-    } finally {
-      setUploading(false);
-    }
-  };
-  const deleteFile = async (path: string) => {
-    if (!window.confirm(`Delete "${path}"? This action cannot be undone.`)) return;
-    setUploading(true);
-    try {
-      await api<void>(`/v0/projects/${encodeURIComponent(props.projectId())}/file?path=${encodeURIComponent(path)}`, { method: "DELETE" });
-      await loadDirectory(path.split("/").slice(0, -1).join("/"), true);
-      dropOpenPath(path);
-      toast.success(`Deleted ${path}`);
-    } catch (cause) {
-      reportError((cause as Error).message);
-    } finally {
-      setUploading(false);
-    }
-  };
-  const requestedName = (label: string, initial = "") => {
-    const value = window.prompt(label, initial);
-    if (value == null) return null;
-    const name = value.trim();
-    if (!name || name === "." || name === ".." || name.includes("/") || name.includes("\\")) {
-      reportError("Enter one file or folder name without slashes");
-      return null;
-    }
-    return name;
-  };
-  const joinPath = (parent: string, name: string) => parent ? `${parent}/${name}` : name;
-  const createFile = async (parent = "") => {
-    const name = requestedName("New file name:");
-    if (!name) return;
-    const path = joinPath(parent, name);
-    setUploading(true);
-    try {
-      await api<FileWriteResult>(`/v0/projects/${encodeURIComponent(props.projectId())}/file?path=${encodeURIComponent(path)}`, {
-        method: "PUT",
-        headers: { "content-type": "application/octet-stream" },
-        body: new Blob([]),
-      });
-      await loadDirectory(parent, true);
-      openFile(path);
-      toast.success(`Created ${path}`);
-    } catch (cause) {
-      reportError((cause as Error).message);
-      await loadDirectory(parent, true);
-    } finally {
-      setUploading(false);
-    }
-  };
-  const createDirectory = async (parent = "") => {
-    const name = requestedName("New folder name:");
-    if (!name) return;
-    const path = joinPath(parent, name);
-    setUploading(true);
-    try {
-      await api<{ path: string }>(`/v0/projects/${encodeURIComponent(props.projectId())}/directory`, {
-        method: "POST",
-        body: JSON.stringify({ path }),
-      });
-      await loadDirectory(parent, true);
-      toast.success(`Created ${path}`);
-    } catch (cause) {
-      reportError((cause as Error).message);
-      await loadDirectory(parent, true);
-    } finally {
-      setUploading(false);
-    }
-  };
-  const moveEntry = async (entry: TreeEntry, destination: string) => {
-    if (destination === entry.path) return;
-    if (hasUnsavedPath(entry.path)) {
-      reportError("Save or discard changes in this item before moving it");
-      return;
-    }
-    setUploading(true);
-    try {
-      const moved = await api<MovedEntry>(`/v0/projects/${encodeURIComponent(props.projectId())}/entry`, {
-        method: "PATCH",
-        body: JSON.stringify({ path: entry.path, destination }),
-      });
-      remapOpenPaths(moved.path, moved.destination);
-      await resetFileTree();
-      toast.success(`Moved ${moved.path} to ${moved.destination}`);
-    } catch (cause) {
-      reportError((cause as Error).message);
-      await resetFileTree();
-    } finally {
-      setUploading(false);
-    }
-  };
-  const renameEntry = (entry: TreeEntry) => {
-    const name = requestedName(`Rename "${entry.name}" to:`, entry.name);
-    if (!name || name === entry.name) return;
-    const parent = entry.path.split("/").slice(0, -1).join("/");
-    void moveEntry(entry, joinPath(parent, name));
-  };
-  const moveEntryToFolder = (entry: TreeEntry) => {
-    const currentParent = entry.path.split("/").slice(0, -1).join("/");
-    const value = window.prompt(`Move "${entry.name}" to folder (relative to workspace root; leave blank for root):`, currentParent);
-    if (value == null) return;
-    const parent = value.trim().replaceAll("\\", "/").replace(/^\/+|\/+$/g, "");
-    void moveEntry(entry, joinPath(parent, entry.name));
-  };
-  const deleteDirectory = async (path: string) => {
-    if (hasUnsavedPath(path)) {
-      reportError("Save or discard changes in this folder before deleting it");
-      return;
-    }
-    if (!window.confirm(`Delete folder "${path}" and all its contents? This action cannot be undone.`)) return;
-    setUploading(true);
-    try {
-      await api<void>(`/v0/projects/${encodeURIComponent(props.projectId())}/directory?path=${encodeURIComponent(path)}`, { method: "DELETE" });
-      if (pathIsWithin(openPaths().secondary, path)) setSlotPath("secondary", null);
-      if (pathIsWithin(openPaths().primary, path)) dropOpenPath(openPaths().primary!);
-      await resetFileTree();
-      toast.success(`Deleted ${path}`);
-    } catch (cause) {
-      reportError((cause as Error).message);
-      await resetFileTree();
-    } finally {
-      setUploading(false);
-    }
-  };
-  const refreshFiles = async () => {
-    const loaded = Object.keys(directories());
-    for (const directory of loaded.length ? loaded : [""]) await loadDirectory(directory, true);
-    await Promise.all(openSlotHandles().map((handle) => handle.reload()));
-  };
-  const visibleWorkspacePaths = () => [...new Set([
-    "",
-    ...expanded(),
-    ...Object.values(openPaths()).filter((path): path is string => Boolean(path)),
-  ])];
-  const changedDirectory = (directory: string, changedPath: string) => {
-    const parent = changedPath.slice(0, Math.max(0, changedPath.lastIndexOf("/")));
-    return directory === changedPath || directory === parent;
-  };
-  const changedFile = (file: string | null, changedPath: string) => Boolean(file
-    && (file === changedPath || file.startsWith(`${changedPath}/`)));
-  let pollingWorkspace = false;
-  let workspacePollFailures = 0;
-  let workspaceVersionProjectId = "";
-  let workspaceVersion: number | null = null;
-  const refreshChangedWorkspace = async (changedPaths: string[] | null, projectId: string) => {
-    const visibleDirectories = ["", ...expanded()].filter((directory) => directory === "" || Boolean(directories()[directory]));
-    const directoriesToRefresh = changedPaths === null
-      ? visibleDirectories
-      : visibleDirectories.filter((directory) => changedPaths.some((changedPath) => changedDirectory(directory, changedPath)));
-    let treeChanged = false;
-    for (const directory of directoriesToRefresh) {
-      if (await loadDirectory(directory, true)) treeChanged = true;
-    }
-    const slotsToRefresh = changedPaths === null
-      ? openSlotHandles()
-      : [...slotHandles.entries()]
-        .filter(([slot]) => changedPaths.some((changedPath) => changedFile(openPaths()[slot], changedPath)))
-        .map(([, handle]) => handle);
-    await Promise.all(slotsToRefresh.map((handle) => handle.reload()));
-    if (props.projectId() !== projectId) return;
-    if (treeChanged) toast.info("Workspace files updated");
-    if (props.sourceControlEnabled() && (tabVisible("diff") || tabVisible("files"))) await loadDiff(tabVisible("diff") && sourceControlMode() === "patch", tabVisible("diff") && sourceControlMode() === "graph", false, true);
-    else {
-      // Hidden Git data is stale; refresh it only when Source Control opens.
-      setDiff(null);
-      cacheWorkspace(projectId, { diff: null });
-    }
-  };
-  const pollWorkspace = async () => {
-    if (pollingWorkspace || uploading()) return true;
-    pollingWorkspace = true;
-    const projectId = props.projectId();
-    if (workspaceVersionProjectId !== projectId) {
-      workspaceVersionProjectId = projectId;
-      workspaceVersion = null;
-      workspacePollFailures = 0;
-      setWorkspaceStale(false);
-    }
-    const { request, controller } = startRequest("workspace-version", false);
-    try {
-      const query = new URLSearchParams({ paths: JSON.stringify(visibleWorkspacePaths()) });
-      const payload = await api<WorkspaceVersion>(`/v0/projects/${encodeURIComponent(projectId)}/workspace/version?${query}`, { signal: controller.signal });
-      if (!ownsRequest(request)) return true;
-      const initialProbe = workspaceVersion === null;
-      const changed = workspaceVersion !== payload.version;
-      workspaceVersion = payload.version;
-      if ((!initialProbe || (!props.initialDirectory && (Object.keys(directories()).length || diff() || openSlotHandles().length))) && changed) {
-        await refreshChangedWorkspace(payload.changedPaths, projectId);
-      }
-      workspacePollFailures = 0;
-      setWorkspaceStale(false);
-      return true;
-    } catch (cause) {
-      if (props.projectId() === projectId && !wasAborted(cause)) {
-        workspacePollFailures += 1;
-        if (workspacePollFailures >= 2) setWorkspaceStale(true);
-        console.warn("workspace poll failed", cause);
-        return false;
-      }
-      return true;
-    } finally {
-      finishRequest(request);
-      pollingWorkspace = false;
-    }
-  };
-  const retryWorkspacePoll = () => {
-    workspacePollFailures = 0;
-    setWorkspaceStale(false);
-    setPollRetry((attempt) => attempt + 1);
-  };
-  let diffLoadPromise: Promise<void> | undefined;
-  const loadDiff = (includePatch = false, includeHistory = false, reuse = false, background = false): Promise<void> => {
-    if (!props.sourceControlEnabled()) return Promise.resolve();
-    if (diffLoadPromise && !includePatch && !includeHistory) return diffLoadPromise;
-    const load = async () => {
-      const { request, controller } = startRequest("diff", !background);
-      try {
-      const endpoint = `/v0/projects/${encodeURIComponent(request.projectId)}/diff`;
-      // Show the first status before waiting for history or a full patch.
-      if (!diff() && (includePatch || includeHistory)) {
-        const overview = await api<DiffPayload>(`${endpoint}?history=0${reuse ? "&reuse=1" : ""}`, { signal: controller.signal });
-        if (!ownsRequest(request)) return;
-        setDiff(overview);
-        cacheWorkspace(request.projectId, { diff: overview });
-        if (!overview.repository) return;
-        reuse = true;
-      }
-      const query = new URLSearchParams();
-      if (includePatch) query.set("patch", "1");
-      if (!includeHistory) query.set("history", "0");
-      if (reuse) query.set("reuse", "1");
-      const payload = await api<DiffPayload>(`${endpoint}${query.size ? `?${query}` : ""}`, { signal: controller.signal });
-      if (ownsRequest(request)) {
-        const next = includeHistory ? payload : { ...payload, commits: undefined, refs: undefined };
-        setDiff(next);
-        cacheWorkspace(request.projectId, { diff: next });
-      }
-      } catch (cause) {
-        if (ownsRequest(request) && !wasAborted(cause)) reportError((cause as Error).message);
-      } finally {
-        finishRequest(request);
-      }
-    };
-    const promise = load().finally(() => { if (diffLoadPromise === promise) diffLoadPromise = undefined; });
-    diffLoadPromise = promise;
-    return promise;
-  };
-  const inspectCommit = async (commit: GitCommit) => {
-    selectSourceControlMode("patch");
-    setCommitDetail(null);
-    setCommitDetailLoading(true);
-    const { request, controller } = startRequest("commit", true);
-    try {
-      const payload = await api<GitCommitDetail>(`/v0/projects/${encodeURIComponent(request.projectId)}/commits/${encodeURIComponent(commit.hash)}`, { signal: controller.signal });
-      if (ownsRequest(request)) setCommitDetail(payload);
-    } catch (cause) {
-      if (ownsRequest(request) && !wasAborted(cause)) reportError((cause as Error).message);
-    } finally {
-      if (ownsRequest(request)) setCommitDetailLoading(false);
-      finishRequest(request);
-    }
-  };
-  const runGitAction = async (action: GitAction, path?: string) => {
-    if (gitAction()) return;
-    if (action === "commit" && !commitMessage().trim()) return;
-    if (action === "push" && !window.confirm(`Push ${diff()?.branch || "the current branch"} to its configured remote?`)) return;
-    setGitAction(action);
-    try {
-      await api<GitActionResult>(`/v0/projects/${encodeURIComponent(props.projectId())}/git`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action, path, message: action === "commit" ? commitMessage().trim() : undefined }),
-      });
-      if (action === "commit") setCommitMessage("");
-      await loadDiff(sourceControlMode() === "patch", sourceControlMode() === "graph");
-    } catch (cause) {
-      reportError((cause as Error).message);
-    } finally {
-      setGitAction("");
-    }
-  };
-  const copy = (value?: string) => { if (value) void navigator.clipboard.writeText(value); };
+
   // The panel takes room from the main pane only down to its minimum.
   const room = () => {
     const main = document.querySelector<HTMLElement>('[data-slot="sidebar-inset"]');
@@ -1422,7 +344,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   createEffect(() => {
     const open = props.open();
     if (open !== panelWasOpen) {
-      if (!open) resetRequestScope();
+      if (!open) requests.reset();
       animatePanelGeometry(open);
     }
     panelWasOpen = open;
@@ -1438,28 +360,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       queueMicrotask(() => restoreFocus(previous, [".composer textarea", 'button[aria-label="Toggle workspace panel"]', ".mobile-sidebar-trigger"]));
     }
     mobileWasOpen = open;
-  });
-  createEffect(() => {
-    const projectId = props.projectId();
-    const active = !props.initialDirectory && Boolean(projectId) && props.open() && (tabVisible("files") || tabVisible("diff") || tabVisible("chat")) && documentVisible() && networkOnline();
-    pollRetry();
-    if (!active) {
-      workspaceVersion = null;
-      return;
-    }
-    let cancelled = false;
-    let timer = 0;
-    const schedule = (delay: number) => {
-      timer = window.setTimeout(async () => {
-        const success = await pollWorkspace();
-        if (!cancelled) schedule(success ? FILE_POLL_INTERVAL_MS : Math.min(30_000, FILE_POLL_INTERVAL_MS * 2 ** workspacePollFailures));
-      }, delay);
-    };
-    schedule(0);
-    onCleanup(() => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    });
   });
   const startResize = (event: PointerEvent) => {
     if (isMobileLayout()) return;
@@ -1527,15 +427,9 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     resizeHandle?.addEventListener("lostpointercapture", stop, { once: true });
   };
   onCleanup(() => {
-    resetRequestScope();
+    requests.reset();
     stopResize?.();
-    filesResizeObserver?.disconnect();
     splitResizeObserver?.disconnect();
-    document.removeEventListener("visibilitychange", updateDocumentVisibility);
-    window.removeEventListener("online", updateNetworkOnline);
-    window.removeEventListener("offline", updateNetworkOffline);
-    if (treeScrollRaf) cancelAnimationFrame(treeScrollRaf);
-    if (treeTypeaheadTimer) window.clearTimeout(treeTypeaheadTimer);
     document.body.classList.remove("workspace-resizing");
     document.body.classList.remove("workspace-detail-resizing");
     document.body.classList.remove("workspace-tree-resizing");
@@ -1553,22 +447,15 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     }
     let pendingWidthCommit: number | null = null;
     batch(() => {
-      setSourceControlMode(storedSourceControlMode());
-      setCommitDetail(null);
+      sourceControl.restore();
       if (projectChanged) {
         pendingWidthCommit = Number(readGeometrySetting("width")) || 336;
-        setTreeWidth(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(readGeometrySetting("tree-width")) || DEFAULT_TREE_WIDTH)));
-        setTreeCollapsed(readGeometrySetting("tree-collapsed") === "true");
+        files.restoreGeometry();
         setSplitRatio(Math.max(0, Math.min(100, Number(readGeometrySetting("split-ratio")) || 50)));
-        setFileSplitRatio(Math.max(25, Math.min(75, Number(readGeometrySetting("file-split-ratio")) || 50)));
-        setShowHidden(readGeometrySetting("show-hidden") === "true");
       }
       setTab(nextTab);
       setSecondaryTab(storedSecondary());
-      setKeptVisible(storedPaths(props.projectId(), "kept-visible"));
-      const storedFiles = storedOpenFiles();
-      setOpenPaths(storedFiles);
-      setFocusedSlot("primary");
+      files.restoreOpenFiles();
     });
     if (pendingWidthCommit != null) commitWidth(pendingWidthCommit);
   }));
@@ -1584,169 +471,44 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     }
   }));
   createEffect(on(
-    () => [props.projectId(), tab(), secondaryTab(), props.open(), props.expanded(), sourceControlMode()] as const,
+    () => [props.projectId(), tab(), secondaryTab(), props.open(), props.expanded(), sourceControl.mode()] as const,
     ([projectId, activeTab, companionTab, open, panelExpanded]) => {
       if (!open) return;
       const projectChanged = loadedProjectId !== projectId;
       if (projectChanged) {
-        if (loadedProjectId) resetRequestScope();
+        if (loadedProjectId) requests.reset();
         loadedProjectId = projectId;
         const cached = cachedWorkspace(projectId);
         batch(() => {
-          setDirectories(props.initialDirectory ? { ...cached?.directories, "": props.initialDirectory() } : cached?.directories || {});
-          setExpanded(cached?.expanded || new Set<string>());
-          setFileFilter("");
-          setTreeFocusPath(openPaths().primary || "");
-          setDiff(cached?.diff || null);
-        });
-        queueMicrotask(() => {
-          if (treeElement) treeElement.scrollTop = cached?.treeScrollTop || 0;
+          files.restoreFromCache(cached, props.initialDirectory?.());
+          sourceControl.setDiff(cached?.diff || null);
         });
       }
       const filesVisible = activeTab === "files" || (panelExpanded && companionTab === "files");
       const diffVisible = activeTab === "diff" || (panelExpanded && companionTab === "diff");
       const chatVisible = activeTab === "chat" || (panelExpanded && companionTab === "chat");
-      if (filesVisible && !directories()[""] && !filesLoading()) void loadDirectory("", false);
+      if (filesVisible && !files.directories()[""] && !files.filesLoading()) void files.loadDirectory("", false);
       if (diffVisible || (filesVisible && props.sourceControlEnabled())) {
-        const includePatch = sourceControlMode() === "patch";
-        const includeHistory = sourceControlMode() === "graph";
-        const current = diff();
+        const includePatch = sourceControl.mode() === "patch";
+        const includeHistory = sourceControl.mode() === "graph";
+        const current = sourceControl.diff();
         const needsPatch = diffVisible && includePatch;
         const needsHistory = diffVisible && includeHistory;
-        if (!current || (needsPatch && !current.diff) || (needsHistory && !current.commits)) void loadDiff(needsPatch, needsHistory, Boolean(current));
+        if (!current || (needsPatch && !current.diff) || (needsHistory && !current.commits)) void sourceControl.loadDiff(needsPatch, needsHistory, Boolean(current));
       }
-      if (chatVisible && chatMode() === "history") void loadHistory();
+      if (chatVisible && chat.mode() === "history") void chat.loadHistory();
     }));
 
   createEffect(on(() => props.initialDirectory?.(), (listing) => {
     if (!listing) return;
-    setDirectories((current) => ({ ...current, "": listing }));
-    cacheWorkspace(props.projectId(), { directories: directories() });
+    files.setDirectories((current) => ({ ...current, "": listing }));
+    cacheWorkspace(props.projectId(), { directories: files.directories() });
   }));
 
   createEffect(on(() => [props.projectId(), props.requestedFile?.(), props.open()] as const, ([, file, open]) => {
-    if (file && open) openFile(file.path);
+    if (file && open) files.openFile(file.path);
   }));
 
-  function entryMatchesFilter(entry: TreeEntry, query: string): boolean {
-    const kept = [...keptVisible()].some((path) => path === entry.path || path.startsWith(`${entry.path}/`));
-    if (!showHidden() && entry.name.startsWith(".") && !kept) return false;
-    if (!query || entry.name.toLowerCase().includes(query)) return true;
-    return entry.type === "directory" && (directories()[entry.path]?.entries || []).some((child) => entryMatchesFilter(child, query));
-  }
-  const visibleEntries = (directory: string) => {
-    const query = fileFilter().trim().toLowerCase();
-    return (directories()[directory]?.entries || []).filter((entry) => entryMatchesFilter(entry, query));
-  };
-  const directoryIsOpen = (path: string) => expanded().has(path) || Boolean(fileFilter().trim() && directories()[path]);
-  const visibleTreePaths = createMemo(() => {
-    const paths: string[] = [];
-    const collect = (directory: string) => {
-      for (const entry of visibleEntries(directory)) {
-        paths.push(entry.path);
-        if (entry.type === "directory" && directoryIsOpen(entry.path)) collect(entry.path);
-      }
-    };
-    collect("");
-    return paths;
-  });
-  const treeTabStop = () => {
-    const visible = visibleTreePaths();
-    if (visible.includes(treeFocusPath())) return treeFocusPath();
-    const selected = openPaths()[focusedSlot()];
-    return selected && visible.includes(selected) ? selected : visible[0] || "";
-  };
-  const onTreeKeyDown = (event: KeyboardEvent & { currentTarget: HTMLButtonElement }) => {
-    const items = [...(treeElement?.querySelectorAll<HTMLButtonElement>('[role="treeitem"]') || [])];
-    const index = items.indexOf(event.currentTarget);
-    if (index < 0) return;
-    const focus = (next: number) => {
-      const item = items[next];
-      if (item) {
-        setTreeFocusPath(item.dataset.path || "");
-        item.focus();
-      }
-    };
-    if (event.key === "ArrowDown") focus(Math.min(items.length - 1, index + 1));
-    else if (event.key === "ArrowUp") focus(Math.max(0, index - 1));
-    else if (event.key === "Home") focus(0);
-    else if (event.key === "End") focus(items.length - 1);
-    else if (event.key === "ArrowRight") {
-      const level = Number(event.currentTarget.getAttribute("aria-level"));
-      if (event.currentTarget.getAttribute("aria-expanded") === "false") event.currentTarget.click();
-      else if (Number(items[index + 1]?.getAttribute("aria-level")) > level) focus(index + 1);
-    } else if (event.key === "ArrowLeft") {
-      if (event.currentTarget.getAttribute("aria-expanded") === "true" && expanded().has(event.currentTarget.dataset.path || "")) {
-        event.currentTarget.click();
-      } else {
-        const level = Number(event.currentTarget.getAttribute("aria-level"));
-        for (let parent = index - 1; parent >= 0; parent -= 1) {
-          const item = items[parent];
-          if (item && Number(item.getAttribute("aria-level")) < level) {
-            focus(parent);
-            break;
-          }
-        }
-      }
-    } else if (event.key.length === 1 && event.key !== " " && !event.altKey && !event.ctrlKey && !event.metaKey) {
-      treeTypeahead += event.key.toLowerCase();
-      window.clearTimeout(treeTypeaheadTimer);
-      treeTypeaheadTimer = window.setTimeout(() => { treeTypeahead = ""; }, 500);
-      const ordered = [...items.slice(index + 1), ...items.slice(0, index + 1)];
-      const match = ordered.find((item) => item.dataset.name?.startsWith(treeTypeahead));
-      if (match) focus(items.indexOf(match));
-      return;
-    } else return;
-    event.preventDefault();
-  };
-  const focusTreeBoundary = (last: boolean) => {
-    const items = [...(treeElement?.querySelectorAll<HTMLButtonElement>('[role="treeitem"]') || [])];
-    const item = last ? items.at(-1) : items[0];
-    if (!item) return false;
-    setTreeFocusPath(item.dataset.path || "");
-    item.focus();
-    return true;
-  };
-  const onFileFilterKeyDown = (event: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      if (focusTreeBoundary(event.key === "ArrowUp")) event.preventDefault();
-      return;
-    }
-    if (event.key === "Escape" && fileFilter()) {
-      event.preventDefault();
-      setFileFilter("");
-    }
-  };
-  const saveTreeScroll = (event: Event & { currentTarget: HTMLElement }) => {
-    const scrollTop = event.currentTarget.scrollTop;
-    const projectId = props.projectId();
-    if (treeScrollRaf) cancelAnimationFrame(treeScrollRaf);
-    treeScrollRaf = requestAnimationFrame(() => {
-      treeScrollRaf = 0;
-      cacheWorkspace(projectId, { treeScrollTop: scrollTop });
-    });
-  };
-  const toggleHidden = () => {
-    const next = !showHidden();
-    setShowHidden(next);
-    writeSetting(projectScope(), "show-hidden", String(next));
-  };
-  const toggleWrapLines = () => {
-    const next = !wrapLines();
-    setWrapLines(next);
-    writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines", String(next));
-  };
-  const clampTreeWidth = (next: number) => Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, next));
-  const saveTreeWidth = (next: number) => {
-    const value = clampTreeWidth(next);
-    setTreeWidth(value);
-    writeSetting(projectScope(), "tree-width", String(value));
-  };
-  const toggleTreeCollapsed = () => {
-    const next = !treeCollapsed();
-    setTreeCollapsed(next);
-    writeSetting(projectScope(), "tree-collapsed", String(next));
-  };
   const splitRatioBounds = (hostWidth = splitWidth()) => {
     if (hostWidth <= MIN_WORKSPACE_PANE_WIDTH * 2 + WORKSPACE_SPLIT_GUTTER_WIDTH) {
       const middle = hostWidth > 0
@@ -1808,178 +570,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     window.addEventListener("pointercancel", stop, { once: true });
     window.addEventListener("blur", stop, { once: true });
   };
-  const startTreeResize = (event: PointerEvent) => {
-    event.preventDefault();
-    treeResizeHandle?.setPointerCapture(event.pointerId);
-    const startX = event.clientX;
-    const startWidth = treeWidth();
-    let pending = startWidth;
-    let frame = 0;
-    let stopped = false;
-    const apply = () => {
-      frame = 0;
-      setTreeWidth(clampTreeWidth(pending));
-    };
-    const move = (moveEvent: PointerEvent) => {
-      pending = startWidth + moveEvent.clientX - startX;
-      if (!frame) frame = requestAnimationFrame(apply);
-    };
-    const stop = () => {
-      if (stopped) return;
-      stopped = true;
-      if (frame) {
-        cancelAnimationFrame(frame);
-        apply();
-      }
-      saveTreeWidth(pending);
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-      window.removeEventListener("pointercancel", stop);
-      window.removeEventListener("blur", stop);
-      document.body.classList.remove("workspace-tree-resizing");
-    };
-    document.body.classList.add("workspace-tree-resizing");
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop, { once: true });
-    window.addEventListener("pointercancel", stop, { once: true });
-    window.addEventListener("blur", stop, { once: true });
-  };
-  const toggleKeptVisible = (path: string) => {
-    const next = new Set(keptVisible());
-    if (next.has(path)) next.delete(path);
-    else next.add(path);
-    setKeptVisible(next);
-    writeSetting(props.projectId(), "kept-visible", JSON.stringify([...next]));
-  };
-  const collapseTree = () => {
-    const next = new Set<string>();
-    setExpanded(next);
-    cacheWorkspace(props.projectId(), { expanded: next });
-  };
-
-  // One definition per quick action, rendered three ways: the horizontal
-  // toolbar under the tree, the overflow menu it spills into, and the vertical
-  // rail shown while the navigator is collapsed.
-  interface TreeAction { id: string; label: () => string; title: () => string; icon: () => JSX.Element; disabled?: () => boolean; pressed?: () => boolean; run: () => void }
-  const treeActions: TreeAction[] = [
-    { id: "new-file", label: () => "New file", title: () => "Create a file in the workspace root", icon: () => <FilePlusIcon />, disabled: uploading, run: () => void createFile() },
-    { id: "new-folder", label: () => "New folder", title: () => "Create a folder in the workspace root", icon: () => <FolderPlusIcon />, disabled: uploading, run: () => void createDirectory() },
-    { id: "collapse", label: () => "Collapse all folders", title: () => "Collapse all folders", icon: () => <ChevronsUpIcon />, run: collapseTree },
-    { id: "hidden", label: () => showHidden() ? "Hide hidden files" : "Show hidden files", title: () => showHidden() ? "Hide hidden files" : "Show hidden files", icon: () => <Show when={showHidden()} fallback={<EyeOffIcon />}><EyeIcon /></Show>, pressed: showHidden, run: toggleHidden },
-    { id: "upload", label: () => "Upload files", title: () => "Upload files to workspace root", icon: () => <Show when={uploading()} fallback={<UploadIcon />}><Spinner /></Show>, disabled: uploading, run: () => chooseUpload() },
-    { id: "refresh", label: () => "Refresh files", title: () => "Refresh files", icon: () => <RefreshCwIcon />, disabled: filesLoading, run: () => void refreshFiles() },
-  ];
-  const treeActionButton = (action: TreeAction) =>
-    <button type="button" data-tree-action={action.id} aria-label={action.label()} title={action.title()} aria-pressed={action.pressed?.()} disabled={action.disabled?.()} onClick={action.run}>{action.icon()}</button>;
-  const [visibleTreeActions, setVisibleTreeActions] = createSignal(treeActions.length);
-  // Buttons are uniform, so one measured button plus the row gap is enough to
-  // work out how many fit; the cache is invalidated on a height change, which
-  // is what the layout breakpoints move.
-  let treeActionsRow: HTMLDivElement | undefined;
-  let treeActionMetrics: { unit: number; gap: number; height: number } | null = null;
-  const measureTreeActions = (width: number, height: number) => {
-    const row = treeActionsRow;
-    const first = row?.querySelector("button");
-    if (!row || !first) return;
-    if (!treeActionMetrics || treeActionMetrics.height !== height) {
-      const style = getComputedStyle(row);
-      const gap = parseFloat(style.columnGap) || 0;
-      treeActionMetrics = { unit: first.offsetWidth + gap, gap, height };
-    }
-    const { unit, gap } = treeActionMetrics;
-    if (unit <= 0) return;
-    const fits = Math.floor((width + gap) / unit);
-    setVisibleTreeActions(fits >= treeActions.length ? treeActions.length : Math.max(1, fits - 1));
-  };
-
-  const Tree = (treeProps: { directory: string; depth?: number }) => {
-    const depth = () => treeProps.depth || 0;
-    return <>
-      <For each={visibleEntries(treeProps.directory)}>{(entry, index) => <div class="workspace-tree-node">
-        <ContextMenu>
-          <ContextMenuTrigger
-            as="button"
-            type="button"
-            role="treeitem"
-            aria-expanded={entry.type === "directory" ? directoryIsOpen(entry.path) : undefined}
-            aria-level={depth() + 1}
-            aria-posinset={index() + 1}
-            aria-setsize={visibleEntries(treeProps.directory).length}
-            aria-selected={isFileOpen(entry.path)}
-            class="workspace-tree-row"
-            style={{ "padding-left": `${4 + depth() * 11.2}px` }}
-            data-name={entry.name.toLowerCase()}
-            data-path={entry.path}
-            data-selected={isFileOpen(entry.path)}
-            data-focused-file={openPaths()[focusedSlot()] === entry.path}
-            tabIndex={treeTabStop() === entry.path ? 0 : -1}
-            onFocus={() => {
-              setTreeFocusPath(entry.path);
-              if (entry.type === "file") void preloadWorkspaceEditor().catch(() => undefined);
-            }}
-            onPointerEnter={() => {
-              if (entry.type === "file") void preloadWorkspaceEditor().catch(() => undefined);
-            }}
-            onKeyDown={onTreeKeyDown}
-            onDblClick={() => { if (entry.type === "directory") props.onBrowseDirectory?.(entry.path); }}
-            onClick={(event) => entry.type === "directory" ? void toggleDirectory(entry.path) : entry.type === "file" ? (event.altKey ? openFileToSide(entry.path) : openFile(entry.path)) : undefined}
-          >
-            <Show when={entry.type === "directory"} fallback={<><span class="workspace-tree-chevron-placeholder" /><FileTypeIcon name={entry.name} /></>}>
-              <ChevronRightIcon class="workspace-tree-chevron" data-open={directoryIsOpen(entry.path)} /><FolderTypeIcon name={entry.name} expanded={directoryIsOpen(entry.path)} />
-            </Show>
-            <span>{entry.name}</span>
-            <Show when={keptVisible().has(entry.path)}><PinIcon class="workspace-tree-kept" aria-label="Always visible" /></Show>
-          </ContextMenuTrigger>
-          <ContextMenuContent shortcutScope="workspace-panel" class="w-48 workspace-file-menu">
-            <ContextMenuGroup>
-              <Show when={entry.type === "file"}>
-                <ContextMenuItem onSelect={() => openFile(entry.path)}><FileTypeIcon name={entry.name} />Open preview</ContextMenuItem>
-                <ContextMenuItem onSelect={() => openFileToSide(entry.path)}><Columns2Icon />Open as second file</ContextMenuItem>
-                <ContextMenuItem onSelect={() => editFile(entry.path)}><PencilIcon />Edit</ContextMenuItem>
-                <ContextMenuItem onSelect={() => void downloadPath(entry.path)}><DownloadIcon />Download</ContextMenuItem>
-
-                <ContextMenuItem disabled={uploading()} onSelect={() => chooseUpload({ kind: "replacement", path: entry.path })}><UploadIcon />Replace with upload…</ContextMenuItem>
-              </Show>
-              <Show when={entry.type === "directory"}>
-                <Show when={props.onBrowseDirectory}><ContextMenuItem onSelect={() => props.onBrowseDirectory?.(entry.path)}><FolderIcon />Open folder</ContextMenuItem></Show>
-                <ContextMenuItem disabled={uploading()} onSelect={() => void createFile(entry.path)}><FilePlusIcon />New file…</ContextMenuItem>
-                <ContextMenuItem disabled={uploading()} onSelect={() => void createDirectory(entry.path)}><FolderPlusIcon />New folder…</ContextMenuItem>
-                <ContextMenuItem onSelect={() => chooseUpload({ kind: "directory", path: entry.path })}><UploadIcon />Upload files here</ContextMenuItem>
-              </Show>
-              <Show when={entry.type === "file" || entry.type === "directory"}>
-                <ContextMenuItem disabled={uploading()} onSelect={() => renameEntry(entry)}><PencilIcon />Rename…</ContextMenuItem>
-                <ContextMenuItem disabled={uploading()} onSelect={() => moveEntryToFolder(entry)}><MoveIcon />Move…</ContextMenuItem>
-              </Show>
-              <ContextMenuItem onSelect={() => copy(entry.path)}><CopyIcon />Copy path</ContextMenuItem>
-            </ContextMenuGroup>
-            <Show when={entry.name.startsWith(".") || keptVisible().has(entry.path)}>
-              <ContextMenuSeparator />
-              <ContextMenuItem onSelect={() => toggleKeptVisible(entry.path)}>
-                <Show when={keptVisible().has(entry.path)} fallback={<><PinIcon />Keep visible</>}><PinOffIcon />Stop keeping visible</Show>
-              </ContextMenuItem>
-            </Show>
-            <Show when={entry.type === "file"}>
-              <ContextMenuSeparator />
-              <ContextMenuItem variant="destructive" disabled={uploading()} onSelect={() => void deleteFile(entry.path)}><Trash2Icon />Delete file</ContextMenuItem>
-            </Show>
-            <Show when={entry.type === "directory"}>
-              <ContextMenuSeparator />
-              <ContextMenuItem variant="destructive" disabled={uploading()} onSelect={() => void deleteDirectory(entry.path)}><Trash2Icon />Delete folder</ContextMenuItem>
-            </Show>
-          </ContextMenuContent>
-        </ContextMenu>
-        <Show when={entry.type === "directory" && directoryIsOpen(entry.path)}>
-          <div role="group"><Tree directory={entry.path} depth={depth() + 1} /></div>
-        </Show>
-      </div>}</For>
-      <Show when={directories()[treeProps.directory]?.oversize}><div class="workspace-tree-notice">Directory exceeds the 50,000-entry limit. Open a smaller directory.</div></Show>
-      <Show when={directories()[treeProps.directory]?.truncated}><div class="workspace-tree-notice">
-        <Show when={fileFilter().trim()}>Filter covers loaded entries only. </Show>
-        <span>{directories()[treeProps.directory]?.entries.length} of {directories()[treeProps.directory]?.total ?? "more"} entries loaded. </span>
-        <button type="button" disabled={filesLoading()} onClick={() => void loadDirectory(treeProps.directory, false, true)}>Show more</button>
-      </div></Show>
-    </>;
-  };
 
   return <>
     <Show when={props.open()}>
@@ -2027,273 +617,25 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       }} />
     </Show>
     <Show when={tabVisible("files")}>
-      <div
-        ref={(element) => {
-          filesResizeObserver?.disconnect();
-          const updateWideState = (width: number) =>
-            setFilesWide(!isMobileLayout() && width >= (props.expanded() ? 520 : WIDE_FILES_MIN_WIDTH));
-          updateWideState(element.clientWidth);
-          // The entry already carries the new size. Reading clientWidth back
-          // inside the callback instead forces a synchronous layout, and a
-          // panel drag resizes this element every frame: traced at one forced
-          // layout per frame for the whole drag, 1.9ms of a 6.94ms budget.
-          // .workspace-files has no border or padding, so the content box is
-          // the same number clientWidth was reporting.
-          filesResizeObserver = new ResizeObserver((entries) => {
-            const box = entries[entries.length - 1]?.contentBoxSize?.[0];
-            updateWideState(box ? box.inlineSize : element.clientWidth);
-          });
-          filesResizeObserver.observe(element);
-          filesHost = element;
-        }}
-        class="workspace-files"
-        data-position={panePosition("files")}
-        data-wide={filesWide()}
-        data-files={openPaths().secondary ? "2" : "1"}
-        data-tree-collapsed={treeCollapsed()}
-        data-navigator-open={navigatorOpen()}
-        style={{
-          "--workspace-tree-width": `${treeWidth()}px`,
-          "--workspace-file-a": `${fileSplitRatio()}fr`,
-          "--workspace-file-b": `${100 - fileSplitRatio()}fr`,
-        }}
-      >
-        <div class="workspace-tree-pane">
-          <div class="workspace-tree-tools workspace-tree-search">
-            <button type="button" aria-label="Hide file navigator" title="Hide file navigator" onClick={hideFileNavigator}><PanelLeftCloseIcon /></button>
-            <label class="workspace-tree-filter">
-              <SearchIcon />
-              <input
-                ref={fileFilterInput}
-                type="search"
-                aria-label="Filter loaded files"
-                placeholder="Filter loaded files"
-                title="Filter loaded files and folders"
-                value={fileFilter()}
-                onInput={(event) => setFileFilter(event.currentTarget.value)}
-                onKeyDown={onFileFilterKeyDown}
-              />
-            </label>
-          </div>
-          <Show when={workspaceStale()}><div class="workspace-freshness-notice" role="status" aria-live="polite"><span>Not updating</span><span aria-hidden="true">·</span><button type="button" onClick={retryWorkspacePoll}>Retry</button></div></Show>
-          <nav ref={(element) => {
-            treeElement = element;
-            queueMicrotask(() => { element.scrollTop = workspaceCache.get(props.projectId())?.treeScrollTop || 0; });
-          }} aria-label="Project files" role="tree" aria-busy={filesLoading()} class="workspace-tree" onScroll={saveTreeScroll}>
-            <Show when={props.onBrowseParent}><button type="button" class="workspace-tree-row workspace-tree-parent" onClick={props.onBrowseParent} title={`Open parent of ${props.workingRoot()}`}><span class="workspace-tree-chevron-placeholder" /><FolderUpIcon /><span>..</span></button></Show>
-            <Tree directory="" />
-            <Show when={directories()[""] && !directories()[""]?.oversize && visibleEntries("").length === 0}><div class="workspace-tree-empty">{fileFilter() ? "No loaded files match this filter." : "No files to show."}</div></Show>
-          </nav>
-          <div class="workspace-tree-tools workspace-tree-actions" role="toolbar" aria-label="File tree actions" ref={(element) => {
-            treeActionsRow = element;
-            const observer = new ResizeObserver((entries) => {
-              const box = entries[entries.length - 1]?.contentBoxSize?.[0];
-              measureTreeActions(box ? box.inlineSize : element.clientWidth, box ? box.blockSize : element.clientHeight);
-            });
-            observer.observe(element);
-            onCleanup(() => { observer.disconnect(); if (treeActionsRow === element) treeActionsRow = undefined; });
-          }}>
-            <For each={treeActions}>{(action, index) => <Show when={index() < visibleTreeActions()}>{treeActionButton(action)}</Show>}</For>
-            <Show when={visibleTreeActions() < treeActions.length}>
-              <Menu>
-                <MenuTrigger class="workspace-tree-more" aria-label="More file actions" title="More file actions"><EllipsisIcon /></MenuTrigger>
-                <MenuContent>
-                  <For each={treeActions.slice(visibleTreeActions())}>{(action) =>
-                    <MenuItem disabled={action.disabled?.()} onSelect={action.run}>{action.icon()}{action.label()}</MenuItem>
-                  }</For>
-                </MenuContent>
-              </Menu>
-            </Show>
-            <input ref={fileUploadInput} class="workspace-file-input" type="file" multiple={uploadTarget().kind === "directory"} onChange={(event) => void uploadFiles(event.currentTarget.files)} />
-          </div>
-        </div>
-        <Show when={filesWide() ? treeCollapsed() : !navigatorOpen()}>
-          <div class="workspace-tree-collapsed-rail">
-            <button type="button" aria-label="Show file navigator" title="Show file navigator" onClick={showFileNavigator}><PanelLeftOpenIcon /></button>
-            <div class="workspace-tree-rail-actions" role="toolbar" aria-label="File tree actions">
-              <For each={treeActions}>{(action) => treeActionButton(action)}</For>
-            </div>
-          </div>
-        </Show>
-        <Show when={filesWide()}>
-          <div
-            ref={treeResizeHandle}
-            class="workspace-tree-resize-handle"
-            role="separator"
-            aria-label="Resize file tree"
-            aria-orientation="vertical"
-            aria-valuemin={MIN_TREE_WIDTH}
-            aria-valuemax={MAX_TREE_WIDTH}
-            aria-valuenow={treeWidth()}
-            tabIndex={0}
-            onPointerDown={startTreeResize}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowLeft") saveTreeWidth(treeWidth() - 8);
-              if (event.key === "ArrowRight") saveTreeWidth(treeWidth() + 8);
-            }}
-          />
-        </Show>
-          <WorkspaceFileSlot
-            projectId={props.projectId()}
-            path={openPaths().primary}
-            slot="primary"
-            focused={focusedSlot() === "primary" && Boolean(openPaths().secondary)}
-            closable={Boolean(openPaths().primary)}
-            busy={uploading()}
-            wrap={wrapLines()}
-            onToggleWrap={toggleWrapLines}
-            annotationChatId={commentChatId()}
-            reveal={reviewReveal()}
-            onFocus={() => setFocusedSlot("primary")}
-            onClose={() => closeSlot("primary")}
-            onError={reportError}
-            onRemoved={(path, announce) => { dropOpenPath(path); if (announce) toast.info(`${path} was removed`); }}
-            onReplace={(path) => chooseUpload({ kind: "replacement", path })}
-            onDelete={(path) => void deleteFile(path)}
-            onLoaded={(file) => noteSlotLoaded("primary", file)}
-            gitFile={props.sourceControlEnabled() ? diff()?.files.find((file) => file.path === openPaths().primary) : undefined}
-            onShowDiff={(staged) => void showFileDiff("primary", staged)}
-            onSaved={() => { if (props.sourceControlEnabled()) void loadDiff(false, false); }}
-            ref={(handle) => slotHandles.set("primary", handle)}
-            onDispose={() => slotHandles.delete("primary")}
-          />
-          <Show when={openPaths().secondary}>
-            <Show when={filesWide()}><div class="workspace-file-split-handle" role="separator" aria-label="Resize open files" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow={fileSplitRatio()} tabIndex={0} onPointerDown={startFileSplitResize} onKeyDown={(event) => {
-              if (event.key === "ArrowLeft") saveFileSplitRatio(fileSplitRatio() - 2);
-              else if (event.key === "ArrowRight") saveFileSplitRatio(fileSplitRatio() + 2);
-              else if (event.key === "Home") saveFileSplitRatio(25);
-              else if (event.key === "End") saveFileSplitRatio(75);
-              else return;
-              event.preventDefault();
-            }} /></Show>
-            <WorkspaceFileSlot
-              projectId={props.projectId()}
-              path={openPaths().secondary}
-              slot="secondary"
-              focused={focusedSlot() === "secondary"}
-              closable
-              busy={uploading()}
-              wrap={wrapLines()}
-              onToggleWrap={toggleWrapLines}
-              annotationChatId={commentChatId()}
-              reveal={reviewReveal()}
-              onFocus={() => setFocusedSlot("secondary")}
-              onClose={() => closeSlot("secondary")}
-              onError={reportError}
-              onRemoved={(path, announce) => { dropOpenPath(path); if (announce) toast.info(`${path} was removed`); }}
-              onReplace={(path) => chooseUpload({ kind: "replacement", path })}
-              onDelete={(path) => void deleteFile(path)}
-              onLoaded={(file) => noteSlotLoaded("secondary", file)}
-              gitFile={props.sourceControlEnabled() ? diff()?.files.find((file) => file.path === openPaths().secondary) : undefined}
-              onShowDiff={(staged) => void showFileDiff("secondary", staged)}
-              onSaved={() => { if (props.sourceControlEnabled()) void loadDiff(false, false); }}
-              ref={(handle) => slotHandles.set("secondary", handle)}
-              onDispose={() => slotHandles.delete("secondary")}
-            />
-          </Show>
-      </div>
+      <FilesView control={files} position={panePosition("files")} expanded={props.expanded()} projectId={props.projectId()} workingRoot={props.workingRoot()}
+        sourceControlEnabled={props.sourceControlEnabled()} gitFiles={sourceControl.diff()?.files ?? []} commentChatId={commentChatId()} reveal={reviewReveal()}
+        stale={poll.stale()} onRetryPoll={poll.retry} onSaved={() => void sourceControl.loadDiff(false, false)} onShowDiff={showFileDiff}
+        onBrowseDirectory={props.onBrowseDirectory} onBrowseParent={props.onBrowseParent} />
     </Show>
-    <Show when={tabVisible("diff")}><section class="workspace-diff" data-position={panePosition("diff")}>
-      <header class="workspace-detail-dock-header workspace-source-header">
-        <div class="workspace-source-modes" role="tablist" aria-label="Source Control">
-          <button type="button" role="tab" aria-selected={sourceControlMode() === "changes"} onClick={() => selectSourceControlMode("changes")}><CheckIcon />Changes</button>
-          <button type="button" role="tab" aria-selected={sourceControlMode() === "review"} onClick={() => selectSourceControlMode("review")}><GitCompareArrowsIcon />Review</button>
-          <button type="button" role="tab" aria-selected={sourceControlMode() === "graph"} onClick={() => selectSourceControlMode("graph")}><GitCommitHorizontalIcon />Graph</button>
-          <button type="button" role="tab" aria-selected={sourceControlMode() === "patch"} onClick={() => selectSourceControlMode("patch")}><FileDiffIcon />Patch</button>
-        </div>
-        <small>{sourceControlMode() === "graph" ? `${diff()?.commits?.length || 0} recent` : `${diff()?.files.length || 0} changed`}</small>
-        <div class="workspace-source-actions">
-          <button type="button" aria-label="Fetch all remotes" title="Fetch all remotes" disabled={Boolean(gitAction())} onClick={() => void runGitAction("fetch")}><Show when={gitAction() === "fetch"} fallback={<RefreshCwIcon />}><Spinner /></Show><span>Fetch</span></button>
-          <button type="button" aria-label="Pull current branch" title="Pull current branch (fast-forward only)" disabled={!diff()?.upstream || Boolean(gitAction())} onClick={() => void runGitAction("pull")}><DownloadIcon /><span>Pull</span></button>
-          <button type="button" aria-label="Push current branch" title="Push current branch" disabled={!diff()?.upstream || Boolean(gitAction())} onClick={() => void runGitAction("push")}><SendIcon /><span>Push</span></button>
-        </div>
-      </header>
-      <Show when={sourceControlMode() === "changes"}>
-      <div class="workspace-diff-overview">
-      <div class="workspace-status-strip">
-        <div><GitBranchIcon /><strong>{diff() ? diff()!.repository ? diff()!.branch : "Not a Git repository" : "Loading Git status…"}</strong><Show when={diff()?.upstream}><small>{diff()?.upstream}</small></Show></div>
-        <div><Show when={diff()?.ahead || diff()?.behind}><span class="workspace-sync-state">↑ {diff()?.ahead || 0} ↓ {diff()?.behind || 0}</span></Show><Button variant="ghost" size="icon-sm" aria-label="Copy branch name" disabled={!diff()?.branch} onClick={() => copy(diff()?.branch)}><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Refresh Git status" disabled={diffLoading()} onClick={() => void loadDiff(sourceControlMode() === "patch", sourceControlMode() === "graph")}><RefreshCwIcon /></Button></div>
-      </div>
-      <Show when={workspaceStale()}><div class="workspace-freshness-notice" role="status" aria-live="polite"><span>Not updating</span><span aria-hidden="true">·</span><button type="button" onClick={retryWorkspacePoll}>Retry</button></div></Show>
-      <Show when={diff()?.repository}>
-        <form class="workspace-commit-composer" onSubmit={(event) => { event.preventDefault(); void runGitAction("commit"); }}>
-          <textarea aria-label="Commit message" placeholder="Message (Ctrl+Enter to commit)" rows="1" value={commitMessage()} onInput={(event) => { const input = event.currentTarget; setCommitMessage(input.value); input.style.height = "auto"; input.style.height = `${input.scrollHeight}px`; }} onKeyDown={(event) => { if (event.key === "Enter" && event.ctrlKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
-          <button type="submit" disabled={!commitMessage().trim() || !stagedFiles().length || Boolean(gitAction())}><Show when={gitAction() === "commit"} fallback={<CheckIcon />}><Spinner /></Show><span>Commit</span><small>{stagedFiles().length || ""}</small></button>
-        </form>
-        <div class="workspace-change-ledger">
-          <section class="workspace-change-section" data-open={stagedOpen()}>
-            <header><button type="button" class="workspace-change-disclosure" aria-expanded={stagedOpen()} onClick={() => setStagedOpen((open) => !open)}><ChevronRightIcon /><CheckIcon /><span>Staged changes</span><small>{stagedFiles().length}</small></button><button type="button" aria-label="Unstage all" title="Unstage all" disabled={!stagedFiles().length || Boolean(gitAction())} onClick={() => void runGitAction("unstage-all")}><Undo2Icon /></button></header>
-            <Show when={stagedOpen()}><Show when={stagedFiles().length} fallback={<div class="workspace-clean-state">No staged changes</div>}>
-              <div class="workspace-changes"><For each={stagedFiles()}>{(file) =>
-<div class="workspace-change-row"><button type="button" title={`Inspect changes in ${file.path}`} onClick={() => inspectFileDiff(file.path, true)}><GitFileLabel file={file} staged={true} /></button><button type="button" class="workspace-change-action" aria-label={`Unstage ${file.path}`} title="Unstage" disabled={Boolean(gitAction())} onClick={() => void runGitAction("unstage", file.path)}><Undo2Icon /></button></div>
-              }</For></div>
-            </Show></Show>
-          </section>
-          <section class="workspace-change-section" data-open={changesOpen()}>
-            <header><button type="button" class="workspace-change-disclosure" aria-expanded={changesOpen()} onClick={() => setChangesOpen((open) => !open)}><ChevronRightIcon /><FileDiffIcon /><span>Changes</span><small>{unstagedFiles().length}</small></button><button type="button" aria-label="Stage all" title="Stage all" disabled={!unstagedFiles().length || Boolean(gitAction())} onClick={() => void runGitAction("stage-all")}><CirclePlusIcon /></button></header>
-            <Show when={changesOpen() && unstagedFiles().some((file) => file.status === "??" && file.path.endsWith("/"))}><div class="workspace-tree-notice">Untracked folders are grouped. Staging a folder includes its contents.</div></Show>
-            <Show when={changesOpen()}><Show when={unstagedFiles().length} fallback={<div class="workspace-clean-state">Working tree clean</div>}>
-              <div class="workspace-changes"><For each={unstagedFiles()}>{(file) =>
-                <div class="workspace-change-row"><button type="button" title={`Inspect changes in ${file.path}`} onClick={() => inspectFileDiff(file.path, false)}><GitFileLabel file={file} staged={false} /></button><button type="button" class="workspace-change-action" aria-label={`Stage ${file.path}`} title="Stage" disabled={Boolean(gitAction())} onClick={() => void runGitAction("stage", file.path)}><CirclePlusIcon /></button></div>
-              }</For></div>
-            </Show></Show>
-          </section>
-        </div>
-      </Show>
-      </div>
-      </Show>
-      <Show when={sourceControlMode() === "review"}><WorkspaceDiffView
-        title="Changed files"
-        files={sourceReview.files()}
-        selectedPath={sourceReview.selectedPath()}
-        comparison={sourceReview.comparison()}
-        sourceKey={sourceReview.sourceKey()}
-        viewState={sourceReview.viewState()}
-        loading={sourceReview.loading()}
-        error={sourceReview.error()}
-        empty="No uncommitted changes."
-        comparisonSource={comparisonSourceControls(sourceReview, openEmbeddedSourceReview, sourceControlScopes)}
-        annotationChatId={commentChatId()}
-        reveal={reviewReveal()}
-        onSelect={(path) => void sourceReview.select(path)}
-        onOpenWorkingFile={openWorkingFile}
-        onViewStateChange={sourceReview.setViewState}
-      /></Show>
-        <Show when={sourceControlMode() === "graph" || sourceControlMode() === "patch"}><Show when={sourceControlMode() === "patch"} fallback={<Show when={Boolean(diff()?.commits?.length)} fallback={<div class="workspace-panel-empty">No commit history available.</div>}><CommitHistory commits={diff()?.commits || []} refs={diff()?.refs || []} branch={diff()?.branch} onCopy={copy} onInspect={inspectCommit} /></Show>}>
-          <div class="workspace-patch"><Show when={commitDetailLoading()} fallback={<Show when={commitDetail()} fallback={<Show when={diff()?.diff} fallback={<div class="workspace-panel-empty">{diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</div>}>{(content) => <PatchView content={content()} />}</Show>}>{(detail) => <PatchView content={detail().content} />}</Show>}><div class="workspace-panel-empty">Loading commit…</div></Show></div>
-        </Show></Show>
-    </section></Show>
-    <Show when={tabVisible("chat")}><section class="workspace-chat-view" data-position={panePosition("chat")}>
-      <div class="workspace-chat-modes" role="radiogroup" aria-label="Chat view"><div><Show when={props.historyAvailable?.()}><button role="radio" aria-checked={chatMode() === "history"} onClick={() => { selectChatMode("history"); void loadHistory(); }}>History</button></Show><button role="radio" aria-checked={chatMode() === "changes"} onClick={showAgentChanges}>Agent changes</button></div>
-        <Show when={chatMode() === "history"}>
-          <div class="workspace-history-toolbar">
-            <WorkbenchButton class="workspace-history-toggle" aria-label={collapseTools() ? "Expand tool calls" : "Collapse sequential tool calls"} aria-pressed={collapseTools()} title={collapseTools() ? "Expand tool calls" : "Collapse sequential tool calls"} onClick={toggleCollapseTools}><ListCollapseIcon /></WorkbenchButton>
-            <WorkbenchButton class="workspace-history-toggle" aria-label={historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={historyWrap()} title={historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} onClick={toggleHistoryWrap}><WrapTextIcon /></WorkbenchButton>
-          </div>
-        </Show></div>
-      <Show when={chatMode() === "history"}><Show when={!historyLoading()} fallback={<div class="workspace-panel-empty">Loading history…</div>}><Show when={historyTree()?.tree.length} fallback={<div class="workspace-panel-empty"><div><HistoryIcon /><Show when={props.artifactChatId?.()} fallback={<><strong>No chat open</strong><p>Open a chat to see its history.</p></>}><strong>No chat history</strong><p>Send a message to start this tree.</p></Show></div></div>}><div class="workspace-chat-history" role="tree" aria-label="Chat history" data-wrap={historyWrap() ? "true" : "false"}
-          ref={(element) => { historyScroller = element; stickHistoryToBottom(); }} onScroll={trackHistoryScroll}><HistoryNodes nodes={historyTree()!.tree} activePath={historyActivePath()} leafId={historyTree()!.leafId} collapseTools={collapseTools()} openRuns={openRuns()} onToggleRun={toggleRun} /></div></Show></Show></Show>
-      <Show when={chatMode() === "changes"}><WorkspaceDiffView
-        title="Changed files"
-        files={chatReview.files()}
-        selectedPath={chatReview.selectedPath()}
-        comparison={chatReview.comparison()}
-        sourceKey={chatReview.sourceKey()}
-        viewState={chatReview.viewState()}
-        loading={chatReview.loading()}
-        error={chatReview.error()}
-        empty={props.artifactChatId?.() ? "No changes in this scope." : "Open a chat to review agent changes."}
-        comparisonSource={comparisonSourceControls(chatReview, openEmbeddedReview, chatScopes)}
-        annotationChatId={commentChatId()}
-        reveal={reviewReveal()}
-        onSelect={selectEmbeddedReviewFile}
-        onOpenWorkingFile={openWorkingFile}
-        onViewStateChange={chatReview.setViewState}
-      /></Show>
-    </section></Show>
-    <Show when={tabVisible("terminal")}><section class="workspace-terminal-slot" data-position={panePosition("terminal")}><TerminalPane projectId={props.settingsScope?.() === "computer" ? "computer" : props.projectId()} projectName={props.settingsScope?.() === "computer" ? "Computer" : props.projectName()} workingRoot={props.settingsScope?.() === "computer" ? props.workingRoot() : undefined} terminalId={props.requestedTab?.()?.terminalId} focusRequest={terminalFocusRequest()} connectivity={props.connectivity} /></section></Show>
+    <Show when={tabVisible("diff")}>
+      <SourceControlView control={sourceControl} position={panePosition("diff")} stale={poll.stale()} onRetryPoll={poll.retry} chatAvailable={Boolean(props.artifactChatId?.())}
+        commentChatId={commentChatId()} reveal={reviewReveal()} onInspectFile={inspectFileDiff} onOpenWorkingFile={openWorkingFile} />
+    </Show>
+    <Show when={tabVisible("chat")}>
+      <ChatView control={chat} position={panePosition("chat")} historyAvailable={Boolean(props.historyAvailable?.())} chatId={props.artifactChatId?.() ?? null}
+        commentChatId={commentChatId()} reveal={reviewReveal()} onOpenWorkingFile={openWorkingFile} />
+    </Show>
+    <Show when={tabVisible("terminal")}>
+      <TerminalView position={panePosition("terminal")} computer={props.settingsScope?.() === "computer"} projectId={props.projectId()} projectName={props.projectName()}
+        workingRoot={props.workingRoot()} terminalId={props.requestedTab?.()?.terminalId} focusRequest={terminalFocusRequest()} connectivity={props.connectivity} />
+    </Show>
     </main>
-    <Show when={loading()}><div class="workspace-panel-loading"><Spinner /><span>Loading workspace</span></div></Show>
+    <Show when={requests.loading()}><div class="workspace-panel-loading"><Spinner /><span>Loading workspace</span></div></Show>
     </div>
   </aside>
   </>;
