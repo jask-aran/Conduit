@@ -93,6 +93,10 @@
 .sidebar-rail-action:focus-visible { position: relative; z-index: 1; }
 .sidebar-rail-action svg { width: 13.6px; height: 13.6px; }
 .sidebar-rail-action .workspace-glyph { width: 13.6px; height: 13.6px; }
+.sidebar-row > .sidebar-harness-mark { width: 12.8px; height: 12.8px; flex: none; }
+.sidebar-rail-action .sidebar-harness-mark { width: 13.6px; height: 13.6px; }
+/* As the tiles drew them: a mark without artwork in the full foreground, not the row's muted text. */
+:is(.sidebar-row, .sidebar-rail-action) > .sidebar-harness-mark.harness-mark-tinted { background-color: var(--sidebar-foreground); }
 .sidebar-rail-action[data-live="true"]::after { position: absolute; right: 4px; bottom: 4px; width: 4.8px; height: 4.8px; border: 1.6px solid var(--sidebar); border-radius: 999px; background: var(--accent-cool); content: ""; }
 [data-sidebar="rail-divider"] { width: 22.4px; height: 0.8px; margin: 5.6px auto; background: var(--sidebar-border); }
 .workspace-glyph { display: inline-grid; flex: none; place-items: center; font-size: 7.2px; font-weight: 750; letter-spacing: -.04em; line-height: 1; }
@@ -227,6 +231,7 @@
 .sidebar-rail-action:focus-visible { position: relative; z-index: 1; }
 .sidebar-rail-action svg { width: 17px; height: 17px; }
 .sidebar-rail-action .workspace-glyph { width: 17px; height: 17px; }
+.sidebar-row > .sidebar-harness-mark, .sidebar-rail-action .sidebar-harness-mark { width: 17px; height: 17px; }
 .sidebar-rail-action[data-live="true"]::after { position: absolute; right: 5px; bottom: 5px; width: 6px; height: 6px; border: 2px solid var(--sidebar); border-radius: 999px; background: var(--accent-cool); content: ""; }
 [data-sidebar="rail-divider"] { width: 28px; height: 1px; margin: 7px auto; background: var(--sidebar-border); }
 .workspace-glyph { display: inline-grid; flex: none; place-items: center; font-size: 9px; font-weight: 750; letter-spacing: -.04em; line-height: 1; }
@@ -302,7 +307,6 @@
   .conduit-sidebar[data-visual-state="collapsed"] .sidebar-area-toggle[data-area="computer"]::before { transform: translateY(26px); }
   .conduit-sidebar[data-visual-state="collapsed"] .server-status-indicator { margin-left: 0; }
 }
-.conduit-sidebar[data-visual-state="collapsed"] .sidebar-harness-tiles { display: none; }
 /* The rail's icons fade in once the sidebar has folded, rather than snapping in. */
 @keyframes sidebar-rail-in { from { opacity: 0; } to { opacity: 1; } }
 @media (--conduit-wide-layout) {
@@ -320,48 +324,8 @@
   .sidebar-area-toggle button { height: 36px; font-size: 12px; }
 }
 
-.sidebar-harness-tiles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 6px 8px 4px;
-}
-
-.sidebar-harness-tile {
-  position: relative;
-  display: grid;
-  width: 36px;
-  height: 36px;
-  flex: none;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  background: transparent;
-  padding: 0;
-  color: var(--sidebar-foreground);
-  place-items: center;
-}
-
-.sidebar-harness-tile:hover,
-.sidebar-harness-tile[aria-current="page"] {
-  border-color: color-mix(in oklch, var(--border), transparent 20%);
-  background: color-mix(in oklch, var(--sidebar-foreground), transparent 93%);
-}
-
-.sidebar-harness-tile:focus-visible { outline: none; background: var(--sidebar-accent); }
-
-.sidebar-harness-mark { width: 30px; height: 30px; }
-
-.sidebar-harness-status {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 5px;
-  height: 5px;
-  border-radius: 999px;
-  background: var(--muted-foreground);
-}
-
-.sidebar-harness-status[data-status="ready"] { background: var(--success, #45a56b); }
+/* A harness's row keeps its mark in its own colours; a dot says when it is not ready. */
+.sidebar-harness-status { display: block; width: 5px; height: 5px; border-radius: 999px; background: var(--muted-foreground); }
 .sidebar-harness-status[data-status="authentication_required"] { background: var(--warning, #d99a22); }
 
 /* A list that has not arrived, drawn as the shape of a list. Static: nothing
@@ -463,14 +427,10 @@
 /* The wash is the only cursor in the list: a focused row draws no ring, from
    the browser or anywhere else. The chevron is not a stop -- → and ← press it
    -- so it is out of the tab order. */
-.conduit-sidebar :is(.sidebar-row, .sidebar-project-link, .sidebar-rail-action, .sidebar-view-more, .sidebar-harness-tile, .sidebar-user, .sidebar-downloads > a):focus-visible { outline: none; box-shadow: none; }
+.conduit-sidebar :is(.sidebar-row, .sidebar-project-link, .sidebar-rail-action, .sidebar-view-more, .sidebar-user, .sidebar-downloads > a):focus-visible { outline: none; box-shadow: none; }
 /* The server row and the download links take the same wash -- focus comes
    back to the server row when its menu closes, and that is a cursor, not a ring. */
 .conduit-sidebar :is(.sidebar-user, .sidebar-downloads > a):is(:hover, :focus-visible, [data-expanded]) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
-.conduit-sidebar .sidebar-harness-tile:focus-visible {
-  border-color: color-mix(in oklch, var(--border), transparent 20%);
-  background: color-mix(in oklch, var(--sidebar-foreground), transparent 93%);
-}
 
 /* While the keyboard moves the cursor (sidebar-cursor.ts), a row left under a
    still pointer draws at rest until the pointer moves, so only the cursor row
@@ -485,7 +445,6 @@
 
 /* The cursor held while the window is away (sidebar-cursor.ts). */
 .conduit-sidebar :is(.sidebar-row:is([data-held], :has([data-held])), .sidebar-rail-action[data-held], .sidebar-view-more[data-held]) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
-.conduit-sidebar .sidebar-harness-tile[data-held] { border-color: color-mix(in oklch, var(--border), transparent 20%); background: color-mix(in oklch, var(--sidebar-foreground), transparent 93%); }
 :is(.sidebar-row:is([data-held], :has([data-held])), .split-row[data-held]) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
 /* New chat is a phone's row. On desktop a loose chat starts on the Conduit
    dashboard and a place's on its page, each with its composer ready. */
