@@ -487,3 +487,7 @@
 .conduit-sidebar :is(.sidebar-row:is([data-held], :has([data-held])), .sidebar-rail-action[data-held], .sidebar-view-more[data-held]) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 .conduit-sidebar .sidebar-harness-tile[data-held] { border-color: color-mix(in oklch, var(--border), transparent 20%); background: color-mix(in oklch, var(--sidebar-foreground), transparent 93%); }
 :is(.sidebar-row:is([data-held], :has([data-held])), .split-row[data-held]) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
+/* New chat is a phone's row. On desktop a loose chat starts on the Conduit
+   dashboard and a place's on its page, each with its composer ready. */
+.sidebar-row.sidebar-new-chat { display: none; }
+@media (--conduit-phone-layout) { .sidebar-row.sidebar-new-chat { display: flex; } }

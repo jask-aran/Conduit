@@ -1194,7 +1194,6 @@ export function Sidebar(props: {
             </Show>
             <Show when={area() === "conduit"}>
             <RailAction label="Conduit Dashboard" current={props.dashboard} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }}><LayoutDashboardIcon /></RailAction>
-            <RailAction label="New chat" onClick={() => startNewChat()}><MessageSquarePlusIcon /></RailAction>
             <RailAction label="New project" onClick={() => openNewDialog("folder")}><FolderPlusIcon /></RailAction>
             <Show when={railFolders().length}>
               <div data-sidebar="rail-section" data-sidebar-section="projects" class="sidebar-rail-section">
@@ -1242,6 +1241,7 @@ export function Sidebar(props: {
               <LayoutDashboardIcon />
               <span>Conduit Dashboard</span>
             </button>
+            {/* A phone's way to a new chat; on desktop it starts on the dashboard. */}
             <button type="button" class="sidebar-row sidebar-new-chat" aria-current={onNewChatPage() ? "page" : undefined} onClick={() => startNewChat()}>
               <MessageSquarePlusIcon />
               <span>New chat</span>

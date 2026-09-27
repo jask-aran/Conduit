@@ -1214,10 +1214,16 @@ function App() {
 
   // New chat without a project of its own lands on the Conduit dashboard with
   // the composer focused: the dashboard is the new-chat screen.
+  // A new chat starts where its composer already waits: the Conduit dashboard
+  // for a loose chat, and on desktop a project's or workspace's own page. A
+  // phone keeps a place's new chat on a chat page of its own, since a page is
+  // busy to start from there.
   const startNewChat = async (target?: Project) => {
     const project = target || selectedProject();
     if (project && project.slug !== "chat") {
-      await createChat(project);
+      if (isMobileLayout()) { await createChat(project); return; }
+      if (routeKind() !== "project" || selectedProject()?.id !== project.id) await openProject(project);
+      requestAnimationFrame(() => requestAnimationFrame(focusComposer));
       return;
     }
     if (routeKind() !== "dashboard") openDashboard();
@@ -2650,7 +2656,7 @@ function App() {
             onPrefetchProject={prefetchProjectDashboard}
             onContextAction={(type, target) => runSidebar(type, target)}
             isPinned={isSidebarPinned}
-            onNewChat={(project) => void createChat(project)}
+            onNewChat={(project) => void startNewChat(project)}
             onOpenWorkspaceIdentity={openWorkspaceIdentity}
             onOpenWorkspaceSettings={(project) => openSettings("workspaces", project.id)}
             onMoveProjectChats={(source, target) => void moveProjectChats(source, target)}
