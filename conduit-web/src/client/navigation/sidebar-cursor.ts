@@ -8,6 +8,10 @@
  * leaves for the main pane. Shift+↑/↓ selects chats as a range -- selecting is
  * only more washed rows. The Menu key or Shift+F10 opens the row's menu.
  *
+ * ↑ from the first row reaches the Conduit / Computer switch at the top, on
+ * its chosen side: ←/→ move between its sides, Enter or Space picks one, and
+ * ↓ comes back to the rows -- as a dashboard heading's switch does.
+ *
  * Pointer and keyboard move the one cursor. A pointer moving over a row takes
  * focus there while the sidebar has it, so arrowing carries on from where the
  * pointer is; arrowing away from a still pointer takes the rows out of hover
@@ -20,6 +24,8 @@
 // The rows the cursor stops on. A project is its link: the chevron beside it
 // is what → and ← press.
 const STOPS = ".sidebar-rail-action, .sidebar-row:not(.sidebar-project), .sidebar-project-link, .sidebar-view-more, .sidebar-harness-tile";
+// The Conduit / Computer switch in the header, above the rows.
+const SWITCH = ".sidebar-area-toggle button";
 
 type SidebarCursorOptions = {
   root: HTMLElement;
@@ -62,6 +68,23 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
   const keydown = (event: KeyboardEvent) => {
     if (event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
     const target = event.target instanceof HTMLElement ? event.target : null;
+    if (target?.matches(SWITCH) && root.contains(target)) {
+      const sides = [...root.querySelectorAll<HTMLElement>(SWITCH)].filter(visible);
+      const side = sides.indexOf(target);
+      switch (event.key) {
+        case "ArrowLeft": move(sides[side - 1]); break;
+        case "ArrowRight": move(sides[side + 1]); break;
+        case "Home": move(sides[0]); break;
+        case "End": move(sides[sides.length - 1]); break;
+        case "ArrowDown": move(stops()[0]); break;
+        case "ArrowUp": break;
+        case "Escape": options.onLeave(); break;
+        default: return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     const current = target?.matches(STOPS) && list.contains(target) ? target : null;
     if (!current) return;
     const all = stops();
@@ -83,7 +106,10 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
     const link = current.matches(".sidebar-project-link") ? current : null;
     switch (event.key) {
       case "ArrowDown": step(1); break;
-      case "ArrowUp": step(-1); break;
+      case "ArrowUp":
+        if (index === 0 && !event.shiftKey) move(root.querySelector<HTMLElement>(`${SWITCH}[aria-pressed="true"]`) ?? undefined);
+        else step(-1);
+        break;
       case "Home": anchor = null; move(all[0]); break;
       case "End": anchor = null; move(all[all.length - 1]); break;
       case "ArrowRight":
@@ -131,13 +157,13 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
   };
   const focusin = (event: FocusEvent) => {
     const row = event.target instanceof HTMLElement ? event.target : null;
-    if (!pointerFocus && row?.matches(STOPS) && row.matches(":focus-visible")) keyboardCursor(true);
+    if (!pointerFocus && row?.matches(`${STOPS}, ${SWITCH}`) && row.matches(":focus-visible")) keyboardCursor(true);
   };
 
   const release = () => root.querySelector("[data-held]")?.removeAttribute("data-held");
   const away = () => {
     const focused = document.activeElement;
-    if (focused instanceof HTMLElement && list.contains(focused) && focused.matches(STOPS)) focused.setAttribute("data-held", "");
+    if (focused instanceof HTMLElement && root.contains(focused) && focused.matches(`${STOPS}, ${SWITCH}`)) focused.setAttribute("data-held", "");
   };
 
   root.addEventListener("keydown", keydown);

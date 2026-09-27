@@ -287,9 +287,14 @@
 .sidebar-area-toggle[data-area="computer"]::before { transform: translateX(30px); }
 .sidebar-area-toggle svg { width: 14px; height: 14px; }
 @media (prefers-reduced-motion: reduce) { .sidebar-area-toggle::before { transition: none; } }
-.sidebar-area-toggle button:hover { color: var(--sidebar-foreground); }
 .sidebar-area-toggle button[aria-pressed="true"] { color: var(--sidebar-accent-foreground); }
-.sidebar-area-toggle button:focus-visible { outline: none; background: var(--sidebar-accent); }
+/* The cursor on the switch, as on a dashboard heading's (DESIGN.md, Interaction):
+   the unchosen side takes the wash and goes white; the chosen side, already
+   washed, brightens a step toward the text colour. */
+.sidebar-area-toggle button:focus-visible { outline: none; }
+.sidebar-area-toggle button:is(:hover, :focus-visible, [data-held]):not([aria-pressed="true"]) { background: color-mix(in oklch, var(--sidebar-accent), transparent 35%); color: var(--sidebar-accent-foreground); }
+.sidebar-area-toggle button[aria-pressed="true"]:is(:focus-visible, [data-held]) { background: color-mix(in oklch, var(--sidebar-accent), var(--sidebar-accent-foreground) 14%); }
+.conduit-sidebar[data-keyboard-cursor] .sidebar-area-toggle button:hover:not(:focus-visible, [data-held], [aria-pressed="true"]) { background: transparent; color: var(--muted-foreground); }
 @media (--conduit-wide-layout) {
   .conduit-sidebar[data-visual-state="collapsed"] [data-sidebar="header"] { flex-direction: column; align-items: center; gap: 10px; padding-inline: 0; }
   .conduit-sidebar[data-visual-state="collapsed"] .sidebar-area-toggle { grid-template-columns: 28px; }
