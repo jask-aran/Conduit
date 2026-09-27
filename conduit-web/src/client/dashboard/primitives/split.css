@@ -6,7 +6,7 @@
    the pane. */
 .split-dashboard { position: relative; z-index: 1; container: split-dashboard / inline-size; display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: auto; scrollbar-width: var(--native-scrollbar-width); }
 .split-dashboard-body { --split-aside-width: 280px; display: grid; width: min(calc(var(--composer-desktop-reference-width) + 32px + var(--split-aside-width)), calc(100% - 48px)); min-width: 380px; min-height: 0; flex: 1; grid-template-areas: "head head" "notice notice" "main aside"; grid-template-columns: minmax(0, var(--composer-desktop-reference-width)) var(--split-aside-width); grid-template-rows: auto auto minmax(280px, 1fr); column-gap: 32px; margin: 0 auto; padding: 22px 0 16px; }
-.split-dashboard-head { display: flex; min-width: 0; grid-area: head; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
+.split-dashboard-head { display: flex; min-width: 0; grid-area: head; align-items: flex-end; gap: 20px; margin-bottom: 18px; }
 .split-dashboard-notice { grid-area: notice; margin-bottom: 16px; }
 .split-dashboard-main { display: flex; min-width: 0; min-height: 0; grid-area: main; flex-direction: column; }
 .split-dashboard-composer .composer-wrap { width: 100%; margin-inline: 0; }
@@ -32,7 +32,7 @@
 .split-header-context button:is(:hover, :focus-visible) code { color: var(--foreground); }
 .split-header-context button:focus-visible { outline: none; background: var(--accent); }
 
-.split-shortcuts { display: flex; flex: none; margin-right: -7px; }
+.split-shortcuts { position: relative; display: flex; min-width: 24px; flex: 1 1 0; justify-content: flex-end; margin-right: -7px; }
 .split-shortcuts button { display: inline-flex; height: 24px; align-items: center; gap: 6px; border: 0; border-radius: 7px; background: transparent; padding: 0 7px; color: color-mix(in oklch, var(--foreground), transparent 32%); font-size: 10.4px; }
 .split-shortcuts button:is(:hover, :focus-visible) { outline: none; background: var(--accent); color: var(--foreground); }
 .split-shortcuts button svg { display: none; }
@@ -74,11 +74,10 @@
 
 /* One column (data-one-column; :where keeps the phone's rules below winning). */
 :where(.split-dashboard[data-one-column]) .split-dashboard-body { display: flex; width: calc(100% - 40px); flex-direction: column; }
-:where(.split-dashboard[data-one-column]) .split-dashboard-head { flex-direction: column; align-items: stretch; gap: 10px; order: 0; }
+:where(.split-dashboard[data-one-column]) .split-dashboard-head { order: 0; }
 :where(.split-dashboard[data-one-column]) .split-dashboard-notice { order: 1; }
 :where(.split-dashboard[data-one-column]) :is(.split-dashboard-main, .split-dashboard-aside) { display: contents; }
 :where(.split-dashboard[data-one-column]) .split-dashboard-composer { order: 2; }
-:where(.split-dashboard[data-one-column]) .split-shortcuts { margin: 0 0 0 -7px; }
 :where(.split-dashboard[data-one-column]) :is(.split-dashboard-body .split-group, .split-dashboard-aside > .split-group + .split-group) { min-height: auto; flex: none; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
 :where(.split-dashboard[data-one-column]) .split-dashboard-main > .split-group > .split-group-rows { overflow: visible; }
 :where(.split-dashboard[data-one-column]) .split-group[data-order="first"] { order: 3; }
@@ -94,7 +93,8 @@
   .split-header h1 { font-size: 27px; }
   .split-header-context { margin-top: 5px; font-size: 12.5px; line-height: 1.55; }
   .split-header-context code { font-size: 11.5px; }
-  .split-shortcuts { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: 4px; margin: 6px -6px 0; }
+  .split-dashboard-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  .split-shortcuts { display: grid; flex: none; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: 4px; margin: 6px -6px 0; }
   .split-shortcuts button { height: 60px; flex-direction: column; justify-content: center; gap: 7px; border-radius: 12px; font-size: 12px; }
   .split-shortcuts button svg { display: block; width: 19px; height: 19px; color: var(--muted-foreground); }
   .split-group-heading { min-height: 36px; padding: 0 0 4px 9px; }
@@ -206,5 +206,6 @@
 .split-group-heading > .split-heading-switches { flex: none; flex-wrap: nowrap; }
 .split-group-heading:has(> .split-heading-switches) > .split-group-actions { position: relative; min-width: 0; flex: 1 1 0; justify-content: flex-end; }
 .split-heading-switches .settings-segmented, .split-heading-switches .settings-segmented button, .split-group-actions > * { flex: none; white-space: nowrap; }
-.split-group-actions > :is([data-filter], [data-filter-more]) { display: inline-flex; }
-.split-group-actions > :is([data-filter], [data-filter-more])[data-folded] { position: absolute; top: 0; right: 0; visibility: hidden; pointer-events: none; }
+/* Folding rows (watchFold): a folded item stays laid out, hidden. */
+:is(.split-group-actions, .split-shortcuts) > :is([data-fold], [data-fold-more]) { display: inline-flex; }
+:is(.split-group-actions, .split-shortcuts) > [data-folded] { position: absolute; top: 0; right: 0; visibility: hidden; pointer-events: none; }

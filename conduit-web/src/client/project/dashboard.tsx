@@ -3,7 +3,6 @@ import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, 
 import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import {
   CopyIcon,
-  EllipsisIcon,
   FolderIcon,
   FolderOpenIcon,
   GitCompareArrowsIcon,
@@ -36,12 +35,9 @@ import {
   Field,
   FieldLabel,
   Input,
-  Menu,
-  MenuContent,
   MenuGroup,
   MenuItem,
   MenuSeparator,
-  MenuTrigger,
   Spinner,
 } from "@/components/primitives";
 import { api } from "../api/client";
@@ -49,7 +45,7 @@ import type { Template, DashboardChat, Project, ProjectDashboardPayload, Workspa
 import { activityDetail, runtimeActivity, RuntimeIndicator } from "../navigation/runtime-indicator";
 import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
-import { SplitCounts, SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitRow, SplitShortcut, SplitShortcuts } from "../dashboard/primitives/split";
+import { SplitCounts, SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitRow, SplitShortcuts } from "../dashboard/primitives/split";
 import type { Pty } from "../remotes/terminal-pane";
 import type { RuntimeStore } from "../state/runtime";
 import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
@@ -358,9 +354,7 @@ export function ProjectDashboard(props: {
   const workingRoot = () => payload()?.identity.workingRoot || props.project.workingRoot || "";
   const showOutside = () => isWorkspace() && threadSide() === "outside";
 
-  const manageMenu = () => <Menu modal={false}>
-    <MenuTrigger class="workspace-dashboard-manage" tabIndex={-1} aria-label={isWorkspace() ? "Manage workspace" : "Manage project"} title={isWorkspace() ? "Manage workspace" : "Manage project"}><EllipsisIcon /></MenuTrigger>
-    <MenuContent>
+  const manageItems = () => <>
       <MenuGroup>
         <Show when={isWorkspace()}><MenuItem onSelect={() => setAppearanceOpen(true)}><PaletteIcon />Workspace identity</MenuItem></Show>
         <MenuItem onSelect={props.onRename}><PencilIcon />Rename</MenuItem>
@@ -369,8 +363,7 @@ export function ProjectDashboard(props: {
       <MenuSeparator />
       <MenuItem variant="destructive" onSelect={props.onDelete}><Trash2Icon />{isWorkspace() ? "Unlink workspace" : "Delete project"}</MenuItem>
       <Show when={isWorkspace()}><MenuItem variant="destructive" onSelect={() => setDestroyOpen(true)}><Trash2Icon />Delete workspace and files</MenuItem></Show>
-    </MenuContent>
-  </Menu>;
+  </>;
 
   // Running chats stay in place; their dot and activity say they are live.
   const chatRows = () => <Show when={visibleChats().length} fallback={<SplitEmpty>{unreadOnly() ? "Nothing unread." : "Nothing here yet."}</SplitEmpty>}>
@@ -491,17 +484,16 @@ export function ProjectDashboard(props: {
           running() ? `${running()} running` : "Nothing running",
           unreadCount() ? `${unreadCount()} unread` : null,
         ]} />}
-      shortcuts={<SplitShortcuts>
-        <SplitShortcut icon={<FolderOpenIcon />} label="Files" onClick={() => props.onOpenView("files")} />
-        <Show when={isWorkspace()} fallback={<SplitShortcut icon={<SearchIcon />} label="Search chats" onClick={props.onSearchChats} />}>
-          <SplitShortcut icon={<GitCompareArrowsIcon />} label="Changes" onClick={() => props.onOpenView("diff")} />
-        </Show>
-        <Show when={isWorkspace()} fallback={<SplitShortcut icon={<CopyIcon />} label="Copy path" onClick={() => void copyPath()} />}>
-          <SplitShortcut icon={<TerminalIcon />} label="Terminal" onClick={() => props.onOpenView("terminal")} />
-        </Show>
-        <SplitShortcut icon={<Settings2Icon />} label="Settings" onClick={() => props.onOpenSettings("workspaces", props.project.id)} />
-        {manageMenu()}
-      </SplitShortcuts>}
+      shortcuts={<SplitShortcuts label={isWorkspace() ? "Manage workspace" : "Manage project"} manage={manageItems()} items={[
+        { icon: <FolderOpenIcon />, label: "Files", onClick: () => props.onOpenView("files") },
+        isWorkspace()
+          ? { icon: <GitCompareArrowsIcon />, label: "Changes", onClick: () => props.onOpenView("diff") }
+          : { icon: <SearchIcon />, label: "Search chats", onClick: props.onSearchChats },
+        isWorkspace()
+          ? { icon: <TerminalIcon />, label: "Terminal", onClick: () => props.onOpenView("terminal") }
+          : { icon: <CopyIcon />, label: "Copy path", onClick: () => void copyPath() },
+        { icon: <Settings2Icon />, label: "Settings", onClick: () => props.onOpenSettings("workspaces", props.project.id) },
+      ]} />}
       notice={cloning() || (error() && !cloning()) ? <>
         <Show when={cloning()}>
           <section class="clone-progress" aria-live="polite">

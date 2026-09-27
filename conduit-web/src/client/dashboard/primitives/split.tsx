@@ -1,5 +1,6 @@
-import { createContext, createSignal, For, onCleanup, onMount, Show, splitProps, useContext, type Accessor, type JSX } from "solid-js";
-import { ChevronRightIcon } from "lucide-solid";
+import { createContext, createSignal, For, Index, onCleanup, onMount, Show, splitProps, useContext, type Accessor, type JSX } from "solid-js";
+import { ChevronRightIcon, EllipsisIcon } from "lucide-solid";
+import { Menu, MenuContent, MenuGroup, MenuItem, MenuSeparator, MenuTrigger } from "@/components/primitives";
 import { Dynamic } from "solid-js/web";
 import { installSplitCursor, type SplitPage } from "./split-cursor";
 import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../../navigation/mobile-layout";
@@ -31,7 +32,7 @@ const WATCHED = [
  *  into ⋯ are left out. */
 function rowNeed(row: HTMLElement): number {
   const style = getComputedStyle(row);
-  const children = ([...row.children] as HTMLElement[]).filter((child) => !child.hasAttribute("data-filter") && getComputedStyle(child).display !== "none");
+  const children = ([...row.children] as HTMLElement[]).filter((child) => !child.hasAttribute("data-fold") && getComputedStyle(child).display !== "none");
   const inner = children.reduce((sum, child) => {
     const own = getComputedStyle(child);
     const grows = parseFloat(own.flexGrow) > 0 && own.display.includes("flex");
@@ -121,13 +122,67 @@ export function SplitHeader(props: {
   </header>;
 }
 
-/** Plain words at the header's right; a row of large targets on a phone. */
-export function SplitShortcuts(props: { children: JSX.Element }) {
-  return <nav class="split-shortcuts" aria-label="Shortcuts">{props.children}</nav>;
+/**
+ * Folds a row's [data-fold] items, last first, into its [data-fold-more] as
+ * room runs out. A folded item stays laid out, hidden, so its width is known
+ * when room comes back; [data-fold-keep] on the ⋯ counts it whether or not
+ * anything has folded. Call from onMount; a phone never folds.
+ */
+export function watchFold(more: HTMLElement, setFit: (count: number) => void) {
+  const bar = more.parentElement;
+  if (!bar) return;
+  const measure = () => {
+    if (isMobileLayout()) return setFit(Infinity);
+    const gap = parseFloat(getComputedStyle(bar).columnGap) || 0;
+    const children = [...bar.children] as HTMLElement[];
+    const widths = children.filter((child) => child.hasAttribute("data-fold")).map((child) => child.offsetWidth + gap);
+    const keep = more.hasAttribute("data-fold-keep");
+    let used = children.filter((child) => !child.matches("[data-fold], [data-fold-more]")).reduce((sum, child) => sum + child.offsetWidth + gap, 0)
+      + (keep ? more.offsetWidth + gap : 0);
+    const room = bar.clientWidth + gap + .5;
+    if (used + widths.reduce((sum, width) => sum + width, 0) <= room) return setFit(widths.length);
+    if (!keep) used += more.offsetWidth + gap;
+    let count = 0;
+    while (count < widths.length && used + widths[count]! <= room) used += widths[count++]!;
+    setFit(count);
+  };
+  const observer = new ResizeObserver(measure);
+  const observeAll = () => { observer.disconnect(); observer.observe(bar); for (const child of bar.children) observer.observe(child); measure(); };
+  const mutations = new MutationObserver(observeAll);
+  mutations.observe(bar, { childList: true });
+  observeAll();
+  onCleanup(() => { observer.disconnect(); mutations.disconnect(); });
 }
 
-export function SplitShortcut(props: { icon: JSX.Element; label: string; onClick: () => void; title?: string }) {
-  return <button type="button" tabIndex={-1} title={props.title} onClick={props.onClick}>{props.icon}<span>{props.label}</span></button>;
+export type SplitShortcutItem = { icon: JSX.Element; label: string; onClick: () => void };
+
+/**
+ * Plain words on the title's line, at every desktop width: as room runs out
+ * they fold, last first, into the ⋯, which also holds the page's `manage`
+ * items, and the title truncates only once they all have. A row of large
+ * targets on a phone.
+ */
+export function SplitShortcuts(props: { items: Array<SplitShortcutItem | false | null | undefined>; manage?: JSX.Element; label?: string }) {
+  const items = () => props.items.filter(Boolean) as SplitShortcutItem[];
+  const [fit, setFit] = createSignal(Infinity);
+  const folded = () => items().slice(fit());
+  let more!: HTMLSpanElement;
+  onMount(() => watchFold(more, setFit));
+  return <nav class="split-shortcuts" aria-label="Shortcuts">
+    <Index each={items()}>{(item, index) => <button type="button" tabIndex={-1} data-fold data-folded={index >= fit() ? "" : undefined} onClick={() => item().onClick()}>{item().icon}<span>{item().label}</span></button>}</Index>
+    <span ref={more} data-fold-more data-fold-keep={props.manage ? "" : undefined} data-folded={!props.manage && !folded().length ? "" : undefined}>
+      <Menu modal={false}>
+        <MenuTrigger class="workspace-dashboard-manage" tabIndex={-1} aria-label={props.label ?? "More"} title={props.label ?? "More"}><EllipsisIcon /></MenuTrigger>
+        <MenuContent>
+          <Show when={folded().length}>
+            <MenuGroup><For each={folded()}>{(item) => <MenuItem onSelect={() => item.onClick()}>{item.icon}{item.label}</MenuItem>}</For></MenuGroup>
+            <Show when={props.manage}><MenuSeparator /></Show>
+          </Show>
+          {props.manage}
+        </MenuContent>
+      </Menu>
+    </span>
+  </nav>;
 }
 
 /**

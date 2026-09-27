@@ -1,8 +1,8 @@
-import { createSignal, For, Index, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { createSignal, For, Index, onMount, Show, type JSX } from "solid-js";
 import { ChevronDownIcon, EllipsisIcon, LayersIcon, SearchIcon } from "lucide-solid";
 import { Menu, MenuContent, MenuGroup, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@/components/primitives";
 import { HarnessMark } from "../../harness-brand";
-import { SplitGroupMore } from "./split";
+import { SplitGroupMore, watchFold } from "./split";
 import type { Project } from "../../api/contracts";
 import { PlaceGlyph } from "../../chat/place-picker";
 
@@ -87,38 +87,16 @@ function ChoiceFilter(props: { choice: ListChoice }) {
 /**
  * The heading's filters on its one line, beside the switches: each choice its
  * own dropdown, and as room runs out the last ones fold, in order, into a ⋯
- * menu before search (the children). A folded filter stays laid out, hidden,
- * so its width is known when room comes back.
+ * menu before search (the children), as watchFold has it.
  */
 export function FilterBar(props: { choices: Array<ListChoice | false | null | undefined>; children?: JSX.Element }) {
   const choices = () => props.choices.filter(Boolean) as ListChoice[];
   const [fit, setFit] = createSignal(Infinity);
   let more!: HTMLSpanElement;
-  onMount(() => {
-    const bar = more.parentElement;
-    if (!bar) return;
-    const measure = () => {
-      const gap = parseFloat(getComputedStyle(bar).columnGap) || 0;
-      const children = [...bar.children] as HTMLElement[];
-      const widths = children.filter((child) => child.hasAttribute("data-filter")).map((child) => child.offsetWidth + gap);
-      let used = children.filter((child) => !child.matches("[data-filter], [data-filter-more]")).reduce((sum, child) => sum + child.offsetWidth + gap, 0);
-      const room = bar.clientWidth + gap + .5;
-      if (used + widths.reduce((sum, width) => sum + width, 0) <= room) return setFit(widths.length);
-      used += more.offsetWidth + gap;
-      let count = 0;
-      while (count < widths.length && used + widths[count]! <= room) used += widths[count++]!;
-      setFit(count);
-    };
-    const observer = new ResizeObserver(measure);
-    const observeAll = () => { observer.disconnect(); observer.observe(bar); for (const child of bar.children) observer.observe(child); measure(); };
-    const mutations = new MutationObserver(observeAll);
-    mutations.observe(bar, { childList: true });
-    observeAll();
-    onCleanup(() => { observer.disconnect(); mutations.disconnect(); });
-  });
+  onMount(() => watchFold(more, setFit));
   return <>
-    <Index each={choices()}>{(choice, index) => <span data-filter data-folded={index >= fit() ? "" : undefined}><ChoiceFilter choice={choice()} /></span>}</Index>
-    <span ref={more} data-filter-more data-folded={fit() >= choices().length ? "" : undefined}><FiltersMenu title="More filters" trigger={<EllipsisIcon />} choices={choices().slice(fit())} /></span>
+    <Index each={choices()}>{(choice, index) => <span data-fold data-folded={index >= fit() ? "" : undefined}><ChoiceFilter choice={choice()} /></span>}</Index>
+    <span ref={more} data-fold-more data-folded={fit() >= choices().length ? "" : undefined}><FiltersMenu title="More filters" trigger={<EllipsisIcon />} choices={choices().slice(fit())} /></span>
     {props.children}
   </>;
 }

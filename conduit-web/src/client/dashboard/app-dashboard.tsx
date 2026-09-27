@@ -15,7 +15,7 @@ import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
 import { Segmented } from "../settings/settings-controls";
 import { CHAT_PAGE, DayGroups, FilterBar, groupByDay, ListSearch, CompactHeading, FiltersMenu, placeChoice, profileChoice, profileOf, ShowMore, sortChoice } from "./primitives/chat-list";
-import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitRow, SplitShortcut, SplitShortcuts } from "./primitives/split";
+import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitRow, SplitShortcuts } from "./primitives/split";
 import "./app-dashboard.css";
 
 // The Conduit dashboard is also where New chat lands: the composer, every
@@ -285,12 +285,12 @@ export function AppDashboard(props: {
       running() ? `${running()} running` : "Nothing running",
       unread() ? `${unread()} unread` : null,
     ]} />}
-    shortcuts={<SplitShortcuts>
-      <SplitShortcut icon={<SearchIcon />} label="Search chats" onClick={() => props.onSearchChats("all")} />
-      <SplitShortcut icon={<FolderPlusIcon />} label="New project" onClick={() => props.onContextAction("new-folder", {})} />
-      <SplitShortcut icon={<TerminalIcon />} label="Terminal" onClick={props.onOpenTerminalView} />
-      <SplitShortcut icon={<Settings2Icon />} label="Settings" onClick={props.onOpenSettings} />
-    </SplitShortcuts>}
+    shortcuts={<SplitShortcuts items={[
+      { icon: <SearchIcon />, label: "Search chats", onClick: () => props.onSearchChats("all") },
+      { icon: <FolderPlusIcon />, label: "New project", onClick: () => props.onContextAction("new-folder", {}) },
+      { icon: <TerminalIcon />, label: "Terminal", onClick: props.onOpenTerminalView },
+      { icon: <Settings2Icon />, label: "Settings", onClick: props.onOpenSettings },
+    ]} />}
     composer={props.composer}
     list={chatsGroup()}
     aside={<>{foldersGroup()}{workspacesGroup()}{terminalsGroup()}</>} />;
