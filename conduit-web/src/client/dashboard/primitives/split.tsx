@@ -42,38 +42,34 @@ function rowNeed(row: HTMLElement): number {
   return inner + (parseFloat(style.columnGap) || 0) * Math.max(0, children.length - 1) + edges.reduce((sum, edge) => sum + (parseFloat(style[edge]) || 0), 0);
 }
 
-let switches = 0;
+let running: Animation[] = [];
 
 /**
- * Switches layouts without anything crossing the pane: the sections fade out,
- * the layout changes, and they fade in at their new places (as the collapsed
- * sidebar's rail does), while the composer eases from its old width and place
- * to its new ones. Instant when motion is reduced.
+ * Switches layouts at once, without anything crossing the pane: the sections
+ * appear at their new places and fade in (as the collapsed sidebar's rail
+ * does), while the composer eases from its old width and place to its new
+ * ones. Never delayed, so a fast resize never catches the old layout squeezed.
+ * Instant when motion is reduced.
  */
-async function glide(root: HTMLElement, change: () => void) {
+function glide(root: HTMLElement, change: () => void) {
+  for (const animation of running) animation.cancel();
+  running = [];
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return change();
-  const token = ++switches;
-  const sections = () => [...root.querySelectorAll<HTMLElement>(".split-group, .split-dashboard-notice")];
-  const out = sections().map((section) => section.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, easing: "ease-in", fill: "forwards" }));
-  await Promise.all(out.map((animation) => animation.finished.catch(() => undefined)));
-  // A newer switch has taken over, holding the sections out itself.
-  if (token !== switches) { for (const animation of out) animation.cancel(); return; }
   const composer = root.querySelector<HTMLElement>(".split-dashboard-composer");
   const before = composer?.getBoundingClientRect();
   change();
-  for (const animation of out) animation.cancel();
   const after = composer?.getBoundingClientRect();
   // Into two columns the composer narrows out of the right column's way; its
   // sections wait until it mostly has, so it never draws over them.
   const narrowing = Boolean(before && after && after.width < before.width - 1);
-  for (const section of sections()) {
-    const delay = narrowing && section.closest(".split-dashboard-aside") ? 220 : 0;
-    section.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, delay, easing: "ease-out", fill: "backwards" });
+  for (const section of root.querySelectorAll<HTMLElement>(".split-group, .split-dashboard-notice")) {
+    const delay = narrowing && section.closest(".split-dashboard-aside") ? 200 : 0;
+    running.push(section.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, delay, easing: "ease-out", fill: "backwards" }));
   }
-  if (composer && before && after && Math.abs(before.width - after.width) > 1) composer.animate([
+  if (composer && before && after && Math.abs(before.width - after.width) > 1) running.push(composer.animate([
     { width: `${before.width}px`, transform: `translate(${before.left - after.left}px, ${before.top - after.top}px)` },
     { width: `${after.width}px`, transform: "none" },
-  ], { duration: 320, easing: "cubic-bezier(.2, .8, .2, 1)" });
+  ], { duration: 320, easing: "cubic-bezier(.2, .8, .2, 1)" }));
 }
 
 /** The narrowest pane that fits both columns. */
@@ -117,7 +113,7 @@ export function SplitDashboard(props: {
     if (next === target) return;
     target = next;
     if (!measured) return setOneColumn(next);
-    void glide(root, () => setOneColumn(next));
+    glide(root, () => setOneColumn(next));
   });
   onMount(() => {
     onCleanup(installSplitCursor(root));
