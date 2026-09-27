@@ -224,3 +224,11 @@
 /* Folding rows (watchFold): a folded item stays laid out, hidden. */
 :is(.split-group-actions, .split-quick-actions) > :is([data-fold], [data-fold-more]) { display: inline-flex; }
 :is(.split-group-actions, .split-quick-actions) > [data-folded] { position: absolute; top: 0; right: 0; visibility: hidden; pointer-events: none; }
+
+/* The switch between two columns and one (glide, split.tsx): each block
+   glides to its new place, its snapshot pinned top-left so a changing width
+   crops rather than stretches. The rest of the page stays live underneath. */
+:root[data-split-transition] { view-transition-name: none; }
+:root[data-split-transition]::view-transition { pointer-events: none; }
+::view-transition-group(.split-block) { animation-duration: 220ms; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
+::view-transition-old(.split-block), ::view-transition-new(.split-block) { width: 100%; height: 100%; object-fit: none; object-position: left top; }
