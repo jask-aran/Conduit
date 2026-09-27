@@ -11,7 +11,7 @@
 /* The header is one grid: the mark centred on both lines, the title with the
    quick actions at the right of its line, and the status row under both, the
    header's full width. The title keeps its size and the quick actions fold
-   first; the status row stays one line, its path giving way. */
+   first; the status row stays one line, running off its right edge when too long. */
 .split-dashboard-head { display: grid; min-width: 0; grid-area: head; grid-template-columns: auto minmax(0, max-content) minmax(44px, 1fr); grid-template-areas: "glyph title actions" "glyph status status"; align-items: center; margin-bottom: 18px; }
 .split-dashboard-head :is(.split-header, .split-header-copy) { display: contents; }
 .split-dashboard-head .split-header-glyph { grid-area: glyph; margin-right: 12px; }
@@ -37,10 +37,6 @@
 .split-header h1 { min-width: 0; margin: 0; overflow: hidden; font-size: clamp(22px, 2.6vw, 31px); font-weight: 560; letter-spacing: -.035em; line-height: 1.05; text-overflow: ellipsis; white-space: nowrap; }
 .split-header-context { display: flex; min-width: 0; flex-wrap: nowrap; align-items: baseline; margin: 6px 0 0; overflow: hidden; color: var(--muted-foreground); font-size: 9.6px; }
 .split-header-context > span { flex: none; white-space: nowrap; }
-/* The path gives way first, cut from its start so the folder stays. */
-.split-header-context > span:has(> button > code) { display: flex; min-width: 0; flex: 0 1 auto; align-items: baseline; }
-.split-header-context > span > button:has(> code) { min-width: 0; overflow: hidden; }
-.split-header-context button > code { display: block; overflow: hidden; direction: rtl; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .split-header-context > span:not(:last-child)::after { content: "·"; margin-inline: 6px; opacity: .6; }
 .split-header-context code { color: color-mix(in oklch, var(--foreground), transparent 32%); font: 8.8px ui-monospace, SFMono-Regular, Consolas, monospace; }
 .split-header-context button { border: 0; border-radius: 4px; background: transparent; padding: 0; color: inherit; font: inherit; cursor: pointer; }
