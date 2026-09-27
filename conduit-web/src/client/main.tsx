@@ -14,7 +14,7 @@ import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
 import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/primitives";
 import { api, apiWhenServed, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./api/client";
-import { buildHttpUrl, httpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl } from "./api/transport";
+import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl } from "./api/transport";
 import { startPathSelection } from "./platform/path-selector";
 import { canDiscoverServers, discoverServers, type FoundServer } from "./platform/discovery";
 import { proveServer } from "./platform/server-proof";
@@ -1438,16 +1438,11 @@ function App() {
     drive.detach();
     if (live) void api(`/v0/live-sessions/${encodeURIComponent(live)}/process`, { method: "DELETE" }).catch(() => {});
   };
-  // A reload or a closed tab leaves the page as surely as navigating does.
-  // The close must be sent before the handler returns, since api() awaits
-  // first and the page is gone by then; keepalive lets it outlive the page.
-  const closeOnUnload = () => {
-    const live = driveLiveId;
-    driveLiveId = "";
-    if (live) void fetch(httpUrl(`/v0/live-sessions/${encodeURIComponent(live)}/process`), { method: "DELETE", keepalive: true, credentials: "include" }).catch(() => {});
-  };
-  window.addEventListener("pagehide", closeOnUnload);
-  onCleanup(() => window.removeEventListener("pagehide", closeOnUnload));
+  // A reload or a closed tab leaves too, and asks first as well while a turn
+  // is running; the server closes the process once no page drives it.
+  const holdUnload = (event: BeforeUnloadEvent) => { if (harnessThread() && drive.chat.streaming()) event.preventDefault(); };
+  window.addEventListener("beforeunload", holdUnload);
+  onCleanup(() => window.removeEventListener("beforeunload", holdUnload));
   // Its process is Conduit's only while its page is open, so leaving closes
   // it -- asking first while a turn is still running.
   const leaveHarnessThread = () => {
