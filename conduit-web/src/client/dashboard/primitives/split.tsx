@@ -38,19 +38,21 @@ export function SplitDashboard(props: {
   </section>;
 }
 
-/** Name, kind and one muted line of context, written as words. */
+/** One line: the page's mark at the title's size, its name, then its kind and
+ *  context, small and muted, on the title's baseline. */
 export function SplitHeader(props: {
   title: string;
   kind?: string;
   glyph?: JSX.Element;
   context?: Array<JSX.Element | false | null | undefined>;
 }) {
+  const items = () => [props.kind, ...(props.context ?? [])].filter(Boolean);
   return <header class="split-header">
     <Show when={props.glyph}><span class="split-header-glyph">{props.glyph}</span></Show>
-    <div class="split-header-copy">
-      <h1><span>{props.title}</span><Show when={props.kind}><span class="split-header-kind">{props.kind}</span></Show></h1>
-      <Show when={props.context?.some(Boolean)}>
-        <p class="split-header-context"><For each={props.context!.filter(Boolean)}>{(item) => <span>{item}</span>}</For></p>
+    <div class="split-header-line">
+      <h1>{props.title}</h1>
+      <Show when={items().length}>
+        <p class="split-header-context"><For each={items()}>{(item) => <span>{item}</span>}</For></p>
       </Show>
     </div>
   </header>;
