@@ -45,7 +45,15 @@ function storedPaths(scopeId: string, name: string) {
  * split (`secondary`) -- and the navigator's geometry. It outlives the view, so a hidden Files
  * view keeps its drafts, and the change poll can refresh what is open.
  */
-export function createFiles(options: { projectId: Accessor<string>; requests: RequestScope; settings: WorkspaceSettings; settingsScope: string }) {
+export function createFiles(options: {
+  projectId: Accessor<string>; requests: RequestScope; settings: WorkspaceSettings; settingsScope: string;
+  /**
+   * Where a file opens instead of the view's own slot: a pane's file viewer
+   * (docs/design/panes-and-rail.md, 6d-2). Answers false where there is none
+   * (a phone, a desktop too narrow for a pane), and the slot opens it.
+   */
+  openElsewhere?: (path: string, beside: boolean, edit: boolean) => boolean;
+}) {
   const { requests, settings } = options;
   const [directories, setDirectories] = createSignal<Record<string, DirectoryListing>>({});
   const [expanded, setExpanded] = createSignal<Set<string>>(new Set());
@@ -145,10 +153,12 @@ export function createFiles(options: { projectId: Accessor<string>; requests: Re
   // The tree opens into the view's own slot; the file beside is opened only
   // by asking for it.
   const openFile = (path: string) => {
+    if (options.openElsewhere?.(path, false, false)) return;
     if (openInSlot("primary", path)) setNavigatorOpen(false);
   };
   let pendingEdit: string | null = null;
   const editFile = (path: string) => {
+    if (options.openElsewhere?.(path, false, true)) return;
     const slot = slotForPath(path);
     if (slot) {
       setFocusedSlot(slot);
@@ -633,6 +643,8 @@ export function FilesView(props: {
   onOpenBeside?: (path: string) => void;
   onBrowseDirectory?: (path: string) => void;
   onBrowseParent?: () => void;
+  /** Files opens in panes' file viewers: the view is the navigator alone -- the tree and its search. */
+  navigatorOnly?: boolean;
 }) {
   const c = props.control;
   let treeResizeHandle: HTMLDivElement | undefined;
@@ -871,7 +883,7 @@ export function FilesView(props: {
           c.elements.host = element;
         }}
         class="workspace-files"
-        data-wide={c.filesWide()}
+        data-wide={props.navigatorOnly ? "navigator" : c.filesWide()}
         data-tree-collapsed={c.treeCollapsed()}
         data-navigator-open={c.navigatorOpen()}
         style={{
@@ -880,7 +892,7 @@ export function FilesView(props: {
       >
         <div class="workspace-tree-pane">
           <div class="workspace-tree-tools workspace-tree-search">
-            <button type="button" aria-label="Hide file navigator" title="Hide file navigator" onClick={c.hideFileNavigator}><PanelLeftCloseIcon /></button>
+            <Show when={!props.navigatorOnly}><button type="button" aria-label="Hide file navigator" title="Hide file navigator" onClick={c.hideFileNavigator}><PanelLeftCloseIcon /></button></Show>
             <label class="workspace-tree-filter">
               <SearchIcon />
               <input
@@ -927,7 +939,7 @@ export function FilesView(props: {
             <input ref={(element) => { c.elements.upload = element; }} class="workspace-file-input" type="file" multiple={c.uploadTarget().kind === "directory"} onChange={(event) => void c.uploadFiles(event.currentTarget.files)} />
           </div>
         </div>
-        <Show when={c.filesWide() ? c.treeCollapsed() : !c.navigatorOpen()}>
+        <Show when={!props.navigatorOnly && (c.filesWide() ? c.treeCollapsed() : !c.navigatorOpen())}>
           <div class="workspace-tree-collapsed-rail">
             <button type="button" aria-label="Show file navigator" title="Show file navigator" onClick={c.showFileNavigator}><PanelLeftOpenIcon /></button>
             <div class="workspace-tree-rail-actions" role="toolbar" aria-label="File tree actions">
@@ -935,7 +947,7 @@ export function FilesView(props: {
             </div>
           </div>
         </Show>
-        <Show when={c.filesWide()}>
+        <Show when={!props.navigatorOnly && c.filesWide()}>
           <div
             ref={treeResizeHandle}
             class="workspace-tree-resize-handle"
@@ -953,7 +965,7 @@ export function FilesView(props: {
             }}
           />
         </Show>
-          <WorkspaceFileSlot
+          <Show when={!props.navigatorOnly}><WorkspaceFileSlot
             projectId={props.projectId}
             path={c.openPaths().primary}
             slot="primary"
@@ -976,7 +988,7 @@ export function FilesView(props: {
             onSaved={() => { if (props.sourceControlEnabled) props.onSaved(); }}
             ref={(handle) => c.slotHandles.set("primary", handle)}
             onDispose={() => c.slotHandles.delete("primary")}
-          />
+          /></Show>
       </div>;
 }
 

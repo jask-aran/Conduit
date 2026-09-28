@@ -88,6 +88,10 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 /* Where a view dragged from the dock will land: the chat's right half, washed. */
 .main-split-drop { position: absolute; z-index: 30; inset: 8px 8px 8px 50%; border-radius: 10px; background: var(--accent); pointer-events: none; }
 .workspace-files { position: relative; display: flex; min-height: 0; flex: 1; flex-direction: column; }
+/* A pane's file viewer: one file, or two side by side (6d-2). */
+.workspace-file-viewer { flex-direction: row; }
+.workspace-file-viewer > .workspace-preview { min-width: 0; flex: 1 1 0; height: auto !important; }
+.workspace-file-viewer > .workspace-preview + .workspace-preview { border-left: 1px solid var(--border); }
 .workspace-tree-pane { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
 .workspace-tree-collapsed-rail { display: flex; flex-direction: column; align-items: center; gap: 2px; border-right: 1px solid var(--border); padding-block: 4px; }
 .workspace-tree-rail-actions { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: auto; }
