@@ -74,6 +74,7 @@ import { isShortcutRegion } from "./shortcuts/shortcut-types";
 import { acknowledgeRegion } from "./shortcuts/region-cue";
 import { globalShortcuts } from "./shortcuts/global-shortcuts";
 import { formatFileView, parseFileView, sameFileEntry, type FileEntry } from "./workspace/file-documents";
+import type { ReviewNavigationRequest } from "./chat/review-navigation";
 import type { FileSlotHandle, FileSummary } from "./workspace/workspace-file-slot";
 import { dropScope, migrateWorkspacePanelStorage, readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace/workspace-panel-storage";
 import { readToolDrag, TOOL_DRAG_TYPE, WorkspaceRail } from "./workspace/workspace-rail";
@@ -2251,8 +2252,11 @@ function App() {
   createEffect(() => { const pane = keyboardPane(); if (pane !== "main" && parseFileView(slotView(pane))) setFilePane(pane); });
   const focusFileEntry = (slot: number, index: number) => setFileFocus((current) => ({ ...current, [slot]: index }));
   const canOpenFilePanes = () => dockAvailable() && !isMobileLayout() && splitFits(1);
-  const openFileDocument = (entry: FileEntry, options: { beside: boolean; edit: boolean }) => {
+  // A review comment on a file, for the viewer that shows it to scroll to.
+  const [fileReveal, setFileReveal] = createSignal<{ entry: FileEntry; request: ReviewNavigationRequest } | null>(null);
+  const openFileDocument = (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest }) => {
     if (options.edit) pendingFileEdit = entry;
+    setFileReveal(options.reveal ? { entry, request: options.reveal } : null);
     for (const slot of shownSlots()) {
       const index = parseFileView(slotView(slot))?.findIndex((item) => sameFileEntry(item, entry)) ?? -1;
       if (index < 0) continue;
@@ -3524,7 +3528,7 @@ function App() {
             <FileViewer entries={entries()} focused={fileFocus()[slot] ?? 0} wrap={fileWrap()} onToggleWrap={toggleFileWrap} commentChatId={focusedChat().loadedId()}
               onFocusEntry={(index) => { focusFileEntry(slot, index); setFilePane(slot); }} onSplit={() => splitFileViewer(slot)} onCloseEntry={(index) => closeFileEntry(slot, index)}
               onSetMode={(index, mode) => { const current = parseFileView(slotView(slot)); if (current) setSlotView(slot, formatFileView(current.map((item, at) => at === index ? { projectId: item.projectId, path: item.path, ...(mode ? { mode } : {}) } : item))); }}
-              onLoaded={(index, file) => noteFileLoaded(slot, index, file)} ref={(index, handle) => { fileHandles[slot]![index] = handle; }} />
+              onLoaded={(index, file) => noteFileLoaded(slot, index, file)} reveal={fileReveal()} ref={(index, handle) => { fileHandles[slot]![index] = handle; }} />
           </div>
         }</Show>
         <Show when={page()}>

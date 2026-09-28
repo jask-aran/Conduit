@@ -44,7 +44,7 @@ function panelTab(value: string): PanelTab | null {
 
 const MIN_WORKSPACE_PANE_WIDTH = 240;
 
-export default function WorkspacePanel(props: { connectivity?: () => Connectivity; projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; commentChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; onFocusRequestComplete?: () => void; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onRequestOpen?: () => void; onToggleExpanded: () => void; onClose: () => void; onTabChange?: (tab: PanelTab) => void; splitView?: Accessor<SplitView | null>; splitHost?: Accessor<HTMLElement | undefined>; onOpenBeside?: (view: SplitView) => void; onMoveToDock?: (view: SplitView) => void; onCloseSplit?: (focus?: boolean) => void; bindSplit?: (release: (toDock: boolean) => boolean) => () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing>; onOpenFile?: (entry: FileEntry, options: { beside: boolean; edit: boolean }) => void }) {
+export default function WorkspacePanel(props: { connectivity?: () => Connectivity; projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; commentChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; onFocusRequestComplete?: () => void; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onRequestOpen?: () => void; onToggleExpanded: () => void; onClose: () => void; onTabChange?: (tab: PanelTab) => void; splitView?: Accessor<SplitView | null>; splitHost?: Accessor<HTMLElement | undefined>; onOpenBeside?: (view: SplitView) => void; onMoveToDock?: (view: SplitView) => void; onCloseSplit?: (focus?: boolean) => void; bindSplit?: (release: (toDock: boolean) => boolean) => () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing>; onOpenFile?: (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest }) => void }) {
   let panelRoot: HTMLElement | undefined;
   let resizeHandle: HTMLDivElement | undefined;
   let panelMotionId = 0;
@@ -94,9 +94,9 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   const chat = createChatReview({ projectId: props.projectId, chatId: () => props.artifactChatId?.() ?? null, historyAvailable: () => Boolean(props.historyAvailable?.()),
     visible: () => shown("chat"), gitFiles: () => sourceControl.diff()?.files ?? [], settings, settingsScope: panelScope() });
   // Where panes can hold a file viewer, Files is the navigator and opens files there (6d-2).
-  const openFileDocument = (path: string, beside: boolean, edit: boolean) => {
+  const openFileDocument = (path: string, beside: boolean, edit: boolean, reveal?: ReviewNavigationRequest) => {
     if (!props.onOpenFile) return false;
-    props.onOpenFile({ projectId: props.projectId(), path }, { beside, edit });
+    props.onOpenFile({ projectId: props.projectId(), path }, { beside, edit, reveal });
     return true;
   };
   const files = createFiles({ projectId: props.projectId, requests, settings, settingsScope: projectScope(), openElsewhere: openFileDocument });
@@ -296,9 +296,11 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     const request = (event as CustomEvent<ReviewNavigationRequest>).detail;
     if (!request || request.chatId !== commentChatId()) return;
     const target: PanelTab = request.scope === "file" ? "files" : request.scope === "changes" || request.scope === "staged" || request.scope === "head" ? "diff" : "chat";
-    if (!inSplit(target)) props.onRequestOpen?.();
+    // A file's comment goes to a pane's file viewer, which needs no dock.
+    if (!inSplit(target) && !(request.scope === "file" && props.onOpenFile)) props.onRequestOpen?.();
     setReviewReveal(request);
     if (request.scope === "file") {
+      if (openFileDocument(request.path, false, false, request)) return;
       openWorkingFile(request.path);
       return;
     }
