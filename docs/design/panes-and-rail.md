@@ -405,6 +405,7 @@ Stage 6 commits:
 - 6a: 5f51f03 (search and the palette on the rail)
 - 6b: 0052905, 2db3a91 (up to three panes, each slot its own session; a pane's chat closes it only when deleted)
 - 6e (part): 7ef24b5 (a sidebar row or chat search result replaces the focused pane's document; Alt opens a new pane right of the focused one). 6c (tabs) is deferred until 6d and 6e are lived with.
+- 6d-1: 6103cea (the dock follows places); 6d-2: 708a451 (the file viewer: Files as the navigator where panes fit, a file pane of one or two files). Not yet in the viewer: the Git status mark and its review buttons (6d-3), a review comment's reveal, Replace with upload (the navigator keeps it).
 
 ## Open questions
 
