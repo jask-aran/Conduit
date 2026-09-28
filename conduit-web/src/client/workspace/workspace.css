@@ -21,11 +21,11 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 /* Surface keeps settled panel width, right-anchored inside the shell. */
 .workspace-panel-surface { position: absolute; inset: 0; display: flex; min-width: 0; height: 100%; contain: layout paint; container-name: workspace-surface; container-type: inline-size; flex: none; flex-direction: column; overflow: hidden; isolation: isolate; border-radius: 12.8px; background: transparent; }
 /* As the main pane: the header row on the frame, the sheet below it. */
-.workspace-panel-surface::before { content: ""; position: absolute; inset: 44.8px 0 0; z-index: -1; border-radius: 12.8px; background: var(--background); pointer-events: none; }
+.workspace-panel-surface::before { content: ""; position: absolute; inset: 36.8px 0 0; z-index: -1; border-radius: 12.8px; background: var(--background); pointer-events: none; }
 .workspace-panel-surface > * { max-width: 100%; }
 /* The dock's header shares the top line of the app: the main header's height
    and padding, the name at the breadcrumb's size, 14px icons, no hairline. */
-.workspace-panel-header { display: flex; height: 44.8px; flex: none; align-items: center; gap: 6.4px; overflow: hidden; padding: 6.4px 11.2px; }
+.workspace-panel-header { display: flex; height: 36.8px; flex: none; align-items: center; gap: 6.4px; overflow: hidden; padding: 5.6px 11.2px; }
 .workspace-panel-header strong { overflow: hidden; flex: none; font-size: 11.2px; font-weight: 600; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-panel-header[data-compact="name"] strong { display: none; }
 .workspace-panel-header [data-slot="button"] svg { width: 14px; height: 14px; }
@@ -80,13 +80,11 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
    gutter; the drag edge sits in it. */
 .main-split { position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 8px 6.4px 0; flex-direction: column; border-radius: 12.8px; background: transparent; }
 /* As the main pane: the header row on the frame, the sheet below it. */
-.main-split::before { content: ""; position: absolute; inset: 44.8px 0 0; z-index: -1; border-radius: 12.8px; background: var(--background); pointer-events: none; }
-/* Search and the palette are shared: the main pane's header holds them. */
-.main-split .chat-header :is(.search-trigger, .palette-trigger) { display: none; }
+.main-split::before { content: ""; position: absolute; inset: 36.8px 0 0; z-index: -1; border-radius: 12.8px; background: var(--background); pointer-events: none; }
 .main-split > div:not(.main-split-resize) { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; }
 .workspace-split-surface { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; container-name: workspace-surface; container-type: inline-size; }
 /* A chat beside the main one: laid out as the main pane's chat is, measured by its own width. */
-.main-split-chat { --chat-header-height: 44.8px; position: relative; isolation: isolate; container-type: inline-size; container-name: chat-main; color: var(--foreground); }
+.main-split-chat { --chat-header-height: 36.8px; position: relative; isolation: isolate; container-type: inline-size; container-name: chat-main; color: var(--foreground); }
 .main-split-resize { position: absolute; z-index: 5; inset-block: 0; left: -8px; width: 8px; cursor: col-resize; touch-action: none; }
 /* Where a view dragged from the dock will land: the chat's right half, washed. */
 .main-split-drop { position: absolute; z-index: 30; inset: 8px 8px 8px 50%; border-radius: 10px; background: var(--accent); pointer-events: none; }
