@@ -383,6 +383,7 @@ newest first.
 Stage 6 commits:
 
 - 6a: 5f51f03 (search and the palette on the rail)
+- 6b: 0052905, 2db3a91 (up to three panes, each slot its own session; a pane's chat closes it only when deleted)
 
 ## Open questions
 
