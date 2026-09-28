@@ -45,15 +45,19 @@ export default function FileViewer(props: {
   // Each file's Git status, where its place is a Git workspace: the mark in
   // its header and which changes it can show.
   const [statuses, setStatuses] = createSignal<Record<string, GitChangedFile | undefined>>({});
-  const loadStatus = async (entry: FileEntry) => {
+  // The place's status list, once per place: a path-filtered read returns only its patch.
+  const loadStatus = async (projectId: string) => {
+    let files: GitChangedFile[] = [];
     try {
-      const payload = await api<DiffPayload>(`/v0/projects/${encodeURIComponent(entry.projectId)}/diff?path=${encodeURIComponent(entry.path)}&history=0`);
-      setStatuses((current) => ({ ...current, [entryKey(entry)]: payload.files?.find((file) => file.path === entry.path) }));
-    } catch {
-      setStatuses((current) => ({ ...current, [entryKey(entry)]: undefined }));
-    }
+      files = (await api<DiffPayload>(`/v0/projects/${encodeURIComponent(projectId)}/diff?history=0&reuse=1`)).files ?? [];
+    } catch {}
+    setStatuses((current) => {
+      const next = { ...current };
+      for (const entry of props.entries) if (entry.projectId === projectId) next[entryKey(entry)] = files.find((file) => file.path === entry.path);
+      return next;
+    });
   };
-  createEffect(() => { for (const entry of props.entries) void loadStatus(entry); });
+  createEffect(() => { for (const projectId of new Set(props.entries.map((entry) => entry.projectId))) void loadStatus(projectId); });
   // One version probe per place the entries are in; a change to an entry's
   // path reloads that entry, which keeps a draft it has.
   createEffect(() => {
@@ -72,10 +76,9 @@ export default function FileViewer(props: {
           if (cancelled) return;
           if (version !== null && version !== payload.version) {
             entries.forEach((entry, index) => {
-              if (entry.projectId !== projectId || (payload.changedPaths !== null && !payload.changedPaths.includes(entry.path))) return;
-              void handles[index]?.reload();
-              void loadStatus(entry);
+              if (entry.projectId === projectId && (payload.changedPaths === null || payload.changedPaths.includes(entry.path))) void handles[index]?.reload();
             });
+            void loadStatus(projectId);
           }
           version = payload.version;
         } catch {}
