@@ -226,7 +226,7 @@ export function Sidebar(props: {
   selectedId: string | null;
   /** With two chats side by side: the one with the keyboard, current in place of the selection, and the other, marked open. */
   focusedId?: string | null;
-  openId?: string | null;
+  openIds?: string[];
   /** Open a chat beside the main pane's (Alt+click, or its menu); absent where there is no split. */
   onOpenChatBeside?: (chat: ChatSummary, project: Project) => void;
   navigatingId?: string | null;
@@ -882,7 +882,7 @@ export function Sidebar(props: {
       class="sidebar-row sidebar-chat"
       data-chat-id={menuProps.chat.id}
       aria-current={(props.focusedId || props.selectedId) === menuProps.chat.id ? "page" : undefined}
-      data-open={props.openId === menuProps.chat.id ? "true" : undefined}
+      data-open={props.openIds?.includes(menuProps.chat.id) ? "true" : undefined}
       aria-label={`${chatTitle(menuProps.chat)}, ${menuProps.chat.harnessId || "conduit"} harness${menuProps.chat.unread ? ", unread" : ""}${selected() ? ", selected" : ""}`}
       data-selected={selected() ? "true" : undefined}
       onPointerEnter={() => props.onPrefetchChat(menuProps.chat)}
