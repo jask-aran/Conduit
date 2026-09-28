@@ -265,7 +265,7 @@ file, a terminal or a tool.
   the composer's status and attach input -- moves into one factory
   (`state/chat-session.ts`). The main chat is built from it; no visible
   change.
-- **5b. One chat view.** Header, transcript and composer become one
+- **5b. One chat view** -- built. Header, transcript and composer become one
   component that takes a session. The main pane renders it; no visible
   change.
 - **5c. Panes.** The main pane holds two panes, A and B, each a view plus
@@ -320,6 +320,7 @@ stage 5 commit is listed below as it lands.
 Stage 5 commits:
 
 - 5a: d6e9c5a (the chat session factory)
+- 5b: bff14ae (one chat surface)
 
 ## Open questions
 
