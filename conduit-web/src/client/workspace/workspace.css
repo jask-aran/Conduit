@@ -4,7 +4,7 @@
   --workspace-git-modified: #d19a66;
 }
 
-.workspace-panel, .main-split {
+.workspace-panel, .main-split, .chat-main > .workspace-split-surface, .pane-a-tool-host {
   --workbench-bar-height: 28px;
   --workbench-control-size: 22.4px;
   --workbench-gap: 2.4px;
