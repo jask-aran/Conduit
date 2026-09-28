@@ -1798,6 +1798,7 @@ function App() {
   };
   const focusMainPane = () => {
     if (isMobileLayout()) setMobileSidebarOpen(false);
+    if (splitShown() && cyclePaneFocus()) return;
     enterMainPane();
     acknowledgeFocusedRegion(document.querySelector<HTMLElement>(".chat-main"));
   };
@@ -1825,7 +1826,8 @@ function App() {
   const hasTranscript = () => Boolean(document.querySelector(".message-scroller-viewport"));
   const focusTranscript = () => {
     if (isMobileLayout()) setMobileSidebarOpen(false);
-    document.querySelector<HTMLElement>(".message-scroller-viewport")?.focus({ preventScroll: true });
+    ((sideHasKeyboard() ? document.querySelector<HTMLElement>(".main-split .message-scroller-viewport") : null)
+      ?? document.querySelector<HTMLElement>(".message-scroller-viewport"))?.focus({ preventScroll: true });
   };
   const toggleChatWorkspaceFocus = () => {
     const inWorkspacePanel = document.activeElement instanceof Element && Boolean(document.activeElement.closest('[data-region="workspace-panel"]'));
@@ -1862,11 +1864,12 @@ function App() {
     catch (error) { showError(error); return false; }
   };
   const autoNameChat = async () => {
-    const id = catalogue.selectedId();
+    const id = focusedChatId();
+    const target = focusedChat();
     if (!id) return;
     try {
       const saved = await api<ChatSummary>(`/v0/sessions/${id}/auto-name`, { method: "POST" });
-      chat.setTitle(saved.title);
+      target.setTitle(saved.title);
       await refresh();
       toast.success(`Renamed chat to ${saved.title}`);
     } catch (error) { showError(error); }
@@ -2140,10 +2143,29 @@ function App() {
   const sideChatId = () => { const view = splitView(); return view?.startsWith("chat:") ? view.slice("chat:".length) : null; };
   const [keyboardSide, setKeyboardSide] = createSignal<"main" | "side">("main");
   const sideHasKeyboard = () => keyboardSide() === "side" && splitShown() && Boolean(sideChatId());
+  const lastPaneFocus: Record<"main" | "side", HTMLElement | null> = { main: null, side: null };
   const noteKeyboardSide = (event: FocusEvent) => {
-    const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest(".main-split")) setKeyboardSide("side");
-    else if (target?.closest(".chat-main")) setKeyboardSide("main");
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    const pane = target?.closest(".main-split") ? "side" : target?.closest(".chat-main") ? "main" : null;
+    if (!pane) return;
+    setKeyboardSide(pane);
+    lastPaneFocus[pane] = target;
+  };
+  // Ctrl+Shift+2 with two panes: from elsewhere, back to the pane last used;
+  // from one pane, to the other. Each lands where its focus last was.
+  const cyclePaneFocus = () => {
+    const active = document.activeElement;
+    const from = active?.closest(".main-split") ? "side" : active?.closest(".chat-main") ? "main" : null;
+    const to = from ? (from === "main" ? "side" : "main") : keyboardSide();
+    const last = lastPaneFocus[to];
+    const paneSelector = to === "side" ? ".main-split" : ".chat-main";
+    if (last?.isConnected && last.closest(paneSelector) && last.getClientRects().length) {
+      last.focus({ preventScroll: true });
+      if (to === "main") acknowledgeFocusedRegion(document.querySelector<HTMLElement>(".chat-main"));
+      return true;
+    }
+    if (to === "side") { setKeyboardSide("side"); focusSplit(); return true; }
+    return false;
   };
   document.addEventListener("focusin", noteKeyboardSide);
   onCleanup(() => document.removeEventListener("focusin", noteKeyboardSide));
@@ -2173,6 +2195,22 @@ function App() {
   // The same chat on both sides is one chat: the main pane taking it closes the side.
   createEffect(() => { if (sideChatId() && sideChatId() === mainChatId()) saveSplitView(null); });
   // The side's chat takes the main pane; the chat there, if any, moves beside.
+  /*
+   * The pane with the keyboard, and its chat: what the palette, the leader's
+   * chat commands, the model selector and the dock act on, as if each pane
+   * were a Conduit tab of its own. Pane A (the main pane) unless pane B holds
+   * a chat and was the last to have focus.
+   */
+  const focusedSession = (): ChatSession => sideHasKeyboard() && side.selectedId() ? side : session;
+  const focusedChat = () => focusedSession().chat;
+  const focusedModels = () => focusedSession().models;
+  const sideFocused = () => focusedSession() === side;
+  const focusedChatId = () => sideFocused() ? side.selectedId() : catalogue.selectedId();
+  // A sidebar command's target when it is pane B's chat; pane A's is the sidebar's own.
+  const focusedTarget = () => sideFocused() ? side.selected() ?? {} : {};
+  const dockSelection = () => sideFocused() ? side.selected() : null;
+  const dockProject = () => dockSelection()?.project ?? selectedProject();
+  const dockScope = () => dockSelection() ? `project:${dockSelection()!.project.id}` : workspacePanelScope();
   const swapSideChat = () => {
     const beside = side.selected();
     if (!beside) return;
@@ -2306,41 +2344,42 @@ function App() {
   };
 
   const lastAssistant = createMemo(() => {
-    const list = chat.messages();
+    const list = focusedChat().messages();
     for (let index = list.length - 1; index >= 0; index -= 1) if (list[index]!.role === "assistant") return list[index]!;
     return undefined;
   });
   const lastUserEntryId = createMemo(() => {
-    const list = chat.messages();
+    const list = focusedChat().messages();
     // An optimistic id is one the backend never persisted - a message sent and
     // then interrupted before it was written. Forking one fails, so it cannot
     // be the target of regenerate or edit.
     for (let index = list.length - 1; index >= 0; index -= 1) { const message = list[index]!; if (message.role === "user" && !message.pending) return message.id; }
     return null;
   });
-  const thinkingLevels = createMemo(() => models.models().find((item) => item.spec === models.model())?.thinkingLevels ?? []);
+  const thinkingLevels = createMemo(() => focusedModels().models().find((item) => item.spec === focusedModels().model())?.thinkingLevels ?? []);
 
   const paletteContext = createMemo<PaletteContext>(() => ({
     nativeApp,
-    chatId: catalogue.selectedId(),
-    project: selectedProject(),
+    chatId: focusedChatId(),
+    project: dockProject(),
     projects: catalogue.projects(),
     templates: templates(),
-    templateId: chat.templateId(),
-    chatStatus: chat.status(),
-    streaming: chat.streaming(),
-    liveProcess: Boolean(runtime.getProcess(catalogue.selectedId())),
+    templateId: focusedChat().templateId(),
+    chatStatus: focusedChat().status(),
+    streaming: focusedChat().streaming(),
+    liveProcess: Boolean(runtime.getProcess(focusedChatId())),
     connectivity: runtime.connectivity(),
-    effort: models.effort(),
+    effort: focusedModels().effort(),
     thinkingLevels: thinkingLevels(),
-    canRegenerate: chatCapability("regenerate") && Boolean(lastUserEntryId()) && !chat.streaming() && !chat.stopping(),
-    canContinue: partialContinue() && Boolean(lastAssistant()?.stopped) && !chat.streaming(),
-    canCompact: chatCapability("compaction") && !chat.streaming() && !chat.compacting() && chat.messages().length > 0,
+    canRegenerate: focusedSession().capability("regenerate") && Boolean(lastUserEntryId()) && !focusedChat().streaming() && !focusedChat().stopping(),
+    canContinue: partialContinue() && Boolean(lastAssistant()?.stopped) && !focusedChat().streaming(),
+    canCompact: focusedSession().capability("compaction") && !focusedChat().streaming() && !focusedChat().compacting() && focusedChat().messages().length > 0,
     canCopy: Boolean(lastAssistant()?.content),
     chatSort: chatSort(),
   }));
 
   const restoreStash = async (id: string) => {
+    const { chat, attachments } = focusedSession();
     const entry = await drafts.restore(id);
     if (!entry) return;
     chat.setDraft(chat.draft() ? `${chat.draft()}\n${entry.text}` : entry.text);
@@ -2352,6 +2391,7 @@ function App() {
   };
 
   const stashPrompt = () => {
+    const { chat, attachments } = focusedSession();
     const chatId = chat.loadedId();
     if (!chatId) return;
     const text = chat.draft();
@@ -2381,7 +2421,7 @@ function App() {
     newFolder: () => runSidebar("new-folder"),
     newWorkspace: () => runSidebar("new-workspace"),
     openRuntimeChat: () => void createChat(undefined, { templateId: "runtime" }),
-    attach: () => session.openAttachments(),
+    attach: () => focusedSession().openAttachments(),
     stashPrompt,
     toggleDictation: () => window.dispatchEvent(new Event("conduit:toggle-dictation")),
     toggleSidebar: () => runSidebar("toggle-sidebar"),
@@ -2391,16 +2431,16 @@ function App() {
     focusWorkspacePanel,
     toggleChatWorkspaceFocus,
     openWorkspaceView,
-    copyTranscript: () => { const id = catalogue.selectedId(); if (id) void copyTranscript({ id } as ChatSummary); },
-    rename: () => runSidebar("rename-chat"),
+    copyTranscript: () => { const id = focusedChatId(); if (id) void copyTranscript({ id } as ChatSummary); },
+    rename: () => runSidebar("rename-chat", focusedTarget()),
     autoName: () => void autoNameChat(),
-    move: () => runSidebar("move-chat"),
+    move: () => runSidebar("move-chat", focusedTarget()),
     renameFolder: () => runSidebar("rename-folder"),
-    stop: () => chat.stop(),
-    stopProcess: () => void stopChatProcess(),
-    regenerate: () => { const id = lastUserEntryId(); if (id) void chat.regenerate(id); },
-    continue: () => void chat.continueResponse(),
-    compact: () => void chat.compact(),
+    stop: () => focusedChat().stop(),
+    stopProcess: () => void stopChatProcess(focusedChatId()),
+    regenerate: () => { const id = lastUserEntryId(); if (id) void focusedChat().regenerate(id); },
+    continue: () => void focusedChat().continueResponse(),
+    compact: () => void focusedChat().compact(),
     copy: () => { const content = lastAssistant()?.content; if (content) void navigator.clipboard.writeText(content); },
     retryConnection: () => runtime.retry(),
     reload: () => location.reload(),
@@ -2409,7 +2449,7 @@ function App() {
     keyboardProbe: () => toast.success(toggleKeyboardProbe()
       ? "Keyboard measurements on. Open a chat and tap the composer."
       : "Keyboard measurements off."),
-    delete: () => runSidebar("delete-chat"),
+    delete: () => runSidebar("delete-chat", focusedTarget()),
     deleteFolder: () => runSidebar("delete-project"),
     settings: (section) => openSettings(section),
     workspaceSettings: (id) => openSettings("workspaces", id),
@@ -2419,9 +2459,9 @@ function App() {
     moveChats,
     copyChatLinks,
     deleteChats,
-    chooseModel: (spec) => void models.chooseModel(spec),
-    chooseEffort: (level) => void models.chooseEffort(level),
-    setChatProfile: (id) => void switchProfile(id),
+    chooseModel: (spec) => void focusedModels().chooseModel(spec),
+    chooseEffort: (level) => void focusedModels().chooseEffort(level),
+    setChatProfile: (id) => void focusedSession().switchProfile(id).catch(showError),
   };
 
   const dismissOpenLayer = (event: KeyboardEvent) => {
@@ -3203,17 +3243,17 @@ function App() {
       </section>
     </Show>
     <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={splitView} splitHost={splitHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
-    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => selectedProject()!.id} projectName={() => selectedProject()!.name} sourceControlEnabled={() => selectedProject()!.kind === "workspace"} workingRoot={() => selectedProject()!.workingRoot} chatId={() => workspacePanelScope()!} artifactChatId={() => routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => chat.loadedId()} historyAvailable={() => routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={splitView} splitHost={splitHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
+    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? side.chat.loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? side.history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={splitView} splitHost={splitHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </div>
     <Show when={routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard"].includes(routeKind()) && selectedProject() && workspacePanelScope()}>
-      <WorkspaceRail current={panelOpen() ? dockTool() : null} inSplit={splitToolShown()} onDock={moveToDock} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : selectedProject()?.kind === "workspace"} onChoose={chooseRailTool} />
+      <WorkspaceRail current={panelOpen() ? dockTool() : null} inSplit={splitToolShown()} onDock={moveToDock} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : dockProject()?.kind === "workspace"} onChoose={chooseRailTool} />
     </Show>
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>
       <TerminalRoute terminalId={terminalRouteId()} connectivity={runtime.connectivity} onOpenConduit={leaveTerminalRoute} />
     </Show>
     <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} onPageChange={setPalettePage} initialPage={palettePage()} initialQuery={paletteInitialQuery()} launchNonce={paletteNonce()} directLaunch={paletteDirectLaunch()}
-      context={paletteContext()} runtime={runtime} actions={paletteActions} onChooseModel={(spec) => void models.chooseModel(spec)} currentModel={models.model()} scopeModels={models.allModels()} enabledModelSpecs={models.enabledModels()} onToggleModelScope={(spec) => { const enabled = models.enabledModels(); void models.saveScope(enabled.includes(spec) ? enabled.filter((item) => item !== spec) : [...enabled, spec]); }} shortcuts={shortcutManager} />
+      context={paletteContext()} runtime={runtime} actions={paletteActions} onChooseModel={(spec) => void focusedModels().chooseModel(spec)} currentModel={focusedModels().model()} scopeModels={focusedModels().allModels()} enabledModelSpecs={focusedModels().enabledModels()} onToggleModelScope={(spec) => { const models = focusedModels(); const enabled = models.enabledModels(); void models.saveScope(enabled.includes(spec) ? enabled.filter((item) => item !== spec) : [...enabled, spec]); }} shortcuts={shortcutManager} />
     <LeaderPalette shortcuts={shortcutManager} />
     <Show when={settingsLoaded()}>
       <Settings open={settingsOpen()} initialSection={settingsSection()} sectionWasNamed={settingsNamedSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} rendererControlsVisible={rendererControlsVisible()} onRendererControlsVisibleChange={switchRendererControlsVisible} meteorField={meteorField()} onMeteorFieldChange={switchMeteorField} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} contextMetrics={contextMetrics()} onContextMetricsChange={switchContextMetrics} onOpenModelSelector={openModelSelector} shortcuts={shortcutManager} />
