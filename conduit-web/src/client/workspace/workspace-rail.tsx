@@ -1,5 +1,5 @@
-import { For } from "solid-js";
-import { FolderIcon, GitCompareArrowsIcon, MessageSquareIcon, TerminalIcon } from "lucide-solid";
+import { For, Show } from "solid-js";
+import { CommandIcon, FolderIcon, GitCompareArrowsIcon, MessageSquareIcon, SearchIcon, TerminalIcon } from "lucide-solid";
 import { isSplitView, type PanelTab, type SplitView } from "./workspace-types";
 
 export const WORKSPACE_TOOL_LABELS: Record<PanelTab, string> = { files: "Files", diff: "Source Control", chat: "Chat review", terminal: "Terminal" };
@@ -26,8 +26,16 @@ const RAIL_ICONS = { files: FolderIcon, diff: GitCompareArrowsIcon, chat: Messag
  * phone keeps the dock's own tabs. Not a region of its own: its icons are
  * reached from the dock, so it stays out of the tab order as the header's
  * icons do. A view dragged from the split onto it docks.
+ *
+ * Below the tools, set apart by a hairline, are chat search and the command
+ * palette: actions rather than dock views, here so no pane's header carries
+ * the app's own controls. They stay when a page has no tools to show.
  */
 export function WorkspaceRail(props: {
+  /** Whether the page has a place whose tools the dock can show. */
+  tools: boolean;
+  onOpenSearch: () => void;
+  onOpenPalette: () => void;
   current: PanelTab | null;
   inSplit: PanelTab | null;
   sourceControlEnabled: boolean;
@@ -37,7 +45,7 @@ export function WorkspaceRail(props: {
   return <nav class="workspace-rail" aria-label="Workspace tools"
     onDragOver={(event) => { if (document.body.dataset.toolDrag === "split" && event.dataTransfer?.types.includes(TOOL_DRAG_TYPE)) event.preventDefault(); }}
     onDrop={(event) => { const drag = readToolDrag(event); if (drag?.from === "split") { event.preventDefault(); props.onDock(drag.tool); } }}>
-    <For each={RAIL_TOOLS}>{(tool) => {
+    <Show when={props.tools}><For each={RAIL_TOOLS}>{(tool) => {
       const Icon = RAIL_ICONS[tool];
       const disabled = () => tool === "diff" && !props.sourceControlEnabled;
       const label = () => disabled() ? "Source Control is available only for Git workspaces" : WORKSPACE_TOOL_LABELS[tool];
@@ -46,5 +54,8 @@ export function WorkspaceRail(props: {
         data-open={props.inSplit === tool ? "true" : undefined}
         onClick={() => props.onChoose(tool)}><Icon /></button>;
     }}</For>
+    <span class="workspace-rail-separator" aria-hidden="true" /></Show>
+    <button type="button" class="workspace-rail-action" tabIndex={-1} aria-label="Search chats" title="Search chats" onClick={() => props.onOpenSearch()}><SearchIcon /></button>
+    <button type="button" class="workspace-rail-action" tabIndex={-1} aria-label="Open command palette" title="Command palette" onClick={() => props.onOpenPalette()}><CommandIcon /></button>
   </nav>;
 }

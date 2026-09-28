@@ -70,6 +70,7 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-rail-action[aria-current="true"] svg { stroke-width: 3; }
 .workspace-rail-action:disabled { opacity: .4; cursor: not-allowed; }
 .workspace-rail-action svg { width: 14px; height: 14px; }
+.workspace-rail-separator { width: 14px; height: 0.8px; flex: none; margin: 4.8px 7.2px; background: color-mix(in oklch, var(--sidebar-foreground), transparent 80%); }
 /* A tool in the main pane's split is open there without being the dock's. */
 .workspace-rail-action[data-open="true"] { color: var(--sidebar-accent-foreground); }
 

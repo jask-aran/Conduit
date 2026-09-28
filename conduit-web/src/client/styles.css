@@ -120,7 +120,8 @@ svg.lucide { stroke-width: 2.4; }
 .model-trigger { display: flex; min-width: 0; align-items: center; gap: 6.4px; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
 /* One icon size across the top of the app, the sidebar's header included. */
 .chat-header [data-slot="button"] svg { width: 14px; height: 14px; }
-.palette-trigger, .search-trigger { display: inline-flex; flex: none; }
+/* On a desktop search and the palette are the right rail's; a phone's header keeps them. */
+.palette-trigger, .search-trigger { display: none; flex: none; }
 .chat-header-actions { display: flex; margin-left: auto; flex: none; align-items: center; gap: 1.6px; }
 /* Sits in the composer's left cluster beside the attach button, at that
    button's height, with the percentage reading as its label. */
