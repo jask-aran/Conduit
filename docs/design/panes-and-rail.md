@@ -380,8 +380,10 @@ Steps:
     a review's Open working file) opens in the **file pane** -- the pane that
     last showed a file viewer, wherever the keyboard is -- so opening files
     never replaces the chat being typed in; with no file pane it behaves as
-    Alt. Alt+click opens a new file pane beside the focused one (at three,
-    the neighbour). The viewer's own control opens a second file beside the
+    Alt. Alt+click puts the file beside one already open: the second side
+    of a viewer showing one (the file pane's first), and a new file pane
+    only once every viewer shows two (at three panes, the neighbour). The
+    viewer's own control opens a second file beside the
     first in the same pane. The one-tool-pane limit goes: terminals and file
     viewers sit in any pane.
   - *6d-3. Changes as a mode.* A diff is the same CodeMirror base
