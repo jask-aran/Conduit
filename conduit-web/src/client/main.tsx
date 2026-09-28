@@ -60,7 +60,7 @@ import { CHAT_SORT_STORAGE_KEY, selectedChatSort, useChatSort } from "./preferen
 import { WorkspaceAppearanceEditor } from "./project/workspace-appearance-editor";
 import { applyPwaUpdate, checkForPwaUpdate, claimPwaUpdateArrival, forcePwaUpdate, pwaUpdateWaiting, resetPwaAppCache, startPwaUpdates } from "./pwa-update";
 import type { ActiveChatStore } from "./state/active-chat";
-import { createChatSession } from "./state/chat-session";
+import { createChatSession, type ChatSession } from "./state/chat-session";
 import { DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
 import { createDrafts } from "./state/drafts";
 import { createCatalogueStore } from "./state/catalogue";
@@ -2181,7 +2181,6 @@ function App() {
       if (previous && previous.chat.id !== beside.chat.id) saveSplitView(`chat:${previous.chat.id}`);
     });
   };
-  const { manifest: sideManifest, capability: sideCapability, activeProfile: sideProfile, composerStatus: sideComposerStatus, setComposerStatus: setSideComposerStatus } = side;
   // The transcript learns its width only from geometry motion, so the split
   // announces every change of the room it takes from the chat.
   let splitMotionId = 0;
@@ -2905,6 +2904,36 @@ function App() {
     onDrop: (event: DragEvent) => { event.preventDefault(); dragDepth = 0; setDropActive(false); const files = filesFromDataTransfer(event.dataTransfer); if (files.length) attachments.addFiles(files); },
   };
 
+  /*
+   * One chat's surface -- its header, transcript and composer -- drawn from
+   * its session, for whichever pane shows it (docs/design/panes-and-rail.md,
+   * stage 5). What differs by pane comes in as props: the actions only the
+   * main chat has yet, and the side's swap and close.
+   */
+  const ChatSurface = (props: {
+    session: ChatSession;
+    project?: Project;
+    keyboardOwner: () => boolean;
+    onShare: () => void;
+    onRename?: () => void;
+    onDelete?: () => void;
+    actions?: JSX.Element;
+    notice?: JSX.Element;
+    place?: ReturnType<typeof chatPlace>;
+    modelSelector?: boolean;
+    stackRef?: (element: HTMLDivElement) => void;
+  }) => {
+    const current = props.session;
+    const surfaceChat = current.chat;
+    return <>
+      <ChatHeader project={props.project} onOpenPlace={openPlace} title={surfaceChat.title() || (surfaceChat.status() === "active" ? "Untitled chat" : "New chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} contextMetrics={contextMetrics} composerStatus={current.composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} actions={props.actions} />
+      {props.notice}
+      <Conversation chat={surfaceChat} busy={surfaceChat.presentation().kind === "opening_live"} stackRef={props.stackRef}
+        transcript={<Transcript chat={surfaceChat} supports={current.capability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} />}
+        composer={<Composer chat={surfaceChat} place={props.place} supports={current.capability} attachments={current.attachments} attachmentsSupported={current.capability("attachments", true)} models={current.models} permissions={current.capability("permissionModes") ? current.permissions : undefined} serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined} profiles={profiles()} activeProfile={current.activeProfile()} onOpenModelSelector={props.modelSelector ? openModelSelector : undefined} modelSelectorShortcut={props.modelSelector ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} keyboardOwner={props.keyboardOwner} onChooseProfile={(id) => void current.switchProfile(id).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={current.openAttachments} onStatusChange={current.setComposerStatus} />} />
+    </>;
+  };
+
   return <>
     <Toaster richColors />
     <input ref={session.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
@@ -3099,11 +3128,9 @@ function App() {
         <Show when={routeKind() !== "dashboard" && routeKind() !== "computer"}>
         <Show when={routeKind() === "project" && selectedProject()} fallback={<>
           <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
-          <ChatHeader project={selectedProject()} onOpenPlace={openPlace} title={chat.title() || (chat.status() === "active" ? "Untitled chat" : "New chat")} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} chat={chat} contextMetrics={contextMetrics} composerStatus={composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} />
-          <Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>
-          <Conversation chat={chat} busy={openingLiveChat()} stackRef={(element) => { chatComposerStack = element; }}
-            transcript={<Transcript chat={chat} supports={chatCapability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={activeProfile()?.label || activeProfile()?.id || chat.templateId() || undefined} projectId={selectedProject()?.id} />}
-            composer={<Composer chat={chat} place={chatPlace()} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} keyboardOwner={() => !sideHasKeyboard()} onChooseProfile={(id) => void switchProfile(id)} onOpenSettings={openSettings} onOpenAttachments={session.openAttachments} onStatusChange={setComposerStatus} />} />
+          <ChatSurface session={session} project={selectedProject()} keyboardOwner={() => !sideHasKeyboard()} place={chatPlace()} modelSelector stackRef={(element) => { chatComposerStack = element; }}
+            onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")}
+            notice={<Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>} />
         </>}>
           <ChatHeader project={selectedProject()} title={selectedProject()!.name} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} dashboard />
           <ProjectDashboard project={selectedProject()!} runtime={runtime} profiles={profiles()} onOpenHarnessThread={(harnessId, path, id, title) => void openHarnessThread({ harnessId, path, id, title })}
@@ -3166,14 +3193,11 @@ function App() {
         <Show when={sideChatId()}>
           <div class="main-split-chat">
             <input ref={side.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) side.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
-            <ChatHeader project={side.selected()?.project} onOpenPlace={openPlace} title={side.chat.title() || (side.chat.status() === "active" ? "Untitled chat" : "New chat")} profile={sideProfile()} runtime={side.chat.runtimeIdentity()} live={side.chat.live() as unknown as Record<string, unknown>} chat={side.chat} contextMetrics={contextMetrics} composerStatus={sideComposerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={false} onToggleMobileSidebar={() => {}} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareChat(side.selectedId())} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating}
+            <ChatSurface session={side} project={side.selected()?.project} keyboardOwner={sideHasKeyboard} onShare={() => void shareChat(side.selectedId())}
               actions={<>
                 <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label="Swap with the main chat" title="Swap with the main chat" onClick={swapSideChat}><ArrowLeftRightIcon /></Button>
                 <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label="Close this chat" title="Close" onClick={() => closeSplit()}><XIcon /></Button>
               </>} />
-            <Conversation chat={side.chat} busy={side.chat.presentation().kind === "opening_live"}
-              transcript={<Transcript chat={side.chat} supports={sideCapability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={sideProfile()?.label || sideProfile()?.id || side.chat.templateId() || undefined} projectId={side.selected()?.project.id} />}
-              composer={<Composer chat={side.chat} supports={sideCapability} attachments={side.attachments} attachmentsSupported={sideCapability("attachments", true)} models={side.models} permissions={sideCapability("permissionModes") ? side.permissions : undefined} serviceLevels={sideManifest()?.serviceLevels?.length ? side.serviceLevels : undefined} profiles={profiles()} activeProfile={sideProfile()} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} keyboardOwner={sideHasKeyboard} onChooseProfile={(id) => void side.switchProfile(id).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={side.openAttachments} onStatusChange={setSideComposerStatus} />} />
           </div>
         </Show>
       </section>
