@@ -322,6 +322,7 @@ Stage 5 commits:
 - 5a: d6e9c5a (the chat session factory)
 - 5b: bff14ae (one chat surface)
 - 5c: 9c0ba55 (commands, palette, dock and Ctrl+Shift+2 follow the pane)
+- 5c: 1e7201c (pane B's chat renames, deletes, moves place, opens the model selector)
 
 ## Open questions
 
