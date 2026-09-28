@@ -19,9 +19,7 @@
 .workspace-panel[data-edge-instant="true"],
 body.workspace-resizing .workspace-panel { transition: none !important; }
 /* Surface keeps settled panel width, right-anchored inside the shell. */
-.workspace-panel-surface { position: absolute; inset: 0; display: flex; min-width: 0; height: 100%; contain: layout paint; container-name: workspace-surface; container-type: inline-size; flex: none; flex-direction: column; overflow: hidden; isolation: isolate; border-radius: 12.8px; background: transparent; }
-/* As the main pane: the header row on the frame, the sheet below it. */
-.workspace-panel-surface::before { content: ""; position: absolute; inset: 44.8px 0 0; z-index: -1; border-radius: 12.8px; background: var(--background); pointer-events: none; }
+.workspace-panel-surface { position: absolute; inset: 0; display: flex; min-width: 0; height: 100%; contain: layout paint; container-name: workspace-surface; container-type: inline-size; flex: none; flex-direction: column; overflow: hidden; border-radius: 12.8px; background: var(--background); }
 .workspace-panel-surface > * { max-width: 100%; }
 /* The dock's header shares the top line of the app: the main header's height
    and padding, the name at the breadcrumb's size, 14px icons, no hairline. */
@@ -78,11 +76,7 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 /* The main pane's split: a view moved out of the dock, its own sheet on the
    frame beside the chat, as the dock is. The chat's 8px right margin is the
    gutter; the drag edge sits in it. */
-.main-split { position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 8px 6.4px 0; flex-direction: column; border-radius: 12.8px; background: transparent; }
-/* As the main pane: the header row on the frame, the sheet below it. */
-.main-split::before { content: ""; position: absolute; inset: 44.8px 0 0; z-index: -1; border-radius: 12.8px; background: var(--background); pointer-events: none; }
-/* Search and the palette are shared: the main pane's header holds them. */
-.main-split .chat-header :is(.search-trigger, .palette-trigger) { display: none; }
+.main-split { position: relative; display: flex; min-width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 8px 6.4px 0; flex-direction: column; border-radius: 12.8px; background: var(--background); }
 .main-split > div:not(.main-split-resize) { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; }
 .workspace-split-surface { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; container-name: workspace-surface; container-type: inline-size; }
 /* A chat beside the main one: laid out as the main pane's chat is, measured by its own width. */

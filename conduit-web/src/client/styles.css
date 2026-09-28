@@ -140,20 +140,11 @@ svg.lucide { stroke-width: 2.4; }
 .chat-context-menu-values { padding: 1.6px 4.8px 4.8px; color: var(--foreground); font: 8.8px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
 
 /* Inset panel: the rounded fill sits directly on the darker frame. */
-.chat-main { --chat-header-height: 44.8px; position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 8px 6.4px 1.6px; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 12.8px; background: transparent; color: var(--foreground); }
-/* The header row sits on the frame, the top line the app's panes share: a
-   pane's sheet starts below it, so each pane's breadcrumb heads it as a tab
-   does (docs/design/panes-and-rail.md). */
-.chat-main::before { content: ""; position: absolute; inset: var(--chat-header-height) 0 0; z-index: -1; border-radius: 12.8px; background: var(--background); pointer-events: none; }
-/* With two panes, the one without the keyboard heads itself in grey. */
-[data-pane-current="false"] :is(.chat-header-title strong, .workspace-panel-header strong) { color: var(--muted-foreground); }
-.pane-tab-close { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 20px; height: 20px; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--muted-foreground); }
-.pane-tab-close:hover { background: var(--accent); color: var(--foreground); }
-.pane-tab-close svg { width: 12.8px; height: 12.8px; }
+.chat-main { --chat-header-height: 44.8px; position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 8px 6.4px 1.6px; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 12.8px; background: var(--background); color: var(--foreground); }
 /* The header is a flow item, so it reserves its own height for whatever the
    pane holds and no surface has to know it is there. It still paints over
    what runs beneath it -- see `.transcript`, the one surface that asks to. */
-.chat-header { position: relative; z-index: 2; display: flex; height: var(--chat-header-height); flex: none; align-items: center; gap: 6.4px; padding: 6.4px 11.2px; background: transparent; }
+.chat-header { position: relative; z-index: 2; display: flex; height: var(--chat-header-height); flex: none; align-items: center; gap: 6.4px; padding: 6.4px 11.2px; background: linear-gradient(to bottom, var(--background) 0 50%, transparent 100%); }
 .chat-header-title { display: flex; min-width: 0; align-items: center; gap: 5.6px; overflow: hidden; font-size: 11.2px; line-height: 16px; }
 .chat-header-title span, .chat-header-title strong, .chat-header-title .breadcrumb-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The place crumb is a link to its page: the crumb at rest, white under the pointer. */
@@ -200,7 +191,7 @@ svg.lucide { stroke-width: 2.4; }
    rather than stopping at a hard cut, and restates the clearance as the
    thread's own top padding so the first message still starts below the bar.
    Every other pane keeps the space the header reserved, by doing nothing. */
-.transcript { position: relative; z-index: 1; min-height: 0; margin-top: 0; flex: 1; overflow: hidden; }
+.transcript { position: relative; z-index: 1; min-height: 0; margin-top: calc(-1 * var(--chat-header-height)); flex: 1; overflow: hidden; }
 .composer-renderer-switch { position: absolute; top: 6.4px; right: 9.6px; z-index: 3; }
 .composer-renderer-switch label { display: flex; align-items: center; gap: 4.8px; color: var(--muted-foreground); font: 8px ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .06em; }
 .composer-renderer-switch select { min-height: 20.8px; border: 0.8px solid var(--border); border-radius: 4px; background: color-mix(in oklch, var(--background), transparent 8%); padding: 1.6px 4px; color: var(--foreground); font: 8.8px ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: none; }
@@ -476,7 +467,7 @@ svg.lucide { stroke-width: 2.4; }
 .chat-drop-overlay { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; pointer-events: none; background: color-mix(in oklch, var(--background), transparent 22%); backdrop-filter: blur(9.6px); }
 .chat-drop-overlay > div { padding: 14.4px 17.6px; border: 0.8px solid var(--border); border-radius: 12.8px; background: var(--card); box-shadow: 0 14.4px 48px rgb(0 0 0 / 18%); }
 /* Decorative, deterministic meteor field for the entire chat main surface. */
-.chat-meteors { position: absolute; inset: var(--chat-header-height) 0 0; border-radius: 12.8px; z-index: 0; overflow: hidden; pointer-events: none; }
+.chat-meteors { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
 
 .chat-main-empty .transcript { position: absolute; inset: var(--chat-header-height) 0 0; margin-top: 0; }
 .chat-main-empty .message-scroller-viewport { overflow: hidden; overscroll-behavior-y: none; }
