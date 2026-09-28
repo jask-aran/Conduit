@@ -152,6 +152,8 @@ export default function WorkspaceFileSlot(props: {
   busy: boolean;
   wrap: boolean;
   headerPrefix?: JSX.Element;
+  /** Before the close button: the file viewer's split. */
+  headerSuffix?: JSX.Element;
   height?: string;
   empty?: string;
   onToggleWrap: () => void;
@@ -163,7 +165,8 @@ export default function WorkspaceFileSlot(props: {
   // announce: the file vanished while it was on screen, which is worth saying.
   // A stale stored path that simply does not exist here clears in silence.
   onRemoved: (path: string, announce: boolean) => void;
-  onReplace: (path: string) => void;
+  /** Absent where the file cannot be replaced from here (a pane's file viewer; the navigator can). */
+  onReplace?: (path: string) => void;
   onDelete: (path: string) => void;
   onLoaded?: (file: FileSummary | null) => void;
   onSaved?: () => void;
@@ -468,6 +471,7 @@ export default function WorkspaceFileSlot(props: {
       <WorkbenchButton type="button" aria-label="Save file" title="Save file (Ctrl+S)" disabled={saving()} onClick={() => void save()}><Show when={saving()} fallback={<SaveIcon />}><Spinner /></Show>Save</WorkbenchButton>
     </Show>
     {fileActions()}
+    {props.headerSuffix}
     <Show when={props.closable}><WorkbenchButton type="button" class="workspace-preview-action workspace-preview-close" aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><XIcon /></WorkbenchButton></Show>
   </>;
   const previewStatus = (file: FileMetadata & { kind: FileKind; mime: string }) => <WorkbenchStatus commands={
@@ -501,6 +505,7 @@ export default function WorkspaceFileSlot(props: {
           {gitControls()}
           <WorkbenchButton type="button" class="workspace-preview-action" aria-label="Download file" title="Download file" onClick={() => void download()}><DownloadIcon /></WorkbenchButton>
           <WorkbenchButton type="button" class="workspace-preview-copy" aria-label="Copy file path" title="Copy file path" onClick={() => copy(file().path)}><CopyIcon /></WorkbenchButton>
+          {props.headerSuffix}
           <Show when={props.closable}>
             <WorkbenchButton type="button" class="workspace-preview-action workspace-preview-close" aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><XIcon /></WorkbenchButton>
           </Show>
@@ -621,7 +626,7 @@ export default function WorkspaceFileSlot(props: {
             <ContextMenuItem onSelect={() => copy(currentText())}><CopyIcon />Copy contents</ContextMenuItem>
           </Show>
           <ContextMenuItem onSelect={() => void download()}><DownloadIcon />Download</ContextMenuItem>
-          <ContextMenuItem disabled={props.busy || saving()} onSelect={() => props.onReplace(file().path)}><UploadIcon />Replace with upload…</ContextMenuItem>
+          <Show when={props.onReplace}><ContextMenuItem disabled={props.busy || saving()} onSelect={() => props.onReplace?.(file().path)}><UploadIcon />Replace with upload…</ContextMenuItem></Show>
           <ContextMenuItem onSelect={() => copy(file().path)}><CopyIcon />Copy path</ContextMenuItem>
         </ContextMenuGroup>
         <ContextMenuSeparator />

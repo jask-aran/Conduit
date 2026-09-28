@@ -73,6 +73,8 @@ import { ShortcutManager } from "./shortcuts/shortcut-manager";
 import { isShortcutRegion } from "./shortcuts/shortcut-types";
 import { acknowledgeRegion } from "./shortcuts/region-cue";
 import { globalShortcuts } from "./shortcuts/global-shortcuts";
+import { formatFileView, parseFileView, sameFileEntry, type FileEntry } from "./workspace/file-documents";
+import type { FileSlotHandle, FileSummary } from "./workspace/workspace-file-slot";
 import { dropScope, migrateWorkspacePanelStorage, readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace/workspace-panel-storage";
 import { readToolDrag, TOOL_DRAG_TYPE, WorkspaceRail } from "./workspace/workspace-rail";
 import { isPanelTab, isSplitView, type SplitView } from "./workspace/workspace-types";
@@ -152,6 +154,7 @@ type WorkspaceView = "files" | "diff" | "chat" | "terminal";
 const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field";
 const selectedMeteorField = () => localStorage.getItem(METEOR_FIELD_STORAGE_KEY) !== "false";
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
+const FileViewer = lazy(() => import("./workspace/workspace-file-viewer"));
 const ComputerDashboard = lazy(() => import("./dashboard/computer-dashboard").then((module) => ({ default: module.ComputerDashboard })));
 const ProjectDashboard = lazy(() => import("./project/dashboard"));
 const HarnessDashboard = lazy(() => import("./dashboard/harness-dashboard"));
@@ -2130,7 +2133,10 @@ function App() {
   const shownSlots = createMemo(() => dockAvailable() && !isMobileLayout() && splitFits(1) ? slotOrder().filter((slot) => slotView(slot)).slice(0, maxExtras()) : [], [], { equals: (a, b) => a.length === b.length && a.every((slot, index) => slot === b[index]) });
   const splitShown = () => shownSlots().length > 0;
   const isPaneView = (view: SplitView | null) => Boolean(view && /^(chat|page):/.test(view));
-  const toolSlot = () => shownSlots().find((slot) => !isPaneView(slotView(slot))) ?? null;
+  // A tool the dock lends a pane (a whole tool, the legacy file beside, a
+  // terminal) -- not a chat, a page or a file viewer, which panes draw themselves.
+  const isToolView = (view: SplitView | null) => Boolean(view && !isPaneView(view) && !view.startsWith("files:"));
+  const toolSlot = () => shownSlots().find((slot) => isToolView(slotView(slot))) ?? null;
   const toolView = () => { const slot = toolSlot(); return slot === null ? null : slotView(slot); };
   const toolHost = () => { const slot = toolSlot(); return slot === null ? undefined : paneSlot(slot).host(); };
   const splitToolShown = () => { const view = toolView(); return isPanelTab(view) ? view : null; };
@@ -2151,6 +2157,8 @@ function App() {
   // A slot's view; null closes the pane. `position` places a new pane in the order.
   const setSlotView = (slot: number, next: SplitView | null, toDock = false, position?: number) => {
     if (slotView(slot) === "file" && next !== "file" && releaseSplitFile && !releaseSplitFile(toDock)) return false;
+    if (parseFileView(slotView(slot)) && !next?.startsWith("files:") && fileHandles[slot]!.some((handle) => handle?.hasUnsavedChanges())
+      && !window.confirm("Discard unsaved changes and close this file?")) return false;
     batch(() => {
       setSlotViews((current) => current.map((view, index) => index === slot ? next : view));
       setSlotOrder((current) => {
@@ -2198,7 +2206,7 @@ function App() {
     const from = paneOf(document.activeElement);
     const pane = from ?? keyboardPane();
     const position = pane === "main" ? 0 : Math.max(0, shown.indexOf(pane) + 1);
-    let slot = isPaneView(view) ? null : toolSlot();
+    let slot = isToolView(view) ? toolSlot() : null;
     if (slot === null && shown.length >= maxExtras()) slot = shown[position] ?? shown[position - 2] ?? shown[shown.length - 1] ?? null;
     const displaced = slot === null ? null : slotView(slot);
     if (slot === null) slot = [0, 1].find((candidate) => !slotOrder().includes(candidate)) ?? null;
@@ -2226,6 +2234,67 @@ function App() {
     if (splitToolShown() === tool) focusSplit(toolSlot());
     else if (panelOpen() && dockTool() === tool) closePanel();
     else openWorkspaceView(tool);
+  };
+  /*
+   * File viewers (6d-2). The navigator opens a file into the **file pane** --
+   * the pane that last showed a file viewer, wherever the keyboard is -- so
+   * opening files never replaces the chat being typed in; into the viewer's
+   * focused entry when it shows two. With no file pane, or with Alt, it opens
+   * a new pane beside, as a chat opened beside does.
+   */
+  const [filePane, setFilePane] = createSignal<number | null>(null);
+  const [fileFocus, setFileFocus] = createSignal<Record<number, number>>({});
+  const [fileWrap, setFileWrap] = createSignal(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines") === "true");
+  const toggleFileWrap = () => { const next = !fileWrap(); setFileWrap(next); writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines", String(next)); };
+  const fileHandles: (FileSlotHandle | undefined)[][] = [[], []];
+  let pendingFileEdit: FileEntry | null = null;
+  createEffect(() => { const pane = keyboardPane(); if (pane !== "main" && parseFileView(slotView(pane))) setFilePane(pane); });
+  const focusFileEntry = (slot: number, index: number) => setFileFocus((current) => ({ ...current, [slot]: index }));
+  const canOpenFilePanes = () => dockAvailable() && !isMobileLayout() && splitFits(1);
+  const openFileDocument = (entry: FileEntry, options: { beside: boolean; edit: boolean }) => {
+    if (options.edit) pendingFileEdit = entry;
+    for (const slot of shownSlots()) {
+      const index = parseFileView(slotView(slot))?.findIndex((item) => sameFileEntry(item, entry)) ?? -1;
+      if (index < 0) continue;
+      focusFileEntry(slot, index);
+      setFilePane(slot);
+      focusPane(slot);
+      if (options.edit) { pendingFileEdit = null; fileHandles[slot]![index]?.edit(); }
+      return;
+    }
+    const pane = filePane();
+    const target = !options.beside && pane !== null && shownSlots().includes(pane) ? parseFileView(slotView(pane)) : null;
+    if (pane === null || !target) {
+      const view = formatFileView([entry]);
+      openBeside(view, false);
+      const placed = shownSlots().find((slot) => slotView(slot) === view);
+      if (placed !== undefined) { setFilePane(placed); focusFileEntry(placed, 0); }
+      return;
+    }
+    const index = Math.min(fileFocus()[pane] ?? 0, target.length - 1);
+    if (fileHandles[pane]![index]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and open another file?")) return;
+    fileHandles[pane]![index]?.discardChanges();
+    setSlotView(pane, formatFileView(target.map((item, at) => at === index ? entry : item)));
+  };
+  const splitFileViewer = (slot: number) => {
+    const entries = parseFileView(slotView(slot));
+    if (!entries || entries.length > 1) return;
+    setSlotView(slot, formatFileView([entries[0]!, entries[0]!]));
+    focusFileEntry(slot, 1);
+  };
+  const closeFileEntry = (slot: number, index: number) => {
+    const entries = parseFileView(slotView(slot));
+    if (!entries) return;
+    fileHandles[slot]![index] = undefined;
+    if (entries.length === 1) return closeSlot(slot);
+    setSlotView(slot, formatFileView(entries.filter((_, at) => at !== index)));
+    focusFileEntry(slot, 0);
+  };
+  const noteFileLoaded = (slot: number, index: number, file: FileSummary | null) => {
+    const entry = parseFileView(slotView(slot))?.[index];
+    if (!file || !entry || !pendingFileEdit || !sameFileEntry(pendingFileEdit, entry)) return;
+    pendingFileEdit = null;
+    fileHandles[slot]![index]?.edit();
   };
   /*
    * A chat or page in a pane beside A (stages 4, 5, 6b). Pane A keeps the URL
@@ -3438,6 +3507,13 @@ function App() {
       const attachInput = () => <input ref={side.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) side.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />;
       return <section ref={(element) => { pane.setHost(element); onCleanup(() => pane.setHost(undefined)); }} class="main-split" data-pane-slot={slot} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={position() === 0 ? "Pane B" : "Pane C"} style={{ flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": `${MIN_SPLIT_PANE_WIDTH}px` }}>
         <div class="main-split-resize" role="separator" aria-label="Resize panes" aria-orientation="vertical" onPointerDown={(event) => startSplitResize(event, position() + 1)} />
+        <Show when={parseFileView(slotView(slot))}>{(entries) =>
+          <div class="workspace-split-surface">
+            <FileViewer entries={entries()} focused={fileFocus()[slot] ?? 0} wrap={fileWrap()} onToggleWrap={toggleFileWrap} commentChatId={focusedChat().loadedId()}
+              onFocusEntry={(index) => { focusFileEntry(slot, index); setFilePane(slot); }} onSplit={() => splitFileViewer(slot)} onCloseEntry={(index) => closeFileEntry(slot, index)}
+              onLoaded={(index, file) => noteFileLoaded(slot, index, file)} ref={(index, handle) => { fileHandles[slot]![index] = handle; }} />
+          </div>
+        }</Show>
         <Show when={page()}>
           <div class="main-split-chat main-split-page">
             {attachInput()}
@@ -3462,8 +3538,8 @@ function App() {
         </Show>
       </section>;
     }}</For>
-    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
-    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
+    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
+    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </div>
     <WorkspaceRail tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard"].includes(routeKind()) && selectedProject() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
       current={panelOpen() ? dockTool() : null} inSplit={splitToolShown()} onDock={moveToDock} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : dockProject()?.kind === "workspace"} onChoose={chooseRailTool} />
