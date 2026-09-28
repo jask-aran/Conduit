@@ -112,6 +112,7 @@ export default function FileViewer(props: {
     if (!squeezed()) return;
     header.setAttribute("data-compact", "actions");
     if (squeezed()) header.setAttribute("data-compact", "tight");
+    if (squeezed()) header.setAttribute("data-compact", "bare");
   });
   const resized = new ResizeObserver(fitHeaders);
   const changed = new MutationObserver(fitHeaders);

@@ -1,6 +1,6 @@
 import { WorkbenchButton, WorkbenchStatus } from "./workspace-workbench";
 import { batch, createEffect, createSignal, lazy, on, onCleanup, Show, Suspense, type JSX } from "solid-js";
-import { CopyIcon, DownloadIcon, EllipsisIcon, FileCode2Icon, FileDiffIcon, GitCompareArrowsIcon, PencilIcon, SaveIcon, Trash2Icon, UploadIcon, XIcon } from "lucide-solid";
+import { CopyIcon, DownloadIcon, EllipsisIcon, WrapTextIcon, FileCode2Icon, FileDiffIcon, GitCompareArrowsIcon, PencilIcon, SaveIcon, Trash2Icon, UploadIcon, XIcon } from "lucide-solid";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Menu, MenuContent, MenuItem, MenuTrigger, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";
@@ -481,6 +481,7 @@ export default function WorkspaceFileSlot(props: {
         <Show when={hasChanges()}><MenuItem onSelect={() => props.onShowDiff?.(false)}><FileDiffIcon />Review unstaged changes</MenuItem></Show>
         <Show when={hasStaged()}><MenuItem onSelect={() => props.onShowDiff?.(true)}><GitCompareArrowsIcon />Review staged changes</MenuItem></Show>
         {props.headerMenuItems}
+        <MenuItem onSelect={() => props.onToggleWrap()}><WrapTextIcon />{props.wrap ? "Stop wrapping lines" : "Wrap lines"}</MenuItem>
         <MenuItem onSelect={() => copy(currentText())}><CopyIcon />Copy contents</MenuItem>
         <MenuItem onSelect={() => copy(props.path ?? "")}><FileCode2Icon />Copy path</MenuItem>
         <MenuItem onSelect={() => void download()}><DownloadIcon />Download</MenuItem>
