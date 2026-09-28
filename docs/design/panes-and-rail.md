@@ -276,7 +276,7 @@ file, a terminal or a tool.
   chat on the same component; `side-chat.ts` and the repeated markup go.
   Leader commands, the model selector, stash and the rest act on the focused
   pane's session.
-- **5d. Pages as pane views** -- built for the dashboard and project pages; Computer and harness pages still pane A only (their state is single in `main.tsx`). The dashboard, project pages, Computer and
+- **5d. Pages as pane views** -- built for the dashboard, project pages and Computer (a pane beside A browses its own folder); harness pages still pane A only (their composer drafts run on pane A's chat). The dashboard, project pages, Computer and
   harness pages can sit on either side, their composers on that pane's
   session.
 - **5e. Tools as pane views** -- superseded by 6c. Files, Source Control, Chat review and

@@ -1451,6 +1451,40 @@ function App() {
     } catch (error) { showError(error); }
   };
 
+  /*
+   * The Computer page in a pane beside pane A browses on its own: a folder
+   * of its own, sharing the folder cache; what it opens goes where pane A's
+   * Computer page sends it.
+   */
+  const renderPaneComputer = (slot: number) => {
+    const [location, setLocation] = createSignal<ComputerLocation | null>(computerLocation());
+    const [loading, setLoading] = createSignal(false);
+    const [error, setError] = createSignal("");
+    let request = 0;
+    const browse = async (path?: string) => {
+      const mine = ++request;
+      const cached = computerFolders.get(path || location()?.home || "");
+      if (cached) setLocation(cached);
+      setLoading(!cached);
+      setError("");
+      try {
+        const next = await api<ComputerLocation>(`/v0/computer${path ? `?path=${encodeURIComponent(path)}` : ""}`);
+        if (mine !== request) return;
+        cacheComputerFolder(next);
+        setLocation(next);
+        prefetchComputerFolders(next);
+      } catch (failure) {
+        if (mine === request) setError(failure instanceof Error ? failure.message : "Folder could not be opened");
+      } finally {
+        if (mine === request) setLoading(false);
+      }
+    };
+    if (!location()) void browse();
+    return <>
+      <ChatHeader title="Computer" tabActions={paneTabActions(slot)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard alone />
+      <ComputerDashboard projects={catalogue.projects()} location={location()} loading={loading()} error={error()} onOpenHarnessHere={openComputerHarnessHere} onBrowse={(path) => void browse(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => { const here = location(); if (here) void createComputerWorkspace(here.project.workingRoot); }} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProjectHere(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={(path) => { const here = location(); if (here) openFileDocument({ projectId: here.project.id, path }, { beside: altActivation(), edit: false }); }} />
+    </>;
+  };
   const openComputer = (historyMode: "push" | "none" = "push") => {
     if (!leaveHarnessThread()) return;
     leaveChat(historyMode === "none");
@@ -2444,6 +2478,7 @@ function App() {
   };
   const openProjectHere = (project: Project) => openInFocusedPane(`page:project:${project.id}`, () => openProject(project));
   const openDashboardHere = () => openInFocusedPane("page:dashboard", () => openDashboard());
+  const openComputerHere = () => openInFocusedPane("page:computer", () => openComputer());
   const openChatFromPage = async (target: ChatSummary, project: Project) => {
     if (altActivation()) openChatBeside(target, project); else await openChatHere(target, project);
   };
@@ -2476,7 +2511,7 @@ function App() {
      * closes unsent, and the pane's chat once it is sent.
      */
     createEffect(on(() => [slotPage(slot), catalogue.loaded(), templatesLoading(), shownSlots().includes(slot)] as const, ([page, loaded, loading, shown]) => {
-      if (!page) return discardPaneDraft(pane);
+      if (!page || page === "computer") return discardPaneDraft(pane);
       if (!loaded || loading || !shown) return;
       const project = untrack(() => slotPageProject(slot));
       if (!project) return void setSlotView(slot, null);
@@ -2513,7 +2548,7 @@ function App() {
     setSlotView(pane.index, `chat:${id}`);
     await side.chat.send();
   };
-  const openPageBeside = (page: "dashboard" | `project:${string}`) => { if (!isMobileLayout()) openBeside(`page:${page}`, false); };
+  const openPageBeside = (page: "dashboard" | "computer" | `project:${string}`) => { if (!isMobileLayout()) openBeside(`page:${page}`, false); };
   // The same chat in two panes is one chat: pane A taking it closes the other.
   createEffect(() => { const id = mainChatId(); if (swappingPanes) return; for (const slot of shownSlots()) if (id && slotChatId(slot) === id) setSlotView(slot, null); });
   /*
@@ -2560,11 +2595,13 @@ function App() {
   const paneARouteView = (): SplitView | null => {
     if (routeKind() === "chat" && catalogue.selectedId()) return `chat:${catalogue.selectedId()}`;
     if (routeKind() === "dashboard") return "page:dashboard";
+    if (routeKind() === "computer" && !computerHarness()) return "page:computer";
     if (routeKind() === "project" && selectedProject()) return `page:project:${selectedProject()!.id}`;
     return null;
   };
   const openInPaneA = async (view: SplitView) => {
     if (view === "page:dashboard") return openDashboard();
+    if (view === "page:computer") return openComputer();
     if (view.startsWith("page:project:")) {
       const project = catalogue.projects().find((item) => item.id === view.slice("page:project:".length));
       return project ? openProject(project) : undefined;
@@ -3642,7 +3679,7 @@ function App() {
           if (created) openWorkspaceView("terminal", terminal.id);
         });
       }}
-      onOpenComputer={() => openComputer()}
+      onOpenComputer={() => { if (altActivation()) openPageBeside("computer"); else void openComputerHere(); }}
       onOpenHarness={(id) => openComputerHarness(id)} selectedHarness={computerHarness()}
       onOpenTerminalView={() => openTerminalRoute()}
       onOpenDashboard={() => { if (altActivation()) openPageBeside("dashboard"); else void openDashboardHere(); }}
@@ -3695,7 +3732,7 @@ function App() {
         </Show>
         <Show when={routeKind() === "computer"}>
           <Show when={harnessThread()} fallback={<Show when={computerHarness()} fallback={<>
-            <ChatHeader title="Computer" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard alone />
+            <ChatHeader title="Computer" tabActions={paneTabActions("main")} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard alone />
             <ComputerDashboard projects={catalogue.projects()} location={computerLocation()} loading={computerLoading()} error={computerError()} onOpenHarnessHere={openComputerHarnessHere} onBrowse={(path) => void browseComputer(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => void designateComputerWorkspace()} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProject(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={(path) => { setComputerFile({ path }); openWorkspaceView("files"); }} />
           </>}>{(harnessId) => <>
             <ChatHeader title={harnessLabelFor(harnessId()) || harnessId()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard alone />
@@ -3770,7 +3807,10 @@ function App() {
       return <section ref={(element) => { pane.setHost(element); onCleanup(() => pane.setHost(undefined)); }} class="main-split" data-pane-slot={slot} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={position() === 0 ? "Pane B" : "Pane C"} style={{ flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": `${MIN_SPLIT_PANE_WIDTH}px` }}>
         <div class="main-split-resize" role="separator" aria-label="Resize panes" aria-orientation="vertical" onPointerDown={(event) => startSplitResize(event, position() + 1)} />
         <Show when={parseFileView(slotView(slot))}>{(entries) => renderFileViewer(slot, entries())}</Show>
-        <Show when={page()}>
+        <Show when={page() === "computer"}>
+          <div class="main-split-chat main-split-page">{renderPaneComputer(slot)}</div>
+        </Show>
+        <Show when={page() && page() !== "computer"}>
           <div class="main-split-chat main-split-page">
             {attachInput()}
             <Show when={page() === "dashboard"} fallback={<Show when={slotPageProject(slot)}>{(project) =>
