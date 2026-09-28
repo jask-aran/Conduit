@@ -2535,11 +2535,28 @@ function App() {
     check();
   });
   /*
-   * The swap's motion: the right pane fades out, the left slides over into
+   * The swap's motion. By default both panes fade out, the documents change
+   * places, and both fade in at their new places' widths. With Shift, the
+   * slide being compared: the right pane fades out, the left slides over into
    * its place unchanged -- no width change, so nothing re-renders while it
-   * moves -- and what was on the right fades in on the left. The panes keep
-   * their widths: a width belongs to the position, not the document.
+   * moves -- and what was on the right fades in on the left. Either way the
+   * panes keep their widths: a width belongs to the position, not the document.
    */
+  const SWAP_FADE_MS = 140;
+  const crossfadeSwap = async (left: HTMLElement, right: HTMLElement, place: () => Promise<void>) => {
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const both = [left, right];
+    if (!still) await Promise.all(both.map((element) => element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_FADE_MS, easing: "ease-out", fill: "forwards" }).finished));
+    for (const element of both) element.style.opacity = "0";
+    both.forEach((element) => element.getAnimations().forEach((animation) => animation.cancel()));
+    try { await place(); } finally {
+      // A reorder moves the elements themselves; find them again where they are.
+      await Promise.all(both.map(async (element) => {
+        if (!still) await element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SWAP_FADE_MS, easing: "ease-out" }).finished;
+        element.style.opacity = "";
+      }));
+    }
+  };
   const animateSwap = async (left: HTMLElement, right: HTMLElement, reorder: boolean, placeRight: () => Promise<void> | void, placeLeft: () => Promise<void> | void) => {
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (!still) {
@@ -2555,10 +2572,10 @@ function App() {
     incoming.style.opacity = "0";
     for (const element of [left, right]) { element.getAnimations().forEach((animation) => animation.cancel()); element.style.zIndex = ""; }
     await placeLeft();
-    if (!still) await incoming.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: "ease-out" }).finished;
+    if (!still) await incoming.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SWAP_FADE_MS, easing: "ease-out" }).finished;
     incoming.style.opacity = "";
   };
-  const swapPanes = async (pane: PaneKey) => {
+  const swapPanes = async (pane: PaneKey, slide = false) => {
     const partner = swapPartner(pane);
     if (partner === null || swappingPanes) return;
     const [leftPane, rightPane] = pane === "main" || (partner !== "main" && shownSlots().indexOf(partner) > shownSlots().indexOf(pane as number)) ? [pane, partner] : [partner, pane];
@@ -2571,18 +2588,22 @@ function App() {
         const slot = rightPane as number;
         const aView = paneAView()!;
         const bView = slotView(slot)!;
-        await animateSwap(left, right, false, async () => {
+        const placeRight = async () => {
           setSlotView(slot, aView);
           const id = aView.startsWith("chat:") ? aView.slice("chat:".length) : null;
           await waitFor(() => !id || paneSlot(slot).session.chat.loadedId() === id);
-        }, () => openInPaneA(bView));
+        };
+        if (slide) await animateSwap(left, right, false, placeRight, () => openInPaneA(bView));
+        else await crossfadeSwap(left, right, async () => { await Promise.all([placeRight(), openInPaneA(bView)]); });
       } else {
         const a = leftPane as number;
         const b = rightPane as number;
-        await animateSwap(left, right, true, () => {
+        const reorder = () => {
           setSlotOrder((order) => order.map((slot) => slot === a ? b : slot === b ? a : slot));
           persistSlots();
-        }, () => {});
+        };
+        if (slide) await animateSwap(left, right, true, reorder, () => {});
+        else await crossfadeSwap(left, right, async () => reorder());
       }
     } finally {
       swappingPanes = false;
@@ -2600,7 +2621,7 @@ function App() {
   };
   const paneTabActions = (pane: PaneKey) => <Show when={splitShown()}>
     <span class="pane-tab-actions">
-      <Show when={swapPartner(pane) !== null}><button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Swap with the pane beside" title="Swap" onClick={() => void swapPanes(pane)}><ArrowLeftRightIcon /></button></Show>
+      <Show when={swapPartner(pane) !== null}><button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Swap with the pane beside" title="Swap" onClick={(event) => void swapPanes(pane, event.shiftKey)}><ArrowLeftRightIcon /></button></Show>
       <Show when={pane !== "main" || isPaneView(slotView(shownSlots()[0] ?? -1))}><button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Close this pane" title="Close" onClick={() => closePane(pane)}><XIcon /></button></Show>
     </span>
   </Show>;
