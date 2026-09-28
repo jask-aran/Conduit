@@ -65,7 +65,7 @@ import { DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/att
 import { createDrafts } from "./state/drafts";
 import { createCatalogueStore } from "./state/catalogue";
 import { markChatRead } from "./state/read-receipts";
-import { createSideChat } from "./state/side-chat";
+import { createSideChat, type SideChat } from "./state/side-chat";
 import { createRuntimeStore } from "./state/runtime";
 import { VoiceWaveform } from "./chat/voice-waveform";
 import { browserShortcutEnvironmentProvider } from "./shortcuts/shortcut-environment";
@@ -542,6 +542,11 @@ function HeaderActions(props: { children: JSX.Element }) {
   </div>;
 }
 
+/** Pane A, or the slot of a pane beside it (docs/design/panes-and-rail.md, 6b). */
+type PaneKey = "main" | number;
+/** A pane beside pane A: its chat session, its host element, and a page's unsent chat. */
+type PaneSlot = { index: number; session: SideChat; host: () => HTMLElement | undefined; setHost: (element: HTMLElement | undefined) => void; draft: { id: string; projectId: string } | null };
+
 function App() {
   const logout = async () => {
     if (nativeApp) {
@@ -619,13 +624,21 @@ function App() {
   const [workspaceViewRequest, setWorkspaceViewRequest] = createSignal<{ tab: WorkspaceView; terminalId?: string; nonce: number } | null>(null);
   // The tool the dock shows, as the dock reports it, so the rail can mark it
   // before the dock's chunk has loaded.
-  // What the main pane's split holds beside the chat or page -- a tool moved
-  // out of the dock, or a file or terminal opened beside -- and the share of
-  // the main pane it takes; both per device.
-  const storedSplit = readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split");
-  const [splitView, setSplitViewState] = createSignal<SplitView | null>(isSplitView(storedSplit) ? storedSplit : null);
+  // What the panes beside pane A hold, by slot -- a tool moved out of the
+  // dock, a file or terminal opened beside, a chat or a page -- their order
+  // left to right, and the shares of the main pane they take; per device.
+  const storedViews = [readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split"), readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-2")].map((value) => isSplitView(value) ? value : null);
+  const initialViews: (SplitView | null)[] = storedViews[0] ? [storedViews[0], storedViews[1] ?? null] : [storedViews[1] ?? null, null];
+  const [slotViews, setSlotViews] = createSignal(initialViews);
+  const [slotOrder, setSlotOrder] = createSignal<number[]>([0, 1].filter((slot) => initialViews[slot]));
   const [splitRatio, setSplitRatio] = createSignal(Math.max(0.2, Math.min(0.8, Number(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratio")) || 0.5)));
-  const [splitHost, setSplitHost] = createSignal<HTMLElement>();
+  const [splitRatios3, setSplitRatios3] = createSignal<number[]>((() => {
+    try {
+      const stored = JSON.parse(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratios") || "null");
+      if (Array.isArray(stored) && stored.length === 3 && stored.every((value) => typeof value === "number" && value > 0)) return stored;
+    } catch {}
+    return [0.4, 0.3, 0.3];
+  })());
   const [layoutWidth, setLayoutWidth] = createSignal(window.innerWidth);
   const [splitDropActive, setSplitDropActive] = createSignal(false);
   const [dockTool, setDockTool] = createSignal<WorkspaceView>((() => {
@@ -905,10 +918,18 @@ function App() {
     }),
   });
   const { chat, models, permissions, serviceLevels, attachments, activeProfile, composerStatus, setComposerStatus } = session;
-  const side = createSideChat({
-    runtime, projects: catalogue.projects, refresh: catalogue.refresh, patchChat: catalogue.patchChat, drafts, maxAttachmentBytes,
-    harnessCapabilities, profiles, onError: showError, defaultTemplateId, saveWorkspaceDefault,
+  // Panes B and C: a slot each, with its own chat session (6b).
+  const paneSlots: PaneSlot[] = [0, 1].map((index) => {
+    const [host, setHost] = createSignal<HTMLElement>();
+    return {
+      index, host, setHost, draft: null,
+      session: createSideChat({
+        runtime, projects: catalogue.projects, refresh: catalogue.refresh, patchChat: catalogue.patchChat, drafts, maxAttachmentBytes,
+        harnessCapabilities, profiles, onError: showError, defaultTemplateId, saveWorkspaceDefault,
+      }),
+    };
   });
+  const paneSlot = (slot: number) => paneSlots[slot]!;
   // Not awaited: a round trip in front of first paint is a poor price for a
   // race that asking again closes. A chat that opened before this landed is
   // told to look once more, and a composer with something in it is left alone.
@@ -1725,7 +1746,7 @@ function App() {
   };
   const focusComposer = () => {
     const composer = ".composer textarea:not([disabled])";
-    ((sideHasKeyboard() ? document.querySelector<HTMLTextAreaElement>(`.main-split ${composer}`) : null)
+    ((keyboardSlot() !== null ? document.querySelector<HTMLTextAreaElement>(`${paneSelector(keyboardSlot()!)} ${composer}`) : null)
       ?? document.querySelector<HTMLTextAreaElement>(`.chat-main ${composer}`)
       ?? document.querySelector<HTMLTextAreaElement>(composer))?.focus({ preventScroll: true });
   };
@@ -1826,7 +1847,7 @@ function App() {
   const hasTranscript = () => Boolean(document.querySelector(".message-scroller-viewport"));
   const focusTranscript = () => {
     if (isMobileLayout()) setMobileSidebarOpen(false);
-    ((sideHasKeyboard() ? document.querySelector<HTMLElement>(".main-split .message-scroller-viewport") : null)
+    ((keyboardSlot() !== null ? document.querySelector<HTMLElement>(`${paneSelector(keyboardSlot()!)} .message-scroller-viewport`) : null)
       ?? document.querySelector<HTMLElement>(".message-scroller-viewport"))?.focus({ preventScroll: true });
   };
   const toggleChatWorkspaceFocus = () => {
@@ -1915,9 +1936,10 @@ function App() {
     try {
       await api(`/v0/sessions/${id}/move`, { method: "POST", body: JSON.stringify({ projectId: destination.id }) });
       await refresh();
-      if (target === side) {
-        const moved = side.selected();
-        if (moved) await side.open(moved.chat, moved.project);
+      const pane = paneSlots.find((item) => item.session === target);
+      if (pane) {
+        const moved = pane.session.selected();
+        if (moved) await pane.session.open(moved.chat, moved.project);
       } else if (routeKind() === "chat") catalogue.selectProject(destination);
     } catch (error) { showError(error); }
   };
@@ -2093,10 +2115,27 @@ function App() {
     setPanelOpenForChat(true);
   };
   const dockAvailable = () => routeKind() === "computer" ? Boolean(computerLocation()) : ["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope());
-  // The split shows while the main pane can hold both sides at their minimums;
-  // narrower, the dock gives way first (its own clamp), then the split folds.
-  const splitShown = () => Boolean(splitView()) && dockAvailable() && !isMobileLayout() && layoutWidth() >= MIN_MAIN_PANE_WIDTH + MIN_SPLIT_PANE_WIDTH + 16;
-  const splitToolShown = () => { const view = splitView(); return splitShown() && isPanelTab(view) ? view : null; };
+  /*
+   * The panes beside pane A (docs/design/panes-and-rail.md, 6b): up to two,
+   * B and C, each a slot with its own view, session and host, shown left to
+   * right in `slotOrder`. A slot is in the order exactly when it holds a view.
+   * The panes show while the main pane can hold them at their minimums;
+   * narrower, the dock gives way first (its own clamp), then the last pane
+   * folds, then the split. At most one pane holds a tool: the dock's views
+   * move to it, as they did to the one split.
+   */
+  const slotView = (slot: number) => slotViews()[slot] ?? null;
+  const splitFits = (extra: number) => layoutWidth() >= MIN_MAIN_PANE_WIDTH + extra * (MIN_SPLIT_PANE_WIDTH + 16);
+  const maxExtras = () => splitFits(2) ? 2 : 1;
+  const shownSlots = createMemo(() => dockAvailable() && !isMobileLayout() && splitFits(1) ? slotOrder().filter((slot) => slotView(slot)).slice(0, maxExtras()) : [], [], { equals: (a, b) => a.length === b.length && a.every((slot, index) => slot === b[index]) });
+  const splitShown = () => shownSlots().length > 0;
+  const isPaneView = (view: SplitView | null) => Boolean(view && /^(chat|page):/.test(view));
+  const toolSlot = () => shownSlots().find((slot) => !isPaneView(slotView(slot))) ?? null;
+  const toolView = () => { const slot = toolSlot(); return slot === null ? null : slotView(slot); };
+  const toolHost = () => { const slot = toolSlot(); return slot === null ? undefined : paneSlot(slot).host(); };
+  const splitToolShown = () => { const view = toolView(); return isPanelTab(view) ? view : null; };
+  // Pane A's share and each pane's beside it, by position; per device.
+  const paneWeights = () => shownSlots().length === 2 ? splitRatios3() : shownSlots().length === 1 ? [1 - splitRatio(), splitRatio()] : [1];
   // The file beside is the dock's, so leaving it asks the dock first: an
   // unsaved edit, or the file moving into the dock's Files.
   let releaseSplitFile: ((toDock: boolean) => boolean) | undefined;
@@ -2104,83 +2143,124 @@ function App() {
     releaseSplitFile = release;
     return () => { if (releaseSplitFile === release) releaseSplitFile = undefined; };
   };
-  const saveSplitView = (next: SplitView | null, toDock = false) => {
-    if (splitView() === "file" && next !== "file" && releaseSplitFile && !releaseSplitFile(toDock)) return false;
-    setSplitViewState(next);
-    writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split", next ?? "");
+  const persistSlots = () => {
+    const views = slotOrder().map(slotView).filter(Boolean);
+    writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split", views[0] ?? "");
+    writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-2", views[1] ?? "");
+  };
+  // A slot's view; null closes the pane. `position` places a new pane in the order.
+  const setSlotView = (slot: number, next: SplitView | null, toDock = false, position?: number) => {
+    if (slotView(slot) === "file" && next !== "file" && releaseSplitFile && !releaseSplitFile(toDock)) return false;
+    batch(() => {
+      setSlotViews((current) => current.map((view, index) => index === slot ? next : view));
+      setSlotOrder((current) => {
+        if (!next) return current.filter((item) => item !== slot);
+        if (current.includes(slot)) return current;
+        const order = [...current];
+        order.splice(position ?? order.length, 0, slot);
+        return order;
+      });
+    });
+    persistSlots();
     return true;
   };
-  const focusSplit = () => requestAnimationFrame(() => {
-    const content = splitHost()?.querySelector<HTMLElement>(".workspace-panel-content, .composer textarea:not([disabled])");
+  const paneSelector = (pane: PaneKey) => pane === "main" ? ".chat-main" : `.main-split[data-pane-slot="${pane}"]`;
+  const paneOf = (element: Element | null | undefined): PaneKey | null => {
+    const section = element?.closest<HTMLElement>(".main-split");
+    if (section) return Number(section.dataset.paneSlot);
+    return element?.closest(".chat-main") ? "main" : null;
+  };
+  const focusSplit = (slot: number | null = toolSlot() ?? shownSlots()[0] ?? null) => requestAnimationFrame(() => {
+    const content = slot === null ? null : paneSlot(slot).host()?.querySelector<HTMLElement>(".workspace-panel-content, .composer textarea:not([disabled])");
     focusFirst(content);
     if (!content?.contains(document.activeElement)) content?.focus({ preventScroll: true });
   });
-  // A tool moved in, or a file or terminal opened beside. Whatever held the
-  // split goes back to the dock, which opens on it when that is where the
-  // reader was working.
+  const [keyboardPane, setKeyboardPane] = createSignal<PaneKey>("main");
+  // The pane beside A with the keyboard, when it holds a chat or a page.
+  const keyboardSlot = () => { const pane = keyboardPane(); return pane !== "main" && shownSlots().includes(pane) && isPaneView(slotView(pane)) ? pane : null; };
+  const sideHasKeyboard = () => keyboardSlot() !== null;
+  const slotHasKeyboard = (slot: number) => keyboardSlot() === slot;
+  const focusPane = (slot: number) => { setKeyboardPane(slot); focusSplit(slot); };
+  /*
+   * Open beside the pane with the keyboard, as VS Code opens to the side: into
+   * the pane to its right, or a new pane when there is room for one, or else
+   * the pane to its left. A view a pane already shows is gone to there; a tool
+   * goes to the pane that holds one. Whatever a tool displaces goes back to the
+   * dock, which opens on it when that is where the reader was working.
+   */
   const openBeside = (view: SplitView) => {
-    const displaced = splitView();
-    const fromSplit = Boolean(document.activeElement?.closest(".main-split"));
-    if (!saveSplitView(view)) return;
+    const shown = shownSlots();
+    const showing = shown.find((slot) => slotView(slot) === view);
+    if (showing !== undefined) return focusPane(showing);
+    const from = paneOf(document.activeElement);
+    const pane = from ?? keyboardPane();
+    const position = pane === "main" ? 0 : Math.max(0, shown.indexOf(pane) + 1);
+    let slot = isPaneView(view) ? null : toolSlot();
+    if (slot === null) slot = shown[position] ?? (shown.length < maxExtras() ? null : shown[position - 2] ?? shown[shown.length - 1] ?? null);
+    const displaced = slot === null ? null : slotView(slot);
+    if (slot === null) slot = [0, 1].find((candidate) => !slotOrder().includes(candidate)) ?? null;
+    if (slot === null) return;
+    if (!setSlotView(slot, view, false, slotOrder().includes(slot) ? undefined : position)) return;
     if (panelOpen() && dockTool() === view) closePanel();
-    if (fromSplit && displaced !== view && isPanelTab(displaced)) openWorkspaceView(displaced);
-    focusSplit();
+    if (from !== null && from !== "main" && displaced !== view && isPanelTab(displaced)) openWorkspaceView(displaced);
+    focusPane(slot);
   };
   const moveToDock = (view: SplitView) => {
-    if (splitView() === view && !saveSplitView(null, true)) return;
+    const slot = slotOrder().find((candidate) => slotView(candidate) === view);
+    if (slot !== undefined && !setSlotView(slot, null, true)) return;
     openWorkspaceView(view === "file" ? "files" : isPanelTab(view) ? view : "terminal", view.startsWith("shell:") ? view.slice("shell:".length) : undefined);
     focusWorkspacePanel();
   };
-  const closeSplit = (focus = true) => {
-    if (!saveSplitView(null)) return;
+  const closeSlot = (slot: number | null, focus = true) => {
+    if (slot === null || !setSlotView(slot, null)) return;
     if (focus) focusChatPane();
   };
-  // A rail icon opens the dock on its tool, or goes to it in the split; the
+  // The dock's own close: the pane holding its tool.
+  const closeSplit = (focus = true) => closeSlot(toolSlot(), focus);
+  // A rail icon opens the dock on its tool, or goes to it in its pane; the
   // tool the dock already shows closes it.
   const chooseRailTool = (tool: WorkspaceView) => {
-    if (splitToolShown() === tool) focusSplit();
+    if (splitToolShown() === tool) focusSplit(toolSlot());
     else if (panelOpen() && dockTool() === tool) closePanel();
     else openWorkspaceView(tool);
   };
   /*
-   * A second chat beside the main one (stage 4). The left side keeps the URL
-   * and the catalogue's selection; the side with the keyboard owns the
+   * A chat or page in a pane beside A (stages 4, 5, 6b). Pane A keeps the URL
+   * and the catalogue's selection; the pane with the keyboard owns the
    * composer's keys, dictation and the sidebar's current row, and the other
-   * chat is marked open there.
+   * panes' chats are marked open there.
    */
-  const sideChatId = () => { const view = splitView(); return view?.startsWith("chat:") ? view.slice("chat:".length) : null; };
-  // A page in pane B: "dashboard", or "project:<id>" (stage 5d).
-  const sidePage = () => { const view = splitView(); return view?.startsWith("page:") ? view.slice("page:".length) : null; };
-  const sidePageProject = () => {
-    const page = sidePage();
+  const slotChatId = (slot: number) => { const view = slotView(slot); return view?.startsWith("chat:") ? view.slice("chat:".length) : null; };
+  // A page in a pane: "dashboard", or "project:<id>" (stage 5d).
+  const slotPage = (slot: number) => { const view = slotView(slot); return view?.startsWith("page:") ? view.slice("page:".length) : null; };
+  const slotPageProject = (slot: number) => {
+    const page = slotPage(slot);
     if (!page) return null;
     if (page === "dashboard") return catalogue.projects().find((item) => item.slug === "chat") || catalogue.projects()[0] || null;
     return catalogue.projects().find((item) => item.id === page.slice("project:".length)) || null;
   };
-  const [keyboardSide, setKeyboardSide] = createSignal<"main" | "side">("main");
-  const sideHasKeyboard = () => keyboardSide() === "side" && splitShown() && Boolean(sideChatId() || sidePage());
-  const lastPaneFocus: Record<"main" | "side", HTMLElement | null> = { main: null, side: null };
+  const lastPaneFocus = new Map<PaneKey, HTMLElement>();
   const noteKeyboardSide = (event: FocusEvent) => {
     const target = event.target instanceof HTMLElement ? event.target : null;
-    const pane = target?.closest(".main-split") ? "side" : target?.closest(".chat-main") ? "main" : null;
-    if (!pane) return;
-    setKeyboardSide(pane);
-    lastPaneFocus[pane] = target;
+    const pane = paneOf(target);
+    if (pane === null || !target) return;
+    setKeyboardPane(pane);
+    lastPaneFocus.set(pane, target);
   };
-  // Ctrl+Shift+2 with two panes: from elsewhere, back to the pane last used;
-  // from one pane, to the other. Each lands where its focus last was.
+  // Ctrl+Shift+2 with panes beside A: from elsewhere, back to the pane last
+  // used; from a pane, to the next, round. Each lands where its focus last was.
   const cyclePaneFocus = () => {
-    const active = document.activeElement;
-    const from = active?.closest(".main-split") ? "side" : active?.closest(".chat-main") ? "main" : null;
-    const to = from ? (from === "main" ? "side" : "main") : keyboardSide();
-    const last = lastPaneFocus[to];
-    const paneSelector = to === "side" ? ".main-split" : ".chat-main";
-    if (last?.isConnected && last.closest(paneSelector) && last.getClientRects().length) {
+    const panes: PaneKey[] = ["main", ...shownSlots()];
+    const from = paneOf(document.activeElement);
+    const at = from === null ? -1 : panes.indexOf(from);
+    const to: PaneKey = at >= 0 ? panes[(at + 1) % panes.length]! : panes.includes(keyboardPane()) ? keyboardPane() : "main";
+    const last = lastPaneFocus.get(to);
+    if (last?.isConnected && last.closest(paneSelector(to)) && last.getClientRects().length) {
       last.focus({ preventScroll: true });
       if (to === "main") acknowledgeFocusedRegion(document.querySelector<HTMLElement>(".chat-main"));
       return true;
     }
-    if (to === "side") { setKeyboardSide("side"); focusSplit(); return true; }
+    if (to !== "main") { focusPane(to); return true; }
     return false;
   };
   document.addEventListener("focusin", noteKeyboardSide);
@@ -2195,107 +2275,124 @@ function App() {
   // Alt on the click or key that opened a chat, from a page that has no way
   // to say so itself.
   const altActivation = () => { const event = window.event; return (event instanceof MouseEvent || event instanceof KeyboardEvent) && event.altKey; };
-  // What pane B already shows is gone to there, not opened again in pane A.
-  const focusPaneB = (showing: boolean) => {
-    if (!showing || !splitShown()) return false;
-    setKeyboardSide("side");
-    focusSplit();
+  // What a pane beside A already shows is gone to there, not opened again in pane A.
+  const focusPaneShowing = (view: SplitView) => {
+    const slot = shownSlots().find((candidate) => slotView(candidate) === view);
+    if (slot === undefined) return false;
+    focusPane(slot);
     return true;
   };
   const openChatFromPage = async (target: ChatSummary, project: Project) => {
-    if (focusPaneB(sideChatId() === target.id)) return;
+    if (focusPaneShowing(`chat:${target.id}`)) return;
     if (altActivation()) openChatBeside(target, project); else await openChat(target, project);
   };
-  // The side's chat follows the split: opened when it names one, let go when
-  // it names something else, and the split closed when the chat is gone.
-  createEffect(on(() => [sideChatId(), catalogue.loaded(), catalogue.projects()] as const, ([id, loaded, projects]) => {
-    if (!id) {
-      if (!untrack(sidePage) && untrack(side.selectedId)) side.close();
-      return;
-    }
-    if (!loaded) return;
-    const found = projects.flatMap((project) => project.sessions.map((item) => ({ chat: item, project }))).find((item) => item.chat.id === id);
-    if (!found) saveSplitView(null);
-    else if (untrack(side.selectedId) !== id) void side.open(found.chat, found.project).catch(showError);
-  }));
-  /*
-   * A page in pane B holds an unsent chat of its own for its composer, as
-   * pane A's dashboard does: made when the page opens, discarded when it
-   * closes unsent, and pane B's chat once it is sent.
-   */
-  let sideDraft: { id: string; projectId: string } | null = null;
-  const discardSideDraft = () => {
-    const draft = sideDraft;
-    if (!draft) return;
-    sideDraft = null;
-    if (untrack(side.selectedId) === draft.id) side.close();
-    void api(`/v0/chats/${encodeURIComponent(draft.id)}?ifEmpty=true`, { method: "DELETE" }).catch(() => {});
-  };
-  createEffect(on(() => [sidePage(), catalogue.loaded(), templatesLoading(), splitShown()] as const, ([page, loaded, loading, shown]) => {
-    if (!page) return discardSideDraft();
-    if (!loaded || loading || !shown) return;
-    const project = untrack(sidePageProject);
-    if (!project) return void saveSplitView(null);
-    if (sideDraft?.projectId === project.id && untrack(side.selectedId) === sideDraft.id) return;
-    discardSideDraft();
-    const templateId = project.defaultTemplateId || untrack(defaultTemplateId) || "assistant";
-    void createProfileChat(project, templateId, side.models).then(async (created) => {
-      if (untrack(sidePage) !== page) {
-        await api(`/v0/chats/${encodeURIComponent(created.id)}?ifEmpty=true`, { method: "DELETE" });
+  for (const pane of paneSlots) {
+    const slot = pane.index;
+    const side = pane.session;
+    // The pane's chat follows its view: opened when it names one, let go when
+    // it names something else, and the pane closed when the chat is gone.
+    createEffect(on(() => [slotChatId(slot), catalogue.loaded(), catalogue.projects()] as const, ([id, loaded, projects]) => {
+      if (!id) {
+        if (!untrack(() => slotPage(slot)) && untrack(side.selectedId)) side.close();
         return;
       }
-      sideDraft = { id: created.id, projectId: project.id };
-      await side.chat.initialize({ ...created, templateId: created.templateId || templateId || undefined }, project);
-    }).catch(showError);
-  }));
-  const sendFromSidePage = async (prompt: string) => {
-    const project = chatPlace(side).current || untrack(sidePageProject);
+      if (!loaded) return;
+      const found = projects.flatMap((project) => project.sessions.map((item) => ({ chat: item, project }))).find((item) => item.chat.id === id);
+      if (!found) setSlotView(slot, null);
+      else if (untrack(side.selectedId) !== id) void side.open(found.chat, found.project).catch(showError);
+    }));
+    /*
+     * A page in a pane holds an unsent chat of its own for its composer, as
+     * pane A's dashboard does: made when the page opens, discarded when it
+     * closes unsent, and the pane's chat once it is sent.
+     */
+    createEffect(on(() => [slotPage(slot), catalogue.loaded(), templatesLoading(), shownSlots().includes(slot)] as const, ([page, loaded, loading, shown]) => {
+      if (!page) return discardPaneDraft(pane);
+      if (!loaded || loading || !shown) return;
+      const project = untrack(() => slotPageProject(slot));
+      if (!project) return void setSlotView(slot, null);
+      if (pane.draft?.projectId === project.id && untrack(side.selectedId) === pane.draft.id) return;
+      discardPaneDraft(pane);
+      const templateId = project.defaultTemplateId || untrack(defaultTemplateId) || "assistant";
+      void createProfileChat(project, templateId, side.models).then(async (created) => {
+        if (untrack(() => slotPage(slot)) !== page) {
+          await api(`/v0/chats/${encodeURIComponent(created.id)}?ifEmpty=true`, { method: "DELETE" });
+          return;
+        }
+        pane.draft = { id: created.id, projectId: project.id };
+        await side.chat.initialize({ ...created, templateId: created.templateId || templateId || undefined }, project);
+      }).catch(showError);
+    }));
+  }
+  function discardPaneDraft(pane: PaneSlot) {
+    const draft = pane.draft;
+    if (!draft) return;
+    pane.draft = null;
+    if (untrack(pane.session.selectedId) === draft.id) pane.session.close();
+    void api(`/v0/chats/${encodeURIComponent(draft.id)}?ifEmpty=true`, { method: "DELETE" }).catch(() => {});
+  }
+  const sendFromPanePage = async (pane: PaneSlot, prompt: string) => {
+    const side = pane.session;
+    const project = chatPlace(side).current || untrack(() => slotPageProject(pane.index));
     const id = side.chat.loadedId();
     if (!project || !id) return;
     catalogue.setProjects((current) => current.map((item) => item.id === project.id
       ? { ...item, sessions: [{ id, projectId: project.id, status: "active", title: side.chat.title() || "New chat", templateId: side.chat.templateId() || undefined }, ...item.sessions.filter((existing) => existing.id !== id)] }
       : item));
     side.chat.setDraft(prompt);
-    sideDraft = null;
-    saveSplitView(`chat:${id}`);
+    pane.draft = null;
+    setSlotView(pane.index, `chat:${id}`);
     await side.chat.send();
   };
   const openPageBeside = (page: "dashboard" | `project:${string}`) => { if (!isMobileLayout()) openBeside(`page:${page}`); };
-  // The same chat on both sides is one chat: the main pane taking it closes the side.
-  createEffect(() => { if (sideChatId() && sideChatId() === mainChatId()) saveSplitView(null); });
-  // The side's chat takes the main pane; the chat there, if any, moves beside.
+  // The same chat in two panes is one chat: pane A taking it closes the other.
+  createEffect(() => { const id = mainChatId(); for (const slot of shownSlots()) if (id && slotChatId(slot) === id) setSlotView(slot, null); });
   /*
    * The pane with the keyboard, and its chat: what the palette, the leader's
    * chat commands, the model selector and the dock act on, as if each pane
-   * were a Conduit tab of its own. Pane A (the main pane) unless pane B holds
-   * a chat and was the last to have focus.
+   * were a Conduit tab of its own. Pane A (the main pane) unless a pane
+   * beside it holds a chat and was the last to have focus.
    */
-  const focusedSession = (): ChatSession => sideHasKeyboard() && side.selectedId() ? side : session;
+  const focusedSlot = () => { const slot = keyboardSlot(); return slot !== null && paneSlot(slot).session.selectedId() ? paneSlot(slot) : null; };
+  const focusedSession = (): ChatSession => focusedSlot()?.session ?? session;
   const focusedChat = () => focusedSession().chat;
   const focusedModels = () => focusedSession().models;
-  const sideFocused = () => focusedSession() === side;
-  const focusedChatId = () => sideFocused() ? side.selectedId() : catalogue.selectedId();
-  // A sidebar command's target when it is pane B's chat; pane A's is the sidebar's own.
-  const focusedTarget = () => sideFocused() ? side.selected() ?? {} : {};
-  const dockSelection = () => sideFocused() ? side.selected() ?? (sidePageProject() ? { project: sidePageProject()! } : null) : null;
+  const sideFocused = () => focusedSlot() !== null;
+  const focusedChatId = () => focusedSlot()?.session.selectedId() ?? catalogue.selectedId();
+  // A sidebar command's target when it is another pane's chat; pane A's is the sidebar's own.
+  const focusedTarget = () => focusedSlot()?.session.selected() ?? {};
+  const dockSelection = () => {
+    const pane = focusedSlot();
+    if (!pane) return null;
+    const project = slotPageProject(pane.index);
+    return pane.session.selected() ?? (project ? { project } : null);
+  };
   const dockProject = () => dockSelection()?.project ?? selectedProject();
   const dockScope = () => dockSelection() ? `project:${dockSelection()!.project.id}` : workspacePanelScope();
-  const swapSideChat = () => {
-    const beside = side.selected();
+  // A pane's chat takes pane A; the chat there, if any, moves to that pane.
+  const swapSideChat = (slot: number) => {
+    const beside = paneSlot(slot).session.selected();
     if (!beside) return;
     const previous = routeKind() === "chat" ? catalogue.selected() : null;
     void openChat(beside.chat, beside.project).then(() => {
-      if (previous && previous.chat.id !== beside.chat.id) saveSplitView(`chat:${previous.chat.id}`);
+      if (previous && previous.chat.id !== beside.chat.id) setSlotView(slot, `chat:${previous.chat.id}`);
     });
   };
-  // The transcript learns its width only from geometry motion, so the split
-  // announces every change of the room it takes from the chat.
+  // The chats the panes show other than the one with the keyboard, marked open in the sidebar.
+  const openChatIds = () => {
+    if (!splitShown()) return [];
+    const current = keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : mainChatId();
+    return [mainChatId(), ...shownSlots().map(slotChatId)].filter((id): id is string => Boolean(id) && id !== current);
+  };
+  // The transcript learns its width only from geometry motion, so the panes
+  // announce every change of the room they take from pane A.
   let splitMotionId = 0;
   let splitSize = 0;
   const announceSplit = (phase: "begin" | "change" | "end", size: number) => dispatchPanelGeometryMotion({ phase, id: splitMotionId, source: "workspace", size });
-  createEffect(on(() => [splitShown(), splitRatio()] as const, () => {
+  const besideWidth = () => shownSlots().reduce((sum, slot) => sum + (paneSlot(slot).host()?.getBoundingClientRect().width ?? 0), 0);
+  createEffect(on(() => [shownSlots(), paneWeights().join()] as const, () => {
     requestAnimationFrame(() => {
-      const next = splitHost()?.getBoundingClientRect().width ?? 0;
+      const next = besideWidth();
       if (Math.abs(next - splitSize) < 0.5) return;
       splitMotionId += 1;
       announceSplit("begin", splitSize);
@@ -2303,26 +2400,34 @@ function App() {
       splitSize = next;
     });
   }, { defer: true }));
-  const startSplitResize = (event: PointerEvent) => {
-    const main = document.querySelector<HTMLElement>(".chat-main");
-    const host = splitHost();
-    if (!main || !host) return;
+  // The edge on the left of the pane at `position` shares the room of that
+  // pane and the one before it between them.
+  const startSplitResize = (event: PointerEvent, position: number) => {
+    const shown = shownSlots();
+    const paneAt = (index: number) => index === 0 ? document.querySelector<HTMLElement>(".chat-main") : index <= shown.length ? paneSlot(shown[index - 1]!).host() : undefined;
+    const left = paneAt(position - 1);
+    const right = paneAt(position);
+    if (!left || !right) return;
     event.preventDefault();
-    const left = main.getBoundingClientRect().left;
-    const right = host.getBoundingClientRect().right;
-    const width = right - left;
-    const minimum = MIN_SPLIT_PANE_WIDTH / width;
-    const maximum = 1 - (MIN_MAIN_PANE_WIDTH + 8) / width;
-    let pending = splitRatio();
+    const start = left.getBoundingClientRect().left;
+    const total = right.getBoundingClientRect().right - start;
+    const minimumLeft = position === 1 ? MIN_MAIN_PANE_WIDTH + 8 : MIN_SPLIT_PANE_WIDTH;
+    const weights = paneWeights();
+    const pair = weights[position - 1]! + weights[position]!;
+    let pending = [...weights];
     let frame = 0;
+    const apply = (next: number[]) => { if (next.length === 2) setSplitRatio(next[1]!); else setSplitRatios3(next); };
     splitMotionId += 1;
-    announceSplit("begin", host.getBoundingClientRect().width);
+    announceSplit("begin", besideWidth());
     const move = (moveEvent: PointerEvent) => {
-      pending = Math.max(minimum, Math.min(maximum, (right - moveEvent.clientX) / width));
+      const width = Math.max(minimumLeft, Math.min(total - MIN_SPLIT_PANE_WIDTH, moveEvent.clientX - start));
+      pending = [...weights];
+      pending[position - 1] = pair * width / total;
+      pending[position] = pair - pending[position - 1]!;
       if (!frame) frame = requestAnimationFrame(() => {
         frame = 0;
-        setSplitRatio(pending);
-        announceSplit("change", host.getBoundingClientRect().width);
+        apply(pending);
+        announceSplit("change", besideWidth());
       });
     };
     const stop = () => {
@@ -2330,9 +2435,10 @@ function App() {
       window.removeEventListener("pointerup", stop);
       window.removeEventListener("pointercancel", stop);
       document.body.classList.remove("workspace-resizing");
-      setSplitRatio(pending);
-      writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratio", String(pending));
-      requestAnimationFrame(() => { splitSize = host.getBoundingClientRect().width; announceSplit("end", splitSize); });
+      apply(pending);
+      if (pending.length === 2) writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratio", String(pending[1]!));
+      else writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratios", JSON.stringify(pending));
+      requestAnimationFrame(() => { splitSize = besideWidth(); announceSplit("end", splitSize); });
     };
     document.body.classList.add("workspace-resizing");
     window.addEventListener("pointermove", move);
@@ -2797,7 +2903,7 @@ function App() {
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "workspace-panel", toggleChatWorkspaceFocus),
       // Moving acts on the tool that has the keyboard: the dock's, or the split's.
       shortcutManager.registerHandler(COMMAND_IDS.workspaceMoveToMain, "workspace-panel", () => openBeside(dockTool()), { when: () => !isMobileLayout() && panelOpen() && !document.activeElement?.closest(".main-split") }),
-      shortcutManager.registerHandler(COMMAND_IDS.workspaceMoveToDock, "workspace-panel", () => { const view = splitView(); if (view) moveToDock(view); }, { when: () => splitShown() && Boolean(document.activeElement?.closest(".main-split")) }),
+      shortcutManager.registerHandler(COMMAND_IDS.workspaceMoveToDock, "workspace-panel", () => { const view = toolView(); if (view) moveToDock(view); }, { when: () => splitShown() && Boolean(document.activeElement?.closest(".main-split")) }),
       // A dashboard is the chat's sibling region and keeps what the main pane
       // could do there before regions had names.
       shortcutManager.registerHandler(COMMAND_IDS.stashPrompt, "dashboard", stashPrompt),
@@ -3108,7 +3214,7 @@ function App() {
   </>;
   // A workspace's other agents: two chats editing the same files.
   const workspaceNotice = (project: Project | undefined, chatId: string | null) => <Show when={project?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== chatId && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>;
-  const closePaneAction = () => <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label="Close this pane" title="Close" onClick={() => closeSplit()}><XIcon /></Button>;
+  const closePaneAction = (slot: number) => <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label="Close this pane" title="Close" onClick={() => closeSlot(slot)}><XIcon /></Button>;
   const ChatSurface = (props: {
     session: ChatSession;
     project?: Project;
@@ -3142,12 +3248,12 @@ function App() {
       </DialogContent>
     </Dialog>
     <Show when={routeKind() !== "terminal"}>
-    <Sidebar projects={catalogue.projects()} catalogueLoaded={catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={sideHasKeyboard() ? sideChatId() : null} openId={splitShown() && sideChatId() ? (sideHasKeyboard() ? mainChatId() : sideChatId()) : null} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard"} project={routeKind() === "project"} computer={routeKind() === "computer"} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
+    <Sidebar projects={catalogue.projects()} catalogueLoaded={catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : null} openIds={openChatIds()} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard"} project={routeKind() === "project"} computer={routeKind() === "computer"} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
-      onNewChat={async (project) => { await startNewChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={async (target, project) => { if (!focusPaneB(sideChatId() === target.id)) await openChat(target, project); }} onFocusMainPane={focusMainPane} onEnterMainPane={() => { if (!isMobileLayout() && !document.activeElement?.closest(".main-split")) enterMainPane(); }} onOpenProject={async (project) => { if (focusPaneB(sidePage() === `project:${project.id}`)) return; if (altActivation()) openPageBeside(`project:${project.id}`); else await openProject(project); }} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
+      onNewChat={async (project) => { await startNewChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={async (target, project) => { if (!focusPaneShowing(`chat:${target.id}`)) await openChat(target, project); }} onFocusMainPane={focusMainPane} onEnterMainPane={() => { if (!isMobileLayout() && !document.activeElement?.closest(".main-split")) enterMainPane(); }} onOpenProject={async (project) => { if (focusPaneShowing(`page:project:${project.id}`)) return; if (altActivation()) openPageBeside(`project:${project.id}`); else await openProject(project); }} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
       onOpenProjectMaximized={openProjectWithMaximizedWorkspace}
       onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
@@ -3172,7 +3278,7 @@ function App() {
       onOpenComputer={() => openComputer()}
       onOpenHarness={(id) => openComputerHarness(id)} selectedHarness={computerHarness()}
       onOpenTerminalView={() => openTerminalRoute()}
-      onOpenDashboard={() => { if (!focusPaneB(sidePage() === "dashboard")) { if (altActivation()) openPageBeside("dashboard"); else openDashboard(); } }}
+      onOpenDashboard={() => { if (!focusPaneShowing("page:dashboard")) { if (altActivation()) openPageBeside("dashboard"); else openDashboard(); } }}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
       onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating()}
       updateState={updateState()} onTakeUpdate={() => void takePwaUpdate()}
@@ -3188,7 +3294,7 @@ function App() {
       }} />
     </Modal>
     <div class="workspace-layout" ref={(element) => { const observer = new ResizeObserver(() => setLayoutWidth(element.clientWidth)); observer.observe(element); onCleanup(() => observer.disconnect()); }}>
-    <main data-slot="sidebar-inset" data-region={routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} style={splitShown() ? { flex: `${1 - splitRatio()} 1 0`, "min-width": `${MIN_MAIN_PANE_WIDTH}px` } : undefined} {...mainDropHandlers}>
+    <main data-slot="sidebar-inset" data-region={routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} style={splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": `${MIN_MAIN_PANE_WIDTH}px` } : undefined} {...mainDropHandlers}>
       <Show when={splitDropActive()}><div class="main-split-drop" aria-hidden="true" /></Show>
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
@@ -3285,35 +3391,40 @@ function App() {
         </Show>
       </Show>
     </main>
-    <Show when={splitShown()}>
-      <section ref={(element) => { setSplitHost(element); onCleanup(() => setSplitHost(undefined)); }} class="main-split" data-region={sideChatId() ? "chat" : sidePage() ? "dashboard" : "workspace-panel"} aria-label="Main pane split" style={{ flex: `${splitRatio()} 1 0`, "min-width": `${MIN_SPLIT_PANE_WIDTH}px` }}>
-        <div class="main-split-resize" role="separator" aria-label="Resize main pane split" aria-orientation="vertical" onPointerDown={startSplitResize} />
-        <Show when={sidePage()}>
+    <For each={shownSlots()}>{(slot, position) => {
+      const pane = paneSlot(slot);
+      const side = pane.session;
+      const owns = () => slotHasKeyboard(slot);
+      const page = () => slotPage(slot);
+      const attachInput = () => <input ref={side.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) side.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />;
+      return <section ref={(element) => { pane.setHost(element); onCleanup(() => pane.setHost(undefined)); }} class="main-split" data-pane-slot={slot} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={position() === 0 ? "Pane B" : "Pane C"} style={{ flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": `${MIN_SPLIT_PANE_WIDTH}px` }}>
+        <div class="main-split-resize" role="separator" aria-label="Resize panes" aria-orientation="vertical" onPointerDown={(event) => startSplitResize(event, position() + 1)} />
+        <Show when={page()}>
           <div class="main-split-chat main-split-page">
-            <input ref={side.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) side.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
-            <Show when={sidePage() === "dashboard"} fallback={<Show when={sidePageProject()}>{(project) =>
-              <ProjectPage session={side} project={project()} target={{ project: project() }} keyboardOwner={sideHasKeyboard} onSendDraft={sendFromSidePage} onOpenChat={async (target, owner) => openChatBeside(target, owner)} actions={closePaneAction()} />
+            {attachInput()}
+            <Show when={page() === "dashboard"} fallback={<Show when={slotPageProject(slot)}>{(project) =>
+              <ProjectPage session={side} project={project()} target={{ project: project() }} keyboardOwner={owns} onSendDraft={(prompt) => sendFromPanePage(pane, prompt)} onOpenChat={async (target, owner) => openChatBeside(target, owner)} actions={closePaneAction(slot)} />
             }</Show>}>
-              <AppDashboardPage session={side} place={chatPlace(side)} keyboardOwner={sideHasKeyboard} onSendDraft={sendFromSidePage} onOpenChat={openChatBeside} actions={closePaneAction()} />
+              <AppDashboardPage session={side} place={chatPlace(side)} keyboardOwner={owns} onSendDraft={(prompt) => sendFromPanePage(pane, prompt)} onOpenChat={openChatBeside} actions={closePaneAction(slot)} />
             </Show>
           </div>
         </Show>
-        <Show when={sideChatId()}>
+        <Show when={slotChatId(slot)}>
           <div class="main-split-chat">
-            <input ref={side.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) side.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
-            <ChatSurface session={side} project={side.selected()?.project} keyboardOwner={sideHasKeyboard} place={chatPlace(side)} modelSelector onShare={() => void shareChat(side.selectedId())}
+            {attachInput()}
+            <ChatSurface session={side} project={side.selected()?.project} keyboardOwner={owns} place={chatPlace(side)} modelSelector onShare={() => void shareChat(side.selectedId())}
               onRename={() => runSidebar("rename-chat", side.selected() ?? {})} onDelete={() => runSidebar("delete-chat", side.selected() ?? {})}
               notice={workspaceNotice(side.selected()?.project, side.selectedId())}
               actions={<>
-                <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label="Swap with the main chat" title="Swap with the main chat" onClick={swapSideChat}><ArrowLeftRightIcon /></Button>
-                <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label="Close this chat" title="Close" onClick={() => closeSplit()}><XIcon /></Button>
+                <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label="Swap with the main chat" title="Swap with the main chat" onClick={() => swapSideChat(slot)}><ArrowLeftRightIcon /></Button>
+                <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label="Close this chat" title="Close" onClick={() => closeSlot(slot)}><XIcon /></Button>
               </>} />
           </div>
         </Show>
-      </section>
-    </Show>
-    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={splitView} splitHost={splitHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
-    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? side.chat.loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? side.history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={splitView} splitHost={splitHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
+      </section>;
+    }}</For>
+    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
+    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </div>
     <WorkspaceRail tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard"].includes(routeKind()) && selectedProject() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
       current={panelOpen() ? dockTool() : null} inSplit={splitToolShown()} onDock={moveToDock} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : dockProject()?.kind === "workspace"} onChoose={chooseRailTool} />
