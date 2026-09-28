@@ -147,6 +147,11 @@ svg.lucide { stroke-width: 2.4; }
    what runs beneath it -- see `.transcript`, the one surface that asks to. */
 .chat-header { position: relative; z-index: 2; display: flex; height: var(--chat-header-height); flex: none; align-items: center; gap: 6.4px; padding: 6.4px 11.2px; background: linear-gradient(to bottom, var(--background) 0 50%, transparent 100%); }
 .chat-header-title { display: flex; min-width: 0; align-items: center; gap: 5.6px; overflow: hidden; font-size: 11.2px; line-height: 16px; }
+/* A pane's swap and close follow its title, with two or more panes. */
+.pane-tab-actions { display: inline-flex; flex: none; align-items: center; gap: 1.6px; margin-left: 1.6px; }
+.pane-tab-action { display: inline-flex; width: 20px; height: 20px; flex: none; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--muted-foreground); }
+.pane-tab-action:hover { background: var(--accent); color: var(--foreground); }
+.pane-tab-action svg { width: 12.8px; height: 12.8px; }
 .chat-header-title span, .chat-header-title strong, .chat-header-title .breadcrumb-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The place crumb is a link to its page: the crumb at rest, white under the pointer. */
 .breadcrumb-link { border: 0; background: none; padding: 0; color: inherit; font: inherit; cursor: pointer; }
