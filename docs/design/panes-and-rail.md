@@ -364,12 +364,32 @@ Steps:
   open and kept on typing, sending or a double-click. Ctrl+Tab moves within
   the pane. A pane's session follows its active chat tab; background tabs
   hold no live session (the runtime store tracks their streams).
-- **6d. Tools as navigators.** Files, Changes, Terminals and Chat context
-  become dock navigators; a file, a diff or a terminal opened from them is
-  a tab in the focused pane. The dock loses its inline file editor and
-  diff view. A narrow desktop falls back to one pane rather than keeping a
-  viewer in the dock.
-- **6e. Opening.** A click opens in the focused pane, as a preview tab.
+- **6d. Files as a navigator, files as documents.** Files in the dock is
+  the file navigator only: the tree and file search. Source Control stays as
+  it is -- a dock tool that can move to a pane whole -- for now. Steps:
+  - *6d-1. The navigator follows places.* The dock shows the place of the
+    last chat or page pane that had the keyboard; focusing a file or
+    terminal pane does not move it. With every pane in one place it never
+    moves; across places it switches, and its header names the place.
+  - *6d-2. The file viewer.* A pane view `files:<entries>` holding one or two
+    `<projectId>:<path>` entries, side by side as the dock's Files once
+    showed two files -- denser than two panes for two files, and still one
+    document. Each entry is an editor slot of its own with its unsaved
+    guard; Files' fixed primary/secondary slots become slots per pane. The
+    dock loses its editor. A click in the navigator (and a chat's file link,
+    a review's Open working file) opens in the **file pane** -- the pane that
+    last showed a file viewer, wherever the keyboard is -- so opening files
+    never replaces the chat being typed in; with no file pane it behaves as
+    Alt. Alt+click opens a new file pane beside the focused one (at three,
+    the neighbour). The viewer's own control opens a second file beside the
+    first in the same pane. The one-tool-pane limit goes: terminals and file
+    viewers sit in any pane.
+  - *6d-3. Changes as a mode.* A diff is the same CodeMirror base
+    (`workspace-editor-base.ts`) as the editor, drawn by
+    `workspace-comparison.tsx`. An entry gets a mode -- contents, changes,
+    staged -- switched in its header, in place of today's jump to Source
+    Control's Review.
+- **6e. Opening.** (Built for chats and pages; preview tabs wait on 6c.) A click opens in the focused pane, as a preview tab.
   Alt+click, or the pane's split button, opens to the side: the next pane,
   or a new one up to three. A tab dragged to a pane's edge splits there. A
   sidebar row goes to the pane already showing it.
