@@ -633,8 +633,20 @@ function App() {
   // What the panes beside pane A hold, by slot -- a tool moved out of the
   // dock, a file or terminal opened beside, a chat or a page -- their order
   // left to right, and the shares of the main pane they take; per device.
-  const storedViews = [readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split"), readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-2")].map((value) => isSplitView(value) ? value : null);
+  // Where the layout comes from (5f): a URL naming panes restores exactly
+  // those; the app opened at its start page restores this device's last
+  // layout; any other URL -- an old link, someone else's share -- pane A alone.
+  const launchUrl = new URL(location.href);
+  const urlNamesPanes = launchUrl.searchParams.has("pane") || launchUrl.searchParams.has("a");
+  const atStart = launchUrl.pathname === "/" && !launchUrl.search;
+  const storedViews = (urlNamesPanes ? launchUrl.searchParams.getAll("pane").slice(0, 2)
+    : atStart ? [readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split"), readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-2")] : [])
+    .map((value) => isSplitView(value) ? value : null);
   const initialViews: (SplitView | null)[] = storedViews[0] ? [storedViews[0], storedViews[1] ?? null] : [storedViews[1] ?? null, null];
+  // Pane A shows its route's chat or page, or, over it, any other view.
+  const storedPaneA = urlNamesPanes ? launchUrl.searchParams.get("a") : atStart ? readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-a") : null;
+  const [paneAOverride, setPaneAOverrideState] = createSignal<SplitView | null>(isSplitView(storedPaneA) && !/^(chat|page):/.test(storedPaneA) ? storedPaneA : null);
+  const setPaneAOverride = (view: SplitView | null) => { setPaneAOverrideState(view); writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-a", view ?? ""); };
   const [slotViews, setSlotViews] = createSignal(initialViews);
   const [slotOrder, setSlotOrder] = createSignal<number[]>([0, 1].filter((slot) => initialViews[slot]));
   const [splitRatio, setSplitRatio] = createSignal(Math.max(0.2, Math.min(0.8, Number(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratio")) || 0.5)));
@@ -2140,8 +2152,10 @@ function App() {
   // terminal) -- not a chat, a page or a file viewer, which panes draw themselves.
   const isToolView = (view: SplitView | null) => Boolean(view && !isPaneView(view) && !view.startsWith("files:"));
   const toolSlot = () => shownSlots().find((slot) => isToolView(slotView(slot))) ?? null;
-  const toolView = () => { const slot = toolSlot(); return slot === null ? null : slotView(slot); };
-  const toolHost = () => { const slot = toolSlot(); return slot === null ? undefined : paneSlot(slot).host(); };
+  // Pane A can hold the dock's tool too, over its route.
+  const toolInPaneA = () => isToolView(paneAOverride());
+  const toolView = () => { if (toolInPaneA()) return paneAOverride(); const slot = toolSlot(); return slot === null ? null : slotView(slot); };
+  const toolHost = () => { if (toolInPaneA()) return paneAToolHost(); const slot = toolSlot(); return slot === null ? undefined : paneSlot(slot).host(); };
   const splitToolShown = () => { const view = toolView(); return isPanelTab(view) ? view : null; };
   // Pane A's share and each pane's beside it, by position; per device.
   const paneWeights = () => shownSlots().length === 2 ? splitRatios3() : shownSlots().length === 1 ? [1 - splitRatio(), splitRatio()] : [1];
@@ -2157,11 +2171,17 @@ function App() {
     writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split", views[0] ?? "");
     writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-2", views[1] ?? "");
   };
+  // Each file viewer's editors, by pane, for its unsaved guard.
+  const fileHandles = new Map<PaneKey, (FileSlotHandle | undefined)[]>();
+  const handlesOf = (pane: PaneKey) => { let list = fileHandles.get(pane); if (!list) fileHandles.set(pane, list = []); return list; };
+  // A swap or a close moving a document to another pane is not leaving it.
+  let movingDocuments = false;
+  const leavesUnsaved = (current: SplitView | null, next: SplitView | null, pane: PaneKey) => !movingDocuments && Boolean(parseFileView(current)) && !next?.startsWith("files:")
+    && handlesOf(pane).some((handle) => handle?.hasUnsavedChanges()) && !window.confirm("Discard unsaved changes and close this file?");
   // A slot's view; null closes the pane. `position` places a new pane in the order.
   const setSlotView = (slot: number, next: SplitView | null, toDock = false, position?: number) => {
     if (slotView(slot) === "file" && next !== "file" && releaseSplitFile && !releaseSplitFile(toDock)) return false;
-    if (parseFileView(slotView(slot)) && !next?.startsWith("files:") && fileHandles[slot]!.some((handle) => handle?.hasUnsavedChanges())
-      && !window.confirm("Discard unsaved changes and close this file?")) return false;
+    if (leavesUnsaved(slotView(slot), next, slot)) return false;
     batch(() => {
       setSlotViews((current) => current.map((view, index) => index === slot ? next : view));
       setSlotOrder((current) => {
@@ -2175,6 +2195,20 @@ function App() {
     persistSlots();
     return true;
   };
+  // Any pane's view, and setting it: pane A's chats and pages go by its route,
+  // anything else shows over the route until pane A is sent somewhere (5f).
+  const viewOf = (pane: PaneKey) => pane === "main" ? paneAView() : slotView(pane);
+  const panesShown = (): PaneKey[] => ["main", ...shownSlots()];
+  const setPaneView = (pane: PaneKey, next: SplitView | null, toDock = false) => {
+    if (pane !== "main") return setSlotView(pane, next, toDock);
+    if (leavesUnsaved(paneAOverride(), next, "main")) return false;
+    if (!next || isPaneView(next)) {
+      setPaneAOverride(null);
+      if (next) void openInPaneA(next);
+    } else setPaneAOverride(next);
+    return true;
+  };
+  const [paneAToolHost, setPaneAToolHost] = createSignal<HTMLElement>();
   const paneSelector = (pane: PaneKey) => pane === "main" ? ".chat-main" : `.main-split[data-pane-slot="${pane}"]`;
   const paneOf = (element: Element | null | undefined): PaneKey | null => {
     const section = element?.closest<HTMLElement>(".main-split");
@@ -2209,6 +2243,7 @@ function App() {
     const from = paneOf(document.activeElement);
     const pane = from ?? keyboardPane();
     const position = pane === "main" ? 0 : Math.max(0, shown.indexOf(pane) + 1);
+    if (isToolView(view) && toolInPaneA()) { setPaneAOverride(view); if (panelOpen() && dockTool() === view) closePanel(); return; }
     let slot = isToolView(view) ? toolSlot() : null;
     if (slot === null && shown.length >= maxExtras()) slot = shown[position] ?? shown[position - 2] ?? shown[shown.length - 1] ?? null;
     const displaced = slot === null ? null : slotView(slot);
@@ -2221,7 +2256,8 @@ function App() {
   };
   const moveToDock = (view: SplitView) => {
     const slot = slotOrder().find((candidate) => slotView(candidate) === view);
-    if (slot !== undefined && !setSlotView(slot, null, true)) return;
+    if (paneAOverride() === view) setPaneAOverride(null);
+    else if (slot !== undefined && !setSlotView(slot, null, true)) return;
     openWorkspaceView(view === "file" ? "files" : isPanelTab(view) ? view : "terminal", view.startsWith("shell:") ? view.slice("shell:".length) : undefined);
     focusWorkspacePanel();
   };
@@ -2230,11 +2266,12 @@ function App() {
     if (focus) focusChatPane();
   };
   // The dock's own close: the pane holding its tool.
-  const closeSplit = (focus = true) => closeSlot(toolSlot(), focus);
+  const closeSplit = (focus = true) => toolInPaneA() ? void setPaneAOverride(null) : closeSlot(toolSlot(), focus);
   // A rail icon opens the dock on its tool, or goes to it in its pane; the
   // tool the dock already shows closes it.
   const chooseRailTool = (tool: WorkspaceView) => {
-    if (splitToolShown() === tool) focusSplit(toolSlot());
+    if (splitToolShown() === tool && toolInPaneA()) focusFirst(paneAToolHost()?.querySelector<HTMLElement>(".workspace-panel-content"));
+    else if (splitToolShown() === tool) focusSplit(toolSlot());
     else if (panelOpen() && dockTool() === tool) closePanel();
     else openWorkspaceView(tool);
   };
@@ -2245,75 +2282,85 @@ function App() {
    * focused entry when it shows two. With no file pane, or with Alt, it opens
    * a new pane beside, as a chat opened beside does.
    */
-  const [filePane, setFilePane] = createSignal<number | null>(null);
-  const [fileFocus, setFileFocus] = createSignal<Record<number, number>>({});
+  const [filePane, setFilePane] = createSignal<PaneKey | null>(null);
+  const [fileFocus, setFileFocus] = createSignal<Record<string, number>>({});
   const [fileWrap, setFileWrap] = createSignal(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines") === "true");
   const toggleFileWrap = () => { const next = !fileWrap(); setFileWrap(next); writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines", String(next)); };
-  const fileHandles: (FileSlotHandle | undefined)[][] = [[], []];
   let pendingFileEdit: FileEntry | null = null;
-  createEffect(() => { const pane = keyboardPane(); if (pane !== "main" && parseFileView(slotView(pane))) setFilePane(pane); });
-  const focusFileEntry = (slot: number, index: number) => setFileFocus((current) => ({ ...current, [slot]: index }));
+  createEffect(() => { const pane = keyboardPane(); if (parseFileView(viewOf(pane))) setFilePane(pane); });
+  const focusFileEntry = (pane: PaneKey, index: number) => setFileFocus((current) => ({ ...current, [String(pane)]: index }));
   const canOpenFilePanes = () => dockAvailable() && !isMobileLayout() && splitFits(1);
+  const focusAnyPane = (pane: PaneKey) => { if (pane === "main") { setKeyboardPane("main"); enterMainPane(); } else focusPane(pane); };
   // A review comment on a file, for the viewer that shows it to scroll to.
   const [fileReveal, setFileReveal] = createSignal<{ entry: FileEntry; request: ReviewNavigationRequest } | null>(null);
   const openFileDocument = (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest }) => {
     if (options.edit) pendingFileEdit = entry;
     setFileReveal(options.reveal ? { entry, request: options.reveal } : null);
-    for (const slot of shownSlots()) {
-      const index = parseFileView(slotView(slot))?.findIndex((item) => sameFileEntry(item, entry)) ?? -1;
+    for (const pane of panesShown()) {
+      const index = parseFileView(viewOf(pane))?.findIndex((item) => sameFileEntry(item, entry)) ?? -1;
       if (index < 0) continue;
-      focusFileEntry(slot, index);
-      setFilePane(slot);
-      focusPane(slot);
-      if (options.edit) { pendingFileEdit = null; fileHandles[slot]![index]?.edit(); }
+      focusFileEntry(pane, index);
+      setFilePane(pane);
+      focusAnyPane(pane);
+      if (options.edit) { pendingFileEdit = null; handlesOf(pane)[index]?.edit(); }
       return;
     }
+    const shownFilePane = () => { const pane = filePane(); return pane !== null && panesShown().includes(pane) && parseFileView(viewOf(pane)) ? pane : null; };
     // Alt: beside a file already open -- the second side of a viewer with
     // one, the file pane's first -- and only a new pane once they are full.
     if (options.beside) {
-      const viewers = [filePane(), ...shownSlots()].filter((slot): slot is number => slot !== null && shownSlots().includes(slot));
-      const roomy = viewers.find((slot) => parseFileView(slotView(slot))?.length === 1);
-      if (roomy !== undefined) {
-        setSlotView(roomy, formatFileView([...parseFileView(slotView(roomy))!, entry]));
+      const roomy = [shownFilePane(), ...panesShown()].find((pane) => pane !== null && parseFileView(viewOf(pane))?.length === 1);
+      if (roomy !== undefined && roomy !== null) {
+        setPaneView(roomy, formatFileView([...parseFileView(viewOf(roomy))!, entry]));
         focusFileEntry(roomy, 1);
         setFilePane(roomy);
         return;
       }
     }
-    const pane = filePane();
-    const target = !options.beside && pane !== null && shownSlots().includes(pane) ? parseFileView(slotView(pane)) : null;
-    if (pane === null || !target) {
+    const pane = options.beside ? null : shownFilePane();
+    if (pane === null) {
       const view = formatFileView([entry]);
       openBeside(view, false);
       const placed = shownSlots().find((slot) => slotView(slot) === view);
       if (placed !== undefined) { setFilePane(placed); focusFileEntry(placed, 0); }
       return;
     }
-    const index = Math.min(fileFocus()[pane] ?? 0, target.length - 1);
-    if (fileHandles[pane]![index]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and open another file?")) return;
-    fileHandles[pane]![index]?.discardChanges();
-    setSlotView(pane, formatFileView(target.map((item, at) => at === index ? entry : item)));
+    const target = parseFileView(viewOf(pane))!;
+    const index = Math.min(fileFocus()[String(pane)] ?? 0, target.length - 1);
+    if (handlesOf(pane)[index]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and open another file?")) return;
+    handlesOf(pane)[index]?.discardChanges();
+    setPaneView(pane, formatFileView(target.map((item, at) => at === index ? entry : item)));
   };
-  const splitFileViewer = (slot: number) => {
-    const entries = parseFileView(slotView(slot));
+  const splitFileViewer = (pane: PaneKey) => {
+    const entries = parseFileView(viewOf(pane));
     if (!entries || entries.length > 1) return;
-    setSlotView(slot, formatFileView([entries[0]!, entries[0]!]));
-    focusFileEntry(slot, 1);
+    setPaneView(pane, formatFileView([entries[0]!, entries[0]!]));
+    focusFileEntry(pane, 1);
   };
-  const closeFileEntry = (slot: number, index: number) => {
-    const entries = parseFileView(slotView(slot));
+  const closeFileEntry = (pane: PaneKey, index: number) => {
+    const entries = parseFileView(viewOf(pane));
     if (!entries) return;
-    fileHandles[slot]![index] = undefined;
-    if (entries.length === 1) return closeSlot(slot);
-    setSlotView(slot, formatFileView(entries.filter((_, at) => at !== index)));
-    focusFileEntry(slot, 0);
+    handlesOf(pane)[index] = undefined;
+    if (entries.length === 1) return pane === "main" ? void setPaneAOverride(null) : closeSlot(pane);
+    setPaneView(pane, formatFileView(entries.filter((_, at) => at !== index)));
+    focusFileEntry(pane, 0);
   };
-  const noteFileLoaded = (slot: number, index: number, file: FileSummary | null) => {
-    const entry = parseFileView(slotView(slot))?.[index];
+  const noteFileLoaded = (pane: PaneKey, index: number, file: FileSummary | null) => {
+    const entry = parseFileView(viewOf(pane))?.[index];
     if (!file || !entry || !pendingFileEdit || !sameFileEntry(pendingFileEdit, entry)) return;
     pendingFileEdit = null;
-    fileHandles[slot]![index]?.edit();
+    handlesOf(pane)[index]?.edit();
   };
+  const setFileMode = (pane: PaneKey, index: number, mode: FileEntry["mode"]) => {
+    const current = parseFileView(viewOf(pane));
+    if (current) setPaneView(pane, formatFileView(current.map((item, at) => at === index ? { projectId: item.projectId, path: item.path, ...(mode ? { mode } : {}) } : item)));
+  };
+  const renderFileViewer = (pane: PaneKey, entries: FileEntry[]) => <div class="workspace-split-surface">
+    <FileViewer entries={entries} focused={fileFocus()[String(pane)] ?? 0} wrap={fileWrap()} onToggleWrap={toggleFileWrap} commentChatId={focusedChat().loadedId()}
+      onFocusEntry={(index) => { focusFileEntry(pane, index); setFilePane(pane); }} onSplit={() => splitFileViewer(pane)} onCloseEntry={(index) => closeFileEntry(pane, index)}
+      onSetMode={(index, mode) => setFileMode(pane, index, mode)}
+      onLoaded={(index, file) => noteFileLoaded(pane, index, file)} reveal={fileReveal()} ref={(index, handle) => { handlesOf(pane)[index] = handle; }} />
+  </div>;
   /*
    * A chat or page in a pane beside A (stages 4, 5, 6b). Pane A keeps the URL
    * and the catalogue's selection; the pane with the keyboard owns the
@@ -2355,7 +2402,7 @@ function App() {
   };
   document.addEventListener("focusin", noteKeyboardSide);
   onCleanup(() => document.removeEventListener("focusin", noteKeyboardSide));
-  const mainChatId = () => routeKind() === "chat" ? catalogue.selectedId() : null;
+  const mainChatId = () => routeKind() === "chat" && !paneAOverride() ? catalogue.selectedId() : null;
   const openChatBeside = (target: ChatSummary, project: Project) => {
     if (isMobileLayout()) return void openChat(target, project);
     if (target.id === mainChatId()) return;
@@ -2382,7 +2429,7 @@ function App() {
   const openInFocusedPane = async (view: SplitView, inPaneA: () => unknown) => {
     if (focusPaneShowing(view)) return;
     const slot = keyboardPaneSlot();
-    if (slot === null) return void await inPaneA();
+    if (slot === null) { setPaneAOverride(null); return void await inPaneA(); }
     if (setSlotView(slot, view)) focusPane(slot);
   };
   const openChatHere = async (target: ChatSummary, project: Project) => {
@@ -2504,6 +2551,7 @@ function App() {
    */
   let swappingPanes = false;
   const paneAView = (): SplitView | null => {
+    if (paneAOverride()) return paneAOverride();
     if (routeKind() === "chat" && catalogue.selectedId()) return `chat:${catalogue.selectedId()}`;
     if (routeKind() === "dashboard") return "page:dashboard";
     if (routeKind() === "project" && selectedProject()) return `page:project:${selectedProject()!.id}`;
@@ -2523,9 +2571,9 @@ function App() {
   };
   const swapPartner = (pane: PaneKey): PaneKey | null => {
     const shown = shownSlots();
-    if (pane === "main") return shown[0] !== undefined && isPaneView(slotView(shown[0])) && paneAView() ? shown[0] : null;
+    if (pane === "main") return shown[0] !== undefined && paneAView() ? shown[0] : null;
     const at = shown.indexOf(pane);
-    if (at === 0) return isPaneView(slotView(pane)) && paneAView() ? "main" : null;
+    if (at === 0) return paneAView() ? "main" : null;
     return at > 0 ? shown[at - 1]! : null;
   };
   const paneElement = (pane: PaneKey) => pane === "main" ? document.querySelector<HTMLElement>(".chat-main") : paneSlot(pane).host();
@@ -2542,7 +2590,7 @@ function App() {
    * moves -- and what was on the right fades in on the left. Either way the
    * panes keep their widths: a width belongs to the position, not the document.
    */
-  const SWAP_FADE_MS = 140;
+  const SWAP_FADE_MS = 100;
   const crossfadeSwap = async (left: HTMLElement, right: HTMLElement, place: () => Promise<void>) => {
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const both = [left, right];
@@ -2588,13 +2636,17 @@ function App() {
         const slot = rightPane as number;
         const aView = paneAView()!;
         const bView = slotView(slot)!;
+        const unsaved = [...handlesOf("main"), ...handlesOf(slot)].some((handle) => handle?.hasUnsavedChanges());
+        if (unsaved && !window.confirm("Discard unsaved changes to swap these panes?")) return;
+        movingDocuments = true;
         const placeRight = async () => {
           setSlotView(slot, aView);
           const id = aView.startsWith("chat:") ? aView.slice("chat:".length) : null;
           await waitFor(() => !id || paneSlot(slot).session.chat.loadedId() === id);
         };
-        if (slide) await animateSwap(left, right, false, placeRight, () => openInPaneA(bView));
-        else await crossfadeSwap(left, right, async () => { await Promise.all([placeRight(), openInPaneA(bView)]); });
+        const placeLeft = async () => { if (isPaneView(bView)) { setPaneAOverride(null); await openInPaneA(bView); } else setPaneView("main", bView); };
+        if (slide) await animateSwap(left, right, false, placeRight, placeLeft);
+        else await crossfadeSwap(left, right, async () => { await Promise.all([placeRight(), placeLeft()]); });
       } else {
         const a = leftPane as number;
         const b = rightPane as number;
@@ -2607,6 +2659,7 @@ function App() {
       }
     } finally {
       swappingPanes = false;
+      movingDocuments = false;
     }
   };
   // Pane A's close hands it the next pane's chat or page.
@@ -2614,17 +2667,73 @@ function App() {
     if (pane !== "main") return closeSlot(pane);
     const next = shownSlots()[0];
     const view = next === undefined ? null : slotView(next);
-    if (next === undefined || !isPaneView(view)) return;
+    if (next === undefined || !view) return;
     swappingPanes = true;
+    movingDocuments = true;
     setSlotView(next, null);
-    void Promise.resolve(openInPaneA(view!)).finally(() => { swappingPanes = false; });
+    movingDocuments = false;
+    if (!isPaneView(view)) { setPaneAOverride(view); swappingPanes = false; return; }
+    setPaneAOverride(null);
+    void Promise.resolve(openInPaneA(view)).finally(() => { swappingPanes = false; });
   };
   const paneTabActions = (pane: PaneKey) => <Show when={splitShown()}>
     <span class="pane-tab-actions">
       <Show when={swapPartner(pane) !== null}><button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Swap with the pane beside" title="Swap" onClick={(event) => void swapPanes(pane, event.shiftKey)}><ArrowLeftRightIcon /></button></Show>
-      <Show when={pane !== "main" || isPaneView(slotView(shownSlots()[0] ?? -1))}><button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Close this pane" title="Close" onClick={() => closePane(pane)}><XIcon /></button></Show>
+      <Show when={pane !== "main" || shownSlots()[0] !== undefined}><button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Close this pane" title="Close" onClick={() => closePane(pane)}><XIcon /></button></Show>
     </span>
   </Show>;
+  /*
+   * The URL carries every pane (5f). The path stays pane A's route; `a` is a
+   * view pane A shows over it, each `pane` a pane beside A in order, and
+   * `focus` the position of the pane with the keyboard. Widths and the dock
+   * stay per device. Every address the app writes goes through here, so a
+   * route change carries the panes and Back restores them.
+   */
+  const PANE_PARAMS = ["a", "pane", "focus"];
+  const withPanes = (address: string | URL) => {
+    const url = new URL(address, location.href);
+    for (const name of PANE_PARAMS) url.searchParams.delete(name);
+    if (paneAOverride()) url.searchParams.set("a", paneAOverride()!);
+    for (const view of slotOrder().map(slotView)) if (view) url.searchParams.append("pane", view);
+    const focus = panesShown().indexOf(keyboardPane());
+    if (focus > 0) url.searchParams.set("focus", String(focus));
+    return `${url.pathname}${url.search}${url.hash}`;
+  };
+  // Where pane A is, without the panes: what route comparisons read.
+  const routeAddress = () => { const url = new URL(location.href); for (const name of PANE_PARAMS) url.searchParams.delete(name); return `${url.pathname}${url.search}`; };
+  const nativePushState = history.pushState.bind(history);
+  const nativeReplaceState = history.replaceState.bind(history);
+  history.pushState = (data, unused, url) => nativePushState(data, unused, url == null ? url : withPanes(url));
+  history.replaceState = (data, unused, url) => nativeReplaceState(data, unused, url == null ? url : withPanes(url));
+  onCleanup(() => { history.pushState = nativePushState; history.replaceState = nativeReplaceState; });
+  createEffect(on(() => [paneAOverride(), slotOrder().map(slotView).join("\n"), keyboardPane(), shownSlots().length] as const, () => {
+    const next = withPanes(location.href);
+    if (next !== `${location.pathname}${location.search}${location.hash}`) nativeReplaceState(history.state, "", next);
+  }, { defer: true }));
+  // Pane A sent somewhere by its route -- a new chat, a link -- leaves what
+  // showed over it; a swap or close moving a document there does not.
+  let paneARoute: string | null = null;
+  createEffect(() => {
+    const key = routeBootstrap() === "ready" ? `${routeKind()}:${catalogue.selectedId()}:${selectedProject()?.id ?? ""}:${harnessThread() ? "thread" : ""}` : null;
+    if (key === null) return;
+    if (paneARoute !== null && key !== paneARoute && !swappingPanes && untrack(paneAOverride)) setPaneAOverride(null);
+    paneARoute = key;
+  });
+  // Back and forward: the panes the address names.
+  const applyPanesFromUrl = () => {
+    const params = new URLSearchParams(location.search);
+    const views = params.getAll("pane").filter(isSplitView).slice(0, 2);
+    const a = params.get("a");
+    batch(() => {
+      setSlotViews([views[0] ?? null, views[1] ?? null]);
+      setSlotOrder(views.map((_, index) => index));
+      setPaneAOverride(isSplitView(a) && !/^(chat|page):/.test(a) ? a : null);
+    });
+    persistSlots();
+  };
+  // The pane the address says has the keyboard, once the panes are drawn.
+  const launchFocus = Number(launchUrl.searchParams.get("focus")) || 0;
+  if (launchFocus > 0) createEffect(on(() => shownSlots().length, (count) => { const slot = shownSlots()[launchFocus - 1]; if (count && slot !== undefined) setKeyboardPane(slot); }));
   // The chats the panes show other than the one with the keyboard, marked open in the sidebar.
   const openChatIds = () => {
     if (!splitShown()) return [];
@@ -3209,11 +3318,12 @@ function App() {
     media?.addEventListener("change", onViewportChange);
     onCleanup(() => media?.removeEventListener("change", onViewportChange));
     const onPopState = () => {
+      applyPanesFromUrl();
       void (async () => {
         // Back off an untracked thread still at work asks first, as any other
         // way off it does; staying puts its address back.
         const open = harnessThread();
-        if (open && `${location.pathname}${location.search}` !== threadPath(open) && !leaveHarnessThread()) {
+        if (open && routeAddress() !== threadPath(open) && !leaveHarnessThread()) {
           history.pushState({}, "", threadPath(open));
           return;
         }
@@ -3541,9 +3651,12 @@ function App() {
       }} />
     </Modal>
     <div class="workspace-layout" ref={(element) => { const observer = new ResizeObserver(() => setLayoutWidth(element.clientWidth)); observer.observe(element); onCleanup(() => observer.disconnect()); }}>
-    <main data-slot="sidebar-inset" data-region={routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} style={splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": `${MIN_MAIN_PANE_WIDTH}px` } : undefined} {...mainDropHandlers}>
+    <main data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} style={splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": `${MIN_MAIN_PANE_WIDTH}px` } : undefined} {...mainDropHandlers}>
       <Show when={splitDropActive()}><div class="main-split-drop" aria-hidden="true" /></Show>
-      <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
+      {/* Pane A holding a file viewer or a tool, over its route (5f). */}
+      <Show when={parseFileView(paneAOverride())}>{(entries) => renderFileViewer("main", entries())}</Show>
+      <Show when={toolInPaneA()}><div ref={(element) => { setPaneAToolHost(element); onCleanup(() => setPaneAToolHost(undefined)); }} class="pane-a-tool-host" /></Show>
+      <Show when={!paneAOverride() && routeBootstrap() === "ready"} fallback={paneAOverride() ? null : <div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
         : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : "Loading chat…"}</div>}>
         <Show when={["chat", "dashboard", "project"].includes(routeKind()) && meteorField()}>
@@ -3646,14 +3759,7 @@ function App() {
       const attachInput = () => <input ref={side.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) side.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />;
       return <section ref={(element) => { pane.setHost(element); onCleanup(() => pane.setHost(undefined)); }} class="main-split" data-pane-slot={slot} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={position() === 0 ? "Pane B" : "Pane C"} style={{ flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": `${MIN_SPLIT_PANE_WIDTH}px` }}>
         <div class="main-split-resize" role="separator" aria-label="Resize panes" aria-orientation="vertical" onPointerDown={(event) => startSplitResize(event, position() + 1)} />
-        <Show when={parseFileView(slotView(slot))}>{(entries) =>
-          <div class="workspace-split-surface">
-            <FileViewer entries={entries()} focused={fileFocus()[slot] ?? 0} wrap={fileWrap()} onToggleWrap={toggleFileWrap} commentChatId={focusedChat().loadedId()}
-              onFocusEntry={(index) => { focusFileEntry(slot, index); setFilePane(slot); }} onSplit={() => splitFileViewer(slot)} onCloseEntry={(index) => closeFileEntry(slot, index)}
-              onSetMode={(index, mode) => { const current = parseFileView(slotView(slot)); if (current) setSlotView(slot, formatFileView(current.map((item, at) => at === index ? { projectId: item.projectId, path: item.path, ...(mode ? { mode } : {}) } : item))); }}
-              onLoaded={(index, file) => noteFileLoaded(slot, index, file)} reveal={fileReveal()} ref={(index, handle) => { fileHandles[slot]![index] = handle; }} />
-          </div>
-        }</Show>
+        <Show when={parseFileView(slotView(slot))}>{(entries) => renderFileViewer(slot, entries())}</Show>
         <Show when={page()}>
           <div class="main-split-chat main-split-page">
             {attachInput()}
