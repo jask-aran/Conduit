@@ -2290,16 +2290,24 @@ function App() {
     const slot = pane.index;
     const side = pane.session;
     // The pane's chat follows its view: opened when it names one, let go when
-    // it names something else, and the pane closed when the chat is gone.
+    // it names something else, and the pane closed when its chat is deleted --
+    // gone from a catalogue that listed it, not merely not listed yet, as on a
+    // reload before the chat's place has loaded.
+    let listed: string | null = null;
     createEffect(on(() => [slotChatId(slot), catalogue.loaded(), catalogue.projects()] as const, ([id, loaded, projects]) => {
       if (!id) {
+        listed = null;
         if (!untrack(() => slotPage(slot)) && untrack(side.selectedId)) side.close();
         return;
       }
       if (!loaded) return;
       const found = projects.flatMap((project) => project.sessions.map((item) => ({ chat: item, project }))).find((item) => item.chat.id === id);
-      if (!found) setSlotView(slot, null);
-      else if (untrack(side.selectedId) !== id) void side.open(found.chat, found.project).catch(showError);
+      if (!found) {
+        if (listed === id) setSlotView(slot, null);
+        return;
+      }
+      listed = id;
+      if (untrack(side.selectedId) !== id) void side.open(found.chat, found.project).catch(showError);
     }));
     /*
      * A page in a pane holds an unsent chat of its own for its composer, as
