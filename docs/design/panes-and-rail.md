@@ -384,6 +384,7 @@ Stage 6 commits:
 
 - 6a: 5f51f03 (search and the palette on the rail)
 - 6b: 0052905, 2db3a91 (up to three panes, each slot its own session; a pane's chat closes it only when deleted)
+- 6e (part): 7ef24b5 (a sidebar row or chat search result replaces the focused pane's document; Alt opens a new pane right of the focused one). 6c (tabs) is deferred until 6d and 6e are lived with.
 
 ## Open questions
 
