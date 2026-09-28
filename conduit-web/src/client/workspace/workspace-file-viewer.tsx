@@ -1,5 +1,7 @@
 import { createEffect, createResource, createSignal, Index, lazy, onCleanup, Show, Suspense, type JSX } from "solid-js";
 import { Columns2Icon, FileDiffIcon, FileTextIcon, GitCompareArrowsIcon, XIcon } from "lucide-solid";
+import { MenuItem } from "@/components/primitives";
+import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import { toast } from "solid-sonner";
 import { api } from "../api/client";
 import type { FileEntry } from "./file-documents";
@@ -36,6 +38,8 @@ export default function FileViewer(props: {
   onSetMode: (index: number, mode: FileEntry["mode"]) => void;
   onLoaded?: (index: number, file: FileSummary | null) => void;
   ref: (index: number, handle: FileSlotHandle | undefined) => void;
+  /** A review comment to scroll to, when it is on one of the entries. */
+  reveal?: { entry: FileEntry; request: ReviewNavigationRequest } | null;
 }) {
   const handles: (FileSlotHandle | undefined)[] = [];
   const [visible, setVisible] = createSignal(document.visibilityState === "visible");
@@ -88,11 +92,26 @@ export default function FileViewer(props: {
     }
     onCleanup(() => { cancelled = true; timers.forEach((timer) => window.clearTimeout(timer)); });
   });
-  // A header that no longer fits drops the actions its menu also has, before the file's name.
+  // A header that no longer fits drops the actions its context menu also
+  // has, then gathers the rest into its overflow menu, before the file's name
+  // goes -- measured, not a width.
   let root: HTMLDivElement | undefined;
   const fitHeaders = () => root?.querySelectorAll<HTMLElement>(".workspace-preview-header").forEach((header) => {
     header.removeAttribute("data-compact");
-    if (header.scrollWidth > header.clientWidth) header.setAttribute("data-compact", "true");
+    // The name needs room for at least the file's own name, measured from its text.
+    const name = header.querySelector<HTMLElement>(".workspace-preview-file span");
+    const nameFits = () => {
+      const text = name?.firstChild;
+      if (!name || !(text instanceof Text)) return true;
+      const range = document.createRange();
+      range.setStart(text, text.data.lastIndexOf("/") + 1);
+      range.setEnd(text, text.data.length);
+      return name.clientWidth + 1 >= range.getBoundingClientRect().width;
+    };
+    const squeezed = () => header.scrollWidth > header.clientWidth || !nameFits();
+    if (!squeezed()) return;
+    header.setAttribute("data-compact", "actions");
+    if (squeezed()) header.setAttribute("data-compact", "tight");
   });
   const resized = new ResizeObserver(fitHeaders);
   const changed = new MutationObserver(fitHeaders);
@@ -128,6 +147,8 @@ export default function FileViewer(props: {
           gitFile={statuses()[entryKey(entry())]}
           onShowDiff={(staged) => { if (leaveContents(index)) props.onSetMode(index, staged ? "staged" : "changes"); }}
           headerSuffix={splitButton()}
+          headerMenuItems={<Show when={props.entries.length === 1}><MenuItem onSelect={() => props.onSplit()}><Columns2Icon />Open again beside</MenuItem></Show>}
+          reveal={props.reveal && props.reveal.entry.projectId === entry().projectId && props.reveal.entry.path === entry().path ? props.reveal.request : null}
           onFocus={() => props.onFocusEntry(index)}
           onClose={() => closeEntry(index)}
           onError={reportError}

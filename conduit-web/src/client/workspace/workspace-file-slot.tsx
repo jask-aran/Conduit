@@ -1,7 +1,7 @@
 import { WorkbenchButton, WorkbenchStatus } from "./workspace-workbench";
 import { batch, createEffect, createSignal, lazy, on, onCleanup, Show, Suspense, type JSX } from "solid-js";
-import { CopyIcon, DownloadIcon, FileCode2Icon, FileDiffIcon, GitCompareArrowsIcon, PencilIcon, SaveIcon, Trash2Icon, UploadIcon, XIcon } from "lucide-solid";
-import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Spinner } from "@/components/primitives";
+import { CopyIcon, DownloadIcon, EllipsisIcon, FileCode2Icon, FileDiffIcon, GitCompareArrowsIcon, PencilIcon, SaveIcon, Trash2Icon, UploadIcon, XIcon } from "lucide-solid";
+import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Menu, MenuContent, MenuItem, MenuTrigger, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
@@ -154,6 +154,8 @@ export default function WorkspaceFileSlot(props: {
   headerPrefix?: JSX.Element;
   /** Before the close button: the file viewer's split. */
   headerSuffix?: JSX.Element;
+  /** The suffix's actions again, for the header's overflow menu when it is too narrow for them. */
+  headerMenuItems?: JSX.Element;
   height?: string;
   empty?: string;
   onToggleWrap: () => void;
@@ -471,7 +473,19 @@ export default function WorkspaceFileSlot(props: {
       <WorkbenchButton type="button" aria-label="Save file" title="Save file (Ctrl+S)" disabled={saving()} onClick={() => void save()}><Show when={saving()} fallback={<SaveIcon />}><Spinner /></Show>Save</WorkbenchButton>
     </Show>
     {fileActions()}
-    {props.headerSuffix}
+    <span class="workspace-preview-suffix">{props.headerSuffix}</span>
+    {/* A header too narrow for its actions keeps them here, and the file's name in view. */}
+    <Menu modal={false}>
+      <MenuTrigger class="workspace-preview-more" aria-label="More file actions" title="More file actions"><EllipsisIcon /></MenuTrigger>
+      <MenuContent>
+        <Show when={hasChanges()}><MenuItem onSelect={() => props.onShowDiff?.(false)}><FileDiffIcon />Review unstaged changes</MenuItem></Show>
+        <Show when={hasStaged()}><MenuItem onSelect={() => props.onShowDiff?.(true)}><GitCompareArrowsIcon />Review staged changes</MenuItem></Show>
+        {props.headerMenuItems}
+        <MenuItem onSelect={() => copy(currentText())}><CopyIcon />Copy contents</MenuItem>
+        <MenuItem onSelect={() => copy(props.path ?? "")}><FileCode2Icon />Copy path</MenuItem>
+        <MenuItem onSelect={() => void download()}><DownloadIcon />Download</MenuItem>
+      </MenuContent>
+    </Menu>
     <Show when={props.closable}><WorkbenchButton type="button" class="workspace-preview-action workspace-preview-close" aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><XIcon /></WorkbenchButton></Show>
   </>;
   const previewStatus = (file: FileMetadata & { kind: FileKind; mime: string }) => <WorkbenchStatus commands={
