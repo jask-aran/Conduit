@@ -2195,7 +2195,17 @@ function App() {
   // Alt on the click or key that opened a chat, from a page that has no way
   // to say so itself.
   const altActivation = () => { const event = window.event; return (event instanceof MouseEvent || event instanceof KeyboardEvent) && event.altKey; };
-  const openChatFromPage = async (target: ChatSummary, project: Project) => { if (altActivation()) openChatBeside(target, project); else await openChat(target, project); };
+  // What pane B already shows is gone to there, not opened again in pane A.
+  const focusPaneB = (showing: boolean) => {
+    if (!showing || !splitShown()) return false;
+    setKeyboardSide("side");
+    focusSplit();
+    return true;
+  };
+  const openChatFromPage = async (target: ChatSummary, project: Project) => {
+    if (focusPaneB(sideChatId() === target.id)) return;
+    if (altActivation()) openChatBeside(target, project); else await openChat(target, project);
+  };
   // The side's chat follows the split: opened when it names one, let go when
   // it names something else, and the split closed when the chat is gone.
   createEffect(on(() => [sideChatId(), catalogue.loaded(), catalogue.projects()] as const, ([id, loaded, projects]) => {
@@ -3137,7 +3147,7 @@ function App() {
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
-      onNewChat={async (project) => { await startNewChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={openChat} onFocusMainPane={focusMainPane} onEnterMainPane={() => { if (!isMobileLayout()) enterMainPane(); }} onOpenProject={async (project) => { if (altActivation()) openPageBeside(`project:${project.id}`); else await openProject(project); }} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
+      onNewChat={async (project) => { await startNewChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={async (target, project) => { if (!focusPaneB(sideChatId() === target.id)) await openChat(target, project); }} onFocusMainPane={focusMainPane} onEnterMainPane={() => { if (!isMobileLayout() && !document.activeElement?.closest(".main-split")) enterMainPane(); }} onOpenProject={async (project) => { if (focusPaneB(sidePage() === `project:${project.id}`)) return; if (altActivation()) openPageBeside(`project:${project.id}`); else await openProject(project); }} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
       onOpenProjectMaximized={openProjectWithMaximizedWorkspace}
       onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
@@ -3162,7 +3172,7 @@ function App() {
       onOpenComputer={() => openComputer()}
       onOpenHarness={(id) => openComputerHarness(id)} selectedHarness={computerHarness()}
       onOpenTerminalView={() => openTerminalRoute()}
-      onOpenDashboard={() => altActivation() ? openPageBeside("dashboard") : openDashboard()}
+      onOpenDashboard={() => { if (!focusPaneB(sidePage() === "dashboard")) { if (altActivation()) openPageBeside("dashboard"); else openDashboard(); } }}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
       onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating()}
       updateState={updateState()} onTakeUpdate={() => void takePwaUpdate()}
