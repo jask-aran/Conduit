@@ -427,6 +427,8 @@ function ChatHeader(props: {
   alone?: boolean;
   /** Last in the actions: a chat beside the main one swaps or closes here. */
   actions?: JSX.Element;
+  /** After the title: the pane's own swap and close, with two or more panes. */
+  tabActions?: JSX.Element;
 }) {
   // What a project or workspace page calls itself in its own menu.
   const placeKind = () => props.project && isWorkspace(props.project) ? "workspace" : "project";
@@ -476,7 +478,7 @@ function ChatHeader(props: {
       </Show>
       {/* A project or workspace page is that place, named as the sidebar names it; a
           chat or the Conduit dashboard sits under its place. */}
-      <nav aria-label="breadcrumb" class="chat-header-title"><Show when={!props.dashboard && !props.alone}><Show when={props.onOpenPlace} fallback={<span>{projectLabel()}</span>}><button type="button" class="breadcrumb-link" tabIndex={-1} onClick={() => props.onOpenPlace!(props.project)}>{projectLabel()}</button></Show><span class="breadcrumb-separator" aria-hidden="true" /></Show><strong>{props.title}</strong></nav>
+      <nav aria-label="breadcrumb" class="chat-header-title"><Show when={!props.dashboard && !props.alone}><Show when={props.onOpenPlace} fallback={<span>{projectLabel()}</span>}><button type="button" class="breadcrumb-link" tabIndex={-1} onClick={() => props.onOpenPlace!(props.project)}>{projectLabel()}</button></Show><span class="breadcrumb-separator" aria-hidden="true" /></Show><strong>{props.title}</strong>{props.tabActions}</nav>
       {props.badge}
       <Show when={!props.dashboard && props.chat}>
         <span class="chat-status-line" data-state={statusTone()} role="status" aria-label={`Runtime status: ${statusLabel()}`} aria-live="polite">
@@ -2461,7 +2463,7 @@ function App() {
   };
   const openPageBeside = (page: "dashboard" | `project:${string}`) => { if (!isMobileLayout()) openBeside(`page:${page}`, false); };
   // The same chat in two panes is one chat: pane A taking it closes the other.
-  createEffect(() => { const id = mainChatId(); for (const slot of shownSlots()) if (id && slotChatId(slot) === id) setSlotView(slot, null); });
+  createEffect(() => { const id = mainChatId(); if (swappingPanes) return; for (const slot of shownSlots()) if (id && slotChatId(slot) === id) setSlotView(slot, null); });
   /*
    * The pane with the keyboard, and its chat: what the palette, the leader's
    * chat commands, the model selector and the dock act on, as if each pane
@@ -2493,15 +2495,115 @@ function App() {
   };
   const dockProject = () => dockSelection()?.project ?? selectedProject();
   const dockScope = () => dockSelection() ? `project:${dockSelection()!.project.id}` : workspacePanelScope();
-  // A pane's chat takes pane A; the chat there, if any, moves to that pane.
-  const swapSideChat = (slot: number) => {
-    const beside = paneSlot(slot).session.selected();
-    if (!beside) return;
-    const previous = routeKind() === "chat" ? catalogue.selected() : null;
-    void openChat(beside.chat, beside.project).then(() => {
-      if (previous && previous.chat.id !== beside.chat.id) setSlotView(slot, `chat:${previous.chat.id}`);
-    });
+  /*
+   * Swapping and closing panes, from each pane's breadcrumb. Pane A swaps with
+   * the pane to its right and the others with the pane to their left. Pane A
+   * holds only chats and pages, so a swap or a close that would put a file or
+   * a tool there is not offered. Between panes beside A the panes themselves
+   * change places; with pane A the documents move, the panes stay.
+   */
+  let swappingPanes = false;
+  const paneAView = (): SplitView | null => {
+    if (routeKind() === "chat" && catalogue.selectedId()) return `chat:${catalogue.selectedId()}`;
+    if (routeKind() === "dashboard") return "page:dashboard";
+    if (routeKind() === "project" && selectedProject()) return `page:project:${selectedProject()!.id}`;
+    return null;
   };
+  const openInPaneA = async (view: SplitView) => {
+    if (view === "page:dashboard") return openDashboard();
+    if (view.startsWith("page:project:")) {
+      const project = catalogue.projects().find((item) => item.id === view.slice("page:project:".length));
+      return project ? openProject(project) : undefined;
+    }
+    const id = view.slice("chat:".length);
+    for (const project of catalogue.projects()) {
+      const found = project.sessions.find((item) => item.id === id);
+      if (found) return openChat(found, project);
+    }
+  };
+  const swapPartner = (pane: PaneKey): PaneKey | null => {
+    const shown = shownSlots();
+    if (pane === "main") return shown[0] !== undefined && isPaneView(slotView(shown[0])) && paneAView() ? shown[0] : null;
+    const at = shown.indexOf(pane);
+    if (at === 0) return isPaneView(slotView(pane)) && paneAView() ? "main" : null;
+    return at > 0 ? shown[at - 1]! : null;
+  };
+  const paneElement = (pane: PaneKey) => pane === "main" ? document.querySelector<HTMLElement>(".chat-main") : paneSlot(pane).host();
+  const waitFor = (ready: () => boolean, timeout = 800) => new Promise<void>((resolve) => {
+    const start = performance.now();
+    const check = () => ready() || performance.now() - start > timeout ? resolve() : requestAnimationFrame(check);
+    check();
+  });
+  /*
+   * The swap's motion: the right pane fades out, the left slides over into
+   * its place unchanged -- no width change, so nothing re-renders while it
+   * moves -- and what was on the right fades in on the left. The panes keep
+   * their widths: a width belongs to the position, not the document.
+   */
+  const animateSwap = async (left: HTMLElement, right: HTMLElement, reorder: boolean, placeRight: () => Promise<void> | void, placeLeft: () => Promise<void> | void) => {
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!still) {
+      await right.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, easing: "ease-out", fill: "forwards" }).finished;
+      left.style.zIndex = "5";
+      await left.animate([{ transform: "none" }, { transform: `translateX(${right.getBoundingClientRect().left - left.getBoundingClientRect().left}px)` }], { duration: 220, easing: "cubic-bezier(.2,.7,.2,1)", fill: "forwards" }).finished;
+    }
+    await placeRight();
+    // Reordered, the slid pane now lives on the right and the other on the
+    // left; otherwise the right pane now shows what slid over it, and the
+    // left goes home unseen to take what was on the right.
+    const incoming = reorder ? right : left;
+    incoming.style.opacity = "0";
+    for (const element of [left, right]) { element.getAnimations().forEach((animation) => animation.cancel()); element.style.zIndex = ""; }
+    await placeLeft();
+    if (!still) await incoming.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: "ease-out" }).finished;
+    incoming.style.opacity = "";
+  };
+  const swapPanes = async (pane: PaneKey) => {
+    const partner = swapPartner(pane);
+    if (partner === null || swappingPanes) return;
+    const [leftPane, rightPane] = pane === "main" || (partner !== "main" && shownSlots().indexOf(partner) > shownSlots().indexOf(pane as number)) ? [pane, partner] : [partner, pane];
+    const left = paneElement(leftPane);
+    const right = paneElement(rightPane);
+    if (!left || !right) return;
+    swappingPanes = true;
+    try {
+      if (leftPane === "main") {
+        const slot = rightPane as number;
+        const aView = paneAView()!;
+        const bView = slotView(slot)!;
+        await animateSwap(left, right, false, async () => {
+          setSlotView(slot, aView);
+          const id = aView.startsWith("chat:") ? aView.slice("chat:".length) : null;
+          await waitFor(() => !id || paneSlot(slot).session.chat.loadedId() === id);
+        }, () => openInPaneA(bView));
+      } else {
+        const a = leftPane as number;
+        const b = rightPane as number;
+        await animateSwap(left, right, true, () => {
+          setSlotOrder((order) => order.map((slot) => slot === a ? b : slot === b ? a : slot));
+          persistSlots();
+        }, () => {});
+      }
+    } finally {
+      swappingPanes = false;
+    }
+  };
+  // Pane A's close hands it the next pane's chat or page.
+  const closePane = (pane: PaneKey) => {
+    if (pane !== "main") return closeSlot(pane);
+    const next = shownSlots()[0];
+    const view = next === undefined ? null : slotView(next);
+    if (next === undefined || !isPaneView(view)) return;
+    swappingPanes = true;
+    setSlotView(next, null);
+    void Promise.resolve(openInPaneA(view!)).finally(() => { swappingPanes = false; });
+  };
+  const paneTabActions = (pane: PaneKey) => <Show when={splitShown()}>
+    <span class="pane-tab-actions">
+      <Show when={swapPartner(pane) !== null}><button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Swap with the pane beside" title="Swap" onClick={() => void swapPanes(pane)}><ArrowLeftRightIcon /></button></Show>
+      <Show when={pane !== "main" || isPaneView(slotView(shownSlots()[0] ?? -1))}><button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Close this pane" title="Close" onClick={() => closePane(pane)}><XIcon /></button></Show>
+    </span>
+  </Show>;
   // The chats the panes show other than the one with the keyboard, marked open in the sidebar.
   const openChatIds = () => {
     if (!splitShown()) return [];
@@ -3293,8 +3395,8 @@ function App() {
       if (maximized) setWorkspaceExpanded(true);
     });
   };
-  const AppDashboardPage = (props: { session: ChatSession; place?: ReturnType<typeof chatPlace>; keyboardOwner: () => boolean; onSendDraft: (prompt: string) => Promise<void>; onOpenChat: (target: ChatSummary, project: Project) => void; actions?: JSX.Element }) => <>
-    <ChatHeader title="Conduit Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard actions={props.actions} />
+  const AppDashboardPage = (props: { session: ChatSession; place?: ReturnType<typeof chatPlace>; keyboardOwner: () => boolean; onSendDraft: (prompt: string) => Promise<void>; onOpenChat: (target: ChatSummary, project: Project) => void; actions?: JSX.Element; tabActions?: JSX.Element }) => <>
+    <ChatHeader title="Conduit Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard actions={props.actions}  tabActions={props.tabActions} />
     <AppDashboard
       projects={catalogue.projects()}
       composer={<PageComposer session={props.session} place={props.place} keyboardOwner={props.keyboardOwner} onSendDraft={props.onSendDraft} />}
@@ -3319,8 +3421,8 @@ function App() {
       onPrefetchTerminal={prefetchWorkspaceTerminal}
     />
   </>;
-  const ProjectPage = (props: { session: ChatSession; project: Project; keyboardOwner: () => boolean; onSendDraft: (prompt: string) => Promise<void>; onOpenChat: (target: DashboardChat, project: Project) => Promise<void>; target?: { project: Project }; actions?: JSX.Element }) => <>
-    <ChatHeader project={props.project} title={props.project.name} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject(props.project)} onRename={() => runSidebar("rename-folder", props.target ?? {})} onDelete={() => runSidebar("delete-project", props.target ?? {})} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} dashboard actions={props.actions} />
+  const ProjectPage = (props: { session: ChatSession; project: Project; keyboardOwner: () => boolean; onSendDraft: (prompt: string) => Promise<void>; onOpenChat: (target: DashboardChat, project: Project) => Promise<void>; target?: { project: Project }; actions?: JSX.Element; tabActions?: JSX.Element }) => <>
+    <ChatHeader project={props.project} title={props.project.name} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject(props.project)} onRename={() => runSidebar("rename-folder", props.target ?? {})} onDelete={() => runSidebar("delete-project", props.target ?? {})} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} dashboard actions={props.actions}  tabActions={props.tabActions} />
     <ProjectDashboard project={props.project} runtime={runtime} profiles={profiles()} onOpenHarnessThread={(harnessId, path, id, title) => void openHarnessThread({ harnessId, path, id, title })}
       composer={<PageComposer session={props.session} keyboardOwner={props.keyboardOwner} onSendDraft={props.onSendDraft} />}
       onOpenChat={props.onOpenChat}
@@ -3338,7 +3440,6 @@ function App() {
   </>;
   // A workspace's other agents: two chats editing the same files.
   const workspaceNotice = (project: Project | undefined, chatId: string | null) => <Show when={project?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== chatId && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>;
-  const closePaneAction = (slot: number) => <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label="Close this pane" title="Close" onClick={() => closeSlot(slot)}><XIcon /></Button>;
   const ChatSurface = (props: {
     session: ChatSession;
     project?: Project;
@@ -3347,6 +3448,7 @@ function App() {
     onRename?: () => void;
     onDelete?: () => void;
     actions?: JSX.Element;
+    tabActions?: JSX.Element;
     notice?: JSX.Element;
     place?: ReturnType<typeof chatPlace>;
     modelSelector?: boolean;
@@ -3355,7 +3457,7 @@ function App() {
     const current = props.session;
     const surfaceChat = current.chat;
     return <>
-      <ChatHeader project={props.project} onOpenPlace={openPlace} title={surfaceChat.title() || (surfaceChat.status() === "active" ? "Untitled chat" : "New chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} contextMetrics={contextMetrics} composerStatus={current.composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} actions={props.actions} />
+      <ChatHeader project={props.project} onOpenPlace={openPlace} title={surfaceChat.title() || (surfaceChat.status() === "active" ? "Untitled chat" : "New chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} contextMetrics={contextMetrics} composerStatus={current.composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} actions={props.actions} tabActions={props.tabActions} />
       {props.notice}
       <Conversation chat={surfaceChat} busy={surfaceChat.presentation().kind === "opening_live"} stackRef={props.stackRef}
         transcript={<Transcript chat={surfaceChat} supports={current.capability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} />}
@@ -3429,7 +3531,7 @@ function App() {
           </div>
         </Show>
         <Show when={routeKind() === "dashboard"}>
-          <AppDashboardPage session={session} place={chatPlace()} keyboardOwner={() => !sideHasKeyboard()} onOpenChat={(target, project) => void openChatFromPage(target, project)}
+          <AppDashboardPage session={session} place={chatPlace()} tabActions={paneTabActions("main")} keyboardOwner={() => !sideHasKeyboard()} onOpenChat={(target, project) => void openChatFromPage(target, project)}
             onSendDraft={async (prompt) => {
               const project = chatOwner() || catalogue.projects().find((item) => item.slug === "chat");
               const id = chat.loadedId();
@@ -3490,11 +3592,11 @@ function App() {
         <Show when={routeKind() !== "dashboard" && routeKind() !== "computer"}>
         <Show when={routeKind() === "project" && selectedProject()} fallback={<>
           <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
-          <ChatSurface session={session} project={selectedProject()} keyboardOwner={() => !sideHasKeyboard()} place={chatPlace()} modelSelector stackRef={(element) => { chatComposerStack = element; }}
+          <ChatSurface session={session} project={selectedProject()} tabActions={paneTabActions("main")} keyboardOwner={() => !sideHasKeyboard()} place={chatPlace()} modelSelector stackRef={(element) => { chatComposerStack = element; }}
             onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")}
             notice={workspaceNotice(selectedProject(), catalogue.selectedId())} />
         </>}>
-          <ProjectPage session={session} project={selectedProject()!} keyboardOwner={() => !sideHasKeyboard()} onOpenChat={(target, project) => openChatFromPage(target, project)}
+          <ProjectPage session={session} project={selectedProject()!} tabActions={paneTabActions("main")} keyboardOwner={() => !sideHasKeyboard()} onOpenChat={(target, project) => openChatFromPage(target, project)}
             onSendDraft={async (prompt) => {
               const project = selectedProject();
               const id = chat.loadedId();
@@ -3535,9 +3637,9 @@ function App() {
           <div class="main-split-chat main-split-page">
             {attachInput()}
             <Show when={page() === "dashboard"} fallback={<Show when={slotPageProject(slot)}>{(project) =>
-              <ProjectPage session={side} project={project()} target={{ project: project() }} keyboardOwner={owns} onSendDraft={(prompt) => sendFromPanePage(pane, prompt)} onOpenChat={openChatFromPage} actions={closePaneAction(slot)} />
+              <ProjectPage session={side} project={project()} target={{ project: project() }} keyboardOwner={owns} onSendDraft={(prompt) => sendFromPanePage(pane, prompt)} onOpenChat={openChatFromPage} tabActions={paneTabActions(slot)} />
             }</Show>}>
-              <AppDashboardPage session={side} place={chatPlace(side)} keyboardOwner={owns} onSendDraft={(prompt) => sendFromPanePage(pane, prompt)} onOpenChat={(target, project) => void openChatFromPage(target, project)} actions={closePaneAction(slot)} />
+              <AppDashboardPage session={side} place={chatPlace(side)} keyboardOwner={owns} onSendDraft={(prompt) => sendFromPanePage(pane, prompt)} onOpenChat={(target, project) => void openChatFromPage(target, project)} tabActions={paneTabActions(slot)} />
             </Show>
           </div>
         </Show>
@@ -3547,10 +3649,7 @@ function App() {
             <ChatSurface session={side} project={side.selected()?.project} keyboardOwner={owns} place={chatPlace(side)} modelSelector onShare={() => void shareChat(side.selectedId())}
               onRename={() => runSidebar("rename-chat", side.selected() ?? {})} onDelete={() => runSidebar("delete-chat", side.selected() ?? {})}
               notice={workspaceNotice(side.selected()?.project, side.selectedId())}
-              actions={<>
-                <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label="Swap with the main chat" title="Swap with the main chat" onClick={() => swapSideChat(slot)}><ArrowLeftRightIcon /></Button>
-                <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label="Close this chat" title="Close" onClick={() => closeSlot(slot)}><XIcon /></Button>
-              </>} />
+              tabActions={paneTabActions(slot)} />
           </div>
         </Show>
       </section>;
