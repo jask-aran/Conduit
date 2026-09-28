@@ -282,6 +282,20 @@ file, a terminal or a tool.
 - **5f. The URL and restore.** The URL keeps pane A; pane B rides a query
   parameter, so reload, back/forward and a shared link restore both.
 
+**The bar.** Two panes should feel like two Conduit tabs side by side: the
+reader never thinks about which one "the window" is. So every per-chat or
+per-page thing follows the pane with the keyboard, not the left one:
+
+- leader and palette commands (stop, regenerate, stash, rename, the model
+  selector), Esc to the composer, and the dock's place (it looks at the
+  focused pane's project);
+- Ctrl+Shift+2 goes to the pane last used, and a key moves between the two;
+- a new chat, or a page, can open in either pane;
+- the URL, back/forward and a shared link carry both panes (5f).
+
+Stage 4 meets none of these yet; 5c carries the first three, 5d pages, 5f
+the URL.
+
 Each step builds, ships and is usable before the next, as the stages are.
 
 **Going back.** Two local tags mark the states to return to:
