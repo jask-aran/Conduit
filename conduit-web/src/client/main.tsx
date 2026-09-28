@@ -1907,16 +1907,24 @@ function App() {
   // The composer's folder button: the open chat, draft or not, moves to the
   // chosen place and stays open there.
   const chatOwner = () => catalogue.projects().find((project) => project.sessions.some((session) => session.id === chat.loadedId()));
-  const placeChat = async (destination: Project) => {
-    const id = chat.loadedId();
+  // Either pane's chat. Pane B's store is re-entered in its new place, as
+  // pane A's catalogue selection follows it.
+  const placeChat = async (destination: Project, target: ChatSession = session) => {
+    const id = target.chat.loadedId();
     if (!id) return;
     try {
       await api(`/v0/sessions/${id}/move`, { method: "POST", body: JSON.stringify({ projectId: destination.id }) });
       await refresh();
-      if (routeKind() === "chat") catalogue.selectProject(destination);
+      if (target === side) {
+        const moved = side.selected();
+        if (moved) await side.open(moved.chat, moved.project);
+      } else if (routeKind() === "chat") catalogue.selectProject(destination);
     } catch (error) { showError(error); }
   };
-  const chatPlace = () => ({ projects: catalogue.projects(), current: chatOwner(), disabled: !chat.loadedId() || runtime.connectivity() !== "online", onChoose: (project: Project) => void placeChat(project) });
+  const chatPlace = (target: ChatSession = session) => {
+    const id = target.chat.loadedId();
+    return { projects: catalogue.projects(), current: target === session ? chatOwner() : catalogue.projects().find((project) => project.sessions.some((item) => item.id === id)), disabled: !id || runtime.connectivity() !== "online", onChoose: (project: Project) => void placeChat(project, target) };
+  };
   const moveProjectChats = async (source: Project, destination: Project) => {
     try { await api(`/v0/projects/${source.id}/move-sessions`, { method: "POST", body: JSON.stringify({ projectId: destination.id }) }); await refresh(); }
     catch (error) { showError(error); }
@@ -2182,15 +2190,15 @@ function App() {
   const openChatFromPage = async (target: ChatSummary, project: Project) => { if (altActivation()) openChatBeside(target, project); else await openChat(target, project); };
   // The side's chat follows the split: opened when it names one, let go when
   // it names something else, and the split closed when the chat is gone.
-  createEffect(on(() => [sideChatId(), catalogue.loaded()] as const, ([id, loaded]) => {
+  createEffect(on(() => [sideChatId(), catalogue.loaded(), catalogue.projects()] as const, ([id, loaded, projects]) => {
     if (!id) {
       if (untrack(side.selectedId)) side.close();
       return;
     }
-    if (untrack(side.selectedId) === id || !loaded) return;
-    const found = untrack(catalogue.projects).flatMap((project) => project.sessions.map((item) => ({ chat: item, project }))).find((item) => item.chat.id === id);
-    if (found) void side.open(found.chat, found.project).catch(showError);
-    else saveSplitView(null);
+    if (!loaded) return;
+    const found = projects.flatMap((project) => project.sessions.map((item) => ({ chat: item, project }))).find((item) => item.chat.id === id);
+    if (!found) saveSplitView(null);
+    else if (untrack(side.selectedId) !== id) void side.open(found.chat, found.project).catch(showError);
   }));
   // The same chat on both sides is one chat: the main pane taking it closes the side.
   createEffect(() => { if (sideChatId() && sideChatId() === mainChatId()) saveSplitView(null); });
@@ -2950,6 +2958,8 @@ function App() {
    * stage 5). What differs by pane comes in as props: the actions only the
    * main chat has yet, and the side's swap and close.
    */
+  // A workspace's other agents: two chats editing the same files.
+  const workspaceNotice = (project: Project | undefined, chatId: string | null) => <Show when={project?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== chatId && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>;
   const ChatSurface = (props: {
     session: ChatSession;
     project?: Project;
@@ -3170,7 +3180,7 @@ function App() {
           <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
           <ChatSurface session={session} project={selectedProject()} keyboardOwner={() => !sideHasKeyboard()} place={chatPlace()} modelSelector stackRef={(element) => { chatComposerStack = element; }}
             onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")}
-            notice={<Show when={selectedProject()?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== catalogue.selectedId() && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>} />
+            notice={workspaceNotice(selectedProject(), catalogue.selectedId())} />
         </>}>
           <ChatHeader project={selectedProject()} title={selectedProject()!.name} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} dashboard />
           <ProjectDashboard project={selectedProject()!} runtime={runtime} profiles={profiles()} onOpenHarnessThread={(harnessId, path, id, title) => void openHarnessThread({ harnessId, path, id, title })}
@@ -3233,7 +3243,9 @@ function App() {
         <Show when={sideChatId()}>
           <div class="main-split-chat">
             <input ref={side.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) side.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
-            <ChatSurface session={side} project={side.selected()?.project} keyboardOwner={sideHasKeyboard} onShare={() => void shareChat(side.selectedId())}
+            <ChatSurface session={side} project={side.selected()?.project} keyboardOwner={sideHasKeyboard} place={chatPlace(side)} modelSelector onShare={() => void shareChat(side.selectedId())}
+              onRename={() => runSidebar("rename-chat", side.selected() ?? {})} onDelete={() => runSidebar("delete-chat", side.selected() ?? {})}
+              notice={workspaceNotice(side.selected()?.project, side.selectedId())}
               actions={<>
                 <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label="Swap with the main chat" title="Swap with the main chat" onClick={swapSideChat}><ArrowLeftRightIcon /></Button>
                 <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label="Close this chat" title="Close" onClick={() => closeSplit()}><XIcon /></Button>
