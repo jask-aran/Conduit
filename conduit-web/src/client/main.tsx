@@ -421,8 +421,10 @@ function ChatHeader(props: {
   appDashboard?: boolean;
   /** The page is a place of its own (Computer): no crumb before its title. */
   alone?: boolean;
-  /** Last in the actions: a chat beside the main one swaps or closes here. */
+  /** Last in the actions: a chat beside the main one swaps here. */
   actions?: JSX.Element;
+  /** Pane B's close, on its tab: the breadcrumb that heads the pane. */
+  onClosePane?: () => void;
 }) {
   // What a project or workspace page calls itself in its own menu.
   const placeKind = () => props.project && isWorkspace(props.project) ? "workspace" : "project";
@@ -472,7 +474,7 @@ function ChatHeader(props: {
       </Show>
       {/* A project or workspace page is that place, named as the sidebar names it; a
           chat or the Conduit dashboard sits under its place. */}
-      <nav aria-label="breadcrumb" class="chat-header-title"><Show when={!props.dashboard && !props.alone}><Show when={props.onOpenPlace} fallback={<span>{projectLabel()}</span>}><button type="button" class="breadcrumb-link" tabIndex={-1} onClick={() => props.onOpenPlace!(props.project)}>{projectLabel()}</button></Show><span class="breadcrumb-separator" aria-hidden="true" /></Show><strong>{props.title}</strong></nav>
+      <nav aria-label="breadcrumb" class="chat-header-title"><Show when={!props.dashboard && !props.alone}><Show when={props.onOpenPlace} fallback={<span>{projectLabel()}</span>}><button type="button" class="breadcrumb-link" tabIndex={-1} onClick={() => props.onOpenPlace!(props.project)}>{projectLabel()}</button></Show><span class="breadcrumb-separator" aria-hidden="true" /></Show><strong>{props.title}</strong><Show when={props.onClosePane}><button type="button" class="pane-tab-close" tabIndex={-1} aria-label="Close this pane" title="Close" onClick={() => props.onClosePane?.()}><XIcon /></button></Show></nav>
       {props.badge}
       <Show when={!props.dashboard && props.chat}>
         <span class="chat-status-line" data-state={statusTone()} role="status" aria-label={`Runtime status: ${statusLabel()}`} aria-live="polite">
@@ -2195,7 +2197,17 @@ function App() {
   // Alt on the click or key that opened a chat, from a page that has no way
   // to say so itself.
   const altActivation = () => { const event = window.event; return (event instanceof MouseEvent || event instanceof KeyboardEvent) && event.altKey; };
-  const openChatFromPage = async (target: ChatSummary, project: Project) => { if (altActivation()) openChatBeside(target, project); else await openChat(target, project); };
+  // What pane B already shows is gone to there, not opened again in pane A.
+  const focusPaneB = (showing: boolean) => {
+    if (!showing || !splitShown()) return false;
+    setKeyboardSide("side");
+    focusSplit();
+    return true;
+  };
+  const openChatFromPage = async (target: ChatSummary, project: Project) => {
+    if (focusPaneB(sideChatId() === target.id)) return;
+    if (altActivation()) openChatBeside(target, project); else await openChat(target, project);
+  };
   // The side's chat follows the split: opened when it names one, let go when
   // it names something else, and the split closed when the chat is gone.
   createEffect(on(() => [sideChatId(), catalogue.loaded(), catalogue.projects()] as const, ([id, loaded, projects]) => {
@@ -3053,8 +3065,8 @@ function App() {
       if (maximized) setWorkspaceExpanded(true);
     });
   };
-  const AppDashboardPage = (props: { session: ChatSession; place?: ReturnType<typeof chatPlace>; keyboardOwner: () => boolean; onSendDraft: (prompt: string) => Promise<void>; onOpenChat: (target: ChatSummary, project: Project) => void; actions?: JSX.Element }) => <>
-    <ChatHeader title="Conduit Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard actions={props.actions} />
+  const AppDashboardPage = (props: { session: ChatSession; place?: ReturnType<typeof chatPlace>; keyboardOwner: () => boolean; onSendDraft: (prompt: string) => Promise<void>; onOpenChat: (target: ChatSummary, project: Project) => void; onClosePane?: () => void }) => <>
+    <ChatHeader title="Conduit Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard onClosePane={props.onClosePane} />
     <AppDashboard
       projects={catalogue.projects()}
       composer={<PageComposer session={props.session} place={props.place} keyboardOwner={props.keyboardOwner} onSendDraft={props.onSendDraft} />}
@@ -3079,8 +3091,8 @@ function App() {
       onPrefetchTerminal={prefetchWorkspaceTerminal}
     />
   </>;
-  const ProjectPage = (props: { session: ChatSession; project: Project; keyboardOwner: () => boolean; onSendDraft: (prompt: string) => Promise<void>; onOpenChat: (target: DashboardChat, project: Project) => Promise<void>; target?: { project: Project }; actions?: JSX.Element }) => <>
-    <ChatHeader project={props.project} title={props.project.name} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject(props.project)} onRename={() => runSidebar("rename-folder", props.target ?? {})} onDelete={() => runSidebar("delete-project", props.target ?? {})} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} dashboard actions={props.actions} />
+  const ProjectPage = (props: { session: ChatSession; project: Project; keyboardOwner: () => boolean; onSendDraft: (prompt: string) => Promise<void>; onOpenChat: (target: DashboardChat, project: Project) => Promise<void>; target?: { project: Project }; onClosePane?: () => void }) => <>
+    <ChatHeader project={props.project} title={props.project.name} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject(props.project)} onRename={() => runSidebar("rename-folder", props.target ?? {})} onDelete={() => runSidebar("delete-project", props.target ?? {})} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} dashboard onClosePane={props.onClosePane} />
     <ProjectDashboard project={props.project} runtime={runtime} profiles={profiles()} onOpenHarnessThread={(harnessId, path, id, title) => void openHarnessThread({ harnessId, path, id, title })}
       composer={<PageComposer session={props.session} keyboardOwner={props.keyboardOwner} onSendDraft={props.onSendDraft} />}
       onOpenChat={props.onOpenChat}
@@ -3098,7 +3110,6 @@ function App() {
   </>;
   // A workspace's other agents: two chats editing the same files.
   const workspaceNotice = (project: Project | undefined, chatId: string | null) => <Show when={project?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== chatId && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>;
-  const closePaneAction = () => <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label="Close this pane" title="Close" onClick={() => closeSplit()}><XIcon /></Button>;
   const ChatSurface = (props: {
     session: ChatSession;
     project?: Project;
@@ -3107,6 +3118,7 @@ function App() {
     onRename?: () => void;
     onDelete?: () => void;
     actions?: JSX.Element;
+    onClosePane?: () => void;
     notice?: JSX.Element;
     place?: ReturnType<typeof chatPlace>;
     modelSelector?: boolean;
@@ -3115,7 +3127,7 @@ function App() {
     const current = props.session;
     const surfaceChat = current.chat;
     return <>
-      <ChatHeader project={props.project} onOpenPlace={openPlace} title={surfaceChat.title() || (surfaceChat.status() === "active" ? "Untitled chat" : "New chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} contextMetrics={contextMetrics} composerStatus={current.composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} actions={props.actions} />
+      <ChatHeader project={props.project} onOpenPlace={openPlace} title={surfaceChat.title() || (surfaceChat.status() === "active" ? "Untitled chat" : "New chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} contextMetrics={contextMetrics} composerStatus={current.composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} actions={props.actions} onClosePane={props.onClosePane} />
       {props.notice}
       <Conversation chat={surfaceChat} busy={surfaceChat.presentation().kind === "opening_live"} stackRef={props.stackRef}
         transcript={<Transcript chat={surfaceChat} supports={current.capability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} />}
@@ -3137,7 +3149,7 @@ function App() {
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
-      onNewChat={async (project) => { await startNewChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={openChat} onFocusMainPane={focusMainPane} onEnterMainPane={() => { if (!isMobileLayout()) enterMainPane(); }} onOpenProject={async (project) => { if (altActivation()) openPageBeside(`project:${project.id}`); else await openProject(project); }} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
+      onNewChat={async (project) => { await startNewChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={async (target, project) => { if (!focusPaneB(sideChatId() === target.id)) await openChat(target, project); }} onFocusMainPane={focusMainPane} onEnterMainPane={() => { if (!isMobileLayout() && !document.activeElement?.closest(".main-split")) enterMainPane(); }} onOpenProject={async (project) => { if (focusPaneB(sidePage() === `project:${project.id}`)) return; if (altActivation()) openPageBeside(`project:${project.id}`); else await openProject(project); }} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
       onOpenProjectMaximized={openProjectWithMaximizedWorkspace}
       onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
@@ -3162,7 +3174,7 @@ function App() {
       onOpenComputer={() => openComputer()}
       onOpenHarness={(id) => openComputerHarness(id)} selectedHarness={computerHarness()}
       onOpenTerminalView={() => openTerminalRoute()}
-      onOpenDashboard={() => altActivation() ? openPageBeside("dashboard") : openDashboard()}
+      onOpenDashboard={() => { if (!focusPaneB(sidePage() === "dashboard")) { if (altActivation()) openPageBeside("dashboard"); else openDashboard(); } }}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
       onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating()}
       updateState={updateState()} onTakeUpdate={() => void takePwaUpdate()}
@@ -3178,7 +3190,7 @@ function App() {
       }} />
     </Modal>
     <div class="workspace-layout" ref={(element) => { const observer = new ResizeObserver(() => setLayoutWidth(element.clientWidth)); observer.observe(element); onCleanup(() => observer.disconnect()); }}>
-    <main data-slot="sidebar-inset" data-region={routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} style={splitShown() ? { flex: `${1 - splitRatio()} 1 0`, "min-width": `${MIN_MAIN_PANE_WIDTH}px` } : undefined} {...mainDropHandlers}>
+    <main data-slot="sidebar-inset" data-region={routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} data-pane-current={splitShown() ? String(keyboardSide() !== "side") : undefined} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} style={splitShown() ? { flex: `${1 - splitRatio()} 1 0`, "min-width": `${MIN_MAIN_PANE_WIDTH}px` } : undefined} {...mainDropHandlers}>
       <Show when={splitDropActive()}><div class="main-split-drop" aria-hidden="true" /></Show>
       <Show when={routeBootstrap() === "ready"} fallback={<div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
@@ -3276,15 +3288,15 @@ function App() {
       </Show>
     </main>
     <Show when={splitShown()}>
-      <section ref={(element) => { setSplitHost(element); onCleanup(() => setSplitHost(undefined)); }} class="main-split" data-region={sideChatId() ? "chat" : sidePage() ? "dashboard" : "workspace-panel"} aria-label="Main pane split" style={{ flex: `${splitRatio()} 1 0`, "min-width": `${MIN_SPLIT_PANE_WIDTH}px` }}>
+      <section ref={(element) => { setSplitHost(element); onCleanup(() => setSplitHost(undefined)); }} class="main-split" data-pane-current={String(keyboardSide() === "side")} data-region={sideChatId() ? "chat" : sidePage() ? "dashboard" : "workspace-panel"} aria-label="Main pane split" style={{ flex: `${splitRatio()} 1 0`, "min-width": `${MIN_SPLIT_PANE_WIDTH}px` }}>
         <div class="main-split-resize" role="separator" aria-label="Resize main pane split" aria-orientation="vertical" onPointerDown={startSplitResize} />
         <Show when={sidePage()}>
           <div class="main-split-chat main-split-page">
             <input ref={side.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) side.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
             <Show when={sidePage() === "dashboard"} fallback={<Show when={sidePageProject()}>{(project) =>
-              <ProjectPage session={side} project={project()} target={{ project: project() }} keyboardOwner={sideHasKeyboard} onSendDraft={sendFromSidePage} onOpenChat={async (target, owner) => openChatBeside(target, owner)} actions={closePaneAction()} />
+              <ProjectPage session={side} project={project()} target={{ project: project() }} keyboardOwner={sideHasKeyboard} onSendDraft={sendFromSidePage} onOpenChat={async (target, owner) => openChatBeside(target, owner)} onClosePane={() => closeSplit()} />
             }</Show>}>
-              <AppDashboardPage session={side} place={chatPlace(side)} keyboardOwner={sideHasKeyboard} onSendDraft={sendFromSidePage} onOpenChat={openChatBeside} actions={closePaneAction()} />
+              <AppDashboardPage session={side} place={chatPlace(side)} keyboardOwner={sideHasKeyboard} onSendDraft={sendFromSidePage} onOpenChat={openChatBeside} onClosePane={() => closeSplit()} />
             </Show>
           </div>
         </Show>
@@ -3294,10 +3306,8 @@ function App() {
             <ChatSurface session={side} project={side.selected()?.project} keyboardOwner={sideHasKeyboard} place={chatPlace(side)} modelSelector onShare={() => void shareChat(side.selectedId())}
               onRename={() => runSidebar("rename-chat", side.selected() ?? {})} onDelete={() => runSidebar("delete-chat", side.selected() ?? {})}
               notice={workspaceNotice(side.selected()?.project, side.selectedId())}
-              actions={<>
-                <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label="Swap with the main chat" title="Swap with the main chat" onClick={swapSideChat}><ArrowLeftRightIcon /></Button>
-                <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label="Close this chat" title="Close" onClick={() => closeSplit()}><XIcon /></Button>
-              </>} />
+              onClosePane={() => closeSplit()}
+              actions={<Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label="Swap with the main chat" title="Swap with the main chat" onClick={swapSideChat}><ArrowLeftRightIcon /></Button>} />
           </div>
         </Show>
       </section>
