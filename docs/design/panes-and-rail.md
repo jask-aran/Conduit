@@ -163,6 +163,9 @@ chats; tabs would repeat them and add the chrome the design language keeps
 out. The dock and a two-way split answer the need, two things at once. If
 tabs come later they are per side, after splits have been lived with.
 
+*Superseded by stage 6:* splits were lived with, and tabs come per pane,
+inside the pane's sheet.
+
 ## Stages
 
 Each stage builds, ships and is usable before the next starts.
@@ -276,7 +279,7 @@ file, a terminal or a tool.
 - **5d. Pages as pane views** -- built for the dashboard and project pages; Computer and harness pages still pane A only (their state is single in `main.tsx`). The dashboard, project pages, Computer and
   harness pages can sit on either side, their composers on that pane's
   session.
-- **5e. Tools as pane views.** Files, Source Control, Chat review and
+- **5e. Tools as pane views** -- superseded by 6c. Files, Source Control, Chat review and
   Terminal get state per place that a pane can host directly; the dock
   becomes one more host instead of the owner the split borrows from.
 - **5f. The URL and restore.** The URL keeps pane A; pane B rides a query
@@ -326,9 +329,62 @@ Stage 5 commits:
 - 5d: 4e2872b (the dashboard and project pages in either pane)
 - Sidebar focus: 70b3b23 (a sidebar row for what pane B shows focuses pane B). A header row on the frame above each sheet was tried (cb0462e..4bbd855) and reverted.
 
+### 6. Panes with tabs, tools as navigators
+
+Stage 5 made two equal panes. Stage 6 takes the rest of VS Code's model:
+the main pane holds one to three panes, each owning tabs of *documents*,
+and the dock holds *navigators* that open documents into the focused pane.
+It comes before the rest of 5d (Computer and harness pages, which become
+two more document kinds) and 5f (the URL and restore, which then carry the
+whole layout).
+
+- **Documents** open in panes, as tabs: a chat, the dashboard, a project
+  page, Computer, a harness page, a file (viewer or editor), a file's diff,
+  a terminal. Ids: `chat:<id>`, `page:dashboard`, `page:project:<id>`,
+  `computer`, `harness:<id>`, `file:<path>`, `diff:<path>`, `term:<id>`.
+- **Navigators** live in the dock, one of each, following the focused pane:
+  Files (tree and file search), Changes (the changed-files list),
+  Terminals (the running terminals, and the dock's quick terminal, which
+  stays), Chat context (the focused chat's artifacts and comments).
+
+Steps:
+
+- **6a. Search and the palette on the rail.** Both move from the headers to
+  the right rail, below the dock tools and set apart from them: they run
+  actions rather than open dock views. Phone headers keep them.
+- **6b. Panes as a list.** The layout is one to three panes, the focused
+  one, and their ratios, kept per device. Pane A and pane B become entries
+  in it; a drag edge sits between each pair; Ctrl+Shift+2 cycles them. Each
+  pane has one chat session (5a).
+- **6c. Tabs per pane.** The tab row sits inside the pane's charcoal sheet
+  and is its header row: with one tab it looks as the header does now
+  (`Project / Title`, the pane's controls at the right). A second document
+  adds a tab; the active tab keeps the breadcrumb, the others a short
+  title, each with its X. A preview tab (italic) is replaced by the next
+  open and kept on typing, sending or a double-click. Ctrl+Tab moves within
+  the pane. A pane's session follows its active chat tab; background tabs
+  hold no live session (the runtime store tracks their streams).
+- **6d. Tools as navigators.** Files, Changes, Terminals and Chat context
+  become dock navigators; a file, a diff or a terminal opened from them is
+  a tab in the focused pane. The dock loses its inline file editor and
+  diff view. A narrow desktop falls back to one pane rather than keeping a
+  viewer in the dock.
+- **6e. Opening.** A click opens in the focused pane, as a preview tab.
+  Alt+click, or the pane's split button, opens to the side: the next pane,
+  or a new one up to three. A tab dragged to a pane's edge splits there. A
+  sidebar row goes to the pane already showing it.
+
+Phone: one pane, no tab row (the sidebar is the tab list), the dock a sheet.
+
+**Going back.** Tag `panes-pre-stage-6` marks main before stage 6. As for
+stage 5, going back is `git revert` of the stage 6 commits listed here,
+newest first.
+
+Stage 6 commits:
+
 ## Open questions
 
-- **Two or three sides.** Two is the cap through stage 4.
+- **Two or three sides.** Three, from stage 6.
 - **Pages in the right side.** Whether a project page can sit beside a chat,
   or only chats and tools can.
 - **Remembered layouts.** One per device (as the panel is now), or one per
