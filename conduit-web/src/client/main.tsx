@@ -2262,6 +2262,18 @@ function App() {
       if (options.edit) { pendingFileEdit = null; fileHandles[slot]![index]?.edit(); }
       return;
     }
+    // Alt: beside a file already open -- the second side of a viewer with
+    // one, the file pane's first -- and only a new pane once they are full.
+    if (options.beside) {
+      const viewers = [filePane(), ...shownSlots()].filter((slot): slot is number => slot !== null && shownSlots().includes(slot));
+      const roomy = viewers.find((slot) => parseFileView(slotView(slot))?.length === 1);
+      if (roomy !== undefined) {
+        setSlotView(roomy, formatFileView([...parseFileView(slotView(roomy))!, entry]));
+        focusFileEntry(roomy, 1);
+        setFilePane(roomy);
+        return;
+      }
+    }
     const pane = filePane();
     const target = !options.beside && pane !== null && shownSlots().includes(pane) ? parseFileView(slotView(pane)) : null;
     if (pane === null || !target) {
@@ -3511,6 +3523,7 @@ function App() {
           <div class="workspace-split-surface">
             <FileViewer entries={entries()} focused={fileFocus()[slot] ?? 0} wrap={fileWrap()} onToggleWrap={toggleFileWrap} commentChatId={focusedChat().loadedId()}
               onFocusEntry={(index) => { focusFileEntry(slot, index); setFilePane(slot); }} onSplit={() => splitFileViewer(slot)} onCloseEntry={(index) => closeFileEntry(slot, index)}
+              onSetMode={(index, mode) => { const current = parseFileView(slotView(slot)); if (current) setSlotView(slot, formatFileView(current.map((item, at) => at === index ? { projectId: item.projectId, path: item.path, ...(mode ? { mode } : {}) } : item))); }}
               onLoaded={(index, file) => noteFileLoaded(slot, index, file)} ref={(index, handle) => { fileHandles[slot]![index] = handle; }} />
           </div>
         }</Show>
