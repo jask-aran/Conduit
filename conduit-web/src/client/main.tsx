@@ -1177,12 +1177,12 @@ function App() {
   // just reading on another profile. Seeding the launch from it then asks the
   // new profile for a model it has never heard of and the launch is refused,
   // so the selection only travels when it is this profile's to give.
-  const createProfileChat = (project: Project, profileId: string) => api<ChatSummary>("/v0/chats", {
+  const createProfileChat = (project: Project, profileId: string, chosen = models) => api<ChatSummary>("/v0/chats", {
     method: "POST",
     body: JSON.stringify({
       projectId: project.id,
       profileId,
-      ...(models.profile() === profileId ? { model: models.model(), thinkingLevel: models.effort() } : {}),
+      ...(chosen.profile() === profileId ? { model: chosen.model(), thinkingLevel: chosen.effort() } : {}),
     }),
   });
 
@@ -2149,8 +2149,16 @@ function App() {
    * chat is marked open there.
    */
   const sideChatId = () => { const view = splitView(); return view?.startsWith("chat:") ? view.slice("chat:".length) : null; };
+  // A page in pane B: "dashboard", or "project:<id>" (stage 5d).
+  const sidePage = () => { const view = splitView(); return view?.startsWith("page:") ? view.slice("page:".length) : null; };
+  const sidePageProject = () => {
+    const page = sidePage();
+    if (!page) return null;
+    if (page === "dashboard") return catalogue.projects().find((item) => item.slug === "chat") || catalogue.projects()[0] || null;
+    return catalogue.projects().find((item) => item.id === page.slice("project:".length)) || null;
+  };
   const [keyboardSide, setKeyboardSide] = createSignal<"main" | "side">("main");
-  const sideHasKeyboard = () => keyboardSide() === "side" && splitShown() && Boolean(sideChatId());
+  const sideHasKeyboard = () => keyboardSide() === "side" && splitShown() && Boolean(sideChatId() || sidePage());
   const lastPaneFocus: Record<"main" | "side", HTMLElement | null> = { main: null, side: null };
   const noteKeyboardSide = (event: FocusEvent) => {
     const target = event.target instanceof HTMLElement ? event.target : null;
@@ -2192,7 +2200,7 @@ function App() {
   // it names something else, and the split closed when the chat is gone.
   createEffect(on(() => [sideChatId(), catalogue.loaded(), catalogue.projects()] as const, ([id, loaded, projects]) => {
     if (!id) {
-      if (untrack(side.selectedId)) side.close();
+      if (!untrack(sidePage) && untrack(side.selectedId)) side.close();
       return;
     }
     if (!loaded) return;
@@ -2200,6 +2208,49 @@ function App() {
     if (!found) saveSplitView(null);
     else if (untrack(side.selectedId) !== id) void side.open(found.chat, found.project).catch(showError);
   }));
+  /*
+   * A page in pane B holds an unsent chat of its own for its composer, as
+   * pane A's dashboard does: made when the page opens, discarded when it
+   * closes unsent, and pane B's chat once it is sent.
+   */
+  let sideDraft: { id: string; projectId: string } | null = null;
+  const discardSideDraft = () => {
+    const draft = sideDraft;
+    if (!draft) return;
+    sideDraft = null;
+    if (untrack(side.selectedId) === draft.id) side.close();
+    void api(`/v0/chats/${encodeURIComponent(draft.id)}?ifEmpty=true`, { method: "DELETE" }).catch(() => {});
+  };
+  createEffect(on(() => [sidePage(), catalogue.loaded(), templatesLoading(), splitShown()] as const, ([page, loaded, loading, shown]) => {
+    if (!page) return discardSideDraft();
+    if (!loaded || loading || !shown) return;
+    const project = untrack(sidePageProject);
+    if (!project) return void saveSplitView(null);
+    if (sideDraft?.projectId === project.id && untrack(side.selectedId) === sideDraft.id) return;
+    discardSideDraft();
+    const templateId = project.defaultTemplateId || untrack(defaultTemplateId) || "assistant";
+    void createProfileChat(project, templateId, side.models).then(async (created) => {
+      if (untrack(sidePage) !== page) {
+        await api(`/v0/chats/${encodeURIComponent(created.id)}?ifEmpty=true`, { method: "DELETE" });
+        return;
+      }
+      sideDraft = { id: created.id, projectId: project.id };
+      await side.chat.initialize({ ...created, templateId: created.templateId || templateId || undefined }, project);
+    }).catch(showError);
+  }));
+  const sendFromSidePage = async (prompt: string) => {
+    const project = chatPlace(side).current || untrack(sidePageProject);
+    const id = side.chat.loadedId();
+    if (!project || !id) return;
+    catalogue.setProjects((current) => current.map((item) => item.id === project.id
+      ? { ...item, sessions: [{ id, projectId: project.id, status: "active", title: side.chat.title() || "New chat", templateId: side.chat.templateId() || undefined }, ...item.sessions.filter((existing) => existing.id !== id)] }
+      : item));
+    side.chat.setDraft(prompt);
+    sideDraft = null;
+    saveSplitView(`chat:${id}`);
+    await side.chat.send();
+  };
+  const openPageBeside = (page: "dashboard" | `project:${string}`) => { if (!isMobileLayout()) openBeside(`page:${page}`); };
   // The same chat on both sides is one chat: the main pane taking it closes the side.
   createEffect(() => { if (sideChatId() && sideChatId() === mainChatId()) saveSplitView(null); });
   // The side's chat takes the main pane; the chat there, if any, moves beside.
@@ -2216,7 +2267,7 @@ function App() {
   const focusedChatId = () => sideFocused() ? side.selectedId() : catalogue.selectedId();
   // A sidebar command's target when it is pane B's chat; pane A's is the sidebar's own.
   const focusedTarget = () => sideFocused() ? side.selected() ?? {} : {};
-  const dockSelection = () => sideFocused() ? side.selected() : null;
+  const dockSelection = () => sideFocused() ? side.selected() ?? (sidePageProject() ? { project: sidePageProject()! } : null) : null;
   const dockProject = () => dockSelection()?.project ?? selectedProject();
   const dockScope = () => dockSelection() ? `project:${dockSelection()!.project.id}` : workspacePanelScope();
   const swapSideChat = () => {
@@ -2295,8 +2346,7 @@ function App() {
       showError(error);
     }
   };
-  const shareProject = async () => {
-    const project = selectedProject();
+  const shareProject = async (project = selectedProject()) => {
     if (!project) return;
     try {
       const { origin } = await api<{ origin: string }>("/v0/share-origin");
@@ -2958,8 +3008,97 @@ function App() {
    * stage 5). What differs by pane comes in as props: the actions only the
    * main chat has yet, and the side's swap and close.
    */
+  /*
+   * The pages either pane can show, drawn from the pane's session: its
+   * composer is the page's unsent chat, and sending makes it that pane's chat
+   * (docs/design/panes-and-rail.md, stage 5d).
+   */
+  const PageComposer = (props: { session: ChatSession; place?: ReturnType<typeof chatPlace>; keyboardOwner: () => boolean; onSendDraft: (prompt: string) => Promise<void> }) => {
+    const current = props.session;
+    return <Composer
+      chat={current.chat}
+      place={props.place}
+      supports={current.capability}
+      attachments={current.attachments}
+      attachmentsSupported={current.capability("attachments", true)}
+      models={current.models}
+      permissions={current.capability("permissionModes") ? current.permissions : undefined}
+      serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined}
+      profiles={profiles()}
+      activeProfile={current.activeProfile()}
+      contextMetrics={contextMetrics}
+      serverOnline={runtime.connectivity() === "online"}
+      voiceSettings={voiceSettings()}
+      keyboardOwner={props.keyboardOwner}
+      onChooseProfile={(id) => void current.switchProfile(id)}
+      onOpenSettings={openSettings}
+      onOpenModelSelector={openModelSelector}
+      modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)}
+      onOpenAttachments={current.openAttachments}
+      onStatusChange={current.setComposerStatus}
+      onSendDraft={props.onSendDraft}
+    />;
+  };
+  const openTerminalFromPage = (terminal: { id: string; projectId: string; cwd?: string | null }, maximized: boolean) => {
+    if ((terminal.projectId === "computer" || terminal.projectId.startsWith("computer:")) && terminal.cwd) {
+      openComputer();
+      void browseComputer(terminal.cwd).then(() => { openWorkspaceView("terminal", terminal.id); if (maximized) setWorkspaceExpanded(true); });
+      return;
+    }
+    const project = catalogue.projects().find((item) => item.id === terminal.projectId);
+    if (!project) return showError("The terminal scope is no longer available.");
+    void createChat(project).then((created) => {
+      if (!created) return;
+      openWorkspaceView("terminal", terminal.id);
+      if (maximized) setWorkspaceExpanded(true);
+    });
+  };
+  const AppDashboardPage = (props: { session: ChatSession; place?: ReturnType<typeof chatPlace>; keyboardOwner: () => boolean; onSendDraft: (prompt: string) => Promise<void>; onOpenChat: (target: ChatSummary, project: Project) => void; actions?: JSX.Element }) => <>
+    <ChatHeader title="Conduit Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard actions={props.actions} />
+    <AppDashboard
+      projects={catalogue.projects()}
+      composer={<PageComposer session={props.session} place={props.place} keyboardOwner={props.keyboardOwner} onSendDraft={props.onSendDraft} />}
+      runtime={runtime}
+      onOpenChat={props.onOpenChat}
+      onPrefetchChat={chat.prefetch}
+      onOpenProject={(project) => void openProject(project)}
+      onPrefetchProject={prefetchProjectDashboard}
+      onContextAction={(type, target) => runSidebar(type, target)}
+      isPinned={isSidebarPinned}
+      onNewChat={(project) => void startNewChat(project)}
+      onOpenWorkspaceIdentity={openWorkspaceIdentity}
+      onOpenWorkspaceSettings={(project) => openSettings("workspaces", project.id)}
+      onMoveProjectChats={(source, target) => void moveProjectChats(source, target)}
+      onOpenChatTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
+      onSearchChats={(scope) => openPalette("chat-search", scope === "unscoped" ? "scope:chats " : "", true)}
+      onOpenTerminalView={() => openTerminalRoute()}
+      onOpenSettings={() => openSettings()}
+      profiles={profiles()}
+      onOpenTerminal={(terminal) => openTerminalFromPage(terminal, false)}
+      onOpenTerminalMaximized={(terminal) => openTerminalFromPage(terminal, true)}
+      onPrefetchTerminal={prefetchWorkspaceTerminal}
+    />
+  </>;
+  const ProjectPage = (props: { session: ChatSession; project: Project; keyboardOwner: () => boolean; onSendDraft: (prompt: string) => Promise<void>; onOpenChat: (target: DashboardChat, project: Project) => Promise<void>; target?: { project: Project }; actions?: JSX.Element }) => <>
+    <ChatHeader project={props.project} title={props.project.name} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject(props.project)} onRename={() => runSidebar("rename-folder", props.target ?? {})} onDelete={() => runSidebar("delete-project", props.target ?? {})} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} dashboard actions={props.actions} />
+    <ProjectDashboard project={props.project} runtime={runtime} profiles={profiles()} onOpenHarnessThread={(harnessId, path, id, title) => void openHarnessThread({ harnessId, path, id, title })}
+      composer={<PageComposer session={props.session} keyboardOwner={props.keyboardOwner} onSendDraft={props.onSendDraft} />}
+      onOpenChat={props.onOpenChat}
+      onOpenChatTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
+      onPrefetchChat={chat.prefetch}
+      onContextAction={(type, target) => runSidebar(type, target)}
+      isPinned={isSidebarPinned}
+      onOpenView={(view) => openWorkspaceView(view)}
+      onOpenTerminal={(terminal) => openWorkspaceView("terminal", terminal.id)}
+      onOpenTerminalMaximized={(terminal) => { openWorkspaceView("terminal", terminal.id); setWorkspaceExpanded(true); }}
+      onPrefetchTerminal={prefetchWorkspaceTerminal}
+      onSearchChats={() => openPalette("chat-search", `in:${props.project.id} `, true)}
+      onRename={() => runSidebar("rename-folder", props.target ?? {})} onDelete={() => runSidebar("delete-project", props.target ?? {})}
+      onOpenSettings={openSettings} onSaveAppearance={saveWorkspaceAppearance} onRefresh={refresh} onCancelClone={cancelClone} onDestroyWorkspace={(confirmation) => destroyWorkspace(props.project, confirmation)} onError={showError} />
+  </>;
   // A workspace's other agents: two chats editing the same files.
   const workspaceNotice = (project: Project | undefined, chatId: string | null) => <Show when={project?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== chatId && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>;
+  const closePaneAction = () => <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label="Close this pane" title="Close" onClick={() => closeSplit()}><XIcon /></Button>;
   const ChatSurface = (props: {
     session: ChatSession;
     project?: Project;
@@ -2998,7 +3137,7 @@ function App() {
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
-      onNewChat={async (project) => { await startNewChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={openChat} onFocusMainPane={focusMainPane} onEnterMainPane={() => { if (!isMobileLayout()) enterMainPane(); }} onOpenProject={openProject} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
+      onNewChat={async (project) => { await startNewChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={openChat} onFocusMainPane={focusMainPane} onEnterMainPane={() => { if (!isMobileLayout()) enterMainPane(); }} onOpenProject={async (project) => { if (altActivation()) openPageBeside(`project:${project.id}`); else await openProject(project); }} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
       onOpenProjectMaximized={openProjectWithMaximizedWorkspace}
       onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
@@ -3023,7 +3162,7 @@ function App() {
       onOpenComputer={() => openComputer()}
       onOpenHarness={(id) => openComputerHarness(id)} selectedHarness={computerHarness()}
       onOpenTerminalView={() => openTerminalRoute()}
-      onOpenDashboard={() => openDashboard()}
+      onOpenDashboard={() => altActivation() ? openPageBeside("dashboard") : openDashboard()}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
       onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating()}
       updateState={updateState()} onTakeUpdate={() => void takePwaUpdate()}
@@ -3050,90 +3189,23 @@ function App() {
           </div>
         </Show>
         <Show when={routeKind() === "dashboard"}>
-          <ChatHeader title="Conduit Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard />
-          <AppDashboard
-            projects={catalogue.projects()}
-            composer={<Composer
-              chat={chat}
-              place={routeKind() === "dashboard" ? chatPlace() : undefined}
-              supports={chatCapability}
-              attachments={attachments}
-              attachmentsSupported={chatCapability("attachments", true)}
-              models={models}
-              permissions={chatCapability("permissionModes") ? permissions : undefined}
-              serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined}
-              profiles={profiles()}
-              activeProfile={activeProfile()}
-              contextMetrics={contextMetrics}
-              serverOnline={runtime.connectivity() === "online"}
-              voiceSettings={voiceSettings()}
-              onChooseProfile={(id) => void switchProfile(id)}
-              onOpenSettings={openSettings}
-              onOpenModelSelector={openModelSelector}
-              modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)}
-              onOpenAttachments={session.openAttachments}
-              onStatusChange={setComposerStatus}
-              onSendDraft={async (prompt) => {
-                const project = chatOwner() || catalogue.projects().find((item) => item.slug === "chat");
-                const id = chat.loadedId();
-                if (!project || !id) return;
-                // Sending is what ends a draft -- the server flips the status
-                // on the prompt itself -- so the row goes in active. Listing it
-                // as a draft hid it behind the New chat row until the first
-                // turn checkpointed, which on a long or interrupted answer left
-                // the sidebar saying "No chats" over an open conversation.
-                catalogue.setProjects((current) => current.map((item) => item.id === project.id
-                  ? { ...item, sessions: [{ id, projectId: project.id, status: "active", title: chat.title() || "New chat", templateId: chat.templateId() || undefined }, ...item.sessions.filter((session) => session.id !== id)] }
-                  : item));
-                history.pushState({}, "", `/chat/${id}`);
-                chat.setDraft(prompt);
-                await sendFromDashboard();
-              }}
-            />}
-            runtime={runtime}
-            onOpenChat={(target, project) => void openChatFromPage(target, project)}
-            onPrefetchChat={chat.prefetch}
-            onOpenProject={(project) => void openProject(project)}
-            onPrefetchProject={prefetchProjectDashboard}
-            onContextAction={(type, target) => runSidebar(type, target)}
-            isPinned={isSidebarPinned}
-            onNewChat={(project) => void startNewChat(project)}
-            onOpenWorkspaceIdentity={openWorkspaceIdentity}
-            onOpenWorkspaceSettings={(project) => openSettings("workspaces", project.id)}
-            onMoveProjectChats={(source, target) => void moveProjectChats(source, target)}
-            onOpenChatTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
-            onSearchChats={(scope) => openPalette("chat-search", scope === "unscoped" ? "scope:chats " : "", true)}
-            onOpenTerminalView={() => openTerminalRoute()}
-            onOpenSettings={() => openSettings()}
-            profiles={profiles()}
-            onOpenTerminal={(terminal) => {
-              if ((terminal.projectId === "computer" || terminal.projectId.startsWith("computer:")) && terminal.cwd) {
-                openComputer();
-                void browseComputer(terminal.cwd).then(() => openWorkspaceView("terminal", terminal.id));
-                return;
-              }
-              const project = catalogue.projects().find((item) => item.id === terminal.projectId);
-              if (!project) return showError("The terminal scope is no longer available.");
-              void createChat(project).then((created) => {
-                if (created) openWorkspaceView("terminal", terminal.id);
-              });
-            }}
-            onOpenTerminalMaximized={(terminal) => {
-              if ((terminal.projectId === "computer" || terminal.projectId.startsWith("computer:")) && terminal.cwd) {
-                openComputer();
-                void browseComputer(terminal.cwd).then(() => { openWorkspaceView("terminal", terminal.id); setWorkspaceExpanded(true); });
-                return;
-              }
-              const project = catalogue.projects().find((item) => item.id === terminal.projectId);
-              if (!project) return showError("The terminal scope is no longer available.");
-              void createChat(project).then((created) => {
-                if (!created) return;
-                openWorkspaceView("terminal", terminal.id);
-                setWorkspaceExpanded(true);
-              });
-            }}
-            onPrefetchTerminal={prefetchWorkspaceTerminal}
-          />
+          <AppDashboardPage session={session} place={chatPlace()} keyboardOwner={() => !sideHasKeyboard()} onOpenChat={(target, project) => void openChatFromPage(target, project)}
+            onSendDraft={async (prompt) => {
+              const project = chatOwner() || catalogue.projects().find((item) => item.slug === "chat");
+              const id = chat.loadedId();
+              if (!project || !id) return;
+              // Sending is what ends a draft -- the server flips the status
+              // on the prompt itself -- so the row goes in active. Listing it
+              // as a draft hid it behind the New chat row until the first
+              // turn checkpointed, which on a long or interrupted answer left
+              // the sidebar saying "No chats" over an open conversation.
+              catalogue.setProjects((current) => current.map((item) => item.id === project.id
+                ? { ...item, sessions: [{ id, projectId: project.id, status: "active", title: chat.title() || "New chat", templateId: chat.templateId() || undefined }, ...item.sessions.filter((session) => session.id !== id)] }
+                : item));
+              history.pushState({}, "", `/chat/${id}`);
+              chat.setDraft(prompt);
+              await sendFromDashboard();
+            }} />
         </Show>
         <Show when={routeKind() === "computer"}>
           <Show when={harnessThread()} fallback={<Show when={computerHarness()} fallback={<>
@@ -3182,64 +3254,40 @@ function App() {
             onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")}
             notice={workspaceNotice(selectedProject(), catalogue.selectedId())} />
         </>}>
-          <ChatHeader project={selectedProject()} title={selectedProject()!.name} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject()} onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} dashboard />
-          <ProjectDashboard project={selectedProject()!} runtime={runtime} profiles={profiles()} onOpenHarnessThread={(harnessId, path, id, title) => void openHarnessThread({ harnessId, path, id, title })}
-            composer={<Composer
-              chat={chat}
-              place={routeKind() === "dashboard" ? chatPlace() : undefined}
-              supports={chatCapability}
-              attachments={attachments}
-              attachmentsSupported={chatCapability("attachments", true)}
-              models={models}
-              permissions={chatCapability("permissionModes") ? permissions : undefined}
-              serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined}
-              profiles={profiles()}
-              activeProfile={activeProfile()}
-              contextMetrics={contextMetrics}
-              serverOnline={runtime.connectivity() === "online"}
-              voiceSettings={voiceSettings()}
-              onChooseProfile={(id) => void switchProfile(id)}
-              onOpenSettings={openSettings}
-              onOpenModelSelector={openModelSelector}
-              modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)}
-              onOpenAttachments={session.openAttachments}
-              onStatusChange={setComposerStatus}
-              onSendDraft={async (prompt) => {
-                const project = selectedProject();
-                const id = chat.loadedId();
-                if (!project || !id) return;
-                // Sending is what ends a draft -- the server flips the status
-                // on the prompt itself -- so the row goes in active. Listing it
-                // as a draft hid it behind the New chat row until the first
-                // turn checkpointed, which on a long or interrupted answer left
-                // the sidebar saying "No chats" over an open conversation.
-                catalogue.setProjects((current) => current.map((item) => item.id === project.id
-                  ? { ...item, sessions: [{ id, projectId: project.id, status: "active", title: chat.title() || "New chat", templateId: chat.templateId() || undefined }, ...item.sessions.filter((session) => session.id !== id)] }
-                  : item));
-                history.pushState({}, "", `/chat/${id}`);
-                chat.setDraft(prompt);
-                await sendFromDashboard();
-              }}
-            />}
-            onOpenChat={(target: DashboardChat, project) => openChatFromPage(target, project)}
-            onOpenChatTerminal={(target, project) => { void openChat(target, project).then(() => openWorkspaceView("terminal")); }}
-            onPrefetchChat={chat.prefetch}
-            onContextAction={(type, target) => runSidebar(type, target)}
-            isPinned={isSidebarPinned}
-            onOpenView={(view) => openWorkspaceView(view)}
-            onOpenTerminal={(terminal) => openWorkspaceView("terminal", terminal.id)}
-            onOpenTerminalMaximized={(terminal) => { openWorkspaceView("terminal", terminal.id); setWorkspaceExpanded(true); }}
-            onPrefetchTerminal={prefetchWorkspaceTerminal}
-            onSearchChats={() => openPalette("chat-search", `in:${selectedProject()!.id} `, true)}
-            onRename={() => runSidebar("rename-folder")} onDelete={() => runSidebar("delete-project")}
-            onOpenSettings={openSettings} onSaveAppearance={saveWorkspaceAppearance} onRefresh={refresh} onCancelClone={cancelClone} onDestroyWorkspace={(confirmation) => destroyWorkspace(selectedProject()!, confirmation)} onError={showError} />
+          <ProjectPage session={session} project={selectedProject()!} keyboardOwner={() => !sideHasKeyboard()} onOpenChat={(target, project) => openChatFromPage(target, project)}
+            onSendDraft={async (prompt) => {
+              const project = selectedProject();
+              const id = chat.loadedId();
+              if (!project || !id) return;
+              // Sending is what ends a draft -- the server flips the status
+              // on the prompt itself -- so the row goes in active. Listing it
+              // as a draft hid it behind the New chat row until the first
+              // turn checkpointed, which on a long or interrupted answer left
+              // the sidebar saying "No chats" over an open conversation.
+              catalogue.setProjects((current) => current.map((item) => item.id === project.id
+                ? { ...item, sessions: [{ id, projectId: project.id, status: "active", title: chat.title() || "New chat", templateId: chat.templateId() || undefined }, ...item.sessions.filter((session) => session.id !== id)] }
+                : item));
+              history.pushState({}, "", `/chat/${id}`);
+              chat.setDraft(prompt);
+              await sendFromDashboard();
+            }} />
         </Show>
         </Show>
       </Show>
     </main>
     <Show when={splitShown()}>
-      <section ref={(element) => { setSplitHost(element); onCleanup(() => setSplitHost(undefined)); }} class="main-split" data-region={sideChatId() ? "chat" : "workspace-panel"} aria-label="Main pane split" style={{ flex: `${splitRatio()} 1 0`, "min-width": `${MIN_SPLIT_PANE_WIDTH}px` }}>
+      <section ref={(element) => { setSplitHost(element); onCleanup(() => setSplitHost(undefined)); }} class="main-split" data-region={sideChatId() ? "chat" : sidePage() ? "dashboard" : "workspace-panel"} aria-label="Main pane split" style={{ flex: `${splitRatio()} 1 0`, "min-width": `${MIN_SPLIT_PANE_WIDTH}px` }}>
         <div class="main-split-resize" role="separator" aria-label="Resize main pane split" aria-orientation="vertical" onPointerDown={startSplitResize} />
+        <Show when={sidePage()}>
+          <div class="main-split-chat main-split-page">
+            <input ref={side.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) side.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
+            <Show when={sidePage() === "dashboard"} fallback={<Show when={sidePageProject()}>{(project) =>
+              <ProjectPage session={side} project={project()} target={{ project: project() }} keyboardOwner={sideHasKeyboard} onSendDraft={sendFromSidePage} onOpenChat={async (target, owner) => openChatBeside(target, owner)} actions={closePaneAction()} />
+            }</Show>}>
+              <AppDashboardPage session={side} place={chatPlace(side)} keyboardOwner={sideHasKeyboard} onSendDraft={sendFromSidePage} onOpenChat={openChatBeside} actions={closePaneAction()} />
+            </Show>
+          </div>
+        </Show>
         <Show when={sideChatId()}>
           <div class="main-split-chat">
             <input ref={side.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) side.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
