@@ -282,8 +282,16 @@ file, a terminal or a tool.
 - **5e. Tools as pane views** -- superseded by 6c. Files, Source Control, Chat review and
   Terminal get state per place that a pane can host directly; the dock
   becomes one more host instead of the owner the split borrows from.
-- **5f. The URL and restore.** The URL keeps pane A; pane B rides a query
-  parameter, so reload, back/forward and a shared link restore both.
+- **5f. The URL and restore** -- built. The path stays pane A's route; `a`
+  is a view pane A shows over it (a file viewer or a tool -- pane A holds
+  anything now), each `pane` a pane beside A in order, `focus` the position
+  of the pane with the keyboard; widths and the dock stay per device. Every
+  address the app writes goes through one helper, so a route change carries
+  the panes; a pane changing rewrites the address in place, and Back and
+  forward restore both. A URL naming panes restores exactly those; the app
+  opened at its start page restores the device's last layout; any other URL
+  opens pane A alone. Pane A's route changing clears what showed over it; a
+  swap, a close or Back restoring an address does not.
 
 **The bar.** Two panes should feel like two Conduit tabs side by side: the
 reader never thinks about which one "the window" is. So every per-chat or
@@ -410,6 +418,7 @@ Stage 6 commits:
 - 6d-1: 6103cea (the dock follows places); 6d-2: 708a451 (the file viewer: Files as the navigator where panes fit, a file pane of one or two files). Not yet in the viewer: a review comment's reveal, Replace with upload (the navigator keeps it).
 - 6d-3: 9cf1925, 2758f60 (an entry shows its unstaged or staged changes in place, with its Git status mark; a header that no longer fits drops its copy and download actions; Alt from Files fills a viewer's second side before opening a new pane).
 - Pane actions: swap and close on each pane's breadcrumb, pane A included; A swaps right, the others left; the swap fades, slides and fades (DESIGN.md, Two chats). File viewer headers gather their actions into an overflow menu before the name goes, and a review comment on a file scrolls its viewer.
+- 5f: see the commits after 91c6af1 (the URL carries every pane; pane A holds anything).
 
 ## Open questions
 
