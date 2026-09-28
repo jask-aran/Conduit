@@ -24,10 +24,10 @@
 .conduit-sidebar[data-visual-state="collapsed"] .sidebar-empty,
 .conduit-sidebar[data-visual-state="collapsed"] .sidebar-chevron,
 .conduit-sidebar[data-visual-state="collapsed"] .workspace-cloning-badge { display: none; }
-/* The header row centres on the main panel header's line (24.8px down), so the
+/* The header row centres on the main panel header's line (28.8px down), so the
    sidebar's icons sit level with the breadcrumb's and the wordmark shares its
    baseline. */
-[data-sidebar="header"] { display: flex; align-items: center; gap: 1.6px; padding: 8px 8px 2.4px; }
+[data-sidebar="header"] { display: flex; align-items: center; gap: 1.6px; padding: 12px 8px 2.4px; }
 [data-sidebar="header"] > [data-sidebar="brand"] { display: flex; order: 1; min-width: 0; height: 33.6px; flex: 1; align-items: stretch; justify-content: flex-start; gap: 8px; border: 0; border-radius: var(--radius-md); background: transparent; padding: 0 4.8px; color: inherit; }
 [data-sidebar="header"] > [data-sidebar="trigger"] { order: 0; margin-left: 0; }
 [data-sidebar="header"] > [data-sidebar="brand"] > span { display: flex; height: 100%; align-items: center; font-family: "Conduit Wordmark", sans-serif; font-size: 15px; font-weight: 400; letter-spacing: 0; line-height: 1; }

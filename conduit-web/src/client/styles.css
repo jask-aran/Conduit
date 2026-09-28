@@ -140,7 +140,7 @@ svg.lucide { stroke-width: 2.4; }
 .chat-context-menu-values { padding: 1.6px 4.8px 4.8px; color: var(--foreground); font: 8.8px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
 
 /* Inset panel: the rounded fill sits directly on the darker frame. */
-.chat-main { --chat-header-height: 36.8px; position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 8px 6.4px 1.6px; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 12.8px; background: transparent; color: var(--foreground); }
+.chat-main { --chat-header-height: 44.8px; position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 8px 6.4px 1.6px; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 12.8px; background: transparent; color: var(--foreground); }
 /* The header row sits on the frame, the top line the app's panes share: a
    pane's sheet starts below it, so each pane's breadcrumb heads it as a tab
    does (docs/design/panes-and-rail.md). */
@@ -153,11 +153,7 @@ svg.lucide { stroke-width: 2.4; }
 /* The header is a flow item, so it reserves its own height for whatever the
    pane holds and no surface has to know it is there. It still paints over
    what runs beneath it -- see `.transcript`, the one surface that asks to. */
-.chat-header { position: relative; z-index: 2; display: flex; height: var(--chat-header-height); flex: none; align-items: center; gap: 6.4px; padding: 5.6px 11.2px; background: transparent; }
-/* Search and the palette are the rail's, not a pane's: they sit at its right
-   end, after a pane's own controls, and only the rightmost pane shows them. */
-.chat-header-actions > :is(.search-trigger, .palette-trigger) { order: 1; }
-.chat-main:has(~ .main-split) .chat-header :is(.search-trigger, .palette-trigger) { display: none; }
+.chat-header { position: relative; z-index: 2; display: flex; height: var(--chat-header-height); flex: none; align-items: center; gap: 6.4px; padding: 6.4px 11.2px; background: transparent; }
 .chat-header-title { display: flex; min-width: 0; align-items: center; gap: 5.6px; overflow: hidden; font-size: 11.2px; line-height: 16px; }
 .chat-header-title span, .chat-header-title strong, .chat-header-title .breadcrumb-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The place crumb is a link to its page: the crumb at rest, white under the pointer. */
@@ -205,8 +201,6 @@ svg.lucide { stroke-width: 2.4; }
    thread's own top padding so the first message still starts below the bar.
    Every other pane keeps the space the header reserved, by doing nothing. */
 .transcript { position: relative; z-index: 1; min-height: 0; margin-top: 0; flex: 1; overflow: hidden; }
-/* The sheet's top edge fades what scrolls up to it, as the header over it once did. */
-.transcript::after { content: ""; position: absolute; inset: 0 0 auto; z-index: 2; height: 25.6px; background: linear-gradient(to bottom, var(--background), transparent); pointer-events: none; }
 .composer-renderer-switch { position: absolute; top: 6.4px; right: 9.6px; z-index: 3; }
 .composer-renderer-switch label { display: flex; align-items: center; gap: 4.8px; color: var(--muted-foreground); font: 8px ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; letter-spacing: .06em; }
 .composer-renderer-switch select { min-height: 20.8px; border: 0.8px solid var(--border); border-radius: 4px; background: color-mix(in oklch, var(--background), transparent 8%); padding: 1.6px 4px; color: var(--foreground); font: 8.8px ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: none; }
@@ -862,8 +856,6 @@ svg.lucide { stroke-width: 2.4; }
   }
   .mobile-header-leading, .chat-header-actions { gap: 0; }
   .chat-header-actions { margin-left: auto; justify-content: flex-end; }
-  .chat-header-actions > :is(.search-trigger, .palette-trigger) { order: 0; }
-  .transcript::after { content: none; }
   .chat-header-more { display: inline-flex; flex: none; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
   .chat-header-more:hover { background: var(--accent); }
   .chat-header-menu {
