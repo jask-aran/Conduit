@@ -268,7 +268,7 @@ file, a terminal or a tool.
 - **5b. One chat view** -- built. Header, transcript and composer become one
   component that takes a session. The main pane renders it; no visible
   change.
-- **5c. Panes.** The main pane holds two panes, A and B, each a view plus
+- **5c. Panes** -- built, except a new chat in pane B; `side-chat.ts` stays as pane B's thin catalogue slice. The main pane holds two panes, A and B, each a view plus
   (for a chat) its own session. The split's `chat:<id>` becomes pane B's
   chat on the same component; `side-chat.ts` and the repeated markup go.
   Leader commands, the model selector, stash and the rest act on the focused
@@ -289,7 +289,7 @@ per-page thing follows the pane with the keyboard, not the left one:
 - leader and palette commands (stop, regenerate, stash, rename, the model
   selector), Esc to the composer, and the dock's place (it looks at the
   focused pane's project);
-- Ctrl+Shift+2 goes to the pane last used, and a key moves between the two;
+- Ctrl+Shift+2 goes to the pane last used, and pressed again moves to the other, each landing where its focus last was;
 - a new chat, or a page, can open in either pane;
 - the URL, back/forward and a shared link carry both panes (5f).
 
@@ -321,6 +321,7 @@ Stage 5 commits:
 
 - 5a: d6e9c5a (the chat session factory)
 - 5b: bff14ae (one chat surface)
+- 5c: 9c0ba55 (commands, palette, dock and Ctrl+Shift+2 follow the pane)
 
 ## Open questions
 
