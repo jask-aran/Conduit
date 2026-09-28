@@ -382,7 +382,7 @@ newest first.
 
 Stage 6 commits:
 
-- 6a: see the commit below this list's first entry (search and the palette on the rail)
+- 6a: 5f51f03 (search and the palette on the rail)
 
 ## Open questions
 
