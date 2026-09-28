@@ -324,6 +324,7 @@ Stage 5 commits:
 - 5c: 9c0ba55 (commands, palette, dock and Ctrl+Shift+2 follow the pane)
 - 5c: 1e7201c (pane B's chat renames, deletes, moves place, opens the model selector)
 - 5d: 4e2872b (the dashboard and project pages in either pane)
+- Sidebar focus: 70b3b23 (a sidebar row for what pane B shows focuses pane B). A header row on the frame above each sheet was tried (cb0462e..4bbd855) and reverted.
 
 ## Open questions
 
