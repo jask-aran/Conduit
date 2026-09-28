@@ -2391,10 +2391,19 @@ function App() {
   const focusedChatId = () => focusedSlot()?.session.selectedId() ?? catalogue.selectedId();
   // A sidebar command's target when it is another pane's chat; pane A's is the sidebar's own.
   const focusedTarget = () => focusedSlot()?.session.selected() ?? {};
+  /*
+   * The dock follows places, not panes (6d-1): it shows the place of the last
+   * chat or page pane that had the keyboard. A file or terminal pane taking
+   * the keyboard leaves it where it was, so it moves only between panes in
+   * different places.
+   */
+  const [placePane, setPlacePane] = createSignal<PaneKey>("main");
+  createEffect(() => { const pane = keyboardPane(); if (pane === "main" || isPaneView(slotView(pane))) setPlacePane(pane); });
   const dockSelection = () => {
-    const pane = focusedSlot();
-    if (!pane) return null;
-    const project = slotPageProject(pane.index);
+    const slot = placePane();
+    if (slot === "main" || !shownSlots().includes(slot)) return null;
+    const pane = paneSlot(slot);
+    const project = slotPageProject(slot);
     return pane.session.selected() ?? (project ? { project } : null);
   };
   const dockProject = () => dockSelection()?.project ?? selectedProject();

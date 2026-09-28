@@ -26,6 +26,8 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-panel-header { display: flex; height: 44.8px; flex: none; align-items: center; gap: 6.4px; overflow: hidden; padding: 6.4px 11.2px; }
 .workspace-panel-header strong { overflow: hidden; flex: none; font-size: 11.2px; font-weight: 600; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-panel-header[data-compact="name"] strong { display: none; }
+.workspace-panel-place { overflow: hidden; min-width: 0; flex: 0 1 auto; color: var(--muted-foreground); font-size: 11.2px; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-panel-header[data-compact] .workspace-panel-place { display: none; }
 .workspace-panel-header [data-slot="button"] svg { width: 14px; height: 14px; }
 /* Its modes are the dashboard heading's switch (split.css), folding to icons
    when the header runs out of room. */
