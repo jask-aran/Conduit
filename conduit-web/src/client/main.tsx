@@ -2719,10 +2719,13 @@ function App() {
   // Pane A sent somewhere by its route -- a new chat, a link -- leaves what
   // showed over it; a swap or close moving a document there does not.
   let paneARoute: string | null = null;
+  // Back or forward restoring an address sets pane A's route and what shows
+  // over it together; the route changing then is not pane A being sent away.
+  let restoringPanes = false;
   createEffect(() => {
     const key = routeBootstrap() === "ready" ? `${routeKind()}:${catalogue.selectedId()}:${selectedProject()?.id ?? ""}:${harnessThread() ? "thread" : ""}` : null;
     if (key === null) return;
-    if (paneARoute !== null && key !== paneARoute && !swappingPanes && untrack(paneAOverride)) setPaneAOverride(null);
+    if (paneARoute !== null && key !== paneARoute && !swappingPanes && !restoringPanes && untrack(paneAOverride)) setPaneAOverride(null);
     paneARoute = key;
   });
   // Back and forward: the panes the address names.
@@ -3324,6 +3327,7 @@ function App() {
     media?.addEventListener("change", onViewportChange);
     onCleanup(() => media?.removeEventListener("change", onViewportChange));
     const onPopState = () => {
+      restoringPanes = true;
       applyPanesFromUrl();
       void (async () => {
         // Back off an untracked thread still at work asks first, as any other
@@ -3367,7 +3371,7 @@ function App() {
             setRouteBootstrap("ready");
           },
         });
-      })().catch((error) => showError(error));
+      })().catch((error) => showError(error)).finally(() => { requestAnimationFrame(() => { restoringPanes = false; }); });
     };
     window.addEventListener("popstate", onPopState);
     onCleanup(() => window.removeEventListener("popstate", onPopState));
