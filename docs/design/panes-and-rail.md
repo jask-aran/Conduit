@@ -273,7 +273,7 @@ file, a terminal or a tool.
   chat on the same component; `side-chat.ts` and the repeated markup go.
   Leader commands, the model selector, stash and the rest act on the focused
   pane's session.
-- **5d. Pages as pane views.** The dashboard, project pages, Computer and
+- **5d. Pages as pane views** -- built for the dashboard and project pages; Computer and harness pages still pane A only (their state is single in `main.tsx`). The dashboard, project pages, Computer and
   harness pages can sit on either side, their composers on that pane's
   session.
 - **5e. Tools as pane views.** Files, Source Control, Chat review and
@@ -323,6 +323,7 @@ Stage 5 commits:
 - 5b: bff14ae (one chat surface)
 - 5c: 9c0ba55 (commands, palette, dock and Ctrl+Shift+2 follow the pane)
 - 5c: 1e7201c (pane B's chat renames, deletes, moves place, opens the model selector)
+- 5d: 4e2872b (the dashboard and project pages in either pane)
 
 ## Open questions
 
