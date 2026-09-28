@@ -2182,13 +2182,16 @@ function App() {
   const slotHasKeyboard = (slot: number) => keyboardSlot() === slot;
   const focusPane = (slot: number) => { setKeyboardPane(slot); focusSplit(slot); };
   /*
-   * Open beside the pane with the keyboard, as VS Code opens to the side: into
-   * the pane to its right, or a new pane when there is room for one, or else
-   * the pane to its left. A view a pane already shows is gone to there; a tool
-   * goes to the pane that holds one. Whatever a tool displaces goes back to the
-   * dock, which opens on it when that is where the reader was working.
+   * Open beside the pane with the keyboard: a new pane just right of it when
+   * the width holds one, or else the pane to its right, or, from the last
+   * pane, the one to its left. A view a pane already shows is gone to there;
+   * a tool goes to the pane that holds one. Whatever a tool displaces goes
+   * back to the dock, which opens on it when that is where the reader was
+   * working. A tool moved from the dock takes the keyboard; a chat or page
+   * opened beside from a list leaves it where it was, so opening several
+   * beside in a row lands each in the same place.
    */
-  const openBeside = (view: SplitView) => {
+  const openBeside = (view: SplitView, focus = true) => {
     const shown = shownSlots();
     const showing = shown.find((slot) => slotView(slot) === view);
     if (showing !== undefined) return focusPane(showing);
@@ -2196,14 +2199,14 @@ function App() {
     const pane = from ?? keyboardPane();
     const position = pane === "main" ? 0 : Math.max(0, shown.indexOf(pane) + 1);
     let slot = isPaneView(view) ? null : toolSlot();
-    if (slot === null) slot = shown[position] ?? (shown.length < maxExtras() ? null : shown[position - 2] ?? shown[shown.length - 1] ?? null);
+    if (slot === null && shown.length >= maxExtras()) slot = shown[position] ?? shown[position - 2] ?? shown[shown.length - 1] ?? null;
     const displaced = slot === null ? null : slotView(slot);
     if (slot === null) slot = [0, 1].find((candidate) => !slotOrder().includes(candidate)) ?? null;
     if (slot === null) return;
     if (!setSlotView(slot, view, false, slotOrder().includes(slot) ? undefined : position)) return;
     if (panelOpen() && dockTool() === view) closePanel();
     if (from !== null && from !== "main" && displaced !== view && isPanelTab(displaced)) openWorkspaceView(displaced);
-    focusPane(slot);
+    if (focus) focusPane(slot);
   };
   const moveToDock = (view: SplitView) => {
     const slot = slotOrder().find((candidate) => slotView(candidate) === view);
@@ -2270,7 +2273,7 @@ function App() {
     if (isMobileLayout()) return void openChat(target, project);
     if (target.id === mainChatId()) return;
     markChatRead(catalogue, target);
-    openBeside(`chat:${target.id}`);
+    openBeside(`chat:${target.id}`, false);
   };
   // Alt on the click or key that opened a chat, from a page that has no way
   // to say so itself.
@@ -2282,9 +2285,28 @@ function App() {
     focusPane(slot);
     return true;
   };
+  /*
+   * Open where the reader is working: a sidebar row, a chat search result or
+   * a page's chat replaces the document of the pane with the keyboard --
+   * pane A's by the route, another pane's by its view. What a pane already
+   * shows is gone to there instead.
+   */
+  const keyboardPaneSlot = () => { const pane = keyboardPane(); return pane !== "main" && shownSlots().includes(pane) ? pane : null; };
+  const openInFocusedPane = async (view: SplitView, inPaneA: () => unknown) => {
+    if (focusPaneShowing(view)) return;
+    const slot = keyboardPaneSlot();
+    if (slot === null) return void await inPaneA();
+    if (setSlotView(slot, view)) focusPane(slot);
+  };
+  const openChatHere = async (target: ChatSummary, project: Project) => {
+    if (keyboardPaneSlot() !== null && target.id === mainChatId()) { setKeyboardPane("main"); return enterMainPane(); }
+    if (keyboardPaneSlot() !== null) markChatRead(catalogue, target);
+    await openInFocusedPane(`chat:${target.id}`, () => openChat(target, project));
+  };
+  const openProjectHere = (project: Project) => openInFocusedPane(`page:project:${project.id}`, () => openProject(project));
+  const openDashboardHere = () => openInFocusedPane("page:dashboard", () => openDashboard());
   const openChatFromPage = async (target: ChatSummary, project: Project) => {
-    if (focusPaneShowing(`chat:${target.id}`)) return;
-    if (altActivation()) openChatBeside(target, project); else await openChat(target, project);
+    if (altActivation()) openChatBeside(target, project); else await openChatHere(target, project);
   };
   for (const pane of paneSlots) {
     const slot = pane.index;
@@ -2352,7 +2374,7 @@ function App() {
     setSlotView(pane.index, `chat:${id}`);
     await side.chat.send();
   };
-  const openPageBeside = (page: "dashboard" | `project:${string}`) => { if (!isMobileLayout()) openBeside(`page:${page}`); };
+  const openPageBeside = (page: "dashboard" | `project:${string}`) => { if (!isMobileLayout()) openBeside(`page:${page}`, false); };
   // The same chat in two panes is one chat: pane A taking it closes the other.
   createEffect(() => { const id = mainChatId(); for (const slot of shownSlots()) if (id && slotChatId(slot) === id) setSlotView(slot, null); });
   /*
@@ -2635,8 +2657,8 @@ function App() {
     deleteFolder: () => runSidebar("delete-project"),
     settings: (section) => openSettings(section),
     workspaceSettings: (id) => openSettings("workspaces", id),
-    openChat: (session, project) => { setMobileSidebarOpen(false); void openChat(session, project); },
-    openProject: (project) => { setMobileSidebarOpen(false); void openProject(project); },
+    openChat: (session, project) => { setMobileSidebarOpen(false); void openChatHere(session, project); },
+    openProject: (project) => { setMobileSidebarOpen(false); void openProjectHere(project); },
     renameChat,
     moveChats,
     copyChatLinks,
@@ -3261,7 +3283,7 @@ function App() {
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
-      onNewChat={async (project) => { await startNewChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={async (target, project) => { if (!focusPaneShowing(`chat:${target.id}`)) await openChat(target, project); }} onFocusMainPane={focusMainPane} onEnterMainPane={() => { if (!isMobileLayout() && !document.activeElement?.closest(".main-split")) enterMainPane(); }} onOpenProject={async (project) => { if (focusPaneShowing(`page:project:${project.id}`)) return; if (altActivation()) openPageBeside(`project:${project.id}`); else await openProject(project); }} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
+      onNewChat={async (project) => { await startNewChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={openChatHere} onFocusMainPane={focusMainPane} onEnterMainPane={() => { if (!isMobileLayout() && !document.activeElement?.closest(".main-split")) enterMainPane(); }} onOpenProject={async (project) => { if (altActivation()) openPageBeside(`project:${project.id}`); else await openProjectHere(project); }} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
       onOpenProjectMaximized={openProjectWithMaximizedWorkspace}
       onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
@@ -3286,7 +3308,7 @@ function App() {
       onOpenComputer={() => openComputer()}
       onOpenHarness={(id) => openComputerHarness(id)} selectedHarness={computerHarness()}
       onOpenTerminalView={() => openTerminalRoute()}
-      onOpenDashboard={() => { if (!focusPaneShowing("page:dashboard")) { if (altActivation()) openPageBeside("dashboard"); else openDashboard(); } }}
+      onOpenDashboard={() => { if (altActivation()) openPageBeside("dashboard"); else void openDashboardHere(); }}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
       onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating()}
       updateState={updateState()} onTakeUpdate={() => void takePwaUpdate()}
@@ -3411,9 +3433,9 @@ function App() {
           <div class="main-split-chat main-split-page">
             {attachInput()}
             <Show when={page() === "dashboard"} fallback={<Show when={slotPageProject(slot)}>{(project) =>
-              <ProjectPage session={side} project={project()} target={{ project: project() }} keyboardOwner={owns} onSendDraft={(prompt) => sendFromPanePage(pane, prompt)} onOpenChat={async (target, owner) => openChatBeside(target, owner)} actions={closePaneAction(slot)} />
+              <ProjectPage session={side} project={project()} target={{ project: project() }} keyboardOwner={owns} onSendDraft={(prompt) => sendFromPanePage(pane, prompt)} onOpenChat={openChatFromPage} actions={closePaneAction(slot)} />
             }</Show>}>
-              <AppDashboardPage session={side} place={chatPlace(side)} keyboardOwner={owns} onSendDraft={(prompt) => sendFromPanePage(pane, prompt)} onOpenChat={openChatBeside} actions={closePaneAction(slot)} />
+              <AppDashboardPage session={side} place={chatPlace(side)} keyboardOwner={owns} onSendDraft={(prompt) => sendFromPanePage(pane, prompt)} onOpenChat={(target, project) => void openChatFromPage(target, project)} actions={closePaneAction(slot)} />
             </Show>
           </div>
         </Show>
