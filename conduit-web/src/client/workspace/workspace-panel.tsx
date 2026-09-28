@@ -547,6 +547,8 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       onDragStart={(event) => { event.dataTransfer?.setData(TOOL_DRAG_TYPE, JSON.stringify({ tool: tool(), from: where })); if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"; document.body.dataset.toolDrag = where; }}
       onDragEnd={() => delete document.body.dataset.toolDrag}>
       <strong title={tool() === "file" ? files.openPaths().secondary ?? "" : props.workingRoot()}>{viewLabel(tool())}</strong>
+      {/* The dock follows places (6d-1): it says which one it shows. */}
+      <Show when={where === "dock"}><span class="workspace-panel-place" title={props.workingRoot()}>{props.projectName()}</span></Show>
       <Show when={tool() === "diff" && props.sourceControlEnabled()}><SourceControlModes control={sourceControl} /></Show>
       <Show when={tool() === "chat"}><ChatModes control={chat} historyAvailable={Boolean(props.historyAvailable?.())} /></Show>
       {where === "dock" ? tabStrip() : null}
