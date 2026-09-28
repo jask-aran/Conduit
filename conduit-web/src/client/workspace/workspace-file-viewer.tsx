@@ -1,19 +1,26 @@
-import { createEffect, createSignal, Index, onCleanup, Show } from "solid-js";
-import { Columns2Icon } from "lucide-solid";
+import { createEffect, createResource, createSignal, Index, lazy, onCleanup, Show, Suspense, type JSX } from "solid-js";
+import { Columns2Icon, FileDiffIcon, FileTextIcon, GitCompareArrowsIcon, XIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
 import { api } from "../api/client";
 import type { FileEntry } from "./file-documents";
+import type { ComparisonPayload } from "./workspace-comparison";
 import WorkspaceFileSlot, { type FileSlotHandle, type FileSummary } from "./workspace-file-slot";
 import { reportError } from "./workspace-shared";
+import type { DiffPayload, GitChangedFile } from "./workspace-types";
 import { WorkbenchButton } from "./workspace-workbench";
 
+const WorkspaceComparison = lazy(() => import("./workspace-comparison"));
 const POLL_INTERVAL_MS = 1_500;
+const entryKey = (entry: FileEntry) => `${entry.projectId}:${entry.path}`;
+const hasUnstaged = (file?: GitChangedFile) => Boolean(file && (file.status === "??" || file.status[1] !== " "));
+const hasStaged = (file?: GitChangedFile) => Boolean(file && file.status[0] !== " " && file.status[0] !== "?");
 
 /**
  * A pane's file viewer (docs/design/panes-and-rail.md, 6d-2): one file, or
  * two side by side -- denser than a pane each. Each entry is an editor slot
- * of its own, with its own load, draft and save; the viewer keeps them fresh
- * against the workspace's version, as the dock's Files does for its slot.
+ * of its own, with its own load, draft and save, or the file's unstaged or
+ * staged changes (6d-3); the viewer keeps them fresh against the
+ * workspace's version, as the dock's Files does for its slot.
  */
 export default function FileViewer(props: {
   entries: FileEntry[];
@@ -26,6 +33,7 @@ export default function FileViewer(props: {
   /** Open the file again beside itself, in this pane. */
   onSplit: () => void;
   onCloseEntry: (index: number) => void;
+  onSetMode: (index: number, mode: FileEntry["mode"]) => void;
   onLoaded?: (index: number, file: FileSummary | null) => void;
   ref: (index: number, handle: FileSlotHandle | undefined) => void;
 }) {
@@ -34,6 +42,18 @@ export default function FileViewer(props: {
   const noteVisibility = () => setVisible(document.visibilityState === "visible");
   document.addEventListener("visibilitychange", noteVisibility);
   onCleanup(() => document.removeEventListener("visibilitychange", noteVisibility));
+  // Each file's Git status, where its place is a Git workspace: the mark in
+  // its header and which changes it can show.
+  const [statuses, setStatuses] = createSignal<Record<string, GitChangedFile | undefined>>({});
+  const loadStatus = async (entry: FileEntry) => {
+    try {
+      const payload = await api<DiffPayload>(`/v0/projects/${encodeURIComponent(entry.projectId)}/diff?path=${encodeURIComponent(entry.path)}&history=0`);
+      setStatuses((current) => ({ ...current, [entryKey(entry)]: payload.files?.find((file) => file.path === entry.path) }));
+    } catch {
+      setStatuses((current) => ({ ...current, [entryKey(entry)]: undefined }));
+    }
+  };
+  createEffect(() => { for (const entry of props.entries) void loadStatus(entry); });
   // One version probe per place the entries are in; a change to an entry's
   // path reloads that entry, which keeps a draft it has.
   createEffect(() => {
@@ -52,7 +72,9 @@ export default function FileViewer(props: {
           if (cancelled) return;
           if (version !== null && version !== payload.version) {
             entries.forEach((entry, index) => {
-              if (entry.projectId === projectId && (payload.changedPaths === null || payload.changedPaths.includes(entry.path))) void handles[index]?.reload();
+              if (entry.projectId !== projectId || (payload.changedPaths !== null && !payload.changedPaths.includes(entry.path))) return;
+              void handles[index]?.reload();
+              void loadStatus(entry);
             });
           }
           version = payload.version;
@@ -63,6 +85,16 @@ export default function FileViewer(props: {
     }
     onCleanup(() => { cancelled = true; timers.forEach((timer) => window.clearTimeout(timer)); });
   });
+  // A header that no longer fits drops the actions its menu also has, before the file's name.
+  let root: HTMLDivElement | undefined;
+  const fitHeaders = () => root?.querySelectorAll<HTMLElement>(".workspace-preview-header").forEach((header) => {
+    header.removeAttribute("data-compact");
+    if (header.scrollWidth > header.clientWidth) header.setAttribute("data-compact", "true");
+  });
+  const resized = new ResizeObserver(fitHeaders);
+  const changed = new MutationObserver(fitHeaders);
+  onCleanup(() => { resized.disconnect(); changed.disconnect(); });
+  const leaveContents = (index: number) => !handles[index]?.hasUnsavedChanges() || window.confirm("Discard unsaved changes to this file?");
   const closeEntry = (index: number) => {
     if (handles[index]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and close this file?")) return;
     props.onCloseEntry(index);
@@ -76,28 +108,70 @@ export default function FileViewer(props: {
       reportError((cause as Error).message);
     }
   };
-  return <div class="workspace-files workspace-file-viewer" data-count={props.entries.length}>
+  const splitButton = () => <Show when={props.entries.length === 1}><WorkbenchButton type="button" class="workspace-preview-action" aria-label="Open this file again beside" title="Split" onClick={() => props.onSplit()}><Columns2Icon /></WorkbenchButton></Show>;
+  return <div ref={(element) => { root = element; resized.observe(element); changed.observe(element, { childList: true, subtree: true }); }} class="workspace-files workspace-file-viewer" data-count={props.entries.length}>
     <Index each={props.entries}>{(entry, index) =>
-      <WorkspaceFileSlot
-        projectId={entry().projectId}
-        path={entry().path}
-        slot={index === 0 ? "primary" : "secondary"}
-        focused={props.entries.length > 1 && props.focused === index}
-        closable
-        busy={false}
-        wrap={props.wrap}
-        onToggleWrap={props.onToggleWrap}
-        annotationChatId={props.commentChatId}
-        headerSuffix={<Show when={props.entries.length === 1}><WorkbenchButton type="button" class="workspace-preview-action" aria-label="Open this file again beside" title="Split" onClick={() => props.onSplit()}><Columns2Icon /></WorkbenchButton></Show>}
-        onFocus={() => props.onFocusEntry(index)}
-        onClose={() => closeEntry(index)}
-        onError={reportError}
-        onRemoved={(path, announce) => { props.onCloseEntry(index); if (announce) toast.info(`${path} was removed`); }}
-        onDelete={() => void deleteFile(entry())}
-        onLoaded={(file) => props.onLoaded?.(index, file)}
-        ref={(handle) => { handles[index] = handle; props.ref(index, handle); }}
-        onDispose={() => { handles[index] = undefined; props.ref(index, undefined); }}
-      />
+      <Show when={entry().mode} fallback={
+        <WorkspaceFileSlot
+          projectId={entry().projectId}
+          path={entry().path}
+          slot={index === 0 ? "primary" : "secondary"}
+          focused={props.entries.length > 1 && props.focused === index}
+          closable
+          busy={false}
+          wrap={props.wrap}
+          onToggleWrap={props.onToggleWrap}
+          annotationChatId={props.commentChatId}
+          gitFile={statuses()[entryKey(entry())]}
+          onShowDiff={(staged) => { if (leaveContents(index)) props.onSetMode(index, staged ? "staged" : "changes"); }}
+          headerSuffix={splitButton()}
+          onFocus={() => props.onFocusEntry(index)}
+          onClose={() => closeEntry(index)}
+          onError={reportError}
+          onRemoved={(path, announce) => { props.onCloseEntry(index); if (announce) toast.info(`${path} was removed`); }}
+          onDelete={() => void deleteFile(entry())}
+          onLoaded={(file) => props.onLoaded?.(index, file)}
+          ref={(handle) => { handles[index] = handle; props.ref(index, handle); }}
+          onDispose={() => { handles[index] = undefined; props.ref(index, undefined); }}
+        />
+      }>{(mode) =>
+        <ChangesEntry entry={entry()} mode={mode()} status={statuses()[entryKey(entry())]} focused={props.entries.length > 1 && props.focused === index}
+          split={splitButton()} onFocus={() => props.onFocusEntry(index)} onClose={() => props.onCloseEntry(index)} onSetMode={(next) => props.onSetMode(index, next)}
+          ref={(handle) => { handles[index] = handle; props.ref(index, handle); }} />
+      }</Show>
     }</Index>
   </div>;
+}
+
+/** A file's unstaged or staged changes, drawn by the review's comparison (6d-3). */
+function ChangesEntry(props: {
+  entry: FileEntry;
+  mode: "changes" | "staged";
+  status?: GitChangedFile;
+  focused: boolean;
+  split: JSX.Element;
+  onFocus: () => void;
+  onClose: () => void;
+  onSetMode: (mode: FileEntry["mode"]) => void;
+  ref: (handle: FileSlotHandle) => void;
+}) {
+  const [comparison, { refetch }] = createResource(() => [props.entry.projectId, props.entry.path, props.mode] as const, ([projectId, path, scope]) =>
+    api<ComparisonPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/diff?compare=1&scope=${scope}&path=${encodeURIComponent(path)}`)
+      .catch((cause: unknown): ComparisonPayload => ({ path, oldPath: path, scope, kind: "unavailable", message: (cause as { message?: string })?.message || "These changes could not be loaded." })));
+  props.ref({ path: () => props.entry.path, hasUnsavedChanges: () => false, reload: async () => { await refetch(); }, edit: () => props.onSetMode(undefined), save: async () => {}, discardChanges: () => {} });
+  const other = () => props.mode === "changes" ? (hasStaged(props.status) ? "staged" as const : null) : (hasUnstaged(props.status) ? "changes" as const : null);
+  const actions = <>
+    <WorkbenchButton type="button" class="workspace-preview-action" aria-label="Show the file" title="Show the file" onClick={() => props.onSetMode(undefined)}><FileTextIcon /></WorkbenchButton>
+    <Show when={other()}>{(next) => <WorkbenchButton type="button" class="workspace-preview-action" aria-label={next() === "staged" ? "Review staged changes" : "Review unstaged changes"} title={next() === "staged" ? "Review staged changes" : "Review unstaged changes"} onClick={() => props.onSetMode(next())}>{next() === "staged" ? <GitCompareArrowsIcon /> : <FileDiffIcon />}</WorkbenchButton>}</Show>
+    {props.split}
+    <WorkbenchButton type="button" class="workspace-preview-action workspace-preview-close" aria-label="Close file" title="Close file" onClick={() => props.onClose()}><XIcon /></WorkbenchButton>
+  </>;
+  return <section class="workspace-preview workspace-changes-entry" data-focused={props.focused} aria-label={`${props.entry.path} ${props.mode === "staged" ? "staged changes" : "changes"}`} onFocusIn={() => props.onFocus()} onPointerDown={() => props.onFocus()}>
+    <Suspense>
+      <Show when={comparison()} fallback={<div class="workspace-panel-empty">{comparison.loading ? "Loading changes…" : "No changes to show."}</div>}>{(payload) =>
+        <WorkspaceComparison comparison={payload()} sourceKey={`${props.entry.projectId}:${props.entry.path}:${props.mode}`} viewState={{ layout: "unified", wrap: false, top: 0, left: 0, position: 0 }}
+          headerAction={<><span class="workspace-changes-scope">{props.mode === "staged" ? "Staged" : "Changes"}</span>{actions}</>} />
+      }</Show>
+    </Suspense>
+  </section>;
 }
