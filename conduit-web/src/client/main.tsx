@@ -2429,7 +2429,12 @@ function App() {
   const openInFocusedPane = async (view: SplitView, inPaneA: () => unknown) => {
     if (focusPaneShowing(view)) return;
     const slot = keyboardPaneSlot();
-    if (slot === null) { setPaneAOverride(null); return void await inPaneA(); }
+    // Pane A goes by its route, and the route changing clears what showed
+    // over it; only going to the route it already has needs clearing here.
+    if (slot === null) {
+      if (paneAOverride() && view === paneARouteView()) setPaneAOverride(null);
+      return void await inPaneA();
+    }
     if (setSlotView(slot, view)) focusPane(slot);
   };
   const openChatHere = async (target: ChatSummary, project: Project) => {
@@ -2550,8 +2555,9 @@ function App() {
    * change places; with pane A the documents move, the panes stay.
    */
   let swappingPanes = false;
-  const paneAView = (): SplitView | null => {
-    if (paneAOverride()) return paneAOverride();
+  const paneAView = (): SplitView | null => paneAOverride() ?? paneARouteView();
+  // Pane A's route as a view, whatever shows over it.
+  const paneARouteView = (): SplitView | null => {
     if (routeKind() === "chat" && catalogue.selectedId()) return `chat:${catalogue.selectedId()}`;
     if (routeKind() === "dashboard") return "page:dashboard";
     if (routeKind() === "project" && selectedProject()) return `page:project:${selectedProject()!.id}`;
