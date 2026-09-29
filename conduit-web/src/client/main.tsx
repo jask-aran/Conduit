@@ -2338,6 +2338,8 @@ function App() {
   };
   // Each file viewer's editors, by pane, for its unsaved guard.
   const fileHandles = new Map<PaneKey, (FileSlotHandle | undefined)[]>();
+  // Handles arrive as sides mount; a tab's unsaved dot reads them again.
+  const [handlesChanged, setHandlesChanged] = createSignal(0);
   const handlesOf = (pane: PaneKey) => { let list = fileHandles.get(pane); if (!list) fileHandles.set(pane, list = []); return list; };
   // A swap or a close moving a document to another pane is not leaving it.
   let movingDocuments = false;
@@ -2381,7 +2383,7 @@ function App() {
     return element?.closest(".chat-main") ? "main" : null;
   };
   const focusSplit = (slot: number | null = toolSlot() ?? shownSlots()[0] ?? null) => requestAnimationFrame(() => {
-    const content = slot === null ? null : paneSlot(slot).host()?.querySelector<HTMLElement>(".workspace-panel-content, .composer textarea:not([disabled])");
+    const content = slot === null ? null : paneSlot(slot).host()?.querySelector<HTMLElement>(".workspace-panel-content, .composer textarea:not([disabled]), .file-viewer-surface");
     focusFirst(content);
     if (!content?.contains(document.activeElement)) content?.focus({ preventScroll: true });
   });
@@ -2806,7 +2808,8 @@ function App() {
   // Each side is headed by its tabs (6c); a viewer with none says how to fill it.
   const renderFileViewer = (pane: PaneKey) => {
     const entries = () => parseFileView(viewOf(pane)) ?? [];
-    return <div class="workspace-split-surface">
+    // Focusable itself, so an image or PDF side still takes the keyboard (a click, Ctrl+Shift+2).
+    return <div class="workspace-split-surface file-viewer-surface" tabIndex={-1}>
       <Show when={entries().length} fallback={<>
         <header class="chat-header file-tabs-header"><nav class="chat-header-title"><strong>No file open</strong></nav><div class="chat-header-actions">{paneTabActions(pane)}</div></header>
         <div class="file-viewer-empty" role="status">Open a file from Files, or Ctrl-click one to add it as a tab.</div>
@@ -2815,7 +2818,7 @@ function App() {
           tabs={(side) => fileSideTabs(pane, side)} paneActions={() => paneTabActions(pane)}
           onFocusEntry={(index) => { focusFileEntry(pane, index); setFilePane(pane); }} onSplit={() => splitFileViewer(pane)} onCloseEntry={(index) => { const entry = entries()[index]; if (entry) closeFileTab(pane, index, fileEntryKey(entry)); }}
           onSetMode={(index, mode) => setFileMode(pane, index, mode)}
-          onLoaded={(index, file) => noteFileLoaded(pane, index, file)} reveal={fileReveal()} ref={(index, handle) => { handlesOf(pane)[index] = handle; }} />
+          onLoaded={(index, file) => noteFileLoaded(pane, index, file)} reveal={fileReveal()} ref={(index, handle) => { handlesOf(pane)[index] = handle; setHandlesChanged((count) => count + 1); }} />
       </Show>
     </div>;
   };
@@ -2858,10 +2861,17 @@ function App() {
       return true;
     }
     if (to !== "main") { focusPane(to); return true; }
+    const viewer = document.querySelector<HTMLElement>(".chat-main .file-viewer-surface");
+    if (viewer) { viewer.focus({ preventScroll: true }); return true; }
     return false;
   };
   document.addEventListener("focusin", noteKeyboardSide);
-  onCleanup(() => document.removeEventListener("focusin", noteKeyboardSide));
+  // A press on what takes no focus (an image), or into a frame (a PDF), still gives its pane the keyboard.
+  const notePanePress = (event: PointerEvent) => { const pane = paneOf(event.target instanceof Element ? event.target : null); if (pane !== null) setKeyboardPane(pane); };
+  const noteFrameFocus = () => setTimeout(() => { const frame = document.activeElement; if (frame instanceof HTMLIFrameElement || frame instanceof HTMLEmbedElement || frame instanceof HTMLObjectElement) { const pane = paneOf(frame); if (pane !== null) setKeyboardPane(pane); } });
+  document.addEventListener("pointerdown", notePanePress, true);
+  window.addEventListener("blur", noteFrameFocus);
+  onCleanup(() => { document.removeEventListener("focusin", noteKeyboardSide); document.removeEventListener("pointerdown", notePanePress, true); window.removeEventListener("blur", noteFrameFocus); });
   const mainChatId = () => routeKind() === "chat" && !paneAOverride() ? catalogue.selectedId() : null;
   const openChatBeside = (target: ChatSummary, project: Project) => {
     if (isMobileLayout()) return void openChat(target, project);
@@ -3565,11 +3575,15 @@ function App() {
     }
     movingDocuments = false;
   };
-  // Every file a viewer shows or holds as a tab, for the navigator to mark.
+  // The files the viewer with the keyboard shows or holds as tabs, for the navigator to mark.
   const openFileKeys = createMemo(() => {
     const keys = new Set<string>();
-    for (const pane of panesShown()) for (const entry of parseFileView(viewOf(pane)) ?? []) keys.add(fileEntryKey(entry));
-    for (const tabs of Object.values(fileTabs())) for (const entry of tabs.entries) keys.add(fileEntryKey(entry));
+    const pane = keyboardPane();
+    if (!panesShown().includes(pane)) return keys;
+    parseFileView(viewOf(pane))?.forEach((entry, side) => {
+      keys.add(fileEntryKey(entry));
+      for (const tab of fileTabsOf(pane, side)?.entries ?? []) keys.add(fileEntryKey(tab));
+    });
     return keys;
   }, new Set<string>(), { equals: (a, b) => a.size === b.size && [...a].every((key) => b.has(key)) });
   const fileSideTabs = (pane: PaneKey, side: number) => {
@@ -3583,6 +3597,8 @@ function App() {
       lit: () => { const shown = parseFileView(viewOf(pane)) ?? []; return shownFileSide(pane) === side && shown[side] ? fileEntryKey(shown[side]!) : null; },
       shown: (key) => { const shown = parseFileView(viewOf(pane)) ?? []; return Boolean(shown[side] && fileEntryKey(shown[side]!) === key); },
       used: () => fileTabsOf(pane, side)?.used ?? [],
+      // Only a showing file can hold edits: leaving one discards them.
+      unsaved: (key) => { handlesChanged(); const shown = parseFileView(viewOf(pane)) ?? []; return Boolean(shown[side] && fileEntryKey(shown[side]!) === key && handlesOf(pane)[side]?.hasUnsavedChanges()); },
       select: (key) => showFileTab(pane, side, key),
       close: (key) => closeFileTab(pane, side, key),
       dragView: (key) => { const entry = fileTabsOf(pane, side)?.entries.find((item) => fileEntryKey(item) === key); return entry ? formatFileView([entry]) : ""; },
