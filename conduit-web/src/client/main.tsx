@@ -2456,6 +2456,21 @@ function App() {
    */
   const DOC_DRAG_TYPE = "application/x-conduit-doc";
   let draggedView: string | null = null;
+  // A pane's header dragged moves its document (draggedPane).
+  let draggedPane: PaneKey | null = null;
+  const armHeaderDrag = (event: PointerEvent) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const header = target?.closest<HTMLElement>("header");
+    if (!header || !splitShown() || isMobileLayout() || paneOf(header) === null) return;
+    if (target!.closest("button,a,input,textarea,select,[role='button'],[role='menuitem'],[contenteditable='true']")) return;
+    header.draggable = true;
+    header.dataset.paneDrag = "true";
+    const disarm = () => { window.removeEventListener("pointerup", disarm); window.removeEventListener("dragend", disarm); header.draggable = false; delete header.dataset.paneDrag; };
+    window.addEventListener("pointerup", disarm);
+    window.addEventListener("dragend", disarm);
+  };
+  document.addEventListener("pointerdown", armHeaderDrag, true);
+  onCleanup(() => document.removeEventListener("pointerdown", armHeaderDrag, true));
   const [docDrop, setDocDrop] = createSignal<{ pane: PaneKey; zone: "left" | "middle" | "right"; rect: { left: number; top: number; width: number; height: number } } | null>(null);
   const docDragView = (target: Element): string | null => {
     const source = target.closest<HTMLElement>("[data-doc-view]");
@@ -2467,8 +2482,11 @@ function App() {
   const roomBeside = (view: string) => shownSlots().length < 2 && viewsFit([...shownSlots().map(slotView), (view.startsWith("tool:") ? "term:" : view) as SplitView]);
   const onDocDragStart = (event: DragEvent) => {
     if (isMobileLayout() || !(event.target instanceof Element) || !event.dataTransfer) return;
-    const view = docDragView(event.target);
+    const header = event.target.closest<HTMLElement>("header[data-pane-drag]");
+    const fromPane = header ? paneOf(header) : null;
+    const view = fromPane !== null ? viewOf(fromPane) : docDragView(event.target);
     if (!view) return;
+    draggedPane = fromPane;
     draggedView = view;
     event.dataTransfer.setData(DOC_DRAG_TYPE, view);
     event.dataTransfer.effectAllowed = "copyMove";
@@ -2482,19 +2500,52 @@ function App() {
     event.dataTransfer.dropEffect = "move";
     const box = element.getBoundingClientRect();
     const third = (event.clientX - box.left) / box.width;
-    const zone = !roomBeside(draggedView) ? "middle" : third < 1 / 3 ? "left" : third > 2 / 3 ? "right" : "middle";
+    if (pane === draggedPane) return void setDocDrop(null);
+    const edges = draggedPane !== null && draggedPane !== "main" ? true : roomBeside(draggedView);
+    const zone = !edges ? "middle" : third < 1 / 3 ? "left" : third > 2 / 3 ? "right" : "middle";
     const width = zone === "middle" ? box.width : box.width / 2;
     const current = docDrop();
     if (current?.pane === pane && current.zone === zone) return;
     setDocDrop({ pane, zone, rect: { left: zone === "right" ? box.left + box.width / 2 : box.left, top: box.top, width, height: box.height } });
   };
-  const endDocDrag = () => { draggedView = null; setDocDrop(null); };
+  const endDocDrag = () => { draggedView = null; draggedPane = null; setDocDrop(null); };
+  /*
+   * A pane's document moved by its header: onto another pane's middle the two
+   * swap; onto an edge it moves there, the panes closing up behind it -- pane
+   * A, left empty, takes the next pane's document.
+   */
+  const movePaneDocument = async (from: PaneKey, target: { pane: PaneKey; zone: "left" | "middle" | "right" }) => {
+    if (target.zone === "middle") return void await swapPanes(from, false, target.pane);
+    const list = panesShown().filter((pane) => pane !== from);
+    const at = list.indexOf(target.pane) + (target.zone === "right" ? 1 : 0);
+    if (from !== "main") {
+      if (at === 0) {
+        // Left of pane A: it takes pane A, and pane A's document follows it.
+        await swapPanes("main", false, from);
+        setSlotOrder((order) => [from, ...order.filter((slot) => slot !== from)]);
+      } else setSlotOrder((order) => { const rest = order.filter((slot) => slot !== from); rest.splice(at - 1, 0, from); return rest; });
+      persistSlots();
+      return focusPane(from);
+    }
+    if (at <= 1) return;
+    const free = [0, 1].find((slot) => !slotOrder().includes(slot));
+    const view = paneAView();
+    if (free === undefined || !view) return;
+    swappingPanes = true;
+    movingDocuments = true;
+    const placed = setSlotView(free, view, false, at - 1);
+    movingDocuments = false;
+    swappingPanes = false;
+    if (placed) { closePane("main"); focusPane(free); }
+  };
   const onDocDrop = async (event: DragEvent) => {
     const target = docDrop();
     let view = draggedView;
+    const fromPane = draggedPane;
     endDocDrag();
     if (!target || !view || !event.dataTransfer?.types.includes(DOC_DRAG_TYPE)) return;
     event.preventDefault();
+    if (fromPane !== null) return void await movePaneDocument(fromPane, target);
     if (view === "tool:terminal") { const id = await pickShell(); if (!id) return; view = `term:${id}`; }
     const next = view as SplitView;
     const showing = panesShown().find((pane) => viewOf(pane) === next);
@@ -2889,8 +2940,8 @@ function App() {
     if (!still) await incoming.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SWAP_FADE_MS, easing: "ease-out" }).finished;
     incoming.style.opacity = "";
   };
-  const swapPanes = async (pane: PaneKey, slide = false) => {
-    const partner = swapPartner(pane);
+  const swapPanes = async (pane: PaneKey, slide = false, withPane?: PaneKey) => {
+    const partner = withPane ?? swapPartner(pane);
     if (partner === null || swappingPanes) return;
     const [leftPane, rightPane] = pane === "main" || (partner !== "main" && shownSlots().indexOf(partner) > shownSlots().indexOf(pane as number)) ? [pane, partner] : [partner, pane];
     const left = paneElement(leftPane);
