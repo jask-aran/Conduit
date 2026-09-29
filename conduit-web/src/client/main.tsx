@@ -77,7 +77,7 @@ import { formatFileView, parseFileView, sameFileEntry, type FileEntry } from "./
 import type { ReviewNavigationRequest } from "./chat/review-navigation";
 import type { FileSlotHandle, FileSummary } from "./workspace/workspace-file-slot";
 import { dropScope, migrateWorkspacePanelStorage, readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace/workspace-panel-storage";
-import { readToolDrag, TOOL_DRAG_TYPE, WorkspaceRail } from "./workspace/workspace-rail";
+import { readToolDrag, TOOL_DRAG_TYPE, WORKSPACE_TOOL_LABELS, WorkspaceRail } from "./workspace/workspace-rail";
 import { isPanelTab, isSplitView, type SplitView } from "./workspace/workspace-types";
 import { MIN_MAIN_PANE_WIDTH, MIN_SPLIT_PANE_WIDTH } from "./layout-geometry";
 import { dispatchPanelGeometryMotion } from "./panel-motion";
@@ -3099,6 +3099,65 @@ function App() {
       movingDocuments = false;
     }
   };
+  /*
+   * Panes the window is too narrow for keep their documents and come back as
+   * it widens; meanwhile the rail lists them. Choosing one trades it with the
+   * pane that has the keyboard: pane A's document moves into the folded pane,
+   * a pane beside A trades places with it.
+   */
+  const foldedSlots = () => !dockAvailable() || isMobileLayout() ? [] : slotOrder().filter((slot) => slotView(slot)).slice(0, 2).filter((slot) => !shownSlots().includes(slot));
+  const viewName = (view: SplitView | null): string => {
+    if (!view) return "";
+    if (view.startsWith("chat:")) {
+      const id = view.slice("chat:".length);
+      const found = catalogue.projects().flatMap((project) => project.sessions).find((item) => item.id === id);
+      return found?.title || "New chat";
+    }
+    if (view === "page:dashboard") return "Conduit Dashboard";
+    if (view === "page:computer") return "Computer";
+    if (view.startsWith("page:harness:")) { const id = decodeURIComponent(view.slice("page:harness:".length)); return harnessLabelFor(id) || id; }
+    if (view.startsWith("page:project:")) return catalogue.projects().find((item) => item.id === view.slice("page:project:".length))?.name || "Project";
+    const files = parseFileView(view);
+    if (files) return files.map((entry) => entry.path.split("/").pop()).join(", ");
+    if (view.startsWith("term:")) return "Terminal";
+    return isPanelTab(view) ? WORKSPACE_TOOL_LABELS[view] : "Pane";
+  };
+  const showFolded = async (slot: number) => {
+    const shown = shownSlots();
+    const held = keyboardPane();
+    const target: PaneKey = held === "main" || shown.includes(held) ? held : shown.at(-1) ?? "main";
+    const element = paneElement(target);
+    if (!element || swappingPanes || !foldedSlots().includes(slot)) return;
+    swappingPanes = true;
+    try {
+      if (target === "main") {
+        const aView = paneAView();
+        const view = slotView(slot)!;
+        if (!aView) return;
+        const unsaved = [...handlesOf("main"), ...handlesOf(slot)].some((handle) => handle?.hasUnsavedChanges());
+        if (unsaved && !window.confirm("Discard unsaved changes to swap these panes?")) return;
+        movingDocuments = true;
+        await crossfadeUnder([element], async () => {
+          setSlotView(slot, aView);
+          if (isPaneView(view)) { setPaneAOverride(null); await openInPaneA(view); } else setPaneView("main", view);
+          const id = view.startsWith("chat:") ? view.slice("chat:".length) : null;
+          await waitFor(() => !id || (chat.loadedId() === id && chatDrawn("main")), 1500);
+        });
+        focusAnyPane("main");
+      } else {
+        await crossfadeUnder([element], async () => {
+          setSlotOrder((order) => order.map((item) => item === target ? slot : item === slot ? target : item));
+          persistSlots();
+          const id = slotChatId(slot);
+          await waitFor(() => Boolean(paneSlot(slot).host()) && (!id || (paneSlot(slot).session.chat.loadedId() === id && chatDrawn(slot))), 1500);
+        });
+        focusAnyPane(slot);
+      }
+    } finally {
+      swappingPanes = false;
+      movingDocuments = false;
+    }
+  };
   // Pane A's close hands it the next pane's chat or page.
   const closePane = (pane: PaneKey) => {
     if (pane !== "main") return closeSlot(pane);
@@ -4389,6 +4448,7 @@ function App() {
     <Show when={docDrop()}>{(drop) => <div class="doc-drop" aria-hidden="true" style={{ left: `${drop().rect.left}px`, top: `${drop().rect.top}px`, width: `${drop().rect.width}px`, height: `${drop().rect.height}px` }} />}</Show>
     <WorkspaceRail tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard"].includes(routeKind()) && selectedProject() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
       panes={splitShown() ? shownSlots().length + 1 : 1} onLayout={applyPaneLayout}
+      folded={foldedSlots().map((slot) => ({ slot, letter: slotOrder().filter((item) => slotView(item)).indexOf(slot) === 0 ? "B" : "C", name: viewName(slotView(slot)) }))} onShowFolded={(slot) => void showFolded(slot)}
       current={panelOpen() ? dockTool() : null} inSplit={splitToolShown()} onDock={moveToDock} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : dockProject()?.kind === "workspace"} onChoose={chooseRailTool} />
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>

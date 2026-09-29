@@ -716,6 +716,8 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 /* The rail's foot: pane layout controls, pushed to the bottom. */
 .workspace-rail { padding-bottom: 14.4px; }
 .workspace-rail-foot { display: flex; flex-direction: column; gap: 1.6px; margin-top: auto; }
+/* A folded pane: its letter on a hairline tile, set apart from the tools. */
+.workspace-rail-folded span { display: grid; width: 16px; height: 16px; place-items: center; border: 0.8px solid color-mix(in oklch, var(--sidebar-foreground), transparent 65%); border-radius: 4.8px; font-family: var(--font-mono); font-size: 9.6px; font-weight: 600; line-height: 1; }
 body.panes-settling :is(.chat-main, .main-split) { transition: flex-grow 220ms cubic-bezier(0.2, 0, 0, 1), margin 220ms cubic-bezier(0.2, 0, 0, 1); }
 .pane-layouts [role="menuitem"] { gap: 10px; }
 .pane-layout-glyph { display: flex; width: 28px; height: 14px; flex: none; gap: 2px; }
