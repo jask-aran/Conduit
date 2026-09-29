@@ -39,6 +39,9 @@ const RAIL_ICONS = { files: FolderIcon, diff: GitCompareArrowsIcon, chat: Messag
  *
  * At the foot, while panes are open beside pane A: Equalise, sharing the
  * panes' room evenly, and Layouts, a menu of share presets for that many.
+ * Above them, set apart, a tile for each pane folded away because the window
+ * is too narrow, lettered as the pane it comes back as; choosing it trades it
+ * with the pane that has the keyboard.
  */
 export function WorkspaceRail(props: {
   /** Whether the page has a place whose tools the dock can show. */
@@ -53,6 +56,8 @@ export function WorkspaceRail(props: {
   /** How many panes are open, pane A included. */
   panes: number;
   onLayout: (weights: number[]) => void;
+  folded: { slot: number; letter: string; name: string }[];
+  onShowFolded: (slot: number) => void;
 }) {
   return <nav class="workspace-rail" aria-label="Workspace tools"
     onDragOver={(event) => { if (document.body.dataset.toolDrag === "split" && event.dataTransfer?.types.includes(TOOL_DRAG_TYPE)) event.preventDefault(); }}
@@ -69,7 +74,16 @@ export function WorkspaceRail(props: {
     <span class="workspace-rail-separator" aria-hidden="true" /></Show>
     <button type="button" class="workspace-rail-action" tabIndex={-1} aria-label="Search chats" title="Search chats" onClick={() => props.onOpenSearch()}><SearchIcon /></button>
     <button type="button" class="workspace-rail-action" tabIndex={-1} aria-label="Open command palette" title="Command palette" onClick={() => props.onOpenPalette()}><CommandIcon /></button>
-    <Show when={PANE_LAYOUTS[props.panes]}>{(layouts) => <div class="workspace-rail-foot">
+    <Show when={PANE_LAYOUTS[props.panes] || props.folded.length}><div class="workspace-rail-foot">
+      <Show when={props.folded.length}>
+        <For each={props.folded}>{(pane) =>
+          <button type="button" class="workspace-rail-action workspace-rail-folded" tabIndex={-1} aria-label={`Show pane ${pane.letter}: ${pane.name}`} title={`${pane.name} (pane ${pane.letter}, folded: no room)`} onClick={() => props.onShowFolded(pane.slot)}>
+            <span aria-hidden="true">{pane.letter}</span>
+          </button>}
+        </For>
+        <Show when={PANE_LAYOUTS[props.panes]}><span class="workspace-rail-separator" aria-hidden="true" /></Show>
+      </Show>
+      <Show when={PANE_LAYOUTS[props.panes]}>{(layouts) => <>
       <button type="button" class="workspace-rail-action" tabIndex={-1} aria-label="Equalise panes" title="Equalise panes" onClick={() => props.onLayout(layouts()[0]!)}><Columns3Icon /></button>
       <Menu modal={false} placement="left-end">
         <MenuTrigger class="workspace-rail-action" tabIndex={-1} aria-label="Pane layouts" title="Pane layouts"><LayoutTemplateIcon /></MenuTrigger>
@@ -83,6 +97,7 @@ export function WorkspaceRail(props: {
           </For></MenuGroup>
         </MenuContent>
       </Menu>
-    </div>}</Show>
+      </>}</Show>
+    </div></Show>
   </nav>;
 }
