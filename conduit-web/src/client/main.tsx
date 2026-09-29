@@ -2268,7 +2268,11 @@ function App() {
   const toolHost = () => { if (toolInPaneA()) return paneAToolHost(); const slot = toolSlot(); return slot === null ? undefined : paneSlot(slot).host(); };
   const splitToolShown = () => { const view = toolView(); return isPanelTab(view) ? view : null; };
   // Pane A's share and each pane's beside it, by position; per device.
-  const paneWeights = () => shownSlots().length === 2 ? splitRatios3() : shownSlots().length === 1 ? [1 - splitRatio(), splitRatio()] : [1];
+  const weightsFor = (count: number) => count === 3 ? splitRatios3() : count === 2 ? [1 - splitRatio(), splitRatio()] : [1];
+  // While a pane opens or closes, the shares ease through an override.
+  const [weightOverride, setWeightOverride] = createSignal<number[] | null>(null);
+  const [paneMotion, setPaneMotion] = createSignal<{ slot: number; phase: "arriving" | "leaving" } | null>(null);
+  const paneWeights = () => weightOverride() ?? weightsFor(shownSlots().length + 1);
   // The file beside is the dock's, so leaving it asks the dock first: an
   // unsaved edit, or the file moving into the dock's Files.
   let releaseSplitFile: ((toDock: boolean) => boolean) | undefined;
@@ -2372,8 +2376,22 @@ function App() {
     focusWorkspacePanel();
   };
   const closeSlot = (slot: number | null, focus = true) => {
-    if (slot === null || !setSlotView(slot, null)) return;
-    if (focus) focusChatPane();
+    if (slot === null) return;
+    const element = paneSlot(slot).host();
+    const index = shownSlots().indexOf(slot);
+    const close = () => { if (setSlotView(slot, null) && focus) focusChatPane(); };
+    if (!element || index < 0 || !animatePanes()) return close();
+    // It fades out, then the panes left ease into its room.
+    setPaneMotion({ slot, phase: "leaving" });
+    void element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_FADE_MS, easing: "ease-out", fill: "forwards" }).finished.then(() => {
+      const target = weightsFor(shownSlots().length);
+      target.splice(index + 1, 0, 0);
+      setWeightOverride(paneShares());
+      requestAnimationFrame(() => requestAnimationFrame(() => easePaneWeights(normalized(target), () => {
+        batch(() => { close(); setWeightOverride(null); setPaneMotion(null); });
+        element.getAnimations().forEach((animation) => animation.cancel());
+      })));
+    });
   };
   // The dock's own close: the pane holding its tool.
   const closeSplit = (focus = true) => toolInPaneA() ? void setPaneAOverride(null) : closeSlot(toolSlot(), focus);
@@ -3075,6 +3093,50 @@ function App() {
   }, { defer: true }));
   // The edge on the left of the pane at `position` shares the room of that
   // pane and the one before it between them.
+  /*
+   * A pane opening: the panes there ease to the widths they will have, then
+   * it fades in; closing, the reverse (closeSlot). Not on first load, a phone,
+   * Back, a swap, or with reduced motion.
+   */
+  let panesSettled = false;
+  window.setTimeout(() => { panesSettled = true; }, 1500);
+  const animatePanes = () => panesSettled && !isMobileLayout() && !swappingPanes && !restoringPanes && !paneMotion()
+    && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const normalized = (weights: number[]) => { const total = weights.reduce((sum, weight) => sum + weight, 0) || 1; return weights.map((weight) => weight / total); };
+  const paneShares = () => normalized(panesShown().map((pane) => paneElement(pane)?.getBoundingClientRect().width ?? 0));
+  const easePaneWeights = (to: number[], done: () => void) => {
+    splitMotionId += 1;
+    announceSplit("begin", besideWidth());
+    document.body.classList.add("panes-settling");
+    setWeightOverride(to);
+    const started = performance.now();
+    const follow = () => {
+      if (performance.now() - started < 240) { announceSplit("change", besideWidth()); requestAnimationFrame(follow); return; }
+      document.body.classList.remove("panes-settling");
+      done();
+      splitSize = besideWidth();
+      announceSplit("end", splitSize);
+    };
+    requestAnimationFrame(follow);
+  };
+  createEffect(on(shownSlots, (now, before) => {
+    const added = now.filter((slot) => !(before ?? []).includes(slot));
+    if (added.length !== 1 || !before || !animatePanes()) return;
+    const slot = added[0]!;
+    const index = now.indexOf(slot);
+    const start = weightsFor(before.length + 1).slice();
+    start.splice(index + 1, 0, 0);
+    setWeightOverride(normalized(start));
+    setPaneMotion({ slot, phase: "arriving" });
+    requestAnimationFrame(() => requestAnimationFrame(() => easePaneWeights(normalized(weightsFor(now.length + 1)), () => {
+      setWeightOverride(null);
+      const element = paneSlot(slot).host();
+      if (!element) return void setPaneMotion(null);
+      element.style.opacity = "0";
+      setPaneMotion(null);
+      void element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SWAP_FADE_MS, easing: "ease-out" }).finished.finally(() => { element.style.opacity = ""; });
+    })));
+  }, { defer: true }));
   // A share preset from the rail (Equalise is the even one): the panes ease to
   // it, each still held at its document's minimum.
   const applyPaneLayout = (weights: number[]) => {
@@ -4113,7 +4175,7 @@ function App() {
       const owns = () => slotHasKeyboard(slot);
       const page = () => slotPage(slot);
       const attachInput = () => <input ref={side.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) side.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />;
-      return <section ref={(element) => { pane.setHost(element); onCleanup(() => pane.setHost(undefined)); }} class="main-split" data-pane-slot={slot} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={position() === 0 ? "Pane B" : "Pane C"} style={{ flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": `${paneMinWidth(slot)}px` }}>
+      return <section ref={(element) => { pane.setHost(element); onCleanup(() => pane.setHost(undefined)); }} class="main-split" data-pane-slot={slot} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={position() === 0 ? "Pane B" : "Pane C"} style={{ flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": paneMotion()?.slot === slot ? "0px" : `${paneMinWidth(slot)}px`, ...(paneMotion()?.slot === slot ? { opacity: 0, overflow: "hidden" } : {}) }}>
         <div class="main-split-resize" role="separator" aria-label="Resize panes" aria-orientation="vertical" onPointerDown={(event) => startSplitResize(event, position() + 1)} />
         <Show when={parseFileView(slotView(slot))}>{(entries) => renderFileViewer(slot, entries())}</Show>
         <Show when={slotView(slot)?.startsWith("term:") && slotView(slot)!.slice("term:".length)} keyed>{(id) => renderTerminalDocument(slot, id)}</Show>
