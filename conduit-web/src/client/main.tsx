@@ -2556,9 +2556,9 @@ function App() {
     const to = panes.indexOf(target.pane);
     // Neighbour by neighbour, each a swap, by position (a swap of two panes
     // beside A reorders their keys) -- all within one fade of the panes
-    // involved.
+    // involved, the old layout showing until the documents have loaded.
     const involved = panes.slice(Math.min(at, to), Math.max(at, to) + 1).map(paneElement).filter((element): element is HTMLElement => Boolean(element));
-    await crossfadePanes(involved, async () => {
+    await crossfadeUnder(involved, async () => {
       while (at !== to) {
         const next = at < to ? at + 1 : at - 1;
         const now = panesShown();
@@ -2942,6 +2942,32 @@ function App() {
    * panes keep their widths: a width belongs to the position, not the document.
    */
   const SWAP_FADE_MS = 100;
+  // A pane's last frame, held over its place while what is under it changes.
+  const ghostOf = (element: HTMLElement) => {
+    const box = element.getBoundingClientRect();
+    const ghost = element.cloneNode(true) as HTMLElement;
+    ghost.removeAttribute("data-pane-slot");
+    Object.assign(ghost.style, { position: "fixed", left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px`, margin: "0", zIndex: "40", pointerEvents: "none" });
+    document.body.append(ghost);
+    // A clone starts scrolled to the top; hold each scroller where it was.
+    const from = [...element.querySelectorAll<HTMLElement>("*")];
+    const to = [...ghost.querySelectorAll<HTMLElement>("*")];
+    from.forEach((source, index) => { if (source.scrollTop || source.scrollLeft) { to[index]!.scrollTop = source.scrollTop; to[index]!.scrollLeft = source.scrollLeft; } });
+    return ghost;
+  };
+  // The panes' last frames stay up while the documents move and load under
+  // them, then the two crossfade (~100ms).
+  const crossfadeUnder = async (elements: HTMLElement[], place: () => Promise<void>) => {
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const ghosts = elements.map(ghostOf);
+    for (const element of elements) element.style.opacity = "0";
+    try { await place(); } finally {
+      await Promise.all([
+        ...elements.map(async (element) => { if (!still) await element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SWAP_FADE_MS, easing: "ease-out" }).finished.catch(() => undefined); element.style.opacity = ""; }),
+        ...ghosts.map(async (ghost) => { if (!still) await ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_FADE_MS, easing: "ease-out", fill: "forwards" }).finished.catch(() => undefined); ghost.remove(); }),
+      ]);
+    }
+  };
   const crossfadeSwap = (left: HTMLElement, right: HTMLElement, place: () => Promise<void>) => crossfadePanes([left, right], place);
   const crossfadePanes = async (both: HTMLElement[], place: () => Promise<void>) => {
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -3042,15 +3068,7 @@ function App() {
           if (isPaneView(view)) { setPaneAOverride(null); await openInPaneA(view); } else setPaneAOverride(view);
           const id = view.startsWith("chat:") ? view.slice("chat:".length) : null;
           await waitFor(() => !id || chat.loadedId() === id, 1500);
-          const box = beside.getBoundingClientRect();
-          const ghost = beside.cloneNode(true) as HTMLElement;
-          ghost.removeAttribute("data-pane-slot");
-          Object.assign(ghost.style, { position: "fixed", left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px`, margin: "0", zIndex: "40", pointerEvents: "none" });
-          document.body.append(ghost);
-          // A clone starts scrolled to the top; hold each scroller where it was.
-          const from = [...beside.querySelectorAll<HTMLElement>("*")];
-          const to = [...ghost.querySelectorAll<HTMLElement>("*")];
-          from.forEach((source, index) => { if (source.scrollTop || source.scrollLeft) { to[index]!.scrollTop = source.scrollTop; to[index]!.scrollLeft = source.scrollLeft; } });
+          const ghost = ghostOf(beside);
           batch(() => {
             movingDocuments = true;
             setSlotView(next, null);
