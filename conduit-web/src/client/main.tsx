@@ -3320,9 +3320,9 @@ function App() {
   // Tabs keep their order and width: switching changes only which is lit.
   const paneTabRow = (pane: PaneKey) => {
     const tabs = () => { const list = tabsOf(pane); return list && list.ids.length > 1 && !isMobileLayout() ? list : null; };
-    return {
-      get tabs() {
-        return <Show when={tabs()}>{(list) => <For each={list().ids}>{(id) => {
+    // Only a pane of two or more has the row; a pane of one keeps its breadcrumb.
+    const has = createMemo(() => Boolean(tabs()));
+    const row = createMemo(() => has() ? untrack(() => <Show when={tabs()}>{(list) => <For each={list().ids}>{(id) => {
           const active = () => activeChatOf(pane) === id;
           const name = () => viewName(`chat:${id}`);
           return <span class="pane-tab" role="tab" aria-selected={active()} classList={{ "pane-tab-active": active(), "pane-tab-preview": list().preview === id }} draggable={active() ? undefined : "true"} data-doc-view={active() ? undefined : `chat:${id}`}>
@@ -3331,9 +3331,8 @@ function App() {
             </button>
             <button type="button" class="pane-tab-close" tabIndex={-1} aria-label={`Close ${name()}`} title="Close tab" onClick={() => void closeTab(pane, id)}><XIcon /></button>
           </span>;
-        }}</For>}</Show>;
-      },
-    };
+        }}</For>}</Show>) : undefined);
+    return { get tabs() { return row(); } };
   };
   // Pane A's close hands it the next pane's chat or page.
   const closePane = (pane: PaneKey) => {
