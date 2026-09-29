@@ -191,24 +191,34 @@ export class OpenCodeAdapter extends EventEmitter {
     }
   }
 
-  async connect() {
+  /**
+   * OpenCode 2.0.19 prints `stopped` from `service status` while a TUI's own
+   * `serve --service` is live, so the state file it writes is read first. A
+   * service is only started when none is running, and never by a health check.
+   */
+  async connect({ start = true } = {}) {
     if (this.connection) return this.connection;
     if (this.connectionStart) return this.connectionStart;
     this.connectionStart = (async () => {
-      // `service status` prints `stopped` and succeeds when there is no service.
       const loopback = /^http:\/\/127\.0\.0\.1:\d+$/;
-      let baseUrl = await this.commandOutput(["service", "status"]).catch(() => "");
+      const serviceFile = async (variable, fallback) => {
+        const root = process.env[variable] || path.join(os.homedir(), fallback);
+        try { return JSON.parse(await fs.readFile(path.join(root, "opencode", "service.json"), "utf8")); }
+        catch (cause) { if (cause.code === "ENOENT") return {}; throw cause; }
+      };
+      const alive = (pid) => { try { process.kill(pid, 0); return true; } catch (cause) { return cause.code === "EPERM"; } };
+      const state = await serviceFile("XDG_STATE_HOME", ".local/state");
+      let baseUrl = loopback.test(state.url || "") && Number.isInteger(state.pid) && alive(state.pid) ? state.url : "";
+      // `service status` prints `stopped` and succeeds when there is no service.
+      if (!baseUrl) baseUrl = await this.commandOutput(["service", "status"]).catch(() => "");
       if (!loopback.test(baseUrl)) {
+        if (!start) throw failure("OpenCode service is not running");
         await this.commandOutput(["service", "start"]);
         baseUrl = await this.commandOutput(["service", "status"]);
       }
       if (!loopback.test(baseUrl)) throw failure("OpenCode service did not report a loopback URL");
-      const configRoot = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
-      let password = process.env.OPENCODE_SERVER_PASSWORD || "";
-      if (!password) {
-        try { password = JSON.parse(await fs.readFile(path.join(configRoot, "opencode", "service.json"), "utf8")).password || ""; }
-        catch (cause) { if (cause.code !== "ENOENT") throw cause; }
-      }
+      const password = process.env.OPENCODE_SERVER_PASSWORD || state.password
+        || (await serviceFile("XDG_CONFIG_HOME", ".config")).password || "";
       const headers = { accept: "application/json" };
       if (password) headers.authorization = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`;
       this.connection = { baseUrl, headers };
@@ -218,8 +228,8 @@ export class OpenCodeAdapter extends EventEmitter {
     finally { this.connectionStart = null; }
   }
 
-  async request(method, route, { directory = "", query = {}, body, whole = false } = {}) {
-    const connection = await this.connect();
+  async request(method, route, { directory = "", query = {}, body, whole = false, start = true, timeout = 30000 } = {}) {
+    const connection = await this.connect({ start });
     const url = new URL(`/api${route}`, connection.baseUrl);
     if (directory) url.searchParams.set("directory", directory);
     for (const [key, value] of Object.entries(query)) if (value !== "" && value != null) url.searchParams.set(key, String(value));
@@ -229,6 +239,8 @@ export class OpenCodeAdapter extends EventEmitter {
         method,
         headers: { ...connection.headers, ...(body === undefined ? {} : { "content-type": "application/json" }) },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        // A busy or wedged service surfaces as unavailable instead of hanging the caller.
+        signal: AbortSignal.timeout(timeout),
       });
     } catch (cause) {
       // The service may have stopped or moved; ask for it again next time.
@@ -247,7 +259,7 @@ export class OpenCodeAdapter extends EventEmitter {
   }
 
   health() {
-    return this.request("GET", "/info").then((info) => ({ configured: true, transportVersion: info.version || null }));
+    return this.request("GET", "/info", { start: false, timeout: 3000 }).then((info) => ({ configured: true, transportVersion: info.version || null }));
   }
 
   async launch(context, { model = "", thinkingLevel = "", forceModel = false } = {}) {
@@ -285,7 +297,8 @@ export class OpenCodeAdapter extends EventEmitter {
     if (existing) return existing;
     const selected = splitModel(model, thinkingLevel);
     // The service ignores `?directory=` here; a session without a location
-    // lands in the service's own directory.
+    // lands in the service's own directory, which is usually home.
+    if (!project?.workingRoot) throw failure("OpenCode session needs a project directory");
     const session = await this.request("POST", "/session", {
       body: { location: { directory: project.workingRoot }, ...(selected ? { model: selected } : {}) },
     });
