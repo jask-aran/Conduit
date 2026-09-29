@@ -2740,8 +2740,9 @@ function App() {
       return;
     }
     // Open as a tab already: shown there.
-    const tabbed = panesShown().find((pane) => fileTabsOf(pane)?.entries.some((item) => sameFileEntry(item, entry)));
-    if (tabbed !== undefined && !options.beside) { showFileTab(tabbed, fileEntryKey(entry)); setFilePane(tabbed); return; }
+    if (!options.beside) for (const pane of panesShown()) for (const side of [0, 1]) {
+      if (fileTabsOf(pane, side)?.entries.some((item) => sameFileEntry(item, entry))) return showFileTab(pane, side, fileEntryKey(entry));
+    }
     const shownFilePane = () => { const pane = filePane(); return pane !== null && panesShown().includes(pane) && parseFileView(viewOf(pane)) ? pane : null; };
     // Alt: beside a file already open -- the second side of a viewer with
     // one, the file pane's first -- and only a new pane once they are full.
@@ -2768,7 +2769,7 @@ function App() {
     if (handlesOf(pane)[index]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and open another file?")) return;
     handlesOf(pane)[index]?.discardChanges();
     // Ctrl keeps the file it replaces as a tab (6c).
-    if (tabActivation()) keepFileNext.add(String(pane));
+    if (tabActivation()) keepFileNext.add(sideKey(pane, index));
     setPaneView(pane, formatFileView(target.map((item, at) => at === index ? entry : item)));
   };
   const splitFileViewer = (pane: PaneKey) => {
@@ -2788,25 +2789,23 @@ function App() {
     const current = parseFileView(viewOf(pane));
     if (current) setPaneView(pane, formatFileView(current.map((item, at) => at === index ? { projectId: item.projectId, path: item.path, ...(mode ? { mode } : {}) } : item)));
   };
-  // A viewer with two or more files open, or none, heads itself with the tab row (6c).
+  // Each side is headed by its tabs (6c); a viewer with none says how to fill it.
   const renderFileViewer = (pane: PaneKey) => {
     const entries = () => parseFileView(viewOf(pane)) ?? [];
-    const row = fileTabRow(pane);
     return <div class="workspace-split-surface">
-      <Show when={row() || entries().length === 0}>
-        <header class="chat-header file-tabs-header">
-          <Show when={row()} fallback={<nav class="chat-header-title"><strong>No file open</strong></nav>}><nav aria-label="Tabs" class="chat-header-title chat-header-tabs">{row()}</nav></Show>
-          <div class="chat-header-actions">{paneTabActions(pane)}</div>
-        </header>
-      </Show>
-      <Show when={entries().length} fallback={<div class="file-viewer-empty" role="status">Open a file from Files, or Ctrl-click one to add it as a tab.</div>}>
+      <Show when={entries().length} fallback={<>
+        <header class="chat-header file-tabs-header"><nav class="chat-header-title"><strong>No file open</strong></nav><div class="chat-header-actions">{paneTabActions(pane)}</div></header>
+        <div class="file-viewer-empty" role="status">Open a file from Files, or Ctrl-click one to add it as a tab.</div>
+      </>}>
         <FileViewer entries={entries()} focused={fileFocus()[String(pane)] ?? 0} wrap={fileWrap()} onToggleWrap={toggleFileWrap} commentChatId={focusedChat().loadedId()}
-          onFocusEntry={(index) => { focusFileEntry(pane, index); setFilePane(pane); }} onSplit={() => splitFileViewer(pane)} onCloseEntry={(index) => { const entry = entries()[index]; if (entry) closeFileTab(pane, fileEntryKey(entry)); }}
+          tabs={(side) => fileSideTabs(pane, side)} paneActions={() => paneTabActions(pane)}
+          onFocusEntry={(index) => { focusFileEntry(pane, index); setFilePane(pane); }} onSplit={() => splitFileViewer(pane)} onCloseEntry={(index) => { const entry = entries()[index]; if (entry) closeFileTab(pane, index, fileEntryKey(entry)); }}
           onSetMode={(index, mode) => setFileMode(pane, index, mode)}
           onLoaded={(index, file) => noteFileLoaded(pane, index, file)} reveal={fileReveal()} ref={(index, handle) => { handlesOf(pane)[index] = handle; }} />
       </Show>
     </div>;
   };
+
   /*
    * A chat or page in a pane beside A (stages 4, 5, 6b). Pane A keeps the URL
    * and the catalogue's selection; the pane with the keyboard owns the
@@ -3357,19 +3356,15 @@ function App() {
   // Stepping round the focused pane's tabs, in the row's order, and the
   // panes (the shortcuts Next/Previous tab and pane).
   // A file viewer's step skips the file showing on its other side.
-  const fileTabsToStep = () => { const pane: PaneKey = keyboardPaneSlot() ?? "main"; const list = fileTabsOf(pane); return !isMobileLayout() && list && list.entries.length > 1 ? { pane, list } : null; };
+  const fileTabsToStep = () => { const pane: PaneKey = keyboardPaneSlot() ?? "main"; const side = shownFileSide(pane); const list = fileTabsOf(pane, side); return !isMobileLayout() && parseFileView(viewOf(pane))?.length && list && list.entries.length > 1 ? { pane, side, list } : null; };
   const tabsToStep = () => { const pane: PaneKey = keyboardPaneSlot() ?? "main"; const list = tabsOf(pane); return !isMobileLayout() && list && list.ids.length > 1 && list.ids.includes(activeChatOf(pane) ?? "") ? { pane, list } : null; };
   const stepTab = (step: number) => {
     const files = fileTabsToStep();
     if (files) {
       const keys = files.list.entries.map(fileEntryKey);
       const shown = (parseFileView(viewOf(files.pane)) ?? []).map(fileEntryKey);
-      let at = keys.indexOf(shown[shownFileSide(files.pane)] ?? "");
-      for (let tries = 0; tries < keys.length; tries += 1) {
-        at = (at + step + keys.length) % keys.length;
-        if (!shown.includes(keys[at]!)) return showFileTab(files.pane, keys[at]!);
-      }
-      return;
+      const at = keys.indexOf(shown[files.side] ?? "");
+      return showFileTab(files.pane, files.side, keys[(at + step + keys.length) % keys.length]!);
     }
     const found = tabsToStep();
     if (!found) return;
@@ -3418,32 +3413,36 @@ function App() {
   };
   const swapTabs = (a: PaneKey, b: PaneKey) => batch(() => {
     setPaneTabs((current) => swapKeys(current, a, b));
-    setFileTabs((current) => swapKeys(current, a, b));
-    const first = lastShownFiles.get(String(a));
-    const second = lastShownFiles.get(String(b));
-    lastShownFiles.delete(String(a));
-    lastShownFiles.delete(String(b));
-    if (second) lastShownFiles.set(String(a), second);
-    if (first) lastShownFiles.set(String(b), first);
+    for (const side of [0, 1]) {
+      setFileTabs((current) => swapKeys(current, sideKey(a, side) as unknown as PaneKey, sideKey(b, side) as unknown as PaneKey));
+      const first = lastShownFiles.get(sideKey(a, side));
+      const second = lastShownFiles.get(sideKey(b, side));
+      lastShownFiles.delete(sideKey(a, side));
+      lastShownFiles.delete(sideKey(b, side));
+      if (second) lastShownFiles.set(sideKey(a, side), second);
+      if (first) lastShownFiles.set(sideKey(b, side), first);
+    }
   });
   /*
-   * File tabs: a file viewer holds up to five files and shows one or two of
-   * them side by side (its view's entries); the rest are its tabs, unmounted.
-   * A file opened into the viewer replaces the one on the side with the
-   * keyboard; Ctrl adds a tab. Closing a showing tab shows the tab used last
-   * in its place, else that side goes; the last leaves the viewer empty.
+   * File tabs (6c): a file viewer shows one or two files side by side (its
+   * view's entries), and each side holds up to five as its own tabs, which
+   * head it in place of the file's name. A file opened into a side replaces
+   * the one there; Ctrl keeps that one as a tab. Closing a side's showing tab
+   * shows the tab it used last, else the side goes; the last leaves the viewer
+   * empty. Tab lists go by `<pane>#<side>`.
    */
   type FileTabs = { entries: FileEntry[]; used: string[] };
   const FILE_TAB_CAP = 5;
+  const sideKey = (pane: PaneKey, side: number) => `${pane}#${side}`;
   const fileTabsFromParams = (params: URLSearchParams): Record<string, FileTabs> => {
     const order = params.getAll("pane").filter(isSplitView).map((_, index) => index);
     const found: Record<string, FileTabs> = {};
     for (const value of params.getAll("ftabs")) {
       const at = value.indexOf(":");
-      const position = Number(value.slice(0, at));
-      const key = position === 0 ? "main" : order[position - 1] === undefined ? null : String(order[position - 1]);
+      const [position, side] = value.slice(0, at).split(".").map(Number);
+      const pane = position === 0 ? "main" : order[position! - 1] === undefined ? null : String(order[position! - 1]);
       const entries = value.slice(at + 1).split("|").map((part) => parseFileView(`files:${part}`)?.[0]).filter((entry): entry is FileEntry => Boolean(entry)).slice(0, FILE_TAB_CAP);
-      if (key !== null && entries.length) found[key] = { entries, used: entries.map(fileEntryKey) };
+      if (pane !== null && entries.length) found[`${pane}#${side || 0}`] = { entries, used: entries.map(fileEntryKey) };
     }
     return found;
   };
@@ -3455,114 +3454,122 @@ function App() {
     return fileTabsFromParams(params);
   };
   const [fileTabs, setFileTabs] = createSignal<Record<string, FileTabs>>(launchFileTabs());
-  const fileTabsOf = (pane: PaneKey) => fileTabs()[String(pane)] ?? null;
-  // What each viewer showed when last reconciled: what leaves it was replaced or closed.
-  const lastShownFiles = new Map<string, FileEntry[]>();
+  const fileTabsOf = (pane: PaneKey, side: number) => fileTabs()[sideKey(pane, side)] ?? null;
+  // What each side showed when last reconciled: what leaves it was replaced.
+  const lastShownFiles = new Map<string, FileEntry>();
   const keepFileNext = new Set<string>();
   const fileTabParams = () => {
     const panes: PaneKey[] = ["main", ...slotOrder().filter((slot) => slotView(slot))];
-    return panes.flatMap((pane, position) => {
-      const tabs = fileTabsOf(pane);
-      return tabs && tabs.entries.length > 1 ? [`${position}:${formatFileView(tabs.entries).slice("files:".length)}`] : [];
-    });
+    return panes.flatMap((pane, position) => [0, 1].flatMap((side) => {
+      const tabs = fileTabsOf(pane, side);
+      return tabs && tabs.entries.length > 1 ? [`${position}.${side}:${formatFileView(tabs.entries).slice("files:".length)}`] : [];
+    }));
   };
   function reconcileFileTabs() {
     const next = { ...untrack(fileTabs) };
     const panes: PaneKey[] = ["main", ...untrack(slotOrder).filter((slot) => untrack(() => slotView(slot)))];
-    for (const key of Object.keys(next)) if (!panes.some((pane) => String(pane) === key)) { delete next[key]; lastShownFiles.delete(key); }
+    const live = new Set<string>();
     for (const pane of panes) {
-      const key = String(pane);
       const shown = parseFileView(untrack(() => viewOf(pane)));
-      if (!shown) { delete next[key]; lastShownFiles.delete(key); continue; }
-      const tabs = next[key] ?? { entries: [], used: [] };
-      let entries = [...tabs.entries];
-      let used = [...tabs.used];
-      const shownKeys = shown.map(fileEntryKey);
-      const kept = keepFileNext.delete(key);
-      // What left the viewer was replaced or closed, unless Ctrl kept it; a new file takes its place.
-      const freed: number[] = [];
-      for (const left of lastShownFiles.get(key) ?? []) {
-        const leftKey = fileEntryKey(left);
-        if (kept || shownKeys.includes(leftKey)) continue;
-        const at = entries.findIndex((entry) => fileEntryKey(entry) === leftKey);
-        if (at >= 0) freed.push(at);
-      }
-      const removed = new Set(freed.map((at) => fileEntryKey(entries[at]!)));
-      const slots = [...freed].sort((a, b) => a - b);
-      const placed: (FileEntry | null)[] = entries.map((entry) => removed.has(fileEntryKey(entry)) ? null : entry);
-      for (const entry of shown) {
-        const at = placed.findIndex((item) => item && fileEntryKey(item) === fileEntryKey(entry));
-        if (at >= 0) { placed[at] = entry; continue; }
-        const free = slots.shift();
-        if (free !== undefined) { placed[free] = entry; continue; }
-        // A new place's file joins its place's run, else the end.
-        const last = placed.reduce((found, item, index) => item?.projectId === entry.projectId ? index : found, -1);
-        placed.splice(last >= 0 ? last + 1 : placed.length, 0, entry);
-      }
-      entries = placed.filter((item): item is FileEntry => Boolean(item));
-      used = [...shownKeys.slice().reverse(), ...used.filter((item) => !shownKeys.includes(item))].filter((item, index, list) => list.indexOf(item) === index && entries.some((entry) => fileEntryKey(entry) === item));
-      while (entries.length > FILE_TAB_CAP) {
-        const drop = [...used].reverse().find((item) => !shownKeys.includes(item));
-        if (!drop) break;
-        entries = entries.filter((entry) => fileEntryKey(entry) !== drop);
-        used = used.filter((item) => item !== drop);
-      }
-      next[key] = { entries, used };
-      lastShownFiles.set(key, shown);
+      if (!shown) continue;
+      shown.forEach((entry, side) => {
+        const key = sideKey(pane, side);
+        live.add(key);
+        const tabs = next[key] ?? { entries: [], used: [] };
+        let entries = [...tabs.entries];
+        const entryKey = fileEntryKey(entry);
+        const kept = keepFileNext.delete(key);
+        const at = entries.findIndex((item) => fileEntryKey(item) === entryKey);
+        const previous = lastShownFiles.get(key);
+        const replaced = previous && !kept && fileEntryKey(previous) !== entryKey ? entries.findIndex((item) => fileEntryKey(item) === fileEntryKey(previous)) : -1;
+        if (at >= 0) {
+          entries[at] = entry;
+          if (replaced >= 0) entries.splice(replaced, 1);
+        } else if (replaced >= 0) entries[replaced] = entry;
+        else {
+          // A new place's file joins its place's run, else the end.
+          const last = entries.reduce((found, item, index) => item.projectId === entry.projectId ? index : found, -1);
+          entries.splice(last >= 0 ? last + 1 : entries.length, 0, entry);
+        }
+        let used = [entryKey, ...tabs.used.filter((item) => item !== entryKey)].filter((item) => entries.some((candidate) => fileEntryKey(candidate) === item));
+        while (entries.length > FILE_TAB_CAP) {
+          const drop = [...used].reverse().find((item) => item !== entryKey);
+          if (!drop) break;
+          entries = entries.filter((item) => fileEntryKey(item) !== drop);
+          used = used.filter((item) => item !== drop);
+        }
+        next[key] = { entries, used };
+        lastShownFiles.set(key, entry);
+      });
     }
+    for (const key of Object.keys(next)) if (!live.has(key)) { delete next[key]; lastShownFiles.delete(key); }
     setFileTabs(next);
   }
   createEffect(on(() => fileTabParams().join("\n"), (value) => writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-file-tabs", value), { defer: true }));
   const shownFileSide = (pane: PaneKey) => { const shown = parseFileView(viewOf(pane)) ?? []; return Math.max(0, Math.min(fileFocus()[String(pane)] ?? 0, shown.length - 1)); };
-  const showFileTab = (pane: PaneKey, key: string) => {
-    const entry = fileTabsOf(pane)?.entries.find((item) => fileEntryKey(item) === key);
+  // A side's tabs moved to another side (a side closing shifts the next one down).
+  const moveSideTabs = (from: string, to: string) => {
+    setFileTabs((current) => { const next = { ...current }; if (current[from]) next[to] = current[from]!; else delete next[to]; delete next[from]; return next; });
+    const shown = lastShownFiles.get(from);
+    lastShownFiles.delete(from);
+    if (shown) lastShownFiles.set(to, shown); else lastShownFiles.delete(to);
+  };
+  const showFileTab = (pane: PaneKey, side: number, key: string) => {
+    const entry = fileTabsOf(pane, side)?.entries.find((item) => fileEntryKey(item) === key);
     const shown = parseFileView(viewOf(pane)) ?? [];
-    if (!entry) return;
-    const already = shown.findIndex((item) => fileEntryKey(item) === key);
-    if (already >= 0) { focusFileEntry(pane, already); return focusAnyPane(pane); }
-    const side = shownFileSide(pane);
-    if (handlesOf(pane)[side]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and show another file?")) return;
-    handlesOf(pane)[side]?.discardChanges();
-    keepFileNext.add(String(pane));
-    setPaneView(pane, formatFileView(shown.length ? shown.map((item, at) => at === side ? entry : item) : [entry]));
+    if (!entry || !shown[side]) return;
+    if (fileEntryKey(shown[side]!) !== key) {
+      if (handlesOf(pane)[side]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and show another file?")) return;
+      handlesOf(pane)[side]?.discardChanges();
+      keepFileNext.add(sideKey(pane, side));
+      setPaneView(pane, formatFileView(shown.map((item, at) => at === side ? entry : item)));
+    }
     focusFileEntry(pane, side);
+    setFilePane(pane);
     focusAnyPane(pane);
   };
-  const closeFileTab = (pane: PaneKey, key: string) => {
-    const tabs = fileTabsOf(pane);
+  const closeFileTab = (pane: PaneKey, side: number, key: string) => {
+    const tabs = fileTabsOf(pane, side);
     const shown = parseFileView(viewOf(pane)) ?? [];
-    const side = shown.findIndex((item) => fileEntryKey(item) === key);
     const forget = () => setFileTabs((current) => {
-      const list = current[String(pane)];
-      return list ? { ...current, [String(pane)]: { entries: list.entries.filter((entry) => fileEntryKey(entry) !== key), used: list.used.filter((item) => item !== key) } } : current;
+      const list = current[sideKey(pane, side)];
+      return list ? { ...current, [sideKey(pane, side)]: { entries: list.entries.filter((entry) => fileEntryKey(entry) !== key), used: list.used.filter((item) => item !== key) } } : current;
     });
-    if (side < 0) return forget();
+    if (!shown[side] || fileEntryKey(shown[side]!) !== key) return forget();
     if (handlesOf(pane)[side]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and close this file?")) return;
     handlesOf(pane)[side]?.discardChanges();
-    handlesOf(pane)[side] = undefined;
-    const shownKeys = shown.map(fileEntryKey);
-    const hidden = tabs?.used.find((item) => !shownKeys.includes(item));
+    const hidden = tabs?.used.find((item) => item !== key);
     const replacement = hidden ? tabs!.entries.find((entry) => fileEntryKey(entry) === hidden) : undefined;
+    forget();
     movingDocuments = true;
-    if (replacement) setPaneView(pane, formatFileView(shown.map((item, at) => at === side ? replacement : item)));
-    else setPaneView(pane, formatFileView(shown.filter((_, at) => at !== side)));
+    if (replacement) {
+      keepFileNext.add(sideKey(pane, side));
+      setPaneView(pane, formatFileView(shown.map((item, at) => at === side ? replacement : item)));
+    } else {
+      handlesOf(pane)[side] = undefined;
+      // The side goes; a second side becomes the first.
+      if (side === 0 && shown.length === 2) moveSideTabs(sideKey(pane, 1), sideKey(pane, 0));
+      else { setFileTabs((current) => { const next = { ...current }; delete next[sideKey(pane, side)]; return next; }); lastShownFiles.delete(sideKey(pane, side)); }
+      setPaneView(pane, formatFileView(shown.filter((_, at) => at !== side)));
+      focusFileEntry(pane, 0);
+    }
     movingDocuments = false;
-    if (!replacement) focusFileEntry(pane, 0);
   };
-  const fileTabRow = (pane: PaneKey) => {
-    const shownKeys = () => (parseFileView(viewOf(pane)) ?? []).map(fileEntryKey);
-    return createTabStrip({
-      keys: () => { const list = fileTabsOf(pane); return list && list.entries.length > 1 && !isMobileLayout() ? list.entries.map(fileEntryKey) : null; },
+  const fileSideTabs = (pane: PaneKey, side: number) => {
+    const row = createTabStrip({
+      keys: () => { const list = fileTabsOf(pane, side); return list?.entries.length ? list.entries.map(fileEntryKey) : null; },
       place: (key) => key.slice(0, key.indexOf(":")),
       placeLabel: (key) => placeLabelOf(key.slice(0, key.indexOf(":"))),
       title: (key) => key.slice(key.indexOf(":") + 1).split("/").pop() || key,
-      lit: () => shownKeys()[shownFileSide(pane)] ?? null,
-      shown: (key) => shownKeys().includes(key),
-      used: () => fileTabsOf(pane)?.used ?? [],
-      select: (key) => showFileTab(pane, key),
-      close: (key) => closeFileTab(pane, key),
-      dragView: (key) => { const entry = fileTabsOf(pane)?.entries.find((item) => fileEntryKey(item) === key); return entry ? formatFileView([entry]) : ""; },
+      // Lit on the side with the keyboard; the other side's showing file in the text colour.
+      lit: () => { const shown = parseFileView(viewOf(pane)) ?? []; return shownFileSide(pane) === side && shown[side] ? fileEntryKey(shown[side]!) : null; },
+      shown: (key) => { const shown = parseFileView(viewOf(pane)) ?? []; return Boolean(shown[side] && fileEntryKey(shown[side]!) === key); },
+      used: () => fileTabsOf(pane, side)?.used ?? [],
+      select: (key) => showFileTab(pane, side, key),
+      close: (key) => closeFileTab(pane, side, key),
+      dragView: (key) => { const entry = fileTabsOf(pane, side)?.entries.find((item) => fileEntryKey(item) === key); return entry ? formatFileView([entry]) : ""; },
     });
+    return <nav aria-label="Tabs" class="chat-header-title chat-header-tabs file-side-tabs">{row()}</nav>;
   };
   /*
    * A pane's tab row, for chats and files alike (6c): tabs keep their order

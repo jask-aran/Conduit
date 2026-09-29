@@ -36,6 +36,10 @@ export default function FileViewer(props: {
   onSplit: () => void;
   onCloseEntry: (index: number) => void;
   onSetMode: (index: number, mode: FileEntry["mode"]) => void;
+  /** Each side's tabs, which head it in place of the file's name (6c). */
+  tabs?: (index: number) => JSX.Element;
+  /** The pane's own actions, at the end of the last side's header. */
+  paneActions?: () => JSX.Element;
   onLoaded?: (index: number, file: FileSummary | null) => void;
   ref: (index: number, handle: FileSlotHandle | undefined) => void;
   /** A review comment to scroll to, when it is on one of the entries. */
@@ -148,6 +152,8 @@ export default function FileViewer(props: {
           gitFile={statuses()[entryKey(entry())]}
           onShowDiff={(staged) => { if (leaveContents(index)) props.onSetMode(index, staged ? "staged" : "changes"); }}
           headerSuffix={splitButton()}
+          headerTabs={props.tabs?.(index)}
+          headerEnd={index === props.entries.length - 1 ? props.paneActions?.() : undefined}
           headerMenuItems={<Show when={props.entries.length === 1}><MenuItem onSelect={() => props.onSplit()}><Columns2Icon />Open again beside</MenuItem></Show>}
           reveal={props.reveal && props.reveal.entry.projectId === entry().projectId && props.reveal.entry.path === entry().path ? props.reveal.request : null}
           onFocus={() => props.onFocusEntry(index)}
@@ -160,7 +166,7 @@ export default function FileViewer(props: {
           onDispose={() => { handles[index] = undefined; props.ref(index, undefined); }}
         />
       }>{(mode) =>
-        <ChangesEntry entry={entry()} mode={mode()} status={statuses()[entryKey(entry())]} focused={props.entries.length > 1 && props.focused === index}
+        <ChangesEntry entry={entry()} mode={mode()} status={statuses()[entryKey(entry())]} focused={props.entries.length > 1 && props.focused === index} tabs={props.tabs?.(index)} end={index === props.entries.length - 1 ? props.paneActions?.() : undefined}
           split={splitButton()} onFocus={() => props.onFocusEntry(index)} onClose={() => props.onCloseEntry(index)} onSetMode={(next) => props.onSetMode(index, next)}
           ref={(handle) => { handles[index] = handle; props.ref(index, handle); }} />
       }</Show>
@@ -178,6 +184,8 @@ function ChangesEntry(props: {
   onFocus: () => void;
   onClose: () => void;
   onSetMode: (mode: FileEntry["mode"]) => void;
+  tabs?: JSX.Element;
+  end?: JSX.Element;
   ref: (handle: FileSlotHandle) => void;
 }) {
   const [comparison, { refetch }] = createResource(() => [props.entry.projectId, props.entry.path, props.mode] as const, ([projectId, path, scope]) =>
@@ -189,13 +197,13 @@ function ChangesEntry(props: {
     <WorkbenchButton type="button" class="workspace-preview-action" aria-label="Show the file" title="Show the file" onClick={() => props.onSetMode(undefined)}><FileTextIcon /></WorkbenchButton>
     <Show when={other()}>{(next) => <WorkbenchButton type="button" class="workspace-preview-action" aria-label={next() === "staged" ? "Review staged changes" : "Review unstaged changes"} title={next() === "staged" ? "Review staged changes" : "Review unstaged changes"} onClick={() => props.onSetMode(next())}>{next() === "staged" ? <GitCompareArrowsIcon /> : <FileDiffIcon />}</WorkbenchButton>}</Show>
     {props.split}
-    <WorkbenchButton type="button" class="workspace-preview-action workspace-preview-close" aria-label="Close file" title="Close file" onClick={() => props.onClose()}><XIcon /></WorkbenchButton>
+    <Show when={!props.tabs}><WorkbenchButton type="button" class="workspace-preview-action workspace-preview-close" aria-label="Close file" title="Close file" onClick={() => props.onClose()}><XIcon /></WorkbenchButton></Show>
   </>;
   return <section class="workspace-preview workspace-changes-entry" data-focused={props.focused} aria-label={`${props.entry.path} ${props.mode === "staged" ? "staged changes" : "changes"}`} onFocusIn={() => props.onFocus()} onPointerDown={() => props.onFocus()}>
     <Suspense>
       <Show when={comparison()} fallback={<div class="workspace-panel-empty">{comparison.loading ? "Loading changes…" : "No changes to show."}</div>}>{(payload) =>
         <WorkspaceComparison comparison={payload()} sourceKey={`${props.entry.projectId}:${props.entry.path}:${props.mode}`} viewState={{ layout: "unified", wrap: false, top: 0, left: 0, position: 0 }}
-          headerAction={<><span class="workspace-changes-scope">{props.mode === "staged" ? "Staged" : "Changes"}</span>{actions}</>} />
+          headerAction={<><span class="workspace-changes-scope">{props.mode === "staged" ? "Staged" : "Changes"}</span>{actions}</>} headerTabs={props.tabs} headerEnd={props.end} />
       }</Show>
     </Suspense>
   </section>;
