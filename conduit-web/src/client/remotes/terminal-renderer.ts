@@ -282,7 +282,8 @@ async function createXtermRenderer(host: HTMLElement, options: TerminalRendererO
   terminal.loadAddon(fit);
   terminal.loadAddon(clipboard);
   terminal.open(host);
-  const webgl = new WebglAddon();
+  // Its frame kept, so a pane's crossfade can copy it (main.tsx, ghostOf).
+  const webgl = new WebglAddon(true);
   const contextLoss = webgl.onContextLoss(() => webgl.dispose());
   try {
     terminal.loadAddon(webgl);
