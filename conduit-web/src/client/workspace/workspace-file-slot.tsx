@@ -472,7 +472,7 @@ export default function WorkspaceFileSlot(props: {
     <Show when={props.headerPrefix}>{props.headerPrefix}</Show>
     <Show when={props.headerTabs} fallback={<div class="workspace-preview-file" title={props.path ?? ""}><FileTypeIcon name={props.path ?? ""} /><span>{props.path}</span></div>}>{props.headerTabs}</Show>
     {gitControls()}
-    <span class="workspace-preview-dirty" data-dirty={hasUnsavedChanges()} aria-hidden="true" />
+    <Show when={!props.headerTabs}><span class="workspace-preview-dirty" data-dirty={hasUnsavedChanges()} aria-hidden="true" /></Show>
     <Show when={hasUnsavedChanges()}>
       <WorkbenchButton type="button" aria-label="Save file" title="Save file (Ctrl+S)" disabled={saving()} onClick={() => void save()}><Show when={saving()} fallback={<SaveIcon />}><Spinner /></Show>Save</WorkbenchButton>
     </Show>

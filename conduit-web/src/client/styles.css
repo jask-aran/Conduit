@@ -186,6 +186,12 @@ svg.lucide { stroke-width: 2.4; }
 .pane-tab:not(.pane-tab-active):hover .pane-tab-close { background: var(--accent); box-shadow: -8px 0 6px var(--accent); opacity: 1; }
 .pane-tab-active .pane-tab-close { background: transparent; }
 .pane-tab-close:hover { color: var(--foreground); }
+/* Unsaved: a dot where the X sits, the X on the pointer. */
+.pane-tab-unsaved .pane-tab-close { opacity: 1; }
+.pane-tab-unsaved:not(:hover) .pane-tab-close { background: transparent; box-shadow: none; }
+.pane-tab-unsaved:not(:hover) .pane-tab-close svg { display: none; }
+.pane-tab-unsaved:not(:hover) .pane-tab-close::after { width: 6.4px; height: 6.4px; border-radius: 50%; background: currentColor; content: ""; }
+.pane-tab-unsaved .pane-tab-close { color: var(--foreground); }
 .pane-tab-close svg { width: 11.2px; height: 11.2px; }
 .pane-tab-live { width: 5px; height: 5px; flex: none; border-radius: 50%; background: var(--live, oklch(0.62 0.17 145)); }
 .pane-tabs-more { margin-left: 8px; }
@@ -2795,3 +2801,4 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .message-cancel-edit.message-scroller-button[data-slot="button"] svg { width: 12px; height: 12px; }
 .message-cancel-edit[data-beside-latest] { translate: calc(-100% - 22px) 0; }
 @media (--conduit-mobile-layout) { .message-cancel-edit.message-scroller-button[data-slot="button"] { font-size: 13px; padding: 0 14px 0 12px; } .message-cancel-edit[data-beside-latest] { translate: calc(-100% - 26px) 0; } }
+.file-viewer-surface:focus { outline: none; }
