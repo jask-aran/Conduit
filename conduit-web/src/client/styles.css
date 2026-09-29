@@ -152,19 +152,27 @@ svg.lucide { stroke-width: 2.4; }
 .pane-tab-action { display: inline-flex; width: 20px; height: 20px; flex: none; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--muted-foreground); }
 .pane-tab-action:hover { background: var(--accent); color: var(--foreground); }
 .pane-tab-action svg { width: 12.8px; height: 12.8px; }
-/* A pane's other chat tabs (6c): the title alone in grey, truncating before
-   the active breadcrumb does; the X shows with the pointer. */
-.chat-header-title .pane-tab { display: inline-flex; min-width: 40px; max-width: 160px; flex: 0 1 auto; align-items: center; border-radius: var(--radius-md); }
-.pane-tab:hover { background: var(--accent); }
-.pane-tab-open { display: inline-flex; min-width: 0; align-items: center; gap: 4.8px; overflow: hidden; padding: 2px 0 2px 6.4px; border: 0; background: transparent; color: var(--muted-foreground); font: inherit; font-weight: 450; text-overflow: ellipsis; white-space: nowrap; }
+/* A pane's chat tabs (6c): titles only, each the same width whether lit or
+   not, so switching moves nothing; hairlines between unlit tabs. */
+.chat-header-tabs { gap: 0; }
+.chat-header-title .pane-tab { position: relative; display: inline-flex; min-width: 72px; max-width: 160px; height: 24px; flex: 0 1 160px; align-items: center; overflow: visible; border-radius: var(--radius-md); }
+.pane-tab:not(.pane-tab-active) + .pane-tab:not(.pane-tab-active)::before { position: absolute; top: 6px; bottom: 6px; left: 0; width: 0.8px; background: color-mix(in oklch, var(--foreground), transparent 85%); content: ""; }
+.pane-tab:hover, .pane-tab-active { background: var(--accent); }
+.pane-tab-open { display: inline-flex; min-width: 0; height: 100%; flex: 1; align-items: center; gap: 4.8px; padding: 0 2px 0 8px; border: 0; background: transparent; color: var(--muted-foreground); font: inherit; font-weight: 450; }
+.chat-header-title .pane-tab-open span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pane-tab:hover .pane-tab-open { color: var(--foreground); }
-.pane-tab-close { display: inline-flex; width: 16px; height: 16px; flex: none; align-items: center; justify-content: center; margin-right: 2px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted-foreground); opacity: 0; }
-.pane-tab:hover .pane-tab-close { opacity: 1; }
+.pane-tab-active .pane-tab-open { color: var(--foreground); font-weight: 660; }
+.pane-tab-close { display: inline-flex; width: 16px; height: 16px; flex: none; align-items: center; justify-content: center; margin-right: 4px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted-foreground); opacity: 0; }
+.pane-tab:hover .pane-tab-close, .pane-tab-active .pane-tab-close { opacity: 1; }
 .pane-tab-close:hover { color: var(--foreground); }
 .pane-tab-close svg { width: 11.2px; height: 11.2px; }
 .pane-tab-live { width: 5px; height: 5px; flex: none; border-radius: 50%; background: var(--live, oklch(0.62 0.17 145)); }
 /* The preview tab, replaced by the next chat opened here until it is kept. */
-.pane-tab-preview .pane-tab-open, .chat-header-title.pane-tab-preview > strong { font-style: italic; }
+.pane-tab-preview .pane-tab-open { font-style: italic; }
+/* The active tab's place, at the right with the pane's actions. */
+.pane-tab-place { overflow: hidden; min-width: 0; flex: 0 1 auto; margin-left: auto; padding: 0; border: 0; background: transparent; color: var(--muted-foreground); font-size: 11.2px; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+button.pane-tab-place:hover { color: var(--foreground); }
+.pane-tab-place + .chat-header-actions { margin-left: 0; }
 .chat-header-title span, .chat-header-title strong, .chat-header-title .breadcrumb-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The place crumb is a link to its page: the crumb at rest, white under the pointer. */
 .breadcrumb-link { border: 0; background: none; padding: 0; color: inherit; font: inherit; cursor: pointer; }
