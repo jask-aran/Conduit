@@ -74,7 +74,7 @@ function sessionMetadata(record: Pty) {
 type StandaloneTerminalControls = { onOpenConduit: () => void };
 type KeyboardLockNavigator = Navigator & { keyboard?: { lock?: (codes?: string[]) => Promise<void>; unlock?: () => void } };
 
-export function TerminalPane(props: { projectId: string; projectName?: string; workingRoot?: string; terminalId?: string; active?: boolean; autoStart?: boolean; focusRequest?: number; connectivity?: () => Connectivity; standaloneControls?: StandaloneTerminalControls; onOpenBeside?: (terminalId: string) => void; headerActions?: JSX.Element }) {
+export function TerminalPane(props: { projectId: string; projectName?: string; workingRoot?: string; terminalId?: string; active?: boolean; autoStart?: boolean; focusRequest?: number; connectivity?: () => Connectivity; standaloneControls?: StandaloneTerminalControls; onOpenBeside?: (terminalId: string) => void; onShown?: (terminalId: string) => void; headerActions?: JSX.Element }) {
   const [pty, setPty] = createSignal<Pty | null>(null);
   const [sessions, setSessions] = createSignal<Pty[]>([]);
   const [error, setError] = createSignal("");
@@ -1012,6 +1012,9 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     activeProjectId = projectId;
     if (props.active !== false) void attachExisting(projectId);
   });
+
+  // Tell the pane which shell it shows, so its address follows a switch made here.
+  createEffect(on(() => pty()?.id, (id) => { if (id && id !== props.terminalId) props.onShown?.(id); }, { defer: true }));
 
   createEffect(on(() => props.terminalId, (terminalId) => {
     if (!mounted || !terminalId || props.active === false || pty()?.id === terminalId) return;

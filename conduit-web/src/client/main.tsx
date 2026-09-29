@@ -2611,17 +2611,21 @@ function App() {
     document.removeEventListener("drop", onDocDrop);
     document.removeEventListener("dragend", endDocDrag);
   });
-  const renderTerminalDocument = (pane: PaneKey, id: string) => {
+  // Not remounted when the shell changes: the terminal switches shells itself.
+  const renderTerminalDocument = (pane: PaneKey, id: () => string) => {
     const [record, setRecord] = createSignal<{ projectId: string; cwd?: string | null } | null | undefined>(undefined);
-    void api<{ ptys: { id: string; projectId: string; cwd?: string | null; status: string }[] }>("/v0/ptys")
-      .then(({ ptys = [] }) => setRecord(ptys.find((item) => item.id === id && item.status === "running") ?? null))
-      .catch(() => setRecord(null));
+    createEffect(on(id, (shell) => {
+      if (untrack(record)) return;
+      void api<{ ptys: { id: string; projectId: string; cwd?: string | null; status: string }[] }>("/v0/ptys")
+        .then(({ ptys = [] }) => { if (id() === shell) setRecord(ptys.find((item) => item.id === shell && item.status === "running") ?? null); })
+        .catch(() => setRecord(null));
+    }));
     const placeName = (projectId: string) => projectId === "computer" || projectId.startsWith("computer:") ? "Computer" : catalogue.projects().find((item) => item.id === projectId)?.name || "Chats";
     return <div class="pane-terminal">
       <Show when={record()} fallback={<Show when={record() === null}>
         <div class="pane-terminal-gone"><span>This terminal has ended.</span>{paneTabActions(pane)}</div>
       </Show>}>{(found) =>
-        <TerminalPane projectId={found().projectId} projectName={placeName(found().projectId)} workingRoot={found().cwd || undefined} terminalId={id} headerActions={paneTabActions(pane)} />
+        <TerminalPane projectId={found().projectId} projectName={placeName(found().projectId)} workingRoot={found().cwd || undefined} terminalId={id()} onShown={(next) => setPaneView(pane, `term:${next}`)} headerActions={paneTabActions(pane)} />
       }</Show>
     </div>;
   };
@@ -4194,7 +4198,7 @@ function App() {
       <Show when={splitDropActive()}><div class="main-split-drop" aria-hidden="true" /></Show>
       {/* Pane A holding a file viewer or a tool, over its route (5f). */}
       <Show when={parseFileView(paneAOverride())}>{(entries) => renderFileViewer("main", entries())}</Show>
-      <Show when={paneAOverride()?.startsWith("term:") && paneAOverride()!.slice("term:".length)} keyed>{(id) => renderTerminalDocument("main", id)}</Show>
+      <Show when={paneAOverride()?.startsWith("term:")}>{renderTerminalDocument("main", () => paneAOverride()!.slice("term:".length))}</Show>
       <Show when={toolInPaneA()}><div ref={(element) => { setPaneAToolHost(element); onCleanup(() => setPaneAToolHost(undefined)); }} class="pane-a-tool-host" /></Show>
       <Show when={!paneAOverride() && routeBootstrap() === "ready"} fallback={paneAOverride() ? null : <div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
@@ -4300,7 +4304,7 @@ function App() {
       return <section ref={(element) => { pane.setHost(element); onCleanup(() => pane.setHost(undefined)); }} class="main-split" data-pane-slot={slot} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={position() === 0 ? "Pane B" : "Pane C"} style={{ flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": paneMotion()?.slot === slot ? "0px" : `${paneMinWidth(slot)}px`, ...(paneMotion()?.slot === slot ? { opacity: 0, overflow: "hidden" } : {}), ...(paneMotion()?.slot === slot && paneMotion()!.collapsed ? { "margin-right": "0px" } : {}) }}>
         <div class="main-split-resize" role="separator" aria-label="Resize panes" aria-orientation="vertical" onPointerDown={(event) => startSplitResize(event, position() + 1)} />
         <Show when={parseFileView(slotView(slot))}>{(entries) => renderFileViewer(slot, entries())}</Show>
-        <Show when={slotView(slot)?.startsWith("term:") && slotView(slot)!.slice("term:".length)} keyed>{(id) => renderTerminalDocument(slot, id)}</Show>
+        <Show when={slotView(slot)?.startsWith("term:")}>{renderTerminalDocument(slot, () => slotView(slot)!.slice("term:".length))}</Show>
         <Show when={page() === "computer"}>
           <div class="main-split-chat main-split-page" tabIndex={-1} onPointerDown={focusChatSurface}>{renderPaneComputer(slot)}</div>
         </Show>
