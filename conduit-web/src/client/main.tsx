@@ -3087,11 +3087,20 @@ function App() {
     document.body.classList.add("panes-settling");
     if (count === 2) { setSplitRatio(next[1]!); writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratio", String(next[1]!)); }
     else { setSplitRatios3(next); writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratios", JSON.stringify(next)); }
-    window.setTimeout(() => {
+    // Each frame of the ease is a change, so transcripts follow their panes
+    // (sliding while they have room, then rewrapping) rather than snapping.
+    const started = performance.now();
+    const follow = () => {
+      if (performance.now() - started < 240) {
+        announceSplit("change", besideWidth());
+        requestAnimationFrame(follow);
+        return;
+      }
       document.body.classList.remove("panes-settling");
       splitSize = besideWidth();
       announceSplit("end", splitSize);
-    }, 240);
+    };
+    requestAnimationFrame(follow);
   };
   const startSplitResize = (event: PointerEvent, position: number) => {
     const shown = shownSlots();
