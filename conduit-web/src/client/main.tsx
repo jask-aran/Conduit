@@ -482,7 +482,7 @@ function ChatHeader(props: {
       </Show>
       {/* A project or workspace page is that place, named as the sidebar names it; a
           chat or the Conduit dashboard sits under its place. */}
-      <Show when={props.tabs} fallback={<nav aria-label="breadcrumb" class="chat-header-title"><Show when={!props.dashboard && !props.alone}><Show when={props.onOpenPlace} fallback={<span>{projectLabel()}</span>}><button type="button" class="breadcrumb-link" tabIndex={-1} onClick={() => props.onOpenPlace!(props.project)}>{projectLabel()}</button></Show><span class="breadcrumb-separator" aria-hidden="true" /></Show><strong>{props.title}</strong></nav>}>
+      <Show when={props.tabs} fallback={<nav aria-label="breadcrumb" class="chat-header-title"><Show when={!props.dashboard && !props.alone}><Show when={props.onOpenPlace} fallback={<span class="chat-header-place">{projectLabel()}</span>}><button type="button" class="breadcrumb-link chat-header-place" tabIndex={-1} onClick={() => props.onOpenPlace!(props.project)}>{projectLabel()}</button></Show></Show><strong>{props.title}</strong></nav>}>
         <nav aria-label="Tabs" class="chat-header-title chat-header-tabs">{props.tabs}</nav>
       </Show>
       {props.badge}
@@ -3352,9 +3352,10 @@ function App() {
       const runs = groups();
       if (!tabs() || groupElements.length !== runs.length) return setFolded([]);
       const room = strip.clientWidth;
-      if (groupElements.reduce((sum, element) => sum + element.getBoundingClientRect().width + (element === groupElements[0] ? 0 : 8), 0) <= room) return setFolded([]);
-      const width = new Map(tabElements.map((element) => [element.dataset.tab!, element.getBoundingClientRect().width]));
-      const labels = groupElements.map((element, index) => (element.querySelector<HTMLElement>(".pane-tab-group-label")?.getBoundingClientRect().width ?? 0) + 16 + (index ? 8 : 0));
+      if (groupElements.reduce((sum, element) => sum + element.getBoundingClientRect().width + (element === groupElements[0] ? 0 : 25), 0) <= room) return setFolded([]);
+      // Each tab with the gap and middot before it; each place with its label and the rule before it.
+      const width = new Map(tabElements.map((element) => [element.dataset.tab!, element.getBoundingClientRect().width + 12]));
+      const labels = groupElements.map((element, index) => (element.querySelector<HTMLElement>(".pane-tab-group-label")?.getBoundingClientRect().width ?? 0) + 8 + (index ? 25 : 0));
       const active = activeChatOf(pane);
       const home = runs.findIndex((run) => run.ids.includes(active ?? ""));
       let budget = room - 28 - (width.get(active ?? "") ?? 0) - (labels[home] ?? 0);
@@ -3383,8 +3384,7 @@ function App() {
         // The place's label goes to the tab of it used last.
         const recent = () => tabs()?.used.find((id) => run.ids.includes(id)) ?? run.ids[0]!;
         return <span class="pane-tab-group" classList={{ "pane-tab-group-current": current() }}>
-          <button type="button" class="pane-tab-group-label" tabIndex={-1} title={label()} data-text={label()} onClick={() => { if (!current()) void switchTab(pane, recent()); }}><span>{label()}</span></button>
-          <span class="breadcrumb-separator" aria-hidden="true" />
+          <button type="button" class="pane-tab-group-label chat-header-place" tabIndex={-1} title={label()} onClick={() => { if (!current()) void switchTab(pane, recent()); }}><span>{label()}</span></button>
           <For each={run.ids}>{(id) => {
             const active = () => activeChatOf(pane) === id;
             const name = () => viewName(`chat:${id}`);
