@@ -2534,6 +2534,8 @@ function App() {
   let draggedView: string | null = null;
   // A pane's header dragged moves its document (draggedPane).
   let draggedPane: PaneKey | null = null;
+  // A place's label dragged takes all its tabs (draggedGroup).
+  let draggedGroup: { pane: PaneKey; ids: string[] } | null = null;
   const armHeaderDrag = (event: PointerEvent) => {
     const target = event.target instanceof Element ? event.target : null;
     const header = target?.closest<HTMLElement>("header");
@@ -2564,6 +2566,9 @@ function App() {
     if (!view) return;
     draggedPane = fromPane;
     draggedView = view;
+    const group = fromPane === null ? event.target.closest<HTMLElement>("[data-tab-group]") : null;
+    const groupPane = group ? paneOf(group) : null;
+    draggedGroup = group && groupPane !== null ? { pane: groupPane, ids: group.dataset.tabGroup!.split(",") } : null;
     event.dataTransfer.setData(DOC_DRAG_TYPE, view);
     event.dataTransfer.effectAllowed = "copyMove";
   };
@@ -2580,12 +2585,14 @@ function App() {
     const edges = draggedPane !== null || roomBeside(draggedView);
     const zone = !edges ? "middle" : third < 1 / 3 ? "left" : third > 2 / 3 ? "right" : "middle";
     if (draggedPane !== null && nearEdge(draggedPane, pane, zone)) return void setDocDrop(null);
+    // A place's tabs dropped on their own pane: only its edges, a pane of their own.
+    if (draggedGroup?.pane === pane && zone === "middle") return void setDocDrop(null);
     const width = zone === "middle" ? box.width : box.width / 2;
     const current = docDrop();
     if (current?.pane === pane && current.zone === zone) return;
     setDocDrop({ pane, zone, rect: { left: zone === "right" ? box.left + box.width / 2 : box.left, top: box.top, width, height: box.height } });
   };
-  const endDocDrag = () => { draggedView = null; draggedPane = null; setDocDrop(null); };
+  const endDocDrag = () => { draggedView = null; draggedPane = null; draggedGroup = null; setDocDrop(null); };
   /*
    * A pane's document moved by its header, among the panes already open: onto
    * another pane's middle the two swap; onto its far edge the document moves
@@ -2615,14 +2622,52 @@ function App() {
     const panes = panesShown();
     return zone === (panes.indexOf(from) < panes.indexOf(pane) ? "left" : "right");
   };
+  /*
+   * A place's tabs moved together: onto a pane's middle they join its tabs
+   * (taking the pane, if it shows something else); onto an edge they open a
+   * pane there. The pane they leave shows its tab used last; one left with
+   * none closes.
+   */
+  const moveTabGroup = async (group: { pane: PaneKey; ids: string[] }, target: { pane: PaneKey; zone: "left" | "middle" | "right" }, recent: string) => {
+    const source = tabsOf(group.pane);
+    if (!source) return;
+    const remaining = source.ids.filter((id) => !group.ids.includes(id));
+    let pane: PaneKey = target.pane;
+    if (target.zone !== "middle") {
+      const free = [0, 1].find((slot) => !slotOrder().includes(slot));
+      if (free === undefined) return;
+      const index = panesShown().indexOf(target.pane);
+      pane = free;
+      if (!setSlotView(free, `chat:${recent}`, false, target.zone === "right" ? index : Math.max(0, index - 1))) return;
+    }
+    swappingPanes = true;
+    try {
+      const held = pane === target.pane ? tabsOf(pane)?.ids.filter((id) => !group.ids.includes(id)) ?? [] : [];
+      const ids = [...held, ...group.ids].slice(-TAB_CAP);
+      setPaneTabs((current) => ({
+        ...current,
+        [String(group.pane)]: { ids: remaining, used: source.used.filter((id) => remaining.includes(id)) },
+        [String(pane)]: { ids, used: [recent, ...ids.filter((id) => id !== recent)] },
+      }));
+      if (remaining.length && group.ids.includes(activeChatOf(group.pane) ?? "")) await switchTab(group.pane, source.used.find((id) => remaining.includes(id)) ?? remaining[0]!);
+      if (pane === target.pane) await switchTab(pane, recent);
+    } finally {
+      swappingPanes = false;
+    }
+    if (!remaining.length) closePane(group.pane);
+    reconcileTabs();
+    focusAnyPane(pane);
+  };
   const onDocDrop = async (event: DragEvent) => {
     const target = docDrop();
     let view = draggedView;
     const fromPane = draggedPane;
+    const group = draggedGroup;
     endDocDrag();
     if (!target || !view || !event.dataTransfer?.types.includes(DOC_DRAG_TYPE)) return;
     event.preventDefault();
     if (fromPane !== null) return void await movePaneDocument(fromPane, target);
+    if (group) return void await moveTabGroup(group, target, view.slice("chat:".length));
     if (view === "tool:terminal") { const id = await pickShell(); if (!id) return; view = `term:${id}`; }
     const next = view as SplitView;
     const showing = panesShown().find((pane) => viewOf(pane) === next);
@@ -3208,7 +3253,15 @@ function App() {
    */
   type PaneTabs = { ids: string[]; used: string[] };
   const TAB_CAP = 5;
-  const [paneTabs, setPaneTabs] = createSignal<Record<string, PaneTabs>>(tabsFromParams(launchUrl.searchParams));
+  // The address's tabs, or at a bare start the device's, beside its saved panes.
+  const launchTabs = () => {
+    if (urlNamesPanes || !atStart) return tabsFromParams(launchUrl.searchParams);
+    const params = new URLSearchParams();
+    for (const view of initialViews) if (view) params.append("pane", view);
+    for (const value of (readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-tabs") || "").split("|").filter(Boolean)) params.append("tabs", value);
+    return tabsFromParams(params);
+  };
+  const [paneTabs, setPaneTabs] = createSignal<Record<string, PaneTabs>>(launchTabs());
   const tabsOf = (pane: PaneKey) => paneTabs()[String(pane)] ?? null;
   // The place a chat tab belongs to, which groups it.
   const tabPlace = (id: string) => catalogue.projects().find((item) => item.sessions.some((chat) => chat.id === id))?.id ?? "chats";
@@ -3283,6 +3336,22 @@ function App() {
     setPaneTabs(next);
   };
   createEffect(on(() => [paneAView(), slotOrder().map((slot) => `${slot}=${slotView(slot)}`).join()] as const, () => { if (!swappingPanes) reconcileTabs(); }));
+  createEffect(on(() => tabParams().join("|"), (value) => writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-tabs", value), { defer: true }));
+  // Ctrl+Tab and Ctrl+Shift+Tab step through the focused pane's tabs, in the
+  // row's order. A browser tab keeps these keys for itself; the desktop app
+  // and an installed app's window pass them on.
+  const cycleTabs = (event: KeyboardEvent) => {
+    if (event.key !== "Tab" || !event.ctrlKey || event.altKey || event.metaKey || isMobileLayout()) return;
+    const pane = keyboardPaneSlot() ?? "main";
+    const list = tabsOf(pane);
+    const at = list?.ids.indexOf(activeChatOf(pane) ?? "") ?? -1;
+    if (!list || list.ids.length < 2 || at < 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void switchTab(pane, list.ids[(at + (event.shiftKey ? -1 : 1) + list.ids.length) % list.ids.length]!);
+  };
+  window.addEventListener("keydown", cycleTabs, true);
+  onCleanup(() => window.removeEventListener("keydown", cycleTabs, true));
 
   const switchTab = async (pane: PaneKey, id: string) => {
     setKeyboardPane(pane);
@@ -3379,7 +3448,7 @@ function App() {
         // The place's label goes to the tab of it used last.
         const recent = () => tabs()?.used.find((id) => run.ids.includes(id)) ?? run.ids[0]!;
         return <span class="pane-tab-group" classList={{ "pane-tab-group-current": current() }}>
-          <button type="button" class="pane-tab-group-label chat-header-place" tabIndex={-1} title={label()} onClick={() => { if (!current()) void switchTab(pane, recent()); }}><span>{label()}</span></button>
+          <button type="button" class="pane-tab-group-label chat-header-place" tabIndex={-1} title={label()} draggable="true" data-doc-view={`chat:${recent()}`} data-tab-group={run.ids.join(",")} onClick={() => { if (!current()) void switchTab(pane, recent()); }}><span>{label()}</span></button>
           <For each={run.ids}>{(id) => {
             const active = () => activeChatOf(pane) === id;
             const name = () => viewName(`chat:${id}`);
