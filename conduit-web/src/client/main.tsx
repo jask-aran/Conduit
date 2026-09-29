@@ -3611,6 +3611,7 @@ function App() {
       const groupElements = [...strip.querySelectorAll<HTMLElement>(".pane-tab-group")];
       const tabElements = [...strip.querySelectorAll<HTMLElement>(".pane-tab")];
       for (const element of [...groupElements, ...tabElements]) element.style.display = "";
+      for (const element of tabElements) element.removeAttribute("data-lead");
       const runs = groups();
       if (!options.keys() || groupElements.length !== runs.length) return setFolded([]);
       const room = strip.clientWidth;
@@ -3633,6 +3634,8 @@ function App() {
         if (hidden.length === 0 && cost <= budget) { budget -= cost; kept.add(index); } else hidden.push(key);
       }));
       tabElements.forEach((element) => { if (hidden.includes(element.dataset.tab!)) element.style.display = "none"; });
+      // A folded tab's middot goes with it: the first tab left in a place leads it.
+      groupElements.forEach((group) => { let lead = true; group.querySelectorAll<HTMLElement>(".pane-tab").forEach((element) => { const shown = element.style.display !== "none"; element.toggleAttribute("data-lead", shown && lead); if (shown) lead = false; }); });
       groupElements.forEach((element, index) => { if (!kept.has(index)) element.style.display = "none"; });
       setFolded(hidden);
     };
