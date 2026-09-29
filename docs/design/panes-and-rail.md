@@ -364,14 +364,46 @@ Steps:
   one, and their ratios, kept per device. Pane A and pane B become entries
   in it; a drag edge sits between each pair; Ctrl+Shift+2 cycles them. Each
   pane has one chat session (5a).
-- **6c. Tabs per pane.** The tab row sits inside the pane's charcoal sheet
-  and is its header row: with one tab it looks as the header does now
-  (`Project / Title`, the pane's controls at the right). A second document
-  adds a tab; the active tab keeps the breadcrumb, the others a short
-  title, each with its X. A preview tab (italic) is replaced by the next
-  open and kept on typing, sending or a double-click. Ctrl+Tab moves within
-  the pane. A pane's session follows its active chat tab; background tabs
-  hold no live session (the runtime store tracks their streams).
+- **6c. Tabs per pane.** (Decided 2026-09-29, after 6d and 6e were lived with.)
+  A pane holds a list of up to five documents and shows one, the active tab.
+  - *One mounted.* Only the active document is mounted; switching tabs
+    unmounts it and mounts the next in place, as a document switch in a pane
+    does today (no fade; the pane keeps the keyboard). A background tab keeps
+    only what a remount would lose: its scroll position and its composer
+    draft. A pane's session follows its active chat tab; background tabs
+    hold no live session (the runtime store tracks their streams).
+  - *The row.* With one tab the header is as now (`Place / Title`, swap and
+    close at the right). With two or more the header is the tab row: the
+    active tab keeps the breadcrumb, white at 660 (the current rule); the
+    others their title alone in grey, truncating first, each with an X on
+    hover and a live dot while their chat runs. Swap and close stay at the
+    right and act on the pane; a tab's X closes the tab, and closing the last
+    tab closes the pane. Tabs that no longer fit fold, last first, into a ⋯
+    menu. Which pane has the keyboard is drawn as now, apart from which tab
+    is active. Ctrl+Tab moves within the pane.
+  - *Opening.* A plain click opens into the focused pane as its preview tab
+    (italic), replacing the preview tab there if there is one; typing,
+    sending, editing or a double-click on the tab keeps it. Alt opens a new
+    pane as now; with no room it opens a new tab in the focused pane rather
+    than replacing a document. A sidebar row goes to the tab already showing
+    it, in whichever pane.
+  - *Dragging.* A drop on a pane's middle adds the document there as a tab
+    (replacing the middle-swap rule); the edges keep their rules. Tabs drag
+    between panes and to a pane's edge, which opens a pane there.
+  - *The cap.* A sixth document drops the tab used longest ago, never one
+    with unsaved changes; if every tab has unsaved changes it is refused
+    with a toast.
+  - *Files join.* A file is a tab like any other: the file viewer's entries
+    become tabs of one file each, and the file pane is the pane whose active
+    tab last was a file. Alt from the navigator adds a tab to the file pane.
+    The viewer's two files side by side goes; two files at once are two
+    panes.
+  - *The URL.* Each `pane=` carries its tabs and which is active; pane A's
+    active tab is its route. A folded pane's rail tile is named for its
+    active tab.
+  - *Build order.* 6c-1 the model and URL (a pane as a tab list, one
+    mounted, state kept per tab); 6c-2 the row; 6c-3 opening, preview tabs,
+    the cap and dragging; 6c-4 files join.
 - **6d. Files as a navigator, files as documents.** Files in the dock is
   the file navigator only: the tree and file search. Source Control stays as
   it is -- a dock tool that can move to a pane whole -- for now. Steps:
@@ -399,7 +431,7 @@ Steps:
     `workspace-comparison.tsx`. An entry gets a mode -- contents, changes,
     staged -- switched in its header, in place of today's jump to Source
     Control's Review.
-- **6e. Opening.** (Built, drag to a pane included -- thirds, sources the sidebar, pages' chats, navigator files and rail tools; pane headers move their documents; preview tabs wait.) A click opens in the focused pane, as a preview tab.
+- **6e. Opening.** (Built, drag to a pane included -- thirds, sources the sidebar, pages' chats, navigator files and rail tools; pane headers move their documents; preview tabs come with 6c.) A click opens in the focused pane, as a preview tab.
   Alt+click, or the pane's split button, opens to the side: the next pane,
   or a new one up to three. A tab dragged to a pane's edge splits there. A
   sidebar row goes to the pane already showing it.
@@ -414,7 +446,7 @@ Stage 6 commits:
 
 - 6a: 5f51f03 (search and the palette on the rail)
 - 6b: 0052905, 2db3a91 (up to three panes, each slot its own session; a pane's chat closes it only when deleted)
-- 6e (part): 7ef24b5 (a sidebar row or chat search result replaces the focused pane's document; Alt opens a new pane right of the focused one). 6c (tabs) is deferred until 6d and 6e are lived with.
+- 6e (part): 7ef24b5 (a sidebar row or chat search result replaces the focused pane's document; Alt opens a new pane right of the focused one). 6c (tabs) was deferred until 6d and 6e were lived with; now decided (6c above).
 - 6d-1: 6103cea (the dock follows places); 6d-2: 708a451 (the file viewer: Files as the navigator where panes fit, a file pane of one or two files). Not yet in the viewer: a review comment's reveal, Replace with upload (the navigator keeps it).
 - 6d-3: 9cf1925, 2758f60 (an entry shows its unstaged or staged changes in place, with its Git status mark; a header that no longer fits drops its copy and download actions; Alt from Files fills a viewer's second side before opening a new pane).
 - Pane actions: swap and close on each pane's breadcrumb, pane A included; A swaps right, the others left; the swap fades, slides and fades (DESIGN.md, Two chats). File viewer headers gather their actions into an overflow menu before the name goes, and a review comment on a file scrolls its viewer.
