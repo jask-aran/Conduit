@@ -2770,7 +2770,20 @@ function App() {
       if (paneAOverride() && view === paneARouteView()) setPaneAOverride(null);
       return void await inPaneA();
     }
-    if (setSlotView(slot, view)) focusPane(slot);
+    if (!setSlotView(slot, view)) return;
+    focusPane(slot);
+    // The document arriving can take the focused element with it; the pane
+    // keeps the keyboard.
+    // keeps the keyboard, unless the person has since gone elsewhere.
+    const id = view.startsWith("chat:") ? view.slice("chat:".length) : null;
+    let moved = false;
+    const note = () => { moved = true; };
+    window.addEventListener("pointerdown", note, true);
+    window.addEventListener("keydown", note, true);
+    await waitFor(() => !id || chatDrawn(slot), 3000);
+    window.removeEventListener("pointerdown", note, true);
+    window.removeEventListener("keydown", note, true);
+    if (!moved && shownSlots().includes(slot) && !paneElement(slot)?.contains(document.activeElement)) focusPane(slot);
   };
   const openChatHere = async (target: ChatSummary, project: Project) => {
     if (keyboardPaneSlot() !== null && target.id === mainChatId()) { setKeyboardPane("main"); return enterMainPane(); }
@@ -4286,13 +4299,13 @@ function App() {
           </div>
         </Show>
         <Show when={slotChatId(slot)}>
-          <div class="main-split-chat">
+          <div class="main-split-chat" classList={{ "chat-main-live-opening": side.chat.presentation().kind !== "ready" || side.chat.loadedId() !== slotChatId(slot) }}>
             {attachInput()}
-            {/* Switching chats, the one there stays until the next has loaded,
-                as in pane A -- in place, keeping focus. Only with nothing to
-                keep (a first load, or an empty draft whose welcome would show)
-                does the pane say it is loading. */}
-            <Show when={side.chat.loadedId() === slotChatId(slot) || (side.chat.loadedId() && side.chat.messages().length > 0)} fallback={<div class="chat-bootstrap" role="status">Loading chat…</div>}>
+            {/* With no chat in the session yet the pane says it is loading;
+                after that it switches in place, as pane A does -- the surface
+                stays (and keeps focus), its transcript withheld while a live
+                chat opens rather than showing an empty chat's welcome. */}
+            <Show when={side.chat.loadedId()} fallback={<div class="chat-bootstrap" role="status">Loading chat…</div>}>
             <ChatSurface session={side} project={side.selected()?.project} keyboardOwner={owns} place={chatPlace(side)} modelSelector onShare={() => void shareChat(side.selectedId())}
               onRename={() => runSidebar("rename-chat", side.selected() ?? {})} onDelete={() => runSidebar("delete-chat", side.selected() ?? {})}
               notice={workspaceNotice(side.selected()?.project, side.selectedId())}
