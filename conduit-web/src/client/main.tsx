@@ -4203,10 +4203,14 @@ function App() {
         <Show when={slotChatId(slot)}>
           <div class="main-split-chat">
             {attachInput()}
+            {/* Until its chat has loaded, the pane says so rather than showing an
+                empty chat's welcome. */}
+            <Show when={side.chat.loadedId() === slotChatId(slot)} fallback={<div class="chat-bootstrap" role="status">Loading chat…</div>}>
             <ChatSurface session={side} project={side.selected()?.project} keyboardOwner={owns} place={chatPlace(side)} modelSelector onShare={() => void shareChat(side.selectedId())}
               onRename={() => runSidebar("rename-chat", side.selected() ?? {})} onDelete={() => runSidebar("delete-chat", side.selected() ?? {})}
               notice={workspaceNotice(side.selected()?.project, side.selectedId())}
               tabActions={paneTabActions(slot)} />
+            </Show>
           </div>
         </Show>
       </section>;
