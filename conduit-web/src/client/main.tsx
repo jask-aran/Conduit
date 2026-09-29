@@ -2501,8 +2501,9 @@ function App() {
     const box = element.getBoundingClientRect();
     const third = (event.clientX - box.left) / box.width;
     if (pane === draggedPane) return void setDocDrop(null);
-    const edges = draggedPane !== null && draggedPane !== "main" ? true : roomBeside(draggedView);
+    const edges = draggedPane !== null || roomBeside(draggedView);
     const zone = !edges ? "middle" : third < 1 / 3 ? "left" : third > 2 / 3 ? "right" : "middle";
+    if (draggedPane !== null && nearEdge(draggedPane, pane, zone)) return void setDocDrop(null);
     const width = zone === "middle" ? box.width : box.width / 2;
     const current = docDrop();
     if (current?.pane === pane && current.zone === zone) return;
@@ -2510,33 +2511,29 @@ function App() {
   };
   const endDocDrag = () => { draggedView = null; draggedPane = null; setDocDrop(null); };
   /*
-   * A pane's document moved by its header: onto another pane's middle the two
-   * swap; onto an edge it moves there, the panes closing up behind it -- pane
-   * A, left empty, takes the next pane's document.
+   * A pane's document moved by its header, among the panes already open: onto
+   * another pane's middle the two swap; onto its far edge the document moves
+   * past it, each pane between shifting one place back -- a swap when they are
+   * neighbours; its near edge is where the document already is, so nothing.
    */
   const movePaneDocument = async (from: PaneKey, target: { pane: PaneKey; zone: "left" | "middle" | "right" }) => {
     if (target.zone === "middle") return void await swapPanes(from, false, target.pane);
-    const list = panesShown().filter((pane) => pane !== from);
-    const at = list.indexOf(target.pane) + (target.zone === "right" ? 1 : 0);
-    if (from !== "main") {
-      if (at === 0) {
-        // Left of pane A: it takes pane A, and pane A's document follows it.
-        await swapPanes("main", false, from);
-        setSlotOrder((order) => [from, ...order.filter((slot) => slot !== from)]);
-      } else setSlotOrder((order) => { const rest = order.filter((slot) => slot !== from); rest.splice(at - 1, 0, from); return rest; });
-      persistSlots();
-      return focusPane(from);
+    const panes = panesShown();
+    let at = panes.indexOf(from);
+    const to = panes.indexOf(target.pane);
+    // Neighbour by neighbour, each a swap, by position (a swap of two panes
+    // beside A reorders their keys).
+    while (at !== to) {
+      const next = at < to ? at + 1 : at - 1;
+      const now = panesShown();
+      await swapPanes(now[Math.min(at, next)]!, false, now[Math.max(at, next)]!);
+      at = next;
     }
-    if (at <= 1) return;
-    const free = [0, 1].find((slot) => !slotOrder().includes(slot));
-    const view = paneAView();
-    if (free === undefined || !view) return;
-    swappingPanes = true;
-    movingDocuments = true;
-    const placed = setSlotView(free, view, false, at - 1);
-    movingDocuments = false;
-    swappingPanes = false;
-    if (placed) { closePane("main"); focusPane(free); }
+    focusAnyPane(panesShown()[to]!);
+  };
+  const nearEdge = (from: PaneKey, pane: PaneKey, zone: "left" | "middle" | "right") => {
+    const panes = panesShown();
+    return zone === (panes.indexOf(from) < panes.indexOf(pane) ? "left" : "right");
   };
   const onDocDrop = async (event: DragEvent) => {
     const target = docDrop();
