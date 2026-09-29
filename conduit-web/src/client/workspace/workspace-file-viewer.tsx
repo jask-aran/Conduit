@@ -104,10 +104,10 @@ export default function FileViewer(props: {
     header.removeAttribute("data-compact");
     // The name needs room for at least the file's own name, measured from its text.
     const name = header.querySelector<HTMLElement>(".workspace-preview-file span");
-    // Headed by tabs, the showing tab's title is the name.
-    const tab = header.querySelector<HTMLElement>(".pane-tab-shown .pane-tab-title > span");
+    // Headed by tabs, every tab is the name: the actions fold before a tab does.
+    const tabs = header.querySelector<HTMLElement>(".pane-tabs[data-need]");
     const nameFits = () => {
-      if (!name && tab) return tab.scrollWidth <= tab.clientWidth + 1;
+      if (!name && tabs) return tabs.clientWidth + 1 >= Number(tabs.dataset.need);
       const text = name?.firstChild;
       if (!name || !(text instanceof Text)) return true;
       const range = document.createRange();
@@ -139,7 +139,7 @@ export default function FileViewer(props: {
     }
   };
   const splitButton = () => <Show when={props.entries.length === 1}><WorkbenchButton type="button" class="workspace-preview-action" aria-label="Open this file again beside" title="Split" onClick={() => props.onSplit()}><Columns2Icon /></WorkbenchButton></Show>;
-  return <div ref={(element) => { root = element; resized.observe(element); changed.observe(element, { childList: true, subtree: true }); }} class="workspace-files workspace-file-viewer" data-count={props.entries.length}>
+  return <div ref={(element) => { root = element; resized.observe(element); changed.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-need"] }); }} class="workspace-files workspace-file-viewer" data-count={props.entries.length}>
     <Index each={props.entries}>{(entry, index) =>
       <Show when={entry().mode} fallback={
         <WorkspaceFileSlot
