@@ -3075,6 +3075,24 @@ function App() {
   }, { defer: true }));
   // The edge on the left of the pane at `position` shares the room of that
   // pane and the one before it between them.
+  // A share preset from the rail (Equalise is the even one): the panes ease to
+  // it, each still held at its document's minimum.
+  const applyPaneLayout = (weights: number[]) => {
+    const count = shownSlots().length + 1;
+    if (weights.length !== count) return;
+    const total = weights.reduce((sum, weight) => sum + weight, 0);
+    const next = weights.map((weight) => weight / total);
+    splitMotionId += 1;
+    announceSplit("begin", besideWidth());
+    document.body.classList.add("panes-settling");
+    if (count === 2) { setSplitRatio(next[1]!); writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratio", String(next[1]!)); }
+    else { setSplitRatios3(next); writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratios", JSON.stringify(next)); }
+    window.setTimeout(() => {
+      document.body.classList.remove("panes-settling");
+      splitSize = besideWidth();
+      announceSplit("end", splitSize);
+    }, 240);
+  };
   const startSplitResize = (event: PointerEvent, position: number) => {
     const shown = shownSlots();
     const paneAt = (index: number) => index === 0 ? document.querySelector<HTMLElement>(".chat-main") : index <= shown.length ? paneSlot(shown[index - 1]!).host() : undefined;
@@ -4122,6 +4140,7 @@ function App() {
     </div>
     <Show when={docDrop()}>{(drop) => <div class="doc-drop" aria-hidden="true" style={{ left: `${drop().rect.left}px`, top: `${drop().rect.top}px`, width: `${drop().rect.width}px`, height: `${drop().rect.height}px` }} />}</Show>
     <WorkspaceRail tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard"].includes(routeKind()) && selectedProject() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
+      panes={splitShown() ? shownSlots().length + 1 : 1} onLayout={applyPaneLayout}
       current={panelOpen() ? dockTool() : null} inSplit={splitToolShown()} onDock={moveToDock} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : dockProject()?.kind === "workspace"} onChoose={chooseRailTool} />
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>
