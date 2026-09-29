@@ -3018,6 +3018,11 @@ function App() {
     await placeRight();
     // Reordered, the slid pane now lives on the right and the other on the
     // left; otherwise the right pane now shows what slid over it, and the
+    // A clone's canvas is blank; paint in what the original shows (a terminal).
+    from.forEach((source, index) => {
+      if (!(source instanceof HTMLCanvasElement) || !source.width || !source.height) return;
+      try { (to[index] as HTMLCanvasElement).getContext("2d")?.drawImage(source, 0, 0); } catch { /* left blank */ }
+    });
     // left goes home unseen to take what was on the right.
     const incoming = reorder ? right : left;
     incoming.style.opacity = "0";
