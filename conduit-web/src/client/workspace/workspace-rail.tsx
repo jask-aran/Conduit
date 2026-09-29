@@ -1,5 +1,6 @@
 import { For, Show } from "solid-js";
-import { CommandIcon, FolderIcon, GitCompareArrowsIcon, MessageSquareIcon, SearchIcon, TerminalIcon } from "lucide-solid";
+import { Columns3Icon, CommandIcon, FolderIcon, GitCompareArrowsIcon, LayoutTemplateIcon, MessageSquareIcon, SearchIcon, TerminalIcon } from "lucide-solid";
+import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from "@/components/primitives";
 import { isSplitView, type PanelTab, type SplitView } from "./workspace-types";
 
 export const WORKSPACE_TOOL_LABELS: Record<PanelTab, string> = { files: "Files", diff: "Source Control", chat: "Chat review", terminal: "Terminal" };
@@ -15,6 +16,11 @@ export function readToolDrag(event: DragEvent): { tool: SplitView; from: "dock" 
   }
 }
 
+// Share presets for the panes, by how many are open; the first is even.
+const PANE_LAYOUTS: Record<number, number[][]> = {
+  2: [[1, 1], [1, 2], [2, 1], [1, 3], [3, 1]],
+  3: [[1, 1, 1], [2, 1, 1], [1, 2, 1], [1, 1, 2]],
+};
 const RAIL_TOOLS = ["files", "diff", "chat", "terminal"] satisfies PanelTab[];
 const RAIL_ICONS = { files: FolderIcon, diff: GitCompareArrowsIcon, chat: MessageSquareIcon, terminal: TerminalIcon };
 
@@ -30,6 +36,9 @@ const RAIL_ICONS = { files: FolderIcon, diff: GitCompareArrowsIcon, chat: Messag
  * Below the tools, set apart by a hairline, are chat search and the command
  * palette: actions rather than dock views, here so no pane's header carries
  * the app's own controls. They stay when a page has no tools to show.
+ *
+ * At the foot, while panes are open beside pane A: Equalise, sharing the
+ * panes' room evenly, and Layouts, a menu of share presets for that many.
  */
 export function WorkspaceRail(props: {
   /** Whether the page has a place whose tools the dock can show. */
@@ -41,6 +50,9 @@ export function WorkspaceRail(props: {
   sourceControlEnabled: boolean;
   onChoose: (tool: PanelTab) => void;
   onDock: (view: SplitView) => void;
+  /** How many panes are open, pane A included. */
+  panes: number;
+  onLayout: (weights: number[]) => void;
 }) {
   return <nav class="workspace-rail" aria-label="Workspace tools"
     onDragOver={(event) => { if (document.body.dataset.toolDrag === "split" && event.dataTransfer?.types.includes(TOOL_DRAG_TYPE)) event.preventDefault(); }}
@@ -57,5 +69,20 @@ export function WorkspaceRail(props: {
     <span class="workspace-rail-separator" aria-hidden="true" /></Show>
     <button type="button" class="workspace-rail-action" tabIndex={-1} aria-label="Search chats" title="Search chats" onClick={() => props.onOpenSearch()}><SearchIcon /></button>
     <button type="button" class="workspace-rail-action" tabIndex={-1} aria-label="Open command palette" title="Command palette" onClick={() => props.onOpenPalette()}><CommandIcon /></button>
+    <Show when={PANE_LAYOUTS[props.panes]}>{(layouts) => <div class="workspace-rail-foot">
+      <button type="button" class="workspace-rail-action" tabIndex={-1} aria-label="Equalise panes" title="Equalise panes" onClick={() => props.onLayout(layouts()[0]!)}><Columns3Icon /></button>
+      <Menu modal={false} placement="left-end">
+        <MenuTrigger class="workspace-rail-action" tabIndex={-1} aria-label="Pane layouts" title="Pane layouts"><LayoutTemplateIcon /></MenuTrigger>
+        <MenuContent class="pane-layouts">
+          <MenuLabel>Pane widths</MenuLabel>
+          <For each={layouts()}>{(weights) =>
+            <MenuItem onSelect={() => props.onLayout(weights)} textValue={weights.join(":")}>
+              <span class="pane-layout-glyph" aria-hidden="true"><For each={weights}>{(weight) => <i style={{ flex: `${weight} 1 0` }} />}</For></span>
+              <span>{weights.every((weight) => weight === weights[0]) ? "Even" : weights.join(" : ")}</span>
+            </MenuItem>}
+          </For>
+        </MenuContent>
+      </Menu>
+    </div>}</Show>
   </nav>;
 }
