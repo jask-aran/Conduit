@@ -3226,7 +3226,8 @@ function App() {
       if (tabs.ids.includes(id)) { if (tabs.used[0] !== id) next[key] = { ...tabs, used: [id, ...tabs.used.filter((item) => item !== id)] }; continue; }
       let ids = [...tabs.ids];
       let used = tabs.used.filter((item) => ids.includes(item));
-      if (tabs.preview && ids.includes(tabs.preview)) {
+      const kept = keepNext.delete(key);
+      if (!kept && tabs.preview && ids.includes(tabs.preview)) {
         ids[ids.indexOf(tabs.preview)] = id;
         used = used.filter((item) => item !== tabs.preview);
       } else ids.splice(used[0] ? ids.indexOf(used[0]) + 1 : ids.length, 0, id);
@@ -3237,8 +3238,7 @@ function App() {
         ids = ids.filter((item) => item !== drop);
         used = used.filter((item) => item !== drop);
       }
-      const kept = keepNext.delete(key);
-      next[key] = { ids, preview: kept ? null : id, used };
+      next[key] = { ids, preview: kept ? tabs.preview : id, used };
       // A chat is a tab in one pane at a time.
       for (const [other, list] of Object.entries(next)) {
         if (other === key || !list.ids.includes(id)) continue;
