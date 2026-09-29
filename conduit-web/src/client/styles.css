@@ -2317,11 +2317,13 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 :root[data-arrival="waiting"] :is(
   [data-region="sidebar"],
   [data-region="workspace-panel"],
+  .workspace-rail,
   :is(.chat-main, .main-split, :is(.chat-main, .main-split) :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"]))
 ) { opacity: 0; }
 :root[data-arrival="arriving"] :is(
   [data-region="sidebar"],
   [data-region="workspace-panel"],
+  .workspace-rail,
   :is(.chat-main, .main-split, :is(.chat-main, .main-split) :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"]))
 ) { animation: ui-arrive 300ms cubic-bezier(.2, .8, .2, 1) both; }
 @keyframes ui-arrive { from { opacity: 0; } to { opacity: 1; } }
