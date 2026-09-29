@@ -154,6 +154,8 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-tree-row:focus { outline: 0; }
 .workspace-tree-row:focus-visible { outline: 1px solid var(--ring); outline-offset: -1px; }
 .workspace-tree-row svg { width: 11.2px; height: 11.2px; flex: none; }
+.workspace-tree-row[data-open-file] { color: var(--foreground); font-weight: 560; }
+.workspace-tree-row[data-open-file="focused"] { font-weight: 680; }
 .workspace-tree-row span { min-width: 0; overflow: hidden; font-size: 9.6px; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-tree-row .workspace-tree-kept { width: 9.6px; height: 9.6px; margin-left: auto; color: var(--muted-foreground); }
 .workspace-tree-parent { color: var(--muted-foreground); }
@@ -572,8 +574,6 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-tree { min-height: 32px; flex: 1; overflow: auto; padding: 6px 3px; }
 .workspace-tree-row { display: flex; width: 100%; min-height: 28px; align-items: center; gap: 6px; border: 0; border-radius: 6px; background: transparent; color: var(--muted-foreground); padding-block: 4px; padding-right: 8px; text-align: left; }
 .workspace-tree-row:hover, .workspace-tree-row[data-selected="true"] { background: var(--accent); color: var(--foreground); }
-/* Open in a pane's file viewer, shown or as a tab. */
-.workspace-tree-row[data-open-file="true"] { color: var(--foreground); font-weight: 600; }
 .workspace-tree-row svg { width: 14px; height: 14px; flex: none; }
 .workspace-tree-row span { min-width: 0; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-tree-row .workspace-tree-kept { width: 12px; height: 12px; }
