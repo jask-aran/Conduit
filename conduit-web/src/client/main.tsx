@@ -2428,9 +2428,14 @@ function App() {
       return void document.querySelector<HTMLElement>(`${paneSelector(showing)} .pane-terminal .xterm-helper-textarea`)?.focus({ preventScroll: true });
     }
     if (shownSlots().length >= 2 || !viewsFit([...shownSlots().map(slotView), "term:"])) return void toast.info("There is no room for another pane.");
+    const id = await pickShell();
+    if (id) openBeside(`term:${id}`, true);
+  };
+  // A running shell of the place no pane shows, else a new one.
+  const pickShell = async (): Promise<string | null> => {
     const computer = routeKind() === "computer";
     const projectId = computer ? "computer" : dockProject()?.id;
-    if (!projectId) return;
+    if (!projectId) return null;
     const open = new Set(panesShown().map(viewOf).filter((view) => view?.startsWith("term:")).map((view) => view!.slice("term:".length)));
     try {
       const { ptys = [] } = await api<{ ptys: { id: string; status: string }[] }>(`/v0/ptys?projectId=${encodeURIComponent(projectId)}`);
@@ -2439,9 +2444,88 @@ function App() {
         id = (await api<{ id: string }>("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId, ...(computer && computerLocation() ? { cwd: computerLocation()!.project.workingRoot } : {}) }) })).id;
         window.dispatchEvent(new Event("conduit:ptys-changed"));
       }
-      openBeside(`term:${id}`, true);
-    } catch (error) { showError(error); }
+      return id;
+    } catch (error) { showError(error); return null; }
   };
+  /*
+   * Drag to a pane (6e): a sidebar row, a page's chat, a file in the
+   * navigator or a rail tool dragged over a pane washes where it will land --
+   * its left or right third a new pane on that side while the width holds
+   * one, its middle the pane's own document (a file joining a viewer holding
+   * one). A document a pane already shows is focused there instead.
+   */
+  const DOC_DRAG_TYPE = "application/x-conduit-doc";
+  let draggedView: string | null = null;
+  const [docDrop, setDocDrop] = createSignal<{ pane: PaneKey; zone: "left" | "middle" | "right"; rect: { left: number; top: number; width: number; height: number } } | null>(null);
+  const docDragView = (target: Element): string | null => {
+    const source = target.closest<HTMLElement>("[data-doc-view]");
+    if (source) return source.dataset.docView || null;
+    const file = target.closest<HTMLElement>('[role="treeitem"][data-path]:not([aria-expanded])');
+    const project = file?.closest<HTMLElement>("[data-doc-project]")?.dataset.docProject;
+    return file && project ? formatFileView([{ projectId: project, path: file.dataset.path! }]) : null;
+  };
+  const roomBeside = (view: string) => shownSlots().length < 2 && viewsFit([...shownSlots().map(slotView), (view.startsWith("tool:") ? "term:" : view) as SplitView]);
+  const onDocDragStart = (event: DragEvent) => {
+    if (isMobileLayout() || !(event.target instanceof Element) || !event.dataTransfer) return;
+    const view = docDragView(event.target);
+    if (!view) return;
+    draggedView = view;
+    event.dataTransfer.setData(DOC_DRAG_TYPE, view);
+    event.dataTransfer.effectAllowed = "copyMove";
+  };
+  const onDocDragOver = (event: DragEvent) => {
+    if (!draggedView || !event.dataTransfer?.types.includes(DOC_DRAG_TYPE)) return;
+    const pane = paneOf(event.target instanceof Element ? event.target : null);
+    const element = pane === null ? null : paneElement(pane);
+    if (pane === null || !element) return void setDocDrop(null);
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    const box = element.getBoundingClientRect();
+    const third = (event.clientX - box.left) / box.width;
+    const zone = !roomBeside(draggedView) ? "middle" : third < 1 / 3 ? "left" : third > 2 / 3 ? "right" : "middle";
+    const width = zone === "middle" ? box.width : box.width / 2;
+    const current = docDrop();
+    if (current?.pane === pane && current.zone === zone) return;
+    setDocDrop({ pane, zone, rect: { left: zone === "right" ? box.left + box.width / 2 : box.left, top: box.top, width, height: box.height } });
+  };
+  const endDocDrag = () => { draggedView = null; setDocDrop(null); };
+  const onDocDrop = async (event: DragEvent) => {
+    const target = docDrop();
+    let view = draggedView;
+    endDocDrag();
+    if (!target || !view || !event.dataTransfer?.types.includes(DOC_DRAG_TYPE)) return;
+    event.preventDefault();
+    if (view === "tool:terminal") { const id = await pickShell(); if (!id) return; view = `term:${id}`; }
+    const next = view as SplitView;
+    const showing = panesShown().find((pane) => viewOf(pane) === next);
+    if (showing !== undefined) return focusAnyPane(showing);
+    if (isToolView(next) && panelOpen() && dockTool() === next) closePanel();
+    if (target.zone === "middle") {
+      const held = parseFileView(viewOf(target.pane));
+      const adding = parseFileView(next);
+      if (held?.length === 1 && adding && !sameFileEntry(held[0]!, adding[0]!)) setPaneView(target.pane, formatFileView([held[0]!, adding[0]!]));
+      else setPaneView(target.pane, next);
+      return focusAnyPane(target.pane);
+    }
+    const free = [0, 1].find((slot) => !slotOrder().includes(slot));
+    if (free === undefined) return;
+    const index = panesShown().indexOf(target.pane);
+    if (target.zone === "right") { if (setSlotView(free, next, false, index)) focusPane(free); return; }
+    if (index > 0) { if (setSlotView(free, next, false, index - 1)) focusPane(free); return; }
+    // Left of pane A: the new document takes pane A, and pane A's moves right.
+    if (setSlotView(free, next, false, 0)) await swapPanes("main");
+    focusAnyPane("main");
+  };
+  document.addEventListener("dragstart", onDocDragStart);
+  document.addEventListener("dragover", onDocDragOver);
+  document.addEventListener("drop", onDocDrop);
+  document.addEventListener("dragend", endDocDrag);
+  onCleanup(() => {
+    document.removeEventListener("dragstart", onDocDragStart);
+    document.removeEventListener("dragover", onDocDragOver);
+    document.removeEventListener("drop", onDocDrop);
+    document.removeEventListener("dragend", endDocDrag);
+  });
   const renderTerminalDocument = (pane: PaneKey, id: string) => {
     const [record, setRecord] = createSignal<{ projectId: string; cwd?: string | null } | null | undefined>(undefined);
     void api<{ ptys: { id: string; projectId: string; cwd?: string | null; status: string }[] }>("/v0/ptys")
@@ -3988,6 +4072,7 @@ function App() {
     <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
     <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </div>
+    <Show when={docDrop()}>{(drop) => <div class="doc-drop" aria-hidden="true" style={{ left: `${drop().rect.left}px`, top: `${drop().rect.top}px`, width: `${drop().rect.width}px`, height: `${drop().rect.height}px` }} />}</Show>
     <WorkspaceRail tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard"].includes(routeKind()) && selectedProject() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
       current={panelOpen() ? dockTool() : null} inSplit={splitToolShown()} onDock={moveToDock} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : dockProject()?.kind === "workspace"} onChoose={chooseRailTool} />
     </Show>

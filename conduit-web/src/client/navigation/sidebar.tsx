@@ -881,6 +881,7 @@ export function Sidebar(props: {
       as="button"
       class="sidebar-row sidebar-chat"
       data-chat-id={menuProps.chat.id}
+      draggable="true" data-doc-view={`chat:${menuProps.chat.id}`}
       aria-current={(props.focusedId || props.selectedId) === menuProps.chat.id ? "page" : undefined}
       data-open={props.openIds?.includes(menuProps.chat.id) ? "true" : undefined}
       aria-label={`${chatTitle(menuProps.chat)}, ${menuProps.chat.harnessId || "conduit"} harness${menuProps.chat.unread ? ", unread" : ""}${selected() ? ", selected" : ""}`}
@@ -1029,7 +1030,7 @@ export function Sidebar(props: {
     return <div class="sidebar-project-block">
       <ContextMenu placement={phoneLayout() ? "bottom-start" : "right-start"} onOpenChange={(openMenu) => { if (openMenu) guard.suppressClick = true; else setTimeout(() => { guard.suppressClick = false; }); }}>
         <ContextMenuTrigger as="div" class="sidebar-row sidebar-project" data-open={open()} aria-current={onProjectPage(blockProps.project) ? "page" : undefined} data-holds-current={holdsCurrentChat(blockProps.project) || undefined}>
-          <button class="sidebar-project-link" onClick={() => {
+          <button class="sidebar-project-link" draggable="true" data-doc-view={`page:project:${blockProps.project.id}`} onClick={() => {
             if (guard.suppressClick) { guard.suppressClick = false; return; }
             closeMobile();
             void props.onOpenProject(blockProps.project).then(enterPane);
@@ -1235,13 +1236,13 @@ export function Sidebar(props: {
             </Show>
           </div>
           <Show when={area() === "computer"}>
-            <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.computer && !props.selectedHarness ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenComputer(); enterPane(); }}><MonitorIcon /><span>Files</span></button>
+            <button type="button" class="sidebar-row sidebar-dashboard" draggable="true" data-doc-view="page:computer" aria-current={props.computer && !props.selectedHarness ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenComputer(); enterPane(); }}><MonitorIcon /><span>Files</span></button>
             <button type="button" class="sidebar-row sidebar-dashboard" onClick={() => openNewDialog("workspace")}><FolderPlusIcon /><span>New workspace</span></button>
             <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.terminal ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /><span>Terminal View</span><span class="sidebar-action-slot"><ExternalLinkIcon class="sidebar-route-indicator" /></span></button>
             {/* Each harness's page, a row as the ones above are, its mark in its own
                 colours; a dot only when it is not ready to use. */}
             <For each={harnesses()}>{(harness) =>
-              <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.selectedHarness === harness.id ? "page" : undefined} title={`${harness.label} · ${harnessStatusLabel(harness.status)}`} onClick={() => { closeMobile(); props.onOpenHarness(harness.id); enterPane(); }}>
+              <button type="button" class="sidebar-row sidebar-dashboard" draggable="true" data-doc-view={`page:harness:${encodeURIComponent(harness.id)}`} aria-current={props.selectedHarness === harness.id ? "page" : undefined} title={`${harness.label} · ${harnessStatusLabel(harness.status)}`} onClick={() => { closeMobile(); props.onOpenHarness(harness.id); enterPane(); }}>
                 <HarnessMark id={harness.id} class="sidebar-harness-mark" artwork /><span>{harness.label}</span>
                 <Show when={harness.status && harness.status !== "ready"}><span class="sidebar-action-slot"><i class="sidebar-harness-status" data-status={harness.status} role="img" aria-label={harnessStatusLabel(harness.status)} /></span></Show>
               </button>
@@ -1254,7 +1255,7 @@ export function Sidebar(props: {
             </section>
           </Show>
           <Show when={area() === "conduit"}>
-            <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.dashboard ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenDashboard(); enterPane(); }}>
+            <button type="button" class="sidebar-row sidebar-dashboard" draggable="true" data-doc-view="page:dashboard" aria-current={props.dashboard ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenDashboard(); enterPane(); }}>
               <LayoutDashboardIcon />
               <span>Conduit Dashboard</span>
             </button>

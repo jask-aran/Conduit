@@ -368,7 +368,7 @@ export function ProjectDashboard(props: {
     <DayGroups groups={chatGroups()}>{(item) => {
       const process = () => props.runtime.getProcess(item.id);
       const live = () => process()?.active ? activityLabel(runtimeActivity(process()) || "working", activityDetail(process())) : "";
-      return <ContextMenu><ContextMenuTrigger as={SplitRow} element="button" onPointerEnter={() => props.onPrefetchChat(item)} onFocus={() => props.onPrefetchChat(item)} onClick={() => void props.onOpenChat(item, props.project)}
+      return <ContextMenu><ContextMenuTrigger as={SplitRow} element="button" draggable="true" data-doc-view={`chat:${item.id}`} onPointerEnter={() => props.onPrefetchChat(item)} onFocus={() => props.onPrefetchChat(item)} onClick={() => void props.onOpenChat(item, props.project)}
           lead={<RuntimeIndicator process={process()} stale={props.runtime.stale()} unread={item.unread} fallback={<ThreadHarnessMark id={item.harnessId} lively />} />}
           primary={item.title || "Untitled chat"}
           context={live()}
