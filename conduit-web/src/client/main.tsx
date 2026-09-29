@@ -2539,6 +2539,8 @@ function App() {
   let draggedPane: PaneKey | null = null;
   // A place's label dragged takes all its tabs (draggedGroup).
   let draggedGroup: { pane: PaneKey; ids: string[] } | null = null;
+  // A file tab dragged moves: its side lets it go once it lands (draggedFileTab).
+  let draggedFileTab: { pane: PaneKey; side: number; key: string } | null = null;
   const armHeaderDrag = (event: PointerEvent) => {
     const target = event.target instanceof Element ? event.target : null;
     const header = target?.closest<HTMLElement>("header");
@@ -2572,6 +2574,9 @@ function App() {
     const group = fromPane === null ? event.target.closest<HTMLElement>("[data-tab-group]") : null;
     const groupPane = group ? paneOf(group) : null;
     draggedGroup = group && groupPane !== null ? { pane: groupPane, ids: group.dataset.tabGroup!.split(",") } : null;
+    const fileTab = fromPane === null ? event.target.closest<HTMLElement>("[data-file-side] [data-tab]") : null;
+    const fileTabPane = fileTab ? paneOf(fileTab) : null;
+    draggedFileTab = fileTab && fileTabPane !== null ? { pane: fileTabPane, side: Number(fileTab.closest<HTMLElement>("[data-file-side]")!.dataset.fileSide), key: fileTab.dataset.tab! } : null;
     event.dataTransfer.setData(DOC_DRAG_TYPE, view);
     event.dataTransfer.effectAllowed = "copyMove";
   };
@@ -2589,13 +2594,13 @@ function App() {
     const zone = !edges ? "middle" : third < 1 / 3 ? "left" : third > 2 / 3 ? "right" : "middle";
     if (draggedPane !== null && nearEdge(draggedPane, pane, zone)) return void setDocDrop(null);
     // A place's tabs dropped on their own pane: only its edges, a pane of their own.
-    if (draggedGroup?.pane === pane && zone === "middle") return void setDocDrop(null);
+    if ((draggedGroup ?? draggedFileTab)?.pane === pane && zone === "middle") return void setDocDrop(null);
     const width = zone === "middle" ? box.width : box.width / 2;
     const current = docDrop();
     if (current?.pane === pane && current.zone === zone) return;
     setDocDrop({ pane, zone, rect: { left: zone === "right" ? box.left + box.width / 2 : box.left, top: box.top, width, height: box.height } });
   };
-  const endDocDrag = () => { draggedView = null; draggedPane = null; draggedGroup = null; setDocDrop(null); };
+  const endDocDrag = () => { draggedView = null; draggedPane = null; draggedGroup = null; draggedFileTab = null; setDocDrop(null); };
   /*
    * A pane's document moved by its header, among the panes already open: onto
    * another pane's middle the two swap; onto its far edge the document moves
@@ -2667,11 +2672,19 @@ function App() {
     let view = draggedView;
     const fromPane = draggedPane;
     const group = draggedGroup;
+    const fileTab = draggedFileTab;
     endDocDrag();
     if (!target || !view || !event.dataTransfer?.types.includes(DOC_DRAG_TYPE)) return;
     event.preventDefault();
     if (fromPane !== null) return void await movePaneDocument(fromPane, target);
     if (group) return void await moveTabGroup(group, target, view.slice("chat:".length));
+    if (fileTab) {
+      await dropDocument(target, view);
+      return closeFileTab(fileTab.pane, fileTab.side, fileTab.key);
+    }
+    return dropDocument(target, view);
+  };
+  const dropDocument = async (target: NonNullable<ReturnType<typeof docDrop>>, view: string) => {
     if (view === "tool:terminal") { const id = await pickShell(); if (!id) return; view = `term:${id}`; }
     const next = view as SplitView;
     const showing = panesShown().find((pane) => viewOf(pane) === next);
@@ -3552,6 +3565,13 @@ function App() {
     }
     movingDocuments = false;
   };
+  // Every file a viewer shows or holds as a tab, for the navigator to mark.
+  const openFileKeys = createMemo(() => {
+    const keys = new Set<string>();
+    for (const pane of panesShown()) for (const entry of parseFileView(viewOf(pane)) ?? []) keys.add(fileEntryKey(entry));
+    for (const tabs of Object.values(fileTabs())) for (const entry of tabs.entries) keys.add(fileEntryKey(entry));
+    return keys;
+  }, new Set<string>(), { equals: (a, b) => a.size === b.size && [...a].every((key) => b.has(key)) });
   const fileSideTabs = (pane: PaneKey, side: number) => {
     const row = createTabStrip({
       keys: () => { const list = fileTabsOf(pane, side); return list?.entries.length ? list.entries.map(fileEntryKey) : null; },
@@ -3567,7 +3587,7 @@ function App() {
       close: (key) => closeFileTab(pane, side, key),
       dragView: (key) => { const entry = fileTabsOf(pane, side)?.entries.find((item) => fileEntryKey(item) === key); return entry ? formatFileView([entry]) : ""; },
     });
-    return <nav aria-label="Tabs" class="chat-header-title chat-header-tabs file-side-tabs">{row()}</nav>;
+    return <nav aria-label="Tabs" class="chat-header-title chat-header-tabs file-side-tabs" data-file-side={side}>{row()}</nav>;
   };
   /*
    * A pane's tab row, for chats and files alike (6c): tabs keep their order
@@ -4999,8 +5019,8 @@ function App() {
         </Show>
       </section>;
     }}</For>
-    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
-    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
+    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
+    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </div>
     <Show when={docDrop()}>{(drop) => <div class="doc-drop" aria-hidden="true" style={{ left: `${drop().rect.left}px`, top: `${drop().rect.top}px`, width: `${drop().rect.width}px`, height: `${drop().rect.height}px` }} />}</Show>
     <WorkspaceRail tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard"].includes(routeKind()) && selectedProject() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
