@@ -160,23 +160,27 @@ svg.lucide { stroke-width: 2.4; }
    nothing; what does not fit waits in the menu at the row's end. */
 .chat-header-tabs { flex: 1 1 auto; }
 .pane-tabs { display: flex; height: 100%; min-width: 0; flex: 1; align-items: center; overflow: hidden; }
-.chat-header-title .pane-tab-group { position: relative; display: inline-flex; flex: none; align-items: center; overflow: visible; }
-.pane-tab-group + .pane-tab-group { margin-left: 25px; }
-.pane-tab-group + .pane-tab-group::before { position: absolute; top: 2px; bottom: 2px; left: -13px; width: 0.8px; background: color-mix(in oklch, var(--foreground), transparent 85%); content: ""; }
+.chat-header-title .pane-tab-group { position: relative; display: inline-flex; flex: none; align-items: baseline; overflow: visible; }
+.pane-tab-group + .pane-tab-group { margin-left: 33px; }
+.pane-tab-group + .pane-tab-group::before { position: absolute; top: 2px; bottom: 2px; left: -17px; width: 0.8px; background: color-mix(in oklch, var(--foreground), transparent 85%); content: ""; }
 .chat-header-title .pane-tab-group-label { display: inline-block; padding: 0; border: 0; background: transparent; color: color-mix(in oklch, var(--foreground), transparent 55%); cursor: pointer; }
 .pane-tab-group-label:hover, .pane-tab-group-current .pane-tab-group-label { color: var(--foreground); }
 .chat-header-title .pane-tab { position: relative; display: inline-flex; max-width: 220px; height: 24px; flex: none; align-items: center; overflow: visible; border-radius: var(--radius-md); }
-.pane-tab + .pane-tab { margin-left: 12px; }
-.pane-tab + .pane-tab::before { position: absolute; left: -8.4px; color: color-mix(in oklch, var(--foreground), transparent 70%); content: "·"; pointer-events: none; }
+.pane-tab + .pane-tab { margin-left: 10px; }
+.pane-tab + .pane-tab::before { position: absolute; left: -7.2px; color: color-mix(in oklch, var(--foreground), transparent 70%); content: "·"; pointer-events: none; }
 .pane-tab:hover { background: var(--accent); }
-.pane-tab-open { display: inline-flex; min-width: 0; height: 100%; flex: 1; align-items: center; gap: 5.6px; padding: 0 2px 0 10px; border: 0; background: transparent; color: color-mix(in oklch, var(--foreground), transparent 45%); font: inherit; font-weight: 450; }
+.pane-tab-open { display: inline-flex; min-width: 0; height: 100%; flex: 1; align-items: center; gap: 5.6px; padding: 0 4px; border: 0; background: transparent; color: color-mix(in oklch, var(--foreground), transparent 45%); font: inherit; font-weight: 450; }
 .chat-header-title .pane-tab-title { display: inline-flex; min-width: 0; flex-direction: column; overflow: hidden; }
 .chat-header-title .pane-tab-title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pane-tab-title::after { height: 0; overflow: hidden; visibility: hidden; font-weight: 660; white-space: nowrap; content: attr(data-text); }
 .pane-tab:hover .pane-tab-open { color: var(--foreground); }
 .pane-tab-active .pane-tab-open { color: var(--foreground); font-weight: 660; }
-.pane-tab-close { display: inline-flex; width: 16px; height: 16px; flex: none; align-items: center; justify-content: center; margin: 0 6px 0 2px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted-foreground); opacity: 0; }
-.pane-tab:hover .pane-tab-close, .pane-tab-active .pane-tab-close { opacity: 1; }
+/* The X takes room only on the active tab; on another it lays over the
+   title's end with the pointer, so unlit tabs sit close within their place. */
+.pane-tab-close { display: inline-flex; width: 16px; height: 16px; flex: none; align-items: center; justify-content: center; margin: 0 2px 0 0; border: 0; border-radius: var(--radius-sm); background: var(--background); color: var(--muted-foreground); }
+.pane-tab:not(.pane-tab-active) .pane-tab-close { position: absolute; right: 2px; opacity: 0; box-shadow: -8px 0 6px var(--background); }
+.pane-tab:not(.pane-tab-active):hover .pane-tab-close { background: var(--accent); box-shadow: -8px 0 6px var(--accent); opacity: 1; }
+.pane-tab-active .pane-tab-close { background: transparent; }
 .pane-tab-close:hover { color: var(--foreground); }
 .pane-tab-close svg { width: 11.2px; height: 11.2px; }
 .pane-tab-live { width: 5px; height: 5px; flex: none; border-radius: 50%; background: var(--live, oklch(0.62 0.17 145)); }
@@ -187,6 +191,8 @@ svg.lucide { stroke-width: 2.4; }
 .breadcrumb-link:hover { color: var(--foreground); }
 /* A breadcrumb's place: the menus' group label (9.6px caps), which sets it
    apart from the title by type alone, without a slash. */
+/* Caps on the title's baseline, not the line's centre, or they sit high. */
+.chat-header-title:has(> .chat-header-place) { align-items: baseline; }
 .chat-header-title .chat-header-place { flex: 0 1 auto; max-width: 120px; margin-right: 2.4px; color: var(--foreground); font-size: 9.6px; font-weight: 700; letter-spacing: 0.04em; line-height: 16px; text-transform: uppercase; }
 .chat-status-line { display: none; }
 .chat-status-line[data-state="error"] { color: color-mix(in oklch, var(--destructive), var(--foreground) 25%); }
