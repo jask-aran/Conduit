@@ -708,8 +708,23 @@ function App() {
     const fallback = setTimeout(arrive, 2500);
     // Two frames: the lazy parts render as their chunks resolve, and the page
     // lays out once before it is shown.
+    // Every pane is part of it: the reveal waits for the chats beside pane A
+    // to load too, then for the layout to hold still -- a long transcript
+    // renders in passes, and shown mid-way its bubbles move under the fade.
+    const panesLoaded = () => shownSlots().every((slot) => { const id = slotChatId(slot); return !id || paneSlot(slot).session.chat.loadedId() === id; });
+    const waitForStill = () => new Promise<void>((resolve) => {
+      let last = "";
+      let still = 0;
+      const check = () => {
+        const shape = [...document.querySelectorAll<HTMLElement>(".chat-main, .main-split, .thread")].map((element) => { const box = element.getBoundingClientRect(); return `${Math.round(box.width)}x${Math.round(box.height)}`; }).join();
+        still = shape === last ? still + 1 : 0;
+        last = shape;
+        if (still >= 3 || root.dataset.arrival !== "waiting") resolve(); else requestAnimationFrame(check);
+      };
+      requestAnimationFrame(check);
+    });
     createEffect(() => {
-      if (routeBootstrap() !== "loading") void layoutReady.then(() => requestAnimationFrame(() => requestAnimationFrame(arrive)));
+      if (routeBootstrap() !== "loading" && panesLoaded()) void layoutReady.then(waitForStill).then(arrive);
     });
     onCleanup(() => { clearTimeout(fallback); clearTimeout(settle); delete root.dataset.arrival; });
   }
