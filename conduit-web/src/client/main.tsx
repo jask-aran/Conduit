@@ -2944,6 +2944,21 @@ function App() {
     if (at === 0) return paneAView() ? "main" : null;
     return at > 0 ? shown[at - 1]! : null;
   };
+  /*
+   * Which pane a swap button trades with: the pane that had the keyboard when
+   * it was pressed; pressed in the pane that has it, the neighbour above --
+   * but the middle of three trades with the pane used before it, else its left.
+   */
+  let keyboardBeforePress: PaneKey | null = null;
+  let previousPane: PaneKey | null = null;
+  createEffect(on(keyboardPane, (now, before) => { if (before !== undefined && before !== now) previousPane = before; }));
+  const swapTarget = (pane: PaneKey): PaneKey | null => {
+    const shown = panesShown();
+    const from = keyboardBeforePress;
+    if (from !== null && from !== pane && shown.includes(from)) return from;
+    if (shown.length === 3 && shown.indexOf(pane) === 1 && previousPane !== null && previousPane !== pane && shown.includes(previousPane)) return previousPane;
+    return swapPartner(pane);
+  };
   const paneElement = (pane: PaneKey) => pane === "main" ? document.querySelector<HTMLElement>(".chat-main") : paneSlot(pane).host();
   const waitFor = (ready: () => boolean, timeout = 800) => new Promise<void>((resolve) => {
     const start = performance.now();
@@ -3108,7 +3123,7 @@ function App() {
   };
   const paneTabActions = (pane: PaneKey) => <Show when={splitShown()}>
     <span class="pane-tab-actions">
-      <Show when={swapPartner(pane) !== null}><button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Swap with the pane beside" title="Swap" onClick={(event) => void swapPanes(pane, event.shiftKey)}><ArrowLeftRightIcon /></button></Show>
+      <Show when={swapPartner(pane) !== null}><button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Swap with the pane beside" title="Swap" onPointerDown={() => { keyboardBeforePress = keyboardPane(); }} onClick={(event) => { const target = swapTarget(pane); keyboardBeforePress = null; if (target !== null) void swapPanes(pane, event.shiftKey, target); }}><ArrowLeftRightIcon /></button></Show>
       <Show when={pane !== "main" || shownSlots()[0] !== undefined}><button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Close this pane" title="Close" onClick={() => closePane(pane)}><XIcon /></button></Show>
     </span>
   </Show>;
@@ -4293,7 +4308,7 @@ function App() {
           <div class="main-split-chat main-split-page" tabIndex={-1} onPointerDown={focusChatSurface}>{attachInput()}{renderPaneHarness(pane, decodeURIComponent(page()!.slice("harness:".length)))}</div>
         </Show>
         <Show when={page() && page() !== "computer" && !page()!.startsWith("harness:")}>
-          <div class="main-split-chat main-split-page">
+          <div class="main-split-chat main-split-page" tabIndex={-1} onPointerDown={focusChatSurface}>
             {attachInput()}
             <Show when={page() === "dashboard"} fallback={<Show when={slotPageProject(slot)}>{(project) =>
               <ProjectPage session={side} project={project()} target={{ project: project() }} keyboardOwner={owns} onSendDraft={(prompt) => sendFromPanePage(pane, prompt)} onOpenChat={openChatFromPage} tabActions={paneTabActions(slot)} />
