@@ -2423,7 +2423,10 @@ function App() {
    */
   const openTerminalTool = async (beside: boolean) => {
     const showing = panesShown().find((pane) => viewOf(pane)?.startsWith("term:"));
-    if (!beside && showing !== undefined) return focusAnyPane(showing);
+    if (!beside && showing !== undefined) {
+      focusAnyPane(showing);
+      return void document.querySelector<HTMLElement>(`${paneSelector(showing)} .pane-terminal .xterm-helper-textarea`)?.focus({ preventScroll: true });
+    }
     if (shownSlots().length >= 2 || !viewsFit([...shownSlots().map(slotView), "term:"])) return void toast.info("There is no room for another pane.");
     const computer = routeKind() === "computer";
     const projectId = computer ? "computer" : dockProject()?.id;
