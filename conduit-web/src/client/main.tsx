@@ -1482,9 +1482,67 @@ function App() {
     if (!location()) void browse();
     return <>
       <ChatHeader title="Computer" tabActions={paneTabActions(slot)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard alone />
-      <ComputerDashboard projects={catalogue.projects()} location={location()} loading={loading()} error={error()} onOpenHarnessHere={openComputerHarnessHere} onBrowse={(path) => void browse(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => { const here = location(); if (here) void createComputerWorkspace(here.project.workingRoot); }} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProjectHere(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={(path) => { const here = location(); if (here) openFileDocument({ projectId: here.project.id, path }, { beside: altActivation(), edit: false }); }} />
+      <ComputerDashboard projects={catalogue.projects()} location={location()} loading={loading()} error={error()} onOpenHarnessHere={(id) => setSlotView(slot, `page:harness:${encodeURIComponent(id)}`)} onBrowse={(path) => void browse(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => { const here = location(); if (here) void createComputerWorkspace(here.project.workingRoot); }} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProjectHere(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={(path) => { const here = location(); if (here) openFileDocument({ projectId: here.project.id, path }, { beside: altActivation(), edit: false }); }} />
     </>;
   };
+  /*
+   * A harness page in a pane beside pane A: its composer's draft is a hidden
+   * chat on that pane's session, as pane A's is on its own; sending runs the
+   * thread in the same pane, and the pane letting go of it ends that chat.
+   */
+  const renderPaneHarness = (pane: PaneSlot, harnessId: string) => {
+    const side = pane.session;
+    const [scope, setScope] = createSignal<string | null>(null);
+    const [draft, setDraft] = createSignal<{ cwd: string; chatId: string } | null>(null);
+    let request: Promise<void> | null = null;
+    let typed = "";
+    const drop = (id: string) => void api(`/v0/sessions/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
+    const ensure = (cwd: string, choices: HarnessChoices): Promise<void> => {
+      if (request) return request.then(() => ensure(cwd, choices));
+      const current = draft();
+      if (!cwd || (current?.cwd === cwd && side.chat.loadedId() === current.chatId)) return Promise.resolve();
+      typed = side.chat.draft();
+      const pending: Promise<void> = openThreadChat(harnessId, { path: cwd, newThread: true, ...choices }).then(async (opened) => {
+        if (untrack(() => slotView(pane.index)) !== `page:harness:${encodeURIComponent(harnessId)}`) { drop(opened.chat.id); return; }
+        setDraft({ cwd, chatId: opened.chat.id });
+        await side.open(opened.chat, opened.project);
+        if (typed && !side.chat.draft()) side.chat.setDraft(typed);
+        typed = "";
+        if (current && current.chatId !== opened.chat.id) drop(current.chatId);
+      }).catch((error) => { showError(error); }).finally(() => { request = null; });
+      request = pending;
+      return pending;
+    };
+    const send = async (cwd: string, choices: HarnessChoices, prompt: string) => {
+      await ensure(cwd, choices);
+      const made = draft();
+      if (!made || side.chat.loadedId() !== made.chatId) return;
+      setDraft(null);
+      paneThreads.set(pane.index, made.chatId);
+      setSlotView(pane.index, `chat:${made.chatId}`);
+      side.chat.setDraft(prompt);
+      await side.chat.send();
+    };
+    onCleanup(() => { const left = draft(); if (left) { if (untrack(side.chat.loadedId) === left.chatId) side.close(); drop(left.chatId); } });
+    return <>{<ChatHeader title={harnessLabelFor(harnessId) || harnessId} tabActions={paneTabActions(pane.index)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard alone />}<HarnessDashboard harnessId={harnessId} projects={catalogue.projects()} runtime={runtime} scope={scope()} onScope={setScope} home={computerLocation()?.home || ""}
+      composer={(input) => {
+        const drafted = () => Boolean(draft() && side.chat.loadedId() === draft()!.chatId);
+        const choices = (): HarnessChoices => drafted()
+          ? { model: side.models.model(), thinkingLevel: side.models.effort(), permissionMode: side.permissions.selected() }
+          : input.choices;
+        createEffect(on(() => input.folder.current, (cwd) => { if (untrack(drafted)) void ensure(cwd, untrack(choices)); }, { defer: true }));
+        const manifest = () => harnessCapabilities()[harnessProfile(harnessId)?.implementation || harnessId] || null;
+        const use = () => ensure(input.folder.current, choices());
+        return <div style={{ display: "contents" }}
+          onInput={(event) => { if (event.target instanceof HTMLTextAreaElement) typed = event.target.value; void use(); }}>
+          <Composer chat={side.chat} launches supports={(name) => resolveCapability(manifest(), side.chat.capabilities(), name, false)} attachments={side.attachments} attachmentsSupported={Boolean(manifest()?.attachments)} models={drafted() ? side.models : input.models} modelsLoading={drafted() ? undefined : input.loading} folder={input.folder} permissions={manifest()?.permissionModes ? (drafted() ? side.permissions : input.permissions) : undefined} profiles={harnessProfile(harnessId) ? [harnessProfile(harnessId)!] : []} activeProfile={harnessProfile(harnessId)} onOpenModelSelector={openModelSelector} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => void use().then(() => side.openAttachments())} onSendDraft={(prompt) => send(input.folder.current, choices(), prompt)} />
+        </div>;
+      }}
+      onStartThread={(launch) => send(launch.cwd, launch, launch.prompt)} onOpenThread={(thread) => void openHarnessThread(thread)} onOpenChat={(target, project) => void openChatFromPage(target, project)} /></>;
+  };
+  // Threads started in a pane beside A run as hidden chats that end when the
+  // pane lets go of them.
+  const paneThreads = new Map<number, string>();
   const openComputer = (historyMode: "push" | "none" = "push") => {
     if (!leaveHarnessThread()) return;
     leaveChat(historyMode === "none");
@@ -2479,6 +2537,7 @@ function App() {
   const openProjectHere = (project: Project) => openInFocusedPane(`page:project:${project.id}`, () => openProject(project));
   const openDashboardHere = () => openInFocusedPane("page:dashboard", () => openDashboard());
   const openComputerHere = () => openInFocusedPane("page:computer", () => openComputer());
+  const openHarnessHere = (id: string) => openInFocusedPane(`page:harness:${encodeURIComponent(id)}`, () => openComputerHarness(id));
   const openChatFromPage = async (target: ChatSummary, project: Project) => {
     if (altActivation()) openChatBeside(target, project); else await openChatHere(target, project);
   };
@@ -2490,6 +2549,10 @@ function App() {
     // gone from a catalogue that listed it, not merely not listed yet, as on a
     // reload before the chat's place has loaded.
     let listed: string | null = null;
+    createEffect(on(() => slotChatId(slot), (id) => {
+      const thread = paneThreads.get(slot);
+      if (thread && id !== thread) { paneThreads.delete(slot); void api(`/v0/sessions/${encodeURIComponent(thread)}`, { method: "DELETE" }).catch(() => {}); }
+    }));
     createEffect(on(() => [slotChatId(slot), catalogue.loaded(), catalogue.projects()] as const, ([id, loaded, projects]) => {
       if (!id) {
         listed = null;
@@ -2511,7 +2574,7 @@ function App() {
      * closes unsent, and the pane's chat once it is sent.
      */
     createEffect(on(() => [slotPage(slot), catalogue.loaded(), templatesLoading(), shownSlots().includes(slot)] as const, ([page, loaded, loading, shown]) => {
-      if (!page || page === "computer") return discardPaneDraft(pane);
+      if (!page || page === "computer" || page.startsWith("harness:")) return discardPaneDraft(pane);
       if (!loaded || loading || !shown) return;
       const project = untrack(() => slotPageProject(slot));
       if (!project) return void setSlotView(slot, null);
@@ -2548,7 +2611,7 @@ function App() {
     setSlotView(pane.index, `chat:${id}`);
     await side.chat.send();
   };
-  const openPageBeside = (page: "dashboard" | "computer" | `project:${string}`) => { if (!isMobileLayout()) openBeside(`page:${page}`, false); };
+  const openPageBeside = (page: "dashboard" | "computer" | `project:${string}` | `harness:${string}`) => { if (!isMobileLayout()) openBeside(`page:${page}`, false); };
   // The same chat in two panes is one chat: pane A taking it closes the other.
   createEffect(() => { const id = mainChatId(); if (swappingPanes) return; for (const slot of shownSlots()) if (id && slotChatId(slot) === id) setSlotView(slot, null); });
   /*
@@ -2596,12 +2659,14 @@ function App() {
     if (routeKind() === "chat" && catalogue.selectedId()) return `chat:${catalogue.selectedId()}`;
     if (routeKind() === "dashboard") return "page:dashboard";
     if (routeKind() === "computer" && !computerHarness()) return "page:computer";
+    if (routeKind() === "computer" && !harnessThread()) return `page:harness:${encodeURIComponent(computerHarness())}`;
     if (routeKind() === "project" && selectedProject()) return `page:project:${selectedProject()!.id}`;
     return null;
   };
   const openInPaneA = async (view: SplitView) => {
     if (view === "page:dashboard") return openDashboard();
     if (view === "page:computer") return openComputer();
+    if (view.startsWith("page:harness:")) return openComputerHarness(decodeURIComponent(view.slice("page:harness:".length)));
     if (view.startsWith("page:project:")) {
       const project = catalogue.projects().find((item) => item.id === view.slice("page:project:".length));
       return project ? openProject(project) : undefined;
@@ -3680,7 +3745,7 @@ function App() {
         });
       }}
       onOpenComputer={() => { if (altActivation()) openPageBeside("computer"); else void openComputerHere(); }}
-      onOpenHarness={(id) => openComputerHarness(id)} selectedHarness={computerHarness()}
+      onOpenHarness={(id) => { if (altActivation()) openPageBeside(`harness:${encodeURIComponent(id)}`); else void openHarnessHere(id); }} selectedHarness={computerHarness()}
       onOpenTerminalView={() => openTerminalRoute()}
       onOpenDashboard={() => { if (altActivation()) openPageBeside("dashboard"); else void openDashboardHere(); }}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
@@ -3810,7 +3875,10 @@ function App() {
         <Show when={page() === "computer"}>
           <div class="main-split-chat main-split-page">{renderPaneComputer(slot)}</div>
         </Show>
-        <Show when={page() && page() !== "computer"}>
+        <Show when={page()?.startsWith("harness:")}>
+          <div class="main-split-chat main-split-page">{attachInput()}{renderPaneHarness(pane, decodeURIComponent(page()!.slice("harness:".length)))}</div>
+        </Show>
+        <Show when={page() && page() !== "computer" && !page()!.startsWith("harness:")}>
           <div class="main-split-chat main-split-page">
             {attachInput()}
             <Show when={page() === "dashboard"} fallback={<Show when={slotPageProject(slot)}>{(project) =>
