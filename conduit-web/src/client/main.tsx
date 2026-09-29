@@ -2358,7 +2358,7 @@ function App() {
   /*
    * Open beside the pane with the keyboard: a new pane just right of it when
    * the width holds one, or else the pane to its right, or, from the last
-   * pane, the one to its left. A view a pane already shows is gone to there;
+   * pane, that pane itself -- beside it there is nothing further right. A view a pane already shows is gone to there;
    * a tool goes to the pane that holds one. Whatever a tool displaces goes
    * back to the dock, which opens on it when that is where the reader was
    * working. A tool moved from the dock takes the keyboard; a chat or page
@@ -2374,7 +2374,7 @@ function App() {
     const position = pane === "main" ? 0 : Math.max(0, shown.indexOf(pane) + 1);
     if (isToolView(view) && toolInPaneA()) { setPaneAOverride(view); if (panelOpen() && dockTool() === view) closePanel(); return; }
     let slot = isToolView(view) ? toolSlot() : null;
-    if (slot === null && (shown.length >= 2 || !viewsFit([...shown.map(slotView), view]))) slot = shown[position] ?? shown[position - 2] ?? shown[shown.length - 1] ?? null;
+    if (slot === null && (shown.length >= 2 || !viewsFit([...shown.map(slotView), view]))) slot = shown[position] ?? shown[position - 1] ?? shown[shown.length - 1] ?? null;
     const displaced = slot === null ? null : slotView(slot);
     if (slot === null) slot = [0, 1].find((candidate) => !slotOrder().includes(candidate)) ?? null;
     if (slot === null) return;
