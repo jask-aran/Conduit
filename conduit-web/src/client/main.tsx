@@ -74,7 +74,7 @@ import { ShortcutManager } from "./shortcuts/shortcut-manager";
 import { isShortcutRegion } from "./shortcuts/shortcut-types";
 import { acknowledgeRegion } from "./shortcuts/region-cue";
 import { globalShortcuts } from "./shortcuts/global-shortcuts";
-import { formatFileView, parseFileView, sameFileEntry, type FileEntry } from "./workspace/file-documents";
+import { EMPTY_FILE_VIEW, fileEntryKey, formatFileView, parseFileView, sameFileEntry, type FileEntry } from "./workspace/file-documents";
 import type { ReviewNavigationRequest } from "./chat/review-navigation";
 import type { FileSlotHandle, FileSummary } from "./workspace/workspace-file-slot";
 import { dropScope, migrateWorkspacePanelStorage, readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace/workspace-panel-storage";
@@ -2739,11 +2739,14 @@ function App() {
       if (options.edit) { pendingFileEdit = null; handlesOf(pane)[index]?.edit(); }
       return;
     }
+    // Open as a tab already: shown there.
+    const tabbed = panesShown().find((pane) => fileTabsOf(pane)?.entries.some((item) => sameFileEntry(item, entry)));
+    if (tabbed !== undefined && !options.beside) { showFileTab(tabbed, fileEntryKey(entry)); setFilePane(tabbed); return; }
     const shownFilePane = () => { const pane = filePane(); return pane !== null && panesShown().includes(pane) && parseFileView(viewOf(pane)) ? pane : null; };
     // Alt: beside a file already open -- the second side of a viewer with
     // one, the file pane's first -- and only a new pane once they are full.
     if (options.beside) {
-      const roomy = [shownFilePane(), ...panesShown()].find((pane) => pane !== null && parseFileView(viewOf(pane))?.length === 1);
+      const roomy = [shownFilePane(), ...panesShown()].find((pane) => pane !== null && (parseFileView(viewOf(pane))?.length ?? 2) < 2);
       if (roomy !== undefined && roomy !== null) {
         setPaneView(roomy, formatFileView([...parseFileView(viewOf(roomy))!, entry]));
         focusFileEntry(roomy, 1);
@@ -2760,9 +2763,12 @@ function App() {
       return;
     }
     const target = parseFileView(viewOf(pane))!;
+    if (!target.length) return void setPaneView(pane, formatFileView([entry]));
     const index = Math.min(fileFocus()[String(pane)] ?? 0, target.length - 1);
     if (handlesOf(pane)[index]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and open another file?")) return;
     handlesOf(pane)[index]?.discardChanges();
+    // Ctrl keeps the file it replaces as a tab (6c).
+    if (tabActivation()) keepFileNext.add(String(pane));
     setPaneView(pane, formatFileView(target.map((item, at) => at === index ? entry : item)));
   };
   const splitFileViewer = (pane: PaneKey) => {
@@ -2771,14 +2777,7 @@ function App() {
     setPaneView(pane, formatFileView([entries[0]!, entries[0]!]));
     focusFileEntry(pane, 1);
   };
-  const closeFileEntry = (pane: PaneKey, index: number) => {
-    const entries = parseFileView(viewOf(pane));
-    if (!entries) return;
-    handlesOf(pane)[index] = undefined;
-    if (entries.length === 1) return pane === "main" ? void setPaneAOverride(null) : closeSlot(pane);
-    setPaneView(pane, formatFileView(entries.filter((_, at) => at !== index)));
-    focusFileEntry(pane, 0);
-  };
+
   const noteFileLoaded = (pane: PaneKey, index: number, file: FileSummary | null) => {
     const entry = parseFileView(viewOf(pane))?.[index];
     if (!file || !entry || !pendingFileEdit || !sameFileEntry(pendingFileEdit, entry)) return;
@@ -2789,12 +2788,25 @@ function App() {
     const current = parseFileView(viewOf(pane));
     if (current) setPaneView(pane, formatFileView(current.map((item, at) => at === index ? { projectId: item.projectId, path: item.path, ...(mode ? { mode } : {}) } : item)));
   };
-  const renderFileViewer = (pane: PaneKey, entries: FileEntry[]) => <div class="workspace-split-surface">
-    <FileViewer entries={entries} focused={fileFocus()[String(pane)] ?? 0} wrap={fileWrap()} onToggleWrap={toggleFileWrap} commentChatId={focusedChat().loadedId()}
-      onFocusEntry={(index) => { focusFileEntry(pane, index); setFilePane(pane); }} onSplit={() => splitFileViewer(pane)} onCloseEntry={(index) => closeFileEntry(pane, index)}
-      onSetMode={(index, mode) => setFileMode(pane, index, mode)}
-      onLoaded={(index, file) => noteFileLoaded(pane, index, file)} reveal={fileReveal()} ref={(index, handle) => { handlesOf(pane)[index] = handle; }} />
-  </div>;
+  // A viewer with two or more files open, or none, heads itself with the tab row (6c).
+  const renderFileViewer = (pane: PaneKey) => {
+    const entries = () => parseFileView(viewOf(pane)) ?? [];
+    const row = fileTabRow(pane);
+    return <div class="workspace-split-surface">
+      <Show when={row() || entries().length === 0}>
+        <header class="chat-header file-tabs-header">
+          <Show when={row()} fallback={<nav class="chat-header-title"><strong>No file open</strong></nav>}><nav aria-label="Tabs" class="chat-header-title chat-header-tabs">{row()}</nav></Show>
+          <div class="chat-header-actions">{paneTabActions(pane)}</div>
+        </header>
+      </Show>
+      <Show when={entries().length} fallback={<div class="file-viewer-empty" role="status">Open a file from Files, or Ctrl-click one to add it as a tab.</div>}>
+        <FileViewer entries={entries()} focused={fileFocus()[String(pane)] ?? 0} wrap={fileWrap()} onToggleWrap={toggleFileWrap} commentChatId={focusedChat().loadedId()}
+          onFocusEntry={(index) => { focusFileEntry(pane, index); setFilePane(pane); }} onSplit={() => splitFileViewer(pane)} onCloseEntry={(index) => { const entry = entries()[index]; if (entry) closeFileTab(pane, fileEntryKey(entry)); }}
+          onSetMode={(index, mode) => setFileMode(pane, index, mode)}
+          onLoaded={(index, file) => noteFileLoaded(pane, index, file)} reveal={fileReveal()} ref={(index, handle) => { handlesOf(pane)[index] = handle; }} />
+      </Show>
+    </div>;
+  };
   /*
    * A chat or page in a pane beside A (stages 4, 5, 6b). Pane A keeps the URL
    * and the catalogue's selection; the pane with the keyboard owns the
@@ -3205,7 +3217,7 @@ function App() {
     if (view.startsWith("page:harness:")) { const id = decodeURIComponent(view.slice("page:harness:".length)); return harnessLabelFor(id) || id; }
     if (view.startsWith("page:project:")) return catalogue.projects().find((item) => item.id === view.slice("page:project:".length))?.name || "Project";
     const files = parseFileView(view);
-    if (files) return files.map((entry) => entry.path.split("/").pop()).join(", ");
+    if (files) return files.length ? files.map((entry) => entry.path.split("/").pop()).join(", ") : "File viewer";
     if (view.startsWith("term:")) return "Terminal";
     return isPanelTab(view) ? WORKSPACE_TOOL_LABELS[view] : "Pane";
   };
@@ -3338,13 +3350,27 @@ function App() {
       }
     }
     setPaneTabs(next);
+    reconcileFileTabs();
   };
   createEffect(on(() => [paneAView(), slotOrder().map((slot) => `${slot}=${slotView(slot)}`).join()] as const, () => { if (!swappingPanes) reconcileTabs(); }));
   createEffect(on(() => tabParams().join("|"), (value) => writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-tabs", value), { defer: true }));
   // Stepping round the focused pane's tabs, in the row's order, and the
   // panes (the shortcuts Next/Previous tab and pane).
+  // A file viewer's step skips the file showing on its other side.
+  const fileTabsToStep = () => { const pane: PaneKey = keyboardPaneSlot() ?? "main"; const list = fileTabsOf(pane); return !isMobileLayout() && list && list.entries.length > 1 ? { pane, list } : null; };
   const tabsToStep = () => { const pane: PaneKey = keyboardPaneSlot() ?? "main"; const list = tabsOf(pane); return !isMobileLayout() && list && list.ids.length > 1 && list.ids.includes(activeChatOf(pane) ?? "") ? { pane, list } : null; };
   const stepTab = (step: number) => {
+    const files = fileTabsToStep();
+    if (files) {
+      const keys = files.list.entries.map(fileEntryKey);
+      const shown = (parseFileView(viewOf(files.pane)) ?? []).map(fileEntryKey);
+      let at = keys.indexOf(shown[shownFileSide(files.pane)] ?? "");
+      for (let tries = 0; tries < keys.length; tries += 1) {
+        at = (at + step + keys.length) % keys.length;
+        if (!shown.includes(keys[at]!)) return showFileTab(files.pane, keys[at]!);
+      }
+      return;
+    }
     const found = tabsToStep();
     if (!found) return;
     const at = found.list.ids.indexOf(activeChatOf(found.pane)!);
@@ -3380,7 +3406,7 @@ function App() {
     return true;
   };
   // Documents moving between pane A and a pane beside it take their tabs.
-  const swapTabs = (a: PaneKey, b: PaneKey) => setPaneTabs((current) => {
+  const swapKeys = <T,>(current: Record<string, T>, a: PaneKey, b: PaneKey) => {
     const next = { ...current };
     const first = current[String(a)];
     const second = current[String(b)];
@@ -3389,23 +3415,187 @@ function App() {
     if (second) next[String(a)] = second;
     if (first) next[String(b)] = first;
     return next;
+  };
+  const swapTabs = (a: PaneKey, b: PaneKey) => batch(() => {
+    setPaneTabs((current) => swapKeys(current, a, b));
+    setFileTabs((current) => swapKeys(current, a, b));
+    const first = lastShownFiles.get(String(a));
+    const second = lastShownFiles.get(String(b));
+    lastShownFiles.delete(String(a));
+    lastShownFiles.delete(String(b));
+    if (second) lastShownFiles.set(String(a), second);
+    if (first) lastShownFiles.set(String(b), first);
   });
-  // Tabs keep their order and width: switching changes only which is lit.
-  const paneTabRow = (pane: PaneKey) => {
-    const tabs = () => { const list = tabsOf(pane); return list && list.ids.length > 1 && !isMobileLayout() ? list : null; };
-    const placeOf = (id: string) => { const project = catalogue.projects().find((item) => item.sessions.some((chat) => chat.id === id)); return !project || project.slug === "chat" ? "Chats" : project.name || project.slug; };
-    // Runs of tabs from one place, each shown under its place once.
+  /*
+   * File tabs: a file viewer holds up to five files and shows one or two of
+   * them side by side (its view's entries); the rest are its tabs, unmounted.
+   * A file opened into the viewer replaces the one on the side with the
+   * keyboard; Ctrl adds a tab. Closing a showing tab shows the tab used last
+   * in its place, else that side goes; the last leaves the viewer empty.
+   */
+  type FileTabs = { entries: FileEntry[]; used: string[] };
+  const FILE_TAB_CAP = 5;
+  const fileTabsFromParams = (params: URLSearchParams): Record<string, FileTabs> => {
+    const order = params.getAll("pane").filter(isSplitView).map((_, index) => index);
+    const found: Record<string, FileTabs> = {};
+    for (const value of params.getAll("ftabs")) {
+      const at = value.indexOf(":");
+      const position = Number(value.slice(0, at));
+      const key = position === 0 ? "main" : order[position - 1] === undefined ? null : String(order[position - 1]);
+      const entries = value.slice(at + 1).split("|").map((part) => parseFileView(`files:${part}`)?.[0]).filter((entry): entry is FileEntry => Boolean(entry)).slice(0, FILE_TAB_CAP);
+      if (key !== null && entries.length) found[key] = { entries, used: entries.map(fileEntryKey) };
+    }
+    return found;
+  };
+  const launchFileTabs = () => {
+    if (urlNamesPanes || !atStart) return fileTabsFromParams(launchUrl.searchParams);
+    const params = new URLSearchParams();
+    for (const view of initialViews) if (view) params.append("pane", view);
+    for (const value of (readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-file-tabs") || "").split("\n").filter(Boolean)) params.append("ftabs", value);
+    return fileTabsFromParams(params);
+  };
+  const [fileTabs, setFileTabs] = createSignal<Record<string, FileTabs>>(launchFileTabs());
+  const fileTabsOf = (pane: PaneKey) => fileTabs()[String(pane)] ?? null;
+  // What each viewer showed when last reconciled: what leaves it was replaced or closed.
+  const lastShownFiles = new Map<string, FileEntry[]>();
+  const keepFileNext = new Set<string>();
+  const fileTabParams = () => {
+    const panes: PaneKey[] = ["main", ...slotOrder().filter((slot) => slotView(slot))];
+    return panes.flatMap((pane, position) => {
+      const tabs = fileTabsOf(pane);
+      return tabs && tabs.entries.length > 1 ? [`${position}:${formatFileView(tabs.entries).slice("files:".length)}`] : [];
+    });
+  };
+  function reconcileFileTabs() {
+    const next = { ...untrack(fileTabs) };
+    const panes: PaneKey[] = ["main", ...untrack(slotOrder).filter((slot) => untrack(() => slotView(slot)))];
+    for (const key of Object.keys(next)) if (!panes.some((pane) => String(pane) === key)) { delete next[key]; lastShownFiles.delete(key); }
+    for (const pane of panes) {
+      const key = String(pane);
+      const shown = parseFileView(untrack(() => viewOf(pane)));
+      if (!shown) { delete next[key]; lastShownFiles.delete(key); continue; }
+      const tabs = next[key] ?? { entries: [], used: [] };
+      let entries = [...tabs.entries];
+      let used = [...tabs.used];
+      const shownKeys = shown.map(fileEntryKey);
+      const kept = keepFileNext.delete(key);
+      // What left the viewer was replaced or closed, unless Ctrl kept it; a new file takes its place.
+      const freed: number[] = [];
+      for (const left of lastShownFiles.get(key) ?? []) {
+        const leftKey = fileEntryKey(left);
+        if (kept || shownKeys.includes(leftKey)) continue;
+        const at = entries.findIndex((entry) => fileEntryKey(entry) === leftKey);
+        if (at >= 0) freed.push(at);
+      }
+      const removed = new Set(freed.map((at) => fileEntryKey(entries[at]!)));
+      const slots = [...freed].sort((a, b) => a - b);
+      const placed: (FileEntry | null)[] = entries.map((entry) => removed.has(fileEntryKey(entry)) ? null : entry);
+      for (const entry of shown) {
+        const at = placed.findIndex((item) => item && fileEntryKey(item) === fileEntryKey(entry));
+        if (at >= 0) { placed[at] = entry; continue; }
+        const free = slots.shift();
+        if (free !== undefined) { placed[free] = entry; continue; }
+        // A new place's file joins its place's run, else the end.
+        const last = placed.reduce((found, item, index) => item?.projectId === entry.projectId ? index : found, -1);
+        placed.splice(last >= 0 ? last + 1 : placed.length, 0, entry);
+      }
+      entries = placed.filter((item): item is FileEntry => Boolean(item));
+      used = [...shownKeys.slice().reverse(), ...used.filter((item) => !shownKeys.includes(item))].filter((item, index, list) => list.indexOf(item) === index && entries.some((entry) => fileEntryKey(entry) === item));
+      while (entries.length > FILE_TAB_CAP) {
+        const drop = [...used].reverse().find((item) => !shownKeys.includes(item));
+        if (!drop) break;
+        entries = entries.filter((entry) => fileEntryKey(entry) !== drop);
+        used = used.filter((item) => item !== drop);
+      }
+      next[key] = { entries, used };
+      lastShownFiles.set(key, shown);
+    }
+    setFileTabs(next);
+  }
+  createEffect(on(() => fileTabParams().join("\n"), (value) => writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-file-tabs", value), { defer: true }));
+  const shownFileSide = (pane: PaneKey) => { const shown = parseFileView(viewOf(pane)) ?? []; return Math.max(0, Math.min(fileFocus()[String(pane)] ?? 0, shown.length - 1)); };
+  const showFileTab = (pane: PaneKey, key: string) => {
+    const entry = fileTabsOf(pane)?.entries.find((item) => fileEntryKey(item) === key);
+    const shown = parseFileView(viewOf(pane)) ?? [];
+    if (!entry) return;
+    const already = shown.findIndex((item) => fileEntryKey(item) === key);
+    if (already >= 0) { focusFileEntry(pane, already); return focusAnyPane(pane); }
+    const side = shownFileSide(pane);
+    if (handlesOf(pane)[side]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and show another file?")) return;
+    handlesOf(pane)[side]?.discardChanges();
+    keepFileNext.add(String(pane));
+    setPaneView(pane, formatFileView(shown.length ? shown.map((item, at) => at === side ? entry : item) : [entry]));
+    focusFileEntry(pane, side);
+    focusAnyPane(pane);
+  };
+  const closeFileTab = (pane: PaneKey, key: string) => {
+    const tabs = fileTabsOf(pane);
+    const shown = parseFileView(viewOf(pane)) ?? [];
+    const side = shown.findIndex((item) => fileEntryKey(item) === key);
+    const forget = () => setFileTabs((current) => {
+      const list = current[String(pane)];
+      return list ? { ...current, [String(pane)]: { entries: list.entries.filter((entry) => fileEntryKey(entry) !== key), used: list.used.filter((item) => item !== key) } } : current;
+    });
+    if (side < 0) return forget();
+    if (handlesOf(pane)[side]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and close this file?")) return;
+    handlesOf(pane)[side]?.discardChanges();
+    handlesOf(pane)[side] = undefined;
+    const shownKeys = shown.map(fileEntryKey);
+    const hidden = tabs?.used.find((item) => !shownKeys.includes(item));
+    const replacement = hidden ? tabs!.entries.find((entry) => fileEntryKey(entry) === hidden) : undefined;
+    movingDocuments = true;
+    if (replacement) setPaneView(pane, formatFileView(shown.map((item, at) => at === side ? replacement : item)));
+    else setPaneView(pane, formatFileView(shown.filter((_, at) => at !== side)));
+    movingDocuments = false;
+    if (!replacement) focusFileEntry(pane, 0);
+  };
+  const fileTabRow = (pane: PaneKey) => {
+    const shownKeys = () => (parseFileView(viewOf(pane)) ?? []).map(fileEntryKey);
+    return createTabStrip({
+      keys: () => { const list = fileTabsOf(pane); return list && list.entries.length > 1 && !isMobileLayout() ? list.entries.map(fileEntryKey) : null; },
+      place: (key) => key.slice(0, key.indexOf(":")),
+      placeLabel: (key) => placeLabelOf(key.slice(0, key.indexOf(":"))),
+      title: (key) => key.slice(key.indexOf(":") + 1).split("/").pop() || key,
+      lit: () => shownKeys()[shownFileSide(pane)] ?? null,
+      shown: (key) => shownKeys().includes(key),
+      used: () => fileTabsOf(pane)?.used ?? [],
+      select: (key) => showFileTab(pane, key),
+      close: (key) => closeFileTab(pane, key),
+      dragView: (key) => { const entry = fileTabsOf(pane)?.entries.find((item) => fileEntryKey(item) === key); return entry ? formatFileView([entry]) : ""; },
+    });
+  };
+  /*
+   * A pane's tab row, for chats and files alike (6c): tabs keep their order
+   * and width, so switching changes only which is lit; runs from one place
+   * share its caps label; what does not fit folds, from the end, into a menu
+   * at the row's end -- never the lit tab, and a place's label only with all
+   * its tabs. A tab `shown` but not lit is a file on the viewer's other side.
+   */
+  type TabStripOptions = {
+    keys: () => string[] | null;
+    place: (key: string) => string;
+    placeLabel: (key: string) => string;
+    title: (key: string) => string;
+    lit: () => string | null;
+    shown?: (key: string) => boolean;
+    used: () => string[];
+    live?: (key: string) => boolean;
+    unsaved?: (key: string) => boolean;
+    select: (key: string) => void;
+    close: (key: string) => void;
+    dragView?: (key: string) => string;
+    groupDrag?: (keys: string[]) => Record<string, string>;
+  };
+  const createTabStrip = (options: TabStripOptions) => {
     const groups = createMemo(() => {
-      const runs: { place: string; ids: string[] }[] = [];
-      for (const id of tabs()?.ids ?? []) {
-        const place = tabPlace(id);
-        if (runs.at(-1)?.place === place) runs.at(-1)!.ids.push(id);
-        else runs.push({ place, ids: [id] });
+      const runs: { place: string; keys: string[] }[] = [];
+      for (const key of options.keys() ?? []) {
+        const place = options.place(key);
+        if (runs.at(-1)?.place === place) runs.at(-1)!.keys.push(key);
+        else runs.push({ place, keys: [key] });
       }
       return runs;
-    }, [], { equals: (a, b) => a.length === b.length && a.every((run, index) => run.place === b[index]!.place && run.ids.join() === b[index]!.ids.join()) });
-    // Tabs that do not fit wait in a menu at the row's end, from the end; the
-    // active one never does, and a place's label goes only with all its tabs.
+    }, [], { equals: (a, b) => a.length === b.length && a.every((run, index) => run.place === b[index]!.place && run.keys.join() === b[index]!.keys.join()) });
     const [folded, setFolded] = createSignal<string[]>([]);
     let strip: HTMLDivElement | undefined;
     const fit = () => {
@@ -3414,50 +3604,50 @@ function App() {
       const tabElements = [...strip.querySelectorAll<HTMLElement>(".pane-tab")];
       for (const element of [...groupElements, ...tabElements]) element.style.display = "";
       const runs = groups();
-      if (!tabs() || groupElements.length !== runs.length) return setFolded([]);
+      if (!options.keys() || groupElements.length !== runs.length) return setFolded([]);
       const room = strip.clientWidth;
       if (groupElements.reduce((sum, element) => sum + element.getBoundingClientRect().width + (element === groupElements[0] ? 0 : 33), 0) <= room) return setFolded([]);
       // Each tab with the gap and middot before it; each place with its label and the rule before it.
       const width = new Map(tabElements.map((element) => [element.dataset.tab!, element.getBoundingClientRect().width + 10]));
       const labels = groupElements.map((element, index) => (element.querySelector<HTMLElement>(".pane-tab-group-label")?.getBoundingClientRect().width ?? 0) + 8 + (index ? 33 : 0));
-      const active = activeChatOf(pane);
-      const home = runs.findIndex((run) => run.ids.includes(active ?? ""));
-      let budget = room - 28 - (width.get(active ?? "") ?? 0) - (labels[home] ?? 0);
-      const shown = new Set([home]);
+      const lit = options.lit();
+      const home = runs.findIndex((run) => run.keys.includes(lit ?? ""));
+      let budget = room - 28 - (width.get(lit ?? "") ?? 0) - (labels[home] ?? 0);
+      const kept = new Set([home]);
       const hidden: string[] = [];
-      runs.forEach((run, index) => run.ids.forEach((id) => {
-        if (id === active) return;
-        const cost = (width.get(id) ?? 0) + (shown.has(index) ? 0 : labels[index]!);
-        if (hidden.length === 0 && cost <= budget) { budget -= cost; shown.add(index); } else hidden.push(id);
+      runs.forEach((run, index) => run.keys.forEach((key) => {
+        if (key === lit) return;
+        const cost = (width.get(key) ?? 0) + (kept.has(index) ? 0 : labels[index]!);
+        if (hidden.length === 0 && cost <= budget) { budget -= cost; kept.add(index); } else hidden.push(key);
       }));
       tabElements.forEach((element) => { if (hidden.includes(element.dataset.tab!)) element.style.display = "none"; });
-      groupElements.forEach((element, index) => { if (!shown.has(index)) element.style.display = "none"; });
+      groupElements.forEach((element, index) => { if (!kept.has(index)) element.style.display = "none"; });
       setFolded(hidden);
     };
-    const has = createMemo(() => Boolean(tabs()));
-    const row = createMemo(() => has() ? untrack(() => <div class="pane-tabs" ref={(element) => {
+    const has = createMemo(() => Boolean(options.keys()));
+    return createMemo(() => has() ? untrack(() => <div class="pane-tabs" ref={(element) => {
       strip = element;
       const observer = new ResizeObserver(() => fit());
       observer.observe(element);
       onCleanup(() => observer.disconnect());
-      createEffect(on(() => [groups(), activeChatOf(pane)] as const, () => requestAnimationFrame(fit)));
+      createEffect(on(() => [groups(), options.lit()] as const, () => requestAnimationFrame(fit)));
     }}>
       <For each={groups()}>{(run) => {
-        const current = () => run.ids.includes(activeChatOf(pane) ?? "");
-        const label = () => placeOf(run.ids[0]!);
+        const current = () => run.keys.includes(options.lit() ?? "");
+        const label = () => options.placeLabel(run.keys[0]!);
         // The place's label goes to the tab of it used last.
-        const recent = () => tabs()?.used.find((id) => run.ids.includes(id)) ?? run.ids[0]!;
+        const recent = () => options.used().find((key) => run.keys.includes(key)) ?? run.keys[0]!;
         return <span class="pane-tab-group" classList={{ "pane-tab-group-current": current() }}>
-          <button type="button" class="pane-tab-group-label chat-header-place" tabIndex={-1} title={label()} draggable="true" data-doc-view={`chat:${recent()}`} data-tab-group={run.ids.join(",")} onClick={() => { if (!current()) void switchTab(pane, recent()); }}><span>{label()}</span></button>
-          <For each={run.ids}>{(id) => {
-            const active = () => activeChatOf(pane) === id;
-            const name = () => viewName(`chat:${id}`);
-            return <span class="pane-tab" role="tab" data-tab={id} aria-selected={active()} classList={{ "pane-tab-active": active() }} draggable={active() ? undefined : "true"} data-doc-view={active() ? undefined : `chat:${id}`}>
-              <button type="button" class="pane-tab-open" tabIndex={-1} title={`${label()} / ${name()}`} onClick={() => { if (!active()) void switchTab(pane, id); }}>
-                <Show when={runtime.getProcess(id)}><i class="pane-tab-live" aria-label="Running" /></Show>
+          <button type="button" class="pane-tab-group-label chat-header-place" tabIndex={-1} title={label()} {...(options.groupDrag ? { draggable: "true", "data-doc-view": options.dragView?.(recent()), ...options.groupDrag(run.keys) } : {})} onClick={() => { if (!current()) options.select(recent()); }}><span>{label()}</span></button>
+          <For each={run.keys}>{(key) => {
+            const lit = () => options.lit() === key;
+            const name = () => options.title(key);
+            return <span class="pane-tab" role="tab" data-tab={key} aria-selected={lit()} classList={{ "pane-tab-active": lit(), "pane-tab-shown": !lit() && Boolean(options.shown?.(key)), "pane-tab-unsaved": Boolean(options.unsaved?.(key)) }} draggable={lit() || !options.dragView ? undefined : "true"} data-doc-view={lit() ? undefined : options.dragView?.(key)}>
+              <button type="button" class="pane-tab-open" tabIndex={-1} title={`${label()} / ${name()}`} onClick={() => { if (!lit()) options.select(key); }}>
+                <Show when={options.live?.(key)}><i class="pane-tab-live" aria-label="Running" /></Show>
                 <span class="pane-tab-title" data-text={name()}><span>{name()}</span></span>
               </button>
-              <button type="button" class="pane-tab-close" tabIndex={-1} aria-label={`Close ${name()}`} title="Close tab" onClick={() => void closeTab(pane, id)}><XIcon /></button>
+              <button type="button" class="pane-tab-close" tabIndex={-1} aria-label={`Close ${name()}`} title={options.unsaved?.(key) ? "Unsaved changes: close tab" : "Close tab"} onClick={() => options.close(key)}><XIcon /></button>
             </span>;
           }}</For>
         </span>;
@@ -3466,15 +3656,31 @@ function App() {
         <Menu modal={false} placement="bottom-end">
           <MenuTrigger class="pane-tab-action pane-tabs-more" tabIndex={-1} aria-label={`${folded().length} more tabs`} title={`${folded().length} more tabs`}><EllipsisIcon /></MenuTrigger>
           <MenuContent class="pane-tabs-menu">
-            <For each={groups().filter((run) => run.ids.some((id) => folded().includes(id)))}>{(run) =>
-              <MenuGroup><MenuLabel>{placeOf(run.ids[0]!)}</MenuLabel>
-                <For each={run.ids.filter((id) => folded().includes(id))}>{(id) => <MenuItem textValue={viewName(`chat:${id}`)} onSelect={() => void switchTab(pane, id)}>{viewName(`chat:${id}`)}</MenuItem>}</For>
+            <For each={groups().filter((run) => run.keys.some((key) => folded().includes(key)))}>{(run) =>
+              <MenuGroup><MenuLabel>{options.placeLabel(run.keys[0]!)}</MenuLabel>
+                <For each={run.keys.filter((key) => folded().includes(key))}>{(key) => <MenuItem textValue={options.title(key)} onSelect={() => options.select(key)}>{options.title(key)}</MenuItem>}</For>
               </MenuGroup>}
             </For>
           </MenuContent>
         </Menu>
       </Show>
     </div>) : undefined);
+  };
+  const placeLabelOf = (projectId: string) => { const project = catalogue.projects().find((item) => item.id === projectId); return !project || project.slug === "chat" ? "Chats" : project.name || project.slug; };
+  const paneTabRow = (pane: PaneKey) => {
+    const row = createTabStrip({
+      keys: () => { const list = tabsOf(pane); return list && list.ids.length > 1 && !isMobileLayout() ? list.ids : null; },
+      place: tabPlace,
+      placeLabel: (id) => placeLabelOf(tabPlace(id)),
+      title: (id) => viewName(`chat:${id}`),
+      lit: () => activeChatOf(pane),
+      used: () => tabsOf(pane)?.used ?? [],
+      live: (id) => Boolean(runtime.getProcess(id)),
+      select: (id) => void switchTab(pane, id),
+      close: (id) => void closeTab(pane, id),
+      dragView: (id) => `chat:${id}`,
+      groupDrag: (ids) => ({ "data-tab-group": ids.join(",") }),
+    });
     return { get tabs() { return row(); } };
   };
   // Pane A's close hands it the next pane's chat or page.
@@ -3550,13 +3756,14 @@ function App() {
    * stay per device. Every address the app writes goes through here, so a
    * route change carries the panes and Back restores them.
    */
-  const PANE_PARAMS = ["a", "pane", "tabs", "focus"];
+  const PANE_PARAMS = ["a", "pane", "tabs", "ftabs", "focus"];
   const withPanes = (address: string | URL) => {
     const url = new URL(address, location.href);
     for (const name of PANE_PARAMS) url.searchParams.delete(name);
     if (paneAOverride()) url.searchParams.set("a", paneAOverride()!);
     for (const view of slotOrder().map(slotView)) if (view) url.searchParams.append("pane", view);
     for (const value of tabParams()) url.searchParams.append("tabs", value);
+    for (const value of fileTabParams()) url.searchParams.append("ftabs", value);
     const focus = panesShown().indexOf(keyboardPane());
     if (focus > 0) url.searchParams.set("focus", String(focus));
     return `${url.pathname}${url.search}${url.hash}`;
@@ -3568,7 +3775,7 @@ function App() {
   history.pushState = (data, unused, url) => nativePushState(data, unused, url == null ? url : withPanes(url));
   history.replaceState = (data, unused, url) => nativeReplaceState(data, unused, url == null ? url : withPanes(url));
   onCleanup(() => { history.pushState = nativePushState; history.replaceState = nativeReplaceState; });
-  createEffect(on(() => [paneAOverride(), slotOrder().map(slotView).join("\n"), keyboardPane(), shownSlots().length, tabParams().join()] as const, () => {
+  createEffect(on(() => [paneAOverride(), slotOrder().map(slotView).join("\n"), keyboardPane(), shownSlots().length, tabParams().join(), fileTabParams().join()] as const, () => {
     const next = withPanes(location.href);
     if (next !== `${location.pathname}${location.search}${location.hash}`) nativeReplaceState(history.state, "", next);
   }, { defer: true }));
@@ -3598,6 +3805,7 @@ function App() {
       setSlotOrder(views.map((_, index) => index));
       setPaneAOverride(isSplitView(a) && !/^(chat|page):/.test(a) ? a : null);
       setPaneTabs(tabsFromParams(params));
+      setFileTabs(fileTabsFromParams(params));
     });
     persistSlots();
   };
@@ -4224,8 +4432,8 @@ function App() {
       ...getCommandDefinition(COMMAND_IDS.focusTranscript).contexts.map((context) =>
         shortcutManager.registerHandler(COMMAND_IDS.focusTranscript, context, focusTranscript, { when: hasTranscript })),
       shortcutManager.registerHandler(COMMAND_IDS.focusMainPane, "application", focusMainPane),
-      shortcutManager.registerHandler(COMMAND_IDS.nextTab, "application", () => stepTab(1), { when: () => Boolean(tabsToStep()) }),
-      shortcutManager.registerHandler(COMMAND_IDS.previousTab, "application", () => stepTab(-1), { when: () => Boolean(tabsToStep()) }),
+      shortcutManager.registerHandler(COMMAND_IDS.nextTab, "application", () => stepTab(1), { when: () => Boolean(tabsToStep() || fileTabsToStep()) }),
+      shortcutManager.registerHandler(COMMAND_IDS.previousTab, "application", () => stepTab(-1), { when: () => Boolean(tabsToStep() || fileTabsToStep()) }),
       shortcutManager.registerHandler(COMMAND_IDS.nextPane, "application", () => stepPane(1), { when: () => splitShown() && !isMobileLayout() }),
       shortcutManager.registerHandler(COMMAND_IDS.previousPane, "application", () => stepPane(-1), { when: () => splitShown() && !isMobileLayout() }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "application", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
@@ -4630,7 +4838,7 @@ function App() {
     <main data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0 } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
       <Show when={splitDropActive()}><div class="main-split-drop" aria-hidden="true" /></Show>
       {/* Pane A holding a file viewer or a tool, over its route (5f). */}
-      <Show when={parseFileView(paneAOverride())}>{(entries) => renderFileViewer("main", entries())}</Show>
+      <Show when={parseFileView(paneAOverride())}>{renderFileViewer("main")}</Show>
       <Show when={paneAOverride()?.startsWith("term:")}>{renderTerminalDocument("main", () => paneAOverride()!.slice("term:".length))}</Show>
       <Show when={toolInPaneA()}><div ref={(element) => { setPaneAToolHost(element); onCleanup(() => setPaneAToolHost(undefined)); }} class="pane-a-tool-host" /></Show>
       <Show when={!paneAOverride() && routeBootstrap() === "ready"} fallback={paneAOverride() ? null : <div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
@@ -4736,7 +4944,7 @@ function App() {
       const attachInput = () => <input ref={side.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) side.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />;
       return <section ref={(element) => { pane.setHost(element); onCleanup(() => pane.setHost(undefined)); }} class="main-split" data-pane-slot={slot} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={position() === 0 ? "Pane B" : "Pane C"} style={{ flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": paneMotion()?.slot === slot ? "0px" : `${paneMinWidth(slot)}px`, ...(paneMotion()?.slot === slot ? { opacity: 0, overflow: "hidden" } : {}), ...(paneMotion()?.slot === slot && paneMotion()!.collapsed ? { "margin-right": "0px" } : {}) }}>
         <div class="main-split-resize" role="separator" aria-label="Resize panes" aria-orientation="vertical" onPointerDown={(event) => startSplitResize(event, position() + 1)} />
-        <Show when={parseFileView(slotView(slot))}>{(entries) => renderFileViewer(slot, entries())}</Show>
+        <Show when={parseFileView(slotView(slot))}>{renderFileViewer(slot)}</Show>
         <Show when={slotView(slot)?.startsWith("term:")}>{renderTerminalDocument(slot, () => slotView(slot)!.slice("term:".length))}</Show>
         <Show when={page() === "computer"}>
           <div class="main-split-chat main-split-page" tabIndex={-1} onPointerDown={focusChatSurface}>{renderPaneComputer(slot)}</div>

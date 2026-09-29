@@ -8,12 +8,18 @@ export interface FileEntry { projectId: string; path: string; mode?: "changes" |
 
 export const sameFileEntry = (a: FileEntry, b: FileEntry) => a.projectId === b.projectId && a.path === b.path;
 
-/** A file viewer pane's view: one or two entries, side by side. */
-export const formatFileView = (entries: FileEntry[]): SplitView =>
+/** A file viewer with no file showing: it stays open until closed. */
+export const EMPTY_FILE_VIEW: SplitView = "files:~";
+/** The key a file tab goes by: its place and path, whatever it shows of it. */
+export const fileEntryKey = (entry: FileEntry) => `${entry.projectId}:${entry.path}`;
+
+/** A file viewer pane's view: none, one or two entries, side by side. */
+export const formatFileView = (entries: FileEntry[]): SplitView => entries.length === 0 ? EMPTY_FILE_VIEW :
   `files:${entries.map((entry) => `${encodeURIComponent(entry.projectId)}:${encodeURIComponent(entry.path)}${entry.mode ? `@${entry.mode}` : ""}`).join("|")}`;
 
 export function parseFileView(view: string | null | undefined): FileEntry[] | null {
   if (!view?.startsWith("files:")) return null;
+  if (view === EMPTY_FILE_VIEW) return [];
   const entries: FileEntry[] = [];
   for (const part of view.slice("files:".length).split("|")) {
     const at = part.indexOf(":");
