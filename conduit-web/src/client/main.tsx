@@ -4288,9 +4288,11 @@ function App() {
         <Show when={slotChatId(slot)}>
           <div class="main-split-chat">
             {attachInput()}
-            {/* Until its chat has loaded, the pane says so rather than showing an
-                empty chat's welcome. */}
-            <Show when={side.chat.loadedId() === slotChatId(slot)} fallback={<div class="chat-bootstrap" role="status">Loading chat…</div>}>
+            {/* Switching chats, the one there stays until the next has loaded,
+                as in pane A -- in place, keeping focus. Only with nothing to
+                keep (a first load, or an empty draft whose welcome would show)
+                does the pane say it is loading. */}
+            <Show when={side.chat.loadedId() === slotChatId(slot) || (side.chat.loadedId() && side.chat.messages().length > 0)} fallback={<div class="chat-bootstrap" role="status">Loading chat…</div>}>
             <ChatSurface session={side} project={side.selected()?.project} keyboardOwner={owns} place={chatPlace(side)} modelSelector onShare={() => void shareChat(side.selectedId())}
               onRename={() => runSidebar("rename-chat", side.selected() ?? {})} onDelete={() => runSidebar("delete-chat", side.selected() ?? {})}
               notice={workspaceNotice(side.selected()?.project, side.selectedId())}
