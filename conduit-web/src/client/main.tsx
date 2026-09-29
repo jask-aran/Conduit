@@ -3616,11 +3616,15 @@ function App() {
       if (!options.keys() || groupElements.length !== runs.length) return setFolded([]);
       const room = strip.clientWidth;
       // What every tab needs, for a header that folds its own actions first.
-      const need = String(Math.ceil(groupElements.reduce((sum, element) => sum + element.getBoundingClientRect().width + (element === groupElements[0] ? 0 : 33), 0)));
+      // Tabs give way to a squeeze by cutting their titles, so each is measured with its whole title.
+      // A tab's own cap (max-width) still holds.
+      const whole = (tab: HTMLElement) => { const title = tab.querySelector<HTMLElement>(".pane-tab-title > span"); const width = tab.getBoundingClientRect().width; return Math.min(width + (title ? title.scrollWidth - title.clientWidth : 0), Math.max(width, parseFloat(getComputedStyle(tab).maxWidth) || Infinity)); };
+      const natural = (element: HTMLElement) => element.classList.contains("pane-tab") ? whole(element) : element.getBoundingClientRect().width + [...element.querySelectorAll<HTMLElement>(".pane-tab")].reduce((sum, tab) => sum + whole(tab) - tab.getBoundingClientRect().width, 0);
+      const need = String(Math.ceil(groupElements.reduce((sum, element) => sum + natural(element) + (element === groupElements[0] ? 0 : 33), 0)));
       if (strip.dataset.need !== need) strip.dataset.need = need;
-      if (groupElements.reduce((sum, element) => sum + element.getBoundingClientRect().width + (element === groupElements[0] ? 0 : 33), 0) <= room) return setFolded([]);
+      if (Number(need) <= room) return setFolded([]);
       // Each tab with the gap and middot before it; each place with its label and the rule before it.
-      const width = new Map(tabElements.map((element) => [element.dataset.tab!, element.getBoundingClientRect().width + 10]));
+      const width = new Map(tabElements.map((element) => [element.dataset.tab!, natural(element) + 10]));
       const labels = groupElements.map((element, index) => (element.querySelector<HTMLElement>(".pane-tab-group-label")?.getBoundingClientRect().width ?? 0) + 8 + (index ? 33 : 0));
       // The lit tab and any other showing (a viewer's other side) never fold.
       const lit = options.lit();
