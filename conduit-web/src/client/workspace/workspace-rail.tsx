@@ -49,7 +49,7 @@ export function WorkspaceRail(props: {
       const Icon = RAIL_ICONS[tool];
       const disabled = () => tool === "diff" && !props.sourceControlEnabled;
       const label = () => disabled() ? "Source Control is available only for Git workspaces" : WORKSPACE_TOOL_LABELS[tool];
-      return <button type="button" class="workspace-rail-action" tabIndex={-1} data-tool={tool} disabled={disabled()}
+      return <button type="button" class="workspace-rail-action" tabIndex={-1} data-tool={tool} draggable={!disabled()} data-doc-view={tool === "terminal" ? "tool:terminal" : tool} disabled={disabled()}
         aria-label={WORKSPACE_TOOL_LABELS[tool]} title={label()} aria-current={props.current === tool ? "true" : undefined}
         data-open={props.inSplit === tool ? "true" : undefined}
         onClick={() => props.onChoose(tool)}><Icon /></button>;

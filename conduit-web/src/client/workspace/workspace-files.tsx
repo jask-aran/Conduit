@@ -884,6 +884,7 @@ export function FilesView(props: {
         }}
         class="workspace-files"
         data-wide={props.navigatorOnly ? "navigator" : c.filesWide()}
+        data-doc-project={props.navigatorOnly ? props.projectId : undefined}
         data-tree-collapsed={c.treeCollapsed()}
         data-navigator-open={c.navigatorOpen()}
         style={{

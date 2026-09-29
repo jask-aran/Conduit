@@ -149,7 +149,7 @@ export function AppDashboard(props: {
     const process = () => props.runtime.getProcess(chat.id);
     const live = () => process()?.active ? activityLabel(runtimeActivity(process()) || "working", activityDetail(process())) : "";
     const where = () => project.slug === "chat" ? "" : project.name;
-    return <ContextMenu><ContextMenuTrigger as={SplitRow} element="button" onPointerEnter={() => props.onPrefetchChat(chat)} onFocus={() => props.onPrefetchChat(chat)} onClick={() => props.onOpenChat(chat, project)}
+    return <ContextMenu><ContextMenuTrigger as={SplitRow} element="button" draggable="true" data-doc-view={`chat:${chat.id}`} onPointerEnter={() => props.onPrefetchChat(chat)} onFocus={() => props.onPrefetchChat(chat)} onClick={() => props.onOpenChat(chat, project)}
         lead={<RuntimeIndicator process={process()} stale={props.runtime.stale()} unread={chat.unread} fallback={<ThreadHarnessMark id={chat.harnessId} lively />} />}
         primary={chat.title || "Untitled chat"}
         context={<>{live() && <span class="app-dashboard-activity">{live()}</span>}{live() && where() ? " · " : ""}{where()}</>}
