@@ -262,6 +262,8 @@ export function Sidebar(props: {
   onOpenComputer: () => void;
   onOpenHarness: (id: string) => void;
   selectedHarness?: string;
+  // A file or tool covers pane A: its route stays selected but is not shown.
+  routeCovered?: boolean;
   onOpenTerminalView: () => void;
   onOpenWorkspaceIdentity: (project: Project) => void;
   onOpenSettings: (section?: string, workspaceId?: string | null) => void;
@@ -667,12 +669,13 @@ export function Sidebar(props: {
   // A project page keeps a draft chat open behind its composer, so the
   // selection alone cannot say which row the reader is on -- without the route,
   // the project row went dark and New chat lit up in its place.
-  const onProjectPage = (project: Project) => props.projectId === project.id && (props.project || props.selectedId == null);
+  const shownId = () => props.routeCovered ? null : props.selectedId;
+  const onProjectPage = (project: Project) => !props.routeCovered && props.projectId === project.id && (props.project || props.selectedId == null);
   // A folder or workspace holding the open chat is drawn as current with it,
   // collapsed or not, wherever its row appears -- so where you are reads up
   // the tree.
-  const holdsCurrentChat = (project: Project) => props.selectedId != null && project.sessions.some((chat) => chat.id === props.selectedId);
-  const railProjectIsActive = (project: Project) => project.id === props.projectId || project.sessions.some((chat) => chat.id === props.selectedId);
+  const holdsCurrentChat = (project: Project) => shownId() != null && project.sessions.some((chat) => chat.id === shownId());
+  const railProjectIsActive = (project: Project) => !props.routeCovered && (project.id === props.projectId || project.sessions.some((chat) => chat.id === props.selectedId));
   const railProjectIsLive = (project: Project) => project.sessions.some((chat) => Boolean(processFor(chat)));
   const RailAction = (railProps: { label: string; onClick: () => void; current?: boolean; live?: boolean; children: unknown }) => <Tooltip>
     <TooltipTrigger as="button" type="button" class="sidebar-rail-action" data-sidebar="rail-action" aria-label={railProps.label} aria-current={railProps.current ? "page" : undefined} data-live={railProps.live ? "true" : undefined} onClick={railProps.onClick}>
@@ -882,7 +885,7 @@ export function Sidebar(props: {
       class="sidebar-row sidebar-chat"
       data-chat-id={menuProps.chat.id}
       draggable="true" data-doc-view={`chat:${menuProps.chat.id}`}
-      aria-current={(props.focusedId || props.selectedId) === menuProps.chat.id ? "page" : undefined}
+      aria-current={(props.focusedId || shownId()) === menuProps.chat.id ? "page" : undefined}
       data-open={props.openIds?.includes(menuProps.chat.id) ? "true" : undefined}
       aria-label={`${chatTitle(menuProps.chat)}, ${menuProps.chat.harnessId || "conduit"} harness${menuProps.chat.unread ? ", unread" : ""}${selected() ? ", selected" : ""}`}
       data-selected={selected() ? "true" : undefined}
@@ -1096,7 +1099,7 @@ export function Sidebar(props: {
     const label = () => item.type === "chat" ? chatTitle(item.chat)
       : item.type === "project" ? item.project.name
         : item.terminal.title || "Shell";
-    const current = () => item.type === "chat" ? props.selectedId === item.chat.id
+    const current = () => item.type === "chat" ? shownId() === item.chat.id
       : item.type === "project" ? onProjectPage(item.project)
         : false;
     return <ContextMenu placement={phoneLayout() ? "bottom-start" : "right-start"}>
@@ -1228,7 +1231,7 @@ export function Sidebar(props: {
             <div data-sidebar="rail-section" data-sidebar-section="chats" class="sidebar-rail-section">
               <For each={railChats()}>{(item) => <RailAction
                 label={`Chat: ${chatTitle(item.chat)}`}
-                current={props.selectedId === item.chat.id}
+                current={shownId() === item.chat.id}
                 live={Boolean(processFor(item.chat))}
                 onClick={() => { setArea("conduit"); closeMobile(); void props.onOpenChat(item.chat, item.project).then(enterPane); }}
               ><MessageSquareIcon /></RailAction>}</For>
