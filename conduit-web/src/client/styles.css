@@ -152,41 +152,44 @@ svg.lucide { stroke-width: 2.4; }
 .pane-tab-action { display: inline-flex; width: 20px; height: 20px; flex: none; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--muted-foreground); }
 .pane-tab-action:hover { background: var(--accent); color: var(--foreground); }
 .pane-tab-action svg { width: 12.8px; height: 12.8px; }
-/* A pane's chat tabs (6c), grouped by place: each run of tabs from one place
-   is one breadcrumb -- the place once, muted (white at 660 for the active
-   tab's), then the titles. Every label and title reserves its bold width, so
-   switching moves nothing. Hairlines between unlit tabs in a run, a gap
-   between runs; what does not fit waits in the menu at the row's end. */
+/* A pane's chat tabs (6c), grouped by place: each run from one place is one
+   breadcrumb -- the place's caps label, then the titles with a muted middot
+   between -- and one hairline between runs. Where you are is text alone:
+   the active title and its place white at 660, the rest grey; the wash is
+   only the pointer. Titles reserve their bold width, so switching moves
+   nothing; what does not fit waits in the menu at the row's end. */
 .chat-header-tabs { flex: 1 1 auto; }
-.pane-tabs { display: flex; min-width: 0; flex: 1; align-items: center; overflow: hidden; }
-.chat-header-title .pane-tab-group { display: inline-flex; flex: none; align-items: center; gap: 2px; overflow: visible; }
-.pane-tab-group + .pane-tab-group { margin-left: 8px; }
-.pane-tab-group-label { display: inline-flex; max-width: 96px; flex-direction: column; padding: 0 0 0 4px; border: 0; background: transparent; color: var(--muted-foreground); font: inherit; font-weight: 450; }
-.chat-header-title .pane-tab-group-label > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pane-tab-group-label:hover { color: var(--foreground); }
-.pane-tab-group-current .pane-tab-group-label { color: var(--foreground); font-weight: 660; }
+.pane-tabs { display: flex; height: 100%; min-width: 0; flex: 1; align-items: center; overflow: hidden; }
+.chat-header-title .pane-tab-group { position: relative; display: inline-flex; flex: none; align-items: center; overflow: visible; }
+.pane-tab-group + .pane-tab-group { margin-left: 25px; }
+.pane-tab-group + .pane-tab-group::before { position: absolute; top: 2px; bottom: 2px; left: -13px; width: 0.8px; background: color-mix(in oklch, var(--foreground), transparent 85%); content: ""; }
+.chat-header-title .pane-tab-group-label { display: inline-block; padding: 0; border: 0; background: transparent; color: color-mix(in oklch, var(--foreground), transparent 55%); cursor: pointer; }
+.pane-tab-group-label:hover, .pane-tab-group-current .pane-tab-group-label { color: var(--foreground); }
 .chat-header-title .pane-tab { position: relative; display: inline-flex; max-width: 220px; height: 24px; flex: none; align-items: center; overflow: visible; border-radius: var(--radius-md); }
-.pane-tab:not(.pane-tab-active) + .pane-tab:not(.pane-tab-active)::before { position: absolute; top: 6px; bottom: 6px; left: -1px; width: 0.8px; background: color-mix(in oklch, var(--foreground), transparent 85%); content: ""; }
-.pane-tab:hover, .pane-tab-active { background: var(--accent); }
-.pane-tab-open { display: inline-flex; min-width: 0; height: 100%; flex: 1; align-items: center; gap: 5.6px; padding: 0 2px 0 8px; border: 0; background: transparent; color: var(--muted-foreground); font: inherit; font-weight: 450; }
+.pane-tab + .pane-tab { margin-left: 12px; }
+.pane-tab + .pane-tab::before { position: absolute; left: -8.4px; color: color-mix(in oklch, var(--foreground), transparent 70%); content: "·"; pointer-events: none; }
+.pane-tab:hover { background: var(--accent); }
+.pane-tab-open { display: inline-flex; min-width: 0; height: 100%; flex: 1; align-items: center; gap: 5.6px; padding: 0 2px 0 10px; border: 0; background: transparent; color: color-mix(in oklch, var(--foreground), transparent 45%); font: inherit; font-weight: 450; }
 .chat-header-title .pane-tab-title { display: inline-flex; min-width: 0; flex-direction: column; overflow: hidden; }
 .chat-header-title .pane-tab-title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pane-tab-title::after, .pane-tab-group-label::after { height: 0; overflow: hidden; visibility: hidden; font-weight: 660; white-space: nowrap; content: attr(data-text); }
+.pane-tab-title::after { height: 0; overflow: hidden; visibility: hidden; font-weight: 660; white-space: nowrap; content: attr(data-text); }
 .pane-tab:hover .pane-tab-open { color: var(--foreground); }
 .pane-tab-active .pane-tab-open { color: var(--foreground); font-weight: 660; }
-.pane-tab-close { display: inline-flex; width: 16px; height: 16px; flex: none; align-items: center; justify-content: center; margin: 0 4px 0 2px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted-foreground); opacity: 0; }
+.pane-tab-close { display: inline-flex; width: 16px; height: 16px; flex: none; align-items: center; justify-content: center; margin: 0 6px 0 2px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted-foreground); opacity: 0; }
 .pane-tab:hover .pane-tab-close, .pane-tab-active .pane-tab-close { opacity: 1; }
 .pane-tab-close:hover { color: var(--foreground); }
 .pane-tab-close svg { width: 11.2px; height: 11.2px; }
 .pane-tab-live { width: 5px; height: 5px; flex: none; border-radius: 50%; background: var(--live, oklch(0.62 0.17 145)); }
-.pane-tabs-more { margin-left: 4px; }
+.pane-tabs-more { margin-left: 8px; }
 /* The preview tab, replaced by the next chat opened here until it is kept. */
 .pane-tab-preview .pane-tab-title { font-style: italic; }
 .chat-header-title span, .chat-header-title strong, .chat-header-title .breadcrumb-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The place crumb is a link to its page: the crumb at rest, white under the pointer. */
 .breadcrumb-link { border: 0; background: none; padding: 0; color: inherit; font: inherit; cursor: pointer; }
 .breadcrumb-link:hover { color: var(--foreground); }
-.breadcrumb-separator::before { content: "/"; }
+/* A breadcrumb's place: the menus' group label (9.6px caps), which sets it
+   apart from the title by type alone, without a slash. */
+.chat-header-title .chat-header-place { flex: 0 1 auto; max-width: 120px; margin-right: 2.4px; color: var(--foreground); font-size: 9.6px; font-weight: 700; letter-spacing: 0.04em; line-height: 16px; text-transform: uppercase; }
 .chat-status-line { display: none; }
 .chat-status-line[data-state="error"] { color: color-mix(in oklch, var(--destructive), var(--foreground) 25%); }
 .chat-status-line[data-state="listening"], .chat-status-line[data-state="active"] { color: var(--muted-foreground); }
@@ -980,7 +983,7 @@ svg.lucide { stroke-width: 2.4; }
 .chat-header { position: relative; z-index: 2; display: flex; height: var(--chat-header-height); flex: none; align-items: center; gap: 8px; padding: 8px 14px; background: linear-gradient(to bottom, var(--background) 0 50%, transparent 100%); }
 .chat-header-title { display: flex; min-width: 0; align-items: center; gap: 7px; overflow: hidden; font-size: 14px; line-height: 20px; }
 .chat-header-title span, .chat-header-title strong, .chat-header-title .breadcrumb-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.breadcrumb-separator::before { content: "/"; }
+.chat-header-title .chat-header-place { font-size: 12px; }
 .chat-status-line { display: none; }
 .chat-status-line[data-state="error"] { color: color-mix(in oklch, var(--destructive), var(--foreground) 25%); }
 .chat-status-line[data-state="listening"], .chat-status-line[data-state="active"] { color: var(--muted-foreground); }
