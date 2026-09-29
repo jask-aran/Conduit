@@ -403,6 +403,10 @@ Steps:
   - *The URL.* A pane of chats carries its tabs and which is active; pane
     A's active tab is its route. A folded pane's rail tile is named for its
     active tab.
+  - *File viewer tabs* (built after): one tab is one file; the viewer holds
+    up to five and shows one or two side by side, in the chats' tab row;
+    Ctrl keeps the replaced file as a tab; the last closed leaves the viewer
+    empty rather than closing the pane. The URL carries them as `ftabs`.
   - *Build order.* 6c-1 the model and URL (a pane of chats as a tab list,
     one mounted, state kept per tab); 6c-2 the row; 6c-3 opening, preview
     tabs, the cap and dragging.

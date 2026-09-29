@@ -3610,13 +3610,14 @@ function App() {
       // Each tab with the gap and middot before it; each place with its label and the rule before it.
       const width = new Map(tabElements.map((element) => [element.dataset.tab!, element.getBoundingClientRect().width + 10]));
       const labels = groupElements.map((element, index) => (element.querySelector<HTMLElement>(".pane-tab-group-label")?.getBoundingClientRect().width ?? 0) + 8 + (index ? 33 : 0));
+      // The lit tab and any other showing (a viewer's other side) never fold.
       const lit = options.lit();
-      const home = runs.findIndex((run) => run.keys.includes(lit ?? ""));
-      let budget = room - 28 - (width.get(lit ?? "") ?? 0) - (labels[home] ?? 0);
-      const kept = new Set([home]);
+      const reserved = (options.keys() ?? []).filter((key) => key === lit || options.shown?.(key));
+      const kept = new Set(runs.flatMap((run, index) => run.keys.some((key) => reserved.includes(key)) ? [index] : []));
+      let budget = room - 28 - reserved.reduce((sum, key) => sum + (width.get(key) ?? 0), 0) - [...kept].reduce((sum, index) => sum + (labels[index] ?? 0), 0);
       const hidden: string[] = [];
       runs.forEach((run, index) => run.keys.forEach((key) => {
-        if (key === lit) return;
+        if (reserved.includes(key)) return;
         const cost = (width.get(key) ?? 0) + (kept.has(index) ? 0 : labels[index]!);
         if (hidden.length === 0 && cost <= budget) { budget -= cost; kept.add(index); } else hidden.push(key);
       }));
