@@ -2781,7 +2781,10 @@ function App() {
     window.addEventListener("pointerdown", note, true);
     window.addEventListener("keydown", note, true);
     const session = paneSlot(slot).session.chat;
-    await waitFor(() => !id || (session.loadedId() === id && session.presentation().kind === "ready" && chatDrawn(slot)), 3000);
+    // A dashboard or project page is ready once its unsent chat is in the composer.
+    const drafts = view === "page:dashboard" || view.startsWith("page:project:");
+    await waitFor(() => id ? session.loadedId() === id && session.presentation().kind === "ready" && chatDrawn(slot)
+      : !drafts || Boolean(paneSlot(slot).draft && session.loadedId() === paneSlot(slot).draft!.id), 3000);
     window.removeEventListener("pointerdown", note, true);
     window.removeEventListener("keydown", note, true);
     if (!moved && shownSlots().includes(slot) && !paneElement(slot)?.contains(document.activeElement)) focusPane(slot);
