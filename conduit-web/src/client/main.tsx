@@ -3085,7 +3085,11 @@ function App() {
   // over it together; the route changing then is not pane A being sent away.
   let restoringPanes = false;
   createEffect(() => {
-    const key = routeBootstrap() === "ready" ? `${routeKind()}:${catalogue.selectedId()}:${selectedProject()?.id ?? ""}:${harnessThread() ? "thread" : ""}` : null;
+    // Only a settled route counts: a project or chat still resolving (as on
+    // the first open, the catalogue arriving) is not pane A being sent away.
+    const settling = (routeKind() === "project" && !selectedProject()) || (routeKind() === "chat" && !catalogue.selectedId() && !catalogue.loaded());
+    // What names pane A's route: the chat, the project, or just the page.
+    const key = routeBootstrap() === "ready" && !settling ? `${routeKind()}:${routeKind() === "chat" ? catalogue.selectedId() : routeKind() === "project" ? selectedProject()?.id : ""}:${harnessThread() ? "thread" : ""}` : null;
     if (key === null) return;
     if (paneARoute !== null && key !== paneARoute && !swappingPanes && !restoringPanes && untrack(paneAOverride)) setPaneAOverride(null);
     paneARoute = key;
