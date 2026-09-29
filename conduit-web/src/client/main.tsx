@@ -2818,7 +2818,7 @@ function App() {
   };
   // Ctrl+Shift+2 with panes beside A: from elsewhere, back to the pane last
   // used; from a pane, to the next, round. Each lands where its focus last was.
-  // `step` -1 goes the other way round (Alt+Shift+[).
+  // `step` -1 goes the other way round (Previous pane).
   const cyclePaneFocus = (step = 1) => {
     const panes: PaneKey[] = ["main", ...shownSlots()];
     const from = paneOf(document.activeElement);
@@ -3339,36 +3339,17 @@ function App() {
   };
   createEffect(on(() => [paneAView(), slotOrder().map((slot) => `${slot}=${slotView(slot)}`).join()] as const, () => { if (!swappingPanes) reconcileTabs(); }));
   createEffect(on(() => tabParams().join("|"), (value) => writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-tabs", value), { defer: true }));
-  /*
-   * Stepping round, from anywhere: Alt+] and Alt+[ the focused pane's tabs,
-   * in the row's order; Alt+Shift+] and Alt+Shift+[ the panes. Ctrl+Tab and
-   * Ctrl+Shift+Tab also step tabs where the browser passes them on (the
-   * desktop app, an installed app's window); a browser tab keeps them.
-   */
-  const cycleTabs = (event: KeyboardEvent) => {
-    if (isMobileLayout() || event.metaKey) return;
-    const bracket = event.altKey && !event.ctrlKey && (event.code === "BracketLeft" || event.code === "BracketRight");
-    const tab = event.key === "Tab" && event.ctrlKey && !event.altKey;
-    if (!bracket && !tab) return;
-    const back = tab ? event.shiftKey : event.code === "BracketLeft";
-    if (bracket && event.shiftKey) {
-      if (!splitShown()) return;
-      event.preventDefault();
-      event.stopPropagation();
-      // False only on the way to pane A with no focus of its own to go back to.
-      if (!cyclePaneFocus(back ? -1 : 1)) focusAnyPane("main");
-      return;
-    }
-    const pane = keyboardPaneSlot() ?? "main";
-    const list = tabsOf(pane);
-    const at = list?.ids.indexOf(activeChatOf(pane) ?? "") ?? -1;
-    if (!list || list.ids.length < 2 || at < 0) return;
-    event.preventDefault();
-    event.stopPropagation();
-    void switchTab(pane, list.ids[(at + (back ? -1 : 1) + list.ids.length) % list.ids.length]!);
+  // Stepping round the focused pane's tabs, in the row's order, and the
+  // panes (the shortcuts Next/Previous tab and pane).
+  const tabsToStep = () => { const pane: PaneKey = keyboardPaneSlot() ?? "main"; const list = tabsOf(pane); return !isMobileLayout() && list && list.ids.length > 1 && list.ids.includes(activeChatOf(pane) ?? "") ? { pane, list } : null; };
+  const stepTab = (step: number) => {
+    const found = tabsToStep();
+    if (!found) return;
+    const at = found.list.ids.indexOf(activeChatOf(found.pane)!);
+    void switchTab(found.pane, found.list.ids[(at + step + found.list.ids.length) % found.list.ids.length]!);
   };
-  window.addEventListener("keydown", cycleTabs, true);
-  onCleanup(() => window.removeEventListener("keydown", cycleTabs, true));
+  // False only on the way to pane A with no focus of its own to go back to.
+  const stepPane = (step: number) => { if (!cyclePaneFocus(step)) focusAnyPane("main"); };
 
   const switchTab = async (pane: PaneKey, id: string) => {
     setKeyboardPane(pane);
@@ -4241,6 +4222,10 @@ function App() {
       ...getCommandDefinition(COMMAND_IDS.focusTranscript).contexts.map((context) =>
         shortcutManager.registerHandler(COMMAND_IDS.focusTranscript, context, focusTranscript, { when: hasTranscript })),
       shortcutManager.registerHandler(COMMAND_IDS.focusMainPane, "application", focusMainPane),
+      shortcutManager.registerHandler(COMMAND_IDS.nextTab, "application", () => stepTab(1), { when: () => Boolean(tabsToStep()) }),
+      shortcutManager.registerHandler(COMMAND_IDS.previousTab, "application", () => stepTab(-1), { when: () => Boolean(tabsToStep()) }),
+      shortcutManager.registerHandler(COMMAND_IDS.nextPane, "application", () => stepPane(1), { when: () => splitShown() && !isMobileLayout() }),
+      shortcutManager.registerHandler(COMMAND_IDS.previousPane, "application", () => stepPane(-1), { when: () => splitShown() && !isMobileLayout() }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "application", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "chat", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "workspace-panel", toggleChatWorkspaceFocus),
