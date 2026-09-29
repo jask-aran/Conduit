@@ -2555,13 +2555,17 @@ function App() {
     let at = panes.indexOf(from);
     const to = panes.indexOf(target.pane);
     // Neighbour by neighbour, each a swap, by position (a swap of two panes
-    // beside A reorders their keys).
-    while (at !== to) {
-      const next = at < to ? at + 1 : at - 1;
-      const now = panesShown();
-      await swapPanes(now[Math.min(at, next)]!, false, now[Math.max(at, next)]!);
-      at = next;
-    }
+    // beside A reorders their keys) -- all within one fade of the panes
+    // involved.
+    const involved = panes.slice(Math.min(at, to), Math.max(at, to) + 1).map(paneElement).filter((element): element is HTMLElement => Boolean(element));
+    await crossfadePanes(involved, async () => {
+      while (at !== to) {
+        const next = at < to ? at + 1 : at - 1;
+        const now = panesShown();
+        await swapPanes(now[Math.min(at, next)]!, false, now[Math.max(at, next)]!, false);
+        at = next;
+      }
+    });
     focusAnyPane(panesShown()[to]!);
   };
   const nearEdge = (from: PaneKey, pane: PaneKey, zone: "left" | "middle" | "right") => {
@@ -2938,9 +2942,9 @@ function App() {
    * panes keep their widths: a width belongs to the position, not the document.
    */
   const SWAP_FADE_MS = 100;
-  const crossfadeSwap = async (left: HTMLElement, right: HTMLElement, place: () => Promise<void>) => {
+  const crossfadeSwap = (left: HTMLElement, right: HTMLElement, place: () => Promise<void>) => crossfadePanes([left, right], place);
+  const crossfadePanes = async (both: HTMLElement[], place: () => Promise<void>) => {
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const both = [left, right];
     if (!still) await Promise.all(both.map((element) => element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_FADE_MS, easing: "ease-out", fill: "forwards" }).finished));
     for (const element of both) element.style.opacity = "0";
     both.forEach((element) => element.getAnimations().forEach((animation) => animation.cancel()));
@@ -2970,7 +2974,8 @@ function App() {
     if (!still) await incoming.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SWAP_FADE_MS, easing: "ease-out" }).finished;
     incoming.style.opacity = "";
   };
-  const swapPanes = async (pane: PaneKey, slide = false, withPane?: PaneKey) => {
+  // `fade: false` places the documents at once, for a caller fading around several swaps.
+  const swapPanes = async (pane: PaneKey, slide = false, withPane?: PaneKey, fade = true) => {
     const partner = withPane ?? swapPartner(pane);
     if (partner === null || swappingPanes) return;
     const [leftPane, rightPane] = pane === "main" || (partner !== "main" && shownSlots().indexOf(partner) > shownSlots().indexOf(pane as number)) ? [pane, partner] : [partner, pane];
@@ -2993,6 +2998,7 @@ function App() {
         };
         const placeLeft = async () => { if (isPaneView(bView)) { setPaneAOverride(null); await openInPaneA(bView); } else setPaneView("main", bView); };
         if (slide) await animateSwap(left, right, false, placeRight, placeLeft);
+        else if (!fade) await Promise.all([placeRight(), placeLeft()]);
         else await crossfadeSwap(left, right, async () => { await Promise.all([placeRight(), placeLeft()]); });
       } else {
         const a = leftPane as number;
@@ -3002,6 +3008,7 @@ function App() {
           persistSlots();
         };
         if (slide) await animateSwap(left, right, true, reorder, () => {});
+        else if (!fade) reorder();
         else await crossfadeSwap(left, right, async () => reorder());
       }
     } finally {
