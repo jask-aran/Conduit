@@ -165,7 +165,11 @@ export function mountTranscriptPanelMotion(
       // is off by half the change.
       const delta = start.paneWidth == null ? detail.size - start.size : start.paneWidth - transcript.getBoundingClientRect().width;
       const availableWidth = Math.max(0, start.width - delta);
-      if (panelMotionMode() === "reflow" || !start.canTranslate) {
+      // The column slides only while it has room beside its gutter: past that
+      // it would be clipped at the pane's edge, then snap back at the end, so
+      // from there it takes real width -- the genuine compression.
+      const slack = (start.width - start.contentWidth) / 2 - start.gutter;
+      if (panelMotionMode() === "reflow" || !start.canTranslate || delta / 2 > slack) {
         start.shift = 0;
         setWidthPreservingAnchor(availableWidth);
         let shift = 0;
