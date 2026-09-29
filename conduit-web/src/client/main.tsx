@@ -3613,6 +3613,9 @@ function App() {
       const runs = groups();
       if (!options.keys() || groupElements.length !== runs.length) return setFolded([]);
       const room = strip.clientWidth;
+      // What every tab needs, for a header that folds its own actions first.
+      const need = String(Math.ceil(groupElements.reduce((sum, element) => sum + element.getBoundingClientRect().width + (element === groupElements[0] ? 0 : 33), 0)));
+      if (strip.dataset.need !== need) strip.dataset.need = need;
       if (groupElements.reduce((sum, element) => sum + element.getBoundingClientRect().width + (element === groupElements[0] ? 0 : 33), 0) <= room) return setFolded([]);
       // Each tab with the gap and middot before it; each place with its label and the rule before it.
       const width = new Map(tabElements.map((element) => [element.dataset.tab!, element.getBoundingClientRect().width + 10]));
