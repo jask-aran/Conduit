@@ -2308,20 +2308,21 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 
 /* The first open (main.tsx): until the route is ready and laid out only the
    frame shows, composer included; then the composer is simply there and every
-   other region fades in around it, once. The last selector takes, inside the
-   main pane, each outermost part that does not hold the composer. */
+   other region fades in around it, once. The last selector takes, inside each
+   pane (pane A and those beside it), each outermost part that does not hold
+   the composer. */
 /* Hidden rather than transparent: the composer has an opacity transition of
    its own, for the question takeover, that would fade it back in. */
 :root[data-arrival="waiting"] [data-part="composer"] { visibility: hidden; }
 :root[data-arrival="waiting"] :is(
   [data-region="sidebar"],
   [data-region="workspace-panel"],
-  :is(.chat-main, .chat-main :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"]))
+  :is(.chat-main, .main-split, :is(.chat-main, .main-split) :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"]))
 ) { opacity: 0; }
 :root[data-arrival="arriving"] :is(
   [data-region="sidebar"],
   [data-region="workspace-panel"],
-  :is(.chat-main, .chat-main :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"]))
+  :is(.chat-main, .main-split, :is(.chat-main, .main-split) :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"]))
 ) { animation: ui-arrive 300ms cubic-bezier(.2, .8, .2, 1) both; }
 @keyframes ui-arrive { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ui-leave { to { opacity: 0; } }
@@ -2338,7 +2339,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   :root[data-arrival="arriving"] :is(
     [data-region="sidebar"],
     [data-region="workspace-panel"],
-    :is(.chat-main, .chat-main :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"]))
+    :is(.chat-main, .main-split, :is(.chat-main, .main-split) :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"]))
   ) { animation: none; }
 }
 
