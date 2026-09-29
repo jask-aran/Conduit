@@ -3211,6 +3211,8 @@ function App() {
   const TAB_CAP = 5;
   const [paneTabs, setPaneTabs] = createSignal<Record<string, PaneTabs>>(tabsFromParams(launchUrl.searchParams));
   const tabsOf = (pane: PaneKey) => paneTabs()[String(pane)] ?? null;
+  // The place a chat tab belongs to, which groups it.
+  const tabPlace = (id: string) => catalogue.projects().find((item) => item.sessions.some((chat) => chat.id === id))?.id ?? "chats";
   const activeChatOf = (pane: PaneKey) => { const view = viewOf(pane); return view?.startsWith("chat:") ? view.slice("chat:".length) : null; };
   // The next chat opened into these panes is kept, not a preview (Alt with no room).
   const keepNext = new Set<string>();
@@ -3251,9 +3253,19 @@ function App() {
       let used = tabs.used.filter((item) => ids.includes(item));
       const kept = keepNext.delete(key);
       if (!kept && tabs.preview && ids.includes(tabs.preview)) {
-        ids[ids.indexOf(tabs.preview)] = id;
+        ids = ids.filter((item) => item !== tabs.preview);
         used = used.filter((item) => item !== tabs.preview);
-      } else ids.splice(used[0] ? ids.indexOf(used[0]) + 1 : ids.length, 0, id);
+      }
+      // Tabs from one place stay together: beside the active tab when it is
+      // from there, else at the end of that place's run, else after the
+      // active tab's run.
+      const place = tabPlace(id);
+      const lastOf = (placeId: string) => ids.reduce((last, item, index) => tabPlace(item) === placeId ? index : last, -1);
+      const current = used.find((item) => ids.includes(item));
+      const at = current && tabPlace(current) === place ? ids.indexOf(current) + 1
+        : lastOf(place) >= 0 ? lastOf(place) + 1
+        : current ? lastOf(tabPlace(current)) + 1 : ids.length;
+      ids.splice(at, 0, id);
       used = [id, ...used];
       while (ids.length > TAB_CAP) {
         const drop = [...used].reverse().find((item) => item !== id && !drafts.draftFor(item));
@@ -3318,27 +3330,43 @@ function App() {
   const paneTabRow = (pane: PaneKey) => {
     const tabs = () => { const list = tabsOf(pane); return list && list.ids.length > 1 && !isMobileLayout() ? list : null; };
     const placeOf = (id: string) => { const project = catalogue.projects().find((item) => item.sessions.some((chat) => chat.id === id)); return !project || project.slug === "chat" ? "Chats" : project.name || project.slug; };
-    // Tabs that do not fit wait in a menu at the row's end; the active one never does.
+    // Runs of tabs from one place, each shown under its place once.
+    const groups = createMemo(() => {
+      const runs: { place: string; ids: string[] }[] = [];
+      for (const id of tabs()?.ids ?? []) {
+        const place = tabPlace(id);
+        if (runs.at(-1)?.place === place) runs.at(-1)!.ids.push(id);
+        else runs.push({ place, ids: [id] });
+      }
+      return runs;
+    }, [], { equals: (a, b) => a.length === b.length && a.every((run, index) => run.place === b[index]!.place && run.ids.join() === b[index]!.ids.join()) });
+    // Tabs that do not fit wait in a menu at the row's end, from the end; the
+    // active one never does, and a place's label goes only with all its tabs.
     const [folded, setFolded] = createSignal<string[]>([]);
     let strip: HTMLDivElement | undefined;
     const fit = () => {
       if (!strip) return;
-      const list = tabs();
-      const elements = [...strip.querySelectorAll<HTMLElement>(".pane-tab")];
-      for (const element of elements) element.style.display = "";
-      if (!list) return setFolded([]);
-      const widths = elements.map((element) => element.getBoundingClientRect().width);
+      const groupElements = [...strip.querySelectorAll<HTMLElement>(".pane-tab-group")];
+      const tabElements = [...strip.querySelectorAll<HTMLElement>(".pane-tab")];
+      for (const element of [...groupElements, ...tabElements]) element.style.display = "";
+      const runs = groups();
+      if (!tabs() || groupElements.length !== runs.length) return setFolded([]);
       const room = strip.clientWidth;
-      if (widths.reduce((sum, width) => sum + width, 0) <= room) return setFolded([]);
-      const active = list.ids.indexOf(activeChatOf(pane) ?? "");
-      let budget = room - 28 - (widths[active] ?? 0);
+      if (groupElements.reduce((sum, element) => sum + element.getBoundingClientRect().width + (element === groupElements[0] ? 0 : 8), 0) <= room) return setFolded([]);
+      const width = new Map(tabElements.map((element) => [element.dataset.tab!, element.getBoundingClientRect().width]));
+      const labels = groupElements.map((element, index) => (element.querySelector<HTMLElement>(".pane-tab-group-label")?.getBoundingClientRect().width ?? 0) + 16 + (index ? 8 : 0));
+      const active = activeChatOf(pane);
+      const home = runs.findIndex((run) => run.ids.includes(active ?? ""));
+      let budget = room - 28 - (width.get(active ?? "") ?? 0) - (labels[home] ?? 0);
+      const shown = new Set([home]);
       const hidden: string[] = [];
-      list.ids.forEach((id, index) => {
-        if (index === active) return;
-        if (hidden.length === 0 && widths[index]! <= budget) budget -= widths[index]!;
-        else hidden.push(id);
-      });
-      elements.forEach((element, index) => { if (hidden.includes(list.ids[index]!)) element.style.display = "none"; });
+      runs.forEach((run, index) => run.ids.forEach((id) => {
+        if (id === active) return;
+        const cost = (width.get(id) ?? 0) + (shown.has(index) ? 0 : labels[index]!);
+        if (hidden.length === 0 && cost <= budget) { budget -= cost; shown.add(index); } else hidden.push(id);
+      }));
+      tabElements.forEach((element) => { if (hidden.includes(element.dataset.tab!)) element.style.display = "none"; });
+      groupElements.forEach((element, index) => { if (!shown.has(index)) element.style.display = "none"; });
       setFolded(hidden);
     };
     const has = createMemo(() => Boolean(tabs()));
@@ -3347,30 +3375,38 @@ function App() {
       const observer = new ResizeObserver(() => fit());
       observer.observe(element);
       onCleanup(() => observer.disconnect());
-      createEffect(on(() => [tabs()?.ids.join(), activeChatOf(pane), catalogue.projects()] as const, () => requestAnimationFrame(fit)));
+      createEffect(on(() => [groups(), activeChatOf(pane)] as const, () => requestAnimationFrame(fit)));
     }}>
-      <For each={tabs()?.ids ?? []}>{(id) => {
-        const active = () => activeChatOf(pane) === id;
-        const name = () => viewName(`chat:${id}`);
-        return <span class="pane-tab" role="tab" aria-selected={active()} classList={{ "pane-tab-active": active(), "pane-tab-preview": tabs()?.preview === id }} draggable={active() ? undefined : "true"} data-doc-view={active() ? undefined : `chat:${id}`}>
-          <button type="button" class="pane-tab-open" tabIndex={-1} title={`${placeOf(id)} / ${name()}`} onClick={() => { if (!active()) void switchTab(pane, id); }} onDblClick={() => keepTab(pane)}>
-            <Show when={runtime.getProcess(id)}><i class="pane-tab-live" aria-label="Running" /></Show>
-            <span class="pane-tab-crumb" data-text={placeOf(id)}><span>{placeOf(id)}</span></span>
-            <span class="breadcrumb-separator" aria-hidden="true" />
-            <span class="pane-tab-crumb pane-tab-title" data-text={name()}><span>{name()}</span></span>
-          </button>
-          <button type="button" class="pane-tab-close" tabIndex={-1} aria-label={`Close ${name()}`} title="Close tab" onClick={() => void closeTab(pane, id)}><XIcon /></button>
+      <For each={groups()}>{(run) => {
+        const current = () => run.ids.includes(activeChatOf(pane) ?? "");
+        const label = () => placeOf(run.ids[0]!);
+        // The place's label goes to the tab of it used last.
+        const recent = () => tabs()?.used.find((id) => run.ids.includes(id)) ?? run.ids[0]!;
+        return <span class="pane-tab-group" classList={{ "pane-tab-group-current": current() }}>
+          <button type="button" class="pane-tab-group-label" tabIndex={-1} title={label()} data-text={label()} onClick={() => { if (!current()) void switchTab(pane, recent()); }}><span>{label()}</span></button>
+          <span class="breadcrumb-separator" aria-hidden="true" />
+          <For each={run.ids}>{(id) => {
+            const active = () => activeChatOf(pane) === id;
+            const name = () => viewName(`chat:${id}`);
+            return <span class="pane-tab" role="tab" data-tab={id} aria-selected={active()} classList={{ "pane-tab-active": active(), "pane-tab-preview": tabs()?.preview === id }} draggable={active() ? undefined : "true"} data-doc-view={active() ? undefined : `chat:${id}`}>
+              <button type="button" class="pane-tab-open" tabIndex={-1} title={`${label()} / ${name()}`} onClick={() => { if (!active()) void switchTab(pane, id); }} onDblClick={() => keepTab(pane)}>
+                <Show when={runtime.getProcess(id)}><i class="pane-tab-live" aria-label="Running" /></Show>
+                <span class="pane-tab-title" data-text={name()}><span>{name()}</span></span>
+              </button>
+              <button type="button" class="pane-tab-close" tabIndex={-1} aria-label={`Close ${name()}`} title="Close tab" onClick={() => void closeTab(pane, id)}><XIcon /></button>
+            </span>;
+          }}</For>
         </span>;
       }}</For>
       <Show when={folded().length}>
         <Menu modal={false} placement="bottom-end">
           <MenuTrigger class="pane-tab-action pane-tabs-more" tabIndex={-1} aria-label={`${folded().length} more tabs`} title={`${folded().length} more tabs`}><EllipsisIcon /></MenuTrigger>
           <MenuContent class="pane-tabs-menu">
-            <MenuGroup><MenuLabel>More tabs</MenuLabel>
-              <For each={folded()}>{(id) => <MenuItem textValue={viewName(`chat:${id}`)} onSelect={() => void switchTab(pane, id)}>
-                <span class="pane-tabs-menu-place">{placeOf(id)}</span><span>{viewName(`chat:${id}`)}</span>
-              </MenuItem>}</For>
-            </MenuGroup>
+            <For each={groups().filter((run) => run.ids.some((id) => folded().includes(id)))}>{(run) =>
+              <MenuGroup><MenuLabel>{placeOf(run.ids[0]!)}</MenuLabel>
+                <For each={run.ids.filter((id) => folded().includes(id))}>{(id) => <MenuItem textValue={viewName(`chat:${id}`)} onSelect={() => void switchTab(pane, id)}>{viewName(`chat:${id}`)}</MenuItem>}</For>
+              </MenuGroup>}
+            </For>
           </MenuContent>
         </Menu>
       </Show>
