@@ -790,6 +790,7 @@ export function FilesView(props: {
             style={{ "padding-left": `${4 + depth() * 11.2}px` }}
             data-name={entry.name.toLowerCase()}
             data-path={entry.path}
+            draggable={entry.type !== "directory"}
             data-selected={c.isFileOpen(entry.path)}
             data-focused-file={c.openPaths().primary === entry.path}
             tabIndex={c.treeTabStop() === entry.path ? 0 : -1}
