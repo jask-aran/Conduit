@@ -2261,7 +2261,9 @@ function App() {
   const isPaneView = (view: SplitView | null) => Boolean(view && /^(chat|page):/.test(view));
   const viewMinWidth = (view: SplitView | null) => !view || isPaneView(view) ? MIN_MAIN_PANE_WIDTH : MIN_SPLIT_PANE_WIDTH;
   const paneMinWidth = (pane: PaneKey) => viewMinWidth(pane === "main" ? paneAView() : slotView(pane));
-  const viewsFit = (views: (SplitView | null)[]) => layoutWidth() >= views.reduce((sum, view) => sum + viewMinWidth(view) + 16, viewMinWidth(paneAView()));
+  // The open dock keeps its own minimum; panes fold before it is pushed out.
+  const viewsFit = (views: (SplitView | null)[]) => layoutWidth() - (panelOpen() && dockAvailable() ? MIN_SPLIT_PANE_WIDTH + 8 : 0)
+    >= views.reduce((sum, view) => sum + viewMinWidth(view) + 16, viewMinWidth(paneAView()));
   const splitFits = (extra: number) => viewsFit(Array(extra).fill("files:"));
   const shownSlots = createMemo(() => {
     if (!dockAvailable() || isMobileLayout()) return [];
@@ -2272,6 +2274,30 @@ function App() {
     }
     return shown;
   }, [], { equals: (a, b) => a.length === b.length && a.every((slot, index) => slot === b[index]) });
+  /*
+   * The panes drawn: those shown, plus one folding away because the window
+   * narrowed, which stays for its fade while the rest ease into its room
+   * (foldPane). Closing a pane has its own motion (closeSlot).
+   */
+  let foldingSlot: number | null = null;
+  let foldedSlot: number | null = null;
+  const [foldTick, setFoldTick] = createSignal(0);
+  const renderSlots = createMemo<number[]>((before) => {
+    foldTick();
+    const now = shownSlots();
+    const lost = before.filter((slot) => !now.includes(slot));
+    if (foldingSlot !== null && !lost.includes(foldingSlot)) foldingSlot = null;
+    if (foldingSlot === null && lost.length === 1 && lost[0] !== foldedSlot && untrack(() => slotView(lost[0]!) !== null && animatePanes())) {
+      foldingSlot = lost[0]!;
+      const slot = foldingSlot;
+      queueMicrotask(() => foldPane(slot));
+    }
+    foldedSlot = null;
+    if (foldingSlot === null) return now;
+    const drawn = [...now];
+    drawn.splice(Math.min(before.indexOf(foldingSlot), drawn.length), 0, foldingSlot);
+    return drawn;
+  }, []);
   const splitShown = () => shownSlots().length > 0;
   // A tool the dock lends a pane (a whole tool, the legacy file beside, a
   // terminal) -- not a chat, a page or a file viewer, which panes draw themselves.
@@ -2287,7 +2313,7 @@ function App() {
   // While a pane opens or closes, the shares ease through an override.
   const [weightOverride, setWeightOverride] = createSignal<number[] | null>(null);
   const [paneMotion, setPaneMotion] = createSignal<{ slot: PaneKey; phase: "arriving" | "leaving"; collapsed?: boolean } | null>(null);
-  const paneWeights = () => weightOverride() ?? weightsFor(shownSlots().length + 1);
+  const paneWeights = () => weightOverride() ?? weightsFor(renderSlots().length + 1);
   // The file beside is the dock's, so leaving it asks the dock first: an
   // unsaved edit, or the file moving into the dock's Files.
   let releaseSplitFile: ((toDock: boolean) => boolean) | undefined;
@@ -2992,6 +3018,11 @@ function App() {
     const from = [...element.querySelectorAll<HTMLElement>("*")];
     const to = [...ghost.querySelectorAll<HTMLElement>("*")];
     from.forEach((source, index) => { if (source.scrollTop || source.scrollLeft) { to[index]!.scrollTop = source.scrollTop; to[index]!.scrollLeft = source.scrollLeft; } });
+    // A clone's canvas is blank; paint in what the original shows (a terminal).
+    from.forEach((source, index) => {
+      if (!(source instanceof HTMLCanvasElement) || !source.width || !source.height) return;
+      try { (to[index] as HTMLCanvasElement).getContext("2d")?.drawImage(source, 0, 0); } catch { /* left blank */ }
+    });
     return ghost;
   };
   // The panes' last frames stay up while the documents move and load under
@@ -3018,11 +3049,6 @@ function App() {
     await placeRight();
     // Reordered, the slid pane now lives on the right and the other on the
     // left; otherwise the right pane now shows what slid over it, and the
-    // A clone's canvas is blank; paint in what the original shows (a terminal).
-    from.forEach((source, index) => {
-      if (!(source instanceof HTMLCanvasElement) || !source.width || !source.height) return;
-      try { (to[index] as HTMLCanvasElement).getContext("2d")?.drawImage(source, 0, 0); } catch { /* left blank */ }
-    });
     // left goes home unseen to take what was on the right.
     const incoming = reorder ? right : left;
     incoming.style.opacity = "0";
@@ -3249,6 +3275,20 @@ function App() {
       announceSplit("end", splitSize);
     };
     requestAnimationFrame(follow);
+  };
+  const foldPane = (slot: number) => {
+    const element = paneSlot(slot).host();
+    const index = renderSlots().indexOf(slot);
+    const finish = () => {
+      element?.getAnimations().forEach((animation) => animation.cancel());
+      batch(() => { setWeightOverride(null); setPaneMotion(null); foldedSlot = slot; foldingSlot = null; setFoldTick((tick) => tick + 1); });
+    };
+    if (!element || index < 0 || foldingSlot !== slot) return finish();
+    setPaneMotion({ slot, phase: "leaving" });
+    void element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_FADE_MS, easing: "ease-out", fill: "forwards" });
+    const target = weightsFor(shownSlots().length + 1).slice();
+    target.splice(index + 1, 0, 0);
+    requestAnimationFrame(() => requestAnimationFrame(() => easePaneWeights(normalized(target), finish)));
   };
   createEffect(on(shownSlots, (now, before) => {
     const added = now.filter((slot) => !(before ?? []).includes(slot));
@@ -4300,7 +4340,7 @@ function App() {
         </Show>
       </Show>
     </main>
-    <For each={shownSlots()}>{(slot, position) => {
+    <For each={renderSlots()}>{(slot, position) => {
       const pane = paneSlot(slot);
       const side = pane.session;
       const owns = () => slotHasKeyboard(slot);
