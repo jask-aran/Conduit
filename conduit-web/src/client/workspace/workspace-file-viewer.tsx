@@ -104,7 +104,10 @@ export default function FileViewer(props: {
     header.removeAttribute("data-compact");
     // The name needs room for at least the file's own name, measured from its text.
     const name = header.querySelector<HTMLElement>(".workspace-preview-file span");
+    // Headed by tabs, the showing tab's title is the name.
+    const tab = header.querySelector<HTMLElement>(".pane-tab-shown .pane-tab-title > span");
     const nameFits = () => {
+      if (!name && tab) return tab.scrollWidth <= tab.clientWidth + 1;
       const text = name?.firstChild;
       if (!name || !(text instanceof Text)) return true;
       const range = document.createRange();
