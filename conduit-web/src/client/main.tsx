@@ -2235,11 +2235,27 @@ function App() {
    * move to it, as they did to the one split.
    */
   const slotView = (slot: number) => slotViews()[slot] ?? null;
-  const splitFits = (extra: number) => layoutWidth() >= MIN_MAIN_PANE_WIDTH + extra * (MIN_SPLIT_PANE_WIDTH + 16);
-  const maxExtras = () => splitFits(2) ? 2 : 1;
-  const shownSlots = createMemo(() => dockAvailable() && !isMobileLayout() && splitFits(1) ? slotOrder().filter((slot) => slotView(slot)).slice(0, maxExtras()) : [], [], { equals: (a, b) => a.length === b.length && a.every((slot, index) => slot === b[index]) });
-  const splitShown = () => shownSlots().length > 0;
+  /*
+   * Each document declares the narrowest its pane may go: one with a
+   * composer, a chat or a page, the dashboard composer's least; a file viewer
+   * or a tool, the dock's. Panes show while the room holds pane A and each
+   * pane beside at their documents' minimums.
+   */
   const isPaneView = (view: SplitView | null) => Boolean(view && /^(chat|page):/.test(view));
+  const viewMinWidth = (view: SplitView | null) => !view || isPaneView(view) ? MIN_MAIN_PANE_WIDTH : MIN_SPLIT_PANE_WIDTH;
+  const paneMinWidth = (pane: PaneKey) => viewMinWidth(pane === "main" ? paneAView() : slotView(pane));
+  const viewsFit = (views: (SplitView | null)[]) => layoutWidth() >= views.reduce((sum, view) => sum + viewMinWidth(view) + 16, viewMinWidth(paneAView()));
+  const splitFits = (extra: number) => viewsFit(Array(extra).fill("files:"));
+  const shownSlots = createMemo(() => {
+    if (!dockAvailable() || isMobileLayout()) return [];
+    const shown: number[] = [];
+    for (const slot of slotOrder().filter((slot) => slotView(slot)).slice(0, 2)) {
+      if (!viewsFit([...shown, slot].map(slotView))) break;
+      shown.push(slot);
+    }
+    return shown;
+  }, [], { equals: (a, b) => a.length === b.length && a.every((slot, index) => slot === b[index]) });
+  const splitShown = () => shownSlots().length > 0;
   // A tool the dock lends a pane (a whole tool, the legacy file beside, a
   // terminal) -- not a chat, a page or a file viewer, which panes draw themselves.
   const isToolView = (view: SplitView | null) => Boolean(view && !isPaneView(view) && !view.startsWith("files:"));
@@ -2337,7 +2353,7 @@ function App() {
     const position = pane === "main" ? 0 : Math.max(0, shown.indexOf(pane) + 1);
     if (isToolView(view) && toolInPaneA()) { setPaneAOverride(view); if (panelOpen() && dockTool() === view) closePanel(); return; }
     let slot = isToolView(view) ? toolSlot() : null;
-    if (slot === null && shown.length >= maxExtras()) slot = shown[position] ?? shown[position - 2] ?? shown[shown.length - 1] ?? null;
+    if (slot === null && (shown.length >= 2 || !viewsFit([...shown.map(slotView), view]))) slot = shown[position] ?? shown[position - 2] ?? shown[shown.length - 1] ?? null;
     const displaced = slot === null ? null : slotView(slot);
     if (slot === null) slot = [0, 1].find((candidate) => !slotOrder().includes(candidate)) ?? null;
     if (slot === null) return;
@@ -2653,9 +2669,9 @@ function App() {
    * change places; with pane A the documents move, the panes stay.
    */
   let swappingPanes = false;
-  const paneAView = (): SplitView | null => paneAOverride() ?? paneARouteView();
+  function paneAView(): SplitView | null { return paneAOverride() ?? paneARouteView(); }
   // Pane A's route as a view, whatever shows over it.
-  const paneARouteView = (): SplitView | null => {
+  function paneARouteView(): SplitView | null {
     if (routeKind() === "chat" && catalogue.selectedId()) return `chat:${catalogue.selectedId()}`;
     if (routeKind() === "dashboard") return "page:dashboard";
     if (routeKind() === "computer" && !computerHarness()) return "page:computer";
@@ -2878,7 +2894,8 @@ function App() {
     event.preventDefault();
     const start = left.getBoundingClientRect().left;
     const total = right.getBoundingClientRect().right - start;
-    const minimumLeft = position === 1 ? MIN_MAIN_PANE_WIDTH + 8 : MIN_SPLIT_PANE_WIDTH;
+    const minimumLeft = position === 1 ? paneMinWidth("main") + 8 : paneMinWidth(shown[position - 2]!);
+    const minimumRight = paneMinWidth(shown[position - 1]!);
     const weights = paneWeights();
     const pair = weights[position - 1]! + weights[position]!;
     let pending = [...weights];
@@ -2887,7 +2904,7 @@ function App() {
     splitMotionId += 1;
     announceSplit("begin", besideWidth());
     const move = (moveEvent: PointerEvent) => {
-      const width = Math.max(minimumLeft, Math.min(total - MIN_SPLIT_PANE_WIDTH, moveEvent.clientX - start));
+      const width = Math.max(minimumLeft, Math.min(total - minimumRight, moveEvent.clientX - start));
       pending = [...weights];
       pending[position - 1] = pair * width / total;
       pending[position] = pair - pending[position - 1]!;
@@ -3763,7 +3780,7 @@ function App() {
       }} />
     </Modal>
     <div class="workspace-layout" ref={(element) => { const observer = new ResizeObserver(() => setLayoutWidth(element.clientWidth)); observer.observe(element); onCleanup(() => observer.disconnect()); }}>
-    <main data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} style={splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": `${MIN_MAIN_PANE_WIDTH}px` } : undefined} {...mainDropHandlers}>
+    <main data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} style={splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": `${paneMinWidth("main")}px` } : undefined} {...mainDropHandlers}>
       <Show when={splitDropActive()}><div class="main-split-drop" aria-hidden="true" /></Show>
       {/* Pane A holding a file viewer or a tool, over its route (5f). */}
       <Show when={parseFileView(paneAOverride())}>{(entries) => renderFileViewer("main", entries())}</Show>
@@ -3869,7 +3886,7 @@ function App() {
       const owns = () => slotHasKeyboard(slot);
       const page = () => slotPage(slot);
       const attachInput = () => <input ref={side.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) side.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />;
-      return <section ref={(element) => { pane.setHost(element); onCleanup(() => pane.setHost(undefined)); }} class="main-split" data-pane-slot={slot} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={position() === 0 ? "Pane B" : "Pane C"} style={{ flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": `${MIN_SPLIT_PANE_WIDTH}px` }}>
+      return <section ref={(element) => { pane.setHost(element); onCleanup(() => pane.setHost(undefined)); }} class="main-split" data-pane-slot={slot} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={position() === 0 ? "Pane B" : "Pane C"} style={{ flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": `${paneMinWidth(slot)}px` }}>
         <div class="main-split-resize" role="separator" aria-label="Resize panes" aria-orientation="vertical" onPointerDown={(event) => startSplitResize(event, position() + 1)} />
         <Show when={parseFileView(slotView(slot))}>{(entries) => renderFileViewer(slot, entries())}</Show>
         <Show when={page() === "computer"}>
