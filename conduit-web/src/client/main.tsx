@@ -2271,7 +2271,7 @@ function App() {
   const weightsFor = (count: number) => count === 3 ? splitRatios3() : count === 2 ? [1 - splitRatio(), splitRatio()] : [1];
   // While a pane opens or closes, the shares ease through an override.
   const [weightOverride, setWeightOverride] = createSignal<number[] | null>(null);
-  const [paneMotion, setPaneMotion] = createSignal<{ slot: number; phase: "arriving" | "leaving"; collapsed?: boolean } | null>(null);
+  const [paneMotion, setPaneMotion] = createSignal<{ slot: PaneKey; phase: "arriving" | "leaving"; collapsed?: boolean } | null>(null);
   const paneWeights = () => weightOverride() ?? weightsFor(shownSlots().length + 1);
   // The file beside is the dock's, so leaving it asks the dock first: an
   // unsaved edit, or the file moving into the dock's Files.
@@ -2997,6 +2997,27 @@ function App() {
   // Pane A's close hands it the next pane's chat or page.
   const closePane = (pane: PaneKey) => {
     if (pane !== "main") return closeSlot(pane);
+    const element = paneElement("main");
+    if (!element || shownSlots()[0] === undefined || !animatePanes()) return closePaneA();
+    // As any pane closes: pane A fades out and the others ease into its room;
+    // then, unseen, it takes the next pane's document at that pane's width and
+    // fades in once it has loaded.
+    setPaneMotion({ slot: "main", phase: "leaving" });
+    void element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_FADE_MS, easing: "ease-out" }).finished.then(() => {
+      const target = weightsFor(shownSlots().length);
+      target.unshift(0);
+      setWeightOverride(paneShares());
+      requestAnimationFrame(() => requestAnimationFrame(() => easePaneWeights(normalized(target), async () => {
+        const view = slotView(shownSlots()[0]!);
+        batch(() => { closePaneA(); setWeightOverride(null); setPaneMotion({ slot: "main", phase: "arriving" }); });
+        const id = view?.startsWith("chat:") ? view.slice("chat:".length) : null;
+        await waitFor(() => !id || chat.loadedId() === id, 1500);
+        setPaneMotion(null);
+        void element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SWAP_FADE_MS, easing: "ease-out" });
+      })));
+    });
+  };
+  const closePaneA = () => {
     const next = shownSlots()[0];
     const view = next === undefined ? null : slotView(next);
     if (next === undefined || !view) return;
@@ -4073,7 +4094,7 @@ function App() {
       }} />
     </Modal>
     <div class="workspace-layout" ref={(element) => { const observer = new ResizeObserver(() => setLayoutWidth(element.clientWidth)); observer.observe(element); onCleanup(() => observer.disconnect()); }}>
-    <main data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} style={splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": `${paneMinWidth("main")}px` } : undefined} {...mainDropHandlers}>
+    <main data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0 } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
       <Show when={splitDropActive()}><div class="main-split-drop" aria-hidden="true" /></Show>
       {/* Pane A holding a file viewer or a tool, over its route (5f). */}
       <Show when={parseFileView(paneAOverride())}>{(entries) => renderFileViewer("main", entries())}</Show>
