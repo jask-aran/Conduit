@@ -2271,7 +2271,7 @@ function App() {
   const weightsFor = (count: number) => count === 3 ? splitRatios3() : count === 2 ? [1 - splitRatio(), splitRatio()] : [1];
   // While a pane opens or closes, the shares ease through an override.
   const [weightOverride, setWeightOverride] = createSignal<number[] | null>(null);
-  const [paneMotion, setPaneMotion] = createSignal<{ slot: number; phase: "arriving" | "leaving" } | null>(null);
+  const [paneMotion, setPaneMotion] = createSignal<{ slot: number; phase: "arriving" | "leaving"; collapsed?: boolean } | null>(null);
   const paneWeights = () => weightOverride() ?? weightsFor(shownSlots().length + 1);
   // The file beside is the dock's, so leaving it asks the dock first: an
   // unsaved edit, or the file moving into the dock's Files.
@@ -3108,7 +3108,12 @@ function App() {
     splitMotionId += 1;
     announceSplit("begin", besideWidth());
     document.body.classList.add("panes-settling");
-    setWeightOverride(to);
+    batch(() => {
+      setWeightOverride(to);
+      // Its margin eases with it, so nothing jumps when it comes or goes.
+      const motion = paneMotion();
+      if (motion) setPaneMotion({ ...motion, collapsed: motion.phase === "leaving" });
+    });
     const started = performance.now();
     const follow = () => {
       if (performance.now() - started < 240) { announceSplit("change", besideWidth()); requestAnimationFrame(follow); return; }
@@ -3127,7 +3132,7 @@ function App() {
     const start = weightsFor(before.length + 1).slice();
     start.splice(index + 1, 0, 0);
     setWeightOverride(normalized(start));
-    setPaneMotion({ slot, phase: "arriving" });
+    setPaneMotion({ slot, phase: "arriving", collapsed: true });
     requestAnimationFrame(() => requestAnimationFrame(() => easePaneWeights(normalized(weightsFor(now.length + 1)), () => {
       setWeightOverride(null);
       const element = paneSlot(slot).host();
@@ -4175,7 +4180,7 @@ function App() {
       const owns = () => slotHasKeyboard(slot);
       const page = () => slotPage(slot);
       const attachInput = () => <input ref={side.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) side.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />;
-      return <section ref={(element) => { pane.setHost(element); onCleanup(() => pane.setHost(undefined)); }} class="main-split" data-pane-slot={slot} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={position() === 0 ? "Pane B" : "Pane C"} style={{ flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": paneMotion()?.slot === slot ? "0px" : `${paneMinWidth(slot)}px`, ...(paneMotion()?.slot === slot ? { opacity: 0, overflow: "hidden" } : {}) }}>
+      return <section ref={(element) => { pane.setHost(element); onCleanup(() => pane.setHost(undefined)); }} class="main-split" data-pane-slot={slot} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={position() === 0 ? "Pane B" : "Pane C"} style={{ flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": paneMotion()?.slot === slot ? "0px" : `${paneMinWidth(slot)}px`, ...(paneMotion()?.slot === slot ? { opacity: 0, overflow: "hidden" } : {}), ...(paneMotion()?.slot === slot && paneMotion()!.collapsed ? { "margin-right": "0px" } : {}) }}>
         <div class="main-split-resize" role="separator" aria-label="Resize panes" aria-orientation="vertical" onPointerDown={(event) => startSplitResize(event, position() + 1)} />
         <Show when={parseFileView(slotView(slot))}>{(entries) => renderFileViewer(slot, entries())}</Show>
         <Show when={slotView(slot)?.startsWith("term:") && slotView(slot)!.slice("term:".length)} keyed>{(id) => renderTerminalDocument(slot, id)}</Show>
