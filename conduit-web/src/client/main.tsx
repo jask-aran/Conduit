@@ -2942,6 +2942,9 @@ function App() {
    * panes keep their widths: a width belongs to the position, not the document.
    */
   const SWAP_FADE_MS = 100;
+  // A chat is drawn once its transcript is in the pane, not merely loaded:
+  // it renders a moment after, and a crossfade before then shows it arrive.
+  const chatDrawn = (pane: PaneKey) => Boolean(paneElement(pane)?.querySelector(".thread, .empty-thread"));
   // A pane's last frame, held over its place while what is under it changes.
   const ghostOf = (element: HTMLElement) => {
     const box = element.getBoundingClientRect();
@@ -3007,9 +3010,7 @@ function App() {
         const placeRight = async () => {
           setSlotView(slot, aView);
           const id = aView.startsWith("chat:") ? aView.slice("chat:".length) : null;
-          const t0 = performance.now();
-          await waitFor(() => !id || paneSlot(slot).session.chat.loadedId() === id);
-          (window as unknown as { __swapT?: unknown[] }).__swapT = [Math.round(performance.now() - t0), paneSlot(slot).session.chat.loadedId(), id];
+          await waitFor(() => !id || (paneSlot(slot).session.chat.loadedId() === id && chatDrawn(slot)), 1500);
         };
         const placeLeft = async () => { if (isPaneView(bView)) { setPaneAOverride(null); await openInPaneA(bView); } else setPaneView("main", bView); };
         if (slide) await animateSwap(left, right, false, placeRight, placeLeft);
@@ -3056,7 +3057,7 @@ function App() {
         try {
           if (isPaneView(view)) { setPaneAOverride(null); await openInPaneA(view); } else setPaneAOverride(view);
           const id = view.startsWith("chat:") ? view.slice("chat:".length) : null;
-          await waitFor(() => !id || chat.loadedId() === id, 1500);
+          await waitFor(() => !id || (chat.loadedId() === id && chatDrawn("main")), 1500);
           const ghost = ghostOf(beside);
           batch(() => {
             movingDocuments = true;
