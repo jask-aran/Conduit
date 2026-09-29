@@ -3023,12 +3023,42 @@ function App() {
       target.unshift(0);
       setWeightOverride(paneShares());
       requestAnimationFrame(() => requestAnimationFrame(() => easePaneWeights(normalized(target), async () => {
-        const view = slotView(shownSlots()[0]!);
-        batch(() => { closePaneA(); setWeightOverride(null); setPaneMotion({ slot: "main", phase: "arriving" }); });
-        const id = view?.startsWith("chat:") ? view.slice("chat:".length) : null;
-        await waitFor(() => !id || chat.loadedId() === id, 1500);
-        setPaneMotion(null);
-        void element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SWAP_FADE_MS, easing: "ease-out" });
+        const next = shownSlots()[0]!;
+        const view = slotView(next);
+        const beside = paneSlot(next).host();
+        if (!view || !beside) { closePaneA(); setWeightOverride(null); setPaneMotion(null); return; }
+        // The next pane stays showing while pane A, collapsed, loads its
+        // document; then the two crossfade -- the pane's last frame, held
+        // over its place, out as pane A comes in there.
+        swappingPanes = true;
+        try {
+          if (isPaneView(view)) { setPaneAOverride(null); await openInPaneA(view); } else setPaneAOverride(view);
+          const id = view.startsWith("chat:") ? view.slice("chat:".length) : null;
+          await waitFor(() => !id || chat.loadedId() === id, 1500);
+          const box = beside.getBoundingClientRect();
+          const ghost = beside.cloneNode(true) as HTMLElement;
+          ghost.removeAttribute("data-pane-slot");
+          Object.assign(ghost.style, { position: "fixed", left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px`, margin: "0", zIndex: "40", pointerEvents: "none" });
+          document.body.append(ghost);
+          // A clone starts scrolled to the top; hold each scroller where it was.
+          const from = [...beside.querySelectorAll<HTMLElement>("*")];
+          const to = [...ghost.querySelectorAll<HTMLElement>("*")];
+          from.forEach((source, index) => { if (source.scrollTop || source.scrollLeft) { to[index]!.scrollTop = source.scrollTop; to[index]!.scrollLeft = source.scrollLeft; } });
+          batch(() => {
+            movingDocuments = true;
+            setSlotView(next, null);
+            movingDocuments = false;
+            setWeightOverride(null);
+            setPaneMotion(null);
+          });
+          await Promise.all([
+            element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SWAP_FADE_MS, easing: "ease-out" }).finished,
+            ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_FADE_MS, easing: "ease-out", fill: "forwards" }).finished,
+          ]).catch(() => undefined);
+          ghost.remove();
+        } finally {
+          swappingPanes = false;
+        }
       })));
     });
   };
