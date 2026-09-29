@@ -399,7 +399,7 @@ Steps:
     `workspace-comparison.tsx`. An entry gets a mode -- contents, changes,
     staged -- switched in its header, in place of today's jump to Source
     Control's Review.
-- **6e. Opening.** (Built for chats and pages; preview tabs wait on 6c.) A click opens in the focused pane, as a preview tab.
+- **6e. Opening.** (Built, drag to a pane included -- thirds, sources the sidebar, pages' chats, navigator files and rail tools; header drag and preview tabs wait.) A click opens in the focused pane, as a preview tab.
   Alt+click, or the pane's split button, opens to the side: the next pane,
   or a new one up to three. A tab dragged to a pane's edge splits there. A
   sidebar row goes to the pane already showing it.
