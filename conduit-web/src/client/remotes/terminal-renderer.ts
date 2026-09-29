@@ -124,6 +124,9 @@ function observeHostSize(host: HTMLElement, terminal: ResizableTerminal & Refres
   const fitNow = () => {
     frame = undefined;
     if (disposed || !host.isConnected || host.clientWidth <= 0 || host.clientHeight <= 0) return;
+    // A pane opening eases from nothing: sized mid-way, the shell would wrap its
+    // prompt to a sliver's width and keep it. Fit once the panes hold still.
+    if (document.body.classList.contains("panes-settling")) return void scheduleFit();
     applyFit(fit);
   };
   const scheduleFit = () => {
@@ -299,7 +302,8 @@ async function createXtermRenderer(host: HTMLElement, options: TerminalRendererO
     write: (bytes) => writeTerminal(terminal, bytes),
     input: (data) => terminal.input(data),
     focus: () => terminal.focus(),
-    fit: () => applyFit(fit),
+    // While panes ease, the host observer fits when they settle (observeHostSize).
+    fit: () => { if (!document.body.classList.contains("panes-settling")) applyFit(fit); },
     setFontSize: (fontSize) => { terminal.options.fontSize = fontSize; applyFit(fit); },
     repaint: () => repaintTerminal(terminal),
     resize: (cols, rows) => resizeTerminal(terminal, cols, rows),
