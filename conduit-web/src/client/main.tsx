@@ -3007,7 +3007,9 @@ function App() {
         const placeRight = async () => {
           setSlotView(slot, aView);
           const id = aView.startsWith("chat:") ? aView.slice("chat:".length) : null;
+          const t0 = performance.now();
           await waitFor(() => !id || paneSlot(slot).session.chat.loadedId() === id);
+          (window as unknown as { __swapT?: unknown[] }).__swapT = [Math.round(performance.now() - t0), paneSlot(slot).session.chat.loadedId(), id];
         };
         const placeLeft = async () => { if (isPaneView(bView)) { setPaneAOverride(null); await openInPaneA(bView); } else setPaneView("main", bView); };
         if (slide) await animateSwap(left, right, false, placeRight, placeLeft);
