@@ -2633,15 +2633,16 @@ function App() {
     if (!source) return;
     const remaining = source.ids.filter((id) => !group.ids.includes(id));
     let pane: PaneKey = target.pane;
-    if (target.zone !== "middle") {
-      const free = [0, 1].find((slot) => !slotOrder().includes(slot));
-      if (free === undefined) return;
-      const index = panesShown().indexOf(target.pane);
-      pane = free;
-      if (!setSlotView(free, `chat:${recent}`, false, target.zone === "right" ? index : Math.max(0, index - 1))) return;
-    }
+    // Moving: the new pane briefly shows the chat its source still shows.
     swappingPanes = true;
     try {
+      if (target.zone !== "middle") {
+        const free = [0, 1].find((slot) => !slotOrder().includes(slot));
+        if (free === undefined) return;
+        const index = panesShown().indexOf(target.pane);
+        pane = free;
+        if (!setSlotView(free, `chat:${recent}`, false, target.zone === "right" ? index : Math.max(0, index - 1))) return;
+      }
       const held = pane === target.pane ? tabsOf(pane)?.ids.filter((id) => !group.ids.includes(id)) ?? [] : [];
       const ids = [...held, ...group.ids].slice(-TAB_CAP);
       setPaneTabs((current) => ({
