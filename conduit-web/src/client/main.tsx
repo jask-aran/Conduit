@@ -2818,11 +2818,12 @@ function App() {
   };
   // Ctrl+Shift+2 with panes beside A: from elsewhere, back to the pane last
   // used; from a pane, to the next, round. Each lands where its focus last was.
-  const cyclePaneFocus = () => {
+  // `step` -1 goes the other way round (Alt+Shift+[).
+  const cyclePaneFocus = (step = 1) => {
     const panes: PaneKey[] = ["main", ...shownSlots()];
     const from = paneOf(document.activeElement);
     const at = from === null ? -1 : panes.indexOf(from);
-    const to: PaneKey = at >= 0 ? panes[(at + 1) % panes.length]! : panes.includes(keyboardPane()) ? keyboardPane() : "main";
+    const to: PaneKey = at >= 0 ? panes[(at + step + panes.length) % panes.length]! : panes.includes(keyboardPane()) ? keyboardPane() : "main";
     const last = lastPaneFocus.get(to);
     if (last?.isConnected && last.closest(paneSelector(to)) && last.getClientRects().length) {
       last.focus({ preventScroll: true });
@@ -3338,18 +3339,33 @@ function App() {
   };
   createEffect(on(() => [paneAView(), slotOrder().map((slot) => `${slot}=${slotView(slot)}`).join()] as const, () => { if (!swappingPanes) reconcileTabs(); }));
   createEffect(on(() => tabParams().join("|"), (value) => writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-tabs", value), { defer: true }));
-  // Ctrl+Tab and Ctrl+Shift+Tab step through the focused pane's tabs, in the
-  // row's order. A browser tab keeps these keys for itself; the desktop app
-  // and an installed app's window pass them on.
+  /*
+   * Stepping round, from anywhere: Alt+] and Alt+[ the focused pane's tabs,
+   * in the row's order; Alt+Shift+] and Alt+Shift+[ the panes. Ctrl+Tab and
+   * Ctrl+Shift+Tab also step tabs where the browser passes them on (the
+   * desktop app, an installed app's window); a browser tab keeps them.
+   */
   const cycleTabs = (event: KeyboardEvent) => {
-    if (event.key !== "Tab" || !event.ctrlKey || event.altKey || event.metaKey || isMobileLayout()) return;
+    if (isMobileLayout() || event.metaKey) return;
+    const bracket = event.altKey && !event.ctrlKey && (event.code === "BracketLeft" || event.code === "BracketRight");
+    const tab = event.key === "Tab" && event.ctrlKey && !event.altKey;
+    if (!bracket && !tab) return;
+    const back = tab ? event.shiftKey : event.code === "BracketLeft";
+    if (bracket && event.shiftKey) {
+      if (!splitShown()) return;
+      event.preventDefault();
+      event.stopPropagation();
+      // False only on the way to pane A with no focus of its own to go back to.
+      if (!cyclePaneFocus(back ? -1 : 1)) focusAnyPane("main");
+      return;
+    }
     const pane = keyboardPaneSlot() ?? "main";
     const list = tabsOf(pane);
     const at = list?.ids.indexOf(activeChatOf(pane) ?? "") ?? -1;
     if (!list || list.ids.length < 2 || at < 0) return;
     event.preventDefault();
     event.stopPropagation();
-    void switchTab(pane, list.ids[(at + (event.shiftKey ? -1 : 1) + list.ids.length) % list.ids.length]!);
+    void switchTab(pane, list.ids[(at + (back ? -1 : 1) + list.ids.length) % list.ids.length]!);
   };
   window.addEventListener("keydown", cycleTabs, true);
   onCleanup(() => window.removeEventListener("keydown", cycleTabs, true));
