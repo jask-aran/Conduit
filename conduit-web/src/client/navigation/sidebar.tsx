@@ -455,7 +455,7 @@ export function Sidebar(props: {
       clearSelection();
     };
     const click = (event: MouseEvent) => {
-      if (event.button !== 0 || event.ctrlKey || event.metaKey || selectedChatIds().size === 0) return;
+      if (event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey || selectedChatIds().size === 0) return;
       queueMicrotask(clearSelection);
     };
     window.addEventListener("keydown", keydown);
@@ -894,7 +894,9 @@ export function Sidebar(props: {
       onContextMenu={() => { if (!selected()) clearSelection(); }}
       onClick={(event: MouseEvent) => {
         if (guard.suppressClick) { guard.suppressClick = false; return; }
-        if (event.ctrlKey || event.metaKey) {
+        // Shift selects for bulk actions (Ctrl too, once a selection is under
+        // way); Ctrl alone opens the chat as a tab (main.tsx, openChatHere).
+        if (event.shiftKey || ((event.ctrlKey || event.metaKey) && selectedChatIds().size > 0)) {
           event.preventDefault();
           toggleChatSelection(menuProps.chat.id);
           return;
