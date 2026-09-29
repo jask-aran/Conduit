@@ -1,4 +1,5 @@
 /// <reference types="vite-plugin-pwa/client" />
+import { FileTypeIcon } from "./workspace/file-type-icon";
 import { focusSplitSection, splitSections } from "./dashboard/primitives/split-cursor";
 import { isConduitManagedProject } from "./navigation/sidebar-preferences";
 import type { ComputerLocation, ComputerPrefetchPayload } from "./api/contracts";
@@ -3486,11 +3487,7 @@ function App() {
           entries[at] = entry;
           if (replaced >= 0) entries.splice(replaced, 1);
         } else if (replaced >= 0) entries[replaced] = entry;
-        else {
-          // A new place's file joins its place's run, else the end.
-          const last = entries.reduce((found, item, index) => item.projectId === entry.projectId ? index : found, -1);
-          entries.splice(last >= 0 ? last + 1 : entries.length, 0, entry);
-        }
+        else entries.push(entry);
         let used = [entryKey, ...tabs.used.filter((item) => item !== entryKey)].filter((item) => entries.some((candidate) => fileEntryKey(candidate) === item));
         while (entries.length > FILE_TAB_CAP) {
           const drop = [...used].reverse().find((item) => item !== entryKey);
@@ -3559,8 +3556,9 @@ function App() {
     const row = createTabStrip({
       keys: () => { const list = fileTabsOf(pane, side); return list?.entries.length ? list.entries.map(fileEntryKey) : null; },
       place: (key) => key.slice(0, key.indexOf(":")),
-      placeLabel: (key) => placeLabelOf(key.slice(0, key.indexOf(":"))),
       title: (key) => key.slice(key.indexOf(":") + 1).split("/").pop() || key,
+      hint: (key) => `${placeLabelOf(key.slice(0, key.indexOf(":")))} / ${key.slice(key.indexOf(":") + 1)}`,
+      icon: (key) => <FileTypeIcon name={key.slice(key.indexOf(":") + 1)} />,
       // Lit on the side with the keyboard; the other side's showing file in the text colour.
       lit: () => { const shown = parseFileView(viewOf(pane)) ?? []; return shownFileSide(pane) === side && shown[side] ? fileEntryKey(shown[side]!) : null; },
       shown: (key) => { const shown = parseFileView(viewOf(pane)) ?? []; return Boolean(shown[side] && fileEntryKey(shown[side]!) === key); },
@@ -3581,8 +3579,11 @@ function App() {
   type TabStripOptions = {
     keys: () => string[] | null;
     place: (key: string) => string;
-    placeLabel: (key: string) => string;
+    // Without a place label the tabs are one run, unlabelled (a file viewer's).
+    placeLabel?: (key: string) => string;
     title: (key: string) => string;
+    hint?: (key: string) => string;
+    icon?: (key: string) => JSX.Element;
     lit: () => string | null;
     shown?: (key: string) => boolean;
     used: () => string[];
@@ -3597,7 +3598,7 @@ function App() {
     const groups = createMemo(() => {
       const runs: { place: string; keys: string[] }[] = [];
       for (const key of options.keys() ?? []) {
-        const place = options.place(key);
+        const place = options.placeLabel ? options.place(key) : "";
         if (runs.at(-1)?.place === place) runs.at(-1)!.keys.push(key);
         else runs.push({ place, keys: [key] });
       }
@@ -3645,16 +3646,17 @@ function App() {
     }}>
       <For each={groups()}>{(run) => {
         const current = () => run.keys.includes(options.lit() ?? "");
-        const label = () => options.placeLabel(run.keys[0]!);
+        const label = () => options.placeLabel?.(run.keys[0]!) ?? "";
         // The place's label goes to the tab of it used last.
         const recent = () => options.used().find((key) => run.keys.includes(key)) ?? run.keys[0]!;
         return <span class="pane-tab-group" classList={{ "pane-tab-group-current": current() }}>
-          <button type="button" class="pane-tab-group-label chat-header-place" tabIndex={-1} title={label()} {...(options.groupDrag ? { draggable: "true", "data-doc-view": options.dragView?.(recent()), ...options.groupDrag(run.keys) } : {})} onClick={() => { if (!current()) options.select(recent()); }}><span>{label()}</span></button>
+          <Show when={options.placeLabel}><button type="button" class="pane-tab-group-label chat-header-place" tabIndex={-1} title={label()} {...(options.groupDrag ? { draggable: "true", "data-doc-view": options.dragView?.(recent()), ...options.groupDrag(run.keys) } : {})} onClick={() => { if (!current()) options.select(recent()); }}><span>{label()}</span></button></Show>
           <For each={run.keys}>{(key) => {
             const lit = () => options.lit() === key;
             const name = () => options.title(key);
             return <span class="pane-tab" role="tab" data-tab={key} aria-selected={lit()} classList={{ "pane-tab-active": lit(), "pane-tab-shown": !lit() && Boolean(options.shown?.(key)), "pane-tab-unsaved": Boolean(options.unsaved?.(key)) }} draggable={lit() || !options.dragView ? undefined : "true"} data-doc-view={lit() ? undefined : options.dragView?.(key)}>
-              <button type="button" class="pane-tab-open" tabIndex={-1} title={`${label()} / ${name()}`} onClick={() => { if (!lit()) options.select(key); }}>
+              <button type="button" class="pane-tab-open" tabIndex={-1} title={options.hint?.(key) ?? `${label()} / ${name()}`} onClick={() => { if (!lit()) options.select(key); }}>
+                {options.icon?.(key)}
                 <Show when={options.live?.(key)}><i class="pane-tab-live" aria-label="Running" /></Show>
                 <span class="pane-tab-title" data-text={name()}><span>{name()}</span></span>
               </button>
@@ -3668,7 +3670,7 @@ function App() {
           <MenuTrigger class="pane-tab-action pane-tabs-more" tabIndex={-1} aria-label={`${folded().length} more tabs`} title={`${folded().length} more tabs`}><EllipsisIcon /></MenuTrigger>
           <MenuContent class="pane-tabs-menu">
             <For each={groups().filter((run) => run.keys.some((key) => folded().includes(key)))}>{(run) =>
-              <MenuGroup><MenuLabel>{options.placeLabel(run.keys[0]!)}</MenuLabel>
+              <MenuGroup><Show when={options.placeLabel}><MenuLabel>{options.placeLabel?.(run.keys[0]!)}</MenuLabel></Show>
                 <For each={run.keys.filter((key) => folded().includes(key))}>{(key) => <MenuItem textValue={options.title(key)} onSelect={() => options.select(key)}>{options.title(key)}</MenuItem>}</For>
               </MenuGroup>}
             </For>
