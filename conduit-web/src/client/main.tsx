@@ -430,11 +430,9 @@ function ChatHeader(props: {
   actions?: JSX.Element;
   /** After the title: the pane's own swap and close, with two or more panes. */
   tabActions?: JSX.Element;
-  /** A pane's other chat tabs, either side of the active one's breadcrumb (6c). */
-  tabsBefore?: JSX.Element;
-  tabsAfter?: JSX.Element;
-  /** The active tab is the pane's preview tab: drawn in italics. */
-  previewTab?: boolean;
+  /** A pane's chat tabs, when it has two or more (6c): they stand in for the
+   *  breadcrumb, and the active tab's place moves to the right. */
+  tabs?: JSX.Element;
 }) {
   // What a project or workspace page calls itself in its own menu.
   const placeKind = () => props.project && isWorkspace(props.project) ? "workspace" : "project";
@@ -484,7 +482,9 @@ function ChatHeader(props: {
       </Show>
       {/* A project or workspace page is that place, named as the sidebar names it; a
           chat or the Conduit dashboard sits under its place. */}
-      <nav aria-label="breadcrumb" class="chat-header-title" classList={{ "pane-tab-preview": props.previewTab }}>{props.tabsBefore}<Show when={!props.dashboard && !props.alone}><Show when={props.onOpenPlace} fallback={<span>{projectLabel()}</span>}><button type="button" class="breadcrumb-link" tabIndex={-1} onClick={() => props.onOpenPlace!(props.project)}>{projectLabel()}</button></Show><span class="breadcrumb-separator" aria-hidden="true" /></Show><strong>{props.title}</strong>{props.tabsAfter}{props.tabActions}</nav>
+      <Show when={props.tabs} fallback={<nav aria-label="breadcrumb" class="chat-header-title"><Show when={!props.dashboard && !props.alone}><Show when={props.onOpenPlace} fallback={<span>{projectLabel()}</span>}><button type="button" class="breadcrumb-link" tabIndex={-1} onClick={() => props.onOpenPlace!(props.project)}>{projectLabel()}</button></Show><span class="breadcrumb-separator" aria-hidden="true" /></Show><strong>{props.title}</strong></nav>}>
+        <nav aria-label="Tabs" class="chat-header-title chat-header-tabs">{props.tabs}</nav>
+      </Show>
       {props.badge}
       <Show when={!props.dashboard && props.chat}>
         <span class="chat-status-line" data-state={statusTone()} role="status" aria-label={`Runtime status: ${statusLabel()}`} aria-live="polite">
@@ -492,6 +492,9 @@ function ChatHeader(props: {
             <VoiceWaveform class="chat-status-waveform" history={waveformHistory} level={waveformLevel} peak={waveformPeak} state={waveformState()} variant="compact" barDensity={3} ariaLabel="Microphone input level" />
           </Show>
         </span>
+      </Show>
+      <Show when={props.tabs && !props.dashboard && !props.alone}>
+        <Show when={props.onOpenPlace} fallback={<span class="pane-tab-place">{projectLabel()}</span>}><button type="button" class="pane-tab-place" tabIndex={-1} title={`Open ${projectLabel()}`} onClick={() => props.onOpenPlace!(props.project)}>{projectLabel()}</button></Show>
       </Show>
       <HeaderActions>
         <Button variant="ghost" size="icon-sm" class="search-trigger" tabIndex={-1} aria-label="Search chats" title="Search chats" onClick={props.onOpenSearch}><SearchIcon /></Button>
@@ -529,6 +532,8 @@ function ChatHeader(props: {
           </MenuContent>
         </Menu></Show>
         {props.actions}
+        {/* The pane's own swap and close, at its right edge: they act on the pane. */}
+        {props.tabActions}
       </HeaderActions>
     </header>
   </>;
@@ -3259,7 +3264,8 @@ function App() {
         ids = ids.filter((item) => item !== drop);
         used = used.filter((item) => item !== drop);
       }
-      next[key] = { ids, preview: kept ? tabs.preview : id, used };
+      // A pane's first chat is its own, not a preview.
+      next[key] = { ids, preview: kept ? tabs.preview : tabs.ids.length ? id : null, used };
       // A chat is a tab in one pane at a time.
       for (const [other, list] of Object.entries(next)) {
         if (other === key || !list.ids.includes(id)) continue;
@@ -3284,8 +3290,7 @@ function App() {
     const tabs = tabsOf(pane);
     if (!tabs || tabs.ids.length < 2) return closePane(pane);
     if (activeChatOf(pane) === id) {
-      const at = tabs.ids.indexOf(id);
-      await switchTab(pane, tabs.ids[at + 1] ?? tabs.ids[at - 1]!);
+      await switchTab(pane, tabs.used.find((item) => item !== id && tabs.ids.includes(item)) ?? tabs.ids.find((item) => item !== id)!);
     }
     setPaneTabs((current) => {
       const list = current[String(pane)];
@@ -3312,23 +3317,22 @@ function App() {
     if (first) next[String(b)] = first;
     return next;
   });
+  // Tabs keep their order and width: switching changes only which is lit.
   const paneTabRow = (pane: PaneKey) => {
     const tabs = () => { const list = tabsOf(pane); return list && list.ids.length > 1 && !isMobileLayout() ? list : null; };
-    const side = (before: boolean) => <Show when={tabs()}>{(list) => {
-      const ids = () => { const at = list().ids.indexOf(activeChatOf(pane) ?? ""); return at < 0 ? [] : before ? list().ids.slice(0, at) : list().ids.slice(at + 1); };
-      return <For each={ids()}>{(id) =>
-        <span class="pane-tab" classList={{ "pane-tab-preview": list().preview === id }} draggable="true" data-doc-view={`chat:${id}`}>
-          <button type="button" class="pane-tab-open" tabIndex={-1} title={viewName(`chat:${id}`)} onClick={() => void switchTab(pane, id)} onDblClick={() => { void switchTab(pane, id).then(() => keepTab(pane)); }}>
-            <Show when={runtime.getProcess(id)}><i class="pane-tab-live" aria-label="Running" /></Show>{viewName(`chat:${id}`)}
-          </button>
-          <button type="button" class="pane-tab-close" tabIndex={-1} aria-label={`Close ${viewName(`chat:${id}`)}`} title="Close tab" onClick={() => void closeTab(pane, id)}><XIcon /></button>
-        </span>}
-      </For>;
-    }}</Show>;
     return {
-      get tabsBefore() { return side(true); },
-      get tabsAfter() { return <>{side(false)}<Show when={tabs()}><button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Close this tab" title="Close tab" onClick={() => void closeTab(pane, activeChatOf(pane)!)}><XIcon /></button></Show></>; },
-      get previewTab() { const list = tabs(); return Boolean(list && list.preview === activeChatOf(pane)); },
+      get tabs() {
+        return <Show when={tabs()}>{(list) => <For each={list().ids}>{(id) => {
+          const active = () => activeChatOf(pane) === id;
+          const name = () => viewName(`chat:${id}`);
+          return <span class="pane-tab" role="tab" aria-selected={active()} classList={{ "pane-tab-active": active(), "pane-tab-preview": list().preview === id }} draggable={active() ? undefined : "true"} data-doc-view={active() ? undefined : `chat:${id}`}>
+            <button type="button" class="pane-tab-open" tabIndex={-1} title={name()} onClick={() => { if (!active()) void switchTab(pane, id); }} onDblClick={() => keepTab(pane)}>
+              <Show when={runtime.getProcess(id)}><i class="pane-tab-live" aria-label="Running" /></Show><span>{name()}</span>
+            </button>
+            <button type="button" class="pane-tab-close" tabIndex={-1} aria-label={`Close ${name()}`} title="Close tab" onClick={() => void closeTab(pane, id)}><XIcon /></button>
+          </span>;
+        }}</For>}</Show>;
+      },
     };
   };
   // Pane A's close hands it the next pane's chat or page.
@@ -4405,9 +4409,7 @@ function App() {
     onDelete?: () => void;
     actions?: JSX.Element;
     tabActions?: JSX.Element;
-    tabsBefore?: JSX.Element;
-    tabsAfter?: JSX.Element;
-    previewTab?: boolean;
+    tabs?: JSX.Element;
     notice?: JSX.Element;
     place?: ReturnType<typeof chatPlace>;
     modelSelector?: boolean;
@@ -4416,7 +4418,7 @@ function App() {
     const current = props.session;
     const surfaceChat = current.chat;
     return <>
-      <ChatHeader project={props.project} onOpenPlace={openPlace} title={surfaceChat.title() || (surfaceChat.status() === "active" ? "Untitled chat" : "New chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} contextMetrics={contextMetrics} composerStatus={current.composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} actions={props.actions} tabActions={props.tabActions} tabsBefore={props.tabsBefore} tabsAfter={props.tabsAfter} previewTab={props.previewTab} />
+      <ChatHeader project={props.project} onOpenPlace={openPlace} title={surfaceChat.title() || (surfaceChat.status() === "active" ? "Untitled chat" : "New chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} contextMetrics={contextMetrics} composerStatus={current.composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} actions={props.actions} tabActions={props.tabActions} tabs={props.tabs} />
       {props.notice}
       <Conversation chat={surfaceChat} busy={surfaceChat.presentation().kind === "opening_live"} stackRef={props.stackRef}
         transcript={<Transcript chat={surfaceChat} supports={current.capability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} />}
