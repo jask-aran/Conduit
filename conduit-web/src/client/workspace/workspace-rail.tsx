@@ -1,6 +1,6 @@
 import { For, Show } from "solid-js";
 import { Columns3Icon, CommandIcon, FolderIcon, GitCompareArrowsIcon, LayoutTemplateIcon, MessageSquareIcon, SearchIcon, TerminalIcon } from "lucide-solid";
-import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from "@/components/primitives";
+import { Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuTrigger } from "@/components/primitives";
 import { isSplitView, type PanelTab, type SplitView } from "./workspace-types";
 
 export const WORKSPACE_TOOL_LABELS: Record<PanelTab, string> = { files: "Files", diff: "Source Control", chat: "Chat review", terminal: "Terminal" };
@@ -74,13 +74,13 @@ export function WorkspaceRail(props: {
       <Menu modal={false} placement="left-end">
         <MenuTrigger class="workspace-rail-action" tabIndex={-1} aria-label="Pane layouts" title="Pane layouts"><LayoutTemplateIcon /></MenuTrigger>
         <MenuContent class="pane-layouts">
-          <MenuLabel>Pane widths</MenuLabel>
+          <MenuGroup><MenuLabel>Pane widths</MenuLabel>
           <For each={layouts()}>{(weights) =>
             <MenuItem onSelect={() => props.onLayout(weights)} textValue={weights.join(":")}>
               <span class="pane-layout-glyph" aria-hidden="true"><For each={weights}>{(weight) => <i style={{ flex: `${weight} 1 0` }} />}</For></span>
               <span>{weights.every((weight) => weight === weights[0]) ? "Even" : weights.join(" : ")}</span>
             </MenuItem>}
-          </For>
+          </For></MenuGroup>
         </MenuContent>
       </Menu>
     </div>}</Show>
