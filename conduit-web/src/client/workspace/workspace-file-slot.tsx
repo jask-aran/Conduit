@@ -154,6 +154,10 @@ export default function WorkspaceFileSlot(props: {
   headerPrefix?: JSX.Element;
   /** Before the close button: the file viewer's split. */
   headerSuffix?: JSX.Element;
+  /** A file viewer's tabs for this side (6c): they name the file, and close it. */
+  headerTabs?: JSX.Element;
+  /** At the header's end: the pane's own actions, on a viewer's last side. */
+  headerEnd?: JSX.Element;
   /** The suffix's actions again, for the header's overflow menu when it is too narrow for them. */
   headerMenuItems?: JSX.Element;
   height?: string;
@@ -466,7 +470,7 @@ export default function WorkspaceFileSlot(props: {
   }</Show>;
   const textHeader = () => <>
     <Show when={props.headerPrefix}>{props.headerPrefix}</Show>
-    <div class="workspace-preview-file" title={props.path ?? ""}><FileTypeIcon name={props.path ?? ""} /><span>{props.path}</span></div>
+    <Show when={props.headerTabs} fallback={<div class="workspace-preview-file" title={props.path ?? ""}><FileTypeIcon name={props.path ?? ""} /><span>{props.path}</span></div>}>{props.headerTabs}</Show>
     {gitControls()}
     <span class="workspace-preview-dirty" data-dirty={hasUnsavedChanges()} aria-hidden="true" />
     <Show when={hasUnsavedChanges()}>
@@ -487,7 +491,8 @@ export default function WorkspaceFileSlot(props: {
         <MenuItem onSelect={() => void download()}><DownloadIcon />Download</MenuItem>
       </MenuContent>
     </Menu>
-    <Show when={props.closable}><WorkbenchButton type="button" class="workspace-preview-action workspace-preview-close" aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><XIcon /></WorkbenchButton></Show>
+    <Show when={props.closable && !props.headerTabs}><WorkbenchButton type="button" class="workspace-preview-action workspace-preview-close" aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><XIcon /></WorkbenchButton></Show>
+    {props.headerEnd}
   </>;
   const previewStatus = (file: FileMetadata & { kind: FileKind; mime: string }) => <WorkbenchStatus commands={
     <span class="workspace-editor-metadata">Working copy</span>
@@ -516,14 +521,15 @@ export default function WorkspaceFileSlot(props: {
       <Show when={asset()}>{(file) => <>
         <header class="workspace-preview-header">
           <Show when={props.headerPrefix}>{props.headerPrefix}</Show>
-          <div class="workspace-preview-file" title={file().path}><FileTypeIcon name={file().path} /><span>{file().path}</span></div>
+          <Show when={props.headerTabs} fallback={<div class="workspace-preview-file" title={file().path}><FileTypeIcon name={file().path} /><span>{file().path}</span></div>}>{props.headerTabs}</Show>
           {gitControls()}
           <WorkbenchButton type="button" class="workspace-preview-action" aria-label="Download file" title="Download file" onClick={() => void download()}><DownloadIcon /></WorkbenchButton>
           <WorkbenchButton type="button" class="workspace-preview-copy" aria-label="Copy file path" title="Copy file path" onClick={() => copy(file().path)}><CopyIcon /></WorkbenchButton>
           {props.headerSuffix}
-          <Show when={props.closable}>
+          <Show when={props.closable && !props.headerTabs}>
             <WorkbenchButton type="button" class="workspace-preview-action workspace-preview-close" aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><XIcon /></WorkbenchButton>
           </Show>
+          {props.headerEnd}
         </header>
         <Show when={!file().url && !file().oversize && file().kind !== "binary"}>
           <div class="workspace-panel-empty" role="status"><Spinner /> Loading {formatKind(file().kind).toLowerCase()}…</div>

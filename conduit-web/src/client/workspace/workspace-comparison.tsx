@@ -32,7 +32,7 @@ export interface ComparisonViewState {
   position: number;
 }
 
-export default function WorkspaceComparison(props: { comparison: ComparisonPayload; sourceKey: string; viewState: ComparisonViewState; headerAction?: JSX.Element; comparisonSource?: JSX.Element; commentHighlights?: readonly CommentHighlight[]; reveal?: ReviewNavigationRequest | null; onViewStateChange?: (state: ComparisonViewState) => void; onAnnotate?: (selection: AnnotationSelection, note: string) => boolean }) {
+export default function WorkspaceComparison(props: { comparison: ComparisonPayload; sourceKey: string; viewState: ComparisonViewState; headerAction?: JSX.Element; headerTabs?: JSX.Element; headerEnd?: JSX.Element; comparisonSource?: JSX.Element; commentHighlights?: readonly CommentHighlight[]; reveal?: ReviewNavigationRequest | null; onViewStateChange?: (state: ComparisonViewState) => void; onAnnotate?: (selection: AnnotationSelection, note: string) => boolean }) {
   let host!: HTMLDivElement;
   let activeView: EditorView | undefined;
   let captureReview = () => ({ ...props.viewState });
@@ -290,7 +290,7 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
 
   return <section class="workspace-comparison">
     <header class="workspace-preview-header">
-      <div class="workspace-preview-file" title={props.comparison.path}><FileTypeIcon name={props.comparison.path} /><span>{props.comparison.path}</span></div>
+      <Show when={props.headerTabs} fallback={<div class="workspace-preview-file" title={props.comparison.path}><FileTypeIcon name={props.comparison.path} /><span>{props.comparison.path}</span></div>}>{props.headerTabs}</Show>
       {props.headerAction}
       <Show when={props.comparison.kind === "text"}>
         <div class="workspace-editor-header-tools">
@@ -299,6 +299,7 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
           <WorkbenchButton aria-label={layout() === "split" ? "Show unified diff" : "Show side-by-side diff"} aria-pressed={layout() === "split"} title={layout() === "split" ? "Show unified diff" : "Show side-by-side diff"} onClick={() => setLayout(layout() === "split" ? "unified" : "split")}><Columns2Icon /></WorkbenchButton>
         </div>
       </Show>
+      {props.headerEnd}
     </header>
     <Show when={props.comparison.kind === "text"} fallback={<div class="workspace-panel-empty">{props.comparison.kind === "unavailable" ? props.comparison.message : ""}</div>}>
       <div class="workspace-comparison-content" data-layout={layout()}>
