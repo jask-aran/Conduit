@@ -3347,10 +3347,10 @@ function App() {
       const runs = groups();
       if (!tabs() || groupElements.length !== runs.length) return setFolded([]);
       const room = strip.clientWidth;
-      if (groupElements.reduce((sum, element) => sum + element.getBoundingClientRect().width + (element === groupElements[0] ? 0 : 25), 0) <= room) return setFolded([]);
+      if (groupElements.reduce((sum, element) => sum + element.getBoundingClientRect().width + (element === groupElements[0] ? 0 : 33), 0) <= room) return setFolded([]);
       // Each tab with the gap and middot before it; each place with its label and the rule before it.
-      const width = new Map(tabElements.map((element) => [element.dataset.tab!, element.getBoundingClientRect().width + 12]));
-      const labels = groupElements.map((element, index) => (element.querySelector<HTMLElement>(".pane-tab-group-label")?.getBoundingClientRect().width ?? 0) + 8 + (index ? 25 : 0));
+      const width = new Map(tabElements.map((element) => [element.dataset.tab!, element.getBoundingClientRect().width + 10]));
+      const labels = groupElements.map((element, index) => (element.querySelector<HTMLElement>(".pane-tab-group-label")?.getBoundingClientRect().width ?? 0) + 8 + (index ? 33 : 0));
       const active = activeChatOf(pane);
       const home = runs.findIndex((run) => run.ids.includes(active ?? ""));
       let budget = room - 28 - (width.get(active ?? "") ?? 0) - (labels[home] ?? 0);
