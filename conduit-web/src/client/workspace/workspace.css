@@ -4,7 +4,7 @@
   --workspace-git-modified: #d19a66;
 }
 
-.workspace-panel, .main-split, .chat-main > .workspace-split-surface, .pane-a-tool-host {
+.workspace-panel, .main-split, .chat-main > .workspace-split-surface, .pane-a-tool-host, .chat-main > .pane-terminal {
   --workbench-bar-height: 28px;
   --workbench-control-size: 22.4px;
   --workbench-gap: 2.4px;
@@ -706,3 +706,17 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 }
 
 }
+/* A shell as a pane's document: the terminal fills the pane, its header
+   carrying the pane's swap and close. */
+.pane-terminal { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; }
+.pane-terminal .terminal-pane-identity .pane-tab-actions { margin-left: auto; }
+.pane-terminal-gone { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px; color: var(--muted-foreground); font-size: 12px; }
+/* The dock's Terminal as a navigator: its shells, and a new one. */
+.terminal-navigator { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 2px; overflow: auto; padding: 8px; }
+.terminal-navigator .split-row[data-open] { color: var(--foreground); }
+.terminal-navigator .split-row[data-open] .split-row-primary { font-weight: 600; }
+.terminal-navigator-end { display: inline-flex; width: 20px; height: 20px; align-items: center; justify-content: center; border-radius: var(--radius-md); color: var(--muted-foreground); opacity: 0; }
+.terminal-navigator .split-row:hover .terminal-navigator-end, .terminal-navigator .split-row:focus-visible .terminal-navigator-end { opacity: 1; }
+.terminal-navigator-end:hover { background: var(--accent); color: var(--foreground); }
+.terminal-navigator-end svg { width: 14px; height: 14px; }
+.terminal-navigator-empty, .terminal-navigator-error { margin: 0; padding: 8px; color: var(--muted-foreground); font-size: 12px; }
