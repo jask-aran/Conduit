@@ -2934,8 +2934,8 @@ function App() {
     check();
   });
   /*
-   * The swap's motion. By default both panes fade out, the documents change
-   * places, and both fade in at their new places' widths. With Shift, the
+   * The swap's motion. By default both panes' last frames stay up while the
+   * documents change places and load under them, then the two crossfade. With Shift, the
    * slide being compared: the right pane fades out, the left slides over into
    * its place unchanged -- no width change, so nothing re-renders while it
    * moves -- and what was on the right fades in on the left. Either way the
@@ -2968,20 +2968,7 @@ function App() {
       ]);
     }
   };
-  const crossfadeSwap = (left: HTMLElement, right: HTMLElement, place: () => Promise<void>) => crossfadePanes([left, right], place);
-  const crossfadePanes = async (both: HTMLElement[], place: () => Promise<void>) => {
-    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!still) await Promise.all(both.map((element) => element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_FADE_MS, easing: "ease-out", fill: "forwards" }).finished));
-    for (const element of both) element.style.opacity = "0";
-    both.forEach((element) => element.getAnimations().forEach((animation) => animation.cancel()));
-    try { await place(); } finally {
-      // A reorder moves the elements themselves; find them again where they are.
-      await Promise.all(both.map(async (element) => {
-        if (!still) await element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SWAP_FADE_MS, easing: "ease-out" }).finished;
-        element.style.opacity = "";
-      }));
-    }
-  };
+  const crossfadeSwap = (left: HTMLElement, right: HTMLElement, place: () => Promise<void>) => crossfadeUnder([left, right], place);
   const animateSwap = async (left: HTMLElement, right: HTMLElement, reorder: boolean, placeRight: () => Promise<void> | void, placeLeft: () => Promise<void> | void) => {
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (!still) {
