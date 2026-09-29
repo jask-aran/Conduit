@@ -171,6 +171,7 @@ svg.lucide { stroke-width: 2.4; }
 .chat-header-title .pane-tab { position: relative; display: inline-flex; max-width: 220px; height: 24px; flex: none; align-items: center; overflow: visible; border-radius: var(--radius-md); }
 .pane-tab + .pane-tab { margin-left: 10px; }
 .pane-tab + .pane-tab::before { position: absolute; left: -7.2px; color: color-mix(in oklch, var(--foreground), transparent 70%); content: "·"; pointer-events: none; }
+.pane-tab[data-lead]::before { content: none; }
 .pane-tab:hover { background: var(--accent); }
 .pane-tab-open { display: inline-flex; min-width: 0; height: 100%; flex: 1; align-items: center; gap: 5.6px; padding: 0 4px; border: 0; background: transparent; color: color-mix(in oklch, var(--foreground), transparent 45%); font: inherit; font-weight: 450; }
 .chat-header-title .pane-tab-title { display: inline-flex; min-width: 0; flex-direction: column; overflow: hidden; }

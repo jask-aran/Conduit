@@ -126,8 +126,8 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-turn-navigation { display: flex; align-items: center; }
 .workspace-preview-header { flex-wrap: nowrap; font: var(--workbench-font-size)/1.45 var(--font-sans); }
 .workspace-preview-header > .workspace-preview-file { min-width: 0; }
-.workspace-preview-header button { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 4px; min-width: var(--workbench-control-size); height: var(--workbench-control-size); min-height: 0; padding: 0 5px; color: var(--muted-foreground); font: inherit; }
-.workspace-preview-header button svg { width: var(--workbench-icon-size); height: var(--workbench-icon-size); }
+.workspace-preview-header button:not(.pane-tabs button) { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 4px; min-width: var(--workbench-control-size); height: var(--workbench-control-size); min-height: 0; padding: 0 5px; color: var(--muted-foreground); font: inherit; }
+.workspace-preview-header button:not(.pane-tabs button) svg { width: var(--workbench-icon-size); height: var(--workbench-icon-size); }
 .workspace-preview-header button[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
 .workspace-preview-header > button { order: 2; }
 .workspace-preview-header > .workspace-file-actions { display: flex; flex: none; align-items: center; gap: 2px; order: 4; }
