@@ -3201,20 +3201,19 @@ function App() {
   /*
    * Chat tabs (panes-and-rail.md, 6c). A pane showing a chat holds up to
    * five; its view is the active one, the only one mounted, and switching is
-   * a document switch in place. A chat opened into the pane replaces its
-   * preview tab, or else joins as the preview; typing or a double-click keeps
-   * it. Anything but a chat takes the pane and its tabs close. Drafts are kept
-   * per chat and each pane's transcript keeps scroll positions, so a tab keeps
-   * what a remount would lose.
+   * a document switch in place. A plain open replaces the active tab; Ctrl, a
+   * drop on the pane or Alt with no room adds one. Anything but a chat takes
+   * the pane and its tabs close. Drafts are kept per chat and each pane's
+   * transcript keeps scroll positions, so a tab keeps what a remount would lose.
    */
-  type PaneTabs = { ids: string[]; preview: string | null; used: string[] };
+  type PaneTabs = { ids: string[]; used: string[] };
   const TAB_CAP = 5;
   const [paneTabs, setPaneTabs] = createSignal<Record<string, PaneTabs>>(tabsFromParams(launchUrl.searchParams));
   const tabsOf = (pane: PaneKey) => paneTabs()[String(pane)] ?? null;
   // The place a chat tab belongs to, which groups it.
   const tabPlace = (id: string) => catalogue.projects().find((item) => item.sessions.some((chat) => chat.id === id))?.id ?? "chats";
   const activeChatOf = (pane: PaneKey) => { const view = viewOf(pane); return view?.startsWith("chat:") ? view.slice("chat:".length) : null; };
-  // The next chat opened into these panes is kept, not a preview (Alt with no room).
+  // The next chat opened into these panes is added as a tab rather than replacing the active one.
   const keepNext = new Set<string>();
   function tabsFromParams(params: URLSearchParams): Record<string, PaneTabs> {
     const order = params.getAll("pane").filter(isSplitView).map((_, index) => index);
@@ -3224,9 +3223,8 @@ function App() {
       const at = Number(position);
       const key = at === 0 ? "main" : order[at - 1] === undefined ? null : String(order[at - 1]);
       if (key === null || !list) continue;
-      const entries = list.split(",").filter(Boolean).slice(0, TAB_CAP);
-      const ids = entries.map((entry) => entry.replace(/^~/, ""));
-      found[key] = { ids, preview: entries.find((entry) => entry.startsWith("~"))?.slice(1) ?? null, used: [...ids] };
+      const ids = list.split(",").filter(Boolean).slice(0, TAB_CAP);
+      found[key] = { ids, used: [...ids] };
     }
     return found;
   }
@@ -3234,7 +3232,7 @@ function App() {
     const panes: PaneKey[] = ["main", ...slotOrder().filter((slot) => slotView(slot))];
     return panes.flatMap((pane, position) => {
       const tabs = tabsOf(pane);
-      return tabs && tabs.ids.length > 1 ? [`${position}:${tabs.ids.map((id) => id === tabs.preview ? `~${id}` : id).join(",")}`] : [];
+      return tabs && tabs.ids.length > 1 ? [`${position}:${tabs.ids.join(",")}`] : [];
     });
   };
   const reconcileTabs = () => {
@@ -3247,14 +3245,16 @@ function App() {
       if (pane === "main" && !view) continue;
       if (!view?.startsWith("chat:")) { delete next[key]; continue; }
       const id = view.slice("chat:".length);
-      const tabs = next[key] ?? { ids: [], preview: null, used: [] };
+      const tabs = next[key] ?? { ids: [], used: [] };
       if (tabs.ids.includes(id)) { if (tabs.used[0] !== id) next[key] = { ...tabs, used: [id, ...tabs.used.filter((item) => item !== id)] }; continue; }
       let ids = [...tabs.ids];
       let used = tabs.used.filter((item) => ids.includes(item));
-      const kept = keepNext.delete(key);
-      if (!kept && tabs.preview && ids.includes(tabs.preview)) {
-        ids = ids.filter((item) => item !== tabs.preview);
-        used = used.filter((item) => item !== tabs.preview);
+      // A plain open replaces the active tab; only Ctrl (keepNext) adds one.
+      const adding = keepNext.delete(key);
+      const replaced = adding ? undefined : used.find((item) => ids.includes(item));
+      if (replaced) {
+        ids = ids.filter((item) => item !== replaced);
+        used = used.filter((item) => item !== replaced);
       }
       // Tabs from one place stay together: beside the active tab when it is
       // from there, else at the end of that place's run, else after the
@@ -3273,22 +3273,17 @@ function App() {
         ids = ids.filter((item) => item !== drop);
         used = used.filter((item) => item !== drop);
       }
-      // A pane's first chat is its own, not a preview.
-      next[key] = { ids, preview: kept ? tabs.preview : tabs.ids.length ? id : null, used };
+      next[key] = { ids, used };
       // A chat is a tab in one pane at a time.
       for (const [other, list] of Object.entries(next)) {
         if (other === key || !list.ids.includes(id)) continue;
-        next[other] = { ids: list.ids.filter((item) => item !== id), preview: list.preview === id ? null : list.preview, used: list.used.filter((item) => item !== id) };
+        next[other] = { ids: list.ids.filter((item) => item !== id), used: list.used.filter((item) => item !== id) };
       }
     }
     setPaneTabs(next);
   };
   createEffect(on(() => [paneAView(), slotOrder().map((slot) => `${slot}=${slotView(slot)}`).join()] as const, () => { if (!swappingPanes) reconcileTabs(); }));
-  const keepTab = (pane: PaneKey) => {
-    const tabs = tabsOf(pane);
-    if (!tabs?.preview || tabs.preview !== activeChatOf(pane)) return;
-    setPaneTabs((current) => ({ ...current, [String(pane)]: { ...tabs, preview: null } }));
-  };
+
   const switchTab = async (pane: PaneKey, id: string) => {
     setKeyboardPane(pane);
     if (pane === "main") await openInPaneA(`chat:${id}`);
@@ -3303,7 +3298,7 @@ function App() {
     }
     setPaneTabs((current) => {
       const list = current[String(pane)];
-      return list ? { ...current, [String(pane)]: { ids: list.ids.filter((item) => item !== id), preview: list.preview === id ? null : list.preview, used: list.used.filter((item) => item !== id) } } : current;
+      return list ? { ...current, [String(pane)]: { ids: list.ids.filter((item) => item !== id), used: list.used.filter((item) => item !== id) } } : current;
     });
   };
   // A chat open as a background tab anywhere is gone to, not opened again.
@@ -3388,8 +3383,8 @@ function App() {
           <For each={run.ids}>{(id) => {
             const active = () => activeChatOf(pane) === id;
             const name = () => viewName(`chat:${id}`);
-            return <span class="pane-tab" role="tab" data-tab={id} aria-selected={active()} classList={{ "pane-tab-active": active(), "pane-tab-preview": tabs()?.preview === id }} draggable={active() ? undefined : "true"} data-doc-view={active() ? undefined : `chat:${id}`}>
-              <button type="button" class="pane-tab-open" tabIndex={-1} title={`${label()} / ${name()}`} onClick={() => { if (!active()) void switchTab(pane, id); }} onDblClick={() => keepTab(pane)}>
+            return <span class="pane-tab" role="tab" data-tab={id} aria-selected={active()} classList={{ "pane-tab-active": active() }} draggable={active() ? undefined : "true"} data-doc-view={active() ? undefined : `chat:${id}`}>
+              <button type="button" class="pane-tab-open" tabIndex={-1} title={`${label()} / ${name()}`} onClick={() => { if (!active()) void switchTab(pane, id); }}>
                 <Show when={runtime.getProcess(id)}><i class="pane-tab-live" aria-label="Running" /></Show>
                 <span class="pane-tab-title" data-text={name()}><span>{name()}</span></span>
               </button>
@@ -4559,7 +4554,7 @@ function App() {
       }} />
     </Modal>
     <div class="workspace-layout" ref={(element) => { const observer = new ResizeObserver(() => setLayoutWidth(element.clientWidth)); observer.observe(element); onCleanup(() => observer.disconnect()); }}>
-    <main data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} onInput={() => keepTab("main")} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0 } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
+    <main data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0 } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
       <Show when={splitDropActive()}><div class="main-split-drop" aria-hidden="true" /></Show>
       {/* Pane A holding a file viewer or a tool, over its route (5f). */}
       <Show when={parseFileView(paneAOverride())}>{(entries) => renderFileViewer("main", entries())}</Show>
@@ -4666,7 +4661,7 @@ function App() {
       const owns = () => slotHasKeyboard(slot);
       const page = () => slotPage(slot);
       const attachInput = () => <input ref={side.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) side.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />;
-      return <section ref={(element) => { pane.setHost(element); onCleanup(() => pane.setHost(undefined)); }} class="main-split" data-pane-slot={slot} onInput={() => keepTab(slot)} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={position() === 0 ? "Pane B" : "Pane C"} style={{ flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": paneMotion()?.slot === slot ? "0px" : `${paneMinWidth(slot)}px`, ...(paneMotion()?.slot === slot ? { opacity: 0, overflow: "hidden" } : {}), ...(paneMotion()?.slot === slot && paneMotion()!.collapsed ? { "margin-right": "0px" } : {}) }}>
+      return <section ref={(element) => { pane.setHost(element); onCleanup(() => pane.setHost(undefined)); }} class="main-split" data-pane-slot={slot} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={position() === 0 ? "Pane B" : "Pane C"} style={{ flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": paneMotion()?.slot === slot ? "0px" : `${paneMinWidth(slot)}px`, ...(paneMotion()?.slot === slot ? { opacity: 0, overflow: "hidden" } : {}), ...(paneMotion()?.slot === slot && paneMotion()!.collapsed ? { "margin-right": "0px" } : {}) }}>
         <div class="main-split-resize" role="separator" aria-label="Resize panes" aria-orientation="vertical" onPointerDown={(event) => startSplitResize(event, position() + 1)} />
         <Show when={parseFileView(slotView(slot))}>{(entries) => renderFileViewer(slot, entries())}</Show>
         <Show when={slotView(slot)?.startsWith("term:")}>{renderTerminalDocument(slot, () => slotView(slot)!.slice("term:".length))}</Show>

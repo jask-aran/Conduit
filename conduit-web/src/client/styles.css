@@ -181,8 +181,6 @@ svg.lucide { stroke-width: 2.4; }
 .pane-tab-close svg { width: 11.2px; height: 11.2px; }
 .pane-tab-live { width: 5px; height: 5px; flex: none; border-radius: 50%; background: var(--live, oklch(0.62 0.17 145)); }
 .pane-tabs-more { margin-left: 8px; }
-/* The preview tab, replaced by the next chat opened here until it is kept. */
-.pane-tab-preview .pane-tab-title { font-style: italic; }
 .chat-header-title span, .chat-header-title strong, .chat-header-title .breadcrumb-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The place crumb is a link to its page: the crumb at rest, white under the pointer. */
 .breadcrumb-link { border: 0; background: none; padding: 0; color: inherit; font: inherit; cursor: pointer; }
