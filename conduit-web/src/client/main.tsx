@@ -2888,26 +2888,35 @@ function App() {
   const startSplitResize = (event: PointerEvent, position: number) => {
     const shown = shownSlots();
     const paneAt = (index: number) => index === 0 ? document.querySelector<HTMLElement>(".chat-main") : index <= shown.length ? paneSlot(shown[index - 1]!).host() : undefined;
-    const left = paneAt(position - 1);
-    const right = paneAt(position);
-    if (!left || !right) return;
+    const panes = Array.from({ length: shown.length + 1 }, (_, index) => paneAt(index));
+    if (panes.some((pane) => !pane)) return;
     event.preventDefault();
-    const start = left.getBoundingClientRect().left;
-    const total = right.getBoundingClientRect().right - start;
-    const minimumLeft = position === 1 ? paneMinWidth("main") + 8 : paneMinWidth(shown[position - 2]!);
-    const minimumRight = paneMinWidth(shown[position - 1]!);
+    // Dragging an edge takes room from the pane beside it down to its
+    // document's minimum, then from the next one on, and gives it to the pane
+    // on the other side.
+    const widths = panes.map((pane) => pane!.getBoundingClientRect().width);
+    const minimums = panes.map((pane) => parseFloat(getComputedStyle(pane!).minWidth) || MIN_SPLIT_PANE_WIDTH);
+    const startX = event.clientX;
     const weights = paneWeights();
-    const pair = weights[position - 1]! + weights[position]!;
+    const weightSum = weights.reduce((sum, weight) => sum + weight, 0);
+    const widthSum = widths.reduce((sum, width) => sum + width, 0);
     let pending = [...weights];
     let frame = 0;
     const apply = (next: number[]) => { if (next.length === 2) setSplitRatio(next[1]!); else setSplitRatios3(next); };
     splitMotionId += 1;
     announceSplit("begin", besideWidth());
     const move = (moveEvent: PointerEvent) => {
-      const width = Math.max(minimumLeft, Math.min(total - minimumRight, moveEvent.clientX - start));
-      pending = [...weights];
-      pending[position - 1] = pair * width / total;
-      pending[position] = pair - pending[position - 1]!;
+      const delta = moveEvent.clientX - startX;
+      const next = [...widths];
+      let owed = Math.abs(delta);
+      const order = delta > 0 ? next.map((_, index) => index).slice(position) : next.map((_, index) => index).slice(0, position).reverse();
+      for (const index of order) {
+        const taken = Math.min(owed, Math.max(0, next[index]! - minimums[index]!));
+        next[index]! -= taken;
+        owed -= taken;
+      }
+      next[delta > 0 ? position - 1 : position]! += Math.abs(delta) - owed;
+      pending = next.map((width) => width / widthSum * weightSum);
       if (!frame) frame = requestAnimationFrame(() => {
         frame = 0;
         apply(pending);
@@ -3890,10 +3899,10 @@ function App() {
         <div class="main-split-resize" role="separator" aria-label="Resize panes" aria-orientation="vertical" onPointerDown={(event) => startSplitResize(event, position() + 1)} />
         <Show when={parseFileView(slotView(slot))}>{(entries) => renderFileViewer(slot, entries())}</Show>
         <Show when={page() === "computer"}>
-          <div class="main-split-chat main-split-page">{renderPaneComputer(slot)}</div>
+          <div class="main-split-chat main-split-page" tabIndex={-1} onPointerDown={focusChatSurface}>{renderPaneComputer(slot)}</div>
         </Show>
         <Show when={page()?.startsWith("harness:")}>
-          <div class="main-split-chat main-split-page">{attachInput()}{renderPaneHarness(pane, decodeURIComponent(page()!.slice("harness:".length)))}</div>
+          <div class="main-split-chat main-split-page" tabIndex={-1} onPointerDown={focusChatSurface}>{attachInput()}{renderPaneHarness(pane, decodeURIComponent(page()!.slice("harness:".length)))}</div>
         </Show>
         <Show when={page() && page() !== "computer" && !page()!.startsWith("harness:")}>
           <div class="main-split-chat main-split-page">

@@ -333,10 +333,10 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   const room = () => {
     const main = document.querySelector<HTMLElement>('[data-slot="sidebar-inset"]');
     if (!main || isMobileLayout()) return Infinity;
-    // A split in the main pane holds its own minimum too.
-    const split = props.splitHost?.();
-    const splitRoom = split ? split.getBoundingClientRect().width - MIN_SPLIT_PANE_WIDTH : 0;
-    return main.getBoundingClientRect().width + splitRoom + (props.open() ? shellWidth() + shellGap() : 0) - 8 - MIN_MAIN_PANE_WIDTH;
+    // Every pane gives way down to its document's minimum.
+    const panes = [...document.querySelectorAll<HTMLElement>(".chat-main, [data-pane-slot]")];
+    const slack = panes.reduce((sum, pane) => sum + pane.getBoundingClientRect().width - (parseFloat(getComputedStyle(pane).minWidth) || MIN_MAIN_PANE_WIDTH), 0);
+    return slack + (props.open() ? shellWidth() + shellGap() : 0) - 8;
   };
   const clampWidth = (next: number) => Math.max(MIN_WORKSPACE_PANE_WIDTH, Math.min(Math.floor(window.innerWidth * 0.65), room(), next));
   // Every atomic width commit has to announce itself. The transcript learns its
