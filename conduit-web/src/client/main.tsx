@@ -2524,7 +2524,9 @@ function App() {
    * navigator or a rail tool dragged over a pane washes where it will land --
    * its left or right third a new pane on that side while the width holds
    * one, its middle the pane's own document (a file joining a viewer holding
-   * one). A document a pane already shows is focused there instead.
+   * one; a chat joining a pane of chats as a tab, 6c). A document a pane
+   * already shows is focused there instead. A background tab drags as its
+   * chat does, leaving its pane's tabs for wherever it lands.
    */
   const DOC_DRAG_TYPE = "application/x-conduit-doc";
   let draggedView: string | null = null;
@@ -2628,7 +2630,11 @@ function App() {
       const held = parseFileView(viewOf(target.pane));
       const adding = parseFileView(next);
       if (held?.length === 1 && adding && !sameFileEntry(held[0]!, adding[0]!)) setPaneView(target.pane, formatFileView([held[0]!, adding[0]!]));
-      else setPaneView(target.pane, next);
+      else {
+        // A chat on a pane of chats joins it as a kept tab (6c).
+        if (next.startsWith("chat:") && activeChatOf(target.pane)) keepNext.add(String(target.pane));
+        setPaneView(target.pane, next);
+      }
       return focusAnyPane(target.pane);
     }
     const free = [0, 1].find((slot) => !slotOrder().includes(slot));
@@ -2790,6 +2796,20 @@ function App() {
   // Alt on the click or key that opened a chat, from a page that has no way
   // to say so itself.
   const altActivation = () => { const event = window.event; return (event instanceof MouseEvent || event instanceof KeyboardEvent) && event.altKey; };
+  // Ctrl (Cmd) on the click that opened a chat: as a tab in the focused pane.
+  const tabActivation = () => { const event = window.event; return !isMobileLayout() && (event instanceof MouseEvent || event instanceof KeyboardEvent) && (event.ctrlKey || event.metaKey); };
+  // A kept tab in the focused pane of chats; false when that pane shows something else.
+  const openChatAsTab = (target: ChatSummary, project: Project) => {
+    const view: SplitView = `chat:${target.id}`;
+    if (target.id === mainChatId() || focusPaneShowing(view) || switchToTab(view)) return true;
+    const pane = keyboardPaneSlot() ?? "main";
+    if (!activeChatOf(pane)) return false;
+    markChatRead(catalogue, target);
+    keepNext.add(String(pane));
+    if (pane === "main") void openChat(target, project); else setSlotView(pane, view);
+    focusAnyPane(pane);
+    return true;
+  };
   // What a pane beside A already shows is gone to there, not opened again in pane A.
   const focusPaneShowing = (view: SplitView) => {
     const slot = shownSlots().find((candidate) => slotView(candidate) === view);
@@ -2833,6 +2853,7 @@ function App() {
     if (!moved && shownSlots().includes(slot) && !paneElement(slot)?.contains(document.activeElement)) focusPane(slot);
   };
   const openChatHere = async (target: ChatSummary, project: Project) => {
+    if (tabActivation() && openChatAsTab(target, project)) return;
     if (keyboardPaneSlot() !== null && target.id === mainChatId()) { setKeyboardPane("main"); return enterMainPane(); }
     if (keyboardPaneSlot() !== null) markChatRead(catalogue, target);
     await openInFocusedPane(`chat:${target.id}`, () => openChat(target, project));
@@ -3296,7 +3317,7 @@ function App() {
     const side = (before: boolean) => <Show when={tabs()}>{(list) => {
       const ids = () => { const at = list().ids.indexOf(activeChatOf(pane) ?? ""); return at < 0 ? [] : before ? list().ids.slice(0, at) : list().ids.slice(at + 1); };
       return <For each={ids()}>{(id) =>
-        <span class="pane-tab" classList={{ "pane-tab-preview": list().preview === id }}>
+        <span class="pane-tab" classList={{ "pane-tab-preview": list().preview === id }} draggable="true" data-doc-view={`chat:${id}`}>
           <button type="button" class="pane-tab-open" tabIndex={-1} title={viewName(`chat:${id}`)} onClick={() => void switchTab(pane, id)} onDblClick={() => { void switchTab(pane, id).then(() => keepTab(pane)); }}>
             <Show when={runtime.getProcess(id)}><i class="pane-tab-live" aria-label="Running" /></Show>{viewName(`chat:${id}`)}
           </button>
