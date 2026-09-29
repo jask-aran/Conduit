@@ -133,6 +133,8 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-preview-header > .workspace-file-actions { display: flex; flex: none; align-items: center; gap: 2px; order: 4; }
 .workspace-preview-header > .workspace-editor-header-tools { display: flex; flex: none; align-items: center; gap: 2px; order: 5; }
 .workspace-preview-header > .workspace-preview-close { order: 10; }
+.workspace-preview-header > .pane-tab-actions { order: 11; }
+.workspace-preview-header > .file-side-tabs { flex: 1 1 auto; min-width: 0; }
 .workspace-files[data-wide="false"] { display: grid; grid-template-columns: 31px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 .workspace-files[data-wide="false"] > .workspace-preview { grid-column: 2; grid-row: 1; height: auto !important; }
 .workspace-files[data-wide="false"][data-navigator-open="true"] > .workspace-preview { grid-column: 1 / -1; }
