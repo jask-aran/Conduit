@@ -17,6 +17,7 @@ import type { VoiceDictationSettings } from "../chat/voice-dictation-types";
 import { isWarmMicrophoneActive, stopWarmMicrophone } from "../chat/voice-dictation-client";
 import { createVoiceWaveformController, VoiceWaveform } from "../chat/voice-waveform";
 import { ModelSelector } from "../chat/model-selector";
+import { saveTabFrost, tabFrost } from "../preferences/tab-frost";
 import type { Installation, Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
 import { MAX_SIDEBAR_CHAT_LIMIT, MIN_SIDEBAR_CHAT_LIMIT } from "../navigation/sidebar-preferences";
@@ -246,6 +247,7 @@ export function Settings(props: {
   shortcuts: ShortcutManager;
 }) {
   const [section, setSection] = createSignal<Section>(props.initialSection || "ui");
+  const [frosted, setFrosted] = createSignal(tabFrost());
   /*
    * On a phone, Settings is two screens rather than a rail beside a pane.
    *
@@ -1150,6 +1152,9 @@ export function Settings(props: {
                     <select id="composer-surface-mode" aria-label="Composer material" title={COMPOSER_SURFACE_OPTIONS.find((option) => option.value === props.composerSurface)?.description} value={props.composerSurface} onChange={(event) => props.onComposerSurfaceChange(event.currentTarget.value as ComposerSurfaceMode)}>
                       <For each={COMPOSER_SURFACE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </select>
+                  </label>
+                  <label class="settings-line" for="tab-frost"><span>Tab row</span>
+                    <Switch id="tab-frost" label="Frosted tab row" checked={frosted()} onChange={(on) => setFrosted(saveTabFrost(on))} />
                   </label>
                   <label class="settings-line" for="markdown-renderer"><span>Markdown</span>
                     <select id="markdown-renderer" aria-label="Markdown renderer" title={MARKDOWN_RENDERER_OPTIONS.find((option) => option.value === props.markdownRenderer)?.description} value={props.markdownRenderer} onChange={(event) => props.onMarkdownRendererChange(event.currentTarget.value as MarkdownRendererId)}>

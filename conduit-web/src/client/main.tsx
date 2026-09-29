@@ -29,6 +29,7 @@ import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnos
 import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
 import { AppDashboard } from "./dashboard/app-dashboard";
 import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_STORAGE_KEY, selectedComposerSurface } from "./chat/composer-surface";
+import { applyTabFrost } from "./preferences/tab-frost";
 import type { VoiceDictationSettings } from "./chat/voice-dictation-types";
 import { CONTEXT_METRIC_STORAGE_KEY, formatContextMetrics, saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
 import { HostUiRequests } from "./chat/host-ui-card";
@@ -644,6 +645,7 @@ function App() {
   // Where the layout comes from (5f): a URL naming panes restores exactly
   // those; the app opened at its start page restores this device's last
   // layout; any other URL -- an old link, someone else's share -- pane A alone.
+  applyTabFrost();
   const launchUrl = new URL(location.href);
   const urlNamesPanes = launchUrl.searchParams.has("pane") || launchUrl.searchParams.has("a");
   const atStart = launchUrl.pathname === "/" && !launchUrl.search;
