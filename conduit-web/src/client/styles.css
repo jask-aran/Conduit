@@ -159,6 +159,9 @@ svg.lucide { stroke-width: 2.4; }
    only the pointer. Titles reserve their bold width, so switching moves
    nothing; what does not fit waits in the menu at the row's end. */
 .chat-header-tabs { flex: 1 1 auto; }
+/* A header holding tabs is a frosted strip, so the row reads over the
+   transcript scrolling under it (a trial: revert its commit to drop it). */
+.chat-header:has(.chat-header-tabs) { background: color-mix(in oklch, var(--background), transparent 30%); backdrop-filter: blur(19.2px) saturate(125%); -webkit-backdrop-filter: blur(19.2px) saturate(125%); }
 .pane-tabs { display: flex; height: 100%; min-width: 0; flex: 1; align-items: center; overflow: hidden; }
 .chat-header-title .pane-tab-group { position: relative; display: inline-flex; flex: none; align-items: baseline; overflow: visible; }
 .pane-tab-group + .pane-tab-group { margin-left: 33px; }
