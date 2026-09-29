@@ -3575,17 +3575,15 @@ function App() {
     }
     movingDocuments = false;
   };
-  // The files the viewer with the keyboard shows or holds as tabs, for the navigator to mark.
+  // The files the viewers show, for the navigator to mark: "focused" in the viewer with the keyboard.
   const openFileKeys = createMemo(() => {
-    const keys = new Set<string>();
-    const pane = keyboardPane();
-    if (!panesShown().includes(pane)) return keys;
-    parseFileView(viewOf(pane))?.forEach((entry, side) => {
-      keys.add(fileEntryKey(entry));
-      for (const tab of fileTabsOf(pane, side)?.entries ?? []) keys.add(fileEntryKey(tab));
-    });
+    const keys = new Map<string, "focused" | "shown">();
+    for (const pane of panesShown()) for (const entry of parseFileView(viewOf(pane)) ?? []) {
+      const key = fileEntryKey(entry);
+      if (pane === keyboardPane()) keys.set(key, "focused"); else if (!keys.has(key)) keys.set(key, "shown");
+    }
     return keys;
-  }, new Set<string>(), { equals: (a, b) => a.size === b.size && [...a].every((key) => b.has(key)) });
+  }, new Map(), { equals: (a, b) => a.size === b.size && [...a].every(([key, value]) => b.get(key) === value) });
   const fileSideTabs = (pane: PaneKey, side: number) => {
     const row = createTabStrip({
       keys: () => { const list = fileTabsOf(pane, side); return list?.entries.length ? list.entries.map(fileEntryKey) : null; },
