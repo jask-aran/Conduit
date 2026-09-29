@@ -645,6 +645,8 @@ export function FilesView(props: {
   onBrowseParent?: () => void;
   /** Files opens in panes' file viewers: the view is the navigator alone -- the tree and its search. */
   navigatorOnly?: boolean;
+  /** A file open in a pane's viewer, shown or as a tab: its row is bold. */
+  openInPane?: (path: string) => boolean;
 }) {
   const c = props.control;
   let treeResizeHandle: HTMLDivElement | undefined;
@@ -793,6 +795,7 @@ export function FilesView(props: {
             draggable={entry.type !== "directory"}
             data-selected={c.isFileOpen(entry.path)}
             data-focused-file={c.openPaths().primary === entry.path}
+            data-open-file={entry.type !== "directory" && props.openInPane?.(entry.path) ? "true" : undefined}
             tabIndex={c.treeTabStop() === entry.path ? 0 : -1}
             onFocus={() => {
               c.setTreeFocusPath(entry.path);
