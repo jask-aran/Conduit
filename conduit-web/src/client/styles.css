@@ -152,27 +152,32 @@ svg.lucide { stroke-width: 2.4; }
 .pane-tab-action { display: inline-flex; width: 20px; height: 20px; flex: none; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--muted-foreground); }
 .pane-tab-action:hover { background: var(--accent); color: var(--foreground); }
 .pane-tab-action svg { width: 12.8px; height: 12.8px; }
-/* A pane's chat tabs (6c): titles only, each the same width whether lit or
-   not, so switching moves nothing; hairlines between unlit tabs. */
-.chat-header-tabs { gap: 0; }
-.chat-header-title .pane-tab { position: relative; display: inline-flex; min-width: 72px; max-width: 160px; height: 24px; flex: 0 1 160px; align-items: center; overflow: visible; border-radius: var(--radius-md); }
+/* A pane's chat tabs (6c): each its full breadcrumb, as wide as that is (to
+   ~280px) and the same lit or not -- each crumb reserves its bold width -- so
+   switching moves nothing. Hairlines between unlit tabs; what does not fit
+   waits in the menu at the row's end. */
+.chat-header-tabs { flex: 1 1 auto; }
+.pane-tabs { display: flex; min-width: 0; flex: 1; align-items: center; overflow: hidden; }
+.chat-header-title .pane-tab { position: relative; display: inline-flex; max-width: 280px; height: 24px; flex: none; align-items: center; overflow: visible; border-radius: var(--radius-md); }
 .pane-tab:not(.pane-tab-active) + .pane-tab:not(.pane-tab-active)::before { position: absolute; top: 6px; bottom: 6px; left: 0; width: 0.8px; background: color-mix(in oklch, var(--foreground), transparent 85%); content: ""; }
 .pane-tab:hover, .pane-tab-active { background: var(--accent); }
-.pane-tab-open { display: inline-flex; min-width: 0; height: 100%; flex: 1; align-items: center; gap: 4.8px; padding: 0 2px 0 8px; border: 0; background: transparent; color: var(--muted-foreground); font: inherit; font-weight: 450; }
-.chat-header-title .pane-tab-open span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pane-tab-open { display: inline-flex; min-width: 0; height: 100%; flex: 1; align-items: center; gap: 5.6px; padding: 0 2px 0 8px; border: 0; background: transparent; color: var(--muted-foreground); font: inherit; font-weight: 450; }
+.chat-header-title .pane-tab-crumb { display: inline-flex; min-width: 0; flex-direction: column; overflow: hidden; }
+.pane-tab-crumb:not(.pane-tab-title) { flex: 0 1 auto; max-width: 96px; }
+.pane-tab-title { flex: 0 1 auto; }
+.chat-header-title .pane-tab-crumb > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pane-tab-crumb::after { height: 0; overflow: hidden; visibility: hidden; font-weight: 660; white-space: nowrap; content: attr(data-text); }
 .pane-tab:hover .pane-tab-open { color: var(--foreground); }
-.pane-tab-active .pane-tab-open { color: var(--foreground); font-weight: 660; }
-.pane-tab-close { display: inline-flex; width: 16px; height: 16px; flex: none; align-items: center; justify-content: center; margin-right: 4px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted-foreground); opacity: 0; }
+.pane-tab-active .pane-tab-title { color: var(--foreground); font-weight: 660; }
+.pane-tab-close { display: inline-flex; width: 16px; height: 16px; flex: none; align-items: center; justify-content: center; margin: 0 4px 0 2px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted-foreground); opacity: 0; }
 .pane-tab:hover .pane-tab-close, .pane-tab-active .pane-tab-close { opacity: 1; }
 .pane-tab-close:hover { color: var(--foreground); }
 .pane-tab-close svg { width: 11.2px; height: 11.2px; }
 .pane-tab-live { width: 5px; height: 5px; flex: none; border-radius: 50%; background: var(--live, oklch(0.62 0.17 145)); }
+.pane-tabs-more { margin-left: 2px; }
+.pane-tabs-menu-place { color: var(--muted-foreground); }
 /* The preview tab, replaced by the next chat opened here until it is kept. */
-.pane-tab-preview .pane-tab-open { font-style: italic; }
-/* The active tab's place, at the right with the pane's actions. */
-.pane-tab-place { overflow: hidden; min-width: 0; flex: 0 1 auto; margin-left: auto; padding: 0; border: 0; background: transparent; color: var(--muted-foreground); font-size: 11.2px; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
-button.pane-tab-place:hover { color: var(--foreground); }
-.pane-tab-place + .chat-header-actions { margin-left: 0; }
+.pane-tab-preview .pane-tab-title { font-style: italic; }
 .chat-header-title span, .chat-header-title strong, .chat-header-title .breadcrumb-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The place crumb is a link to its page: the crumb at rest, white under the pointer. */
 .breadcrumb-link { border: 0; background: none; padding: 0; color: inherit; font: inherit; cursor: pointer; }

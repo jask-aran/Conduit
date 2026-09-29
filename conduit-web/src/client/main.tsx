@@ -493,9 +493,6 @@ function ChatHeader(props: {
           </Show>
         </span>
       </Show>
-      <Show when={props.tabs && !props.dashboard && !props.alone}>
-        <Show when={props.onOpenPlace} fallback={<span class="pane-tab-place">{projectLabel()}</span>}><button type="button" class="pane-tab-place" tabIndex={-1} title={`Open ${projectLabel()}`} onClick={() => props.onOpenPlace!(props.project)}>{projectLabel()}</button></Show>
-      </Show>
       <HeaderActions>
         <Button variant="ghost" size="icon-sm" class="search-trigger" tabIndex={-1} aria-label="Search chats" title="Search chats" onClick={props.onOpenSearch}><SearchIcon /></Button>
         <Button variant="ghost" size="icon-sm" class="palette-trigger" tabIndex={-1} aria-label="Open command palette" title="Command palette" onClick={props.onOpenPalette}><TerminalIcon /></Button>
@@ -3320,18 +3317,64 @@ function App() {
   // Tabs keep their order and width: switching changes only which is lit.
   const paneTabRow = (pane: PaneKey) => {
     const tabs = () => { const list = tabsOf(pane); return list && list.ids.length > 1 && !isMobileLayout() ? list : null; };
-    // Only a pane of two or more has the row; a pane of one keeps its breadcrumb.
+    const placeOf = (id: string) => { const project = catalogue.projects().find((item) => item.sessions.some((chat) => chat.id === id)); return !project || project.slug === "chat" ? "Chats" : project.name || project.slug; };
+    // Tabs that do not fit wait in a menu at the row's end; the active one never does.
+    const [folded, setFolded] = createSignal<string[]>([]);
+    let strip: HTMLDivElement | undefined;
+    const fit = () => {
+      if (!strip) return;
+      const list = tabs();
+      const elements = [...strip.querySelectorAll<HTMLElement>(".pane-tab")];
+      for (const element of elements) element.style.display = "";
+      if (!list) return setFolded([]);
+      const widths = elements.map((element) => element.getBoundingClientRect().width);
+      const room = strip.clientWidth;
+      if (widths.reduce((sum, width) => sum + width, 0) <= room) return setFolded([]);
+      const active = list.ids.indexOf(activeChatOf(pane) ?? "");
+      let budget = room - 28 - (widths[active] ?? 0);
+      const hidden: string[] = [];
+      list.ids.forEach((id, index) => {
+        if (index === active) return;
+        if (hidden.length === 0 && widths[index]! <= budget) budget -= widths[index]!;
+        else hidden.push(id);
+      });
+      elements.forEach((element, index) => { if (hidden.includes(list.ids[index]!)) element.style.display = "none"; });
+      setFolded(hidden);
+    };
     const has = createMemo(() => Boolean(tabs()));
-    const row = createMemo(() => has() ? untrack(() => <Show when={tabs()}>{(list) => <For each={list().ids}>{(id) => {
-          const active = () => activeChatOf(pane) === id;
-          const name = () => viewName(`chat:${id}`);
-          return <span class="pane-tab" role="tab" aria-selected={active()} classList={{ "pane-tab-active": active(), "pane-tab-preview": list().preview === id }} draggable={active() ? undefined : "true"} data-doc-view={active() ? undefined : `chat:${id}`}>
-            <button type="button" class="pane-tab-open" tabIndex={-1} title={name()} onClick={() => { if (!active()) void switchTab(pane, id); }} onDblClick={() => keepTab(pane)}>
-              <Show when={runtime.getProcess(id)}><i class="pane-tab-live" aria-label="Running" /></Show><span>{name()}</span>
-            </button>
-            <button type="button" class="pane-tab-close" tabIndex={-1} aria-label={`Close ${name()}`} title="Close tab" onClick={() => void closeTab(pane, id)}><XIcon /></button>
-          </span>;
-        }}</For>}</Show>) : undefined);
+    const row = createMemo(() => has() ? untrack(() => <div class="pane-tabs" ref={(element) => {
+      strip = element;
+      const observer = new ResizeObserver(() => fit());
+      observer.observe(element);
+      onCleanup(() => observer.disconnect());
+      createEffect(on(() => [tabs()?.ids.join(), activeChatOf(pane), catalogue.projects()] as const, () => requestAnimationFrame(fit)));
+    }}>
+      <For each={tabs()?.ids ?? []}>{(id) => {
+        const active = () => activeChatOf(pane) === id;
+        const name = () => viewName(`chat:${id}`);
+        return <span class="pane-tab" role="tab" aria-selected={active()} classList={{ "pane-tab-active": active(), "pane-tab-preview": tabs()?.preview === id }} draggable={active() ? undefined : "true"} data-doc-view={active() ? undefined : `chat:${id}`}>
+          <button type="button" class="pane-tab-open" tabIndex={-1} title={`${placeOf(id)} / ${name()}`} onClick={() => { if (!active()) void switchTab(pane, id); }} onDblClick={() => keepTab(pane)}>
+            <Show when={runtime.getProcess(id)}><i class="pane-tab-live" aria-label="Running" /></Show>
+            <span class="pane-tab-crumb" data-text={placeOf(id)}><span>{placeOf(id)}</span></span>
+            <span class="breadcrumb-separator" aria-hidden="true" />
+            <span class="pane-tab-crumb pane-tab-title" data-text={name()}><span>{name()}</span></span>
+          </button>
+          <button type="button" class="pane-tab-close" tabIndex={-1} aria-label={`Close ${name()}`} title="Close tab" onClick={() => void closeTab(pane, id)}><XIcon /></button>
+        </span>;
+      }}</For>
+      <Show when={folded().length}>
+        <Menu modal={false} placement="bottom-end">
+          <MenuTrigger class="pane-tab-action pane-tabs-more" tabIndex={-1} aria-label={`${folded().length} more tabs`} title={`${folded().length} more tabs`}><EllipsisIcon /></MenuTrigger>
+          <MenuContent class="pane-tabs-menu">
+            <MenuGroup><MenuLabel>More tabs</MenuLabel>
+              <For each={folded()}>{(id) => <MenuItem textValue={viewName(`chat:${id}`)} onSelect={() => void switchTab(pane, id)}>
+                <span class="pane-tabs-menu-place">{placeOf(id)}</span><span>{viewName(`chat:${id}`)}</span>
+              </MenuItem>}</For>
+            </MenuGroup>
+          </MenuContent>
+        </Menu>
+      </Show>
+    </div>) : undefined);
     return { get tabs() { return row(); } };
   };
   // Pane A's close hands it the next pane's chat or page.
