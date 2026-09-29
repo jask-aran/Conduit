@@ -433,7 +433,7 @@ Steps:
     `workspace-comparison.tsx`. An entry gets a mode -- contents, changes,
     staged -- switched in its header, in place of today's jump to Source
     Control's Review.
-- **6e. Opening.** (Built, drag to a pane included -- thirds, sources the sidebar, pages' chats, navigator files and rail tools; pane headers move their documents; preview tabs come with 6c.) A click opens in the focused pane, as a preview tab.
+- **6e. Opening.** (Built, drag to a pane included -- thirds, sources the sidebar, pages' chats, navigator files and rail tools; pane headers move their documents.) A click opens in the focused pane, replacing its active tab; Ctrl-click adds a tab (6c).
   Alt+click, or the pane's split button, opens to the side: the next pane,
   or a new one up to three. A tab dragged to a pane's edge splits there. A
   sidebar row goes to the pane already showing it.
@@ -452,7 +452,7 @@ Stage 6 commits:
 - 6d-1: 6103cea (the dock follows places); 6d-2: 708a451 (the file viewer: Files as the navigator where panes fit, a file pane of one or two files). Not yet in the viewer: a review comment's reveal, Replace with upload (the navigator keeps it).
 - 6d-3: 9cf1925, 2758f60 (an entry shows its unstaged or staged changes in place, with its Git status mark; a header that no longer fits drops its copy and download actions; Alt from Files fills a viewer's second side before opening a new pane).
 - Pane actions: swap and close on each pane's breadcrumb, pane A included; A swaps right, the others left; the swap fades, slides and fades (DESIGN.md, Two chats). File viewer headers gather their actions into an overflow menu before the name goes, and a review comment on a file scrolls its viewer.
-- 6c-1/6c-2 and most of 6c-3: 1a18b37.. (chat tabs, the row, preview tabs, Alt with no room, the cap, the URL). Then: Ctrl-click opens as a tab (sidebar selection moves to Shift), a chat dropped on a pane of chats joins it, background tabs drag. Not yet: the ⋯ overflow, a key to move between tabs (the browser keeps Ctrl+Tab), tabs in the per-device layout.
+- 6c-1/6c-2 and most of 6c-3: 1a18b37.. (chat tabs, the row, Alt with no room, the cap, the URL; preview tabs were tried and dropped -- a plain click replaces the active tab, Ctrl-click adds). Then: Ctrl-click opens as a tab (sidebar selection moves to Shift), a chat dropped on a pane of chats joins it, background tabs drag. Not yet: the ⋯ overflow, a key to move between tabs (the browser keeps Ctrl+Tab), tabs in the per-device layout.
 - 5f: see the commits after 91c6af1 (the URL carries every pane; pane A holds anything).
 
 ## Open questions
