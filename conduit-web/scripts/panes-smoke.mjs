@@ -83,14 +83,15 @@ async function scenario(name, run) {
   page.on("response", (response) => { if (response.status() >= 400 && response.status() !== 403 && !textFirst(response)) errors.push(`HTTP ${response.status()} ${response.request().method()} ${decodeURIComponent(response.url().replace(origin, "")).slice(0, 160)}`); });
   const failures = [];
   const check = (label, ok, detail = "") => { if (!ok) failures.push(`${label}${detail ? `: ${detail}` : ""}`); };
+  let skipped = null;
   try {
-    await run(page, check);
+    skipped = await run(page, check) ?? null;
   } catch (error) {
     failures.push(`threw: ${error.message.split("\n")[0]}`);
   }
   for (const error of errors) failures.push(`page error: ${error}`);
-  results.push({ name, failures });
-  console.log(`${failures.length ? "FAIL" : "ok  "} ${name}${failures.map((failure) => `\n       - ${failure}`).join("")}`);
+  results.push({ name, failures, skipped });
+  console.log(`${failures.length ? "FAIL" : skipped ? "skip" : "ok  "} ${name}${skipped && !failures.length ? ` (${skipped})` : ""}${failures.map((failure) => `\n       - ${failure}`).join("")}`);
   await context.close();
 }
 
@@ -266,7 +267,7 @@ await scenario("a project page's files open as the navigator's", async (page, ch
   await open(page);
   const rows = page.locator('.split-row[data-doc-view^="files:"]');
   await rows.first().waitFor({ timeout: 4000 }).catch(() => {});
-  if (!await rows.count()) return console.log(`     (skipped: ${project.name}'s page lists no files; try --project <name>)`);
+  if (!await rows.count()) return `${project.name}'s page lists no files; try --project <name>`;
   const name = await rows.first().getAttribute("title");
   await rows.first().click();
   check("opened in a viewer with the keyboard", await until(page, () => document.activeElement?.closest("[data-pane-slot] .workspace-file-viewer")), await focusIn(page));
@@ -276,5 +277,6 @@ await scenario("a project page's files open as the navigator's", async (page, ch
 await browser.close();
 await fs.rm(scratch, { recursive: true, force: true });
 const failed = results.filter((result) => result.failures.length);
-console.log(`\n${results.length - failed.length}/${results.length} scenarios passed (project ${project.name})`);
+const skipped = results.filter((result) => result.skipped && !result.failures.length).length;
+console.log(`\n${results.length - failed.length - skipped}/${results.length} scenarios passed${skipped ? `, ${skipped} skipped` : ""} (project ${project.name})`);
 process.exit(failed.length ? 1 : 0);
