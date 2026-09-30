@@ -409,7 +409,6 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     morphHtml(wrapper, value);
   };
   const show = (value: string) => {
-    if (!value && wrapper?.textContent) console.warn("MATHDEBUG show-empty", new Error().stack?.split("\n").slice(1, 4).join(" | "));
     setHtml(value);
     draw(value);
   };
@@ -435,7 +434,7 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
       // A partial ending part-way through a command renders without it.
       if (!tree) {
         const trimmed = trimUnfinishedMathTail(source);
-        if (trimmed !== source) tree = renderMathTree(repairSyntheticMathSource(trimmed), display);
+        if (trimmed !== source && trimmed.trim()) tree = renderMathTree(repairSyntheticMathSource(trimmed), display);
       }
       // Rejected: the last partial stays drawn.
       if (tree) {
@@ -463,7 +462,7 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     // A partial ending part-way through a command renders without it.
     if (renderedHtml == null && !complete()) {
       const trimmed = trimUnfinishedMathTail(source);
-      if (trimmed !== source) renderedHtml = render(repairSyntheticMathSource(trimmed));
+      if (trimmed !== source && trimmed.trim()) renderedHtml = render(repairSyntheticMathSource(trimmed));
     }
     valid = renderedHtml != null;
     if (renderedHtml == null) {
