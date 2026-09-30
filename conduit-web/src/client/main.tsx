@@ -2835,11 +2835,14 @@ function App() {
       const surface = paneElement(pane)?.querySelector<HTMLElement>(".file-viewer-surface");
       const columns = [...(surface?.querySelectorAll<HTMLElement>(".workspace-file-viewer > .workspace-preview:not(.file-viewer-empty-side)") ?? [])];
       const column = side >= columns.length ? surface?.querySelector<HTMLElement>(".file-viewer-empty-side") : columns[side];
-      if (column?.contains(document.activeElement) && document.activeElement !== column) return;
+      const active = document.activeElement;
+      if (column?.contains(active) && active !== column) return;
+      // Focus taken elsewhere meanwhile is left there.
+      if (tries && active && active !== document.body && active !== column && active !== surface) return;
       const editor = column?.querySelector<HTMLElement>(".cm-content");
       (editor ?? column ?? surface)?.focus({ preventScroll: true });
-      // A column still loading (a large file) is waited for longer than an editor to draw.
-      if (!editor && tries++ < (column ? 8 : 40)) setTimeout(land, 60);
+      // A large file's editor draws late; one with none (an image) keeps the column.
+      if (!editor && tries++ < 50) setTimeout(land, 60);
     };
     requestAnimationFrame(land);
   }
