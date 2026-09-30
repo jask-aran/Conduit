@@ -99,8 +99,16 @@ export function mountTranscriptVisibility(
     element.removeAttribute(VISIBILITY_ATTRIBUTE);
     return true;
   };
+  // A formula still waiting in the render queue is an empty box shorter than
+  // the formula. Hidden, it would render unseen and its placeholder would keep
+  // the empty box's height: on load the transcript came up 24px short per
+  // formula, and every later show or hide moved the text by the difference.
+  // It stays laid out until the queue drains; the pass after that hides it.
+  const pendingMath = (element: HTMLElement) =>
+    element.matches(".incremark-math-block:empty") || element.querySelector(".incremark-math-block:empty") !== null;
   const hide = (element: HTMLElement) => {
     if (element.getAttribute(VISIBILITY_ATTRIBUTE) === "hidden") return false;
+    if (pendingMath(element)) return false;
     element.setAttribute(VISIBILITY_ATTRIBUTE, "hidden");
     return true;
   };
@@ -317,6 +325,12 @@ export function mountTranscriptVisibility(
     if (deliberate) {
       scheduleRefresh();
       return;
+    }
+    // An answer's formula queue has drained: what pendingMath kept laid out
+    // can be measured and hidden now.
+    if (records.some((record) => record.attributeName === "data-settled" && !record.oldValue
+      && (record.target as HTMLElement).hasAttribute("data-settled"))) {
+      scheduleRefresh(true);
     }
     let rows: Set<HTMLElement> | null = new Set();
     for (const record of records) {
