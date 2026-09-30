@@ -35,7 +35,7 @@ export function ChatMarkdown(props: ChatMarkdownProps) {
   const renderer = () => props.renderer || selectedMarkdownRenderer();
   return <Suspense fallback={<div class="markdown-skeleton" />}>
     <Show when={isIncremarkRenderer(renderer())} fallback={<MarkedMarkdown {...props} />}>
-      <IncremarkMarkdown {...props} />
+      <IncremarkMarkdown {...props} renderer={renderer()} />
     </Show>
   </Suspense>;
 }

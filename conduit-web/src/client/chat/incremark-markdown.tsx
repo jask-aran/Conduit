@@ -909,6 +909,9 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   // Block-by-block reveal is what this renderer is; only an inline preview,
   // which is a single line inside a summary, skips it.
   const typewriter = () => !props.inline;
+  // Incremark Fade is this component with the fade reveal; plain Incremark
+  // keeps the typewriter's character budget.
+  const pacing = () => props.renderer === "incremark-fade" ? "fade" : props.pacing && props.pacing !== "fade" ? props.pacing : "buffered";
   // Freezing is a message-level guarantee. A one-line preview inside a summary
   // has no settled state worth protecting, and giving it one would fight the
   // summary's own sizing.
@@ -1169,7 +1172,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     }
 
     const enabled = typewriter();
-    typewriterController.setPacing(props.pacing || "buffered");
+    typewriterController.setPacing(pacing());
     typewriterController.setEnabled(enabled);
     if (previousTypewriter === true && !enabled) {
       typewriterController.flush();
@@ -1263,7 +1266,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     const timer = setTimeout(() => setFadeOver(true), STREAM_WORD_FADE_MS);
     onCleanup(() => clearTimeout(timer));
   });
-  const displayContext: RendererContext = { ...context, fadeWords: () => props.pacing === "fade" && !props.inline && !fadeOver() };
+  const displayContext: RendererContext = { ...context, fadeWords: () => pacing() === "fade" && !props.inline && !fadeOver() };
   return <>
     <div class="chat-markdown" data-renderer={rendererId()} data-inline={props.inline ? "true" : undefined} data-streaming={streaming() || undefined} data-display-busy={displayBusy() || pendingMathRenders() > 0 ? "true" : undefined} data-display-animation-busy={displayBusy() ? "true" : undefined} data-pending-math-renders={pendingMathRenders() > 0 ? String(pendingMathRenders()) : undefined} data-display-key={props.displayKey || undefined} data-settled={settled() ? "true" : undefined}>
       <div class="incremark" data-incremark-core="true">

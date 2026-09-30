@@ -9,8 +9,7 @@ import { toast } from "solid-sonner";
 import { Button, Field, FieldGroup, FieldLabel, Input, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
 import { COMPOSER_SURFACE_OPTIONS, type ComposerSurfaceMode } from "../chat/composer-surface";
-import { isIncremarkRenderer, MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
-import { INCREMARK_PACING_OPTIONS, saveIncremarkPacing, selectedIncremarkPacing, type IncremarkPacingMode } from "../chat/incremark-pacing";
+import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
 import { CONTEXT_METRIC_GROUPS, CONTEXT_METRIC_OPTIONS, CONTEXT_METRIC_PRESETS, contextMetricPreset, metricsForContextMetricPreset, type ContextMetricId, type ContextMetricPresetId } from "../chat/context-metrics";
 import { formatMicrophoneError, hasAudioSignal, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
 import { shortcutFromKeyboardEvent } from "../chat/voice-dictation";
@@ -247,7 +246,6 @@ export function Settings(props: {
 }) {
   const [section, setSection] = createSignal<Section>(props.initialSection || "ui");
   const [frosted, setFrosted] = createSignal(tabFrost());
-  const [pacing, setPacing] = createSignal<IncremarkPacingMode>(selectedIncremarkPacing());
   /*
    * On a phone, Settings is two screens rather than a rail beside a pane.
    *
@@ -1161,13 +1159,6 @@ export function Settings(props: {
                       <For each={MARKDOWN_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </select>
                   </label>
-                  <Show when={isIncremarkRenderer(props.markdownRenderer)}>
-                    <label class="settings-line" for="stream-pacing"><span>Streaming</span>
-                      <select id="stream-pacing" aria-label="Streaming pacing" value={pacing()} onChange={(event) => setPacing(saveIncremarkPacing(event.currentTarget.value as IncremarkPacingMode))}>
-                        <For each={INCREMARK_PACING_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                      </select>
-                    </label>
-                  </Show>
                   <label class="settings-line" for="meteor-field"><span>Meteor field</span>
                     <Switch id="meteor-field" label="Ambient meteor field" checked={props.meteorField} onChange={props.onMeteorFieldChange} />
                   </label>
