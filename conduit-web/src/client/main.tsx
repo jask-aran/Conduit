@@ -2559,7 +2559,7 @@ function App() {
   };
   document.addEventListener("pointerdown", armHeaderDrag, true);
   onCleanup(() => document.removeEventListener("pointerdown", armHeaderDrag, true));
-  const [docDrop, setDocDrop] = createSignal<{ pane: PaneKey; zone: "left" | "middle" | "right"; rect: { left: number; top: number; width: number; height: number } } | null>(null);
+  const [docDrop, setDocDrop] = createSignal<{ pane: PaneKey; zone: "left" | "middle" | "right" | "side"; side?: number; rect: { left: number; top: number; width: number; height: number } } | null>(null);
   const docDragView = (target: Element): string | null => {
     const source = target.closest<HTMLElement>("[data-doc-view]");
     if (source) return source.dataset.docView || null;
@@ -2598,6 +2598,26 @@ function App() {
     const edges = draggedPane !== null || roomBeside(draggedView);
     const zone = !edges ? "middle" : third < 1 / 3 ? "left" : third > 2 / 3 ? "right" : "middle";
     if (draggedPane !== null && nearEdge(draggedPane, pane, zone)) return void setDocDrop(null);
+    // A file over a file viewer: its tab row, or the middle of two sides, is that side -- the
+    // file joins it as a tab; the middle of one side is a second side.
+    const held = draggedPane === null ? parseFileView(viewOf(pane)) : null;
+    const sideElement = held?.length && parseFileView(draggedView) && event.target instanceof Element ? event.target.closest<HTMLElement>(".workspace-file-viewer > .workspace-preview") : null;
+    if (sideElement && held) {
+      const side = [...sideElement.parentElement!.children].filter((child) => child.classList.contains("workspace-preview")).indexOf(sideElement);
+      const overTabs = Boolean((event.target as Element).closest(".workspace-preview-header"));
+      if (side < held.length && (overTabs || (zone === "middle" && held.length === 2))) {
+        if (draggedFileTab?.pane === pane && draggedFileTab.side === side) return void setDocDrop(null);
+        const rect = sideElement.getBoundingClientRect();
+        const current = docDrop();
+        if (current?.pane === pane && current.zone === "side" && current.side === side) return;
+        return void setDocDrop({ pane, zone: "side", side, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } });
+      }
+      if (zone === "middle" && held.length === 1 && draggedFileTab?.pane === pane) {
+        const current = docDrop();
+        if (current?.pane === pane && current.zone === "middle") return;
+        return void setDocDrop({ pane, zone: "middle", rect: { left: box.left + box.width / 2, top: box.top, width: box.width / 2, height: box.height } });
+      }
+    }
     // A place's tabs dropped on their own pane: only its edges, a pane of their own.
     if ((draggedGroup ?? draggedFileTab)?.pane === pane && zone === "middle") return void setDocDrop(null);
     const width = zone === "middle" ? box.width : box.width / 2;
@@ -2681,15 +2701,32 @@ function App() {
     endDocDrag();
     if (!target || !view || !event.dataTransfer?.types.includes(DOC_DRAG_TYPE)) return;
     event.preventDefault();
-    if (fromPane !== null) return void await movePaneDocument(fromPane, target);
-    if (group) return void await moveTabGroup(group, target, view.slice("chat:".length));
+    if (target.zone === "side") {
+      const entry = parseFileView(view)?.[0];
+      const shown = parseFileView(viewOf(target.pane)) ?? [];
+      const side = target.side ?? 0;
+      if (!entry || !shown[side]) return;
+      if (!sameFileEntry(shown[side]!, entry)) {
+        if (handlesOf(target.pane)[side]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and show another file?")) return;
+        handlesOf(target.pane)[side]?.discardChanges();
+        keepFileNext.add(sideKey(target.pane, side));
+        setPaneView(target.pane, formatFileView(shown.map((item, at) => at === side ? entry : item)));
+      }
+      focusFileEntry(target.pane, side);
+      setFilePane(target.pane);
+      if (fileTab) queueMicrotask(() => closeFileTab(fileTab.pane, fileTab.side, fileTab.key));
+      return focusAnyPane(target.pane);
+    }
+    const placed = { ...target, zone: target.zone };
+    if (fromPane !== null) return void await movePaneDocument(fromPane, placed);
+    if (group) return void await moveTabGroup(group, placed, view.slice("chat:".length));
     if (fileTab) {
-      await dropDocument(target, view);
+      await dropDocument(placed, view);
       return closeFileTab(fileTab.pane, fileTab.side, fileTab.key);
     }
-    return dropDocument(target, view);
+    return dropDocument(placed, view);
   };
-  const dropDocument = async (target: NonNullable<ReturnType<typeof docDrop>>, view: string) => {
+  const dropDocument = async (target: { pane: PaneKey; zone: "left" | "middle" | "right" }, view: string) => {
     if (view === "tool:terminal") { const id = await pickShell(); if (!id) return; view = `term:${id}`; }
     const next = view as SplitView;
     const showing = panesShown().find((pane) => viewOf(pane) === next);
@@ -2827,6 +2864,7 @@ function App() {
       </>}>
         <FileViewer entries={entries()} focused={fileFocus()[String(pane)] ?? 0} wrap={(side) => sideWrap(pane, side)} onToggleWrap={(side) => toggleSideWrap(pane, side)} commentChatId={focusedChat().loadedId()}
           tabs={(side) => fileSideTabs(pane, side)} paneActions={() => paneTabActions(pane)}
+          sideMenu={(side) => fileSideMenu(pane, side)} onSwapSides={() => swapSides(pane)}
           share={sideShares()[String(pane)]} onShare={(share) => setSideShares((current) => ({ ...current, [String(pane)]: share }))}
           splitEmpty={hasEmptySide(pane)}
           emptySide={<Show when={hasEmptySide(pane)}>
@@ -3609,6 +3647,61 @@ function App() {
     }
     return keys;
   }, new Map(), { equals: (a, b) => a.size === b.size && [...a].every(([key, value]) => b.get(key) === value) });
+  // Two sides trade places, their tabs, wrapping and focus with them.
+  const swapSides = (pane: PaneKey) => {
+    const shown = parseFileView(viewOf(pane)) ?? [];
+    if (shown.length !== 2) return;
+    const [a, b] = [sideKey(pane, 0), sideKey(pane, 1)];
+    setFileTabs((current) => { const next = { ...current }; const first = current[a]; const second = current[b]; if (second) next[a] = second; else delete next[a]; if (first) next[b] = first; else delete next[b]; return next; });
+    const [first, second] = [lastShownFiles.get(a), lastShownFiles.get(b)];
+    if (second) lastShownFiles.set(a, second); else lastShownFiles.delete(a);
+    if (first) lastShownFiles.set(b, first); else lastShownFiles.delete(b);
+    setSideWraps((current) => { const next = { ...current }; const wa = current[a]; const wb = current[b]; delete next[a]; delete next[b]; if (wb !== undefined) next[a] = wb; if (wa !== undefined) next[b] = wa; return next; });
+    setPaneView(pane, formatFileView([shown[1]!, shown[0]!]));
+    focusFileEntry(pane, 1 - shownFileSide(pane));
+  };
+  // A side goes with all its tabs; the last leaves the viewer empty.
+  const closeSide = (pane: PaneKey, side: number) => {
+    const shown = parseFileView(viewOf(pane)) ?? [];
+    if (!shown[side]) return;
+    if (handlesOf(pane)[side]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and close this side?")) return;
+    handlesOf(pane)[side]?.discardChanges();
+    handlesOf(pane)[side] = undefined;
+    movingDocuments = true;
+    if (side === 0 && shown.length === 2) moveSideTabs(sideKey(pane, 1), sideKey(pane, 0));
+    else { setFileTabs((current) => { const next = { ...current }; delete next[sideKey(pane, side)]; return next; }); lastShownFiles.delete(sideKey(pane, side)); }
+    setPaneView(pane, formatFileView(shown.filter((_, at) => at !== side)));
+    focusFileEntry(pane, 0);
+    movingDocuments = false;
+  };
+  const closeOtherTabs = (pane: PaneKey, side: number) => {
+    const shown = parseFileView(viewOf(pane))?.[side];
+    if (!shown) return;
+    setFileTabs((current) => ({ ...current, [sideKey(pane, side)]: { entries: [shown], used: [fileEntryKey(shown)] } }));
+  };
+  // A side, tabs and all, lifted into a pane of its own beside this one.
+  const moveSideToPane = (pane: PaneKey, side: number) => {
+    const shown = parseFileView(viewOf(pane)) ?? [];
+    const entry = shown[side];
+    const free = [0, 1].find((slot) => !slotOrder().includes(slot));
+    if (!entry || free === undefined) return;
+    const tabs = fileTabsOf(pane, side);
+    if (handlesOf(pane)[side]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and move this side?")) return;
+    handlesOf(pane)[side]?.discardChanges();
+    const view = formatFileView([entry]);
+    if (!setSlotView(free, view, false, panesShown().indexOf(pane))) return;
+    if (tabs) setFileTabs((current) => ({ ...current, [sideKey(free, 0)]: tabs }));
+    lastShownFiles.set(sideKey(free, 0), entry);
+    closeSide(pane, side);
+    setFilePane(free);
+    focusFileEntry(free, 0);
+    focusPane(free);
+  };
+  const fileSideMenu = (pane: PaneKey, side: number) => <>
+    <Show when={(fileTabsOf(pane, side)?.entries.length ?? 0) > 1}><MenuItem onSelect={() => closeOtherTabs(pane, side)}><XIcon />Close other tabs</MenuItem></Show>
+    <Show when={(parseFileView(viewOf(pane))?.length ?? 0) === 2 && roomBeside(formatFileView([parseFileView(viewOf(pane))![side]!]))}><MenuItem onSelect={() => moveSideToPane(pane, side)}><PanelRightIcon />Move to new pane</MenuItem></Show>
+    <MenuItem onSelect={() => closeSide(pane, side)}><XIcon />Close side</MenuItem>
+  </>;
   const fileSideTabs = (pane: PaneKey, side: number) => {
     const row = createTabStrip({
       keys: () => { const list = fileTabsOf(pane, side); return list?.entries.length ? list.entries.map(fileEntryKey) : null; },
@@ -3625,6 +3718,7 @@ function App() {
       select: (key) => showFileTab(pane, side, key),
       close: (key) => closeFileTab(pane, side, key),
       dragView: (key) => { const entry = fileTabsOf(pane, side)?.entries.find((item) => fileEntryKey(item) === key); return entry ? formatFileView([entry]) : ""; },
+      dragLit: true,
     });
     return <nav aria-label="Tabs" class="chat-header-title chat-header-tabs file-side-tabs" data-file-side={side}>{row()}</nav>;
   };
@@ -3651,6 +3745,8 @@ function App() {
     select: (key: string) => void;
     close: (key: string) => void;
     dragView?: (key: string) => string;
+    // The lit tab drags too (a file's; a chat's header moves its pane instead).
+    dragLit?: boolean;
     groupDrag?: (keys: string[]) => Record<string, string>;
   };
   const createTabStrip = (options: TabStripOptions) => {
@@ -3726,7 +3822,7 @@ function App() {
           <For each={run.keys}>{(key) => {
             const lit = () => options.lit() === key;
             const name = () => options.title(key);
-            return <span class="pane-tab" role="tab" data-tab={key} aria-selected={lit()} classList={{ "pane-tab-active": lit(), "pane-tab-shown": !lit() && Boolean(options.shown?.(key)), "pane-tab-unsaved": Boolean(options.unsaved?.(key)) }} draggable={lit() || !options.dragView ? undefined : "true"} data-doc-view={lit() ? undefined : options.dragView?.(key)}>
+            return <span class="pane-tab" role="tab" data-tab={key} aria-selected={lit()} classList={{ "pane-tab-active": lit(), "pane-tab-shown": !lit() && Boolean(options.shown?.(key)), "pane-tab-unsaved": Boolean(options.unsaved?.(key)) }} draggable={(lit() && !options.dragLit) || !options.dragView ? undefined : "true"} data-doc-view={lit() && !options.dragLit ? undefined : options.dragView?.(key)}>
               <button type="button" class="pane-tab-open" tabIndex={-1} title={options.hint?.(key) ?? `${label()} / ${name()}`} onClick={() => { if (!lit()) options.select(key); }}>
                 {options.icon?.(key)}
                 <Show when={options.live?.(key)}><i class="pane-tab-live" aria-label="Running" /></Show>

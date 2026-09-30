@@ -741,3 +741,9 @@ body.panes-settling :is(.chat-main, .main-split) { transition: flex-grow 220ms c
 .workspace-file-viewer .workspace-preview-header .workspace-preview-more { display: inline-flex; order: 9; }
 .workspace-file-viewer .workspace-preview-header [data-folded] { display: none !important; }
 .pane-tab-none .pane-tab-open { color: var(--muted-foreground); font-weight: 450; }
+/* The ⇄ on the rule between two sides trades them; the headers keep clear of it. */
+.file-viewer-swap { position: absolute; top: 5.6px; z-index: 7; display: inline-flex; width: 20px; height: 20px; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: var(--radius-sm); background: var(--background); color: var(--muted-foreground); transform: translateX(-50%); }
+.file-viewer-swap:hover { background: var(--accent); color: var(--foreground); }
+.file-viewer-swap svg { width: 12px; height: 12px; }
+.workspace-file-viewer:has(> .file-viewer-swap) > .workspace-preview:first-child .workspace-preview-header { padding-right: 16px; }
+.workspace-file-viewer:has(> .file-viewer-swap) > .workspace-preview + .workspace-preview .workspace-preview-header { padding-left: 18px; }
