@@ -361,6 +361,11 @@ function cacheMathHtml(node: MarkdownNode, source: string, html: string) {
   mathHtmlCache.set(key, html);
 }
 
+// A display formula still arriving is redrawn at most this often. Each redraw
+// replaces the formula's DOM, ~6ms of style and layout on its own whatever its
+// size, so drawn on every token it took a frame over budget each time.
+const OPEN_MATH_INTERVAL_MS = 200;
+
 function scheduleMathRender(run: () => void, policy: MathRenderPolicy) {
   return mathRenderQueue.enqueue(run, policy);
 }
@@ -397,6 +402,11 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     sizes.observe(wrapper);
   };
   let lastCandidate = "";
+  let lastOpenRenderAt = -Infinity;
+  const renderOpen = (current: MarkdownNode, source: string, version: number) => {
+    if (current?.__conduitMathOpen) lastOpenRenderAt = performance.now();
+    renderCurrent(current, source, version);
+  };
   const renderCurrent = (current: MarkdownNode, whole: string, version: number) => {
     if (version !== renderVersion) return;
     const source = current?.type === "math" && current.__conduitMathOpen && !complete() ? finishedMathRows(whole) : whole;
@@ -495,7 +505,15 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
       // queued. Clearing the span here makes every streamed partial flash
       // blank before KaTeX completes, which is most visible on mobile.
       setBusy(true);
-      cancelJob = scheduleMathRender(() => renderCurrent(current, source, version), props.policy?.() || "stream");
+      const policy = props.policy?.() || "stream";
+      const wait = current.__conduitMathOpen && policy === "stream" ? lastOpenRenderAt + OPEN_MATH_INTERVAL_MS - performance.now() : 0;
+      if (wait <= 0) {
+        cancelJob = scheduleMathRender(() => renderOpen(current, source, version), policy);
+        return;
+      }
+      let queued: (() => void) | null = null;
+      const timer = window.setTimeout(() => { queued = scheduleMathRender(() => renderOpen(current, source, version), policy); }, wait);
+      cancelJob = () => { window.clearTimeout(timer); queued?.(); };
       return;
     }
     renderCurrent(current, source, version);
