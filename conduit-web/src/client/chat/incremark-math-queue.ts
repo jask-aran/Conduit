@@ -1,7 +1,7 @@
 export type MathRenderPolicy = "stream" | "reattach";
 
 export const MATH_RENDER_STREAM_FRAME_BUDGET_MS = 4;
-export const MATH_RENDER_REATTACH_FRAME_BUDGET_MS = 8;
+export const MATH_RENDER_REATTACH_FRAME_BUDGET_MS = 5;
 export const MATH_RENDER_STREAM_MAX_JOBS_PER_FRAME = 4;
 export const MATH_RENDER_REATTACH_MAX_JOBS_PER_FRAME = 12;
 
@@ -126,7 +126,10 @@ export class MathRenderQueue {
     const startedAt = this.now();
     let processedJobs = 0;
     while (this.jobs.length && processedJobs < maxJobs && this.now() - startedAt < frameBudgetMs) {
-      const next = this.jobs.shift()!;
+      // A settled chat opens at its end, so its formulas are drawn from the
+      // last one up: the ones on screen first, not after every formula above
+      // them. A streaming formula stays in order.
+      const next = (this.jobs.at(-1)!.policy === "reattach" ? this.jobs.pop() : this.jobs.shift())!;
       if (next.cancelled) continue;
       next.completed = true;
       next.run();
