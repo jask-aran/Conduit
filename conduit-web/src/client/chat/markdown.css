@@ -129,6 +129,13 @@
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
+  /* Each formula paints on its own. Consecutive $$ lines are one paragraph,
+     so a formula still arriving changed the box every formula above it sat
+     in, and Chrome re-recorded the paint of all of them each frame: late in a
+     long stream, paint alone took ~190ms a second. Contained, the unchanged
+     ones reuse their paint (about a tenth of the cost). Overflow is already
+     clipped above, so containment changes nothing visible. */
+  contain: layout paint;
 }
 .chat-markdown .katex-display::-webkit-scrollbar,
 .chat-markdown .incremark-math-block::-webkit-scrollbar { display: none; }
@@ -242,6 +249,13 @@
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
+  /* Each formula paints on its own. Consecutive $$ lines are one paragraph,
+     so a formula still arriving changed the box every formula above it sat
+     in, and Chrome re-recorded the paint of all of them each frame: late in a
+     long stream, paint alone took ~190ms a second. Contained, the unchanged
+     ones reuse their paint (about a tenth of the cost). Overflow is already
+     clipped above, so containment changes nothing visible. */
+  contain: layout paint;
 }
 .chat-markdown .katex-display::-webkit-scrollbar,
 .chat-markdown .incremark-math-block::-webkit-scrollbar { display: none; }
