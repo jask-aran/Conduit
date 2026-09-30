@@ -111,7 +111,7 @@ npm run build
 # built from, and ordered against other development builds by the timestamp.
 # The commit is carried for reading, not for ordering.
 if [ -n "$dev_client" ] && [ -z "$build_version" ]; then
-  last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+  last_tag=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || echo "v0.0.0")
   next=$(node -p "const p='${last_tag}'.replace(/^v/,'').split('.').map(Number); \`\${p[0]||0}.\${p[1]||0}.\${(p[2]||0)+1}\`")
   build_version="$next-dev.$(date -u +%Y%m%d%H%M%S).$(git rev-parse --short=7 HEAD 2>/dev/null || echo nogit)"
 fi
