@@ -1,3 +1,8 @@
+/**
+ * The typewriter's character budget. Buffered is what Incremark streams with;
+ * adaptive and fixed remain as probes, reached with `?incremarkPacing=`. Fade
+ * is not chosen here: it is the Incremark Fade renderer.
+ */
 export type IncremarkPacingMode = "adaptive" | "fixed" | "buffered" | "fade";
 
 export const INCREMARK_PACING_STORAGE_KEY = "conduit:incremark-pacing";
@@ -9,11 +14,10 @@ export const INCREMARK_PACING_OPTIONS: ReadonlyArray<{
   { value: "adaptive", label: "Adaptive" },
   { value: "fixed", label: "Fixed" },
   { value: "buffered", label: "Buffered" },
-  { value: "fade", label: "Fade words" },
 ];
 
 const isPacing = (value: string | null): value is IncremarkPacingMode =>
-  value === "adaptive" || value === "fixed" || value === "buffered" || value === "fade";
+  value === "adaptive" || value === "fixed" || value === "buffered";
 
 function parsePacing(value: string | null): IncremarkPacingMode | null {
   if (isPacing(value)) return value;

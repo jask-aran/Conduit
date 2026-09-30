@@ -122,7 +122,7 @@ const LEADER_MENUS = ["pause", "immediate", "never"];
 // incremark-synthetic, incremark-fast -- are deliberately absent. A stored value that is no
 // longer a renderer normalizes to null, and the client falls back to its
 // default rather than asking for something that no longer exists.
-const MARKDOWN_RENDERERS = ["incremark", "marked"];
+const MARKDOWN_RENDERERS = ["incremark", "incremark-fade", "marked"];
 const USER_MESSAGE_COLLAPSE = ["off", "6", "10", "15", "25"];
 const CHAT_SORTS = ["latest", "created"];
 const stringList = (value, limit) => Array.isArray(value) && value.length <= limit
