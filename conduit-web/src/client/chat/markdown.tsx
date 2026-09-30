@@ -16,6 +16,9 @@ export type ChatMarkdownProps = {
   streamVersion?: number;
   inline?: boolean;
   onRendered?: () => void;
+  // The answer has finished appearing: nothing still revealing or drawing.
+  // Only renderers that reveal after the stream ends call it.
+  onSettled?: () => void;
   pacing?: IncremarkPacingMode;
   displayKey?: string;
   renderer?: MarkdownRendererId;
