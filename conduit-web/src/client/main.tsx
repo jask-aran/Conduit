@@ -2868,9 +2868,7 @@ function App() {
       const roomy = [shownFilePane(), ...panesShown()].find((pane) => pane !== null && (parseFileView(viewOf(pane))?.length ?? 2) < 2);
       if (roomy !== undefined && roomy !== null) {
         setPaneView(roomy, formatFileView([...parseFileView(viewOf(roomy))!, entry]));
-        focusFileEntry(roomy, 1);
-        setFilePane(roomy);
-        return;
+        return focusColumn(roomy, 1);
       }
     }
     const pane = options.beside ? null : shownFilePane();
@@ -2878,11 +2876,11 @@ function App() {
       const view = formatFileView([entry]);
       openBeside(view, false);
       const placed = shownSlots().find((slot) => slotView(slot) === view);
-      if (placed !== undefined) { setFilePane(placed); focusFileEntry(placed, 0); }
+      if (placed !== undefined) focusColumn(placed, 0);
       return;
     }
     const target = parseFileView(viewOf(pane))!;
-    if (!target.length) return void setPaneView(pane, formatFileView([entry]));
+    if (!target.length) { setPaneView(pane, formatFileView([entry])); return focusColumn(pane, 0); }
     if (emptyFocused(pane)) return fillEmptySide(pane, entry);
     const index = Math.min(fileFocus()[String(pane)] ?? 0, target.length - 1);
     if (handlesOf(pane)[index]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and open another file?")) return;
@@ -2890,6 +2888,7 @@ function App() {
     // Ctrl keeps the file it replaces as a tab (6c).
     if (tabActivation()) keepFileNext.add(sideKey(pane, index));
     setPaneView(pane, formatFileView(target.map((item, at) => at === index ? entry : item)));
+    focusColumn(pane, index);
   };
   // The split opens an empty second side, which the next file opened into the viewer fills.
   // An empty column beside a viewer's one file: at 1 (the split) or 0 (its last tab dragged away).
@@ -3179,14 +3178,20 @@ function App() {
   const focusedTarget = () => focusedSlot()?.session.selected() ?? {};
   /*
    * The dock follows places, not panes (6d-1): it shows the place of the last
-   * chat or page pane that had the keyboard. A file or terminal pane taking
-   * the keyboard leaves it where it was, so it moves only between panes in
-   * different places.
+   * chat, page or file pane that had the keyboard -- a file viewer's is the
+   * place of the file in its current column. A terminal or tool taking the
+   * keyboard leaves it where it was.
    */
   const [placePane, setPlacePane] = createSignal<PaneKey>("main");
-  createEffect(() => { const pane = keyboardPane(); if (pane === "main" || isPaneView(slotView(pane))) setPlacePane(pane); });
+  createEffect(() => { const pane = keyboardPane(); if (pane === "main" || isPaneView(slotView(pane)) || parseFileView(slotView(pane))?.length) setPlacePane(pane); });
   const dockSelection = () => {
     const slot = placePane();
+    const files = panesShown().includes(slot) ? parseFileView(viewOf(slot)) : null;
+    if (files?.length) {
+      const entry = files[Math.min(fileFocus()[String(slot)] ?? 0, files.length - 1)]!;
+      const project = catalogue.projects().find((item) => item.id === entry.projectId);
+      if (project) return { project };
+    }
     if (slot === "main" || !shownSlots().includes(slot)) return null;
     const pane = paneSlot(slot);
     const project = slotPageProject(slot);
