@@ -304,6 +304,36 @@ function preserveAppendOnlyTable(previous: MarkdownNode | undefined, current: Ma
   return preserveAppendOnlyNode(previous, current);
 }
 
+/**
+ * Keep every unchanged subtree of `next` as the object it was in `previous`.
+ *
+ * The parser rebuilds the open block's tree on each update, so without this
+ * every formula, link and text node in it is a new object every frame and
+ * re-renders -- a long block of formulas re-evaluated every one of them per
+ * frame. Only the block being revealed is walked, never the finished ones.
+ */
+function shareUnchanged(previous: MarkdownNode, next: MarkdownNode): MarkdownNode {
+  if (previous === next || !previous || !next || typeof previous !== "object" || typeof next !== "object") return next;
+  if (previous.type !== next.type) return next;
+  let same = true;
+  for (const key in next) {
+    if (key === "children" || key === "position") continue;
+    if (previous[key] !== next[key]) { same = false; break; }
+  }
+  if (same) for (const key in previous) if (key !== "children" && key !== "position" && !(key in next)) { same = false; break; }
+  const nextChildren = next.children;
+  if (!Array.isArray(nextChildren)) return same && !Array.isArray(previous.children) ? previous : next;
+  const previousChildren = Array.isArray(previous.children) ? previous.children : [];
+  let childrenSame = previousChildren.length === nextChildren.length;
+  const children = nextChildren.map((child: MarkdownNode, index: number) => {
+    const shared = shareUnchanged(previousChildren[index], child);
+    if (shared !== previousChildren[index]) childrenSame = false;
+    return shared;
+  });
+  if (same && childrenSame) return previous;
+  return { ...next, children };
+}
+
 function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: RendererContext; history: Map<string, MarkdownNode>; shown: Map<string, BlockFade>; streaming: () => boolean }) {
   // The caret belongs to the block text is still arriving in: the last one,
   // while the message streams. isDisplayComplete is not that -- the
@@ -331,7 +361,7 @@ function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: Rende
       currentNode = { ...currentNode, type };
     }
     const previousNode = props.history.get(block.id);
-    const stableNode = type === "table" ? preserveAppendOnlyTable(previousNode, currentNode) : currentNode;
+    const stableNode = shareUnchanged(previousNode, type === "table" ? preserveAppendOnlyTable(previousNode, currentNode) : currentNode);
     props.history.set(block.id, stableNode);
     if (!props.context.fadeWords?.() || !props.context.fadeLive?.()) return stableNode;
     let fade = props.shown.get(block.id);
