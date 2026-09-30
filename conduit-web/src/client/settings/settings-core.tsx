@@ -18,6 +18,7 @@ import { isWarmMicrophoneActive, stopWarmMicrophone } from "../chat/voice-dictat
 import { createVoiceWaveformController, VoiceWaveform } from "../chat/voice-waveform";
 import { ModelSelector } from "../chat/model-selector";
 import { saveTabFrost, tabFrost } from "../preferences/tab-frost";
+import { saveStreamFade, STREAM_FADE_OPTIONS, streamFadeMs } from "../preferences/stream-fade";
 import type { Installation, Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
 import { MAX_SIDEBAR_CHAT_LIMIT, MIN_SIDEBAR_CHAT_LIMIT } from "../navigation/sidebar-preferences";
@@ -246,6 +247,7 @@ export function Settings(props: {
 }) {
   const [section, setSection] = createSignal<Section>(props.initialSection || "ui");
   const [frosted, setFrosted] = createSignal(tabFrost());
+  const [fadeMs, setFadeMs] = createSignal(streamFadeMs());
   /*
    * On a phone, Settings is two screens rather than a rail beside a pane.
    *
@@ -1159,6 +1161,13 @@ export function Settings(props: {
                       <For each={MARKDOWN_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </select>
                   </label>
+                  <Show when={props.markdownRenderer === "incremark-fade"}>
+                    <label class="settings-line" for="stream-fade"><span>Word fade</span>
+                      <select id="stream-fade" aria-label="Word fade time" value={fadeMs()} onChange={(event) => setFadeMs(saveStreamFade(Number(event.currentTarget.value)))}>
+                        <For each={STREAM_FADE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                      </select>
+                    </label>
+                  </Show>
                   <label class="settings-line" for="meteor-field"><span>Meteor field</span>
                     <Switch id="meteor-field" label="Ambient meteor field" checked={props.meteorField} onChange={props.onMeteorFieldChange} />
                   </label>

@@ -31,6 +31,7 @@ import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/compose
 import { AppDashboard } from "./dashboard/app-dashboard";
 import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_STORAGE_KEY, selectedComposerSurface } from "./chat/composer-surface";
 import { applyTabFrost } from "./preferences/tab-frost";
+import { applyStreamFade } from "./preferences/stream-fade";
 import type { VoiceDictationSettings } from "./chat/voice-dictation-types";
 import { CONTEXT_METRIC_STORAGE_KEY, formatContextMetrics, saveContextMetrics, selectedContextMetrics, type ContextMetricId } from "./chat/context-metrics";
 import { HostUiRequests } from "./chat/host-ui-card";
@@ -645,6 +646,7 @@ function App() {
   // those; the app opened at its start page restores this device's last
   // layout; any other URL -- an old link, someone else's share -- pane A alone.
   applyTabFrost();
+  applyStreamFade();
   const launchUrl = new URL(location.href);
   const urlNamesPanes = launchUrl.searchParams.has("pane") || launchUrl.searchParams.has("a");
   const atStart = launchUrl.pathname === "/" && !launchUrl.search;
