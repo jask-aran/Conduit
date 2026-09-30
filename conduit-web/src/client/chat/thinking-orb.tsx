@@ -16,7 +16,8 @@ export type { ModeFrame, ModeOpts, OrbState };
  * a settled turn, or reduced motion -- it is one still frame, and changes
  * without a fade. `frame` replaces the state's geometry outright, for a
  * frame drawn in the engine's terms rather than taken from the library; it
- * is given plain seconds, not the state's preset speed.
+ * is given plain seconds, not the state's preset speed. A settled turn's orb
+ * moves slowly enough to be drawn less often (`rate`, draws a second).
  */
 const SIZE = 20;
 const DWELL_MS = 250;
@@ -40,7 +41,33 @@ function rgbOf(element: HTMLElement, color: string) {
 
 type Shown = { state: OrbState; opts?: ModeOpts; frame?: ModeFrame };
 
-export function ThinkingOrb(props: { state: OrbState; opts?: ModeOpts; frame?: ModeFrame; paused?: boolean; tint?: string; class?: string }) {
+/*
+ * One animation frame loop for every orb on the page, running only while one
+ * plays: each orb was its own rAF loop, so a transcript with a few settled
+ * turns in view ran as many loops, all drawing every frame
+ * (docs/design/performance-pass.md, 13). An orb given a `rate` draws at most
+ * that many times a second.
+ */
+type Player = { draw: (now: number) => void; interval: number; last: number };
+const players = new Set<Player>();
+let tick = 0;
+const run = (now: number) => {
+  for (const player of players) {
+    if (now - player.last < player.interval - 1) continue;
+    player.last = now;
+    player.draw(now);
+  }
+  tick = players.size ? requestAnimationFrame(run) : 0;
+};
+const play = (player: Player) => { players.add(player); if (!tick) tick = requestAnimationFrame(run); };
+const stop = (player: Player) => { players.delete(player); if (!players.size && tick) { cancelAnimationFrame(tick); tick = 0; } };
+
+/* A settled orb's slow turn (a full one in ~12s: ~0.3px a step at 20px) reads
+   the same at 15 draws a second as at the display's rate; the sputter's
+   snags and kicks want 30. */
+export const settledOrbRate = (unfinished: boolean) => unfinished ? 30 : 15;
+
+export function ThinkingOrb(props: { state: OrbState; opts?: ModeOpts; frame?: ModeFrame; paused?: boolean; tint?: string; class?: string; rate?: number }) {
   let front!: HTMLCanvasElement;
   let back!: HTMLCanvasElement;
   const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -109,17 +136,17 @@ export function ThinkingOrb(props: { state: OrbState; opts?: ModeOpts; frame?: M
       back.style.opacity = String(1 - progress);
     };
 
-    let frame = 0;
     let visible = true;
-    const loop = () => { draw(performance.now() / 1000); frame = requestAnimationFrame(loop); };
+    const player: Player = { draw: (now) => draw(now / 1000), interval: 0, last: 0 };
     const sync = () => {
-      cancelAnimationFrame(frame);
-      if (playing() && visible && document.visibilityState !== "hidden") frame = requestAnimationFrame(loop);
+      player.interval = props.rate ? 1000 / props.rate : 0;
+      if (playing() && visible && document.visibilityState !== "hidden") play(player); else stop(player);
     };
     // Still, it is drawn once for each change of what it shows.
     createEffect(() => {
       frontPreset();
       tint();
+      void props.rate;
       if (playing()) draw(performance.now() / 1000);
       else { setLeaving(null); draw(STILL_AT); }
       sync();
@@ -136,7 +163,7 @@ export function ThinkingOrb(props: { state: OrbState; opts?: ModeOpts; frame?: M
     try { resized.observe(front, { box: "device-pixel-content-box" }); } catch { resized.observe(front); }
     document.addEventListener("visibilitychange", sync);
     onCleanup(() => {
-      cancelAnimationFrame(frame);
+      stop(player);
       observer.disconnect();
       resized.disconnect();
       document.removeEventListener("visibilitychange", sync);

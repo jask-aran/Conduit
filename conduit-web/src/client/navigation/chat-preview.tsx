@@ -6,7 +6,7 @@ import { chatSortStamp } from "../preferences/chat-sort";
 import type { ChatSummary, Message, Project, ToolKind, TranscriptDetail } from "../api/contracts";
 import { harnessLabelFor, ThreadHarnessMark } from "../harness-brand";
 import { PLAIN_SPHERE, SPUTTERING_SPHERE } from "../chat/orb-frames";
-import { ThinkingOrb } from "../chat/thinking-orb";
+import { settledOrbRate, ThinkingOrb } from "../chat/thinking-orb";
 
 /*
  * Chat search's preview column: the highlighted chat's last prompt, the start
@@ -124,7 +124,7 @@ export function ChatPreview(props: { target: Target | null; folder?: Project | n
             <Show when={seen().prompt}><p class="command-preview-prompt">{seen().prompt}</p></Show>
             <Show when={seen().outcome}>
               <div class="command-preview-turn">
-                <ThinkingOrb state="working" frame={seen().outcome === "Done" ? PLAIN_SPHERE : SPUTTERING_SPHERE} tint={seen().outcome === "Done" ? undefined : "var(--destructive)"} />
+                <ThinkingOrb state="working" frame={seen().outcome === "Done" ? PLAIN_SPHERE : SPUTTERING_SPHERE} tint={seen().outcome === "Done" ? undefined : "var(--destructive)"} rate={settledOrbRate(seen().outcome !== "Done")} />
                 <span><b>{seen().outcome}</b>{seen().took ? ` · ${seen().took}` : ""}{seen().work ? ` · ${seen().work}` : ""}</span>
               </div>
             </Show>
