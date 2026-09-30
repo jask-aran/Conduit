@@ -529,7 +529,7 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
       setPreviewMinHeight(0);
       return;
     }
-    const cached = getCachedMathHtml(current, repairSyntheticMathSource(source), complete());
+    const cached = getCachedMathHtml(current, repairSyntheticMathSource(source));
     if (cached !== undefined) {
       lastValidHtml = cached;
       show(cached);
