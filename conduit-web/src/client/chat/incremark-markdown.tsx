@@ -1109,7 +1109,20 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   });
   onCleanup(() => typewriterController.destroy());
 
-  const blockContainsOffset = (block: ParsedBlock, offset: number) => offset >= block.startOffset && offset <= block.endOffset;
+  // Offsets end exclusive: a block ending where the open construct starts is
+  // the one before it. Counting the end in, a `$$` line opening right under a
+  // finished formula found that formula's block first, so the new formula was
+  // drawn in its place -- the finished one gone -- until it closed and both
+  // jumped back into their own slots.
+  const openBlockAt = (blocks: Iterable<ParsedBlock>, offset: number) => {
+    let within: ParsedBlock | undefined;
+    let touching: ParsedBlock | undefined;
+    for (const block of blocks) {
+      if (offset >= block.startOffset && offset < block.endOffset) within = block;
+      else if (offset === block.endOffset && (!touching || block.startOffset > touching.startOffset)) touching = block;
+    }
+    return within ?? touching;
+  };
 
   createEffect(() => {
     const raw = frozenSource() ?? String(props.children || "");
@@ -1177,7 +1190,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     }
     const pendingPrefixBlock = (() => {
       if (!split.pending || props.inline) return null;
-      const currentBlock = [...pendingUpdateBlocks.values()].find((block) => blockContainsOffset(block, split.pending!.start));
+      const currentBlock = openBlockAt(pendingUpdateBlocks.values(), split.pending.start);
       if (!currentBlock) return null;
       if (split.pending.kind === "math-inline" || split.pending.kind === "math-block") {
         const previewNode = createSyntheticMathPreviewNode(currentBlock.node, {
@@ -1265,7 +1278,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       // the parser reads it meanwhile -- a `-` line inside an open formula is a
       // setext underline to Markdown, and ended a block there, so the rest of
       // the formula leaked as a paragraph. Only blocks wholly before it show.
-      const beforeOpen = (block: ParsedBlock) => pendingOffset == null || block.endOffset < pendingOffset;
+      const beforeOpen = (block: ParsedBlock) => pendingOffset == null || block.endOffset <= pendingOffset;
       const nextBlocks = [...completedById.values()]
         .filter(beforeOpen)
         .sort((left, right) => left.startOffset - right.startOffset);
