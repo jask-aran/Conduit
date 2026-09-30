@@ -5,6 +5,7 @@ import { applyTranscriptOp } from "./transcript-fold.js";
 import { messageClose, messageDrop, messageOpen, toolClose, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
 import { reduceActiveGeneration, snapshotActiveGeneration } from "./active-generation.js";
 import { unsupported } from "./harnesses/unsupported.js";
+import { KATEX_COMPENDIUM, KATEX_LIMITS } from "./test-stream-replays.js";
 
 /**
  * A backend that answers instantly, forever, at a rate you choose.
@@ -82,6 +83,11 @@ export const TEST_STREAM_SPEEDS = Object.freeze([
   { id: "fast-250", label: "250 tokens/s", tokensPerSecond: 250 },
   { id: "fast-1000", label: "1000 tokens/s", tokensPerSecond: 1000 },
   { id: "flood-4000", label: "4000 tokens/s · past any real provider", tokensPerSecond: 4000 },
+  // A real reply replayed word for word at a real model's pace: what the
+  // renderer does with the text a model actually writes, which the filler
+  // words never exercise. The whole reply streams whatever the level says.
+  { id: "replay-katex-limits", label: "KaTeX replay · long aligned blocks", tokensPerSecond: 60, replay: KATEX_LIMITS },
+  { id: "replay-katex-compendium", label: "KaTeX replay · hundreds of formulas", tokensPerSecond: 60, replay: KATEX_COMPENDIUM },
 ].map(Object.freeze));
 
 /**
@@ -163,6 +169,14 @@ export const TEST_STREAM_TOOL = Object.freeze({
   input: Object.freeze({ path: "docs/testing.md" }),
   output: "docs/testing.md: approach selection, commands, safety boundaries, evidence.",
 });
+
+// About four characters a token, as a provider's tokenizer cuts prose, with
+// whitespace riding at the front of the token after it.
+const replayTokenCache = new Map();
+export function replayTokens(text) {
+  if (!replayTokenCache.has(text)) replayTokenCache.set(text, text.match(/\s*\S{1,4}|\s+/g) || []);
+  return replayTokenCache.get(text);
+}
 
 /** The nth token of the stream, including the paragraph breaks. */
 export function tokenAt(index) {
@@ -282,7 +296,8 @@ export class TestStreamAdapter extends EventEmitter {
     // name. Inventing one here would state a second row for a message that is
     // on screen: the same prompt twice, until a reload agreed with neither.
     const userMessageId = options?.clientUserMessageId || crypto.randomUUID();
-    record.tokens = amountFromPrompt(message, amountFor(record.thinkingLevel).tokens);
+    const replay = speedFor(record.model).replay;
+    record.tokens = replay ? replayTokens(replay).length : amountFromPrompt(message, amountFor(record.thinkingLevel).tokens);
     record.active = true;
     record.activity = "working";
     record.stopping = false;
@@ -365,7 +380,7 @@ export class TestStreamAdapter extends EventEmitter {
       if (!record.turn || record.stopping || record.turn !== turn) return;
       const due = Math.min(target, from + Math.ceil(((Date.now() - startedAt) / 1000) * speed.tokensPerSecond));
       while (turn.sent < due) {
-        const delta = tokenAt(turn.sent);
+        const delta = speed.replay ? replayTokens(speed.replay)[turn.sent] ?? "" : tokenAt(turn.sent);
         turn.text += delta;
         turn.sent += 1;
         record.streamed += 1;
