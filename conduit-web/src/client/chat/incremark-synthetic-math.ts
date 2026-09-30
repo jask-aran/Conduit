@@ -228,6 +228,12 @@ export function createSyntheticMathPreviewNode(node: MarkdownNode, pending: Synt
   if (!node || typeof node !== "object") return null;
   if (pending.kind === "math-block") {
     const [preview, replaced] = replacePendingDisplayMath(node, pending.body);
+    // A paragraph holding nothing but the formula is the formula: returned
+    // wrapped, the block changed type once the parser saw it as display math,
+    // which remounted it and blanked the formula for a frame.
+    if (replaced && preview.type === "paragraph" && preview.children?.length === 1 && preview.children[0].type === "math") {
+      return { ...preview.children[0], position: node.position };
+    }
     if (replaced) return preview;
     if (node.type === "table" || node.type === "tableRow" || node.type === "tableCell") return null;
     return {
