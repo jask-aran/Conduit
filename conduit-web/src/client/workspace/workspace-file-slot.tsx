@@ -1,6 +1,6 @@
 import { WorkbenchButton, WorkbenchStatus } from "./workspace-workbench";
 import { batch, createEffect, createSignal, lazy, on, onCleanup, Show, Suspense, type JSX } from "solid-js";
-import { CopyIcon, DownloadIcon, EllipsisIcon, WrapTextIcon, FileCode2Icon, FileDiffIcon, GitCompareArrowsIcon, PencilIcon, SaveIcon, Trash2Icon, UploadIcon, XIcon } from "lucide-solid";
+import { CopyIcon, SearchIcon, DownloadIcon, EllipsisIcon, WrapTextIcon, FileCode2Icon, FileDiffIcon, GitCompareArrowsIcon, PencilIcon, SaveIcon, Trash2Icon, UploadIcon, XIcon } from "lucide-solid";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Menu, MenuContent, MenuItem, MenuTrigger, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";
@@ -159,7 +159,8 @@ export default function WorkspaceFileSlot(props: {
   /** At the header's end: the pane's own actions, on a viewer's last side. */
   headerEnd?: JSX.Element;
   /** The suffix's actions again, for the header's overflow menu when it is too narrow for them. */
-  headerMenuItems?: JSX.Element;
+  /** More items for the header's ⋯, given which folded actions it lists. */
+  headerMenuItems?: (folded: (action: string) => boolean) => JSX.Element;
   height?: string;
   empty?: string;
   onToggleWrap: () => void;
@@ -458,13 +459,43 @@ export default function WorkspaceFileSlot(props: {
   const editable = () => Boolean(preview() && !preview()!.readOnly && !preview()!.truncated);
   const hasChanges = () => Boolean(props.gitFile && (props.gitFile.status === "??" || props.gitFile.status[1] !== " "));
   const hasStaged = () => Boolean(props.gitFile && props.gitFile.status[0] !== " " && props.gitFile.status[0] !== "?");
-  const fileActions = () => <div class="workspace-file-actions">
-    <Show when={hasChanges()}><WorkbenchButton type="button" aria-label="Review unstaged changes" title="Review unstaged changes" onClick={(event) => props.onShowDiff?.(false, event.altKey)}><FileDiffIcon /></WorkbenchButton></Show>
-    <Show when={hasStaged()}><WorkbenchButton type="button" aria-label="Review staged changes" title="Review staged changes" onClick={(event) => props.onShowDiff?.(true, event.altKey)}><GitCompareArrowsIcon /></WorkbenchButton></Show>
-    <WorkbenchButton type="button" aria-label="Copy contents" title="Copy contents" onClick={() => copy(currentText())}><CopyIcon /></WorkbenchButton>
-    <WorkbenchButton type="button" aria-label="Copy path" title="Copy path" onClick={() => copy(props.path ?? "")}><FileCode2Icon /></WorkbenchButton>
-    <WorkbenchButton type="button" aria-label="Download working file" title="Download working file" onClick={() => void download()}><DownloadIcon /></WorkbenchButton>
+  /*
+   * A file viewer's header folds its actions one at a time (data-fold, first to
+   * fold first) into its ⋯, which the viewer measures (workspace-file-viewer.tsx)
+   * and reports with a "headerfold" event; the ⋯ lists only what has folded,
+   * besides copying and wrapping, which live there.
+   */
+  const [folded, setFolded] = createSignal<string[]>([]);
+  const isFolded = (action: string) => folded().includes(action);
+  const watchFolds = (element: HTMLElement) => queueMicrotask(() => {
+    const header = element.closest("header");
+    if (!header) return;
+    const note = (event: Event) => setFolded((event as CustomEvent<string[]>).detail);
+    header.addEventListener("headerfold", note);
+    onCleanup(() => header.removeEventListener("headerfold", note));
+  });
+  const pressHidden = (label: string, from: Element | null | undefined) => from?.closest("header")?.querySelector<HTMLElement>(`[aria-label="${label}"]`)?.click();
+  let moreAnchor: HTMLElement | undefined;
+  const fileActions = () => <div class="workspace-file-actions" ref={watchFolds}>
+    <Show when={hasChanges()}><WorkbenchButton type="button" data-fold="4" aria-label="Review unstaged changes" title="Review unstaged changes" onClick={(event) => props.onShowDiff?.(false, event.altKey)}><FileDiffIcon /></WorkbenchButton></Show>
+    <Show when={hasStaged()}><WorkbenchButton type="button" data-fold="3" aria-label="Review staged changes" title="Review staged changes" onClick={(event) => props.onShowDiff?.(true, event.altKey)}><GitCompareArrowsIcon /></WorkbenchButton></Show>
+    <WorkbenchButton type="button" class="workspace-file-copy" aria-label="Copy contents" title="Copy contents" onClick={() => copy(currentText())}><CopyIcon /></WorkbenchButton>
+    <WorkbenchButton type="button" class="workspace-file-copy" aria-label="Copy path" title="Copy path" onClick={() => copy(props.path ?? "")}><FileCode2Icon /></WorkbenchButton>
+    <WorkbenchButton type="button" data-fold="0" aria-label="Download working file" title="Download working file" onClick={() => void download()}><DownloadIcon /></WorkbenchButton>
   </div>;
+  const moreMenu = (text: boolean) => <Menu modal={false}>
+    <MenuTrigger class="workspace-preview-more" aria-label="More file actions" title="More file actions" ref={moreAnchor}><EllipsisIcon /></MenuTrigger>
+    <MenuContent>
+      <Show when={hasChanges() && isFolded("4")}><MenuItem onSelect={() => props.onShowDiff?.(false)}><FileDiffIcon />Review unstaged changes</MenuItem></Show>
+      <Show when={hasStaged() && isFolded("3")}><MenuItem onSelect={() => props.onShowDiff?.(true)}><GitCompareArrowsIcon />Review staged changes</MenuItem></Show>
+      <Show when={text && isFolded("2")}><MenuItem onSelect={() => pressHidden("Find or replace", moreAnchor)}><SearchIcon />Find or replace</MenuItem></Show>
+      {props.headerMenuItems?.(isFolded)}
+      <Show when={isFolded("0")}><MenuItem onSelect={() => void download()}><DownloadIcon />Download</MenuItem></Show>
+      <Show when={text}><MenuItem onSelect={() => props.onToggleWrap()}><WrapTextIcon />{props.wrap ? "Stop wrapping lines" : "Wrap lines"}</MenuItem></Show>
+      <Show when={text}><MenuItem onSelect={() => copy(currentText())}><CopyIcon />Copy contents</MenuItem></Show>
+      <MenuItem onSelect={() => copy(props.path ?? "")}><FileCode2Icon />Copy path</MenuItem>
+    </MenuContent>
+  </Menu>;
   const gitControls = () => <Show when={props.gitFile}>{(file) =>
     <code class="workspace-file-git-status" data-status={file().status === "??" ? "U" : file().status.trim()} title="Git status">{file().status === "??" ? "U" : file().status.trim()}</code>
   }</Show>;
@@ -479,18 +510,7 @@ export default function WorkspaceFileSlot(props: {
     {fileActions()}
     <span class="workspace-preview-suffix">{props.headerSuffix}</span>
     {/* A header too narrow for its actions keeps them here, and the file's name in view. */}
-    <Menu modal={false}>
-      <MenuTrigger class="workspace-preview-more" aria-label="More file actions" title="More file actions"><EllipsisIcon /></MenuTrigger>
-      <MenuContent>
-        <Show when={hasChanges()}><MenuItem onSelect={() => props.onShowDiff?.(false)}><FileDiffIcon />Review unstaged changes</MenuItem></Show>
-        <Show when={hasStaged()}><MenuItem onSelect={() => props.onShowDiff?.(true)}><GitCompareArrowsIcon />Review staged changes</MenuItem></Show>
-        {props.headerMenuItems}
-        <MenuItem onSelect={() => props.onToggleWrap()}><WrapTextIcon />{props.wrap ? "Stop wrapping lines" : "Wrap lines"}</MenuItem>
-        <MenuItem onSelect={() => copy(currentText())}><CopyIcon />Copy contents</MenuItem>
-        <MenuItem onSelect={() => copy(props.path ?? "")}><FileCode2Icon />Copy path</MenuItem>
-        <MenuItem onSelect={() => void download()}><DownloadIcon />Download</MenuItem>
-      </MenuContent>
-    </Menu>
+    {moreMenu(true)}
     <Show when={props.closable && !props.headerTabs}><WorkbenchButton type="button" class="workspace-preview-action workspace-preview-close" aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><XIcon /></WorkbenchButton></Show>
     {props.headerEnd}
   </>;
@@ -523,9 +543,10 @@ export default function WorkspaceFileSlot(props: {
           <Show when={props.headerPrefix}>{props.headerPrefix}</Show>
           <Show when={props.headerTabs} fallback={<div class="workspace-preview-file" title={file().path}><FileTypeIcon name={file().path} /><span>{file().path}</span></div>}>{props.headerTabs}</Show>
           {gitControls()}
-          <WorkbenchButton type="button" class="workspace-preview-action" aria-label="Download file" title="Download file" onClick={() => void download()}><DownloadIcon /></WorkbenchButton>
-          <WorkbenchButton type="button" class="workspace-preview-copy" aria-label="Copy file path" title="Copy file path" onClick={() => copy(file().path)}><CopyIcon /></WorkbenchButton>
+          <WorkbenchButton type="button" class="workspace-preview-action" data-fold="0" ref={watchFolds} aria-label="Download file" title="Download file" onClick={() => void download()}><DownloadIcon /></WorkbenchButton>
+          <WorkbenchButton type="button" class="workspace-preview-copy workspace-file-copy" aria-label="Copy file path" title="Copy file path" onClick={() => copy(file().path)}><CopyIcon /></WorkbenchButton>
           {props.headerSuffix}
+          <Show when={props.headerTabs}>{moreMenu(false)}</Show>
           <Show when={props.closable && !props.headerTabs}>
             <WorkbenchButton type="button" class="workspace-preview-action workspace-preview-close" aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><XIcon /></WorkbenchButton>
           </Show>
