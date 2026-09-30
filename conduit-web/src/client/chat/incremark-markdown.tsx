@@ -9,7 +9,7 @@ import { copyWithFeedback, createExternalLinkController } from "./markdown-actio
 import { codeBlockCollapseLabel, codeBlockState, normalizeCodeLanguage, publishCodeBlockToggle } from "./code-block";
 import { useCodeBlockCollapse } from "./transcript-appearance";
 import { highlighterReady, StreamingCodeHighlighter } from "./code-highlight";
-import { createSyntheticMathPreviewNode, finishedMathRows, repairSyntheticMathSource, trimUnfinishedMathTail } from "./incremark-synthetic-math";
+import { createSyntheticMathPreviewNode, repairSyntheticMathSource, trimUnfinishedMathTail } from "./incremark-synthetic-math";
 import { conduitMathPlugin } from "./incremark-math-extension";
 import { BufferedIncremarkTypewriter, visibleAstCharacters } from "./incremark-typewriter";
 import { MathRenderQueue, type MathRenderPolicy } from "./incremark-math-queue";
@@ -361,11 +361,6 @@ function cacheMathHtml(node: MarkdownNode, source: string, html: string) {
   mathHtmlCache.set(key, html);
 }
 
-// A display formula still arriving is redrawn at most this often. Each redraw
-// replaces the formula's DOM, ~6ms of style and layout on its own whatever its
-// size, so drawn on every token it took a frame over budget each time.
-const OPEN_MATH_INTERVAL_MS = 200;
-
 function scheduleMathRender(run: () => void, policy: MathRenderPolicy) {
   return mathRenderQueue.enqueue(run, policy);
 }
@@ -402,14 +397,8 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     sizes.observe(wrapper);
   };
   let lastCandidate = "";
-  let lastOpenRenderAt = -Infinity;
-  const renderOpen = (current: MarkdownNode, source: string, version: number) => {
-    if (current?.__conduitMathOpen) lastOpenRenderAt = performance.now();
-    renderCurrent(current, source, version);
-  };
-  const renderCurrent = (current: MarkdownNode, whole: string, version: number) => {
+  const renderCurrent = (current: MarkdownNode, source: string, version: number) => {
     if (version !== renderVersion) return;
-    const source = current?.type === "math" && current.__conduitMathOpen && !complete() ? finishedMathRows(whole) : whole;
     const candidate = repairSyntheticMathSource(source);
     if (candidate === lastCandidate && lastValidHtml) {
       setBusy(false);
@@ -505,15 +494,7 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
       // queued. Clearing the span here makes every streamed partial flash
       // blank before KaTeX completes, which is most visible on mobile.
       setBusy(true);
-      const policy = props.policy?.() || "stream";
-      const wait = current.__conduitMathOpen && policy === "stream" ? lastOpenRenderAt + OPEN_MATH_INTERVAL_MS - performance.now() : 0;
-      if (wait <= 0) {
-        cancelJob = scheduleMathRender(() => renderOpen(current, source, version), policy);
-        return;
-      }
-      let queued: (() => void) | null = null;
-      const timer = window.setTimeout(() => { queued = scheduleMathRender(() => renderOpen(current, source, version), policy); }, wait);
-      cancelJob = () => { window.clearTimeout(timer); queued?.(); };
+      cancelJob = scheduleMathRender(() => renderCurrent(current, source, version), props.policy?.() || "stream");
       return;
     }
     renderCurrent(current, source, version);
@@ -1049,9 +1030,14 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         .filter((block) => pendingOffset == null || !blockContainsOffset(block, pendingOffset))
         .sort((left, right) => left.startOffset - right.startOffset);
       const completedIds = new Set(nextBlocks.map((block) => block.id));
-      const nextPendingBlocks = split.pending
-        ? (pendingPrefixBlock ? [pendingPrefixBlock] : [])
-        : [...pendingUpdateBlocks.values()].filter((block) => !completedIds.has(block.id));
+      // The preview stands in only for the block holding the open construct.
+      // Blocks the parser still holds as pending before it stay: consecutive
+      // `$$ … $$` lines are one paragraph to the parser, so every formula already
+      // closed above the open one is still pending, and dropping them all while
+      // a formula was open made each blink out and back as the next one opened.
+      const nextPendingBlocks = [...pendingUpdateBlocks.values()]
+        .filter((block) => !completedIds.has(block.id) && (pendingOffset == null || !blockContainsOffset(block, pendingOffset)))
+        .concat(split.pending && pendingPrefixBlock ? [pendingPrefixBlock] : []);
       currentBlocks = nextBlocks
         .concat(nextPendingBlocks)
         .sort((left, right) => left.startOffset - right.startOffset);
