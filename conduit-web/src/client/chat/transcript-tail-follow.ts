@@ -136,9 +136,6 @@ export const TAIL_NEAR_LATEST_PX = 80;
  */
 export const TAIL_REJOIN_PX = 8;
 export const HISTORY_LOAD_TOP_PX = 240;
-// Drawing held history rows stops after this much of a frame (6.94ms at 144Hz),
-// leaving the rest of it for layout and paint.
-export const HISTORY_REVEAL_BUDGET_MS = 4;
 
 export function usedMaxScrollTop(input: {
   scrollHeight: number;
