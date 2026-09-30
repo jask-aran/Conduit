@@ -78,6 +78,15 @@ transcript and composer margins matched on every sampled frame, and the
 transcript's virtualisation stays frozen during motion. The one real bug found
 nearby (columns sliding past their gutter and snapping back) is fixed.
 
+**Measured (2026-09-30), with target 6.** Under a 4× CPU slowdown with two
+chats open and one streaming a real turn, frames dropped (7-20 of ~240 over
+33ms in 4s) and deleting the `:has()` rules removed nearly all of it (0-1): the
+streaming half of this report is most likely target 6. Dragging the pane
+divider in the same setup cost the same with or without the rules: ~1.9s of
+main-thread work, ~600-680ms style and 210-220 layouts over 30 pointer moves
+(~7 layouts per move), so the drag half is forced layout of its own -- the
+per-frame measuring described below is the first suspect.
+
 **Leads.** Which gesture it is (divider drag, pane open/close ease, layout
 preset, sidebar toggle, window resize, or during streaming). In side-by-side
 mode `chat/transcript-motion.ts` measures each pane with
@@ -132,9 +141,28 @@ re-check ancestors on every mutation beneath `.chat-main`/`.main-split`. The
 settings rule costs it with no settings dialog open.
 
 **Why it matters.** Any surface that mutates the DOM steadily inside a pane
-pays it per change: CodeMirror on every cursor move or keystroke, and very
-likely a streaming transcript per rendered chunk -- a candidate for target 3's
-"jelly under load" (unmeasured: it needs a live turn).
+pays it per change: CodeMirror on every cursor move or keystroke, and a
+streaming transcript per rendered chunk. Measured on a real turn (below), it
+is the main cost of streaming and the most likely cause of target 3.
+
+**Streaming, measured (2026-09-30).** Real turns from Muse Spark 1.3
+Contributor (`openrouter/meta/muse-spark-1.3-contributor`, thinking minimal)
+on the Assistant profile, a ~1200-word answer with headings, lists, a table and
+a code block, in 4s windows of requestAnimationFrame gaps plus CDP metrics:
+
+| Setup | Style / 4s | Script / 4s | Frames over 33ms (of ~240) |
+| --- | --- | --- | --- |
+| One chat, full speed | 100-235ms | 170-190ms | 0 |
+| Beside a second chat, full speed | 125 → 233 → 407ms as the answer grows | 90-305ms | 0 |
+| Two chats, CPU 4× slower, rules in place | 330-1340ms | 800-890ms | 7-20 |
+| Two chats, CPU 4× slower, every `:has()` rule deleted | 196-245ms | 290-335ms | 0-1 |
+
+Style is the largest single cost of a streaming turn and grows with the
+transcript while the rules are in place; without them it stays flat, although
+that turn ran later with a longer transcript. The Test profile
+(`test-stream`, plain paragraphs, 250 tokens/s) showed no difference with or
+without the rules: plain text mutates far less DOM than real markdown, so use
+a real turn to judge this target.
 
 **Leads.** Mark the parts that fade once, in JS, when arrival or route motion
 starts (an attribute on each outermost non-composer child), so the rules need
@@ -211,13 +239,40 @@ source via the bundle; CDP line numbers are 0-based).
 
 ## 11. Startup long tasks (seen 2026-09-30)
 
-A warm load of a long chat: first paint at 40-48ms, first contentful paint at
+Mostly target 12 (the icon manifest). A warm load of a long chat: first paint at 40-48ms, first contentful paint at
 660-700ms, then long tasks of ~190ms, ~53ms and ~67ms within the first 550ms.
 They were not broken down, but most likely hold the shell's first render and
 the transcript's first passes (target 2). Profile the first second of a load
 with the same CDP approach.
 
-## 12. Measured and fine (2026-09-30)
+## 12. A file-icon manifest generated on every load (seen 2026-09-30)
+
+**Seen.** A CPU profile of a warm chat load (840ms of non-idle main thread in
+the first ~2.5s) put ~185ms in one place: `generateManifest()` from
+`material-icon-theme`, run at module load by
+`workspace/material-file-icons.ts` inside the lazy `file-type-icon` chunk
+(1.25MB, 238KB gzipped), which a chat page loads too. It builds the theme's
+whole manifest to answer "which SVG for this name or extension". This is most
+of the ~190-210ms long task at ~200ms after navigation (target 11).
+
+**Leads.** Generate the lookup at build time -- file names, extensions and
+folder names to asset names, with the `*.dax` association -- as a small JSON
+or module, and drop `material-icon-theme`'s generator from the client. Find
+why a chat page loads the chunk at all (the attachment strip, the sidebar or
+the dock) and whether it could wait until an icon is drawn.
+
+## 13. Work continues after a turn ends (seen 2026-09-30)
+
+**Seen.** After a real turn had settled (no Stop button), a chat left open
+did ~200-270ms of main-thread work per 4s (40-70ms of it style), where an idle
+chat loaded fresh did ~8ms per 3s. Not traced.
+
+**Leads.** A CSS animation or timer still running after settling (the
+thinking orb, a live dot, the harness mark's lively state, relative times),
+or the transcript's deferred passes; Chrome's Performance panel or the CDP
+Animation domain will name it.
+
+## 14. Measured and fine (2026-09-30)
 
 So the pass need not look again: scrolling a long file (30 wheel steps: 1
 layout, 10ms of style), a tab switch (~75ms of work), header folding (no
