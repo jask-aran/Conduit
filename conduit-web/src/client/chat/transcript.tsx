@@ -1145,7 +1145,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
           }
           return <div ref={row} data-slot="message-scroller-item" data-message-id={message().id}>
             <article data-slot="message" data-align={user() ? "end" : "start"} class={user() ? "message-user" : "message-assistant"}>
-              <div data-slot="message-content">
+              <div data-slot="message-content" data-incremark={!user() && rendererUsesTypewriter() ? "" : undefined}>
                 <Show when={!user() || review().text}><div data-slot="bubble" data-align={user() ? "end" : "start"} data-error={failed() ? "true" : undefined} data-editing={props.chat.editingEntryId() === message().id ? "true" : "false"} data-composer-surface={user() ? composerSurface() : undefined} class={user() ? "bubble bubble-user composer-surface-material" : "bubble bubble-assistant"}>
                   <div data-slot="bubble-content">
                     <Show when={user()} fallback={<>
