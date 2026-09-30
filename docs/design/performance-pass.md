@@ -333,6 +333,26 @@ view and the visibility observer reveals, then hides, its blocks. Next step:
 render a history page across frames, or insert it hidden with estimated
 sizes -- target 2's territory.
 
+**Tried and reverted (2026-09-30): drawing a history page a row a frame.**
+The page's data went in as before; the transcript held back the rows above
+the first one it had drawn and revealed them one at a time, restoring the
+anchor after each, until ~4ms of the frame had gone. It was worse on every
+count: 35-39 tasks over 6.94ms on the first scroll up (from 8-12, worst 48ms),
+and the row in view moved 21px on two of four loads. One row, drawn and laid
+out, took 16-20ms on its own: each reveal relaid the whole thread above the
+anchor and rendered that row's markdown in full, so rows are too coarse a unit
+to spread. A page loaded in one go costs ~10-15ms of script (building its
+rows and rendering their markdown) plus ~6-11ms of layout. To get under the
+budget both halves have to shrink, and the two ways to do that are:
+
+- **Layout:** insert a page's rows already virtualised -- `content-visibility`
+  with an estimated `contain-intrinsic-size` -- since they land above the
+  viewport and are not painted; the browser's own scroll anchoring then
+  corrects as each is first shown at its real size.
+- **Script:** render a history row's markdown only when it nears the
+  viewport (the visibility observer already knows), drawing an
+  estimated-height shell until then.
+
 ## 11. Startup long tasks (seen 2026-09-30)
 
 Mostly target 12 (the icon manifest). A warm load of a long chat: first paint at 40-48ms, first contentful paint at
