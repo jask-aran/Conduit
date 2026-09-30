@@ -473,8 +473,12 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     cancelJob?.();
     cancelJob = null;
     setBusy(false);
+    // A delimiter just opened has no body yet, and for that one update the
+    // parser still sees it on the line of the formula before -- whose block, and
+    // so whose node, the empty preview takes. Keep what is drawn until there
+    // is something to draw instead of blanking a finished formula for a frame.
+    if (current && !source && html()) return;
     if (!current || !source) {
-      if (html()) console.warn("MATHDEBUG clear", JSON.stringify(current)?.slice(0, 200));
       setHtml("");
       lastValidHtml = "";
       lastCandidate = "";
