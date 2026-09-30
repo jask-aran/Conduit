@@ -88,6 +88,10 @@ export const TEST_STREAM_SPEEDS = Object.freeze([
   // A real reply replayed word for word at a real model's pace: what the
   // renderer does with the text a model actually writes, which the filler
   // words never exercise. The whole reply streams whatever the level says.
+  // A real provider's cadence: the same average rate, delivered as chunks
+  // after uneven gaps, one of them a long pause. Even ticks flatter any
+  // reveal; this is the pause-then-paragraph a real turn has, repeatably.
+  { id: "bursty-60", label: "60 tokens/s in uneven bursts · like a real provider", tokensPerSecond: 60, gapsMs: [40, 120, 60, 350, 80, 1200, 150, 90] },
   { id: "replay-katex-limits", label: "KaTeX replay · long aligned blocks", tokensPerSecond: 60, replay: KATEX_LIMITS },
   { id: "replay-katex-compendium", label: "KaTeX replay · hundreds of formulas", tokensPerSecond: 60, replay: KATEX_COMPENDIUM },
 ].map(Object.freeze));
@@ -379,23 +383,30 @@ export class TestStreamAdapter extends EventEmitter {
     const from = turn.sent;
     const { messageId, generationId } = turn;
     const contentIndex = turn.contentIndex;
+    let gap = 0;
+    const nextDelay = () => speed.gapsMs ? speed.gapsMs[gap++ % speed.gapsMs.length] : intervalMs;
 
     const tick = () => {
       record.timer = null;
       if (!record.turn || record.stopping || record.turn !== turn) return;
       const due = Math.min(target, from + Math.ceil(((Date.now() - startedAt) / 1000) * speed.tokensPerSecond));
+      const emit = (delta) => this.publish(record, { type: "assistant_content", generationId, phase: "delta",
+        seq: ++record.generationSeq, messageId, contentIndex, blockKind: "text", delta });
+      // Bursts arrive as one delta, the way a provider's chunk does.
+      let burst = "";
       while (turn.sent < due) {
         const delta = speed.replay ? replayTokens(speed.replay)[turn.sent] ?? "" : tokenAt(turn.sent);
         turn.text += delta;
         turn.sent += 1;
         record.streamed += 1;
-        this.publish(record, { type: "assistant_content", generationId, phase: "delta",
-          seq: ++record.generationSeq, messageId, contentIndex, blockKind: "text", delta });
+        if (speed.gapsMs) burst += delta;
+        else emit(delta);
       }
+      if (burst) emit(burst);
       if (turn.sent >= target) { this.advance(record); return; }
-      record.timer = setTimeout(tick, intervalMs);
+      record.timer = setTimeout(tick, nextDelay());
     };
-    record.timer = setTimeout(tick, intervalMs);
+    record.timer = setTimeout(tick, nextDelay());
   }
 
   /**

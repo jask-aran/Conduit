@@ -38,3 +38,11 @@
 .transcript[data-panel-motion] .chat-markdown .katex-display > .katex {
   contain: layout paint;
 }
+
+/* Fade pacing: a newly shown word fades in once. Opacity only; its layout is
+   final when it is inserted, so nothing waits on the animation. */
+.chat-markdown .stream-word { animation: stream-word-in 200ms ease-out both; }
+@keyframes stream-word-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .chat-markdown .stream-word { animation: none; }
+}

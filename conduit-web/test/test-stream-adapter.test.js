@@ -114,7 +114,7 @@ test("speed is the model and amount is the thinking level", async () => {
   // level is a string the harness interprets; this one reads it as how much to
   // send back, so it is written as the amount.
   assert.deepEqual(TEST_STREAM_SPEEDS.map((speed) => speed.id),
-    ["paced-60", "fast-250", "fast-1000", "flood-4000", "replay-katex-limits", "replay-katex-compendium"]);
+    ["paced-60", "fast-250", "fast-1000", "flood-4000", "bursty-60", "replay-katex-limits", "replay-katex-compendium"]);
   assert.deepEqual(TEST_STREAM_AMOUNTS.map((amount) => amount.id),
     ["400 tokens", "2000 tokens", "8000 tokens", "32000 tokens"]);
   assert.equal(speedFor("nonsense").id, DEFAULT_SPEED_ID);

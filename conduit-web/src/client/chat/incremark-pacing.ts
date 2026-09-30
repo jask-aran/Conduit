@@ -1,4 +1,4 @@
-export type IncremarkPacingMode = "adaptive" | "fixed" | "buffered";
+export type IncremarkPacingMode = "adaptive" | "fixed" | "buffered" | "fade";
 
 export const INCREMARK_PACING_STORAGE_KEY = "conduit:incremark-pacing";
 
@@ -9,10 +9,14 @@ export const INCREMARK_PACING_OPTIONS: ReadonlyArray<{
   { value: "adaptive", label: "Adaptive" },
   { value: "fixed", label: "Fixed" },
   { value: "buffered", label: "Buffered" },
+  { value: "fade", label: "Fade words" },
 ];
 
+const isPacing = (value: string | null): value is IncremarkPacingMode =>
+  value === "adaptive" || value === "fixed" || value === "buffered" || value === "fade";
+
 function parsePacing(value: string | null): IncremarkPacingMode | null {
-  if (value === "adaptive" || value === "fixed" || value === "buffered") return value;
+  if (isPacing(value)) return value;
   if (value === "1" || value === "true") return "adaptive";
   if (value === "0" || value === "false") return "fixed";
   return null;
@@ -31,7 +35,7 @@ export function saveIncremarkPacing(
   mode: IncremarkPacingMode,
   storage: Pick<Storage, "setItem"> = localStorage,
 ): IncremarkPacingMode {
-  const selected = mode === "adaptive" || mode === "fixed" ? mode : "buffered";
+  const selected = isPacing(mode) ? mode : "buffered";
   storage.setItem(INCREMARK_PACING_STORAGE_KEY, selected);
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("conduit:ui-preference-change", { detail: { key: "incremarkPacing", value: selected } }));
   return selected;

@@ -37,11 +37,8 @@ import { HostUiRequests } from "./chat/host-ui-card";
 import { isWorkspace } from "./chat/place-picker";
 import {
   MARKDOWN_RENDERER_STORAGE_KEY,
-  RENDERER_CONTROLS_VISIBLE_STORAGE_KEY,
   saveMarkdownRenderer,
-  saveRendererControlsVisible,
   selectedMarkdownRenderer,
-  selectedRendererControlsVisible,
   type MarkdownRendererId,
 } from "./chat/markdown-settings";
 import { loadVoiceDictationSettings, saveVoiceDictationSettings, VOICE_DICTATION_STORAGE_KEY } from "./chat/voice-dictation";
@@ -611,7 +608,6 @@ function App() {
   const [partialContinue, setPartialContinue] = createSignal(true);
   const [maxAttachmentBytes, setMaxAttachmentBytes] = createSignal(DEFAULT_MAX_ATTACHMENT_BYTES);
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
-  const [rendererControlsVisible, setRendererControlsVisible] = createSignal(selectedRendererControlsVisible());
   const [meteorField, setMeteorField] = createSignal(selectedMeteorField());
   const [sidebarChatLimit, setSidebarChatLimit] = createSignal(selectedSidebarChatLimit());
   const chatSort = useChatSort();
@@ -2179,7 +2175,6 @@ function App() {
     setSettingsOpen(true);
   };
   const switchMarkdownRenderer = (next: MarkdownRendererId) => setMarkdownRenderer(saveMarkdownRenderer(next));
-  const switchRendererControlsVisible = (visible: boolean) => setRendererControlsVisible(saveRendererControlsVisible(visible));
   const switchMeteorField = (enabled: boolean) => {
     setMeteorField(enabled);
     localStorage.setItem(METEOR_FIELD_STORAGE_KEY, String(enabled));
@@ -4550,7 +4545,6 @@ function App() {
       collapsedProjectIds: parseStringArray("conduit.sidebar.collapsed-projects"),
       sidebarCollapsed: localStorage.getItem("conduit.sidebar") === "collapsed",
       markdownRenderer: localStorage.getItem(MARKDOWN_RENDERER_STORAGE_KEY) || selectedMarkdownRenderer(),
-      rendererControlsVisible: selectedRendererControlsVisible(),
       composerSurface: selectedComposerSurface(),
       contextMetrics: selectedContextMetrics(),
       meteorField: selectedMeteorField(),
@@ -4578,7 +4572,6 @@ function App() {
       collapsedProjectIds: "conduit.sidebar.collapsed-projects",
       sidebarCollapsed: "conduit.sidebar",
       markdownRenderer: MARKDOWN_RENDERER_STORAGE_KEY,
-      rendererControlsVisible: RENDERER_CONTROLS_VISIBLE_STORAGE_KEY,
       composerSurface: COMPOSER_SURFACE_STORAGE_KEY,
       contextMetrics: CONTEXT_METRIC_STORAGE_KEY,
       meteorField: METEOR_FIELD_STORAGE_KEY,
@@ -4620,7 +4613,6 @@ function App() {
       if (key === "sidebarChatLimit" && typeof value === "number") setSidebarChatLimit(clampSidebarChatLimit(value));
       else if (key === "sidebarPins" && Array.isArray(value)) setSidebarPins(value.filter((item): item is string => typeof item === "string"));
       else if (key === "markdownRenderer" && typeof value === "string" && !overridden(key)) setMarkdownRenderer(value as MarkdownRendererId);
-      else if (key === "rendererControlsVisible" && typeof value === "boolean") setRendererControlsVisible(value);
       else if (key === "contextMetrics" && Array.isArray(value)) setContextMetrics(selectedContextMetrics());
       else if (key === "meteorField" && typeof value === "boolean") setMeteorField(value);
       else if (key === "transcriptWidth" && isTranscriptWidthMode(value) && !overridden(key)) applyTranscriptAppearance({ width: value });
@@ -5058,7 +5050,7 @@ function App() {
       <ChatHeader project={props.project} onOpenPlace={openPlace} title={surfaceChat.title() || (surfaceChat.status() === "active" ? "Untitled chat" : "New chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} contextMetrics={contextMetrics} composerStatus={current.composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} actions={props.actions} tabActions={props.tabActions} tabs={props.tabs} />
       {props.notice}
       <Conversation chat={surfaceChat} busy={surfaceChat.presentation().kind === "opening_live"} stackRef={props.stackRef}
-        transcript={<Transcript chat={surfaceChat} supports={current.capability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} />}
+        transcript={<Transcript chat={surfaceChat} supports={current.capability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} />}
         composer={<Composer chat={surfaceChat} place={props.place} supports={current.capability} attachments={current.attachments} attachmentsSupported={current.capability("attachments", true)} models={current.models} permissions={current.capability("permissionModes") ? current.permissions : undefined} serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined} profiles={profiles()} activeProfile={current.activeProfile()} onOpenModelSelector={props.modelSelector ? openModelSelector : undefined} modelSelectorShortcut={props.modelSelector ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} keyboardOwner={props.keyboardOwner} onChooseProfile={(id) => void current.switchProfile(id).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={current.openAttachments} onStatusChange={current.setComposerStatus} />} />
     </>;
   };
@@ -5186,7 +5178,7 @@ function App() {
               {/* The same conversation a chat page has; only moving it to another
                   place is missing, since the thread's folder is where it ran. */}
               <Conversation chat={chat} busy={openingLiveChat()} stackRef={(element) => { chatComposerStack = element; }}
-                transcript={<Transcript chat={chat} supports={chatCapability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} rendererControlsVisible={rendererControlsVisible()} profileLabel={label()} projectId={catalogue.projectId()} />}
+                transcript={<Transcript chat={chat} supports={chatCapability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} profileLabel={label()} projectId={catalogue.projectId()} />}
                 composer={<Composer chat={chat} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} contextMetrics={contextMetrics} serverOnline={runtime.connectivity() === "online"} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={session.openAttachments} onStatusChange={setComposerStatus} />} />
             </>;
           }}</Show>
@@ -5281,7 +5273,7 @@ function App() {
       context={paletteContext()} runtime={runtime} actions={paletteActions} onChooseModel={(spec) => void focusedModels().chooseModel(spec)} currentModel={focusedModels().model()} scopeModels={focusedModels().allModels()} enabledModelSpecs={focusedModels().enabledModels()} onToggleModelScope={(spec) => { const models = focusedModels(); const enabled = models.enabledModels(); void models.saveScope(enabled.includes(spec) ? enabled.filter((item) => item !== spec) : [...enabled, spec]); }} shortcuts={shortcutManager} />
     <LeaderPalette shortcuts={shortcutManager} />
     <Show when={settingsLoaded()}>
-      <Settings open={settingsOpen()} initialSection={settingsSection()} sectionWasNamed={settingsNamedSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} rendererControlsVisible={rendererControlsVisible()} onRendererControlsVisibleChange={switchRendererControlsVisible} meteorField={meteorField()} onMeteorFieldChange={switchMeteorField} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} contextMetrics={contextMetrics()} onContextMetricsChange={switchContextMetrics} onOpenModelSelector={openModelSelector} shortcuts={shortcutManager} />
+      <Settings open={settingsOpen()} initialSection={settingsSection()} sectionWasNamed={settingsNamedSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} meteorField={meteorField()} onMeteorFieldChange={switchMeteorField} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} contextMetrics={contextMetrics()} onContextMetricsChange={switchContextMetrics} onOpenModelSelector={openModelSelector} shortcuts={shortcutManager} />
     </Show>
   </>;
 }

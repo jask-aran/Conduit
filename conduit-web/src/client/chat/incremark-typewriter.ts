@@ -18,6 +18,10 @@ export const TYPEWRITER_MAX_BLOCKS_PER_FRAME = 64;
 export const TYPEWRITER_EMA_ALPHA = 0.25;
 export const TYPEWRITER_FIXED_STEP = 32;
 export const TYPEWRITER_ADAPTIVE_BACKLOG_WINDOW_MS = 250;
+/** The longest a delivered word may wait to be shown under fade pacing. */
+export const FADE_MAX_WINDOW_MS = 300;
+/** A delivery drains no faster than this per character: a paragraph reads in, not pops. */
+export const FADE_MS_PER_CHARACTER = 0.7;
 const TYPEWRITER_MATH_SOURCE = "__conduitMathSource";
 
 export type TypewriterMetrics = {
@@ -93,6 +97,43 @@ export function chooseAdaptiveStep(
   if (targetRate <= 0) return Math.min(available, TYPEWRITER_FIXED_STEP);
   const interval = normalizeFrameInterval(frameIntervalMs);
   return Math.min(available, Math.max(1, Math.min(TYPEWRITER_MAX_STEP, Math.ceil(targetRate * interval / 1000))));
+}
+
+export type FadeDelivery = { end: number; deadline: number };
+
+/**
+ * How long one delivery may take to show under fade pacing.
+ *
+ * Spread over the usual gap between deliveries, the next one lands as the last
+ * finishes, so a provider that sends chunks every 100ms reads as a continuous
+ * stream at no more than one gap of delay. A big delivery still drains at a
+ * readable rate. Neither may hold a word past the cap.
+ */
+export function fadeWindow(deliveredCharacters: number, gapEmaMs: number | null) {
+  return Math.min(FADE_MAX_WINDOW_MS, Math.max(gapEmaMs || 0, deliveredCharacters * FADE_MS_PER_CHARACTER));
+}
+
+/**
+ * Characters to release this frame so every delivery is shown by its
+ * deadline. Deliveries are met in order: the required rate is the steepest
+ * over all of them, so a later one never overtakes an older one.
+ */
+export function chooseFadeStep(
+  deliveries: FadeDelivery[],
+  displayedCharacters: number,
+  now: number,
+  frameIntervalMs: number,
+) {
+  const interval = normalizeFrameInterval(frameIntervalMs);
+  let rate = 0;
+  for (const delivery of deliveries) {
+    const remaining = delivery.end - displayedCharacters;
+    if (remaining <= 0) continue;
+    rate = Math.max(rate, remaining / Math.max(interval, delivery.deadline - now));
+  }
+  // Nothing owed a deadline -- pacing just switched, or the tail is markup the
+  // visible count does not see -- so there is nothing to spread out.
+  return rate > 0 ? Math.max(1, Math.ceil(rate * interval)) : Infinity;
 }
 
 // AST nodes are immutable once produced: every transform in this renderer
@@ -239,6 +280,9 @@ export class BufferedIncremarkTypewriter {
   private lastObservedSourceCharacters = 0;
   private lastObservedSourceAt: number | null = null;
   private backlogStartedAt: number | null = null;
+  private deliveries: FadeDelivery[] = [];
+  private deliveryGapEmaMs: number | null = null;
+  private lastDeliveryAt: number | null = null;
   private lastMetrics: TypewriterMetrics = {
     scheduler: "buffered",
     sourceVisibleCharacters: 0,
@@ -303,6 +347,7 @@ export class BufferedIncremarkTypewriter {
     const elapsed = this.lastObservedSourceAt == null ? 0 : now - this.lastObservedSourceAt;
     const delta = sourceCharacters - this.lastObservedSourceCharacters;
     if (elapsed > 0 && delta > 0) this.observedRate = updateEma(this.observedRate, delta / elapsed * 1000);
+    if (delta > 0 && this.pacing === "fade") this.recordDelivery(sourceCharacters, delta, now);
     this.lastObservedSourceCharacters = sourceCharacters;
     this.lastObservedSourceAt = now;
     this.setSourceBlocks(blocks);
@@ -334,9 +379,31 @@ export class BufferedIncremarkTypewriter {
     this.lastObservedSourceCharacters = this.baselineCharacters;
     this.lastObservedSourceAt = null;
     this.backlogStartedAt = null;
+    this.deliveries = [];
+    this.deliveryGapEmaMs = null;
+    this.lastDeliveryAt = null;
     this.terminalEmitted = false;
     this.setBusy(false);
     this.emitMetrics(performance.now(), false, 0, []);
+  }
+
+  private recordDelivery(sourceCharacters: number, delta: number, now: number) {
+    if (this.lastDeliveryAt != null) {
+      this.deliveryGapEmaMs = updateEma(this.deliveryGapEmaMs, Math.min(FADE_MAX_WINDOW_MS, now - this.lastDeliveryAt));
+    }
+    this.lastDeliveryAt = now;
+    const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const span = reduced ? 0 : fadeWindow(delta, this.deliveryGapEmaMs);
+    this.deliveries.push({ end: sourceCharacters, deadline: now + span });
+  }
+
+  /** The whole of this frame's release under fade pacing; unbounded otherwise. */
+  private frameQuota(displayedCharacters: number) {
+    if (this.pacing !== "fade") return Infinity;
+    let shown = 0;
+    while (shown < this.deliveries.length && this.deliveries[shown]!.end <= displayedCharacters) shown += 1;
+    if (shown) this.deliveries.splice(0, shown);
+    return chooseFadeStep(this.deliveries, displayedCharacters, performance.now(), this.frameIntervalMs);
   }
 
   seed(blocks: ParsedBlock[]) {
@@ -489,8 +556,10 @@ export class BufferedIncremarkTypewriter {
     let processedCharacters = 0;
     let processedBlocks = 0;
     let acceptedProgress = false;
+    const quota = this.frameQuota(displayedCharacters);
 
     while (processedCharacters < TYPEWRITER_MAX_CHARS_PER_FRAME
+      && processedCharacters < quota
       && processedBlocks < TYPEWRITER_MAX_BLOCKS_PER_FRAME) {
       const activeIndex = this.firstIncompleteIndex();
       if (activeIndex < 0) break;
@@ -502,6 +571,7 @@ export class BufferedIncremarkTypewriter {
       const step = Math.min(
         remaining,
         TYPEWRITER_MAX_CHARS_PER_FRAME - processedCharacters,
+        quota - processedCharacters,
         this.chooseStep(remaining, sourceCharacters - displayedCharacters, frameBudgetMs),
       );
       if (step <= 0) break;
@@ -553,6 +623,8 @@ export class BufferedIncremarkTypewriter {
   }
 
   private chooseStep(availableCharacters: number, backlogCharacters: number, frameBudgetMs: number) {
+    // The frame's quota already bounds fade; within it, show as much as fits.
+    if (this.pacing === "fade") return availableCharacters;
     if (this.pacing === "fixed") return chooseFixedStep(availableCharacters);
     if (this.pacing === "adaptive") {
       return chooseAdaptiveStep(availableCharacters, this.observedRate, backlogCharacters, this.frameIntervalMs);
