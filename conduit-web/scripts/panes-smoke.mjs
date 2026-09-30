@@ -264,6 +264,34 @@ await scenario("focus: Alt+] steps tabs across columns; Ctrl+Shift+2 steps panes
   check("the dock names pane A's place", (await place()) === viewerPlace, `${viewerPlace} vs ${await place()}`);
 });
 
+await scenario("dragging the dock's edge and a pane's edge resizes them in place", async (page, check) => {
+  await open(page);
+  await navFiles(page).nth(0).click();
+  await until(page, () => document.querySelector("[data-pane-slot] .workspace-file-viewer"));
+  const geometry = () => page.evaluate(() => { const box = (selector) => { const r = document.querySelector(selector)?.getBoundingClientRect(); return r ? { left: Math.round(r.left), right: Math.round(r.right) } : null; }; return { dock: box(".workspace-panel"), main: box(".chat-main"), slot: box("[data-pane-slot]") }; });
+  const dragBy = async (selector, dx) => {
+    const handle = await page.locator(selector).first().boundingBox();
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + 200);
+    await page.mouse.down();
+    for (let step = 1; step <= 8; step++) await page.mouse.move(handle.x + handle.width / 2 + dx * step / 8, handle.y + 200);
+    const mid = await geometry();
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+    return mid;
+  };
+  const before = await geometry();
+  const mid = await dragBy(".workspace-resize-handle", -120);
+  const after = await geometry();
+  check("mid-drag the dock stays at the right edge", mid.dock && Math.abs(mid.dock.right - before.dock.right) <= 2 && mid.dock.left < before.dock.left - 60, JSON.stringify({ before: before.dock, mid: mid.dock }));
+  check("the dock took the width", after.dock.left < before.dock.left - 60 && Math.abs(after.dock.right - before.dock.right) <= 2, JSON.stringify({ before: before.dock, after: after.dock }));
+  check("the panes gave it up", after.slot.right <= after.dock.left + 2 && after.main.left === before.main.left, JSON.stringify(after));
+  const beforePanes = await geometry();
+  const midPanes = await dragBy(".main-split-resize", -100);
+  const afterPanes = await geometry();
+  check("mid-drag the panes follow the edge", midPanes.main.right < beforePanes.main.right - 50 && midPanes.slot.right === beforePanes.slot.right, JSON.stringify({ before: beforePanes, mid: midPanes }));
+  check("the edge stays where it was dropped", Math.abs(afterPanes.main.right - midPanes.main.right) <= 4 && afterPanes.dock.left === beforePanes.dock.left, JSON.stringify({ mid: midPanes, after: afterPanes }));
+});
+
 await scenario("a project page's files open as the navigator's", async (page, check) => {
   await open(page);
   const rows = page.locator('.split-row[data-doc-view^="files:"]');
