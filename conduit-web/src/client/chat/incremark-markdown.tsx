@@ -54,21 +54,33 @@ const FADE_FROM = "__conduitFadeFrom";
  * the spine down to new text is cloned; everything before `shown` is left as
  * the same objects.
  */
-function markFreshText(node: MarkdownNode, shown: number, offset = 0): MarkdownNode {
-  if (!node || typeof node !== "object") return node;
-  const length = visibleAstCharacters(node);
-  if (offset + length <= shown) return node;
-  if (node.type === "text") return { ...node, [FADE_FROM]: Math.max(0, shown - offset) };
-  if (!Array.isArray(node.children)) return node;
-  let at = offset;
+function markFreshText(node: MarkdownNode, shown: number): { node: MarkdownNode; length: number } {
+  return markFrom(node, shown, 0);
+}
+
+// Lengths are counted here, not read from visibleAstCharacters: that cache is
+// keyed on node objects, and the display store merges updates into the same
+// objects, so a growing text node kept its first length and every word after
+// the first few was taken as already shown.
+function markFrom(node: MarkdownNode, shown: number, offset: number): { node: MarkdownNode; length: number } {
+  if (!node || typeof node !== "object") return { node, length: 0 };
+  if (node.type === "math" || node.type === "inlineMath") return { node, length: 1 };
+  if (node.type === "image" || node.type === "imageReference") return { node, length: 0 };
+  if (typeof node.value === "string") {
+    const length = node.value.length;
+    const fresh = node.type === "text" && offset + length > shown;
+    return { node: fresh ? { ...node, [FADE_FROM]: Math.max(0, shown - offset) } : node, length };
+  }
+  if (!Array.isArray(node.children)) return { node, length: 0 };
+  let length = 0;
   let changed = false;
   const children = node.children.map((child: MarkdownNode) => {
-    const next = markFreshText(child, shown, at);
-    at += visibleAstCharacters(child);
-    changed ||= next !== child;
-    return next;
+    const next = markFrom(child, shown, offset + length);
+    length += next.length;
+    changed ||= next.node !== child;
+    return next.node;
   });
-  return changed ? { ...node, children } : node;
+  return { node: changed ? { ...node, children } : node, length };
 }
 
 function restoreParsedBlock(block: ParsedBlock, sentinel: string | null, originalSource: string) {
@@ -284,10 +296,10 @@ function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: Rende
     const stableNode = type === "table" ? preserveAppendOnlyTable(previousNode, currentNode) : currentNode;
     props.history.set(block.id, stableNode);
     if (!props.context.fadeWords?.()) return stableNode;
-    const total = visibleAstCharacters(stableNode);
     const shown = props.shown.get(block.id) ?? 0;
-    props.shown.set(block.id, Math.max(shown, total));
-    return markFreshText(stableNode, shown);
+    const marked = markFreshText(stableNode, shown);
+    props.shown.set(block.id, Math.max(shown, marked.length));
+    return marked.node;
   };
   // Keep completed blocks and the one active transformer block in one keyed
   // list. Moving the active block between separate Solid branches would
