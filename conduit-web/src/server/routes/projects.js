@@ -186,7 +186,9 @@ export function registerProjectRoutes(app, {
         terminals: terminals.list(),
         readPage: readSessionPage,
         inspectWorkspace: (root, options) => readWorkspaceDiff(root, { ...options, includePatch: false }),
-        listBackendSessions: (implementation, cwd) => backends.forImplementation(implementation).listSessions({ cwd }),
+        // A harness with no threads of its own to enumerate (ChatGPT Web, the
+        // test profile) has nothing to list, rather than failing the page.
+        listBackendSessions: async (implementation, cwd) => (await backends.forImplementation(implementation).listSessions?.({ cwd })) || [],
         signal: controller.signal,
       }));
     } catch (error) {

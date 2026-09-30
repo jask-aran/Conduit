@@ -1,7 +1,9 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { EventEmitter } from "node:events";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { applyTranscriptOp } from "./transcript-fold.js";
+import { applyTranscriptOps } from "./transcript-fold.js";
 import { messageClose, messageDrop, messageOpen, toolClose, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
 import { reduceActiveGeneration, snapshotActiveGeneration } from "./active-generation.js";
 import { unsupported } from "./harnesses/unsupported.js";
@@ -213,24 +215,23 @@ const attachmentSummary = (attachments) => attachments.map((item) => ({
 }));
 
 export class TestStreamAdapter extends EventEmitter {
-  constructor({ logs = null } = {}) {
+  constructor({ dataDir = null, logs = null } = {}) {
     super();
     this.sessions = new SessionRecords({
       capabilities: TEST_STREAM_CAPABILITIES,
       backend: { protocol: "native_api", implementation: "test-stream", installationId: "conduit-test-stream" },
       extras: (record) => ({ rate: speedFor(record.model).label, thinkingLevel: record.thinkingLevel, tokens: record.tokens }),
-      // Nothing outside this process knows anything about these chats, so the
-      // statements are the transcript, exactly as they are for ChatGPT Web. The
-      // journal is memory only: this backend exists for the length of a
-      // profiling session, and giving it a file would leave real ones behind.
+      // Nothing outside Conduit knows anything about these chats, so the
+      // statements are the transcript, exactly as they are for ChatGPT Web, and
+      // each is durable before it is broadcast: a test chat reloads, survives a
+      // restart and forks like any other. Without a data directory (the unit
+      // tests) the journal is held in memory instead.
       onPublish: (record, event) => {
-        if (event.type !== "transcript_op") return;
-        const journal = this.journals.get(record.chatId) || [];
-        journal.push(event);
-        this.journals.set(record.chatId, journal);
+        if (event.type === "transcript_op") this.appendJournal(record.chatId, event);
       },
       logs,
     });
+    this.dataDir = dataDir;
     this.journals = new Map();
     this.logs = logs;
     this.records = this.sessions.records;
@@ -314,7 +315,11 @@ export class TestStreamAdapter extends EventEmitter {
       generationId,
       answers: userMessageId,
       prompts: [userMessageId],
-      steps: planTurn(record.tokens, toolRunsFromPrompt(message)),
+      // A tool's id is the turn's as well as its place in it: tool records are
+      // keyed by id for the whole chat, so a second turn's call_1 would be
+      // folded over the first's.
+      steps: planTurn(record.tokens, toolRunsFromPrompt(message))
+        .map((step) => (step.toolCallId ? { ...step, toolCallId: `${step.toolCallId}_${generationId.slice(0, 8)}` } : step)),
       step: 0,
       approvals: approvalFromPrompt(message),
       attachments: attachmentSummary(options?.attachments || []),
@@ -800,17 +805,46 @@ export class TestStreamAdapter extends EventEmitter {
       sourceMessage: { id: source.id, text: source.content || "" } };
   }
 
-  transcript(chatId) {
-    let messages = [];
-    for (const event of this.journals.get(chatId) || []) messages = applyTranscriptOp(messages, event);
-    return messages.filter((message) => !message.streaming);
+  journalPath(chatId) { return this.dataDir ? path.join(this.dataDir, "journals", `${chatId}.jsonl`) : null; }
+
+  /**
+   * Keep a statement, without the number this process gave it: the sequence
+   * belongs to a log that dies with the process (as ChatGPT Web's journal).
+   */
+  appendJournal(chatId, event) {
+    const { log: _log, seq: _seq, ...durable } = event;
+    const file = this.journalPath(chatId);
+    if (!file) {
+      this.journals.set(chatId, [...(this.journals.get(chatId) || []), durable]);
+      return;
+    }
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.appendFileSync(file, JSON.stringify(durable) + "\n", { mode: 0o600 });
   }
+
+  readJournal(chatId) {
+    const file = this.journalPath(chatId);
+    if (!file) return this.journals.get(chatId) || [];
+    try { return fs.readFileSync(file, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)); } catch { return []; }
+  }
+
+  /** Messages and tools folded out of the journal, as the browser folds the live ops. */
+  fold(chatId) {
+    const { messages, tools } = applyTranscriptOps({}, this.readJournal(chatId));
+    // A row still marked as arriving is one the process died holding; nothing
+    // is going to finish it now. A tool is kept only while its call is.
+    const kept = messages.filter((message) => !message.streaming);
+    const calls = new Set(kept.flatMap((message) => (message.blocks || []).map((block) => block.toolCallId).filter(Boolean)));
+    return { messages: kept, tools: calls.size ? tools.filter((tool) => calls.has(tool.toolCallId)) : tools };
+  }
+
+  transcript(chatId) { return this.fold(chatId).messages; }
 
   async readTranscript({ liveSessionId, chatId }) {
     const record = liveSessionId ? this.get(liveSessionId) : null;
-    // Nothing is stored beyond this process, so there is never an earlier page
-    // and the read says so rather than leaving the browser to decide.
-    return { messages: this.transcript(chatId || record?.chatId), tools: [], page: { before: null } };
+    // The journal is the whole chat, so there is never an earlier page, and
+    // the read says so rather than leaving the browser to decide.
+    return { ...this.fold(chatId || record?.chatId), page: { before: null } };
   }
 
   /**
