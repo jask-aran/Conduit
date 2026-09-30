@@ -601,6 +601,11 @@ export class BufferedIncremarkTypewriter {
       processedCharacters += step;
       if (nextProgress >= total) processedBlocks += 1;
       if (elapsed >= frameBudgetMs) break;
+      // A display formula counts as one character, so a frame's quota could
+      // reveal a run of them together, each mounting empty until KaTeX drew it
+      // and pushing the text below down in one jump. One per frame shows them
+      // in quick sequence and spreads their rendering.
+      if (nextProgress >= total && (block.node as { type?: string } | undefined)?.type === "math") break;
     }
 
     if (!acceptedProgress && this.firstIncompleteIndex() >= 0) {

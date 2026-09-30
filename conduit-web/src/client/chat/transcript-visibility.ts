@@ -9,8 +9,6 @@ const VISIBILITY_ATTRIBUTE = "data-transcript-visibility";
 const INTRINSIC_SIZE_PROPERTY = "contain-intrinsic-block-size";
 const INTRINSIC_INLINE_SIZE_PROPERTY = "contain-intrinsic-inline-size";
 const OVERSCAN_PX = 120;
-const DISPLAY_MATH_SELECTOR = ".incremark-math-block, .katex-display";
-const SETTLED_MESSAGE_SELECTOR = '.chat-markdown[data-settled="true"]';
 
 interface TableLock {
   table: HTMLTableElement;
@@ -176,20 +174,17 @@ export function mountTranscriptVisibility(
   // only the row it changed.
   const rowElements = new Map<HTMLElement, HTMLElement[]>();
 
-  // Which of a row's elements are virtualized. A message that contains
-  // display math stays fully laid out until it settles: content-visibility on
-  // either the KaTeX block or a sibling was observed changing the root's
-  // intrinsic inline geometry and shifting equations. Settlement gives the
-  // root explicit inline-size containment, and only then can every top-level
-  // block be managed independently without changing its centring basis.
+  // Which of a row's elements are virtualized: every top-level block, a
+  // streaming answer's included. Display math once kept its whole message laid
+  // out until it settled, over a worry that hiding blocks changed the root's
+  // inline size and shifted centred equations; the message column no longer
+  // sizes to its content, and keeping every formula written so far laid out
+  // and painted is what made a long mathematical answer's frames grow with it.
   const elementsOf = (row: HTMLElement) => {
     const blocks = [...row.querySelectorAll<HTMLElement>(".chat-markdown > .incremark > *")];
     if (!blocks.length) return [row];
     show(row);
-    // One query for the row, not one per block: a streaming answer ran this on
-    // every frame, over every block it had.
-    const hasDisplayMath = Boolean(row.querySelector(DISPLAY_MATH_SELECTOR));
-    return hasDisplayMath ? blocks.filter((block) => block.closest(SETTLED_MESSAGE_SELECTOR)) : blocks;
+    return blocks;
   };
 
   const release = (element: HTMLElement) => {
