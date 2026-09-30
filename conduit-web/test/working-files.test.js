@@ -42,5 +42,7 @@ test("production restart drains active assistant responses unless forced", async
   assert.match(shell, /activeGenerations/);
   assert.match(shell, /wait_for_generations/);
   assert.match(shell, /CONDUIT_RESTART_DRAIN_TIMEOUT_SECONDS/);
-  assert.match(shell, /build_if_needed\n\s+if \[\[ "\$\{1:-\}" == "--force"/);
+  // The build comes first, then --force decides whether responses are drained.
+  assert.match(shell, /build_if_needed\n\s+force_restart=false\n\s+if \[\[ "\$\{1:-\}" == "--force" \]\]; then force_restart=true/);
+  assert.match(shell, /if \[\[ "\$force_restart" == "false" \]\]; then wait_for_generations; fi/);
 });
