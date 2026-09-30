@@ -18,11 +18,26 @@ interface TableLock {
   marginLeft: string;
 }
 
+// A block's borders do not change as it resizes, and reading them is a
+// getComputedStyle per block: at settlement every block of a long answer is
+// observed at once, and those reads were a third of that frame.
+const borders = new WeakMap<Element, { block: number; inline: number }>();
+
+function bordersOf(element: HTMLElement) {
+  let known = borders.get(element);
+  if (!known) {
+    const style = getComputedStyle(element);
+    known = {
+      block: Number.parseFloat(style.borderBlockStartWidth) + Number.parseFloat(style.borderBlockEndWidth),
+      inline: Number.parseFloat(style.borderInlineStartWidth) + Number.parseFloat(style.borderInlineEndWidth),
+    };
+    borders.set(element, known);
+  }
+  return known;
+}
+
 function intrinsicBlockSize(element: HTMLElement, borderBoxSize: number) {
-  const style = getComputedStyle(element);
-  const border = Number.parseFloat(style.borderBlockStartWidth)
-    + Number.parseFloat(style.borderBlockEndWidth);
-  return Math.max(0, borderBoxSize - border);
+  return Math.max(0, borderBoxSize - bordersOf(element).block);
 }
 
 function blockSize(entry: ResizeObserverEntry) {
@@ -32,10 +47,7 @@ function blockSize(entry: ResizeObserverEntry) {
 }
 
 function intrinsicInlineSize(element: HTMLElement, borderBoxSize: number) {
-  const style = getComputedStyle(element);
-  const border = Number.parseFloat(style.borderInlineStartWidth)
-    + Number.parseFloat(style.borderInlineEndWidth);
-  return Math.max(0, borderBoxSize - border);
+  return Math.max(0, borderBoxSize - bordersOf(element).inline);
 }
 
 function inlineSize(entry: ResizeObserverEntry) {
@@ -44,9 +56,7 @@ function inlineSize(entry: ResizeObserverEntry) {
   return intrinsicInlineSize(entry.target as HTMLElement, size);
 }
 
-function containsDisplayMath(element: HTMLElement) {
-  return element.matches(DISPLAY_MATH_SELECTOR) || Boolean(element.querySelector(DISPLAY_MATH_SELECTOR));
-}
+const ROW_SELECTOR = '[data-slot="message-scroller-item"]';
 
 // Three observers share the work, and the split is the whole point of this
 // module's shape:
@@ -161,56 +171,60 @@ export function mountTranscriptVisibility(
     refreshing = false;
   };
 
-  // Reconcile the managed set with the DOM. This reads no geometry, so it is
-  // what streaming pays: new blocks start observed and fully rendered, and the
-  // observers take it from there.
-  const syncMembership = () => {
-    const next = new Set<HTMLElement>();
-    const stableIncremarkBlocks = new Set<HTMLElement>();
-    const settledIncremarkBlocks = new Set<HTMLElement>();
+  // The blocks each row hands to the observers, so a streamed frame touches
+  // only the row it changed.
+  const rowElements = new Map<HTMLElement, HTMLElement[]>();
 
-    for (const row of thread.querySelectorAll<HTMLElement>('[data-slot="message-scroller-item"]')) {
-      const blocks = [...row.querySelectorAll<HTMLElement>(".chat-markdown > .incremark > *")];
-      if (!blocks.length) {
-        next.add(row);
-        continue;
-      }
-      show(row);
-      const hasDisplayMath = blocks.some(containsDisplayMath);
-      for (const block of blocks) {
-        next.add(block);
-        if (block.closest(SETTLED_MESSAGE_SELECTOR)) settledIncremarkBlocks.add(block);
-        else if (hasDisplayMath) stableIncremarkBlocks.add(block);
-      }
-    }
+  // Which of a row's elements are virtualized. A message that contains
+  // display math stays fully laid out until it settles: content-visibility on
+  // either the KaTeX block or a sibling was observed changing the root's
+  // intrinsic inline geometry and shifting equations. Settlement gives the
+  // root explicit inline-size containment, and only then can every top-level
+  // block be managed independently without changing its centring basis.
+  const elementsOf = (row: HTMLElement) => {
+    const blocks = [...row.querySelectorAll<HTMLElement>(".chat-markdown > .incremark > *")];
+    if (!blocks.length) return [row];
+    show(row);
+    // One query for the row, not one per block: a streaming answer ran this on
+    // every frame, over every block it had.
+    const hasDisplayMath = Boolean(row.querySelector(DISPLAY_MATH_SELECTOR));
+    return hasDisplayMath ? blocks.filter((block) => block.closest(SETTLED_MESSAGE_SELECTOR)) : blocks;
+  };
 
-    const virtualized = new Set<HTMLElement>();
+  const release = (element: HTMLElement) => {
+    visibilityObserver.unobserve(element);
+    sizeObserver.unobserve(element);
+    clear(element);
+    managed.delete(element);
+  };
+
+  const syncRow = (row: HTMLElement) => {
+    const previous = rowElements.get(row) ?? [];
+    const next = row.isConnected ? elementsOf(row) : [];
+    const kept = new Set(next);
+    for (const element of previous) if (!kept.has(element)) release(element);
     for (const element of next) {
-      // A message that contains display math stays fully laid out until it
-      // settles: content-visibility on either the KaTeX block or a sibling was
-      // observed changing the root's intrinsic inline geometry and shifting
-      // equations. Settlement gives the root explicit inline-size containment,
-      // and only then can every top-level block be managed independently
-      // without changing its centring basis.
-      if (!settledIncremarkBlocks.has(element)
-        && (stableIncremarkBlocks.has(element) || containsDisplayMath(element))) continue;
-      virtualized.add(element);
-    }
-
-    for (const element of managed) {
-      if (virtualized.has(element)) continue;
-      visibilityObserver.unobserve(element);
-      sizeObserver.unobserve(element);
-      clear(element);
-    }
-    for (const element of virtualized) {
       if (managed.has(element)) continue;
+      managed.add(element);
       sizeObserver.observe(element);
       visibilityObserver.observe(element);
     }
-    managed.clear();
-    for (const element of virtualized) managed.add(element);
-    return virtualized;
+    if (next.length) rowElements.set(row, next);
+    else rowElements.delete(row);
+  };
+
+  // Reconcile the managed set with the DOM. This reads no geometry, so it is
+  // what streaming pays: new blocks start observed and fully rendered, and the
+  // observers take it from there. Given rows, only those are looked at.
+  const syncMembership = (rows?: Iterable<HTMLElement>) => {
+    if (rows) {
+      for (const row of rows) syncRow(row);
+    } else {
+      const present = new Set(thread.querySelectorAll<HTMLElement>(ROW_SELECTOR));
+      for (const row of [...rowElements.keys()]) if (!present.has(row)) syncRow(row);
+      for (const row of present) syncRow(row);
+    }
+    return managed;
   };
 
   // Reads every managed rect, then writes every attribute. Interleaving the two
@@ -260,12 +274,19 @@ export function mountTranscriptVisibility(
     measureFrame = requestAnimationFrame(refresh);
   };
 
-  const scheduleSync = () => {
+  // Rows changed since the last sync; null means a change outside any row, so
+  // everything is looked at.
+  let dirtyRows: Set<HTMLElement> | null = new Set();
+  const scheduleSync = (rows: Set<HTMLElement> | null) => {
+    if (dirtyRows && rows) for (const row of rows) dirtyRows.add(row);
+    else dirtyRows = null;
     if (!fontsReady || activeIds.size || syncFrame != null
       || measureFrame != null || measureIdle != null) return;
     syncFrame = requestAnimationFrame(() => {
       syncFrame = null;
-      syncMembership();
+      const rows = dirtyRows;
+      dirtyRows = new Set();
+      syncMembership(rows ?? undefined);
     });
   };
 
@@ -301,12 +322,9 @@ export function mountTranscriptVisibility(
     resizeIds.clear();
     cancelRefresh();
     unlockTables();
-    for (const element of managed) {
-      visibilityObserver.unobserve(element);
-      sizeObserver.unobserve(element);
-      clear(element);
-    }
+    for (const element of [...managed]) release(element);
     managed.clear();
+    rowElements.clear();
     scheduleRefresh(true);
   };
 
@@ -350,8 +368,17 @@ export function mountTranscriptVisibility(
     const deliberate = records.some((record) => record.attributeName === "data-collapsed"
       && record.oldValue !== (record.target as HTMLElement).getAttribute("data-collapsed")
       && Boolean((record.target as HTMLElement).closest(`[${VISIBILITY_ATTRIBUTE}="hidden"]`)));
-    if (deliberate) scheduleRefresh();
-    else scheduleSync();
+    if (deliberate) {
+      scheduleRefresh();
+      return;
+    }
+    let rows: Set<HTMLElement> | null = new Set();
+    for (const record of records) {
+      const row = record.target === thread ? null : (record.target as Element).closest?.(ROW_SELECTOR) as HTMLElement | null;
+      if (!row) { rows = null; break; }
+      rows.add(row);
+    }
+    scheduleSync(rows);
   });
   const viewportObserver = new ResizeObserver(() => scheduleRefresh());
   // Backgrounding must not disturb geometry. Clearing the intrinsic sizes here
