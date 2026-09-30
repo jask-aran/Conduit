@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, Index, onCleanup, onMount, Show, untrack } from "solid-js";
+import { createEffect, createMemo, createRenderEffect, createSignal, For, Index, onCleanup, onMount, Show, untrack } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { createIncremarkParser, type DisplayBlock, type ParsedBlock } from "@incremark/core";
 import katex from "katex";
@@ -115,6 +115,23 @@ function restoreParsedBlock(block: ParsedBlock, sentinel: string | null, origina
     node: restoredNode,
     rawText: restoredRawText,
   } as ParsedBlock;
+}
+
+/**
+ * While streaming, hold back a last line that is so far nothing but Markdown
+ * markers.
+ *
+ * Until a line reaches its first word the parser keeps changing its mind
+ * about it: `-` is an empty list item, `- ` a paragraph, `- *` a nested list,
+ * and `-` under a paragraph turns that paragraph into a heading. Each reading
+ * rebuilt the list item or restyled the line above for a frame. The line is
+ * released with its first word, a character or two later.
+ */
+const MARKER_ONLY_LINE = /(?:^|\n)([ \t]*[-*+#>=_~`.):|\d][-*+#>=_~`.):|\d \t]*)$/;
+
+function holdMarkerLine(source: string) {
+  const match = MARKER_ONLY_LINE.exec(source);
+  return match ? source.slice(0, source.length - match[1]!.length) : source;
 }
 
 function sameDefinitions(previous: Record<string, Definition>, next: Record<string, Definition>) {
@@ -694,9 +711,11 @@ function CodeNode(props: { node: MarkdownNode | NodeAccessor }) {
         </Show>
       </span>
     </div>
-    {/* innerHTML rather than a post-hoc DOM rewrite: the renderer keeps
-        ownership of the node, so a later render cannot wipe the highlighting. */}
-    <pre><code innerHTML={highlighted()} /></pre>
+    {/* Morphed by the renderer rather than rewritten from outside, so a later
+        render cannot wipe the highlighting; morphed rather than innerHTML, so
+        a streaming block keeps its finished lines instead of rebuilding every
+        line on every token. */}
+    <pre><code ref={(element) => createRenderEffect(() => morphHtml(element, highlighted()))} /></pre>
     <Show when={state().collapsible}>
       <button type="button" class="artifact-expand" data-expand-code data-expand-label onClick={(event) => toggle(event.currentTarget)}>
         {collapsed() ? state().expandLabel : codeBlockCollapseLabel()}
@@ -1059,7 +1078,8 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   const blockContainsOffset = (block: ParsedBlock, offset: number) => offset >= block.startOffset && offset <= block.endOffset;
 
   createEffect(() => {
-    const source = frozenSource() ?? String(props.children || "");
+    const raw = frozenSource() ?? String(props.children || "");
+    const source = streaming() && !props.inline ? holdMarkerLine(raw) : raw;
     const tableMath = !props.inline;
     const split = splitStreamingMarkdown(source, { tableMath, allowUnclosedMath: streaming() });
     const projection = tableMath
