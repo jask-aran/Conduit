@@ -2781,6 +2781,7 @@ function App() {
     }
     const target = parseFileView(viewOf(pane))!;
     if (!target.length) return void setPaneView(pane, formatFileView([entry]));
+    if (hasEmptySide(pane) && (fileFocus()[String(pane)] ?? 0) === 1) { setPaneView(pane, formatFileView([target[0]!, entry])); return focusFileEntry(pane, 1); }
     const index = Math.min(fileFocus()[String(pane)] ?? 0, target.length - 1);
     if (handlesOf(pane)[index]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and open another file?")) return;
     handlesOf(pane)[index]?.discardChanges();
@@ -2788,11 +2789,18 @@ function App() {
     if (tabActivation()) keepFileNext.add(sideKey(pane, index));
     setPaneView(pane, formatFileView(target.map((item, at) => at === index ? entry : item)));
   };
+  // The split opens an empty second side, which the next file opened into the viewer fills.
+  const [emptySides, setEmptySides] = createSignal<Record<string, true>>({});
+  const hasEmptySide = (pane: PaneKey) => Boolean(emptySides()[String(pane)]) && parseFileView(viewOf(pane))?.length === 1;
+  const closeEmptySide = (pane: PaneKey) => { setEmptySides((current) => { const next = { ...current }; delete next[String(pane)]; return next; }); focusFileEntry(pane, 0); };
+  createEffect(() => { for (const key of Object.keys(emptySides())) { const pane: PaneKey = key === "main" ? "main" : Number(key); if (!panesShown().includes(pane) || parseFileView(viewOf(pane))?.length !== 1) untrack(() => closeEmptySide(pane)); } });
+  const [sideShares, setSideShares] = createSignal<Record<string, number>>({});
   const splitFileViewer = (pane: PaneKey) => {
     const entries = parseFileView(viewOf(pane));
-    if (!entries || entries.length > 1) return;
-    setPaneView(pane, formatFileView([entries[0]!, entries[0]!]));
+    if (!entries || entries.length !== 1) return;
+    setEmptySides((current) => ({ ...current, [String(pane)]: true }));
     focusFileEntry(pane, 1);
+    setFilePane(pane);
   };
 
   const noteFileLoaded = (pane: PaneKey, index: number, file: FileSummary | null) => {
@@ -2816,6 +2824,13 @@ function App() {
       </>}>
         <FileViewer entries={entries()} focused={fileFocus()[String(pane)] ?? 0} wrap={fileWrap()} onToggleWrap={toggleFileWrap} commentChatId={focusedChat().loadedId()}
           tabs={(side) => fileSideTabs(pane, side)} paneActions={() => paneTabActions(pane)}
+          share={sideShares()[String(pane)]} onShare={(share) => setSideShares((current) => ({ ...current, [String(pane)]: share }))}
+          emptySide={<Show when={hasEmptySide(pane)}>
+            <section class="workspace-preview file-viewer-empty-side" data-focused={fileFocus()[String(pane)] === 1} onPointerDown={() => { focusFileEntry(pane, 1); setFilePane(pane); }}>
+              <header class="workspace-preview-header"><div class="workspace-preview-file"><span>No file open</span></div><button type="button" class="workspace-preview-action workspace-preview-close" aria-label="Close this side" title="Close" onClick={() => closeEmptySide(pane)}><XIcon /></button>{paneTabActions(pane)}</header>
+              <div class="file-viewer-empty" role="status">Open a file from Files to show it here.</div>
+            </section>
+          </Show>}
           onFocusEntry={(index) => { focusFileEntry(pane, index); setFilePane(pane); }} onSplit={() => splitFileViewer(pane)} onCloseEntry={(index) => { const entry = entries()[index]; if (entry) closeFileTab(pane, index, fileEntryKey(entry)); }}
           onSetMode={(index, mode) => setFileMode(pane, index, mode)}
           onLoaded={(index, file) => noteFileLoaded(pane, index, file)} reveal={fileReveal()} ref={(index, handle) => { handlesOf(pane)[index] = handle; setHandlesChanged((count) => count + 1); }} />
@@ -3592,7 +3607,7 @@ function App() {
       hint: (key) => `${placeLabelOf(key.slice(0, key.indexOf(":")))} / ${key.slice(key.indexOf(":") + 1)}`,
       icon: (key) => <FileTypeIcon name={key.slice(key.indexOf(":") + 1)} />,
       // Lit on the side with the keyboard; the other side's showing file in the text colour.
-      lit: () => { const shown = parseFileView(viewOf(pane)) ?? []; return shownFileSide(pane) === side && shown[side] ? fileEntryKey(shown[side]!) : null; },
+      lit: () => { const shown = parseFileView(viewOf(pane)) ?? []; return shownFileSide(pane) === side && shown[side] && !(hasEmptySide(pane) && fileFocus()[String(pane)] === 1) ? fileEntryKey(shown[side]!) : null; },
       shown: (key) => { const shown = parseFileView(viewOf(pane)) ?? []; return Boolean(shown[side] && fileEntryKey(shown[side]!) === key); },
       used: () => fileTabsOf(pane, side)?.used ?? [],
       // Only a showing file can hold edits: leaving one discards them.
@@ -3654,9 +3669,15 @@ function App() {
       // A tab's own cap (max-width) still holds.
       const whole = (tab: HTMLElement) => { const title = tab.querySelector<HTMLElement>(".pane-tab-title > span"); const width = tab.getBoundingClientRect().width; return Math.min(width + (title ? title.scrollWidth - title.clientWidth : 0), Math.max(width, parseFloat(getComputedStyle(tab).maxWidth) || Infinity)); };
       const natural = (element: HTMLElement) => element.classList.contains("pane-tab") ? whole(element) : element.getBoundingClientRect().width + [...element.querySelectorAll<HTMLElement>(".pane-tab")].reduce((sum, tab) => sum + whole(tab) - tab.getBoundingClientRect().width, 0);
-      const need = String(Math.ceil(groupElements.reduce((sum, element) => sum + natural(element) + (element === groupElements[0] ? 0 : 33), 0)));
+      const all = groupElements.reduce((sum, element) => sum + natural(element) + (element === groupElements[0] ? 0 : 33), 0);
+      // What must stay -- the lit and showing tabs, their labels and the ⋯ -- for a header
+      // that folds its own actions only after the other tabs have folded.
+      const litKey = options.lit();
+      const staying = tabElements.filter((element) => element.dataset.tab === litKey || options.shown?.(element.dataset.tab!));
+      const need = String(Math.ceil(staying.reduce((sum, element) => sum + natural(element) + 10, 0) + (staying.length < tabElements.length ? 28 : 0)
+        + groupElements.filter((group) => staying.some((element) => group.contains(element))).reduce((sum, group) => sum + (group.querySelector<HTMLElement>(".pane-tab-group-label")?.getBoundingClientRect().width ?? 0), 0)));
       if (strip.dataset.need !== need) strip.dataset.need = need;
-      if (Number(need) <= room) return setFolded([]);
+      if (all <= room) return setFolded([]);
       // Each tab with the gap and middot before it; each place with its label and the rule before it.
       const width = new Map(tabElements.map((element) => [element.dataset.tab!, natural(element) + 10]));
       const labels = groupElements.map((element, index) => (element.querySelector<HTMLElement>(".pane-tab-group-label")?.getBoundingClientRect().width ?? 0) + 8 + (index ? 33 : 0));

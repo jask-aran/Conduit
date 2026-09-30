@@ -39,6 +39,10 @@ export default function FileViewer(props: {
   /** Each side's tabs, which head it in place of the file's name (6c). */
   tabs?: (index: number) => JSX.Element;
   /** The pane's own actions, at the end of the last side's header. */
+  emptySide?: JSX.Element;
+  /** The first side's share of the width, with two. */
+  share?: number;
+  onShare?: (share: number) => void;
   paneActions?: () => JSX.Element;
   onLoaded?: (index: number, file: FileSummary | null) => void;
   ref: (index: number, handle: FileSlotHandle | undefined) => void;
@@ -138,15 +142,30 @@ export default function FileViewer(props: {
       reportError((cause as Error).message);
     }
   };
-  const splitButton = () => <Show when={props.entries.length === 1}><WorkbenchButton type="button" class="workspace-preview-action" aria-label="Open this file again beside" title="Split" onClick={() => props.onSplit()}><Columns2Icon /></WorkbenchButton></Show>;
-  return <div ref={(element) => { root = element; resized.observe(element); changed.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-need"] }); }} class="workspace-files workspace-file-viewer" data-count={props.entries.length}>
+  // Two sides share the width by a rule between them, dragged.
+  const sides = () => props.entries.length + (props.emptySide ? 1 : 0);
+  const share = () => Math.min(0.8, Math.max(0.2, props.share ?? 0.5));
+  const dragDivider = (event: PointerEvent) => {
+    const divider = event.currentTarget as HTMLElement;
+    const box = root!.getBoundingClientRect();
+    divider.setPointerCapture(event.pointerId);
+    divider.dataset.dragging = "";
+    const move = (next: PointerEvent) => props.onShare?.(Math.min(0.8, Math.max(0.2, (next.clientX - box.left) / box.width)));
+    const end = () => { delete divider.dataset.dragging; divider.removeEventListener("pointermove", move); divider.removeEventListener("pointerup", end); divider.removeEventListener("pointercancel", end); };
+    divider.addEventListener("pointermove", move);
+    divider.addEventListener("pointerup", end);
+    divider.addEventListener("pointercancel", end);
+    event.preventDefault();
+  };
+  const splitButton = () => <Show when={props.entries.length === 1 && !props.emptySide}><WorkbenchButton type="button" class="workspace-preview-action" aria-label="Open this file again beside" title="Split" onClick={() => props.onSplit()}><Columns2Icon /></WorkbenchButton></Show>;
+  return <div ref={(element) => { root = element; resized.observe(element); changed.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-need"] }); }} class="workspace-files workspace-file-viewer" data-count={sides()} style={sides() > 1 ? { "--side-a": String(share()), "--side-b": String(1 - share()) } : undefined}>
     <Index each={props.entries}>{(entry, index) =>
       <Show when={entry().mode} fallback={
         <WorkspaceFileSlot
           projectId={entry().projectId}
           path={entry().path}
           slot={index === 0 ? "primary" : "secondary"}
-          focused={props.entries.length > 1 && props.focused === index}
+          focused={sides() > 1 && props.focused === index}
           closable
           busy={false}
           wrap={props.wrap}
@@ -156,8 +175,8 @@ export default function FileViewer(props: {
           onShowDiff={(staged) => { if (leaveContents(index)) props.onSetMode(index, staged ? "staged" : "changes"); }}
           headerSuffix={splitButton()}
           headerTabs={props.tabs?.(index)}
-          headerEnd={index === props.entries.length - 1 ? props.paneActions?.() : undefined}
-          headerMenuItems={<Show when={props.entries.length === 1}><MenuItem onSelect={() => props.onSplit()}><Columns2Icon />Open again beside</MenuItem></Show>}
+          headerEnd={index === props.entries.length - 1 && !props.emptySide ? props.paneActions?.() : undefined}
+          headerMenuItems={<Show when={props.entries.length === 1 && !props.emptySide}><MenuItem onSelect={() => props.onSplit()}><Columns2Icon />Open again beside</MenuItem></Show>}
           reveal={props.reveal && props.reveal.entry.projectId === entry().projectId && props.reveal.entry.path === entry().path ? props.reveal.request : null}
           onFocus={() => props.onFocusEntry(index)}
           onClose={() => closeEntry(index)}
@@ -169,11 +188,13 @@ export default function FileViewer(props: {
           onDispose={() => { handles[index] = undefined; props.ref(index, undefined); }}
         />
       }>{(mode) =>
-        <ChangesEntry entry={entry()} mode={mode()} status={statuses()[entryKey(entry())]} focused={props.entries.length > 1 && props.focused === index} tabs={props.tabs?.(index)} end={index === props.entries.length - 1 ? props.paneActions?.() : undefined}
+        <ChangesEntry entry={entry()} mode={mode()} status={statuses()[entryKey(entry())]} focused={sides() > 1 && props.focused === index} tabs={props.tabs?.(index)} end={index === props.entries.length - 1 && !props.emptySide ? props.paneActions?.() : undefined}
           split={splitButton()} onFocus={() => props.onFocusEntry(index)} onClose={() => props.onCloseEntry(index)} onSetMode={(next) => props.onSetMode(index, next)}
           ref={(handle) => { handles[index] = handle; props.ref(index, handle); }} />
       }</Show>
     }</Index>
+    {props.emptySide}
+    <Show when={sides() > 1}><div class="file-viewer-divider" role="separator" aria-orientation="vertical" aria-label="Resize the sides" style={{ left: `${share() * 100}%` }} onPointerDown={dragDivider} onDblClick={() => props.onShare?.(0.5)} /></Show>
   </div>;
 }
 
