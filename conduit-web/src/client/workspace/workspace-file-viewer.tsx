@@ -1,5 +1,5 @@
 import { createEffect, createResource, createSignal, Index, lazy, onCleanup, Show, Suspense, type JSX } from "solid-js";
-import { Columns2Icon, FileDiffIcon, FileTextIcon, GitCompareArrowsIcon, XIcon } from "lucide-solid";
+import { ArrowLeftRightIcon, Columns2Icon, FileDiffIcon, FileTextIcon, GitCompareArrowsIcon, XIcon } from "lucide-solid";
 import { MenuItem } from "@/components/primitives";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import { toast } from "solid-sonner";
@@ -46,6 +46,10 @@ export default function FileViewer(props: {
   share?: number;
   onShare?: (share: number) => void;
   paneActions?: () => JSX.Element;
+  /** A side's own items in its ⋯ (close it, close its other tabs, move it to a pane). */
+  sideMenu?: (index: number) => JSX.Element;
+  /** Two sides trade places, from the ⇄ on the rule between them. */
+  onSwapSides?: () => void;
   onLoaded?: (index: number, file: FileSummary | null) => void;
   ref: (index: number, handle: FileSlotHandle | undefined) => void;
   /** A review comment to scroll to, when it is on one of the entries. */
@@ -186,8 +190,11 @@ export default function FileViewer(props: {
           onShowDiff={(staged) => { if (leaveContents(index)) props.onSetMode(index, staged ? "staged" : "changes"); }}
           headerSuffix={splitButton()}
           headerTabs={props.tabs?.(index)}
-          headerEnd={props.paneActions?.()}
-          headerMenuItems={(folded) => <Show when={props.entries.length === 1 && !props.splitEmpty && folded("1")}><MenuItem onSelect={() => props.onSplit()}><Columns2Icon />Open again beside</MenuItem></Show>}
+          headerEnd={index === props.entries.length - 1 && !props.splitEmpty ? props.paneActions?.() : undefined}
+          headerMenuItems={(folded) => <>
+            <Show when={props.entries.length === 1 && !props.splitEmpty && folded("1")}><MenuItem onSelect={() => props.onSplit()}><Columns2Icon />Open again beside</MenuItem></Show>
+            {props.sideMenu?.(index)}
+          </>}
           reveal={props.reveal && props.reveal.entry.projectId === entry().projectId && props.reveal.entry.path === entry().path ? props.reveal.request : null}
           onFocus={() => props.onFocusEntry(index)}
           onClose={() => closeEntry(index)}
@@ -199,12 +206,13 @@ export default function FileViewer(props: {
           onDispose={() => { handles[index] = undefined; props.ref(index, undefined); }}
         />
       }>{(mode) =>
-        <ChangesEntry entry={entry()} mode={mode()} status={statuses()[entryKey(entry())]} focused={sides() > 1 && props.focused === index} tabs={props.tabs?.(index)} end={props.paneActions?.()}
+        <ChangesEntry entry={entry()} mode={mode()} status={statuses()[entryKey(entry())]} focused={sides() > 1 && props.focused === index} tabs={props.tabs?.(index)} end={index === props.entries.length - 1 && !props.splitEmpty ? props.paneActions?.() : undefined}
           split={splitButton()} onFocus={() => props.onFocusEntry(index)} onClose={() => props.onCloseEntry(index)} onSetMode={(next) => props.onSetMode(index, next)}
           ref={(handle) => { handles[index] = handle; props.ref(index, handle); }} />
       }</Show>
     }</Index>
     {props.emptySide}
+    <Show when={props.entries.length === 2 && props.onSwapSides}><button type="button" class="file-viewer-swap" tabIndex={-1} aria-label="Swap the sides" title="Swap the sides" style={{ left: `${share() * 100}%` }} onClick={() => props.onSwapSides?.()}><ArrowLeftRightIcon /></button></Show>
     <Show when={sides() > 1}><div class="file-viewer-divider" role="separator" aria-orientation="vertical" aria-label="Resize the sides" style={{ left: `${share() * 100}%` }} onPointerDown={dragDivider} onDblClick={() => props.onShare?.(0.5)} /></Show>
   </div>;
 }
