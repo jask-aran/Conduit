@@ -916,6 +916,29 @@ function syntheticMathClosingDelimiter(source: string, pending: StreamingPending
   return source.startsWith("\\[", pending.start) ? "\n\\]" : "\n$$";
 }
 
+/**
+ * An answer that ended inside a formula -- stopped, or cut off -- would keep its
+ * last formula as raw TeX once streaming ends, since only a stream draws an
+ * open one. Close it as the stream's preview did: finish what KaTeX needs
+ * (open groups, a dangling script), drop a command left half-written if the
+ * whole will not render, and add the closing delimiter.
+ */
+function closeTrailingMath(source: string) {
+  const pending = splitStreamingMarkdown(source, { tableMath: true, allowUnclosedMath: true }).pending;
+  if (!pending || (pending.kind !== "math-block" && pending.kind !== "math-inline")) return source;
+  const opening = source.startsWith("\\(", pending.start) || source.startsWith("\\[", pending.start) || source.startsWith("$$", pending.start) ? 2 : 1;
+  const bodyStart = pending.start + opening;
+  const body = source.slice(bodyStart);
+  const display = pending.kind === "math-block";
+  const renders = (tex: string) => {
+    try { katex.renderToString(tex, { displayMode: display, throwOnError: true }); return true; } catch { return false; }
+  };
+  let repaired = repairSyntheticMathSource(body);
+  if (!renders(repaired)) repaired = repairSyntheticMathSource(trimUnfinishedMathTail(body.trimEnd()));
+  if (!repaired.trim() || !renders(repaired)) return source;
+  return source.slice(0, bodyStart) + repaired + syntheticMathClosingDelimiter(source, pending);
+}
+
 function containsMath(node: MarkdownNode): boolean {
   if (!node || typeof node !== "object") return false;
   if (node.type === "inlineMath" || node.type === "math") return true;
@@ -1156,7 +1179,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
 
   createEffect(() => {
     const raw = frozenSource() ?? String(props.children || "");
-    const source = streaming() && !props.inline ? holdMarkerLine(raw) : raw;
+    const source = props.inline ? raw : streaming() ? holdMarkerLine(raw) : closeTrailingMath(raw);
     const tableMath = !props.inline;
     const split = splitStreamingMarkdown(source, { tableMath, allowUnclosedMath: streaming() });
     const projection = tableMath
