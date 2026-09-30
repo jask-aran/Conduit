@@ -1,3 +1,4 @@
+import { inlineDollarClose } from "./inline-dollar.ts";
 export type StreamingPendingKind = "math-block" | "math-inline" | "fence";
 
 export type StreamingPending = {
@@ -249,18 +250,17 @@ function findInlineMath(source: string, ranges: SourceRange[], blockMathStart: n
 
     if (source[index] !== "$" || source[index + 1] === "$") continue;
     if (skipDoubleDollar && index > 0 && source[index - 1] === "$" && !isEscaped(source, index - 1)) continue;
+    // A closed formula is the parser's rule exactly (inline-dollar.ts), so
+    // the two cannot pair a line's dollars differently. An open one is taken
+    // only after a letter or symbol: "$72" still arriving is a price.
+    const close = inlineDollarClose(source, index);
+    if (close >= 0) {
+      index = close;
+      continue;
+    }
     const next = source[index + 1];
     if (!next || /\s|\d/.test(next)) continue;
-
-    let closeFound = false;
-    for (let close = index + 1; close < source.length; close += 1) {
-      if (source[close] !== "$" || source[close + 1] === "$" || isEscaped(source, close)) continue;
-      if (/\s/.test(source[close - 1] || "")) continue;
-      closeFound = true;
-      index = close;
-      break;
-    }
-    if (closeFound) continue;
+    if (source.indexOf("$", index + 1) >= 0 && !/[\r\n]/.test(source.slice(index, source.indexOf("$", index + 1)))) continue;
     const body = source.slice(index + 1);
     if (allowUnclosedMath && !/[\r\n]/.test(body) && !looksLikeShellVariable(body)) return { start: index, bodyStart: index + 1 };
   }

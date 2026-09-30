@@ -17,6 +17,8 @@ const CURRENCY_PROSE = [
   "Item *row* sum is $174k because EA+QT10 duplicated the same orders; after one amount per ItemId they match. So the **$** in this file are the item extract.",
   "Top buyers (Fuji SMBE $12.4k, RN Baker $8.4k, Globetech $6.9k) are **L1 63%, L3 0**.",
   "- **73% of $** ($119.7k) has **L3 = 0**, and the next bucket is **L1 52% ~$32k**.",
+  "Observed usage is $0.015/vCPU·h, $0.008/GiB RAM·h, $0.0007/GiB disk·h.",
+  "Light-use fives were $38–$71; the band is ($13.80–$15.92, 51 windows) and $823 / $151 = 5.5×.",
 ];
 
 const REAL_MATH = [
@@ -61,6 +63,15 @@ test("real formulas still parse as math in both renderers", () => {
     assert.deepEqual(incremarkMath(source), [expected], `incremark: ${source}`);
     assert.deepEqual(markedMath(source), [expected], `marked: ${source}`);
   }
+});
+
+test("formulas a real transcript left as raw TeX parse in incremark", () => {
+  // A formula opening on a digit or a space, and `$$` in mid-line: all three
+  // were refused as if they were money (inline-dollar.ts).
+  assert.deepEqual(incremarkMath("Room $0$ is at the end, then Room $1$."), ["0", "1"]);
+  assert.deepEqual(incremarkMath("She was at $2^{10} = 1024$, then $1/2$ sad."), ["2^{10} = 1024", "1/2"]);
+  assert.deepEqual(incremarkMath("You think $ \\infty $ is big?"), ["\\infty"]);
+  assert.deepEqual(incremarkMath("so → $$\\frac{1}{2} = x$$ inline"), ["\\frac{1}{2} = x"]);
 });
 
 test("tex delimiters still parse in incremark", () => {

@@ -9,6 +9,8 @@ export type TableMathProjection = {
 const FIRST_SENTINEL = 0xe000;
 const LAST_SENTINEL = 0xf8ff;
 
+import { inlineDollarClose } from "./inline-dollar.ts";
+
 function isEscaped(source: string, index: number) {
   let slashes = 0;
   for (let cursor = index - 1; cursor >= 0 && source[cursor] === "\\"; cursor -= 1) slashes += 1;
@@ -85,6 +87,7 @@ function projectTableLine(line: string, sentinel: string, convertTexDisplayDelim
   let mode: MathMode | null = null;
   let mathStart = 0;
   let mathComplete = false;
+  let mathEnd = -1;
   let codeLength = 0;
   let pipeRepairs = 0;
   let output = "";
@@ -121,7 +124,8 @@ function projectTableLine(line: string, sentinel: string, convertTexDisplayDelim
       index += 1;
       continue;
     }
-    if (mode === "dollar-inline" && character === "$" && !isEscaped(line, index) && !/\s/.test(line[index - 1] || "")) {
+    if (mode === "dollar-inline" && character === "$" && !isEscaped(line, index)
+      && (mathEnd >= 0 ? index === mathEnd : !/\s/.test(line[index - 1] || ""))) {
       output += character;
       mode = null;
       mathComplete = true;
@@ -175,11 +179,15 @@ function projectTableLine(line: string, sentinel: string, convertTexDisplayDelim
       index += 1;
       continue;
     }
-    if (character === "$" && !isEscaped(line, index) && line[index + 1] !== "$" && line[index + 1] && !/[\s\d]/.test(line[index + 1]!)) {
+    // The shared rule (inline-dollar.ts) decides a closed formula; one still
+    // open is taken only where the streaming split would open it too.
+    const dollarEnd = character === "$" ? inlineDollarClose(line, index) : -1;
+    if (dollarEnd >= 0 || (character === "$" && !isEscaped(line, index) && line[index + 1] !== "$" && line[index + 1] && !/[\s\d]/.test(line[index + 1]!))) {
       output += character;
-      const close = findInlineDollarClose(line, index + 1);
+      const close = dollarEnd >= 0 ? dollarEnd : findInlineDollarClose(line, index + 1);
       mode = "dollar-inline";
       mathStart = index + 1;
+      mathEnd = dollarEnd;
       mathComplete = close >= 0;
       continue;
     }
