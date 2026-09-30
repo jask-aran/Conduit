@@ -40,6 +40,8 @@ export default function FileViewer(props: {
   tabs?: (index: number) => JSX.Element;
   /** The pane's own actions, at the end of the last side's header. */
   emptySide?: JSX.Element;
+  /** An empty second side shows (the split, before a file fills it). */
+  splitEmpty?: boolean;
   /** The first side's share of the width, with two. */
   share?: number;
   onShare?: (share: number) => void;
@@ -143,7 +145,7 @@ export default function FileViewer(props: {
     }
   };
   // Two sides share the width by a rule between them, dragged.
-  const sides = () => props.entries.length + (props.emptySide ? 1 : 0);
+  const sides = () => props.entries.length + (props.splitEmpty ? 1 : 0);
   const share = () => Math.min(0.8, Math.max(0.2, props.share ?? 0.5));
   const dragDivider = (event: PointerEvent) => {
     const divider = event.currentTarget as HTMLElement;
@@ -157,7 +159,7 @@ export default function FileViewer(props: {
     divider.addEventListener("pointercancel", end);
     event.preventDefault();
   };
-  const splitButton = () => <Show when={props.entries.length === 1 && !props.emptySide}><WorkbenchButton type="button" class="workspace-preview-action" aria-label="Open this file again beside" title="Split" onClick={() => props.onSplit()}><Columns2Icon /></WorkbenchButton></Show>;
+  const splitButton = () => <Show when={props.entries.length === 1 && !props.splitEmpty}><WorkbenchButton type="button" class="workspace-preview-action" aria-label="Open this file again beside" title="Split" onClick={() => props.onSplit()}><Columns2Icon /></WorkbenchButton></Show>;
   return <div ref={(element) => { root = element; resized.observe(element); changed.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-need"] }); }} class="workspace-files workspace-file-viewer" data-count={sides()} style={sides() > 1 ? { "--side-a": String(share()), "--side-b": String(1 - share()) } : undefined}>
     <Index each={props.entries}>{(entry, index) =>
       <Show when={entry().mode} fallback={
@@ -175,8 +177,8 @@ export default function FileViewer(props: {
           onShowDiff={(staged) => { if (leaveContents(index)) props.onSetMode(index, staged ? "staged" : "changes"); }}
           headerSuffix={splitButton()}
           headerTabs={props.tabs?.(index)}
-          headerEnd={index === props.entries.length - 1 && !props.emptySide ? props.paneActions?.() : undefined}
-          headerMenuItems={<Show when={props.entries.length === 1 && !props.emptySide}><MenuItem onSelect={() => props.onSplit()}><Columns2Icon />Open again beside</MenuItem></Show>}
+          headerEnd={index === props.entries.length - 1 && !props.splitEmpty ? props.paneActions?.() : undefined}
+          headerMenuItems={<Show when={props.entries.length === 1 && !props.splitEmpty}><MenuItem onSelect={() => props.onSplit()}><Columns2Icon />Open again beside</MenuItem></Show>}
           reveal={props.reveal && props.reveal.entry.projectId === entry().projectId && props.reveal.entry.path === entry().path ? props.reveal.request : null}
           onFocus={() => props.onFocusEntry(index)}
           onClose={() => closeEntry(index)}
@@ -188,7 +190,7 @@ export default function FileViewer(props: {
           onDispose={() => { handles[index] = undefined; props.ref(index, undefined); }}
         />
       }>{(mode) =>
-        <ChangesEntry entry={entry()} mode={mode()} status={statuses()[entryKey(entry())]} focused={sides() > 1 && props.focused === index} tabs={props.tabs?.(index)} end={index === props.entries.length - 1 && !props.emptySide ? props.paneActions?.() : undefined}
+        <ChangesEntry entry={entry()} mode={mode()} status={statuses()[entryKey(entry())]} focused={sides() > 1 && props.focused === index} tabs={props.tabs?.(index)} end={index === props.entries.length - 1 && !props.splitEmpty ? props.paneActions?.() : undefined}
           split={splitButton()} onFocus={() => props.onFocusEntry(index)} onClose={() => props.onCloseEntry(index)} onSetMode={(next) => props.onSetMode(index, next)}
           ref={(handle) => { handles[index] = handle; props.ref(index, handle); }} />
       }</Show>
