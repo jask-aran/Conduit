@@ -2577,6 +2577,14 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-label mark, .command-model-label mark { background: none; color: var(--foreground); font-weight: 700; }
 .command-preview-prompt { justify-self: end; max-width: 92%; margin: 2px 0 0; border: 1px solid oklch(1 0 0 / 10%); border-radius: 12px; background: var(--glass-bg); padding: 6px 10px; color: var(--foreground); font-size: 11.5px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .command-preview-answer { margin: 0; color: color-mix(in oklch, var(--foreground), transparent 20%); font-size: 11.5px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 7; -webkit-box-orient: vertical; overflow: hidden; }
+/* An answer with formulas: KaTeX in the answer's own colour, no box, left on
+   the column like the words around it. Display maths cannot line-clamp, so
+   the answer stops at a height and fades out, as the folded user message does;
+   a formula wider than the column fades at its right edge. */
+.command-preview-answer-math { display: block; max-height: 15em; -webkit-line-clamp: unset; mask-image: linear-gradient(to bottom, #000 12.5em, transparent 15em); }
+.command-preview-answer-math .katex { font-size: 1.08em; }
+.command-preview-answer-math .katex-display { margin: 0.55em 0; overflow: hidden; text-align: left; mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
+.command-preview-answer-math .katex-display > .katex { text-align: left; }
 .command-preview-turn { display: flex; align-items: center; gap: 8px; font-size: 11px; }
 .command-preview-turn b { color: var(--foreground); font-weight: 560; }
 .command-preview-turn .thinking-orb { width: 16px; height: 16px; flex: none; }
