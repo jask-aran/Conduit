@@ -138,12 +138,13 @@ export function mountTranscriptVisibility(
 
   const sizeObserver = new ResizeObserver((entries) => {
     if (activeIds.size) return;
-    for (const entry of entries) {
-      const element = entry.target as HTMLElement;
-      if (element.getAttribute(VISIBILITY_ATTRIBUTE) !== "hidden") {
-        setIntrinsicSize(element, blockSize(entry), inlineSize(entry));
-      }
-    }
+    // Every read before any write: a size written between two border reads
+    // made the second getComputedStyle recalculate style, once per block --
+    // at settlement, once per block of the whole answer.
+    const sizes = entries
+      .filter((entry) => (entry.target as HTMLElement).getAttribute(VISIBILITY_ATTRIBUTE) !== "hidden")
+      .map((entry) => [entry.target as HTMLElement, blockSize(entry), inlineSize(entry)] as const);
+    for (const [element, height, width] of sizes) setIntrinsicSize(element, height, width);
   });
 
   const visibilityObserver = new IntersectionObserver((entries) => {
