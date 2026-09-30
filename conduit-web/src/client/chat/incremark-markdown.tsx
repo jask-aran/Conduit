@@ -14,6 +14,7 @@ import { conduitMathPlugin } from "./incremark-math-extension";
 import { BufferedIncremarkTypewriter, visibleAstCharacters } from "./incremark-typewriter";
 import { MathRenderQueue, type MathRenderPolicy } from "./incremark-math-queue";
 import { morphHtml } from "./morph-html";
+import { patchMathTree, renderMathTree } from "./katex-patch";
 import { citationHost, resolveMarkdownUrl } from "./markdown-security";
 import { projectTableMathSource, promoteTableCellDisplayMath, restoreTableMathAst, restoreTableMathSentinel } from "./table-math";
 import type { StreamingPending } from "./streaming-markdown";
@@ -398,10 +399,23 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     sizes.observe(wrapper);
   };
   let lastCandidate = "";
+  // What a formula still arriving last drew, as KaTeX's tree; see katex-patch.ts.
+  let drawnTree: ReturnType<typeof renderMathTree> = null;
+  let applied = "";
+  const draw = (value: string) => {
+    if (!wrapper || value === applied) return;
+    applied = value;
+    drawnTree = null;
+    morphHtml(wrapper, value);
+  };
+  const show = (value: string) => {
+    setHtml(value);
+    draw(value);
+  };
   const renderCurrent = (current: MarkdownNode, source: string, version: number) => {
     if (version !== renderVersion) return;
     const candidate = repairSyntheticMathSource(source);
-    if (candidate === lastCandidate && lastValidHtml) {
+    if (candidate === lastCandidate && (lastValidHtml || drawnTree)) {
       setBusy(false);
       return;
     }
@@ -409,9 +423,27 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     const cached = getCachedMathHtml(current, candidate);
     if (cached !== undefined) {
       lastValidHtml = cached;
-      setHtml(cached);
+      show(cached);
       setBusy(false);
       samplePreviewHeight(current);
+      return;
+    }
+    if (!complete() && wrapper) {
+      const display = current?.type === "math";
+      let tree = renderMathTree(candidate, display);
+      // A partial ending part-way through a command renders without it.
+      if (!tree) {
+        const trimmed = trimUnfinishedMathTail(source);
+        if (trimmed !== source) tree = renderMathTree(repairSyntheticMathSource(trimmed), display);
+      }
+      // Rejected: the last partial stays drawn.
+      if (tree) {
+        patchMathTree(wrapper, drawnTree, tree);
+        drawnTree = tree;
+        applied = "";
+      }
+      samplePreviewHeight(current);
+      setBusy(false);
       return;
     }
     let renderedHtml: string | null = null;
@@ -453,7 +485,7 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
       lastValidHtml = renderedHtml;
       if (complete()) cacheMathHtml(current, candidate, renderedHtml);
     }
-    if (renderedHtml !== html()) setHtml(renderedHtml);
+    show(renderedHtml);
     samplePreviewHeight(current);
     setBusy(false);
   };
@@ -477,9 +509,9 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     // parser still sees it on the line of the formula before -- whose block, and
     // so whose node, the empty preview takes. Keep what is drawn until there
     // is something to draw instead of blanking a finished formula for a frame.
-    if (current && !source && html()) return;
+    if (current && !source && (html() || drawnTree)) return;
     if (!current || !source) {
-      setHtml("");
+      show("");
       lastValidHtml = "";
       lastCandidate = "";
       setPreviewMinHeight(0);
@@ -488,7 +520,7 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     const cached = getCachedMathHtml(current, repairSyntheticMathSource(source));
     if (cached !== undefined) {
       lastValidHtml = cached;
-      setHtml(cached);
+      show(cached);
       return;
     }
     // Inline math changes line width. Render it in the same effect as the
@@ -505,15 +537,9 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     }
     renderCurrent(current, source, version);
   });
-  // Each rendering is edited into the last rather than replacing it; see
-  // morph-html.ts.
-  let applied = "";
-  createEffect(() => {
-    const next = html();
-    if (!wrapper || next === applied) return;
-    applied = next;
-    morphHtml(wrapper, next);
-  });
+  // A rendering made before the wrapper existed is drawn once it does. Each is
+  // edited into the last rather than replacing it; see morph-html.ts.
+  onMount(() => draw(html()));
   createEffect(() => {
     if (!complete()) return;
     sizes?.disconnect();
