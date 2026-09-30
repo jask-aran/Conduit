@@ -9,7 +9,7 @@ import { copyWithFeedback, createExternalLinkController } from "./markdown-actio
 import { codeBlockCollapseLabel, codeBlockState, normalizeCodeLanguage, publishCodeBlockToggle } from "./code-block";
 import { useCodeBlockCollapse } from "./transcript-appearance";
 import { highlighterReady, StreamingCodeHighlighter } from "./code-highlight";
-import { createSyntheticMathPreviewNode, repairSyntheticMathSource } from "./incremark-synthetic-math";
+import { createSyntheticMathPreviewNode, repairSyntheticMathSource, trimUnfinishedMathTail } from "./incremark-synthetic-math";
 import { conduitMathPlugin } from "./incremark-math-extension";
 import { BufferedIncremarkTypewriter, visibleAstCharacters } from "./incremark-typewriter";
 import { MathRenderQueue, type MathRenderPolicy } from "./incremark-math-queue";
@@ -405,16 +405,21 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     let valid = false;
     const recorder = getHarnessRecorder();
     const startedAt = recorder ? performance.now() : 0;
-    try {
-      renderedHtml = katex.renderToString(candidate, {
-        displayMode: current?.type === "math",
-        throwOnError: true,
-      });
-      if (renderedHtml.includes("katex-error")) renderedHtml = null;
-      else valid = true;
-    } catch {
-      renderedHtml = null;
+    const render = (tex: string) => {
+      try {
+        const out = katex.renderToString(tex, { displayMode: current?.type === "math", throwOnError: true });
+        return out.includes("katex-error") ? null : out;
+      } catch {
+        return null;
+      }
+    };
+    renderedHtml = render(candidate);
+    // A partial ending part-way through a command renders without it.
+    if (renderedHtml == null && !complete()) {
+      const trimmed = trimUnfinishedMathTail(source);
+      if (trimmed !== source) renderedHtml = render(repairSyntheticMathSource(trimmed));
     }
+    valid = renderedHtml != null;
     if (renderedHtml == null) {
       // A first invalid partial must not reserve a larger fallback box than
       // the valid preview that follows it. Keep the stable wrapper mounted,
