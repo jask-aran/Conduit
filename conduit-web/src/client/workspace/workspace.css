@@ -17,7 +17,6 @@
 .workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 0 6.4px 0; flex: none; overflow: visible; pointer-events: none; border-radius: 12.8px; transition: width 220ms var(--panel-motion-easing), margin-right 220ms var(--panel-motion-easing); }
 .workspace-panel.workspace-panel-open { pointer-events: auto; background: var(--background); }
 .workspace-panel[data-edge-instant="true"],
-body.workspace-resizing .workspace-panel { transition: none !important; }
 /* Surface keeps settled panel width, right-anchored inside the shell. */
 .workspace-panel-surface { position: absolute; inset: 0; display: flex; min-width: 0; height: 100%; contain: layout paint; container-name: workspace-surface; container-type: inline-size; flex: none; flex-direction: column; overflow: hidden; border-radius: 12.8px; background: var(--background); }
 .workspace-panel-surface > * { max-width: 100%; }
@@ -416,7 +415,6 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-panel-loading { position: absolute; inset: auto 9.6px 9.6px auto; display: flex; align-items: center; gap: 5.6px; padding: 4.8px 7.2px; border: 0.8px solid var(--border); border-radius: 999px; background: var(--popover); color: var(--muted-foreground); font-size: 8.8px; box-shadow: 0 6.4px 19.2px rgb(0 0 0 / 25%); }
 /* 19.2px hit target centered on the gap between chat-main and the panel edge. */
 .workspace-resize-handle { position: absolute; inset-block: 0; left: -12px; z-index: 40; width: 19.2px; cursor: col-resize; touch-action: none; }
-.workspace-resizing { cursor: col-resize; user-select: none; }
 .workspace-detail-resizing { cursor: row-resize; user-select: none; }
 .workspace-chat-view { display: flex; min-height: 0; flex: 1; flex-direction: column; }
 .workspace-chat-modes { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 6px; border-bottom: 1px solid var(--border); }
@@ -565,7 +563,6 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - 16px); margin: 8px 0 8px 0; flex: none; overflow: visible; pointer-events: none; border-radius: 16px; transition: width 220ms var(--panel-motion-easing), margin-right 220ms var(--panel-motion-easing); }
 .workspace-panel.workspace-panel-open { pointer-events: auto; background: var(--background); }
 .workspace-panel[data-edge-instant="true"],
-body.workspace-resizing .workspace-panel { transition: none !important; }
 /* Surface keeps settled panel width, right-anchored inside the shell. */
 .workspace-panel-surface { position: absolute; inset: 0; display: flex; min-width: 0; height: 100%; contain: layout paint; flex: none; flex-direction: column; overflow: hidden; border-radius: 16px; background: var(--background); }
 .workspace-panel-surface > * { max-width: 100%; }
@@ -634,7 +631,6 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-panel-loading { position: absolute; inset: auto 12px 12px auto; display: flex; align-items: center; gap: 7px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 999px; background: var(--popover); color: var(--muted-foreground); font-size: 11px; box-shadow: 0 8px 24px rgb(0 0 0 / 25%); }
 /* 24px hit target centered on the gap between chat-main and the panel edge. */
 .workspace-resize-handle { position: absolute; inset-block: 0; left: -12px; z-index: 40; width: 24px; cursor: col-resize; touch-action: none; }
-.workspace-resizing { cursor: col-resize; user-select: none; }
 .workspace-detail-resizing { cursor: row-resize; user-select: none; }
 .workspace-chat-view { display: flex; min-height: 0; flex: 1; flex-direction: column; }
 .workspace-chat-modes { display: flex; align-items: center; justify-content: space-between; gap: 3px; padding: 4px 8px; border-bottom: 1px solid var(--border); }

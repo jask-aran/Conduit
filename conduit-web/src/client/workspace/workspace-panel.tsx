@@ -449,13 +449,13 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       window.removeEventListener("blur", stop);
       resizeHandle?.removeEventListener("lostpointercapture", stop);
       if (resizeHandle?.hasPointerCapture(pointerId)) resizeHandle.releasePointerCapture(pointerId);
-      document.body.classList.remove("workspace-resizing");
       panelRoot?.removeAttribute("data-edge-instant");
       panelRoot?.style.removeProperty("transition");
       stopResize = undefined;
     };
     stopResize = stop;
-    document.body.classList.add("workspace-resizing");
+    // No class on body: the captured handle keeps its cursor, and its inherited
+    // cursor and user-select restyled the whole page at each end of the drag.
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop, { once: true });
     window.addEventListener("pointercancel", stop, { once: true });
@@ -465,7 +465,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   onCleanup(() => {
     requests.reset();
     stopResize?.();
-    document.body.classList.remove("workspace-resizing");
     document.body.classList.remove("workspace-detail-resizing");
     document.body.classList.remove("workspace-tree-resizing");
     document.body.classList.remove("workspace-split-resizing");

@@ -4201,6 +4201,12 @@ function App() {
     const panes = Array.from({ length: shown.length + 1 }, (_, index) => paneAt(index));
     if (panes.some((pane) => !pane)) return;
     event.preventDefault();
+    // Captured, the handle keeps its col-resize cursor and the pointer (over a
+    // PDF's frame too), and the prevented press starts no text selection -- no
+    // class on body, whose inherited cursor and user-select restyled the whole
+    // page as the drag began and again as it ended (~7ms each).
+    const handle = event.currentTarget as HTMLElement;
+    handle.setPointerCapture(event.pointerId);
     // Dragging an edge takes room from the pane beside it down to its
     // document's minimum, then from the next one on, and gives it to the pane
     // on the other side.
@@ -4244,13 +4250,12 @@ function App() {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
       window.removeEventListener("pointercancel", stop);
-      document.body.classList.remove("workspace-resizing");
+      if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
       apply(pending);
       if (pending.length === 2) writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratio", String(pending[1]!));
       else writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratios", JSON.stringify(pending));
       requestAnimationFrame(() => { splitSize = besideWidth(); announceSplit("end", splitSize); });
     };
-    document.body.classList.add("workspace-resizing");
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop);
     window.addEventListener("pointercancel", stop);
