@@ -338,6 +338,34 @@ thinking orb, a live dot, the harness mark's lively state, relative times),
 or the transcript's deferred passes; Chrome's Performance panel or the CDP
 Animation domain will name it.
 
+**Cause and fix (2026-09-30).** The thinking orb: DESIGN.md has a settled
+turn's orb keep turning (Done, one turn in ~12s; Interrupted and Failed
+sputtering), and each orb ran its own requestAnimationFrame loop drawing
+every frame -- two chats with three settled turns in view were three loops at
+the display's rate, and each draw also rewrote both canvases' opacity (a style
+recalc). Now (`chat/thinking-orb.tsx`):
+
+- every orb shares one loop, which runs only while one plays;
+- a settled orb draws 15 times a second (30 sputtering; `settledOrbRate`) --
+  at 20px its turn moves ~0.3px a step, which does not show;
+- with only throttled orbs playing the loop sleeps until the next draw is
+  due, since merely asking for a frame makes Chromium run a whole one
+  (style, intersection observers, commit);
+- opacity is written only when it changes.
+
+A live orb still draws every frame (checked on a Test profile turn: one orb,
+60 draws a second headless). Two chats idle, three settled orbs in view:
+
+| | Before | After |
+| --- | --- | --- |
+| Frames asked for in 2s | 363 | 30 |
+| Orb draws in 2s | ~360 | 90 |
+| Main-thread work in 4s | ~190ms | ~111ms |
+| Same, CPU 4× slower | ~734ms | ~413ms |
+
+What remains idle (~28ms a second) is the orbs' own draws and the frame
+commit around them, each well inside the budget.
+
 ## 14. Measured and fine (2026-09-30)
 
 So the pass need not look again: scrolling a long file (30 wheel steps: 1
