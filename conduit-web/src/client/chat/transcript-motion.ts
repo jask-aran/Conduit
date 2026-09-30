@@ -32,7 +32,7 @@ export function mountTranscriptPanelMotion(
   const activeIds = new Map<PanelGeometryMotionSource, number>();
   // Edge motions (resize + open/close shell easing) pin a preview width so the
   // heavy transcript does not take natural flex width on every frame.
-  const edgeStarts = new Map<PanelGeometryMotionSource, { size: number; width: number; contentWidth: number; gutter: number; canTranslate: boolean; shift: number; paneWidth: number | null }>();
+  const edgeStarts = new Map<PanelGeometryMotionSource, { size: number; width: number; contentWidth: number; gutter: number; canTranslate: boolean; shift: number; paneWidth: number | null; host: { element: HTMLElement; width: number } | null }>();
   let transformSource: PanelGeometryMotionSource | null = null;
   const panelMotionMode = usePanelMotion();
 
@@ -149,6 +149,7 @@ export function mountTranscriptPanelMotion(
         canTranslate: contentWidth + gutter < width - 1,
         shift: 0,
         paneWidth: rect ? rect.width : null,
+        host: detail.panes?.find((pane) => pane.element.contains(transcript)) ?? null,
       });
       transcript.dataset.panelMotion = "edge";
       setTransform(0);
@@ -163,7 +164,11 @@ export function mountTranscriptPanelMotion(
       // per frame, with the heavy content held at its pinned width. The shell
       // sits at the pane's left, so whichever edge moved, the content's centre
       // is off by half the change.
-      const delta = start.paneWidth == null ? detail.size - start.size : start.paneWidth - transcript.getBoundingClientRect().width;
+      // A mover that says what each pane's width now is saves that read.
+      const host = start.host && detail.panes?.find((pane) => pane.element === start.host!.element);
+      const delta = start.paneWidth == null ? detail.size - start.size
+        : host ? start.host!.width - host.width
+        : start.paneWidth - transcript.getBoundingClientRect().width;
       const availableWidth = Math.max(0, start.width - delta);
       // The column slides only while it has room beside its gutter: past that
       // it would be clipped at the pane's edge, then snap back at the end, so

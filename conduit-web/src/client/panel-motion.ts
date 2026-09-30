@@ -11,6 +11,12 @@ export type PanelGeometryMotionDetail = {
   targetSize?: number;
   duration?: number;
   easing?: string;
+  /**
+   * Each pane's width as the mover has just set it (a pane-edge drag), so a
+   * transcript beside another pane takes its share without measuring -- which,
+   * straight after the weights are written, would force a layout per pane.
+   */
+  panes?: { element: HTMLElement; width: number }[];
 };
 
 export function dispatchPanelGeometryMotion(detail: PanelGeometryMotionDetail) {

@@ -4087,9 +4087,9 @@ function App() {
   // pinned and relaid out with its anchor, and the drag's own changes, now
   // under a stale id, ignored (docs/design/performance-pass.md, 3).
   let splitMotionOpen = false;
-  const announceSplit = (phase: "begin" | "change" | "end", size: number) => {
+  const announceSplit = (phase: "begin" | "change" | "end", size: number, panes?: { element: HTMLElement; width: number }[]) => {
     splitMotionOpen = phase !== "end";
-    dispatchPanelGeometryMotion({ phase, id: splitMotionId, source: "workspace", size });
+    dispatchPanelGeometryMotion({ phase, id: splitMotionId, source: "workspace", size, panes });
   };
   const besideWidth = () => shownSlots().reduce((sum, slot) => sum + (paneSlot(slot).host()?.getBoundingClientRect().width ?? 0), 0);
   createEffect(on(() => [shownSlots(), paneWeights().join()] as const, () => {
@@ -4217,7 +4217,9 @@ function App() {
     let frame = 0;
     const apply = (next: number[]) => { if (next.length === 2) setSplitRatio(next[1]!); else setSplitRatios3(next); };
     splitMotionId += 1;
-    announceSplit("begin", besideWidth());
+    const sized = (list: number[]) => panes.map((element, index) => ({ element: element!, width: list[index]! }));
+    let pendingWidths = widths;
+    announceSplit("begin", pendingBeside, sized(widths));
     const move = (moveEvent: PointerEvent) => {
       const delta = moveEvent.clientX - startX;
       const next = [...widths];
@@ -4231,10 +4233,11 @@ function App() {
       next[delta > 0 ? position - 1 : position]! += Math.abs(delta) - owed;
       pending = next.map((width) => width / widthSum * weightSum);
       pendingBeside = next.slice(1).reduce((sum, width) => sum + width, 0);
+      pendingWidths = next;
       if (!frame) frame = requestAnimationFrame(() => {
         frame = 0;
         apply(pending);
-        announceSplit("change", pendingBeside);
+        announceSplit("change", pendingBeside, sized(pendingWidths));
       });
     };
     const stop = () => {
