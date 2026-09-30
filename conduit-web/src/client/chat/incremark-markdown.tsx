@@ -1,5 +1,4 @@
 import { createEffect, createMemo, createRenderEffect, createSignal, For, Index, onCleanup, onMount, Show, untrack } from "solid-js";
-import { createStore, reconcile } from "solid-js/store";
 import { createIncremarkParser, type DisplayBlock, type ParsedBlock } from "@incremark/core";
 import katex from "katex";
 import { getHarnessRecorder, recordHarnessMetric } from "@/client/harness-metrics";
@@ -355,7 +354,9 @@ function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: Rende
   // remove and recreate its DOM when it completes.
   const list = createBlockIndex(() => props.blocks());
   return <For each={list.ids()}>{(id) => {
-    const block = () => list.lookup(id);
+    // Memoised on identity: a finished block is the same object every frame,
+    // so only the block being revealed recomputes below.
+    const block = createMemo(() => list.lookup(id));
     // displayNode rebuilds the node and appendPendingInlineMath clones its
     // spine. Without the memo the accessor recomputes both for every JSX
     // position that reads it, and the clone cache -- keyed on node identity --
@@ -965,7 +966,11 @@ function AstNodeContent(props: { node: NodeAccessor; context: RendererContext })
 export function IncremarkMarkdown(props: ChatMarkdownProps) {
   const parser = createIncremarkParser(incremarkParserOptions);
   const [seededBlocks, setSeededBlocks] = createSignal<ParsedBlock[]>([], { equals: sameBlockList });
-  const [displayBlockStore, setDisplayBlockStore] = createStore<{ items: DisplayBlock[] }>({ items: [] });
+  // A plain signal, not a reconciled store. The typewriter already hands back
+  // the same object for every finished block and a fresh one only for the
+  // block being revealed, so identity says what changed; reconcile re-derived
+  // that by walking every block's whole tree on every frame.
+  const [displayBlocks, setDisplayBlocksSignal] = createSignal<DisplayBlock[]>([], { equals: false });
   const [displayBusy, setDisplayBusy] = createSignal(false);
   const [pendingMathRenders, setPendingMathRenders] = createSignal(0);
   const [inlineAst, setInlineAst] = createSignal<MarkdownNode>({ type: "root", children: [] });
@@ -1037,9 +1042,8 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   });
   onCleanup(cancelSettlement);
   const rendererId = () => "incremark";
-  const displayBlocks = () => displayBlockStore.items;
   const setDisplayBlocks = (next: DisplayBlock[]) => {
-    setDisplayBlockStore("items", reconcile(next, { key: "id", merge: true }));
+    setDisplayBlocksSignal(next);
   };
   const typewriterController = new BufferedIncremarkTypewriter({
     onChange: (next) => {
