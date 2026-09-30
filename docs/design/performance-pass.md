@@ -178,7 +178,7 @@ what lets target 1's watch close and be re-walked on return.
 **Leads.** One poller per place, shared by the dock and every viewer showing
 it, handing out `changedPaths` to each subscriber.
 
-## 11. Scrolling up a long transcript forces layout per frame (seen 2026-09-30)
+## 10. Scrolling up a long transcript forces layout per frame (seen 2026-09-30)
 
 **Seen.** The first scroll up through a long chat's history (40 wheel steps
 of 400px over ~2.4s) cost ~830-880ms of main-thread work: ~210-240ms style,
@@ -209,7 +209,7 @@ blocks near the band. For history loads, restore the anchor with
 `Profiler` with callers of `getBoundingClientRect` (minified positions map to
 source via the bundle; CDP line numbers are 0-based).
 
-## 12. Startup long tasks (seen 2026-09-30)
+## 11. Startup long tasks (seen 2026-09-30)
 
 A warm load of a long chat: first paint at 40-48ms, first contentful paint at
 660-700ms, then long tasks of ~190ms, ~53ms and ~67ms within the first 550ms.
@@ -217,7 +217,7 @@ They were not broken down, but most likely hold the shell's first render and
 the transcript's first passes (target 2). Profile the first second of a load
 with the same CDP approach.
 
-## 13. Measured and fine (2026-09-30)
+## 12. Measured and fine (2026-09-30)
 
 So the pass need not look again: scrolling a long file (30 wheel steps: 1
 layout, 10ms of style), a tab switch (~75ms of work), header folding (no
