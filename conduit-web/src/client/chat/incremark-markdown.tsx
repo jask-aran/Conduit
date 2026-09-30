@@ -15,6 +15,7 @@ import { BufferedIncremarkTypewriter, visibleAstCharacters } from "./incremark-t
 import { MathRenderQueue, type MathRenderPolicy } from "./incremark-math-queue";
 import { morphHtml } from "./morph-html";
 import { patchMathTree, renderMathTree } from "./katex-patch";
+import { readStoredMath, storeMath } from "./math-html-store";
 import { citationHost, resolveMarkdownUrl } from "./markdown-security";
 import { projectTableMathSource, promoteTableCellDisplayMath, restoreTableMathAst, restoreTableMathSentinel } from "./table-math";
 import type { StreamingPending } from "./streaming-markdown";
@@ -339,8 +340,14 @@ function mathCacheKey(node: MarkdownNode, source: string) {
   return `${node?.type === "math" ? "display" : "inline"}\u0000${source}`;
 }
 
-function getCachedMathHtml(node: MarkdownNode, source: string) {
-  return mathHtmlCache.get(mathCacheKey(node, source));
+function getCachedMathHtml(node: MarkdownNode, source: string, settled = false) {
+  const key = mathCacheKey(node, source);
+  const held = mathHtmlCache.get(key);
+  if (held !== undefined || !settled) return held;
+  // Kept from an earlier page load; see math-html-store.ts. A partial never is.
+  const stored = readStoredMath(key);
+  if (stored !== undefined) rememberMathHtml(key, stored);
+  return stored;
 }
 
 /**
@@ -355,6 +362,11 @@ function getCachedMathHtml(node: MarkdownNode, source: string) {
  */
 function cacheMathHtml(node: MarkdownNode, source: string, html: string) {
   const key = mathCacheKey(node, source);
+  rememberMathHtml(key, html);
+  storeMath(key, html);
+}
+
+function rememberMathHtml(key: string, html: string) {
   if (!mathHtmlCache.has(key) && mathHtmlCache.size >= MATH_HTML_CACHE_LIMIT) {
     const oldest = mathHtmlCache.keys().next().value;
     if (oldest) mathHtmlCache.delete(oldest);
@@ -420,7 +432,7 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
       return;
     }
     lastCandidate = candidate;
-    const cached = getCachedMathHtml(current, candidate);
+    const cached = getCachedMathHtml(current, candidate, complete());
     if (cached !== undefined) {
       lastValidHtml = cached;
       show(cached);
@@ -517,7 +529,7 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
       setPreviewMinHeight(0);
       return;
     }
-    const cached = getCachedMathHtml(current, repairSyntheticMathSource(source));
+    const cached = getCachedMathHtml(current, repairSyntheticMathSource(source), complete());
     if (cached !== undefined) {
       lastValidHtml = cached;
       show(cached);
