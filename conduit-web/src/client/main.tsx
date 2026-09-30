@@ -2602,17 +2602,17 @@ function App() {
     if (!draggedView || !event.dataTransfer?.types.includes(DOC_DRAG_TYPE)) return;
     const pane = paneOf(event.target instanceof Element ? event.target : null);
     const element = pane === null ? null : paneElement(pane);
-    if (pane === null || !element) return void setDocDrop(null);
+    if (pane === null || !element) { setDragHint(null); return void setDocDrop(null); }
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     const box = element.getBoundingClientRect();
     const third = (event.clientX - box.left) / box.width;
-    if (pane === draggedPane) return void setDocDrop(null);
+    if (pane === draggedPane) { setDragHint(null); return void setDocDrop(null); }
     const edges = draggedPane !== null || roomBeside(draggedView);
     const viewer = draggedPane === null && Boolean(parseFileView(viewOf(pane))?.length);
     const edge = viewer ? 1 / 5 : 1 / 3;
     const zone = !edges ? "middle" : third < edge ? "left" : third > 1 - edge ? "right" : "middle";
-    if (draggedPane !== null && nearEdge(draggedPane, pane, zone)) return void setDocDrop(null);
+    if (draggedPane !== null && nearEdge(draggedPane, pane, zone)) { setDragHint(null); return void setDocDrop(null); }
     /*
      * A file over a file viewer: only its outer fifths are panes (washed); within,
      * the column under the pointer takes it as its showing tab -- or, beside a lone
@@ -2639,9 +2639,8 @@ function App() {
       if (beside) return hint(own && (fileTabsOf(pane, own.side)?.entries.length ?? 1) < 2 ? null : { zone: "column", text: "Open in a new column" });
       return hint(own?.side === side ? null : { zone: "side", side, text: "Add as a tab here" });
     }
-    setDragHint(null);
     // A place's tabs dropped on their own pane: only its edges, a pane of their own.
-    if ((draggedGroup ?? draggedFileTab)?.pane === pane && zone === "middle") return void setDocDrop(null);
+    if ((draggedGroup ?? draggedFileTab)?.pane === pane && zone === "middle") { setDragHint(null); return void setDocDrop(null); }
     const named = (view: SplitView | null) => `“${viewName(view)}”`;
     const hint: { text: string; icon: DragHintIcon } = zone !== "middle"
       ? { text: draggedPane !== null ? `Move to the ${zone} of ${named(viewOf(pane))}` : draggedGroup ? `Open these tabs in a new pane on the ${zone}` : `Open in a new pane on the ${zone}`, icon: zone }
