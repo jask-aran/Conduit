@@ -383,12 +383,18 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     busy = next;
     props.onBusyChange?.(next);
   };
+  // A display formula keeps the tallest height it has drawn while it is still
+  // arriving, so a partial that briefly fails cannot shrink the block. Heard
+  // from a ResizeObserver after the frame's own layout: reading the rect after
+  // each render forced a layout of the transcript on every streamed partial.
+  let sizes: ResizeObserver | null = null;
   const samplePreviewHeight = (current: MarkdownNode) => {
-    if (current?.type !== "math") return;
-    queueMicrotask(() => {
-      const height = wrapper?.getBoundingClientRect().height || 0;
+    if (current?.type !== "math" || complete() || sizes || !wrapper || typeof ResizeObserver !== "function") return;
+    sizes = new ResizeObserver(([entry]) => {
+      const height = entry?.borderBoxSize?.[0]?.blockSize ?? entry?.contentRect.height ?? 0;
       if (height > previewMinHeight()) setPreviewMinHeight(height);
     });
+    sizes.observe(wrapper);
   };
   const renderCurrent = (current: MarkdownNode, source: string, version: number) => {
     if (version !== renderVersion) return;
@@ -486,8 +492,14 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     }
     renderCurrent(current, source, version);
   });
+  createEffect(() => {
+    if (!complete()) return;
+    sizes?.disconnect();
+    sizes = null;
+  });
   onCleanup(() => {
     cancelJob?.();
+    sizes?.disconnect();
     setBusy(false);
   });
   return <span ref={wrapper} class={type() === "math" ? "incremark-math-block" : "incremark-math-inline"} style={{ "min-height": type() === "math" && previewMinHeight() > 0 ? `${previewMinHeight()}px` : undefined }} innerHTML={html()} />;
