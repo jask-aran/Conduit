@@ -342,7 +342,14 @@ export function mountTranscriptVisibility(
     // A collapse commits a large height change in one go. Leaving it to the
     // observers left every cached intrinsic size stale for a frame or more,
     // which showed as empty placeholders where the text should be.
-    const deliberate = records.some((record) => record.attributeName === "data-collapsed");
+    // Only where the observers cannot see it: a shown block's change reaches
+    // the size observer, and a toggle the reader makes re-measures through
+    // CODE_BLOCK_TOGGLE_EVENT. Rewrites to the same value, and a user
+    // message's first fold verdict as history loads, ran this full pass
+    // repeatedly through a scroll up (docs/design/performance-pass.md, 10).
+    const deliberate = records.some((record) => record.attributeName === "data-collapsed"
+      && record.oldValue !== (record.target as HTMLElement).getAttribute("data-collapsed")
+      && Boolean((record.target as HTMLElement).closest(`[${VISIBILITY_ATTRIBUTE}="hidden"]`)));
     if (deliberate) scheduleRefresh();
     else scheduleSync();
   });
@@ -387,6 +394,7 @@ export function mountTranscriptVisibility(
     childList: true,
     subtree: true,
     attributes: true,
+    attributeOldValue: true,
     attributeFilter: ["data-settled", "data-collapsed"],
   });
   viewportObserver.observe(viewport);
