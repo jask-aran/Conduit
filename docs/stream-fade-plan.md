@@ -330,3 +330,22 @@ the build or is a known gap.
    a formula whose preview is changing shape would read as flicker.
 9. **Reduced motion** releases everything on arrival and turns the animation
    off in CSS.
+
+## First measurement (2026-09-30, headed Windows Chrome at 144Hz)
+
+This trace was recorded over raw CDP with the lean categories. It covers 10
+seconds of the bursty test speed and 8 seconds of the reply's length, sampled
+every frame.
+
+| Pacing | Frames the text grew | Largest step | Pauses of 12+ frames (over 83ms) | Tasks over 6.94ms | Worst task |
+|---|---|---|---|---|---|
+| Buffered | 32 of 1150 | 395 chars | 20 | 0 | 5.3ms |
+| Fade words | 444 of 1151 | 11 chars | 8 | 2 | 8.5ms |
+
+- Buffered's frame-cost rule doubles its step whenever a frame is cheap. On a
+  fast machine, that makes it show each burst whole.
+- Under Fade words, the pauses that remain are the provider's own. The longest,
+  165 frames, is the test speed's 1.2s gap.
+- At most 27 words were mid-fade at once. The frame cost stayed near the
+  budget, so the layer concern in point 4 didn't show at this rate.
+- The spans are gone within 1.5s of the message settling.
