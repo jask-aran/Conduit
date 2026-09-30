@@ -9,7 +9,7 @@ import { copyWithFeedback, createExternalLinkController } from "./markdown-actio
 import { codeBlockCollapseLabel, codeBlockState, normalizeCodeLanguage, publishCodeBlockToggle } from "./code-block";
 import { useCodeBlockCollapse } from "./transcript-appearance";
 import { highlighterReady, StreamingCodeHighlighter } from "./code-highlight";
-import { createSyntheticMathPreviewNode, repairSyntheticMathSource, trimUnfinishedMathTail } from "./incremark-synthetic-math";
+import { createSyntheticMathPreviewNode, finishedMathRows, repairSyntheticMathSource, trimUnfinishedMathTail } from "./incremark-synthetic-math";
 import { conduitMathPlugin } from "./incremark-math-extension";
 import { BufferedIncremarkTypewriter, visibleAstCharacters } from "./incremark-typewriter";
 import { MathRenderQueue, type MathRenderPolicy } from "./incremark-math-queue";
@@ -396,9 +396,16 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     });
     sizes.observe(wrapper);
   };
-  const renderCurrent = (current: MarkdownNode, source: string, version: number) => {
+  let lastCandidate = "";
+  const renderCurrent = (current: MarkdownNode, whole: string, version: number) => {
     if (version !== renderVersion) return;
+    const source = current?.type === "math" && current.__conduitMathOpen && !complete() ? finishedMathRows(whole) : whole;
     const candidate = repairSyntheticMathSource(source);
+    if (candidate === lastCandidate && lastValidHtml) {
+      setBusy(false);
+      return;
+    }
+    lastCandidate = candidate;
     const cached = getCachedMathHtml(current, candidate);
     if (cached !== undefined) {
       lastValidHtml = cached;
@@ -469,6 +476,7 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     if (!current || !source) {
       setHtml("");
       lastValidHtml = "";
+      lastCandidate = "";
       setPreviewMinHeight(0);
       return;
     }
