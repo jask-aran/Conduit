@@ -2842,8 +2842,8 @@ function App() {
       if (tries && !idle) return;
       const editor = column?.querySelector<HTMLElement>(".cm-content");
       (editor ?? column ?? surface)?.focus({ preventScroll: true });
-      // A large file's editor draws late; one with none (an image) keeps the column.
-      if (!editor && tries++ < 50) setTimeout(land, 60);
+      // A viewer's first load (its chunks) or a large file draws late: up to 6s, never taking focus back.
+      if (!editor && tries++ < 100) setTimeout(land, 60);
     };
     requestAnimationFrame(land);
   }
