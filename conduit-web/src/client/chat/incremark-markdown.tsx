@@ -1100,6 +1100,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     settleFrame = requestAnimationFrame(advanceSettlement);
   });
   onCleanup(cancelSettlement);
+  createEffect(() => { if (settled()) props.onSettled?.(); });
   const rendererId = () => "incremark";
   const setDisplayBlocks = (next: DisplayBlock[]) => {
     setDisplayBlocksSignal(next);

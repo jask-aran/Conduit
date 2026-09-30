@@ -1142,6 +1142,12 @@ svg.lucide { stroke-width: 2.4; }
     inset 0 -1px 0 rgb(255 255 255 / 10%);
 }
 .response-actions { display: flex; min-height: 28px; align-items: center; gap: 2px; opacity: 1; }
+/* An answer that streamed here gets its actions and time once it has finished
+   appearing; they fade in rather than landing. The empty row holds their
+   height meanwhile, so nothing moves when they arrive. */
+.response-actions[data-reveal] { animation: response-actions-in 240ms ease-out backwards; }
+@keyframes response-actions-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .response-actions[data-reveal] { animation: none; } }
 .response-actions [data-slot="button"] { width: 24px; height: 24px; border-radius: 999px; }
 .response-actions [data-slot="button"] svg { width: 14px; height: 14px; }
 

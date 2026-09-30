@@ -147,7 +147,7 @@ function MessageTime(props: { timestamp?: string | null }) {
   return <Show when={props.timestamp}>{(timestamp) => <time class="response-time" dateTime={timestamp()} title={fullDateTime(timestamp())}>{new Date(timestamp()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>}</Show>;
 }
 
-function Actions(props: { message: Message; precedingUserId?: string; chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; partialContinue: boolean; artifact?: TurnArtifactSummary; traced?: boolean }) {
+function Actions(props: { message: Message; precedingUserId?: string; chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; partialContinue: boolean; artifact?: TurnArtifactSummary; traced?: boolean; reveal?: boolean }) {
   const [copied, setCopied] = createSignal(false);
   let copyButton: HTMLButtonElement | undefined;
   const assistant = () => props.message.role !== "user";
@@ -166,7 +166,7 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Tran
      when the agent kept what it had written. */
   const continuable = () => props.partialContinue && Boolean(props.message.stopped) && !props.message.discarded
     && Boolean(props.message.content) && !props.chat.streaming() && props.chat.messages().at(-1)?.id === props.message.id;
-  return <div class="response-actions">
+  return <div class="response-actions" data-reveal={props.reveal ? "" : undefined}>
     <MessageTime timestamp={props.message.timestamp} />
     <Show when={status()}>{(label) => <span class="marker response-status turn-trace-status" data-status={label() === "Interrupted" ? "interrupted" : undefined}>{label()}</span>}</Show>
     {/* A prompt offers editing. Regenerating it is the same act as regenerating
@@ -1135,6 +1135,15 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             const last = props.chat.messages().at(-1);
             return props.chat.streaming() && !user() && Boolean(last && message().id === last.id);
           });
+          // An answer that streamed here offers its actions, and shows its
+          // time, only once it has finished appearing, and fades them in:
+          // at the tail of a bursty answer the row jumped with every delivery.
+          // One loaded finished shows them at once.
+          const [streamed, setStreamed] = createSignal(live());
+          const [settled, setSettled] = createSignal(false);
+          createEffect(() => { if (live()) { setStreamed(true); setSettled(false); } });
+          const actionsShown = () => user() || !streamed()
+            || (!live() && (settled() || !rendererUsesTypewriter() || !message().content));
           const precedingUserId = () => user() ? undefined : item.precedingUserId;
           const artifact = createMemo(() => {
             const userId = precedingUserId();
@@ -1154,7 +1163,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
                     <Show when={user()} fallback={<>
                       <Show when={message().content}>
                         <Suspense fallback={<div class="markdown-skeleton" />}>
-                          <ChatMarkdown renderer={markdownRenderer()} pacing={incremarkPacing()} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={() => settleAfterMarkdown(row)}>{message().content || ""}</ChatMarkdown>
+                          <ChatMarkdown renderer={markdownRenderer()} pacing={incremarkPacing()} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={() => settleAfterMarkdown(row)} onSettled={() => setSettled(true)}>{message().content || ""}</ChatMarkdown>
                         </Suspense>
                       </Show>
                       <Show when={!message().content && message().stopped && !item.traced && !failed()}>
@@ -1178,7 +1187,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
 
                 <Show when={user() && message().attachments?.length}><AttachmentCards items={message().attachments!} chatId={props.chat.loadedId()} label="Message attachments" /></Show>
                 <Show when={user() && review().comments.length}><ReviewCommentCards items={review().comments} chatId={props.chat.loadedId() ?? ""} label="Code references" /></Show>
-                <Actions message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} partialContinue={props.partialContinue} artifact={artifact()} traced={item.traced} />
+                <Show when={actionsShown()} fallback={<div class="response-actions" aria-hidden="true" />}><Actions message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} partialContinue={props.partialContinue} artifact={artifact()} traced={item.traced} reveal={!user() && streamed()} /></Show>
               </div>
             </article>
           </div>;
