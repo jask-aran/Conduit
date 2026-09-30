@@ -409,6 +409,7 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     morphHtml(wrapper, value);
   };
   const show = (value: string) => {
+    if (!value && wrapper?.textContent) console.warn("MATHDEBUG show-empty", new Error().stack?.split("\n").slice(1, 4).join(" | "));
     setHtml(value);
     draw(value);
   };
