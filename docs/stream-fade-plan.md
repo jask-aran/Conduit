@@ -331,21 +331,46 @@ the build or is a known gap.
 9. **Reduced motion** releases everything on arrival and turns the animation
    off in CSS.
 
-## First measurement (2026-09-30, headed Windows Chrome at 144Hz)
+## Measured on Muse Spark (2026-09-30, headed Windows Chrome at 144Hz)
 
-This trace was recorded over raw CDP with the lean categories. It covers 10
-seconds of the bursty test speed and 8 seconds of the reply's length, sampled
-every frame.
+These are real turns in `/project/test` on Muse Spark 1.3 Contributor, traced
+over raw CDP with the lean categories. The same prompt was sent to each
+renderer, and the text length was sampled every frame. The first test-profile
+measurement is withdrawn: a bug meant only a paragraph's first few words faded,
+which also made the fade look free.
 
-| Pacing | Frames the text grew | Largest step | Pauses of 12+ frames (over 83ms) | Tasks over 6.94ms | Worst task |
-|---|---|---|---|---|---|
-| Buffered | 32 of 1150 | 395 chars | 20 | 0 | 5.3ms |
-| Fade words | 444 of 1151 | 11 chars | 8 | 2 | 8.5ms |
+| Renderer | Frames the text grew | Typical step (p90) | Pauses over 83ms | 100ms throughput variation | Tasks over 6.94ms | Worst task |
+|---|---|---|---|---|---|---|
+| Marked (arrival as delivered) | 272 of 3258 | 25 chars | 52 | 0.75 | 0 | 15.6ms |
+| Incremark (typewriter, Buffered) | 87 of 1433 | 94 chars | 44 | 1.25 | 6 | 10.8ms |
+| Incremark Fade | 1069 of 1767 | 3 chars | 8 | 0.75 | 10 | 16.4ms |
 
-- Buffered's frame-cost rule doubles its step whenever a frame is cheap. On a
-  fast machine, that makes it show each burst whole.
-- Under Fade words, the pauses that remain are the provider's own. The longest,
-  165 frames, is the test speed's 1.2s gap.
-- At most 27 words were mid-fade at once. The frame cost stayed near the
-  budget, so the layer concern in point 4 didn't show at this rate.
-- The spans are gone within 1.5s of the message settling.
+Throughput variation is the coefficient of variation of characters shown per
+100ms; 0 would be perfectly even. The Marked row comes from an earlier prompt,
+so treat it as the provider's own cadence, not a like-for-like comparison.
+
+What the real turns found, in order:
+
+- **Averaging the gap between deliveries left pauses.** Muse's gaps are
+  uneven, so an average finished each drain early and left the rest of the gap
+  still. The window now covers the longest recent gap and eases back over the
+  deliveries that follow. Pauses fell from 61 to 6–8. What remains is the
+  provider's own gaps over 300ms.
+- **Only the first few words of each paragraph faded.** The fade marking read
+  lengths from a cache keyed on node objects, but the display store merges
+  updates into the same objects, so the cached lengths went stale. It now counts
+  lengths as it walks.
+- **Opacity was too expensive.** With every word fading, Layerize was the
+  largest cost in frames over budget, because each opacity animation takes a
+  compositor layer: 85–300 tasks over 6.94ms. The fade now animates colour,
+  which only repaints the word: 10 tasks over budget, against 6 for plain
+  Incremark. What's left inside those frames is mostly garbage collection.
+- **The inline-math caret remounted at every delivery.** It was keyed on the
+  typewriter's completeness flag, which flips whenever the display catches up
+  with the source. It now belongs to the streaming tail block and is stored as a
+  flag on its container, not as a trailing child. Remounts fell from 71 to 28 per
+  reply, one per new paragraph or table cell.
+- **Inline math is moved, not re-rendered.** A mutation observer that checks
+  whether each removed node is back in the page found every inline-math removal
+  was a list reorder, mostly from the span cleanup at settle. No KaTeX was
+  redrawn.
