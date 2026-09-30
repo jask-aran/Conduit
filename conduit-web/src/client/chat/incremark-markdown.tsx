@@ -474,6 +474,7 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     cancelJob = null;
     setBusy(false);
     if (!current || !source) {
+      if (html()) console.warn("MATHDEBUG clear", JSON.stringify(current)?.slice(0, 200));
       setHtml("");
       lastValidHtml = "";
       lastCandidate = "";
