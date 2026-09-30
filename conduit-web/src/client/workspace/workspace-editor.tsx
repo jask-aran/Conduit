@@ -364,8 +364,8 @@ export default function WorkspaceEditor(props: {
     <header class="workspace-preview-header">
       {props.header}
       <div class="workspace-editor-header-tools">
-        <WorkbenchButton aria-label="Find or replace" title="Find or replace (Ctrl+F)" onClick={() => runCommand(openSearchPanel)}><SearchIcon /></WorkbenchButton>
-        <WorkbenchButton aria-label={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={props.wrap} title={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} onClick={props.onToggleWrap}><WrapTextIcon /></WorkbenchButton>
+        <WorkbenchButton data-fold="2" aria-label="Find or replace" title="Find or replace (Ctrl+F)" onClick={() => runCommand(openSearchPanel)}><SearchIcon /></WorkbenchButton>
+        <WorkbenchButton class="workspace-editor-wrap" aria-label={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={props.wrap} title={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} onClick={props.onToggleWrap}><WrapTextIcon /></WorkbenchButton>
       </div>
     </header>
     <div class="workspace-editor-content">

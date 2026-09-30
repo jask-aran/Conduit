@@ -2474,8 +2474,11 @@ function App() {
    */
   const [filePane, setFilePane] = createSignal<PaneKey | null>(null);
   const [fileFocus, setFileFocus] = createSignal<Record<string, number>>({});
-  const [fileWrap, setFileWrap] = createSignal(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines") === "true");
-  const toggleFileWrap = () => { const next = !fileWrap(); setFileWrap(next); writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines", String(next)); };
+  const [fileWrap] = createSignal(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines") === "true");
+  // Each side of a viewer wraps on its own; the setting is where a side starts.
+  const [sideWraps, setSideWraps] = createSignal<Record<string, boolean>>({});
+  const sideWrap = (pane: PaneKey, side: number) => sideWraps()[`${pane}#${side}`] ?? fileWrap();
+  const toggleSideWrap = (pane: PaneKey, side: number) => setSideWraps((current) => ({ ...current, [`${pane}#${side}`]: !sideWrap(pane, side) }));
   let pendingFileEdit: FileEntry | null = null;
   createEffect(() => { const pane = keyboardPane(); if (parseFileView(viewOf(pane))) setFilePane(pane); });
   const focusFileEntry = (pane: PaneKey, index: number) => setFileFocus((current) => ({ ...current, [String(pane)]: index }));
@@ -2822,13 +2825,19 @@ function App() {
         <header class="chat-header file-tabs-header"><nav class="chat-header-title"><strong>No file open</strong></nav><div class="chat-header-actions">{paneTabActions(pane)}</div></header>
         <div class="file-viewer-empty" role="status">Open a file from Files, or Ctrl-click one to add it as a tab.</div>
       </>}>
-        <FileViewer entries={entries()} focused={fileFocus()[String(pane)] ?? 0} wrap={fileWrap()} onToggleWrap={toggleFileWrap} commentChatId={focusedChat().loadedId()}
+        <FileViewer entries={entries()} focused={fileFocus()[String(pane)] ?? 0} wrap={(side) => sideWrap(pane, side)} onToggleWrap={(side) => toggleSideWrap(pane, side)} commentChatId={focusedChat().loadedId()}
           tabs={(side) => fileSideTabs(pane, side)} paneActions={() => paneTabActions(pane)}
           share={sideShares()[String(pane)]} onShare={(share) => setSideShares((current) => ({ ...current, [String(pane)]: share }))}
           splitEmpty={hasEmptySide(pane)}
           emptySide={<Show when={hasEmptySide(pane)}>
             <section class="workspace-preview file-viewer-empty-side" data-focused={fileFocus()[String(pane)] === 1} onPointerDown={() => { focusFileEntry(pane, 1); setFilePane(pane); }}>
-              <header class="workspace-preview-header"><div class="workspace-preview-file"><span>No file open</span></div><button type="button" class="workspace-preview-action workspace-preview-close" aria-label="Close this side" title="Close" onClick={() => closeEmptySide(pane)}><XIcon /></button>{paneTabActions(pane)}</header>
+              <header class="workspace-preview-header">
+                <nav aria-label="Tabs" class="chat-header-title chat-header-tabs file-side-tabs"><div class="pane-tabs"><span class="pane-tab pane-tab-active pane-tab-none">
+                  <span class="pane-tab-open"><span class="pane-tab-title"><span>No file open</span></span></span>
+                  <button type="button" class="pane-tab-close" tabIndex={-1} aria-label="Close this side" title="Close this side" onClick={() => closeEmptySide(pane)}><XIcon /></button>
+                </span></div></nav>
+                {paneTabActions(pane)}
+              </header>
               <div class="file-viewer-empty" role="status">Open a file from Files to show it here.</div>
             </section>
           </Show>}

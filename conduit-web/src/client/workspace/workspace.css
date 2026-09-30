@@ -735,3 +735,9 @@ body.panes-settling :is(.chat-main, .main-split) { transition: flex-grow 220ms c
 .pane-layouts [role="menuitem"] { gap: 10px; }
 .pane-layout-glyph { display: flex; width: 28px; height: 14px; flex: none; gap: 2px; }
 .pane-layout-glyph i { min-width: 0; border-radius: 2px; background: color-mix(in oklch, currentColor, transparent 60%); }
+/* A file viewer's header: copying and wrapping live in its ⋯, which is always there;
+   the other actions fold into it one at a time (data-folded). */
+.workspace-file-viewer .workspace-preview-header :is(.workspace-file-copy, .workspace-editor-wrap) { display: none; }
+.workspace-file-viewer .workspace-preview-header .workspace-preview-more { display: inline-flex; order: 9; }
+.workspace-file-viewer .workspace-preview-header [data-folded] { display: none !important; }
+.pane-tab-none .pane-tab-open { color: var(--muted-foreground); font-weight: 450; }

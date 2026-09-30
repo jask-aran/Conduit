@@ -28,8 +28,8 @@ export default function FileViewer(props: {
   entries: FileEntry[];
   /** The entry the navigator's next file replaces. */
   focused: number;
-  wrap: boolean;
-  onToggleWrap: () => void;
+  wrap: (index: number) => boolean;
+  onToggleWrap: (index: number) => void;
   commentChatId: string | null;
   onFocusEntry: (index: number) => void;
   /** Open the file again beside itself, in this pane. */
@@ -122,10 +122,19 @@ export default function FileViewer(props: {
       return name.clientWidth + 1 >= range.getBoundingClientRect().width;
     };
     const squeezed = () => header.scrollWidth > header.clientWidth || !nameFits();
-    if (!squeezed()) return;
-    header.setAttribute("data-compact", "actions");
-    if (squeezed()) header.setAttribute("data-compact", "tight");
-    if (squeezed()) header.setAttribute("data-compact", "bare");
+    // Actions fold one at a time, lowest data-fold first, into the header's ⋯.
+    const foldable = [...header.querySelectorAll<HTMLElement>("[data-fold]")].sort((a, b) => Number(a.dataset.fold) - Number(b.dataset.fold));
+    foldable.forEach((element) => element.removeAttribute("data-folded"));
+    const gone: string[] = [];
+    for (const element of foldable) {
+      if (!squeezed()) break;
+      element.setAttribute("data-folded", "");
+      gone.push(element.dataset.fold!);
+    }
+    if (header.dataset.foldedActions !== gone.join()) {
+      header.dataset.foldedActions = gone.join();
+      header.dispatchEvent(new CustomEvent("headerfold", { detail: gone }));
+    }
   });
   const resized = new ResizeObserver(fitHeaders);
   const changed = new MutationObserver(fitHeaders);
@@ -159,7 +168,7 @@ export default function FileViewer(props: {
     divider.addEventListener("pointercancel", end);
     event.preventDefault();
   };
-  const splitButton = () => <Show when={props.entries.length === 1 && !props.splitEmpty}><WorkbenchButton type="button" class="workspace-preview-action" aria-label="Open this file again beside" title="Split" onClick={() => props.onSplit()}><Columns2Icon /></WorkbenchButton></Show>;
+  const splitButton = () => <Show when={props.entries.length === 1 && !props.splitEmpty}><WorkbenchButton type="button" class="workspace-preview-action" data-fold="1" aria-label="Open this file again beside" title="Split" onClick={() => props.onSplit()}><Columns2Icon /></WorkbenchButton></Show>;
   return <div ref={(element) => { root = element; resized.observe(element); changed.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-need"] }); }} class="workspace-files workspace-file-viewer" data-count={sides()} style={sides() > 1 ? { "--side-a": String(share()), "--side-b": String(1 - share()) } : undefined}>
     <Index each={props.entries}>{(entry, index) =>
       <Show when={entry().mode} fallback={
@@ -170,15 +179,15 @@ export default function FileViewer(props: {
           focused={sides() > 1 && props.focused === index}
           closable
           busy={false}
-          wrap={props.wrap}
-          onToggleWrap={props.onToggleWrap}
+          wrap={props.wrap(index)}
+          onToggleWrap={() => props.onToggleWrap(index)}
           annotationChatId={props.commentChatId}
           gitFile={statuses()[entryKey(entry())]}
           onShowDiff={(staged) => { if (leaveContents(index)) props.onSetMode(index, staged ? "staged" : "changes"); }}
           headerSuffix={splitButton()}
           headerTabs={props.tabs?.(index)}
-          headerEnd={index === props.entries.length - 1 && !props.splitEmpty ? props.paneActions?.() : undefined}
-          headerMenuItems={<Show when={props.entries.length === 1 && !props.splitEmpty}><MenuItem onSelect={() => props.onSplit()}><Columns2Icon />Open again beside</MenuItem></Show>}
+          headerEnd={props.paneActions?.()}
+          headerMenuItems={(folded) => <Show when={props.entries.length === 1 && !props.splitEmpty && folded("1")}><MenuItem onSelect={() => props.onSplit()}><Columns2Icon />Open again beside</MenuItem></Show>}
           reveal={props.reveal && props.reveal.entry.projectId === entry().projectId && props.reveal.entry.path === entry().path ? props.reveal.request : null}
           onFocus={() => props.onFocusEntry(index)}
           onClose={() => closeEntry(index)}
@@ -190,7 +199,7 @@ export default function FileViewer(props: {
           onDispose={() => { handles[index] = undefined; props.ref(index, undefined); }}
         />
       }>{(mode) =>
-        <ChangesEntry entry={entry()} mode={mode()} status={statuses()[entryKey(entry())]} focused={sides() > 1 && props.focused === index} tabs={props.tabs?.(index)} end={index === props.entries.length - 1 && !props.splitEmpty ? props.paneActions?.() : undefined}
+        <ChangesEntry entry={entry()} mode={mode()} status={statuses()[entryKey(entry())]} focused={sides() > 1 && props.focused === index} tabs={props.tabs?.(index)} end={props.paneActions?.()}
           split={splitButton()} onFocus={() => props.onFocusEntry(index)} onClose={() => props.onCloseEntry(index)} onSetMode={(next) => props.onSetMode(index, next)}
           ref={(handle) => { handles[index] = handle; props.ref(index, handle); }} />
       }</Show>
