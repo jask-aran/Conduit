@@ -2560,7 +2560,9 @@ function App() {
   document.addEventListener("pointerdown", armHeaderDrag, true);
   onCleanup(() => document.removeEventListener("pointerdown", armHeaderDrag, true));
   // Over a file viewer, a file dragged onto a column says what it will do in a pill by the pointer, not a wash.
-  const [dragHint, setDragHint] = createSignal<{ x: number; y: number; text: string; column: boolean } | null>(null);
+  // Every drop says what it will do in a pill by the pointer; a wash marks only where a pane target lies.
+  type DragHintIcon = "left" | "right" | "column" | "tab" | "swap" | "here";
+  const [dragHint, setDragHint] = createSignal<{ x: number; y: number; text: string; icon: DragHintIcon } | null>(null);
   const [docDrop, setDocDrop] = createSignal<{ pane: PaneKey; zone: "left" | "middle" | "right" | "side" | "column" | "fill"; side?: number; rect: { left: number; top: number; width: number; height: number } } | null>(null);
   const docDragView = (target: Element): string | null => {
     const source = target.closest<HTMLElement>("[data-doc-view]");
@@ -2614,7 +2616,7 @@ function App() {
       const column = event.target.closest<HTMLElement>(".workspace-file-viewer > .workspace-preview");
       const hint = (next: { zone: "side" | "column" | "fill"; side?: number; text: string } | null) => {
         if (!next) { setDocDrop(null); return void setDragHint(null); }
-        setDragHint({ x: event.clientX, y: event.clientY, text: next.text, column: next.zone === "column" });
+        setDragHint({ x: event.clientX, y: event.clientY, text: next.text, icon: next.zone === "column" ? "column" : "tab" });
         const current = docDrop();
         if (current?.pane === pane && current.zone === next.zone && current.side === next.side) return;
         setDocDrop({ pane, zone: next.zone, side: next.side, rect: { left: 0, top: 0, width: 0, height: 0 } });
@@ -2631,10 +2633,22 @@ function App() {
     setDragHint(null);
     // A place's tabs dropped on their own pane: only its edges, a pane of their own.
     if ((draggedGroup ?? draggedFileTab)?.pane === pane && zone === "middle") return void setDocDrop(null);
-    const width = zone === "middle" ? box.width : box.width / 2;
+    const named = (view: SplitView | null) => `“${viewName(view)}”`;
+    const hint: { text: string; icon: DragHintIcon } = zone !== "middle"
+      ? { text: draggedPane !== null ? `Move to the ${zone} of ${named(viewOf(pane))}` : draggedGroup ? `Open these tabs in a new pane on the ${zone}` : `Open in a new pane on the ${zone}`, icon: zone }
+      : draggedPane !== null ? { text: `Swap with ${named(viewOf(pane))}`, icon: "swap" }
+      : draggedGroup ? { text: "Move these tabs here", icon: "tab" }
+      : panesShown().some((other) => viewOf(other) === draggedView) ? { text: "Already open: go to it", icon: "here" }
+      : draggedView.startsWith("chat:") && activeChatOf(pane) ? { text: "Add as a tab here", icon: "tab" }
+      : parseFileView(viewOf(pane))?.length === 0 ? { text: "Open in this pane", icon: "here" }
+      : { text: `Open here in place of ${named(viewOf(pane))}`, icon: "here" };
+    setDragHint({ x: event.clientX, y: event.clientY, ...hint });
+    // The wash is the target itself: an edge's band, else the pane between them.
+    const band = edges ? box.width * edge : 0;
+    const rect = zone === "left" ? { left: box.left, width: band } : zone === "right" ? { left: box.right - band, width: band } : { left: box.left + band, width: box.width - band * 2 };
     const current = docDrop();
     if (current?.pane === pane && current.zone === zone) return;
-    setDocDrop({ pane, zone, rect: { left: zone === "right" ? box.left + box.width / 2 : box.left, top: box.top, width, height: box.height } });
+    setDocDrop({ pane, zone, rect: { ...rect, top: box.top, height: box.height } });
   };
   const endDocDrag = () => { draggedView = null; draggedPane = null; draggedGroup = null; draggedFileTab = null; setDocDrop(null); setDragHint(null); };
   /*
@@ -5239,7 +5253,7 @@ function App() {
     <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
     <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </div>
-    <Show when={dragHint()}>{(hint) => <div class="drag-hint" aria-hidden="true" style={{ left: `${hint().x + 14}px`, top: `${hint().y + 18}px` }}><Show when={hint().column} fallback={<PanelTopIcon />}><Columns2Icon /></Show>{hint().text}</div>}</Show>
+    <Show when={dragHint()}>{(hint) => <div class="drag-hint" aria-hidden="true" style={{ left: `${hint().x + 14}px`, top: `${hint().y + 18}px` }}>{{ left: <PanelLeftIcon />, right: <PanelRightIcon />, column: <Columns2Icon />, tab: <PanelTopIcon />, swap: <ArrowLeftRightIcon />, here: <PanelTopIcon /> }[hint().icon]}{hint().text}</div>}</Show>
     <Show when={docDrop() && ["left", "middle", "right"].includes(docDrop()!.zone) ? docDrop() : null}>{(drop) => <div class="doc-drop" aria-hidden="true" style={{ left: `${drop().rect.left}px`, top: `${drop().rect.top}px`, width: `${drop().rect.width}px`, height: `${drop().rect.height}px` }} />}</Show>
     <WorkspaceRail tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard"].includes(routeKind()) && selectedProject() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
       panes={splitShown() ? shownSlots().length + 1 : 1} onLayout={applyPaneLayout}
