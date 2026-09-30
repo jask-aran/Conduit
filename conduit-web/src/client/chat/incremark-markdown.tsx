@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, Index, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Index, onCleanup, onMount, Show, untrack } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { createIncremarkParser, type DisplayBlock, type ParsedBlock } from "@incremark/core";
 import katex from "katex";
@@ -26,6 +26,8 @@ type MarkdownNode = any;
 type Definition = { url?: string; title?: string | null };
 /** Quiet frames a message must hold before its source is frozen. */
 const SETTLE_DELAY_FRAMES = 2;
+/** Matches `.stream-word`'s animation; the spans are dropped once it is over. */
+const STREAM_WORD_FADE_MS = 220;
 
 const incremarkParserOptions = { gfm: true, plugins: [conduitMathPlugin({ tex: true })], htmlTree: true, containers: true };
 type RendererContext = {
@@ -37,7 +39,38 @@ type RendererContext = {
   rendererId: () => string;
   onMathBusyChange: (busy: boolean) => void;
   onPendingPlaceholderChange: (delta: number) => void;
+  /** Newly shown words fade in as spans; only the streamed blocks set it. */
+  fadeWords?: () => boolean;
 };
+
+/** Text-node field: characters of this node before it were already on screen. */
+const FADE_FROM = "__conduitFadeFrom";
+
+/**
+ * Mark the text nodes holding characters past what the block last showed.
+ *
+ * Fade state is a visible-text offset in document order, not the identity of
+ * a node: closing `**bold` remounts its words inside `<strong>`, and a word
+ * already shown must not fade again because the tree around it changed. Only
+ * the spine down to new text is cloned; everything before `shown` is left as
+ * the same objects.
+ */
+function markFreshText(node: MarkdownNode, shown: number, offset = 0): MarkdownNode {
+  if (!node || typeof node !== "object") return node;
+  const length = visibleAstCharacters(node);
+  if (offset + length <= shown) return node;
+  if (node.type === "text") return { ...node, [FADE_FROM]: Math.max(0, shown - offset) };
+  if (!Array.isArray(node.children)) return node;
+  let at = offset;
+  let changed = false;
+  const children = node.children.map((child: MarkdownNode) => {
+    const next = markFreshText(child, shown, at);
+    at += visibleAstCharacters(child);
+    changed ||= next !== child;
+    return next;
+  });
+  return changed ? { ...node, children } : node;
+}
 
 function restoreParsedBlock(block: ParsedBlock, sentinel: string | null, originalSource: string) {
   const restoredNode = promoteTableCellDisplayMath(restoreTableMathAst(block.node, sentinel));
@@ -228,7 +261,7 @@ function preserveAppendOnlyTable(previous: MarkdownNode | undefined, current: Ma
   return preserveAppendOnlyNode(previous, current);
 }
 
-function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: RendererContext; history: Map<string, MarkdownNode> }) {
+function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: RendererContext; history: Map<string, MarkdownNode>; shown: Map<string, number> }) {
   const structuralType = (block: DisplayBlock) => {
     const sourceNode = block.node as MarkdownNode;
     if (sourceNode?.type === "paragraph" && /^ {0,3}\|/.test(String((block as DisplayBlock & { rawText?: string }).rawText || ""))) return "table";
@@ -251,7 +284,11 @@ function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: Rende
     const previousNode = props.history.get(block.id);
     const stableNode = type === "table" ? preserveAppendOnlyTable(previousNode, currentNode) : currentNode;
     props.history.set(block.id, stableNode);
-    return stableNode;
+    if (!props.context.fadeWords?.()) return stableNode;
+    const total = visibleAstCharacters(stableNode);
+    const shown = props.shown.get(block.id) ?? 0;
+    props.shown.set(block.id, Math.max(shown, total));
+    return markFreshText(stableNode, shown);
   };
   // Keep completed blocks and the one active transformer block in one keyed
   // list. Moving the active block between separate Solid branches would
@@ -759,8 +796,36 @@ function containsMath(node: MarkdownNode): boolean {
   return Array.isArray(node.children) && node.children.some((child: MarkdownNode) => containsMath(child));
 }
 
-function TextNode(props: { node: NodeAccessor }) {
-  return <>{(props.node()?.value || "").replaceAll("&nbsp;", " ")}</>;
+function TextNode(props: { node: NodeAccessor; fade?: () => boolean }) {
+  const text = () => (props.node()?.value || "").replaceAll("&nbsp;", " ");
+  return <Show when={props.fade?.()} fallback={<>{text()}</>}><FadingText node={props.node} text={text} /></Show>;
+}
+
+/**
+ * Words as they are shown: each new one a span that fades in once.
+ *
+ * A word keeps its index as the text grows, so a trailing partial word
+ * (`wor` to `world`) grows inside the span already fading rather than
+ * restarting it. A word from before the node's fade offset -- one remounted by
+ * a restructure, not newly shown -- is plain text.
+ */
+function FadingText(props: { node: NodeAccessor; text: () => string }) {
+  const words = createMemo(() => props.text().match(/\S+\s*|\s+/g) || []);
+  const starts = createMemo(() => {
+    const list = words();
+    const at = new Array<number>(list.length);
+    let offset = 0;
+    for (let index = 0; index < list.length; index += 1) {
+      at[index] = offset;
+      offset += list[index]!.length;
+    }
+    return at;
+  });
+  return <Index each={words()}>{(word, index) => {
+    const from = untrack(() => props.node()?.[FADE_FROM]);
+    const fresh = typeof from === "number" && untrack(starts)[index]! + untrack(word).length > from;
+    return fresh ? <span class="stream-word">{word()}</span> : <>{word()}</>;
+  }}</Index>;
 }
 
 function AstNode(props: { node: MarkdownNode | NodeAccessor; context: RendererContext }) {
@@ -773,7 +838,7 @@ function AstNode(props: { node: MarkdownNode | NodeAccessor; context: RendererCo
 function AstNodeContent(props: { node: NodeAccessor; context: RendererContext }) {
   const node = props.node;
   switch (node().type) {
-    case "text": return <TextNode node={node} />;
+    case "text": return <TextNode node={node} fade={props.context.fadeWords} />;
     case "strong": return <strong data-markdown="strong"><InlineNodes nodes={() => node()?.children || []} context={props.context} /></strong>;
     case "emphasis": return <em><InlineNodes nodes={() => node()?.children || []} context={props.context} /></em>;
     case "delete": return <del><InlineNodes nodes={() => node()?.children || []} context={props.context} /></del>;
@@ -832,6 +897,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   const [settled, setSettled] = createSignal(false);
   const external = createExternalLinkController();
   const displayHistory = new Map<string, MarkdownNode>();
+  const displayShown = new Map<string, number>();
   const completedById = new Map<string, ParsedBlock>();
   const seededById = new Map<string, ParsedBlock>();
   let currentBlocks: ParsedBlock[] = [];
@@ -967,6 +1033,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
           completedById.clear();
           seededById.clear();
           displayHistory.clear();
+          displayShown.clear();
           setSeededBlocks([]);
           typewriterController.reset();
         }
@@ -1107,6 +1174,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     if (previousTypewriter === true && !enabled) {
       typewriterController.flush();
       displayHistory.clear();
+      displayShown.clear();
       seededById.clear();
       setSeededBlocks([]);
       setDisplayBlocks([]);
@@ -1116,6 +1184,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       || (parserMode === "render" && previousTypewriter === true && !preserveTypewriterState)
     )) {
       displayHistory.clear();
+      displayShown.clear();
       seededById.clear();
       for (const block of currentBlocks) seededById.set(block.id, block);
       setSeededBlocks([...currentBlocks]);
@@ -1185,12 +1254,22 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     onMathBusyChange: (busy) => setPendingMathRenders((count) => Math.max(0, count + (busy ? 1 : -1))),
     onPendingPlaceholderChange: (delta) => setPendingPlaceholders((count) => Math.max(0, count + delta)),
   };
+  // Word spans exist only while there is a fade to run. Once the message has
+  // settled and its last fade is over, one render puts plain text back, so a
+  // streamed message does not keep an element per word for the session.
+  const [fadeOver, setFadeOver] = createSignal(false);
+  createEffect(() => {
+    if (!settled()) return;
+    const timer = setTimeout(() => setFadeOver(true), STREAM_WORD_FADE_MS);
+    onCleanup(() => clearTimeout(timer));
+  });
+  const displayContext: RendererContext = { ...context, fadeWords: () => props.pacing === "fade" && !props.inline && !fadeOver() };
   return <>
     <div class="chat-markdown" data-renderer={rendererId()} data-inline={props.inline ? "true" : undefined} data-streaming={streaming() || undefined} data-display-busy={displayBusy() || pendingMathRenders() > 0 ? "true" : undefined} data-display-animation-busy={displayBusy() ? "true" : undefined} data-pending-math-renders={pendingMathRenders() > 0 ? String(pendingMathRenders()) : undefined} data-display-key={props.displayKey || undefined} data-settled={settled() ? "true" : undefined}>
       <div class="incremark" data-incremark-core="true">
         <Show when={props.inline} fallback={<>
           <ParsedBlockNodes blocks={seededBlocks} context={context} />
-          <DisplayBlockNodes blocks={displayBlocks} context={context} history={displayHistory} />
+          <DisplayBlockNodes blocks={displayBlocks} context={displayContext} history={displayHistory} shown={displayShown} />
           <Show when={pending()}>
             {(value) => <Show when={value().kind === "fence"}>
               <PendingConstruct pending={value()} streaming={streaming()} />

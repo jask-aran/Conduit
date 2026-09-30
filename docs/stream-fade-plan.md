@@ -1,10 +1,10 @@
 # Fade streamed text instead of typing it
 
-> **Status (2026-09-22): sketch.** Nothing here is built. The typewriter is still
-> the Incremark display path. This records why that path cannot look right on a
-> real provider, what the fade-in systems actually do, and the shape of the
-> replacement, so the next attempt does not start by tuning the character budget
-> again.
+> **Status (2026-09-30): built as a pacing option, "Fade words".** It sits beside
+> Buffered, Adaptive and Fixed in Settings → Appearance → Streaming rather than
+> replacing them, so the two can be compared on the same turn. The review at the
+> end of this document changed three parts of the design; read it before this
+> sketch.
 
 **Decision: remove the typewriter.** Smooth per-character typing needs a fixed,
 slow character rate, but keeping up with a fast provider needs many characters
@@ -263,3 +263,70 @@ character queue, and neither should be "fixed" while doing this.
   a dumped paragraph. The check is a real Pi turn, and a pause followed by a
   paragraph. A burst mode on the test profile is worth adding only if watching
   a provider is too noisy to judge the drain.
+
+## Review (2026-09-30), before building
+
+An adversarial read against the code as it stands. Each point either changed
+the build or is a known gap.
+
+1. **"Delete the scheduler" and "pace bursts" contradict each other.** A burst
+   backlog is text that has arrived and is not shown yet. That is withholding,
+   and withholding is what `sliceAst` and the progress map already do. The
+   typewriter's fault was never the slicing. It was the rate: a character budget
+   unrelated to when text arrived. **Changed:** fade is a new rate rule in the
+   same scheduler, not a new scheduler. The alternative, putting every word in
+   the DOM at once with staggered `animation-delay`, needs no loop, but a
+   paragraph's full height lands at once. Tail-follow then jumps to blank space
+   that fills in, which is the pop the plan is meant to remove.
+2. **Eight words a frame depends on the refresh rate.** On a 144Hz panel it is
+   over a thousand words a second, so nothing would ever be paced. **Changed:**
+   the rule is in time, not frames. See point 3.
+3. **A fixed allowance does not fix pauses, which is the actual complaint.**
+   Under "release up to eight words a frame, drain the rest in 300ms", a
+   provider that sends six words every 100ms still shows six words, then
+   nothing for 100ms. That is fade-decorated stutter. **Changed:** each
+   delivery gets a deadline. Its window is the larger of the usual gap between
+   deliveries (a smoothed average, each sample capped at 300ms) and 0.7ms per
+   character, never more than 300ms. Every frame releases enough to meet the
+   earliest deadline still pending. The result:
+   - Even per-frame deltas show on the next frame.
+   - Chunks every 100ms spread across those 100ms, so output flows
+     continuously at no more than one gap of added delay.
+   - A pause followed by a paragraph drains over at most 300ms.
+
+   Deadlines are met in order, so no delivery overtakes an older one. A
+   pause longer than 300ms still shows as a pause. Hiding that would take a
+   playout delay longer than the pause, and that costs more than it hides.
+4. **Opacity animations on inline spans may not be free.** A composited
+   opacity animation needs a layer. Fifty words mid-fade could mean fifty layers,
+   or a repaint of their lines every frame. This is the risk to measure in the
+   144Hz trace, not assume away. The fallback is animating `color` alpha, which
+   repaints and never creates layers.
+5. **Selection, copy and browser search do not break on inline spans.** The
+   plan listed these as the reason for the cleanup. The real cost of leaving
+   the spans is one element per word in every message streamed this session.
+   **Kept:** the cleanup, as one swap of word spans back to text nodes 300ms after the
+   message settles, so no fade is cut short.
+6. **Identity through restructure.** `AstNode` is a keyed `Show` on node type,
+   so `**bold` closing into `<strong>` remounts its words. **Built:** each
+   block keeps a count of visible characters already shown. Only text nodes
+   that contain new characters are marked, with the offset where new text
+   starts. A remounted word from before that offset renders as plain text and
+   does not fade again.
+
+   **Known gap:** a word remounted while its own fade is still running snaps to
+   full opacity. LibreChat avoids this with a negative animation delay. When
+   `**` closes, visible offsets shrink by the two asterisks, so the next two
+   characters show without a fade.
+7. **The test profile can prove the drain.** The plan was right that even ticks
+   flatter any reveal. A real Pi turn can't be repeated exactly, though, so it
+   can't serve as a regression check. **Added:** a test-profile speed, "60
+   tokens/s in uneven bursts". It averages 60 tokens/s but sends deliveries on
+   a fixed pattern of gaps, 40ms up to 1.2s. That is the plan's "pause, then a
+   paragraph", made repeatable.
+8. **Math and code arrive without a fade.** Word spans live only in text nodes,
+   so math, fenced code and inline code are left out without extra rules. A
+   formula or code block still appears unfaded. This is left as it is: a fade on
+   a formula whose preview is changing shape would read as flicker.
+9. **Reduced motion** releases everything on arrival and turns the animation
+   off in CSS.

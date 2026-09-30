@@ -20,7 +20,6 @@ export function isIncremarkRenderer(value: MarkdownRendererId) {
 }
 
 export const MARKDOWN_RENDERER_STORAGE_KEY = "conduit:markdown-renderer";
-export const RENDERER_CONTROLS_VISIBLE_STORAGE_KEY = "conduit:renderer-controls-visible";
 
 export const MARKDOWN_RENDERER_DEFAULT: MarkdownRendererId = "incremark";
 
@@ -75,23 +74,4 @@ export function saveMarkdownRenderer(
     }));
   }
   return selected;
-}
-
-export function selectedRendererControlsVisible(
-  storage: Pick<Storage, "getItem"> = localStorage,
-): boolean {
-  return storage.getItem(RENDERER_CONTROLS_VISIBLE_STORAGE_KEY) !== "false";
-}
-
-export function saveRendererControlsVisible(
-  visible: boolean,
-  storage: Pick<Storage, "setItem"> = localStorage,
-): boolean {
-  storage.setItem(RENDERER_CONTROLS_VISIBLE_STORAGE_KEY, String(visible));
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent("conduit:ui-preference-change", {
-      detail: { key: "rendererControlsVisible", value: visible },
-    }));
-  }
-  return visible;
 }

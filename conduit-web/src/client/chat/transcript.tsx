@@ -13,7 +13,6 @@ import { createTimelineStore } from "../state/timeline-store";
 import type { MarkdownRendererId } from "./markdown-settings";
 import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_OPTIONS, saveComposerSurface, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
 import { isIncremarkRenderer, MARKDOWN_RENDERER_OPTIONS, saveMarkdownRenderer, selectedMarkdownRenderer } from "./markdown-settings";
-import "./transcript-renderer.css";
 import { INCREMARK_PACING_OPTIONS, saveIncremarkPacing, selectedIncremarkPacing, type IncremarkPacingMode } from "./incremark-pacing";
 import { PANEL_MOTION_OPTIONS, savePanelMotion, selectedPanelMotion, type PanelMotionMode } from "./transcript-appearance";
 import { UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
@@ -220,7 +219,7 @@ function StopLabel(props: { traced?: boolean; detail: string }) {
    caret there once the draft has been swapped in. */
 const focusComposerSoon = () => requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea:not([disabled])")?.focus({ preventScroll: true }));
 
-export function Transcript(props: { chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; partialContinue: boolean; markdownRenderer: MarkdownRendererId; rendererControlsVisible: boolean; profileLabel?: string; projectId?: string }) {
+export function Transcript(props: { chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; partialContinue: boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; projectId?: string }) {
   let transcriptRoot!: HTMLDivElement;
   let motionShell!: HTMLDivElement;
   let viewport!: HTMLDivElement;
@@ -1096,24 +1095,6 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   });
 
   return <div ref={transcriptRoot} class="transcript" data-part="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-incremark-pacing={rendererUsesTypewriter() ? incremarkPacing() : undefined}>
-    <Show when={props.rendererControlsVisible}>
-      <div class="composer-renderer-switch">
-        <label>Composer renderer<select aria-label="Composer renderer" title="Composer renderer" value={composerSurface()} onChange={(event) => switchComposerSurface(event.currentTarget.value as ComposerSurfaceMode)}>
-          <For each={COMPOSER_SURFACE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-        </select></label>
-        <label>Transcript renderer<select aria-label="Transcript renderer" title="Transcript renderer" value={markdownRenderer()} onChange={(event) => switchMarkdownRenderer(event.currentTarget.value as MarkdownRendererId)}>
-          <For each={MARKDOWN_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-        </select></label>
-        <label>Panel drag<select aria-label="Panel drag" title="Panel drag" value={panelDrag()} onChange={(event) => switchPanelDrag(event.currentTarget.value as PanelMotionMode)}>
-          <For each={PANEL_MOTION_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-        </select></label>
-        <Show when={rendererUsesTypewriter()}>
-          <label>Typewriter pacing<select aria-label="Typewriter pacing" title="Typewriter pacing" value={incremarkPacing()} onChange={(event) => switchIncremarkPacing(event.currentTarget.value as IncremarkPacingMode)}>
-            <For each={INCREMARK_PACING_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-          </select></label>
-        </Show>
-      </div>
-    </Show>
     <div ref={motionShell} class="transcript-motion-shell">
       <div ref={viewport} class="message-scroller-viewport" data-slot="message-scroller-viewport" tabIndex={-1} aria-label="Transcript">
         <div ref={thread} class="thread" data-slot="message-scroller-content">
