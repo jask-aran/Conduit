@@ -176,11 +176,12 @@ const pendingInlineNodeCache = new WeakMap<object, MarkdownNode>();
 
 function appendPendingInlineMath(node: MarkdownNode): MarkdownNode {
   if (!node || typeof node !== "object" || !Array.isArray(node.children)) return node;
+  // A flag on the container, not a child: as the last child it shifted one
+  // index whenever an inline node was appended before it, so every new link,
+  // emphasis or formula remounted it -- dozens of times a paragraph -- and
+  // each remount flipped the settlement count.
   if (["paragraph", "heading", "tableCell"].includes(node.type)) {
-    return {
-      ...node,
-      children: [...node.children, { type: PENDING_INLINE_MATH_NODE }],
-    };
+    return { ...node, [PENDING_INLINE_MATH_NODE]: true };
   }
   for (let index = node.children.length - 1; index >= 0; index -= 1) {
     const child = node.children[index];
@@ -764,6 +765,10 @@ function PendingConstruct(props: { pending: StreamingPending; streaming: boolean
  * placeholder was the one exception, and polling for it is why settlement used
  * to need a MutationObserver over the whole subtree.
  */
+function PendingCaret(props: { node: NodeAccessor; context: RendererContext }) {
+  return <Show when={props.node()?.[PENDING_INLINE_MATH_NODE]}><PendingInlineMathPlaceholder context={props.context} /></Show>;
+}
+
 function PendingInlineMathPlaceholder(props: { context: RendererContext }) {
   onMount(() => {
     props.context.onPendingPlaceholderChange(1);
@@ -791,8 +796,8 @@ function TableNode(props: { node: MarkdownNode | NodeAccessor; context: Renderer
 function TableRow(props: { node: MarkdownNode | NodeAccessor; context: RendererContext; header?: boolean }) {
   const node = () => readNode(props.node);
   return <tr><Index each={node()?.children || []}>{(cell) => props.header
-    ? <th><InlineNodes nodes={() => cell()?.children || []} context={props.context} /></th>
-    : <td><InlineNodes nodes={() => cell()?.children || []} context={props.context} /></td>}
+    ? <th><InlineNodes nodes={() => cell()?.children || []} context={props.context} /><PendingCaret node={cell} context={props.context} /></th>
+    : <td><InlineNodes nodes={() => cell()?.children || []} context={props.context} /><PendingCaret node={cell} context={props.context} /></td>}
   </Index></tr>;
 }
 
@@ -856,14 +861,13 @@ function AstNodeContent(props: { node: NodeAccessor; context: RendererContext })
     case "inlineCode": return <code>{node()?.value || ""}</code>;
     case "inlineMath":
     case "math": return <MathNode node={node} defer={props.context.deferMath} policy={props.context.mathRenderPolicy} renderer={props.context.rendererId} onBusyChange={props.context.onMathBusyChange} />;
-    case PENDING_INLINE_MATH_NODE: return <PendingInlineMathPlaceholder context={props.context} />;
     case "break": return <br />;
     case "link": return <LinkNode node={node} context={props.context} />;
     case "linkReference": return <LinkNode node={node} context={props.context} reference={() => props.context.definitions()[node()?.identifier]} />;
     case "image":
     case "imageReference": return null;
     case "heading": {
-      const children = <InlineNodes nodes={() => node()?.children || []} context={props.context} />;
+      const children = <><InlineNodes nodes={() => node()?.children || []} context={props.context} /><PendingCaret node={node} context={props.context} /></>;
       if (node()?.depth === 1) return <h1>{children}</h1>;
       if (node()?.depth === 2) return <h2>{children}</h2>;
       if (node()?.depth === 3) return <h3>{children}</h3>;
@@ -871,7 +875,7 @@ function AstNodeContent(props: { node: NodeAccessor; context: RendererContext })
       if (node()?.depth === 5) return <h5>{children}</h5>;
       return <h6>{children}</h6>;
     }
-    case "paragraph": return <p><InlineNodes nodes={() => node()?.children || []} context={props.context} /></p>;
+    case "paragraph": return <p><InlineNodes nodes={() => node()?.children || []} context={props.context} /><PendingCaret node={node} context={props.context} /></p>;
     case "list": {
       const children = <Index each={node()?.children || []}>{(item) => <AstNode node={item} context={props.context} />}</Index>;
       return node()?.ordered ? <ol start={node()?.start || undefined}>{children}</ol> : <ul>{children}</ul>;
