@@ -182,7 +182,7 @@ function replacePendingDisplayMath(node: MarkdownNode, body: string): [MarkdownN
       const candidate = String(following.value || "");
       if (candidate === previewBody || candidate.startsWith(previewBody) || previewBody.startsWith(candidate)) {
         const children = [...node.children];
-        children.splice(index, 2, { type: "math", value: previewBody, __conduitMathSource: previewBody, __conduitMathOpen: true });
+        children.splice(index, 2, { type: "math", value: previewBody, __conduitMathSource: previewBody });
         return [{ ...node, children }, true];
       }
     }
@@ -203,7 +203,7 @@ function replacePendingDisplayMath(node: MarkdownNode, body: string): [MarkdownN
         if (candidate.startsWith(previewBody) || node.type === "tableCell" || node.type === "tableRow" || node.type === "table") {
           const replacement = [];
           if (prefix) replacement.push({ type: "text", value: prefix });
-          replacement.push({ type: "math", value: previewBody, __conduitMathSource: previewBody, __conduitMathOpen: true });
+          replacement.push({ type: "math", value: previewBody, __conduitMathSource: previewBody });
           const children = [...node.children];
           children.splice(index, endIndex - index + 1, ...replacement);
           return [{ ...node, children }, true];
@@ -234,8 +234,6 @@ export function createSyntheticMathPreviewNode(node: MarkdownNode, pending: Synt
       type: "math",
       value: pending.body,
       __conduitMathSource: pending.body,
-      // Still arriving: its closing delimiter has not been written.
-      __conduitMathOpen: true,
       position: node.position,
     };
   }
@@ -244,15 +242,3 @@ export function createSyntheticMathPreviewNode(node: MarkdownNode, pending: Synt
   return replaced ? preview : null;
 }
 
-/**
- * A display formula still arriving, cut after its last finished row. Every
- * partial replaces the formula's whole DOM, which for a long aligned block is
- * a layout of thousands of boxes a frame; row by row it is drawn only as each
- * row completes, and the row being written appears whole. A formula with no
- * row break yet is shown as it is.
- */
-export function finishedMathRows(source: string) {
-  let end = -1;
-  for (const match of source.matchAll(/\\\\(?:\[[^\]]*\])?/g)) end = match.index!;
-  return end > 0 ? source.slice(0, end) : source;
-}
