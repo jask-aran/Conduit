@@ -2837,8 +2837,9 @@ function App() {
       const column = side >= columns.length ? surface?.querySelector<HTMLElement>(".file-viewer-empty-side") : columns[side];
       const active = document.activeElement;
       if (column?.contains(active) && active !== column) return;
-      // Focus taken elsewhere meanwhile is left there.
-      if (tries && active && active !== document.body && active !== column && active !== surface) return;
+      // Focus taken elsewhere meanwhile is left there; the pane's own frame or a column is not elsewhere.
+      const idle = !active || active === document.body || Boolean(paneElement(pane)?.contains(active) && active.matches(".file-viewer-surface, .workspace-file-viewer > .workspace-preview"));
+      if (tries && !idle) return;
       const editor = column?.querySelector<HTMLElement>(".cm-content");
       (editor ?? column ?? surface)?.focus({ preventScroll: true });
       // A large file's editor draws late; one with none (an image) keeps the column.
