@@ -186,6 +186,10 @@ export function mountTranscriptPanelMotion(
       // The compositor follows the changing center, then one final layout
       // commit adopts the target width. The "reflow" preference opts back
       // into taking real width every frame.
+      // Back from compression: the slide assumes the shell is still at the
+      // width it started with, and compression narrowed it. Sliding the
+      // narrowed column clipped it at the pane's left edge until release.
+      if (motionShell.style.width !== `${start.width}px`) setWidthPreservingAnchor(start.width);
       start.shift = -delta / 2;
       let shift = 0;
       for (const entry of edgeStarts.values()) shift += entry.shift;
