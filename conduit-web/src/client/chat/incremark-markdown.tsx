@@ -1041,8 +1041,13 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       // streaming construct owns its tail. The pending prefix/placeholder is
       // the only representation of that block until the delimiter closes.
       pendingOffset = split.pending?.start ?? null;
+      // Everything from the open construct's start on is its source, however
+      // the parser reads it meanwhile -- a `-` line inside an open formula is a
+      // setext underline to Markdown, and ended a block there, so the rest of
+      // the formula leaked as a paragraph. Only blocks wholly before it show.
+      const beforeOpen = (block: ParsedBlock) => pendingOffset == null || block.endOffset < pendingOffset;
       const nextBlocks = [...completedById.values()]
-        .filter((block) => pendingOffset == null || !blockContainsOffset(block, pendingOffset))
+        .filter(beforeOpen)
         .sort((left, right) => left.startOffset - right.startOffset);
       const completedIds = new Set(nextBlocks.map((block) => block.id));
       // The preview stands in only for the block holding the open construct.
@@ -1051,7 +1056,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       // closed above the open one is still pending, and dropping them all while
       // a formula was open made each blink out and back as the next one opened.
       const nextPendingBlocks = [...pendingUpdateBlocks.values()]
-        .filter((block) => !completedIds.has(block.id) && (pendingOffset == null || !blockContainsOffset(block, pendingOffset)))
+        .filter((block) => !completedIds.has(block.id) && beforeOpen(block))
         .concat(split.pending && pendingPrefixBlock ? [pendingPrefixBlock] : []);
       currentBlocks = nextBlocks
         .concat(nextPendingBlocks)
