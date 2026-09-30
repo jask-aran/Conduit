@@ -94,6 +94,8 @@ body.workspace-resizing .workspace-panel { transition: none !important; }
 .workspace-file-viewer { position: relative; flex-direction: row; }
 .workspace-file-viewer > .workspace-preview { position: relative; min-width: 0; flex: var(--side-a, 1) 1 0; height: auto !important; }
 .workspace-file-viewer > .workspace-preview + .workspace-preview { flex-grow: var(--side-b, 1); }
+/* A column without an editor (an image, rendered Markdown) holds the keyboard itself; its pane's line shows it. */
+.workspace-preview:focus { outline: none; }
 /* With two sides, the held pane's bottom line runs under the side with the keyboard only. */
 [data-region][data-focus-held]:has(.workspace-file-viewer > .workspace-preview + .workspace-preview)::after { opacity: 0; }
 .workspace-file-viewer > .workspace-preview::after { position: absolute; right: 16px; bottom: 0; left: 16px; z-index: 5; height: 1.5px; border-radius: 1px; background: linear-gradient(to right, transparent, var(--region-focus) 18%, var(--region-focus) 82%, transparent); opacity: 0; pointer-events: none; transition: opacity 220ms ease-out; content: ""; }

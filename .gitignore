@@ -27,3 +27,4 @@ working-files/.venv/
 .hero-demo/
 .hero-state/
 .hero-tools/
+.smoke-tools/
