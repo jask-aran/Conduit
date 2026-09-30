@@ -249,6 +249,20 @@ export function Settings(props: {
   const [section, setSection] = createSignal<Section>(props.initialSection || "ui");
   const [frosted, setFrosted] = createSignal(tabFrost());
   const [fadeMs, setFadeMs] = createSignal(streamFadeMs());
+  // On a phone, a field holding a text input or model picker stacks its
+  // control under the label. Marked here rather than with
+  // `[data-slot="field"]:has(> input[type="text"])`: a :has() on an attribute
+  // or tag re-checked ancestors on every DOM change in the app, open or not.
+  const STACKED = ':scope > input:is([type="text"], [type="url"], [type="password"], [type="search"]), .model-trigger';
+  const markStackedFields = (content: HTMLElement) => {
+    const mark = () => {
+      for (const field of content.querySelectorAll('[data-slot="field"]')) field.toggleAttribute("data-stack", Boolean(field.querySelector(STACKED)));
+    };
+    const observer = new MutationObserver(mark);
+    observer.observe(content, { childList: true, subtree: true });
+    queueMicrotask(mark);
+    onCleanup(() => observer.disconnect());
+  };
   const [pacing, setPacing] = createSignal<IncremarkPacingMode>(selectedIncremarkPacing());
   /*
    * On a phone, Settings is two screens rather than a rail beside a pane.
@@ -1109,7 +1123,7 @@ export function Settings(props: {
           </nav>
           <AboutSettingsFooter />
         </div>
-        <main class="settings-content" data-section={section()}>
+        <main ref={markStackedFields} class="settings-content" data-section={section()}>
           <header>
             <Show when={narrow()}>
               <Button variant="ghost" size="icon-sm" class="settings-back" aria-label="All settings" onClick={() => setBrowsingSections(true)}><ChevronLeftIcon aria-hidden="true" /></Button>

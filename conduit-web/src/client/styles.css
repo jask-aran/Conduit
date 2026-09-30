@@ -1889,13 +1889,9 @@ svg.lucide { stroke-width: 2.4; }
 }
 .settings-tile > summary::-webkit-details-marker,
 .settings-tile > summary > span,
-.settings-tile > summary > span:has(svg),
 .settings-tile > summary > span svg,
 .settings-tile > summary strong,
 .settings-tile > summary small,
-.settings-tile > summary > span:has(svg) strong,
-.settings-disclosure > summary > span:has(svg) strong,
-.settings-tile > summary > span:has(svg) small,
 .settings-chevron { width: 14px; height: 14px; flex: none; margin-left: auto; color: var(--muted-foreground); transition: transform 140ms ease; }
 details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .settings-tile[open] > summary { border-bottom: 1px solid var(--border); }
@@ -2199,17 +2195,9 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
      rows in the same tile read as different kinds of thing. Only a control
      that genuinely needs the width takes it -- see below. */
   .settings-dialog .settings-content [data-slot="field"] { grid-template-columns: minmax(0, 1fr) minmax(112px, 46%); gap: 0 12px; }
-  .settings-dialog .settings-content [data-slot="field"]:has(> input[type="text"]),
-  .settings-dialog .settings-content [data-slot="field"]:has(> input[type="url"]),
-  .settings-dialog .settings-content [data-slot="field"]:has(> input[type="password"]),
-  .settings-dialog .settings-content [data-slot="field"]:has(> input[type="search"]),
-  .settings-dialog .settings-content [data-slot="field"]:has(.model-trigger) { grid-template-columns: minmax(0, 1fr); }
+  .settings-dialog .settings-content [data-slot="field"][data-stack] { grid-template-columns: minmax(0, 1fr); }
   /* Where a row does stack, the help reads before the control it explains. */
-  .settings-dialog .settings-content [data-slot="field"]:has(> input[type="text"]) > :not(label):not(small),
-  .settings-dialog .settings-content [data-slot="field"]:has(> input[type="url"]) > :not(label):not(small),
-  .settings-dialog .settings-content [data-slot="field"]:has(> input[type="password"]) > :not(label):not(small),
-  .settings-dialog .settings-content [data-slot="field"]:has(> input[type="search"]) > :not(label):not(small),
-  .settings-dialog .settings-content [data-slot="field"]:has(.model-trigger) > :not(label):not(small) { grid-column: 1; grid-row: 3; margin-top: 7px; justify-self: stretch; }
+  .settings-dialog .settings-content [data-slot="field"][data-stack] > :not(label):not(small) { grid-column: 1; grid-row: 3; margin-top: 7px; justify-self: stretch; }
   .settings-dialog .settings-rail { width: 100%; padding: calc(10px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom)); border-right: 0; overflow-y: auto; }
   .settings-dialog .settings-rail-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 4px 14px; }
   /* Undoes the old icon-rail breakpoints, which hid the title because there
@@ -2761,7 +2749,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 :is(.conduit-modal-card, .external-link-dialog-card, .conduit-dialog) :is(input, select, textarea) { border: 1px solid oklch(1 0 0 / 14%); background: oklch(0 0 0 / 14%); box-shadow: none; outline: none; }
 :is(.conduit-modal-card, .external-link-dialog-card, .conduit-dialog) :is(input, select, textarea):focus { border-color: oklch(1 0 0 / 30%); box-shadow: none; outline: none; }
 /* A one-field prompt's title already names the field. */
-.conduit-modal-card label:has(+ input:only-of-type), .conduit-modal-card label:has(+ [data-slot="input"]) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.conduit-modal-card [data-slot="field"] > label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 
 /* Keyboard focus on a button is the wash (quiet buttons) or a slight lift
    (filled ones), never a ring (DESIGN.md, Interaction). */

@@ -48,17 +48,17 @@
 .sidebar-view-more span { min-width: 0; flex: 1; }
 .sidebar-view-more small { color: var(--muted-foreground); font-size: 8.8px; }
 .sidebar-chevron { color: var(--muted-foreground); transition: rotate 140ms ease; }
-.sidebar-project:has(.sidebar-project-toggle[aria-expanded="true"]) .sidebar-chevron { rotate: 90deg; }
+.sidebar-project[data-open="true"] .sidebar-chevron { rotate: 90deg; }
 .sidebar-row, .sidebar-user { display: flex; min-width: 0; align-items: center; gap: 6.4px; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
 .sidebar-row { width: 100%; min-height: 24px; padding: 4px 6.4px; text-align: left; font-size: 10.4px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 32%); }
-.sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible)) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.sidebar-row:is(:hover, :focus-visible, :active, [data-focus-shown]) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 .sidebar-row:is([aria-current="page"], [data-holds-current]) { color: var(--sidebar-accent-foreground); font-weight: 660; }
 .sidebar-row:is([aria-current="page"], [data-holds-current]) svg { stroke-width: 3; }
 /* The chat open beside the current one: white, without the current weight. */
 .sidebar-chat[data-open="true"] { color: var(--sidebar-accent-foreground); }
 .sidebar-chat[data-selected="true"] { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 .sidebar-row > svg { width: 12px; height: 12px; flex: none; color: var(--muted-foreground); }
-.sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"], [data-holds-current]) > svg, .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"], [data-holds-current]) .sidebar-project-link > svg { color: var(--sidebar-accent-foreground); }
+.sidebar-row:is(:hover, :focus-visible, :active, [data-focus-shown], [aria-current="page"], [data-holds-current]) > svg, .sidebar-row:is(:hover, :focus-visible, :active, [data-focus-shown], [aria-current="page"], [data-holds-current]) .sidebar-project-link > svg { color: var(--sidebar-accent-foreground); }
 .sidebar-action-slot { display: grid; width: 17.6px; height: 17.6px; min-width: 17.6px !important; flex: none !important; margin-right: -4.8px; place-items: center; overflow: visible !important; }
 .sidebar-route-indicator { width: 10px; height: 10px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 35%); }
 .sidebar-row span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -194,17 +194,17 @@
 .sidebar-view-more span { min-width: 0; flex: 1; }
 .sidebar-view-more small { color: var(--muted-foreground); font-size: 11px; }
 .sidebar-chevron { color: var(--muted-foreground); transition: rotate 140ms ease; }
-.sidebar-project:has(.sidebar-project-toggle[aria-expanded="true"]) .sidebar-chevron { rotate: 90deg; }
+.sidebar-project[data-open="true"] .sidebar-chevron { rotate: 90deg; }
 .sidebar-row, .sidebar-user { display: flex; min-width: 0; align-items: center; gap: 8px; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
 .sidebar-row { width: 100%; min-height: 34px; padding: 6px 9px; text-align: left; font-size: 14.5px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 32%); }
-.sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible)) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.sidebar-row:is(:hover, :focus-visible, :active, [data-focus-shown]) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 .sidebar-row:is([aria-current="page"], [data-holds-current]) { color: var(--sidebar-accent-foreground); font-weight: 660; }
 .sidebar-row:is([aria-current="page"], [data-holds-current]) svg { stroke-width: 3; }
 /* The chat open beside the current one: white, without the current weight. */
 .sidebar-chat[data-open="true"] { color: var(--sidebar-accent-foreground); }
 .sidebar-chat[data-selected="true"] { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 .sidebar-row > svg { width: 17px; height: 17px; flex: none; color: var(--muted-foreground); }
-.sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"], [data-holds-current]) > svg, .sidebar-row:is(:hover, :focus-visible, :active, :has(:focus-visible), [aria-current="page"], [data-holds-current]) .sidebar-project-link > svg { color: var(--sidebar-accent-foreground); }
+.sidebar-row:is(:hover, :focus-visible, :active, [data-focus-shown], [aria-current="page"], [data-holds-current]) > svg, .sidebar-row:is(:hover, :focus-visible, :active, [data-focus-shown], [aria-current="page"], [data-holds-current]) .sidebar-project-link > svg { color: var(--sidebar-accent-foreground); }
 .sidebar-action-slot { display: grid; width: 24px; height: 24px; min-width: 24px !important; flex: none !important; margin-right: -6px; place-items: center; overflow: visible !important; }
 .sidebar-route-indicator { width: 12px; height: 12px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 35%); }
 .sidebar-row span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -440,16 +440,16 @@
    still pointer draws at rest until the pointer moves, so only the cursor row
    is washed. An override rather than pointer-events: Chromium keeps :hover on
    an element that stops taking the pointer until the mouse next moves. */
-.conduit-sidebar[data-keyboard-cursor] :is(.sidebar-row, .sidebar-rail-action, .sidebar-view-more):hover:not(:focus-visible, :has(:focus-visible), [data-selected="true"]) { background: transparent; }
-.conduit-sidebar[data-keyboard-cursor] .sidebar-row:hover:not(:focus-visible, :has(:focus-visible), [aria-current="page"], [data-holds-current]) { color: color-mix(in oklch, var(--sidebar-foreground), transparent 32%); }
-.conduit-sidebar[data-keyboard-cursor] .sidebar-row:hover:not(:focus-visible, :has(:focus-visible), [aria-current="page"], [data-holds-current]) :is(> svg, .sidebar-project-link > svg) { color: var(--muted-foreground); }
+.conduit-sidebar[data-keyboard-cursor] :is(.sidebar-row, .sidebar-rail-action, .sidebar-view-more):hover:not(:focus-visible, [data-focus-shown], [data-selected="true"]) { background: transparent; }
+.conduit-sidebar[data-keyboard-cursor] .sidebar-row:hover:not(:focus-visible, [data-focus-shown], [aria-current="page"], [data-holds-current]) { color: color-mix(in oklch, var(--sidebar-foreground), transparent 32%); }
+.conduit-sidebar[data-keyboard-cursor] .sidebar-row:hover:not(:focus-visible, [data-focus-shown], [aria-current="page"], [data-holds-current]) :is(> svg, .sidebar-project-link > svg) { color: var(--muted-foreground); }
 .conduit-sidebar[data-keyboard-cursor] .sidebar-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] { color: var(--muted-foreground); opacity: .78; }
 .conduit-sidebar[data-keyboard-cursor] .sidebar-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: currentColor; opacity: 1; }
 .conduit-sidebar[data-keyboard-cursor] .sidebar-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 0; }
 
 /* The cursor held while the window is away (sidebar-cursor.ts). */
-.conduit-sidebar :is(.sidebar-row:is([data-held], :has([data-held])), .sidebar-rail-action[data-held], .sidebar-view-more[data-held]) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
-:is(.sidebar-row:is([data-held], :has([data-held])), .split-row[data-held]) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
+.conduit-sidebar :is(.sidebar-row:is([data-held], [data-held-within]), .sidebar-rail-action[data-held], .sidebar-view-more[data-held]) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+:is(.sidebar-row:is([data-held], [data-held-within]), .split-row[data-held]) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
 /* New chat is a phone's row. On desktop a loose chat starts on the Conduit
    dashboard and a place's on its page, each with its composer ready. */
 .sidebar-row.sidebar-new-chat { display: none; }

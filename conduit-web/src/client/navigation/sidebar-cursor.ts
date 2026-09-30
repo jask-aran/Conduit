@@ -157,10 +157,18 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
     if (!pointerFocus && row?.matches(`${STOPS}, ${SWITCH}`) && row.matches(":focus-visible")) keyboardCursor(true);
   };
 
-  const release = () => root.querySelector("[data-held]")?.removeAttribute("data-held");
+  // The row holding the held stop is marked too, for the stylesheet, in place
+  // of `.sidebar-row:has([data-held])` (see preferences/focus-shown.ts).
+  const release = () => {
+    root.querySelector("[data-held]")?.removeAttribute("data-held");
+    root.querySelector("[data-held-within]")?.removeAttribute("data-held-within");
+  };
   const away = () => {
     const focused = document.activeElement;
-    if (focused instanceof HTMLElement && root.contains(focused) && focused.matches(`${STOPS}, ${SWITCH}`)) focused.setAttribute("data-held", "");
+    if (!(focused instanceof HTMLElement) || !root.contains(focused) || !focused.matches(`${STOPS}, ${SWITCH}`)) return;
+    focused.setAttribute("data-held", "");
+    const row = focused.parentElement?.closest(".sidebar-row");
+    if (row) row.setAttribute("data-held-within", "");
   };
 
   root.addEventListener("keydown", keydown);

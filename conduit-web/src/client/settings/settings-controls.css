@@ -100,7 +100,7 @@
 /* The row's wash is the cursor, for the pointer and for focus alike; no
    control draws a ring or an outline of its own. */
 @media (hover: hover) { .settings-line:hover { background: var(--accent); } }
-.settings-line:has(:focus-visible), .settings-line:has(input:focus) { background: var(--accent); }
+.settings-line[data-focus-shown] { background: var(--accent); }
 .settings-dialog .settings-line :is(input, select, button):focus { outline: none; box-shadow: none; }
 .settings-line > span, .settings-line > label { display: flex; min-width: 0; align-items: baseline; gap: 8px; overflow: hidden; color: var(--foreground); font-size: 10.4px; font-weight: 400; white-space: nowrap; }
 .settings-line em, .settings-line-wide em { overflow: hidden; color: var(--muted-foreground); font-size: 9.6px; font-style: normal; font-weight: 400; text-overflow: ellipsis; }

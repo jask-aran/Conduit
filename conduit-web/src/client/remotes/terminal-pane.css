@@ -506,7 +506,7 @@
 
 .terminal-menu-row:hover,
 .terminal-menu-row:focus-within,
-.terminal-menu-row:has([data-highlighted]) {
+.terminal-menu-row[data-highlighted] {
   background: var(--accent);
 }
 
@@ -569,7 +569,7 @@
 
 .terminal-menu-row:hover .terminal-menu-actions,
 .terminal-menu-row:focus-within .terminal-menu-actions,
-.terminal-menu-row:has([data-highlighted]) .terminal-menu-actions {
+.terminal-menu-row[data-highlighted] .terminal-menu-actions {
   opacity: 1;
 }
 
