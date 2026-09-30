@@ -244,7 +244,7 @@ function ChangesEntry(props: {
     {props.split}
     <Show when={!props.tabs}><WorkbenchButton type="button" class="workspace-preview-action workspace-preview-close" aria-label="Close file" title="Close file" onClick={() => props.onClose()}><XIcon /></WorkbenchButton></Show>
   </>;
-  return <section class="workspace-preview workspace-changes-entry" data-focused={props.focused} aria-label={`${props.entry.path} ${props.mode === "staged" ? "staged changes" : "changes"}`} onFocusIn={() => props.onFocus()} onPointerDown={() => props.onFocus()}>
+  return <section class="workspace-preview workspace-changes-entry" tabIndex={-1} data-focused={props.focused} aria-label={`${props.entry.path} ${props.mode === "staged" ? "staged changes" : "changes"}`} onFocusIn={() => props.onFocus()} onPointerDown={() => props.onFocus()}>
     <Suspense>
       <Show when={comparison()} fallback={<div class="workspace-panel-empty">{comparison.loading ? "Loading changes…" : "No changes to show."}</div>}>{(payload) =>
         <WorkspaceComparison comparison={payload()} sourceKey={`${props.entry.projectId}:${props.entry.path}:${props.mode}`} viewState={{ layout: "unified", wrap: false, top: 0, left: 0, position: 0 }}

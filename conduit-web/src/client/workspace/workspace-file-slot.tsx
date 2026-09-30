@@ -531,6 +531,7 @@ export default function WorkspaceFileSlot(props: {
     <ContextMenuTrigger
       as="section"
       class="workspace-preview"
+      tabIndex={-1}
       data-slot={props.slot}
       data-focused={props.focused}
       aria-label={label}

@@ -12,7 +12,21 @@ Always pick the lowest tier that can prove the change. Do not escalate to Tier 3
 | **Tier 1: Static & Isolated** | < 2s | **Minimal** (clean exit) | `npm run typecheck`<br>`node --test test/<file>.test.js` | Contract changes, types, server routes, isolated logic. |
 | **Tier 2: Fast Deterministic Harnesses** | < 1s | **Low** (compact JSON) | `node scripts/run-harness.mjs [--profile ...]`<br>`node scripts/bench-renderer.mjs`<br>`curl` with `conduit-auth.mjs mint-session` | WebSocket lifecycles, streaming backpressure, KaTeX/markdown parser, live server HTTP headers. |
 | **Tier 3: Targeted Browser** | 10–30s | **Moderate** | `npm run qa:agent-browser`<br>`npm run agent-browser:local -- --session <id> ...` | Real DOM interactions, focus/keyboard traps, CSS layout regressions. Driven, not asserted. |
+| **Tier 3: Panes smoke** | ~1m | **Low** (one line per scenario) | `node --test test/file-tabs.test.js`<br>`npm run smoke:panes [-- --project <name>]` | Panes, file viewer tabs and columns, drag targets and pills, header folding, focus and the dock's place. Asserted; run after any change to them, including performance work. |
 | **Tier 4: Broad Sweeps & Canaries** | 30s–5m+ | **Prohibitive** (context poison) | `npm test` | Release verification only. **Do not run during iterative coding turns.** |
+
+## Panes smoke
+
+`npm run smoke:panes` drives the panes and file viewer in headless Chromium
+against the running server and prints `ok`/`FAIL` per scenario, exiting 1 on
+any failure. It is read-only (files are opened, never edited) and each
+scenario gets a fresh browser context, so the saved layout starts empty. It
+picks the first project with six top-level files; `--project <name>` picks
+one, and a project whose page lists files (not Conduit's own) also covers the
+project page scenario. Playwright is taken from `conduit-web`'s dependencies
+or installed once into `.smoke-tools/`. Run it from the checkout the server
+serves: the session it mints goes into that checkout's `data/`. The tab
+rules themselves are unit tests in `test/file-tabs.test.js`.
 
 ## Local authentication
 

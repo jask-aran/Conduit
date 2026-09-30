@@ -13,6 +13,7 @@
     "start": "node src/server.js",
     "test": "node --test test/*.test.js",
     "test:harness": "node scripts/run-harness.mjs",
+    "smoke:panes": "node scripts/panes-smoke.mjs",
     "qa:agent-browser": "node scripts/run-agent-browser.mjs",
     "agent-browser:local": "node scripts/run-agent-browser-command.mjs",
     "perf:live": "node scripts/run-live-harness.mjs",

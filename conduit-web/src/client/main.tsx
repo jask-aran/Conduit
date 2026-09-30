@@ -75,6 +75,7 @@ import { isShortcutRegion } from "./shortcuts/shortcut-types";
 import { acknowledgeRegion } from "./shortcuts/region-cue";
 import { globalShortcuts } from "./shortcuts/global-shortcuts";
 import { EMPTY_FILE_VIEW, fileEntryKey, formatFileView, parseFileView, sameFileEntry, type FileEntry } from "./workspace/file-documents";
+import { dropWash, dropZoneAt, fileTabParam, fileTabsFromParams, moveKey, nextShownTab, reconcileSide, swapRecordKeys, withoutTab, type FileTabs } from "./workspace/file-tabs";
 import type { ReviewNavigationRequest } from "./chat/review-navigation";
 import type { FileSlotHandle, FileSummary } from "./workspace/workspace-file-slot";
 import { dropScope, migrateWorkspacePanelStorage, readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace/workspace-panel-storage";
@@ -2610,8 +2611,7 @@ function App() {
     if (pane === draggedPane) { setDragHint(null); return void setDocDrop(null); }
     const edges = draggedPane !== null || roomBeside(draggedView);
     const viewer = draggedPane === null && Boolean(parseFileView(viewOf(pane))?.length);
-    const edge = viewer ? 1 / 5 : 1 / 3;
-    const zone = !edges ? "middle" : third < edge ? "left" : third > 1 - edge ? "right" : "middle";
+    const { zone, edge } = dropZoneAt(third, { edges, viewer });
     if (draggedPane !== null && nearEdge(draggedPane, pane, zone)) { setDragHint(null); return void setDocDrop(null); }
     /*
      * A file over a file viewer: only its outer fifths are panes (washed); within,
@@ -2652,8 +2652,7 @@ function App() {
       : { text: `Open here in place of ${named(viewOf(pane))}`, icon: "here" };
     setDragHint({ x: event.clientX, y: event.clientY, ...hint });
     // The wash is the target itself: an edge's band, else the pane between them.
-    const band = edges ? box.width * edge : 0;
-    const rect = zone === "left" ? { left: box.left, width: band } : zone === "right" ? { left: box.right - band, width: band } : { left: box.left + band, width: box.width - band * 2 };
+    const rect = dropWash(box, zone, edge, edges);
     const current = docDrop();
     if (current?.pane === pane && current.zone === zone) return;
     setDocDrop({ pane, zone, rect: { ...rect, top: box.top, height: box.height } });
@@ -3612,21 +3611,7 @@ function App() {
    * shows the tab it used last, else the side goes; the last leaves the viewer
    * empty. Tab lists go by `<pane>#<side>`.
    */
-  type FileTabs = { entries: FileEntry[]; used: string[] };
-  const FILE_TAB_CAP = 5;
   const sideKey = (pane: PaneKey, side: number) => `${pane}#${side}`;
-  const fileTabsFromParams = (params: URLSearchParams): Record<string, FileTabs> => {
-    const order = params.getAll("pane").filter(isSplitView).map((_, index) => index);
-    const found: Record<string, FileTabs> = {};
-    for (const value of params.getAll("ftabs")) {
-      const at = value.indexOf(":");
-      const [position, side] = value.slice(0, at).split(".").map(Number);
-      const pane = position === 0 ? "main" : order[position! - 1] === undefined ? null : String(order[position! - 1]);
-      const entries = value.slice(at + 1).split("|").map((part) => parseFileView(`files:${part}`)?.[0]).filter((entry): entry is FileEntry => Boolean(entry)).slice(0, FILE_TAB_CAP);
-      if (pane !== null && entries.length) found[`${pane}#${side || 0}`] = { entries, used: entries.map(fileEntryKey) };
-    }
-    return found;
-  };
   const launchFileTabs = () => {
     if (urlNamesPanes || !atStart) return fileTabsFromParams(launchUrl.searchParams);
     const params = new URLSearchParams();
@@ -3641,10 +3626,7 @@ function App() {
   const keepFileNext = new Set<string>();
   const fileTabParams = () => {
     const panes: PaneKey[] = ["main", ...slotOrder().filter((slot) => slotView(slot))];
-    return panes.flatMap((pane, position) => [0, 1].flatMap((side) => {
-      const tabs = fileTabsOf(pane, side);
-      return tabs && tabs.entries.length > 1 ? [`${position}.${side}:${formatFileView(tabs.entries).slice("files:".length)}`] : [];
-    }));
+    return panes.flatMap((pane, position) => [0, 1].flatMap((side) => fileTabParam(position, side, fileTabsOf(pane, side)) ?? []));
   };
   function reconcileFileTabs() {
     const next = { ...untrack(fileTabs) };
@@ -3656,26 +3638,7 @@ function App() {
       shown.forEach((entry, side) => {
         const key = sideKey(pane, side);
         live.add(key);
-        const tabs = next[key] ?? { entries: [], used: [] };
-        let entries = [...tabs.entries];
-        const entryKey = fileEntryKey(entry);
-        const kept = keepFileNext.delete(key);
-        const at = entries.findIndex((item) => fileEntryKey(item) === entryKey);
-        const previous = lastShownFiles.get(key);
-        const replaced = previous && !kept && fileEntryKey(previous) !== entryKey ? entries.findIndex((item) => fileEntryKey(item) === fileEntryKey(previous)) : -1;
-        if (at >= 0) {
-          entries[at] = entry;
-          if (replaced >= 0) entries.splice(replaced, 1);
-        } else if (replaced >= 0) entries[replaced] = entry;
-        else entries.push(entry);
-        let used = [entryKey, ...tabs.used.filter((item) => item !== entryKey)].filter((item) => entries.some((candidate) => fileEntryKey(candidate) === item));
-        while (entries.length > FILE_TAB_CAP) {
-          const drop = [...used].reverse().find((item) => item !== entryKey);
-          if (!drop) break;
-          entries = entries.filter((item) => fileEntryKey(item) !== drop);
-          used = used.filter((item) => item !== drop);
-        }
-        next[key] = { entries, used };
+        next[key] = reconcileSide(next[key], entry, lastShownFiles.get(key), keepFileNext.delete(key));
         lastShownFiles.set(key, entry);
       });
     }
@@ -3686,7 +3649,7 @@ function App() {
   const shownFileSide = (pane: PaneKey) => { const shown = parseFileView(viewOf(pane)) ?? []; return Math.max(0, Math.min(fileFocus()[String(pane)] ?? 0, shown.length - 1)); };
   // A side's tabs moved to another side (a side closing shifts the next one down).
   const moveSideTabs = (from: string, to: string) => {
-    setFileTabs((current) => { const next = { ...current }; if (current[from]) next[to] = current[from]!; else delete next[to]; delete next[from]; return next; });
+    setFileTabs((current) => moveKey(current, from, to));
     const shown = lastShownFiles.get(from);
     lastShownFiles.delete(from);
     if (shown) lastShownFiles.set(to, shown); else lastShownFiles.delete(to);
@@ -3708,13 +3671,12 @@ function App() {
     const shown = parseFileView(viewOf(pane)) ?? [];
     const forget = () => setFileTabs((current) => {
       const list = current[sideKey(pane, side)];
-      return list ? { ...current, [sideKey(pane, side)]: { entries: list.entries.filter((entry) => fileEntryKey(entry) !== key), used: list.used.filter((item) => item !== key) } } : current;
+      return list ? { ...current, [sideKey(pane, side)]: withoutTab(list, key) } : current;
     });
     if (!shown[side] || fileEntryKey(shown[side]!) !== key) return forget();
     if (handlesOf(pane)[side]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and close this file?")) return;
     handlesOf(pane)[side]?.discardChanges();
-    const hidden = tabs?.used.find((item) => item !== key);
-    const replacement = hidden ? tabs!.entries.find((entry) => fileEntryKey(entry) === hidden) : undefined;
+    const replacement = nextShownTab(tabs, key);
     forget();
     movingDocuments = true;
     if (replacement) {
@@ -3744,11 +3706,11 @@ function App() {
     const shown = parseFileView(viewOf(pane)) ?? [];
     if (shown.length !== 2) return;
     const [a, b] = [sideKey(pane, 0), sideKey(pane, 1)];
-    setFileTabs((current) => { const next = { ...current }; const first = current[a]; const second = current[b]; if (second) next[a] = second; else delete next[a]; if (first) next[b] = first; else delete next[b]; return next; });
+    setFileTabs((current) => swapRecordKeys(current, a, b));
     const [first, second] = [lastShownFiles.get(a), lastShownFiles.get(b)];
     if (second) lastShownFiles.set(a, second); else lastShownFiles.delete(a);
     if (first) lastShownFiles.set(b, first); else lastShownFiles.delete(b);
-    setSideWraps((current) => { const next = { ...current }; const wa = current[a]; const wb = current[b]; delete next[a]; delete next[b]; if (wb !== undefined) next[a] = wb; if (wa !== undefined) next[b] = wa; return next; });
+    setSideWraps((current) => swapRecordKeys(current, a, b));
     setPaneView(pane, formatFileView([shown[1]!, shown[0]!]));
     focusFileEntry(pane, 1 - shownFileSide(pane));
   };
