@@ -3,8 +3,11 @@
    intrinsically sized; an inline-size-contained descendant contributes zero
    intrinsic inline size and collapses that ancestor. Give the message a
    definite containing width first, then isolate only its Incremark root. An
-   inline preview and the Marked renderer never match these selectors. */
-.message-assistant [data-slot="message-content"]:has(.chat-markdown[data-renderer="incremark"]:not([data-inline])) {
+   inline preview and the Marked renderer never match these selectors.
+   An attribute, not :has(.chat-markdown…): every restyle of this node made
+   the :has() search the message below it, thousands of KaTeX nodes in a
+   formula-heavy answer, and it restyled on most streamed frames. */
+.message-assistant [data-slot="message-content"][data-incremark] {
   width: 100%;
 }
 
