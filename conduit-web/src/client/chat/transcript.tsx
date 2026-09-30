@@ -622,9 +622,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     historyLoad = props.chat.loadOlder().then((loaded) => {
       if (!loaded) return;
       loadedMore = true;
-      // Restored in the next frame, before it paints: a restore in this task
-      // as well forced the new page's layout inside the task that rendered it
-      // (~30ms together; docs/design/performance-pass.md, 10).
+      queueMicrotask(restoreAnchor);
       return new Promise<void>((resolve) => requestAnimationFrame(() => {
         restoreAnchor();
         requestAnimationFrame(() => {
