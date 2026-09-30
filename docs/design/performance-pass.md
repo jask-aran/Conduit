@@ -7,6 +7,10 @@ The probes were headless Chromium (Playwright) against the local server on
 :4310, sampling once per animation frame; numbers are single runs on the dev
 box unless noted.
 
+Before and after each change, run the regression cover for the panes
+(`docs/testing.md`, "Panes smoke"): `node --test test/file-tabs.test.js` and
+`npm run smoke:panes -- --project <a place whose page lists files>`.
+
 ## 1. The server's event loop stalls for ~3.5s
 
 **Seen.** On cold page loads, every `/v0/` request issued in the first ~500ms
@@ -28,6 +32,22 @@ on first request (`terminals.reconcile()` in `GET /v0/ptys`, harness discovery
 behind `/v0/harnesses`, per-harness thread listing). Start with an event-loop
 delay monitor (`perf_hooks.monitorEventLoopDelay`) and `--cpu-prof` around a
 cold load.
+
+**Likely cause (2026-09-30).** `readWorkspaceVersion`
+(`src/workspace-inspector.js`, `GET /v0/projects/:id/workspace/version`)
+starts `fs.watch(root, { recursive: true })`. On Linux, Node builds a
+recursive watch by walking the whole tree synchronously: on this checkout
+(21,853 directories, `node_modules` and `.git` included) the `watch()` call
+alone blocks for 3.15s (measured standalone). Every request in flight waits
+it out -- a cold open of `AGENTS.md` saw `/file` (6ms on its own) and
+`/workspace/version` both finish 8.5s after the click. The watch closes after
+`WORKSPACE_WATCH_IDLE_MS` (3s) without a poll, so it is paid again whenever
+polling pauses for longer: the tab hidden, the last viewer or dock closed. The
+first `/workspace/version` after a restart took 3.2s by curl; later ones
+~28ms. Fixes to weigh: skip ignored trees (`node_modules`, `.git`, what
+`.gitignore` names) by watching per directory, an async walk, a watcher that
+does not walk (`@parcel/watcher`), or keeping the watch open for places still
+in view rather than closing it after 3s.
 
 ## 2. Long transcripts render in passes, after being shown
 
@@ -88,3 +108,80 @@ until it is ready.
 - Moving a chat into another pane waits for its transcript to exist; in warm
   runs that was ~250-370ms after the click, of which ~130ms was loading and the
   rest rendering.
+
+## 6. One-shot motion rules make every DOM change pay for style (seen 2026-09-30)
+
+**Seen.** With a file open in a pane, 40 arrow-key presses in its editor cost
+~500-570ms of style recalculation (~12ms a key). Deleting every `:has()` rule
+from the page took that to ~19-43ms; the same rules made no difference to
+typing in the composer (a textarea's value is not a DOM change). Rule by rule
+(20 keys each, ~21ms baseline):
+
+| Rule (`styles.css`) | Recalc / 20 keys |
+| --- | --- |
+| `:root[data-route-motion="arriving"] :is(.chat-main, .chat-main :has([data-part="composer"])) > …` | 283ms |
+| `:root[data-arrival="arriving"] :is(…, :is(.chat-main, .main-split) :has([data-part="composer"])) > …` | 255ms |
+| `:root[data-route-motion="leaving"] …` (same shape) | 253ms |
+| `:root[data-arrival="waiting"] …` (same shape) | 217ms |
+| `.settings-dialog .settings-content [data-slot="field"]:has(> textarea)` | 149ms |
+| each other `:has()` rule | ≤ 44ms |
+
+The four motion rules cost this all the time, not only while their root
+attribute is set: a `:has()` under a descendant combinator makes Chromium
+re-check ancestors on every mutation beneath `.chat-main`/`.main-split`. The
+settings rule costs it with no settings dialog open.
+
+**Why it matters.** Any surface that mutates the DOM steadily inside a pane
+pays it per change: CodeMirror on every cursor move or keystroke, and very
+likely a streaming transcript per rendered chunk -- a candidate for target 3's
+"jelly under load" (unmeasured: it needs a live turn).
+
+**Leads.** Mark the parts that fade once, in JS, when arrival or route motion
+starts (an attribute on each outermost non-composer child), so the rules need
+no `:has()`; or scope them to a class set only for the 300ms they run. Give
+wide settings fields `data-wide` (the rule's other half already reads it) and
+drop `:has(> textarea)`. Probe: the arrow-key loop above with CDP
+`Performance.getMetrics` (`RecalcStyleDuration`).
+
+## 7. A file viewer's first open is a serial chain (seen 2026-09-30)
+
+**Seen.** Cold open of `AGENTS.md` into a pane: editor, languages and viewer
+chunks at 64-78ms, then `/file` and `/workspace/version` (target 1's stall),
+and only once the file had arrived did `workspace-markdown` and two more
+chunks start loading (8635ms). The column itself did not exist until then, so
+focus had nothing to land on for ~4s (`focusColumn` now waits up to 6s).
+
+**Leads.** Start the renderer's chunk (markdown, by the file's extension) in
+parallel with the fetch, as `loadWorkspaceEditor()` already is for text.
+Render the column's frame and header before its contents so focus, the tab
+strip and folding settle at once.
+
+## 8. Media files are asked for as text first (seen 2026-09-30)
+
+**Seen.** Every image, PDF, audio or video opened in a viewer is first
+requested as text (`GET /file?path=…`), answered `400 file_not_text`, then
+fetched again as metadata and inline. That is one wasted round trip per open,
+and a console error each time (the panes smoke tolerates it).
+
+**Leads.** `workspace-file-slot.tsx` `load()`: when `fallbackKind(path)` says
+image/pdf/audio/video, go straight to `?metadata=1` and the inline URL; keep
+the text-first path for unknown extensions.
+
+## 9. Two pollers per place with a viewer open (seen 2026-09-30)
+
+**Seen.** With the dock's Files open, `/workspace/version` is polled ~3 times
+in 6s; opening a file viewer on the same place takes it to 7-8, as the viewer
+runs its own 1.5s probe (`workspace-file-viewer.tsx`) beside
+`workspace-poll.ts`'s. Both stop while the tab is hidden (good), which is also
+what lets target 1's watch close and be re-walked on return.
+
+**Leads.** One poller per place, shared by the dock and every viewer showing
+it, handing out `changedPaths` to each subscriber.
+
+## 10. Measured and fine (2026-09-30)
+
+So the pass need not look again: scrolling a long file (30 wheel steps: 1
+layout, 10ms of style), a tab switch (~75ms of work), header folding (no
+attribute writes while scrolling or moving the cursor), the file-drag pill
+(0.1-1.5ms a dragover after the transform fix), and an idle viewer (33ms of
+work in 3s).
