@@ -115,7 +115,7 @@ const focusIn = (page) => page.evaluate(() => {
   const active = document.activeElement;
   const column = active?.closest(".workspace-file-viewer > .workspace-preview");
   return active?.closest(".workspace-file-viewer") ? `viewer:${column ? [...column.parentElement.children].filter((child) => child.classList.contains("workspace-preview")).indexOf(column) : "?"}`
-    : active?.closest("[data-pane-slot]") ? "slot" : active?.closest(".workspace-panel") ? "dock" : "main";
+    : active?.closest("[data-pane-slot]") ? `slot:${active.tagName}.${String(active.className).slice(0, 40)}` : active?.closest(".workspace-panel") ? "dock" : "main";
 });
 const fileName = (page, index) => navFiles(page).nth(index).getAttribute("data-path");
 // A drag's pill and wash mid-drag, from synthetic events (native drags cannot pause).
@@ -138,7 +138,8 @@ await scenario("opening a file gives its viewer the keyboard and marks it in Fil
   const name = await fileName(page, 0);
   await navFiles(page).nth(0).click();
   check("viewer opened", await until(page, () => document.querySelector("[data-pane-slot] .workspace-file-viewer")), `${name} -> ${decodeURIComponent(page.url().replace(origin, ""))}`);
-  check("focus in the viewer", await until(page, () => document.activeElement?.closest(".workspace-file-viewer")), await focusIn(page));
+  // A cold first load fetches the viewer's chunks: allow it the 6s focus waits.
+  check("focus in the viewer", await until(page, () => document.activeElement?.closest(".workspace-file-viewer .cm-content") || document.activeElement?.closest(".workspace-file-viewer"), undefined, 8000), await focusIn(page));
   check("file bold as focused", await until(page, (path) => document.querySelector(`[data-path="${CSS.escape(path)}"][data-open-file="focused"]`), name));
   await page.locator(".chat-main").first().click({ position: { x: 300, y: 400 } }).catch(() => {});
   check("file still bold once focus leaves", await until(page, (path) => document.querySelector(`[data-path="${CSS.escape(path)}"][data-open-file="shown"]`), name));
