@@ -13,13 +13,13 @@ import { conduitMathPlugin } from "./incremark-math-extension";
 import { BufferedIncremarkTypewriter, visibleAstCharacters } from "./incremark-typewriter";
 import { MathRenderQueue, type MathRenderPolicy } from "./incremark-math-queue";
 import { morphHtml } from "./morph-html";
-import { patchMathTree, renderMathTree } from "./katex-patch";
+import { markFadeIn, patchMathTree, renderMathTree } from "./katex-patch";
 import { readStoredMath, storeMath } from "./math-html-store";
 import { citationHost, resolveMarkdownUrl } from "./markdown-security";
 import { projectTableMathSource, promoteTableCellDisplayMath, restoreTableMathAst, restoreTableMathSentinel } from "./table-math";
 import type { StreamingPending } from "./streaming-markdown";
 import { splitStreamingMarkdown } from "./streaming-markdown";
-import { streamFadeMs } from "@/client/preferences/stream-fade";
+import { streamFadeMs, streamMathFade } from "@/client/preferences/stream-fade";
 import "./incremark-markdown.css";
 
 type MarkdownNode = any;
@@ -39,6 +39,8 @@ type RendererContext = {
   onPendingPlaceholderChange: (delta: number) => void;
   /** Newly shown words fade in as spans; only the streamed blocks set it. */
   fadeWords?: () => boolean;
+  // Formulas held while open and faded in whole once complete.
+  fadeMath?: () => boolean;
   /** False once the message has settled and its last fade is over. */
   fadeLive?: () => boolean;
 };
@@ -52,6 +54,25 @@ const FADE_REVEALS = "__conduitFadeReveals";
 
 type Reveal = [from: number, at: number];
 type BlockFade = { shown: number; reveals: Reveal[] };
+
+// The formula a pending preview draws while its delimiter is still open is
+// the last one in the preview's block: the open construct is the source's
+// tail. Marked so "fade in when complete" can hold it until it closes.
+const OPEN_MATH = "__conduitMathOpen";
+function markOpenMath(node: MarkdownNode): MarkdownNode {
+  if (!node || typeof node !== "object") return node;
+  if (node.type === "math" || node.type === "inlineMath") return { ...node, [OPEN_MATH]: true };
+  if (!Array.isArray(node.children)) return node;
+  for (let index = node.children.length - 1; index >= 0; index -= 1) {
+    const marked = markOpenMath(node.children[index]);
+    if (marked !== node.children[index]) {
+      const children = node.children.slice();
+      children[index] = marked;
+      return { ...node, children };
+    }
+  }
+  return node;
+}
 
 /**
  * Mark the text nodes holding characters past what the block last showed.
@@ -507,7 +528,7 @@ function scheduleMathRender(run: () => void, policy: MathRenderPolicy) {
   return mathRenderQueue.enqueue(run, policy);
 }
 
-function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => boolean; policy?: () => MathRenderPolicy; renderer?: () => string; onBusyChange?: (busy: boolean) => void }) {
+function MathNode(props: { node: MarkdownNode | NodeAccessor; fadeOnce?: () => boolean; defer?: () => boolean; policy?: () => MathRenderPolicy; renderer?: () => string; onBusyChange?: (busy: boolean) => void }) {
   const node = () => readNode(props.node);
   const [html, setHtml] = createSignal("");
   const [type, setType] = createSignal<string | undefined>();
@@ -546,7 +567,9 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     if (!wrapper || value === applied) return;
     applied = value;
     drawnTree = null;
+    const first = wrapper.childElementCount === 0;
     morphHtml(wrapper, value);
+    if (first && props.fadeOnce?.()) markFadeIn(wrapper.firstElementChild);
   };
   const show = (value: string) => {
     setHtml(value);
@@ -578,7 +601,9 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
       }
       // Rejected: the last partial stays drawn.
       if (tree) {
+        const first = wrapper.childElementCount === 0;
         patchMathTree(wrapper, drawnTree, tree);
+        if (first && props.fadeOnce?.()) markFadeIn(wrapper.firstElementChild);
         drawnTree = tree;
         applied = "";
       }
@@ -629,9 +654,12 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     samplePreviewHeight(current);
     setBusy(false);
   };
+  // Under "fade in when complete" a formula still open is not drawn: the
+  // reserved box waits, and the closed formula fades in once, whole.
+  const held = (current: MarkdownNode) => Boolean(current?.[OPEN_MATH] && props.fadeOnce?.());
   const initial = node();
   const initialSource = String(initial?.__conduitMathSource ?? initial?.value ?? "");
-  if (initial && initialSource && !(props.defer?.() && initial.type === "math")) {
+  if (initial && initialSource && !held(initial) && !(props.defer?.() && initial.type === "math")) {
     renderVersion = 1;
     setType(initial.type);
     renderCurrent(initial, initialSource, renderVersion);
@@ -645,6 +673,7 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     cancelJob?.();
     cancelJob = null;
     setBusy(false);
+    if (held(current)) return;
     // A delimiter just opened has no body yet, and for that one update the
     // parser still sees it on the line of the formula before -- whose block, and
     // so whose node, the empty preview takes. Keep what is drawn until there
@@ -955,7 +984,7 @@ function AstNodeContent(props: { node: NodeAccessor; context: RendererContext })
     case "delete": return <del><InlineNodes nodes={() => node()?.children || []} context={props.context} /></del>;
     case "inlineCode": return <code>{node()?.value || ""}</code>;
     case "inlineMath":
-    case "math": return <MathNode node={node} defer={props.context.deferMath} policy={props.context.mathRenderPolicy} renderer={props.context.rendererId} onBusyChange={props.context.onMathBusyChange} />;
+    case "math": return <MathNode node={node} fadeOnce={() => Boolean(props.context.fadeMath?.() && props.context.fadeLive?.())} defer={props.context.deferMath} policy={props.context.mathRenderPolicy} renderer={props.context.rendererId} onBusyChange={props.context.onMathBusyChange} />;
     case "break": return <br />;
     case "link": return <LinkNode node={node} context={props.context} />;
     case "linkReference": return <LinkNode node={node} context={props.context} reference={() => props.context.definitions()[node()?.identifier]} />;
@@ -1201,7 +1230,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         if (previewNode) {
           return {
             ...currentBlock,
-            node: previewNode,
+            node: markOpenMath(previewNode),
             endOffset: currentBlock.endOffset,
             rawText: currentBlock.rawText,
           };
@@ -1220,7 +1249,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         if (reparsedNode && containsMath(reparsedNode)) {
           return {
             ...currentBlock,
-            node: reparsedNode,
+            node: markOpenMath(reparsedNode),
             endOffset: currentBlock.endOffset,
             rawText: currentBlock.rawText,
           };
@@ -1392,7 +1421,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     const timer = setTimeout(() => setFadeOver(true), streamFadeMs() + 20);
     onCleanup(() => clearTimeout(timer));
   });
-  const displayContext: RendererContext = { ...context, fadeWords: () => pacing() === "fade" && !props.inline, fadeLive: () => !fadeOver() };
+  const displayContext: RendererContext = { ...context, fadeWords: () => pacing() === "fade" && !props.inline, fadeMath: () => pacing() === "fade" && !props.inline && streamMathFade(), fadeLive: () => !fadeOver() };
   return <>
     <div class="chat-markdown" data-renderer={rendererId()} data-inline={props.inline ? "true" : undefined} data-streaming={streaming() || undefined} data-display-busy={displayBusy() || pendingMathRenders() > 0 ? "true" : undefined} data-display-animation-busy={displayBusy() ? "true" : undefined} data-pending-math-renders={pendingMathRenders() > 0 ? String(pendingMathRenders()) : undefined} data-display-key={props.displayKey || undefined} data-settled={settled() ? "true" : undefined}>
       <div class="incremark" data-incremark-core="true">

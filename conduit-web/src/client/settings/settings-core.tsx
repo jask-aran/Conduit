@@ -18,7 +18,7 @@ import { isWarmMicrophoneActive, stopWarmMicrophone } from "../chat/voice-dictat
 import { createVoiceWaveformController, VoiceWaveform } from "../chat/voice-waveform";
 import { ModelSelector } from "../chat/model-selector";
 import { saveTabFrost, tabFrost } from "../preferences/tab-frost";
-import { saveStreamFade, STREAM_FADE_OPTIONS, streamFadeMs } from "../preferences/stream-fade";
+import { saveStreamFade, saveStreamMathFade, STREAM_FADE_OPTIONS, streamFadeMs, streamMathFade } from "../preferences/stream-fade";
 import { INCREMARK_PACING_OPTIONS, saveIncremarkPacing, selectedIncremarkPacing, type IncremarkPacingMode } from "../chat/incremark-pacing";
 import type { Installation, Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
@@ -1189,6 +1189,9 @@ export function Settings(props: {
                       <select id="stream-fade" aria-label="Word fade time" value={fadeMs()} onChange={(event) => setFadeMs(saveStreamFade(Number(event.currentTarget.value)))}>
                         <For each={STREAM_FADE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                       </select>
+                    </label>
+                    <label class="settings-line" for="stream-math-fade"><span>Fade formulas in when complete</span>
+                      <Switch id="stream-math-fade" label="Fade formulas in when complete" checked={streamMathFade()} onChange={saveStreamMathFade} />
                     </label>
                   </Show>
                   <label class="settings-line" for="meteor-field"><span>Meteor field</span>

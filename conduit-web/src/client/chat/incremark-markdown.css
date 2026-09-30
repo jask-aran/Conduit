@@ -49,6 +49,11 @@
    a real stream. A colour animation only repaints the word. */
 .chat-markdown .stream-word { animation: stream-word-in var(--stream-word-fade, 200ms) ease-out both; }
 @keyframes stream-word-in { from { color: transparent; } }
+/* A formula's new parts fade their opacity instead, backwards only, and the
+   class is taken off once it has run (katex-patch.ts). */
+.chat-markdown .stream-math-in { animation: stream-math-in var(--stream-word-fade, 200ms) ease-out backwards; }
+@keyframes stream-math-in { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .chat-markdown .stream-word { animation: none; }
+  .chat-markdown .stream-word,
+  .chat-markdown .stream-math-in { animation: none; }
 }
