@@ -416,6 +416,61 @@ A live orb still draws every frame (checked on a Test profile turn: one orb,
 What remains idle (~28ms a second) is the orbs' own draws and the frame
 commit around them, each well inside the budget.
 
+## 15. Streaming KaTeX: partials drawn in chunks (fixed 2026-09-30)
+
+**Seen.** A real model's math came in large chunks rather than as smoothly
+growing partials: long aligned blocks appeared whole, formulas blinked out
+and back, and once the rest of an open formula showed as raw TeX in a
+paragraph.
+
+**How it was measured.** The Test profile replays two real KaTeX replies word
+for word at 60 tokens/s (models "KaTeX replay · long aligned blocks" and
+"· hundreds of formulas", `src/test-stream-replays.js`). A probe sampled every
+frame for three faults: a formula element removed from the list, a formula
+emptied, and TeX commands in text outside math. The frame budget was read in
+headed Chrome on Windows over CDP with the lean categories (`devtools.timeline`,
+`toplevel`). The DevTools CLI's `performance_start_trace` also tracks
+invalidations, which puts a stack on every DOM write: it showed 360+ tasks
+over for the same stream, and does not measure this.
+
+**Causes, all in Conduit's glue between Incremark and KaTeX** (the parser and
+KaTeX were not at fault):
+
+1. *Partials never rendered for environments.* The repair of a partial closed
+   braces only, so an open `\begin{aligned}`, `\left(` or `\frac{a` was invalid
+   until its end arrived. `repairSyntheticMathSource` now closes environments,
+   `\left` and a cut-short first argument in nesting order, and a command still
+   being typed (`\ome`) is left off on a retry. Partials that render: 2% → 100%
+   (long blocks), 60% → 100% (formula list).
+2. *Formulas blinked.* While a construct was open, only its preview was shown,
+   dropping every block the parser still held as pending. Consecutive `$$`
+   lines are one paragraph to the parser, so every closed formula above the
+   open one vanished until the next closed.
+3. *Raw TeX leaked.* A `-` line inside an open formula is a setext underline to
+   Markdown, which ended a block there. Only blocks wholly before the open
+   construct are shown now.
+4. *A formula blanked for a frame* when its first preview changed from
+   `paragraph[math]` to `math`, and when a delimiter just opened on the next
+   line briefly took the previous formula's block with an empty body.
+5. *Each partial rebuilt the whole formula's DOM* (~12ms for a long aligned
+   block). A formula still arriving is now patched from KaTeX's render tree
+   (`chat/katex-patch.ts`): about 7 of ~400 nodes change per token. A settled
+   formula still uses `renderToString`, the cache and `chat/morph-html.ts`.
+
+A redraw cap and a row-at-a-time cut were tried and dropped: smooth partials
+at any rate are the requirement.
+
+Headed Windows Chrome, 10s of each stream:
+
+| Stream | Tasks over 6.94ms | Over 16.7ms | p99 | Worst |
+| --- | --- | --- | --- | --- |
+| Filler text (control) | 3 | 0 | 2.5ms | 15.9ms |
+| Long aligned blocks | 37 | 0 | 6.1ms | 9.4ms |
+| Hundreds of formulas | 8 | 0 | 5.3ms | 8.6ms |
+
+What is left over budget is the long-block frames that re-render KaTeX (~0.5-1ms)
+and patch at once with a typewriter step and the tail follow's layout read.
+
 ## 14. Measured and fine (2026-09-30)
 
 So the pass need not look again: scrolling a long file (30 wheel steps: 1
