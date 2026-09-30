@@ -13,6 +13,7 @@ import { createSyntheticMathPreviewNode, repairSyntheticMathSource, trimUnfinish
 import { conduitMathPlugin } from "./incremark-math-extension";
 import { BufferedIncremarkTypewriter, visibleAstCharacters } from "./incremark-typewriter";
 import { MathRenderQueue, type MathRenderPolicy } from "./incremark-math-queue";
+import { morphHtml } from "./morph-html";
 import { citationHost, resolveMarkdownUrl } from "./markdown-security";
 import { projectTableMathSource, promoteTableCellDisplayMath, restoreTableMathAst, restoreTableMathSentinel } from "./table-math";
 import type { StreamingPending } from "./streaming-markdown";
@@ -499,6 +500,15 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     }
     renderCurrent(current, source, version);
   });
+  // Each rendering is edited into the last rather than replacing it; see
+  // morph-html.ts.
+  let applied = "";
+  createEffect(() => {
+    const next = html();
+    if (!wrapper || next === applied) return;
+    applied = next;
+    morphHtml(wrapper, next);
+  });
   createEffect(() => {
     if (!complete()) return;
     sizes?.disconnect();
@@ -509,7 +519,7 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; defer?: () => bool
     sizes?.disconnect();
     setBusy(false);
   });
-  return <span ref={wrapper} class={type() === "math" ? "incremark-math-block" : "incremark-math-inline"} style={{ "min-height": type() === "math" && previewMinHeight() > 0 ? `${previewMinHeight()}px` : undefined }} innerHTML={html()} />;
+  return <span ref={wrapper} class={type() === "math" ? "incremark-math-block" : "incremark-math-inline"} style={{ "min-height": type() === "math" && previewMinHeight() > 0 ? `${previewMinHeight()}px` : undefined }} />;
 }
 
 function CodeNode(props: { node: MarkdownNode | NodeAccessor }) {
