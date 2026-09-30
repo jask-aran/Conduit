@@ -1,4 +1,5 @@
 /// <reference types="vite-plugin-pwa/client" />
+import "./motion-rules";
 import { focusSplitSection, splitSections } from "./dashboard/primitives/split-cursor";
 import { isConduitManagedProject } from "./navigation/sidebar-preferences";
 import type { ComputerLocation, ComputerPrefetchPayload } from "./api/contracts";

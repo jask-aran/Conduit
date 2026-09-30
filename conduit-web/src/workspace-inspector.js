@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { watch } from "node:fs";
+import { EventEmitter } from "node:events";
+import { Worker } from "node:worker_threads";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -14,7 +15,9 @@ const UNTRACKED_READ_BATCH = 8;
 const MAX_DIRECTORY_ENTRIES = 500;
 const MAX_FILE_SNIFF_BYTES = 4 * 1024;
 const INSPECTION_CACHE_MS = 2_000;
-const WORKSPACE_WATCH_IDLE_MS = 3_000;
+// Rebuilding the watch walks the tree again (seconds on a large checkout), so
+// it outlives a pause in polling -- a hidden tab, a closed viewer.
+const WORKSPACE_WATCH_IDLE_MS = 60_000;
 const MAX_CHANGED_WORKSPACE_PATHS = 1_000;
 const gitSlots = { active: 0, waiters: [] };
 const inspections = new Map();
@@ -408,6 +411,42 @@ function scheduleWorkspaceWatchClose(record) {
   record.closeTimer.unref();
 }
 
+/*
+ * A recursive watch on Linux walks the whole tree synchronously as it starts
+ * (3s for this repository's ~22k directories, node_modules included), and
+ * every request waits on the event loop meanwhile. Here the walk runs on a
+ * worker thread and changes come back as messages. `ready` settles once the
+ * watch is live, so the first version is taken after it, as with fs.watch.
+ */
+const WATCH_WORKER_SOURCE = `
+const { parentPort, workerData } = require("node:worker_threads");
+const { watch } = require("node:fs");
+try {
+  const watcher = watch(workerData.root, { recursive: true }, (event, filename) => parentPort.postMessage({ event, filename: filename == null ? null : String(filename) }));
+  watcher.on("error", (error) => parentPort.postMessage({ error: error.message }));
+  parentPort.postMessage({ ready: true });
+} catch (error) {
+  parentPort.postMessage({ error: error.message });
+}
+`;
+
+function watchOffThread(root, _options, listener) {
+  const watcher = new EventEmitter();
+  const worker = new Worker(WATCH_WORKER_SOURCE, { eval: true, workerData: { root } });
+  let settle;
+  watcher.ready = new Promise((resolve) => { settle = resolve; });
+  worker.on("message", (message) => {
+    if (message.ready) return settle();
+    if (message.error) { settle(); return watcher.emit("error", new Error(message.error)); }
+    listener(message.event, message.filename);
+  });
+  worker.on("error", (error) => { settle(); watcher.emit("error", error); });
+  worker.on("exit", () => settle());
+  watcher.close = () => { void worker.terminate(); };
+  watcher.unref = () => { worker.unref(); return watcher; };
+  return watcher;
+}
+
 function startWorkspaceWatch(record) {
   if (record.watcher || record.fallback) return;
   try {
@@ -448,7 +487,7 @@ async function scanWorkspacePaths(record, paths) {
 }
 
 /** Return one shared workspace-change version for the currently visible paths. */
-export async function readWorkspaceVersion(root, { paths = [], watchImpl = watch } = {}) {
+export async function readWorkspaceVersion(root, { paths = [], watchImpl = watchOffThread } = {}) {
   const resolved = await resolveInspectorPath(root, "", { kind: "directory" });
   let record = workspaceWatches.get(resolved.path);
   if (!record) {
@@ -460,6 +499,7 @@ export async function readWorkspaceVersion(root, { paths = [], watchImpl = watch
   record.closeTimer = null;
   try {
     startWorkspaceWatch(record);
+    await record.watcher?.ready;
     if (record.fallback) await scanWorkspacePaths(record, paths);
     const changedPaths = record.fullRefresh || record.changedPaths === null ? null : [...record.changedPaths];
     if (record.fullRefresh) {

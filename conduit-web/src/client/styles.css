@@ -2060,10 +2060,10 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 /* The model trigger is a menu button rather than a control, so it sized to
    its text and floated at the end of a column its neighbours filled. */
 .settings-dialog .settings-content [data-slot="field"] .model-trigger { width: 100%; justify-content: space-between; }
-/* Anything that needs the width keeps it: a key, a path, a prompt. */
-.settings-dialog .settings-content [data-slot="field"]:has(> textarea),
+/* Anything that needs the width keeps it (a key, a path, a prompt): mark its
+   field data-wide. Not :has(> textarea) -- a :has() there taxed every DOM
+   change in the app, settings closed or not. */
 .settings-dialog .settings-content [data-slot="field"][data-wide] { grid-template-columns: minmax(0, 1fr); }
-.settings-dialog .settings-content [data-slot="field"]:has(> textarea) > :not(label):not(small),
 .settings-dialog .settings-content [data-slot="field"][data-wide] > :not(label):not(small) { grid-column: 1; grid-row: auto; }
 
 /*
@@ -2368,36 +2368,14 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 /* Hidden rather than transparent: the composer has an opacity transition of
    its own, for the question takeover, that would fade it back in. */
 :root[data-arrival="waiting"] [data-part="composer"] { visibility: hidden; }
-:root[data-arrival="waiting"] :is(
-  [data-region="sidebar"],
-  [data-region="workspace-panel"],
-  .workspace-rail,
-  :is(.chat-main, .main-split, :is(.chat-main, .main-split) :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"]))
-) { opacity: 0; }
-:root[data-arrival="arriving"] :is(
-  [data-region="sidebar"],
-  [data-region="workspace-panel"],
-  .workspace-rail,
-  :is(.chat-main, .main-split, :is(.chat-main, .main-split) :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"]))
-) { animation: ui-arrive 300ms cubic-bezier(.2, .8, .2, 1) both; }
 @keyframes ui-arrive { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ui-leave { to { opacity: 0; } }
 
 /* Sending from a dashboard (main.tsx): the main pane but its composer
    leaves, then the chat's arrives around the composer as it travels. */
-:root[data-route-motion="leaving"] :is(.chat-main, .chat-main :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"])) {
-  animation: ui-leave 200ms cubic-bezier(.4, 0, 1, 1) both;
-}
-:root[data-route-motion="arriving"] :is(.chat-main, .chat-main :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"])) {
-  animation: ui-arrive 300ms cubic-bezier(.2, .8, .2, 1) both;
-}
-@media (prefers-reduced-motion: reduce) {
-  :root[data-arrival="arriving"] :is(
-    [data-region="sidebar"],
-    [data-region="workspace-panel"],
-    :is(.chat-main, .main-split, :is(.chat-main, .main-split) :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"]))
-  ) { animation: none; }
-}
+/* The fade rules themselves are in `motion-rules.ts`: present only
+   while an arrival or route motion runs, since their :has() tax every DOM
+   change beneath the panes for as long as they exist. */
 
 /* Where focus is held (main.tsx marks the top-level region): a line along
    its bottom edge, fading out at the ends so it sits inside any corner. The
