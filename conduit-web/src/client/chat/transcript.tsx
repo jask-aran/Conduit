@@ -589,7 +589,10 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   };
   const loadEarlier = () => {
     const maxScrollTop = viewportMaxScrollTop();
-    const settled = !thread?.querySelector(".markdown-skeleton");
+    // Only a page too short to scroll up asks whether it has laid out. This
+    // runs on every tail-follow frame, and a query that finds nothing walks
+    // the whole thread, so a long answer paid for its own length each frame.
+    const settled = maxScrollTop < HISTORY_LOAD_TOP_PX && !thread?.querySelector(".markdown-skeleton");
     if (!shouldLoadEarlierHistory({
       following: following(),
       maxScrollTop,
