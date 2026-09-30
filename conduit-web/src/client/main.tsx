@@ -2825,6 +2825,7 @@ function App() {
         <FileViewer entries={entries()} focused={fileFocus()[String(pane)] ?? 0} wrap={fileWrap()} onToggleWrap={toggleFileWrap} commentChatId={focusedChat().loadedId()}
           tabs={(side) => fileSideTabs(pane, side)} paneActions={() => paneTabActions(pane)}
           share={sideShares()[String(pane)]} onShare={(share) => setSideShares((current) => ({ ...current, [String(pane)]: share }))}
+          splitEmpty={hasEmptySide(pane)}
           emptySide={<Show when={hasEmptySide(pane)}>
             <section class="workspace-preview file-viewer-empty-side" data-focused={fileFocus()[String(pane)] === 1} onPointerDown={() => { focusFileEntry(pane, 1); setFilePane(pane); }}>
               <header class="workspace-preview-header"><div class="workspace-preview-file"><span>No file open</span></div><button type="button" class="workspace-preview-action workspace-preview-close" aria-label="Close this side" title="Close" onClick={() => closeEmptySide(pane)}><XIcon /></button>{paneTabActions(pane)}</header>
