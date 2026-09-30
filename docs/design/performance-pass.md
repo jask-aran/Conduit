@@ -303,6 +303,36 @@ blocks near the band. For history loads, restore the anchor with
 `Profiler` with callers of `getBoundingClientRect` (minified positions map to
 source via the bundle; CDP line numbers are 0-based).
 
+**Fixed in part (2026-09-30).** Traced per task, the full measuring pass
+(`refresh` → `measurePass`) was in nearly every frame over budget, from two
+triggers that were not what it exists for:
+
+- `scrollend`, which fires between wheel notches, ran it to repair missed
+  upward intersections. It now re-observes every managed block instead -- an
+  IntersectionObserver reports a new target's current state, computed in the
+  frame's own intersection step, with no rect read.
+- The mutation watcher took any `data-collapsed` change as a deliberate fold:
+  user-message text rewrites the attribute to the same value, and settles its
+  first fold verdict as history loads. It now runs the pass only for a real
+  change inside a hidden block, the one place the observers cannot see; a
+  reader's toggle already re-measures through `CODE_BLOCK_TOGGLE_EVENT`.
+
+Long chat, 40 wheel steps each way, per-task trace (two runs each):
+
+| | Before | After |
+| --- | --- | --- |
+| Scroll back down: tasks over 6.94ms | 21 (worst 10.0ms) | 0 (worst 6.3-6.9ms) |
+| First scroll up: tasks over 6.94ms | 21 (worst 19.3ms) | 8-12 (worst ~30ms) |
+
+No block was left hidden in view after fast, slow or flick scrolls either
+way. What remains over budget scrolling up is each page of older history:
+rendered in one task (~10-15ms of script) and laid out when its anchor is
+restored (~6-11ms), ~20-30ms together. Restoring the anchor only in the next
+frame was tried and was worse (worst 40ms): until then the new page sits in
+view and the visibility observer reveals, then hides, its blocks. Next step:
+render a history page across frames, or insert it hidden with estimated
+sizes -- target 2's territory.
+
 ## 11. Startup long tasks (seen 2026-09-30)
 
 Mostly target 12 (the icon manifest). A warm load of a long chat: first paint at 40-48ms, first contentful paint at
