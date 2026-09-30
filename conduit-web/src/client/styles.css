@@ -2583,6 +2583,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
    a formula wider than the column fades at its right edge. */
 .command-preview-answer-math { display: block; max-height: 15em; -webkit-line-clamp: unset; mask-image: linear-gradient(to bottom, #000 12.5em, transparent 15em); }
 .command-preview-answer-math .katex { font-size: 1.08em; }
+.command-preview-answer-math .katex-display > .katex { font-size: 0.95em; }
 .command-preview-answer-math .katex-display { margin: 0.55em 0; overflow: hidden; text-align: left; mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
 .command-preview-answer-math .katex-display > .katex { text-align: left; }
 .command-preview-turn { display: flex; align-items: center; gap: 8px; font-size: 11px; }
