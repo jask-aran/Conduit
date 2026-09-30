@@ -178,10 +178,53 @@ what lets target 1's watch close and be re-walked on return.
 **Leads.** One poller per place, shared by the dock and every viewer showing
 it, handing out `changedPaths` to each subscriber.
 
-## 10. Measured and fine (2026-09-30)
+## 11. Scrolling up a long transcript forces layout per frame (seen 2026-09-30)
+
+**Seen.** The first scroll up through a long chat's history (40 wheel steps
+of 400px over ~2.4s) cost ~830-880ms of main-thread work: ~210-240ms style,
+~57ms layout, ~150ms script, ~520ms "(program)" (native: paint, raster,
+compositing). A CPU profile put ~150ms in `getBoundingClientRect` from two
+callers:
+
+- `measurePass` in `chat/transcript-visibility.ts` (~75ms): each frame it
+  reads the rect of every virtualised block, then writes intrinsic sizes and
+  shown/hidden attributes, and schedules another frame whenever a block was
+  revealed. So a scroll that reveals blocks re-measures the whole transcript
+  every frame, and each pass's writes make the next pass's reads force a
+  layout.
+- The anchor restore after `loadOlder()` in `chat/transcript.tsx`
+  (`restoreAnchor`, ~70ms): it reads the anchor's rect straight after older
+  messages are inserted. That forced layout is inherent, but it lands in the
+  same frame as the insertion.
+
+Scrolling back over blocks already drawn is cheap (~19ms of style for 24
+steps without `:has()` rules, ~40-55ms with them: target 6's rules add ~2×
+here too, spread across many of them rather than one).
+
+**Leads.** Let an `IntersectionObserver` (margin = the overscan) decide shown
+and hidden, and the ResizeObservers the module already holds keep intrinsic
+sizes current, so no pass has to read every block. Failing that, measure only
+blocks near the band. For history loads, restore the anchor with
+`overflow-anchor` or in the frame after insertion. Probe: wheel loop plus CDP
+`Profiler` with callers of `getBoundingClientRect` (minified positions map to
+source via the bundle; CDP line numbers are 0-based).
+
+## 12. Startup long tasks (seen 2026-09-30)
+
+A warm load of a long chat: first paint at 40-48ms, first contentful paint at
+660-700ms, then long tasks of ~190ms, ~53ms and ~67ms within the first 550ms.
+They were not broken down, but most likely hold the shell's first render and
+the transcript's first passes (target 2). Profile the first second of a load
+with the same CDP approach.
+
+## 13. Measured and fine (2026-09-30)
 
 So the pass need not look again: scrolling a long file (30 wheel steps: 1
 layout, 10ms of style), a tab switch (~75ms of work), header folding (no
 attribute writes while scrolling or moving the cursor), the file-drag pill
-(0.1-1.5ms a dragover after the transform fix), and an idle viewer (33ms of
-work in 3s).
+(0.1-1.5ms a dragover after the transform fix), an idle viewer (33ms of
+work in 3s), typing in the composer (~16ms of style for 25 characters, with
+or without target 6's rules), toggling the sidebar (~70ms of work for two
+toggles), and an idle chat (8ms of work in 3s). Switching chats, opening a
+chat beside and closing a pane each cost ~160-230ms of main-thread work,
+which would be worth a second look after targets 2 and 6.
