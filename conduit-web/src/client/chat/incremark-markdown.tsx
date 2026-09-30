@@ -40,10 +40,19 @@ type RendererContext = {
   onPendingPlaceholderChange: (delta: number) => void;
   /** Newly shown words fade in as spans; only the streamed blocks set it. */
   fadeWords?: () => boolean;
+  /** False once the message has settled and its last fade is over. */
+  fadeLive?: () => boolean;
 };
 
 /** Text-node field: characters of this node before it were already on screen. */
 const FADE_FROM = "__conduitFadeFrom";
+/** Text-node field: where this node starts in its block's visible text. */
+const FADE_OFFSET = "__conduitFadeOffset";
+/** Text-node field: the block's recent reveals, [visible offset, time shown]. */
+const FADE_REVEALS = "__conduitFadeReveals";
+
+type Reveal = [from: number, at: number];
+type BlockFade = { shown: number; reveals: Reveal[] };
 
 /**
  * Mark the text nodes holding characters past what the block last showed.
@@ -54,28 +63,34 @@ const FADE_FROM = "__conduitFadeFrom";
  * the spine down to new text is cloned; everything before `shown` is left as
  * the same objects.
  */
-function markFreshText(node: MarkdownNode, shown: number): { node: MarkdownNode; length: number } {
-  return markFrom(node, shown, 0);
+function markFreshText(node: MarkdownNode, fade: BlockFade): { node: MarkdownNode; length: number } {
+  // Text a recent reveal showed is marked too, so a word remounted while its
+  // fade is still running can pick the fade up where it was.
+  const from = fade.reveals.length ? Math.min(fade.shown, fade.reveals[0]![0]) : fade.shown;
+  return markFrom(node, from, fade, 0);
 }
 
 // Lengths are counted here, not read from visibleAstCharacters: that cache is
 // keyed on node objects, and the display store merges updates into the same
 // objects, so a growing text node kept its first length and every word after
 // the first few was taken as already shown.
-function markFrom(node: MarkdownNode, shown: number, offset: number): { node: MarkdownNode; length: number } {
+function markFrom(node: MarkdownNode, from: number, fade: BlockFade, offset: number): { node: MarkdownNode; length: number } {
   if (!node || typeof node !== "object") return { node, length: 0 };
   if (node.type === "math" || node.type === "inlineMath") return { node, length: 1 };
   if (node.type === "image" || node.type === "imageReference") return { node, length: 0 };
   if (typeof node.value === "string") {
     const length = node.value.length;
-    const fresh = node.type === "text" && offset + length > shown;
-    return { node: fresh ? { ...node, [FADE_FROM]: Math.max(0, shown - offset) } : node, length };
+    const fresh = node.type === "text" && offset + length > from;
+    return {
+      node: fresh ? { ...node, [FADE_FROM]: Math.max(0, fade.shown - offset), [FADE_OFFSET]: offset, [FADE_REVEALS]: fade.reveals } : node,
+      length,
+    };
   }
   if (!Array.isArray(node.children)) return { node, length: 0 };
   let length = 0;
   let changed = false;
   const children = node.children.map((child: MarkdownNode) => {
-    const next = markFrom(child, shown, offset + length);
+    const next = markFrom(child, from, fade, offset + length);
     length += next.length;
     changed ||= next.node !== child;
     return next.node;
@@ -273,7 +288,7 @@ function preserveAppendOnlyTable(previous: MarkdownNode | undefined, current: Ma
   return preserveAppendOnlyNode(previous, current);
 }
 
-function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: RendererContext; history: Map<string, MarkdownNode>; shown: Map<string, number>; streaming: () => boolean }) {
+function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: RendererContext; history: Map<string, MarkdownNode>; shown: Map<string, BlockFade>; streaming: () => boolean }) {
   // The caret belongs to the block text is still arriving in: the last one,
   // while the message streams. isDisplayComplete is not that -- the
   // typewriter marks a block complete whenever it has shown everything
@@ -302,10 +317,20 @@ function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: Rende
     const previousNode = props.history.get(block.id);
     const stableNode = type === "table" ? preserveAppendOnlyTable(previousNode, currentNode) : currentNode;
     props.history.set(block.id, stableNode);
-    if (!props.context.fadeWords?.()) return stableNode;
-    const shown = props.shown.get(block.id) ?? 0;
-    const marked = markFreshText(stableNode, shown);
-    props.shown.set(block.id, Math.max(shown, marked.length));
+    if (!props.context.fadeWords?.() || !props.context.fadeLive?.()) return stableNode;
+    let fade = props.shown.get(block.id);
+    if (!fade) props.shown.set(block.id, fade = { shown: 0, reveals: [] });
+    const now = performance.now();
+    const window = streamFadeMs();
+    let expired = 0;
+    while (expired < fade.reveals.length && now - fade.reveals[expired]![1] > window) expired += 1;
+    // Replaced, not spliced: nodes already marked hold the previous array.
+    if (expired) fade.reveals = fade.reveals.slice(expired);
+    const marked = markFreshText(stableNode, fade);
+    if (marked.length > fade.shown) {
+      fade.reveals = [...fade.reveals, [fade.shown, now]];
+      fade.shown = marked.length;
+    }
     return marked.node;
   };
   // Keep completed blocks and the one active transformer block in one keyed
@@ -818,9 +843,13 @@ function containsMath(node: MarkdownNode): boolean {
   return Array.isArray(node.children) && node.children.some((child: MarkdownNode) => containsMath(child));
 }
 
-function TextNode(props: { node: NodeAccessor; fade?: () => boolean }) {
+function TextNode(props: { node: NodeAccessor; context: RendererContext }) {
   const text = () => (props.node()?.value || "").replaceAll("&nbsp;", " ");
-  return <Show when={props.fade?.()} fallback={<>{text()}</>}><FadingText node={props.node} text={text} /></Show>;
+  if (!untrack(() => props.context.fadeWords?.())) return <>{text()}</>;
+  // One wrapper per text node, kept when the word spans go. Swapping the spans
+  // straight for a text node changed the paragraph's own child list, and Solid
+  // reconciled it by moving every formula after it out and back in.
+  return <span class="stream-text"><Show when={props.context.fadeLive?.()} fallback={text()}><FadingText node={props.node} text={text} /></Show></span>;
 }
 
 /**
@@ -829,7 +858,8 @@ function TextNode(props: { node: NodeAccessor; fade?: () => boolean }) {
  * A word keeps its index as the text grows, so a trailing partial word
  * (`wor` to `world`) grows inside the span already fading rather than
  * restarting it. A word from before the node's fade offset -- one remounted by
- * a restructure, not newly shown -- is plain text.
+ * a restructure, not newly shown -- is plain text, unless the reveal that
+ * showed it is still fading: then it resumes that fade part way through.
  */
 function FadingText(props: { node: NodeAccessor; text: () => string }) {
   const words = createMemo(() => props.text().match(/\S+\s*|\s+/g) || []);
@@ -844,9 +874,18 @@ function FadingText(props: { node: NodeAccessor; text: () => string }) {
     return at;
   });
   return <Index each={words()}>{(word, index) => {
-    const from = untrack(() => props.node()?.[FADE_FROM]);
-    const fresh = typeof from === "number" && untrack(starts)[index]! + untrack(word).length > from;
-    return fresh ? <span class="stream-word">{word()}</span> : <>{word()}</>;
+    const node = untrack(props.node);
+    const from = node?.[FADE_FROM];
+    if (typeof from !== "number") return <>{word()}</>;
+    const end = untrack(starts)[index]! + untrack(word).length;
+    if (end > from) return <span class="stream-word">{word()}</span>;
+    const absolute = (node[FADE_OFFSET] ?? 0) + end;
+    const reveals: Reveal[] = node[FADE_REVEALS] || [];
+    let shownAt: number | null = null;
+    for (const [start, at] of reveals) if (start < absolute) shownAt = at;
+    const elapsed = shownAt == null ? Infinity : performance.now() - shownAt;
+    if (elapsed >= streamFadeMs()) return <>{word()}</>;
+    return <span class="stream-word" style={{ "animation-delay": `-${Math.round(elapsed)}ms` }}>{word()}</span>;
   }}</Index>;
 }
 
@@ -860,7 +899,7 @@ function AstNode(props: { node: MarkdownNode | NodeAccessor; context: RendererCo
 function AstNodeContent(props: { node: NodeAccessor; context: RendererContext }) {
   const node = props.node;
   switch (node().type) {
-    case "text": return <TextNode node={node} fade={props.context.fadeWords} />;
+    case "text": return <TextNode node={node} context={props.context} />;
     case "strong": return <strong data-markdown="strong"><InlineNodes nodes={() => node()?.children || []} context={props.context} /></strong>;
     case "emphasis": return <em><InlineNodes nodes={() => node()?.children || []} context={props.context} /></em>;
     case "delete": return <del><InlineNodes nodes={() => node()?.children || []} context={props.context} /></del>;
@@ -918,7 +957,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   const [settled, setSettled] = createSignal(false);
   const external = createExternalLinkController();
   const displayHistory = new Map<string, MarkdownNode>();
-  const displayShown = new Map<string, number>();
+  const displayShown = new Map<string, BlockFade>();
   const completedById = new Map<string, ParsedBlock>();
   const seededById = new Map<string, ParsedBlock>();
   let currentBlocks: ParsedBlock[] = [];
@@ -930,9 +969,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   // Block-by-block reveal is what this renderer is; only an inline preview,
   // which is a single line inside a summary, skips it.
   const typewriter = () => !props.inline;
-  // Incremark Fade is this component with the fade reveal; plain Incremark
-  // keeps the typewriter's character budget.
-  const pacing = () => props.renderer === "incremark-fade" ? "fade" : props.pacing && props.pacing !== "fade" ? props.pacing : "buffered";
+  const pacing = () => props.pacing || "buffered";
   // Freezing is a message-level guarantee. A one-line preview inside a summary
   // has no settled state worth protecting, and giving it one would fight the
   // summary's own sizing.
@@ -1288,7 +1325,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     const timer = setTimeout(() => setFadeOver(true), streamFadeMs() + 20);
     onCleanup(() => clearTimeout(timer));
   });
-  const displayContext: RendererContext = { ...context, fadeWords: () => pacing() === "fade" && !props.inline && !fadeOver() };
+  const displayContext: RendererContext = { ...context, fadeWords: () => pacing() === "fade" && !props.inline, fadeLive: () => !fadeOver() };
   return <>
     <div class="chat-markdown" data-renderer={rendererId()} data-inline={props.inline ? "true" : undefined} data-streaming={streaming() || undefined} data-display-busy={displayBusy() || pendingMathRenders() > 0 ? "true" : undefined} data-display-animation-busy={displayBusy() ? "true" : undefined} data-pending-math-renders={pendingMathRenders() > 0 ? String(pendingMathRenders()) : undefined} data-display-key={props.displayKey || undefined} data-settled={settled() ? "true" : undefined}>
       <div class="incremark" data-incremark-core="true">

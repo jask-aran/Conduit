@@ -1,7 +1,7 @@
 /**
- * The typewriter's character budget. Buffered is what Incremark streams with;
- * adaptive and fixed remain as probes, reached with `?incremarkPacing=`. Fade
- * is not chosen here: it is the Incremark Fade renderer.
+ * How Incremark reveals a streaming answer. Buffered, adaptive and fixed are
+ * character budgets; fade shows each delivery by a deadline and fades its
+ * words in.
  */
 export type IncremarkPacingMode = "adaptive" | "fixed" | "buffered" | "fade";
 
@@ -14,10 +14,11 @@ export const INCREMARK_PACING_OPTIONS: ReadonlyArray<{
   { value: "adaptive", label: "Adaptive" },
   { value: "fixed", label: "Fixed" },
   { value: "buffered", label: "Buffered" },
+  { value: "fade", label: "Fade" },
 ];
 
 const isPacing = (value: string | null): value is IncremarkPacingMode =>
-  value === "adaptive" || value === "fixed" || value === "buffered";
+  value === "adaptive" || value === "fixed" || value === "buffered" || value === "fade";
 
 function parsePacing(value: string | null): IncremarkPacingMode | null {
   if (isPacing(value)) return value;
@@ -32,7 +33,9 @@ export function selectedIncremarkPacing(
   const params = typeof location === "undefined" ? null : new URLSearchParams(location.search);
   const override = parsePacing(params ? params.get("incremarkPacing") || params.get("adaptivePacing") : null);
   if (override) return override;
-  return parsePacing(storage.getItem(INCREMARK_PACING_STORAGE_KEY)) || "buffered";
+  return parsePacing(storage.getItem(INCREMARK_PACING_STORAGE_KEY))
+    // Fade was briefly its own renderer id.
+    || (storage.getItem("conduit:markdown-renderer") === "incremark-fade" ? "fade" : "buffered");
 }
 
 export function saveIncremarkPacing(

@@ -19,6 +19,7 @@ import { createVoiceWaveformController, VoiceWaveform } from "../chat/voice-wave
 import { ModelSelector } from "../chat/model-selector";
 import { saveTabFrost, tabFrost } from "../preferences/tab-frost";
 import { saveStreamFade, STREAM_FADE_OPTIONS, streamFadeMs } from "../preferences/stream-fade";
+import { INCREMARK_PACING_OPTIONS, saveIncremarkPacing, selectedIncremarkPacing, type IncremarkPacingMode } from "../chat/incremark-pacing";
 import type { Installation, Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
 import { MAX_SIDEBAR_CHAT_LIMIT, MIN_SIDEBAR_CHAT_LIMIT } from "../navigation/sidebar-preferences";
@@ -248,6 +249,7 @@ export function Settings(props: {
   const [section, setSection] = createSignal<Section>(props.initialSection || "ui");
   const [frosted, setFrosted] = createSignal(tabFrost());
   const [fadeMs, setFadeMs] = createSignal(streamFadeMs());
+  const [pacing, setPacing] = createSignal<IncremarkPacingMode>(selectedIncremarkPacing());
   /*
    * On a phone, Settings is two screens rather than a rail beside a pane.
    *
@@ -1161,7 +1163,14 @@ export function Settings(props: {
                       <For each={MARKDOWN_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </select>
                   </label>
-                  <Show when={props.markdownRenderer === "incremark-fade"}>
+                  <Show when={props.markdownRenderer === "incremark"}>
+                    <label class="settings-line" for="stream-pacing"><span>Streaming</span>
+                      <select id="stream-pacing" aria-label="Streaming reveal" value={pacing()} onChange={(event) => setPacing(saveIncremarkPacing(event.currentTarget.value as IncremarkPacingMode))}>
+                        <For each={INCREMARK_PACING_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                      </select>
+                    </label>
+                  </Show>
+                  <Show when={props.markdownRenderer === "incremark" && pacing() === "fade"}>
                     <label class="settings-line" for="stream-fade"><span>Word fade</span>
                       <select id="stream-fade" aria-label="Word fade time" value={fadeMs()} onChange={(event) => setFadeMs(saveStreamFade(Number(event.currentTarget.value)))}>
                         <For each={STREAM_FADE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>

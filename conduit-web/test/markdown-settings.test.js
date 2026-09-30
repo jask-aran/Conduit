@@ -27,14 +27,14 @@ test("new users get Incremark", () => {
   });
 });
 
-test("every offered renderer round-trip", () => {
+test("both offered renderers round-trip", () => {
   withSearch("", () => {
     for (const option of MARKDOWN_RENDERER_OPTIONS) {
       assert.ok(isMarkdownRendererId(option.value), option.value);
       assert.equal(selectedMarkdownRenderer(stored(option.value)), option.value);
     }
   });
-  assert.equal(MARKDOWN_RENDERER_OPTIONS.length, 3);
+  assert.equal(MARKDOWN_RENDERER_OPTIONS.length, 2);
 });
 
 test("a retired renderer id falls back instead of stranding the reader", () => {

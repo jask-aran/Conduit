@@ -16,13 +16,18 @@ export const STREAM_FADE_OPTIONS: ReadonlyArray<{ value: number; label: string }
 
 const isOption = (value: number) => STREAM_FADE_OPTIONS.some((option) => option.value === value);
 
+// Read on every streamed frame, so kept rather than read from storage each time.
+let current: number | null = null;
+
 export function streamFadeMs(): number {
+  if (current != null) return current;
   try {
     const stored = Number(localStorage.getItem(STREAM_FADE_KEY));
-    return isOption(stored) ? stored : STREAM_FADE_DEFAULT_MS;
+    current = isOption(stored) ? stored : STREAM_FADE_DEFAULT_MS;
   } catch {
-    return STREAM_FADE_DEFAULT_MS;
+    current = STREAM_FADE_DEFAULT_MS;
   }
+  return current;
 }
 
 export function applyStreamFade(ms = streamFadeMs()): void {
@@ -31,6 +36,7 @@ export function applyStreamFade(ms = streamFadeMs()): void {
 
 export function saveStreamFade(ms: number): number {
   const value = isOption(ms) ? ms : STREAM_FADE_DEFAULT_MS;
+  current = value;
   try { localStorage.setItem(STREAM_FADE_KEY, String(value)); } catch { /* this session only */ }
   applyStreamFade(value);
   return value;
