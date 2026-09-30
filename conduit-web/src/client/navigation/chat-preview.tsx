@@ -7,6 +7,7 @@ import type { ChatSummary, Message, Project, ToolKind, TranscriptDetail } from "
 import { harnessLabelFor, ThreadHarnessMark } from "../harness-brand";
 import { PLAIN_SPHERE, SPUTTERING_SPHERE } from "../chat/orb-frames";
 import { settledOrbRate, ThinkingOrb } from "../chat/thinking-orb";
+import { inlineDollarClose } from "../chat/inline-dollar";
 
 /*
  * Chat search's preview column: the highlighted chat's last prompt, the start
@@ -16,7 +17,7 @@ import { settledOrbRate, ThinkingOrb } from "../chat/thinking-orb";
  * the search.
  */
 type Target = { chat: ChatSummary; project: Project };
-type Glance = { prompt: string; answer: string; outcome: "Done" | "Interrupted" | "Failed" | null; took: string; work: string };
+type Glance = { prompt: string; answer: string; answerMath: string | null; outcome: "Done" | "Interrupted" | "Failed" | null; took: string; work: string };
 
 const WORK_WORDS: Record<ToolKind, [string, string]> = {
   command: ["command", "commands"], read: ["read", "reads"], edit: ["edit", "edits"],
@@ -26,7 +27,62 @@ const cache = new Map<string, Glance>();
 
 /* Markdown's marks, dropped for a few quiet lines. */
 const plain = (text = "") => text.replace(/```[\s\S]*?```/g, " ").replace(/[#>*_`~|]+/g, "").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\s+/g, " ").trim();
-const textOf = (message?: Message) => plain(message?.content || (message?.blocks || []).map((block) => (block as { type?: string; text?: string }).type === "text" ? (block as { text?: string }).text || "" : "").join(" "));
+const rawOf = (message?: Message) => message?.content || (message?.blocks || []).map((block) => (block as { type?: string; text?: string }).type === "text" ? (block as { text?: string }).text || "" : "").join(" ");
+const textOf = (message?: Message) => plain(rawOf(message));
+
+/* An answer's formulas, split out before plain() strips the marks TeX is made
+   of. A formula left open (a stopped answer) ends the preview there. */
+type Piece = { text: string; math?: "inline" | "display" };
+const MATH_OPEN = /\$\$|\\\[|\\\(|\$/g;
+function pieces(raw: string, budget = 700): Piece[] {
+  const out: Piece[] = [];
+  let at = 0;
+  let used = 0;
+  const text = (value: string) => { const words = plain(value); if (words) { out.push({ text: words }); used += words.length; } };
+  MATH_OPEN.lastIndex = 0;
+  for (let match = MATH_OPEN.exec(raw); match && used < budget; match = MATH_OPEN.exec(raw)) {
+    const open = match.index;
+    const opener = match[0];
+    let close = -1;
+    let length = 0;
+    if (opener === "$") {
+      close = inlineDollarClose(raw, open);
+      length = 1;
+    } else {
+      const closer = opener === "$$" ? "$$" : opener === "\\[" ? "\\]" : "\\)";
+      close = raw.indexOf(closer, open + opener.length);
+      length = closer.length;
+      if (close < 0) { text(raw.slice(at, open)); return out; }
+    }
+    if (close < 0) continue;
+    text(raw.slice(at, open));
+    const tex = raw.slice(open + opener.length, close).trim();
+    if (tex) out.push({ text: tex, math: opener === "$$" || opener === "\\[" ? "display" : "inline" });
+    used += 40;
+    at = close + length;
+    MATH_OPEN.lastIndex = at;
+  }
+  if (used < budget) text(raw.slice(at));
+  return out;
+}
+
+const escapeHtml = (value: string) => value.replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[char]!);
+
+/* The answer as HTML with its formulas drawn, or null when it has none.
+   KaTeX loads only once a highlighted answer holds a formula. */
+async function mathAnswer(raw: string): Promise<string | null> {
+  const parts = pieces(raw);
+  if (!parts.some((part) => part.math)) return null;
+  const [{ default: katex }] = await Promise.all([import("katex"), import("katex/dist/katex.min.css")]);
+  return parts.map((part) => {
+    if (!part.math) return escapeHtml(part.text) + " ";
+    try {
+      return katex.renderToString(part.text, { displayMode: part.math === "display", throwOnError: true, output: "html" }) + " ";
+    } catch {
+      return escapeHtml(part.text) + " ";
+    }
+  }).join("");
+}
 
 function took(from?: string, to?: string) {
   const ms = from && to ? Date.parse(to) - Date.parse(from) : NaN;
@@ -36,7 +92,7 @@ function took(from?: string, to?: string) {
   return seconds < 60 ? `${String(seconds).padStart(2, "0")}s` : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
 }
 
-function glance(detail: TranscriptDetail): Glance {
+async function glance(detail: TranscriptDetail): Promise<Glance> {
   const messages = detail.messages || [];
   const promptAt = messages.findLastIndex((message) => message.role === "user");
   const prompt = messages[promptAt];
@@ -52,7 +108,8 @@ function glance(detail: TranscriptDetail): Glance {
     counts.set(tool.kind || "other", (counts.get(tool.kind || "other") || 0) + 1);
   }
   const work = [...counts].sort((a, b) => b[1] - a[1]).map(([kind, n]) => `${n} ${WORK_WORDS[kind][n === 1 ? 0 : 1]}`).join(", ");
-  return { prompt: textOf(prompt), answer: answer?.errorMessage ? plain(answer.errorMessage) : textOf(answer), outcome, took: took(prompt?.timestamp, answers.at(-1)?.timestamp), work };
+  const answerMath = answer && !answer.errorMessage ? await mathAnswer(rawOf(answer)).catch(() => null) : null;
+  return { prompt: textOf(prompt), answer: answer?.errorMessage ? plain(answer.errorMessage) : textOf(answer), answerMath, outcome, took: took(prompt?.timestamp, answers.at(-1)?.timestamp), work };
 }
 
 const dateOf = (value?: string | null) => {
@@ -106,7 +163,7 @@ export function ChatPreview(props: { target: Target | null; folder?: Project | n
   const [read] = createResource(settled, async (target) => {
     const found = cache.get(key(target));
     if (found) return found;
-    const next = glance(await api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(target.chat.id)}`));
+    const next = await glance(await api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(target.chat.id)}`));
     cache.set(key(target), next);
     return next;
   });
@@ -128,7 +185,9 @@ export function ChatPreview(props: { target: Target | null; folder?: Project | n
                 <span><b>{seen().outcome}</b>{seen().took ? ` · ${seen().took}` : ""}{seen().work ? ` · ${seen().work}` : ""}</span>
               </div>
             </Show>
-            <Show when={seen().answer}><p class="command-preview-answer">{seen().answer}</p></Show>
+            <Show when={seen().answerMath} fallback={<Show when={seen().answer}><p class="command-preview-answer">{seen().answer}</p></Show>}>
+              {(html) => <div class="command-preview-answer command-preview-answer-math" innerHTML={html()} />}
+            </Show>
             <Show when={!seen().prompt}><p class="command-preview-empty">No messages yet</p></Show>
           </>}
         </Show>
