@@ -7,7 +7,7 @@ import { applyTranscriptOps } from "./transcript-fold.js";
 import { messageClose, messageDrop, messageOpen, toolClose, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
 import { reduceActiveGeneration, snapshotActiveGeneration } from "./active-generation.js";
 import { unsupported } from "./harnesses/unsupported.js";
-import { KATEX_COMPENDIUM, KATEX_LIMITS } from "./test-stream-replays.js";
+import { KATEX_COMPENDIUM, KATEX_LIMITS, MARKDOWN_MIX } from "./test-stream-replays.js";
 
 /**
  * A backend that answers instantly, forever, at a rate you choose.
@@ -92,6 +92,8 @@ export const TEST_STREAM_SPEEDS = Object.freeze([
   // after uneven gaps, one of them a long pause. Even ticks flatter any
   // reveal; this is the pause-then-paragraph a real turn has, repeatably.
   { id: "bursty-60", label: "60 tokens/s in uneven bursts · like a real provider", tokensPerSecond: 60, gapsMs: [40, 120, 60, 350, 80, 1200, 150, 90] },
+  { id: "replay-markdown", label: "Markdown replay · lists, table, math, code", tokensPerSecond: 60, replay: MARKDOWN_MIX },
+  { id: "replay-markdown-bursty", label: "Markdown replay in uneven bursts", tokensPerSecond: 60, replay: MARKDOWN_MIX, gapsMs: [40, 120, 60, 350, 80, 1200, 150, 90] },
   { id: "replay-katex-limits", label: "KaTeX replay · long aligned blocks", tokensPerSecond: 60, replay: KATEX_LIMITS },
   { id: "replay-katex-compendium", label: "KaTeX replay · hundreds of formulas", tokensPerSecond: 60, replay: KATEX_COMPENDIUM },
 ].map(Object.freeze));

@@ -12,15 +12,11 @@
  * What remains is the renderer answers are drawn with, and one alternate to
  * fall back to if a message renders wrong.
  */
-export type MarkdownRendererId = "incremark" | "incremark-fade" | "marked";
+export type MarkdownRendererId = "incremark" | "marked";
 
-/**
- * Incremark is one component; Marked is a separate emitter. Incremark Fade is
- * the same component with a different reveal: words shown on each delivery's
- * deadline and faded in, instead of the typewriter's character budget.
- */
+/** Incremark is one component; Marked is a separate emitter. */
 export function isIncremarkRenderer(value: MarkdownRendererId) {
-  return value === "incremark" || value === "incremark-fade";
+  return value === "incremark";
 }
 
 export const MARKDOWN_RENDERER_STORAGE_KEY = "conduit:markdown-renderer";
@@ -38,11 +34,6 @@ export const MARKDOWN_RENDERER_OPTIONS: ReadonlyArray<{
     description: "Streams block by block, then freezes a settled message so it is never re-rendered again.",
   },
   {
-    value: "incremark-fade",
-    label: "Incremark Fade",
-    description: "Incremark, revealing words as they are delivered and fading them in, so uneven provider output reads as a steady stream.",
-  },
-  {
     value: "marked",
     label: "Marked",
     description: "Reconciles a re-parsed Markdown tree into the live one. The fallback if a message renders wrong.",
@@ -50,7 +41,7 @@ export const MARKDOWN_RENDERER_OPTIONS: ReadonlyArray<{
 ];
 
 export function isMarkdownRendererId(value: unknown): value is MarkdownRendererId {
-  return value === "incremark" || value === "incremark-fade" || value === "marked";
+  return value === "incremark" || value === "marked";
 }
 
 export function selectedMarkdownRenderer(
@@ -66,7 +57,8 @@ export function selectedMarkdownRenderer(
   // to the default rather than leaving someone on a renderer that no longer
   // exists. "incremark-advanced" retired when its settle-and-freeze shell was
   // merged into the renderer itself; everyone stored under it lands back on the
-  // same component.
+  // same component. "incremark-fade" was briefly a renderer; it is Incremark
+  // with the Fade pacing, which selectedIncremarkPacing picks up from it.
   const stored = storage.getItem(MARKDOWN_RENDERER_STORAGE_KEY);
   return isMarkdownRendererId(stored) ? stored : MARKDOWN_RENDERER_DEFAULT;
 }
