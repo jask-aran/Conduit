@@ -1,3 +1,5 @@
+import { createSignal } from "solid-js";
+
 /*
  * How long a word takes to fade in under Incremark Fade: a device setting.
  * It is a custom property on the root the stylesheet reads, so changing it
@@ -40,4 +42,23 @@ export function saveStreamFade(ms: number): number {
   try { localStorage.setItem(STREAM_FADE_KEY, String(value)); } catch { /* this session only */ }
   applyStreamFade(value);
   return value;
+}
+
+/*
+ * How formulas arrive under Incremark Fade: drawn as they stream (the
+ * progressive renderer every other pacing uses), or held while open and faded
+ * in whole once complete. A device setting, like the fade time.
+ */
+const STREAM_MATH_FADE_KEY = "conduit:stream-math-fade";
+
+const [mathFade, setMathFade] = createSignal((() => {
+  try { return localStorage.getItem(STREAM_MATH_FADE_KEY) === "complete"; } catch { return false; }
+})());
+
+export const streamMathFade = mathFade;
+
+export function saveStreamMathFade(complete: boolean): boolean {
+  setMathFade(complete);
+  try { localStorage.setItem(STREAM_MATH_FADE_KEY, complete ? "complete" : "progressive"); } catch { /* this session only */ }
+  return complete;
 }

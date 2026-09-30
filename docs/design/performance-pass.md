@@ -547,10 +547,45 @@ change at a time in 3-second windows of a single stream, then by CPU profile.
 | KaTeX · hundreds of formulas | 1702 | 83 / 108 |
 | Markdown mix in bursts | 7–8 | 8 / 1 |
 
-The worst single task in the compendium fell from 72–91ms to ~25ms. What
-remains in the compendium is per-frame work that still scales with the size
-of the open block, one paragraph of dozens of `$$` lines: style, layout and
-layerize of that paragraph.
+The worst single task in the compendium fell from 72–91ms to ~25ms.
+
+**Follow-up: virtualising during generation.** The remaining climb was not an
+open paragraph. Each `$$` line is its own block. A streaming message that held
+display math was exempt from virtualisation until it settled, so every formula
+written so far stayed laid out and painted. That guard was against centred
+equations shifting sideways. The width rule it relied on no longer exists, and
+a per-frame check of every finished formula's position found no sideways shift
+with it removed.
+
+Two related fixes came from checking every frame for formulas that move or change:
+
+- **The slot swap.** Block offsets end exclusive, but the open construct's
+  block was looked up with the end counted in. A `$$` line opening under a
+  finished formula therefore took that formula's block, and the finished
+  formula vanished until the new one closed. It happened 62 times in 25s of
+  the compendium, and now happens 0 times.
+- **Runs of formulas.** A formula counts as one character to the reveal, so a
+  backlog could reveal six in one frame, each mounting empty. Reveal now
+  stops after each display formula.
+
+**Formula fade (Incremark Fade)** is a setting, off by default: formulas are
+either drawn as they arrive (the progressive renderer) or held while open and
+faded in whole once, when complete. Fading pieces as they arrived mixed the
+two, and read as finished formulas re-rendering. Two fade designs measured badly:
+
+- **Colour fades.** Colour is inherited, so a colour fade restyles every span
+  of the piece each frame. Kept with `fill: both`, finished fades also stayed
+  in effect: 911 of them over 19k spans after 18s. The fade is opacity, and
+  its class comes off once it has run.
+- **Fading every symbol.** Each running opacity fade is a layer, and a dozen
+  small ones at once cost 13 → 61 frames over budget on the limits replay.
+
+Measured with pieces fading as they arrived (before the setting):
+
+| Replay | Buffered | Fade |
+|---|---|---|
+| KaTeX · long aligned blocks | 946 → 13 | 13 → 14 |
+| KaTeX · hundreds of formulas | 1702 → 27 | 108 → 42 |
 
 ## 14. Measured and fine (2026-09-30)
 

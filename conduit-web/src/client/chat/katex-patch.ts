@@ -1,4 +1,5 @@
 import katex from "katex";
+import { streamFadeMs } from "@/client/preferences/stream-fade";
 
 /**
  * Draw a formula still arriving by patching the DOM from KaTeX's own render
@@ -35,6 +36,36 @@ export function renderMathTree(tex: string, displayMode: boolean): TreeNode | nu
   } catch {
     return null;
   }
+}
+
+/**
+ * Incremark Fade's "fade in when complete": a formula is held while it is
+ * open and faded in whole once, when it closes. MathNode marks its first
+ * drawing; this takes the class off once the fade has run.
+ *
+ * Left on, every finished fade was still an animation in effect, and a long
+ * answer's hundreds of them made each style pass resolve thousands of KaTeX
+ * spans again. It fades opacity, not the words' colour: colour is inherited,
+ * so a colour fade restyled every span of the formula on every frame.
+ */
+export const MATH_FADE_CLASS = "stream-math-in";
+let faded: Array<[Element, number]> = [];
+let fadedTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearFaded() {
+  fadedTimer = null;
+  const cutoff = performance.now() - streamFadeMs() - 50;
+  let done = 0;
+  while (done < faded.length && faded[done]![1] <= cutoff) faded[done++]![0].classList.remove(MATH_FADE_CLASS);
+  faded = faded.slice(done);
+  if (faded.length) fadedTimer = setTimeout(clearFaded, faded[0]![1] - cutoff);
+}
+
+export function markFadeIn(element: Element | null | undefined) {
+  if (!element) return;
+  element.classList.add(MATH_FADE_CLASS);
+  faded.push([element, performance.now()]);
+  fadedTimer ??= setTimeout(clearFaded, streamFadeMs() + 50);
 }
 
 /** Bring `host`, last drawn from `previous`, to `next`. */
