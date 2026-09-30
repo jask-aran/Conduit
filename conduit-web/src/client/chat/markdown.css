@@ -1,6 +1,8 @@
 .chat-markdown { width: 100%; font-size: 12px; line-height: 1.66; overflow-wrap: anywhere; }
 .chat-markdown > :first-child { margin-top: 0; }
 .chat-markdown > :last-child { margin-bottom: 0; }
+.chat-markdown > .incremark > :first-child { margin-top: 0; }
+.chat-markdown > .incremark > :last-child { margin-bottom: 0; }
 .chat-markdown h1, .chat-markdown h2, .chat-markdown h3 { margin: 1.25em 0 0.5em; line-height: 1.25; letter-spacing: -0.02em; }
 .chat-markdown h1 { font-size: 1.6rem; } .chat-markdown h2 { font-size: 1.35rem; }
 .chat-markdown ul, .chat-markdown ol { margin: 0.8em 0; padding-left: 1.6em; }
@@ -21,40 +23,36 @@
    zero the moment the box is over-constrained, so the margin has to be a
    constant and the width has to match it.
 
-   Grid lifts that. justify-self centres an item that overflows its track
-   symmetrically, so the width no longer has to be known in advance: max-content
-   asks for what the content actually needs, min-width holds a block that needs
-   less at the reading measure, and max-width is the ceiling. A block that fits
-   the column does not move at all.
+   Grid lifted that, and it was the wrong trade: grid items never collapse
+   their margins, so every gap in the answer doubled above this breakpoint and
+   halved below it, and dragging a panel across it jumped the whole transcript.
+   The answer stays in block flow; the bleed starts at the column's centre and
+   is pulled back by half its own width, which centres it whatever its width.
+   max-content asks for what the content needs, min-width holds a block that
+   needs less at the reading measure, and max-width is the ceiling. A block
+   that fits the column does not move at all.
 
    A table has no choice about its natural width. A code block does: left wide
    by default it dominates the page, so it stays in the reading column unless
    the reader opts in with the Wide code blocks setting. */
 @container chat-main (--conduit-wide-chat) {
-  /* minmax(0, 1fr) keeps the track at the reading measure. A plain 1fr track
-     would grow to fit a max-content item and take the bleed with it. */
-  .chat-markdown[data-renderer^="incremark"]:not([data-inline]) > .incremark,
-  .chat-markdown[data-renderer^="marked"]:not([data-inline]) {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-  }
-  /* Direct children only: a table nested in a list or a blockquote is not a
-     grid item, and giving it max-content sizing there would over-constrain it
-     into the same off-centre overflow this replaces. */
+  /* Direct children only: a table nested in a list or a blockquote keeps to
+     its own box. */
   .chat-markdown[data-renderer^="incremark"]:not([data-inline]) > .incremark > .markdown-table-scroll,
   .chat-markdown[data-renderer^="marked"]:not([data-inline]) > .markdown-table-scroll,
   :root[data-code-width="wide"] .chat-markdown[data-renderer^="incremark"]:not([data-inline]) > .incremark > .artifact,
   :root[data-code-width="wide"] .chat-markdown[data-renderer^="marked"]:not([data-inline]) > .artifact {
-    justify-self: center;
     width: max-content;
     min-width: 100%;
     max-width: min(var(--transcript-wide-scale), var(--transcript-wide-max));
+    margin-left: 50%;
+    translate: -50%;
   }
 }
 /* A table is the one block that cannot honour the clamp above. max-width is
    advice; a table's min-content width is a floor, so once the column is
    narrower than the widest row demands, the table simply overruns it -- off the
-   left edge too, because justify-self centres it. Each table stops at its own
+   left edge too, because the bleed centres it. Each table stops at its own
    floor, so they also stop agreeing with each other, which is how this reads on
    screen: several tables at several different widths, none of them the column's.
 
@@ -66,10 +64,11 @@
    393 and 550 in a 379px column all sit at 302 with room to spare. */
 .markdown-table-scroll {
   margin: 1em 0;
-  /* The clamp has to be repeated here, not left to the wide-chat query above:
-     below that breakpoint there is no max-width at all. Width is deliberately
-     not set, so the bleed the query grants above it still applies. */
-  max-width: min(var(--transcript-wide-scale), var(--transcript-wide-max));
+  /* The column, not the bleed ceiling: below the wide-chat query the box
+     sits in block flow at the column's left edge, and the ceiling reserves a
+     gutter on both sides of the container, so it stopped the table a
+     gutter short of the text beside it. The query grants the bleed above. */
+  max-width: 100%;
   overflow-x: auto;
   scrollbar-color: var(--muted-foreground) transparent;
   scrollbar-gutter: stable;
@@ -117,7 +116,7 @@
 .streaming-pending-math-block { display: block; min-height: 2.2em; margin: 1em 0; visibility: hidden; pointer-events: none; user-select: none; }
 .streaming-pending-math-inline { display: inline-block; width: 0; height: 1em; overflow: hidden; vertical-align: baseline; visibility: hidden; pointer-events: none; user-select: none; }
 .streaming-pending-fence { opacity: 0.92; }
-.chat-markdown .katex-display { display: flex; min-height: 2.2em; margin: 1em 0; align-items: center; justify-content: center; }
+.chat-markdown .katex-display { display: flex; min-height: 2.2em; margin: 1em 0; align-items: center; justify-content: safe center; }
 .chat-markdown .incremark-math-block { display: block; min-height: 2.2em; margin: 1em 0; }
 
 /* KaTeX does not wrap a display formula. Keep the formula inside the phone
@@ -139,10 +138,7 @@
 }
 .chat-markdown .katex-display::-webkit-scrollbar,
 .chat-markdown .incremark-math-block::-webkit-scrollbar { display: none; }
-@media (max-width: 576px) {
-  .chat-markdown .katex-display { justify-content: flex-start; }
-  .chat-markdown .katex-display > .katex { flex: 0 0 auto; }
-}
+.chat-markdown .katex-display > .katex { flex: 0 0 auto; }
 
 
 /* Phone mode retains the larger touch density. */
@@ -150,6 +146,8 @@
 .chat-markdown { width: 100%; font-size: 15px; line-height: 1.66; overflow-wrap: anywhere; }
 .chat-markdown > :first-child { margin-top: 0; }
 .chat-markdown > :last-child { margin-bottom: 0; }
+.chat-markdown > .incremark > :first-child { margin-top: 0; }
+.chat-markdown > .incremark > :last-child { margin-bottom: 0; }
 .chat-markdown h1, .chat-markdown h2, .chat-markdown h3 { margin: 1.25em 0 0.5em; line-height: 1.25; letter-spacing: -0.02em; }
 .chat-markdown h1 { font-size: 1.6rem; } .chat-markdown h2 { font-size: 1.35rem; }
 .chat-markdown ul, .chat-markdown ol { margin: 0.8em 0; padding-left: 1.6em; }
@@ -170,34 +168,30 @@
    zero the moment the box is over-constrained, so the margin has to be a
    constant and the width has to match it.
 
-   Grid lifts that. justify-self centres an item that overflows its track
-   symmetrically, so the width no longer has to be known in advance: max-content
-   asks for what the content actually needs, min-width holds a block that needs
-   less at the reading measure, and max-width is the ceiling. A block that fits
-   the column does not move at all.
+   Grid lifted that, and it was the wrong trade: grid items never collapse
+   their margins, so every gap in the answer doubled above this breakpoint and
+   halved below it, and dragging a panel across it jumped the whole transcript.
+   The answer stays in block flow; the bleed starts at the column's centre and
+   is pulled back by half its own width, which centres it whatever its width.
+   max-content asks for what the content needs, min-width holds a block that
+   needs less at the reading measure, and max-width is the ceiling. A block
+   that fits the column does not move at all.
 
    A table has no choice about its natural width. A code block does: left wide
    by default it dominates the page, so it stays in the reading column unless
    the reader opts in with the Wide code blocks setting. */
 @container chat-main (--conduit-wide-chat) {
-  /* minmax(0, 1fr) keeps the track at the reading measure. A plain 1fr track
-     would grow to fit a max-content item and take the bleed with it. */
-  .chat-markdown[data-renderer^="incremark"]:not([data-inline]) > .incremark,
-  .chat-markdown[data-renderer^="marked"]:not([data-inline]) {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-  }
-  /* Direct children only: a table nested in a list or a blockquote is not a
-     grid item, and giving it max-content sizing there would over-constrain it
-     into the same off-centre overflow this replaces. */
+  /* Direct children only: a table nested in a list or a blockquote keeps to
+     its own box. */
   .chat-markdown[data-renderer^="incremark"]:not([data-inline]) > .incremark > .markdown-table-scroll,
   .chat-markdown[data-renderer^="marked"]:not([data-inline]) > .markdown-table-scroll,
   :root[data-code-width="wide"] .chat-markdown[data-renderer^="incremark"]:not([data-inline]) > .incremark > .artifact,
   :root[data-code-width="wide"] .chat-markdown[data-renderer^="marked"]:not([data-inline]) > .artifact {
-    justify-self: center;
     width: max-content;
     min-width: 100%;
     max-width: min(var(--transcript-wide-scale), var(--transcript-wide-max));
+    margin-left: 50%;
+    translate: -50%;
   }
 }
 .chat-markdown th, .chat-markdown td { padding: 7px 9px; border: 1px solid var(--border); text-align: left; }
@@ -237,7 +231,7 @@
 .streaming-pending-math-block { display: block; min-height: 2.2em; margin: 1em 0; visibility: hidden; pointer-events: none; user-select: none; }
 .streaming-pending-math-inline { display: inline-block; width: 0; height: 1em; overflow: hidden; vertical-align: baseline; visibility: hidden; pointer-events: none; user-select: none; }
 .streaming-pending-fence { opacity: 0.92; }
-.chat-markdown .katex-display { display: flex; min-height: 2.2em; margin: 1em 0; align-items: center; justify-content: center; }
+.chat-markdown .katex-display { display: flex; min-height: 2.2em; margin: 1em 0; align-items: center; justify-content: safe center; }
 .chat-markdown .incremark-math-block { display: block; min-height: 2.2em; margin: 1em 0; }
 
 /* KaTeX does not wrap a display formula. Keep the formula inside the phone
@@ -259,9 +253,6 @@
 }
 .chat-markdown .katex-display::-webkit-scrollbar,
 .chat-markdown .incremark-math-block::-webkit-scrollbar { display: none; }
-@media (max-width: 720px) {
-  .chat-markdown .katex-display { justify-content: flex-start; }
-  .chat-markdown .katex-display > .katex { flex: 0 0 auto; }
-}
+.chat-markdown .katex-display > .katex { flex: 0 0 auto; }
 
 }

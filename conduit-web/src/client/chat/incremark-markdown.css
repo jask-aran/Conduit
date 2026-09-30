@@ -22,12 +22,10 @@
   contain: inline-size;
 }
 
-/* Give visible blocks compositor layers during panel motion without changing
-   their formatting context. `contain: paint` prevented margin collapsing and
-   therefore changed transcript height as soon as a drag began. */
-.transcript[data-panel-motion] .chat-markdown[data-renderer="incremark"] > .incremark > :not([data-transcript-visibility="hidden"]) {
-  will-change: transform;
-}
+/* No per-block compositor layers during panel motion. The motion shell is
+   already one layer and slides as one; promoting each visible block on
+   pointer-down re-snapped it to the device pixel grid, which under fractional
+   display scaling moved the text sideways before the handle had moved. */
 
 /* A display formula sits in its own horizontally scrolling box, so a narrower
    column changes that box but never the formula: KaTeX has already resolved

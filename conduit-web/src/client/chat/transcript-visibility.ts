@@ -3,18 +3,11 @@ import {
   type PanelGeometryMotionDetail,
   type PanelGeometryMotionSource,
 } from "../panel-motion";
-import { usePanelMotion } from "./transcript-appearance";
 
 const VISIBILITY_ATTRIBUTE = "data-transcript-visibility";
 const INTRINSIC_SIZE_PROPERTY = "contain-intrinsic-block-size";
 const INTRINSIC_INLINE_SIZE_PROPERTY = "contain-intrinsic-inline-size";
 const OVERSCAN_PX = 120;
-
-interface TableLock {
-  table: HTMLTableElement;
-  width: string;
-  marginLeft: string;
-}
 
 // A block's borders do not change as it resizes, and reading them is a
 // getComputedStyle per block: at settlement every block of a long answer is
@@ -73,10 +66,7 @@ export function mountTranscriptVisibility(
   thread: HTMLElement,
 ) {
   const activeIds = new Map<PanelGeometryMotionSource, number>();
-  const resizeIds = new Map<PanelGeometryMotionSource, number>();
   const managed = new Set<HTMLElement>();
-  let tableLocks: TableLock[] = [];
-  const panelMotionMode = usePanelMotion();
   let measureFrame: number | null = null;
   let measureIdle: number | null = null;
   let syncFrame: number | null = null;
@@ -286,38 +276,9 @@ export function mountTranscriptVisibility(
     });
   };
 
-  const lockTables = () => {
-    if (tableLocks.length) return;
-    tableLocks = [...thread.querySelectorAll<HTMLTableElement>(".chat-markdown table")]
-      .filter((table) => !table.closest(`[${VISIBILITY_ATTRIBUTE}="hidden"]`))
-      .map((table) => {
-        const rect = table.getBoundingClientRect();
-        const computed = getComputedStyle(table);
-        const lock = {
-          table,
-          width: table.style.width,
-          marginLeft: table.style.marginLeft,
-        };
-        table.style.width = `${rect.width}px`;
-        table.style.marginLeft = computed.marginLeft;
-        return lock;
-      });
-  };
-
-  const unlockTables = () => {
-    for (const lock of tableLocks) {
-      if (!lock.table.isConnected) continue;
-      lock.table.style.width = lock.width;
-      lock.table.style.marginLeft = lock.marginLeft;
-    }
-    tableLocks = [];
-  };
-
   const reset = () => {
     activeIds.clear();
-    resizeIds.clear();
     cancelRefresh();
-    unlockTables();
     for (const element of [...managed]) release(element);
     managed.clear();
     rowElements.clear();
@@ -333,22 +294,11 @@ export function mountTranscriptVisibility(
       // membership and measurements until the single idle pass after motion.
       cancelRefresh();
       activeIds.set(detail.source, detail.id);
-      if (detail.source === "workspace" && detail.targetSize == null) {
-        resizeIds.set(detail.source, detail.id);
-        // Pinning a table to its pre-drag pixel width only holds while the
-        // column is frozen. Under live reflow the column genuinely narrows and
-        // a pinned table cannot follow it: it overruns the column mid-drag,
-        // each table stranded at a different width because each was locked to
-        // its own, and they all jump back when the lock releases on pointer-up.
-        if (panelMotionMode() !== "reflow") lockTables();
-      }
       return;
     }
     if (activeIds.get(detail.source) !== detail.id) return;
     if (detail.phase === "change") return;
     activeIds.delete(detail.source);
-    if (resizeIds.get(detail.source) === detail.id) resizeIds.delete(detail.source);
-    if (!resizeIds.size) unlockTables();
     if (!activeIds.size) scheduleRefresh(true);
   };
 
@@ -386,13 +336,11 @@ export function mountTranscriptVisibility(
   const onVisibility = () => {
     if (document.visibilityState === "hidden") {
       cancelRefresh();
-      unlockTables();
-      // Abandon in-flight panel motions: their end events may never arrive
+        // Abandon in-flight panel motions: their end events may never arrive
       // while hidden, and a stuck activeIds entry would gate every future
       // refresh. Dropping the tracking costs nothing -- the geometry stays.
       activeIds.clear();
-      resizeIds.clear();
-      return;
+        return;
     }
     scheduleRefresh(true);
   };
@@ -446,8 +394,7 @@ export function mountTranscriptVisibility(
       visibilityObserver.disconnect();
       sizeObserver.disconnect();
       cancelRefresh();
-      unlockTables();
-      for (const element of managed) clear(element);
+        for (const element of managed) clear(element);
       managed.clear();
     },
   };
