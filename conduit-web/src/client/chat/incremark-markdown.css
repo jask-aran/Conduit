@@ -39,10 +39,13 @@
   contain: layout paint;
 }
 
-/* Fade pacing: a newly shown word fades in once. Opacity only; its layout is
-   final when it is inserted, so nothing waits on the animation. */
+/* Incremark Fade: a newly shown word fades in once. Its layout is final when
+   it is inserted, so nothing waits on the animation. The colour fades, not the
+   opacity: an opacity animation gives every word mid-fade its own compositor
+   layer, and layerizing a few dozen of them cost more than the frame budget on
+   a real stream. A colour animation only repaints the word. */
 .chat-markdown .stream-word { animation: stream-word-in var(--stream-word-fade, 200ms) ease-out both; }
-@keyframes stream-word-in { from { opacity: 0; } }
+@keyframes stream-word-in { from { color: transparent; } }
 @media (prefers-reduced-motion: reduce) {
   .chat-markdown .stream-word { animation: none; }
 }
