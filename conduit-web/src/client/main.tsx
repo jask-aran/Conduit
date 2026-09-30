@@ -3177,26 +3177,33 @@ function App() {
   // A sidebar command's target when it is another pane's chat; pane A's is the sidebar's own.
   const focusedTarget = () => focusedSlot()?.session.selected() ?? {};
   /*
-   * The dock follows places, not panes (6d-1): it shows the place of the last
-   * chat, page or file pane that had the keyboard -- a file viewer's is the
-   * place of the file in its current column. A terminal or tool taking the
-   * keyboard leaves it where it was.
+   * The dock follows places, not panes (6d-1), and its place is read from the
+   * pane with the keyboard -- what that pane shows, never a remembered pane or
+   * the route beneath pane A: a chat's or page's project, a file viewer's
+   * current file's. A terminal or tool has no place, so it leaves the dock
+   * where it was; pane A showing its own route gives the route's place.
    */
-  const [placePane, setPlacePane] = createSignal<PaneKey>("main");
-  createEffect(() => { const pane = keyboardPane(); if (pane === "main" || isPaneView(slotView(pane)) || parseFileView(slotView(pane))?.length) setPlacePane(pane); });
-  const dockSelection = () => {
-    const slot = placePane();
-    const files = panesShown().includes(slot) ? parseFileView(viewOf(slot)) : null;
-    if (files?.length) {
-      const entry = files[Math.min(fileFocus()[String(slot)] ?? 0, files.length - 1)]!;
-      const project = catalogue.projects().find((item) => item.id === entry.projectId);
-      if (project) return { project };
+  type PlaceSelection = { project: Project } | NonNullable<ReturnType<ReturnType<typeof paneSlot>["session"]["selected"]>>;
+  const placeOf = (pane: PaneKey): PlaceSelection | "route" | null => {
+    if (!panesShown().includes(pane)) return null;
+    if (pane === "main" && !paneAOverride()) return "route";
+    const view = viewOf(pane);
+    const byId = (id: string | undefined) => catalogue.projects().find((item) => item.id === id);
+    const files = parseFileView(view);
+    if (files) { const project = byId(files[Math.min(fileFocus()[String(pane)] ?? 0, files.length - 1)]?.projectId); return project ? { project } : null; }
+    if (view === "page:dashboard") { const project = catalogue.projects().find((item) => item.slug === "chat") ?? catalogue.projects()[0]; return project ? { project } : null; }
+    if (view?.startsWith("page:project:")) { const project = byId(view.slice("page:project:".length)); return project ? { project } : null; }
+    if (view?.startsWith("chat:")) {
+      if (pane !== "main") return paneSlot(pane).session.selected() ?? null;
+      const id = view.slice("chat:".length);
+      const project = catalogue.projects().find((item) => item.sessions.some((chat) => chat.id === id));
+      return project ? { project } : null;
     }
-    if (slot === "main" || !shownSlots().includes(slot)) return null;
-    const pane = paneSlot(slot);
-    const project = slotPageProject(slot);
-    return pane.session.selected() ?? (project ? { project } : null);
+    return null;
   };
+  const [heldPlace, setHeldPlace] = createSignal<PlaceSelection | "route">("route");
+  createEffect(() => { const place = placeOf(keyboardPane()); if (place) setHeldPlace(() => place); });
+  const dockSelection = (): PlaceSelection | null => { const place = heldPlace(); return place === "route" ? null : place; };
   const dockProject = () => dockSelection()?.project ?? selectedProject();
   const dockScope = () => dockSelection() ? `project:${dockSelection()!.project.id}` : workspacePanelScope();
   /*
