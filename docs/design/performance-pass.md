@@ -49,6 +49,16 @@ first `/workspace/version` after a restart took 3.2s by curl; later ones
 does not walk (`@parcel/watcher`), or keeping the watch open for places still
 in view rather than closing it after 3s.
 
+**Fixed (2026-09-30).** The recursive watch now starts on a worker thread
+(`watchOffThread` in `src/workspace-inspector.js`); a place's first
+`/workspace/version` waits for it to be live, and it stays open 60s after the
+last poll rather than 3s. Measured straight after a restart: `/file` requests
+made while the Conduit checkout's watch was still walking answered in 6-9ms,
+and a cold open of `AGENTS.md` into a pane reached its editor in 234ms (was
+3.9-8.5s). The walk still costs a core for ~3s and holds a watch on every
+directory, `node_modules` included; skipping ignored trees is the next step if
+that matters.
+
 ## 2. Long transcripts render in passes, after being shown
 
 **Seen.** A chat with a long history (~3400px of thread) grows in steps after
@@ -170,6 +180,22 @@ no `:has()`; or scope them to a class set only for the 300ms they run. Give
 wide settings fields `data-wide` (the rule's other half already reads it) and
 drop `:has(> textarea)`. Probe: the arrow-key loop above with CDP
 `Performance.getMetrics` (`RecalcStyleDuration`).
+
+**Fixed (2026-09-30).** The four motion rules moved to `motion-rules.ts`,
+which adds them as a style element only while `data-arrival` or
+`data-route-motion` is on the root (the first open's fade was checked: the
+first frame is hidden, the fade runs, the element is gone after). The settings
+selector's `:has(> textarea)` half matched nothing -- no field holds a
+textarea -- and went. After:
+
+| | Before | After | Every `:has()` deleted |
+| --- | --- | --- | --- |
+| 40 arrow keys in a file editor, style | 500-570ms | 103ms | 19-43ms |
+| Real turn, two chats, CPU 4× slower, style / 4s | 330-1340ms | 264-342ms | 196-245ms |
+| Same, frames over 33ms (of ~240) | 7-20 | 1 | 0-1 |
+
+What remains is spread across the other ~30 `:has()` rules, none over ~44ms
+on its own in the editor test.
 
 ## 7. A file viewer's first open is a serial chain (seen 2026-09-30)
 
