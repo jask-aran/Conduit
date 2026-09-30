@@ -214,6 +214,11 @@ function smartMergeAst(baseNode: any, fullSlice: any): any {
   if (fullSlice.value !== undefined) return fullSlice;
   if (!Array.isArray(baseNode.children) || !Array.isArray(fullSlice.children)) return fullSlice;
   if (fullSlice.children.length < baseNode.children.length) return fullSlice;
+  // A block that started from nothing -- a list, quote or table shown at
+  // progress 0 -- has no last child to merge into. Merging anyway put an
+  // empty slot first, so the first item mounted at index 1 and remounted at
+  // index 0 on the next frame.
+  if (baseNode.children.length === 0) return fullSlice;
   if (fullSlice.children.length === baseNode.children.length) {
     if (baseNode.children.length === 0) return fullSlice;
     const lastIndex = baseNode.children.length - 1;
