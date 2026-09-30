@@ -273,7 +273,13 @@ function preserveAppendOnlyTable(previous: MarkdownNode | undefined, current: Ma
   return preserveAppendOnlyNode(previous, current);
 }
 
-function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: RendererContext; history: Map<string, MarkdownNode>; shown: Map<string, number> }) {
+function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: RendererContext; history: Map<string, MarkdownNode>; shown: Map<string, number>; streaming: () => boolean }) {
+  // The caret belongs to the block text is still arriving in: the last one,
+  // while the message streams. isDisplayComplete is not that -- the
+  // typewriter marks a block complete whenever it has shown everything
+  // received so far, so on a real stream it flipped at every delivery, and
+  // the caret with it.
+  const tail = createMemo(() => props.streaming() ? props.blocks().at(-1)?.id ?? null : null);
   const structuralType = (block: DisplayBlock) => {
     const sourceNode = block.node as MarkdownNode;
     if (sourceNode?.type === "paragraph" && /^ {0,3}\|/.test(String((block as DisplayBlock & { rawText?: string }).rawText || ""))) return "table";
@@ -323,7 +329,7 @@ function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: Rende
       // finished blocks it was a permanent zero-width span in every paragraph,
       // and the settled-message check -- which looks for exactly this marker --
       // could therefore never pass.
-      return current.isDisplayComplete ? display : renderBlockNode(display);
+      return current.id === tail() ? renderBlockNode(display) : display;
     });
     return <Show when={block()}><AstNode node={node} context={props.context} /></Show>;
   }}</For>;
@@ -1288,7 +1294,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       <div class="incremark" data-incremark-core="true">
         <Show when={props.inline} fallback={<>
           <ParsedBlockNodes blocks={seededBlocks} context={context} />
-          <DisplayBlockNodes blocks={displayBlocks} context={displayContext} history={displayHistory} shown={displayShown} />
+          <DisplayBlockNodes blocks={displayBlocks} context={displayContext} history={displayHistory} shown={displayShown} streaming={streaming} />
           <Show when={pending()}>
             {(value) => <Show when={value().kind === "fence"}>
               <PendingConstruct pending={value()} streaming={streaming()} />
