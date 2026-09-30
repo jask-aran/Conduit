@@ -6,7 +6,7 @@ import { batch, createEffect, createMemo, createRenderEffect, createSignal, Erro
 import { render } from "solid-js/web";
 import { androidShell, desktopShell, isInstalledClient } from "./platform/installed-client.ts";
 import {
-  ArrowLeftRightIcon, EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ServerIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon, XIcon,
+  ArrowLeftRightIcon, Columns2Icon, PanelTopIcon, EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ServerIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon, XIcon,
 } from "lucide-solid";
 import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
@@ -2559,7 +2559,9 @@ function App() {
   };
   document.addEventListener("pointerdown", armHeaderDrag, true);
   onCleanup(() => document.removeEventListener("pointerdown", armHeaderDrag, true));
-  const [docDrop, setDocDrop] = createSignal<{ pane: PaneKey; zone: "left" | "middle" | "right" | "side"; side?: number; rect: { left: number; top: number; width: number; height: number } } | null>(null);
+  // Over a file viewer, a file dragged onto a column says what it will do in a pill by the pointer, not a wash.
+  const [dragHint, setDragHint] = createSignal<{ x: number; y: number; text: string; column: boolean } | null>(null);
+  const [docDrop, setDocDrop] = createSignal<{ pane: PaneKey; zone: "left" | "middle" | "right" | "side" | "column" | "fill"; side?: number; rect: { left: number; top: number; width: number; height: number } } | null>(null);
   const docDragView = (target: Element): string | null => {
     const source = target.closest<HTMLElement>("[data-doc-view]");
     if (source) return source.dataset.docView || null;
@@ -2596,28 +2598,37 @@ function App() {
     const third = (event.clientX - box.left) / box.width;
     if (pane === draggedPane) return void setDocDrop(null);
     const edges = draggedPane !== null || roomBeside(draggedView);
-    const zone = !edges ? "middle" : third < 1 / 3 ? "left" : third > 2 / 3 ? "right" : "middle";
+    const viewer = draggedPane === null && Boolean(parseFileView(viewOf(pane))?.length);
+    const edge = viewer ? 1 / 5 : 1 / 3;
+    const zone = !edges ? "middle" : third < edge ? "left" : third > 1 - edge ? "right" : "middle";
     if (draggedPane !== null && nearEdge(draggedPane, pane, zone)) return void setDocDrop(null);
-    // A file over a file viewer: its tab row, or the middle of two sides, is that side -- the
-    // file joins it as a tab; the middle of one side is a second side.
-    const held = draggedPane === null ? parseFileView(viewOf(pane)) : null;
-    const sideElement = held?.length && parseFileView(draggedView) && event.target instanceof Element ? event.target.closest<HTMLElement>(".workspace-file-viewer > .workspace-preview") : null;
-    if (sideElement && held) {
-      const side = [...sideElement.parentElement!.children].filter((child) => child.classList.contains("workspace-preview")).indexOf(sideElement);
-      const overTabs = Boolean((event.target as Element).closest(".workspace-preview-header"));
-      if (side < held.length && (overTabs || (zone === "middle" && held.length === 2))) {
-        if (draggedFileTab?.pane === pane && draggedFileTab.side === side) return void setDocDrop(null);
-        const rect = sideElement.getBoundingClientRect();
+    /*
+     * A file over a file viewer: only its outer fifths are panes (washed); within,
+     * the column under the pointer takes it as its showing tab -- or, beside a lone
+     * column's file (the right half of its body), a new column; an empty column
+     * shows it. Where it came from is no target.
+     */
+    const held = draggedPane === null && parseFileView(draggedView) ? parseFileView(viewOf(pane)) : null;
+    const fifth = viewer && zone !== "middle" ? zone : null;
+    if (held?.length && !fifth && event.target instanceof Element) {
+      const column = event.target.closest<HTMLElement>(".workspace-file-viewer > .workspace-preview");
+      const hint = (next: { zone: "side" | "column" | "fill"; side?: number; text: string } | null) => {
+        if (!next) { setDocDrop(null); return void setDragHint(null); }
+        setDragHint({ x: event.clientX, y: event.clientY, text: next.text, column: next.zone === "column" });
         const current = docDrop();
-        if (current?.pane === pane && current.zone === "side" && current.side === side) return;
-        return void setDocDrop({ pane, zone: "side", side, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } });
-      }
-      if (zone === "middle" && held.length === 1 && draggedFileTab?.pane === pane) {
-        const current = docDrop();
-        if (current?.pane === pane && current.zone === "middle") return;
-        return void setDocDrop({ pane, zone: "middle", rect: { left: box.left + box.width / 2, top: box.top, width: box.width / 2, height: box.height } });
-      }
+        if (current?.pane === pane && current.zone === next.zone && current.side === next.side) return;
+        setDocDrop({ pane, zone: next.zone, side: next.side, rect: { left: 0, top: 0, width: 0, height: 0 } });
+      };
+      if (!column) return hint(null);
+      if (column.classList.contains("file-viewer-empty-side")) return hint({ zone: "fill", text: "Open in this column" });
+      const side = [...column.parentElement!.children].filter((child) => child.classList.contains("workspace-preview") && !child.classList.contains("file-viewer-empty-side")).indexOf(column);
+      const own = draggedFileTab?.pane === pane ? draggedFileTab : null;
+      const rect = column.getBoundingClientRect();
+      const beside = held.length === 1 && !hasEmptySide(pane) && !event.target.closest(".workspace-preview-header") && event.clientX > rect.left + rect.width / 2;
+      if (beside) return hint(own && (fileTabsOf(pane, own.side)?.entries.length ?? 1) < 2 ? null : { zone: "column", text: "Open in a new column" });
+      return hint(own?.side === side ? null : { zone: "side", side, text: "Add as a tab here" });
     }
+    setDragHint(null);
     // A place's tabs dropped on their own pane: only its edges, a pane of their own.
     if ((draggedGroup ?? draggedFileTab)?.pane === pane && zone === "middle") return void setDocDrop(null);
     const width = zone === "middle" ? box.width : box.width / 2;
@@ -2625,7 +2636,7 @@ function App() {
     if (current?.pane === pane && current.zone === zone) return;
     setDocDrop({ pane, zone, rect: { left: zone === "right" ? box.left + box.width / 2 : box.left, top: box.top, width, height: box.height } });
   };
-  const endDocDrag = () => { draggedView = null; draggedPane = null; draggedGroup = null; draggedFileTab = null; setDocDrop(null); };
+  const endDocDrag = () => { draggedView = null; draggedPane = null; draggedGroup = null; draggedFileTab = null; setDocDrop(null); setDragHint(null); };
   /*
    * A pane's document moved by its header, among the panes already open: onto
    * another pane's middle the two swap; onto its far edge the document moves
@@ -2701,28 +2712,32 @@ function App() {
     endDocDrag();
     if (!target || !view || !event.dataTransfer?.types.includes(DOC_DRAG_TYPE)) return;
     event.preventDefault();
-    if (target.zone === "side") {
+    if (target.zone === "side" || target.zone === "column" || target.zone === "fill") {
       const entry = parseFileView(view)?.[0];
       const shown = parseFileView(viewOf(target.pane)) ?? [];
-      const side = target.side ?? 0;
-      if (!entry || !shown[side]) return;
-      if (!sameFileEntry(shown[side]!, entry)) {
-        if (handlesOf(target.pane)[side]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and show another file?")) return;
-        handlesOf(target.pane)[side]?.discardChanges();
-        keepFileNext.add(sideKey(target.pane, side));
-        setPaneView(target.pane, formatFileView(shown.map((item, at) => at === side ? entry : item)));
+      if (!entry || !shown.length) return;
+      if (target.zone === "fill") fillEmptySide(target.pane, entry);
+      else if (target.zone === "column") { setPaneView(target.pane, formatFileView([shown[0]!, entry])); focusColumn(target.pane, 1); }
+      else {
+        const side = target.side ?? 0;
+        if (!shown[side]) return;
+        if (!sameFileEntry(shown[side]!, entry)) {
+          if (handlesOf(target.pane)[side]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and show another file?")) return;
+          handlesOf(target.pane)[side]?.discardChanges();
+          keepFileNext.add(sideKey(target.pane, side));
+          setPaneView(target.pane, formatFileView(shown.map((item, at) => at === side ? entry : item)));
+        }
+        focusColumn(target.pane, side);
       }
-      focusFileEntry(target.pane, side);
-      setFilePane(target.pane);
-      if (fileTab) queueMicrotask(() => closeFileTab(fileTab.pane, fileTab.side, fileTab.key));
-      return focusAnyPane(target.pane);
+      if (fileTab) queueMicrotask(() => leaveSide(fileTab.pane, fileTab.side, fileTab.key));
+      return;
     }
     const placed = { ...target, zone: target.zone };
     if (fromPane !== null) return void await movePaneDocument(fromPane, placed);
     if (group) return void await moveTabGroup(group, placed, view.slice("chat:".length));
     if (fileTab) {
       await dropDocument(placed, view);
-      return closeFileTab(fileTab.pane, fileTab.side, fileTab.key);
+      return leaveSide(fileTab.pane, fileTab.side, fileTab.key);
     }
     return dropDocument(placed, view);
   };
@@ -2780,7 +2795,32 @@ function App() {
       }</Show>
     </div>;
   };
-  const focusAnyPane = (pane: PaneKey) => { if (pane === "main") { setKeyboardPane("main"); enterMainPane(); } else focusPane(pane); };
+  const focusAnyPane = (pane: PaneKey) => {
+    if (parseFileView(viewOf(pane))) return focusColumn(pane, fileFocus()[String(pane)] ?? 0);
+    if (pane === "main") { setKeyboardPane("main"); enterMainPane(); } else focusPane(pane);
+  };
+  /*
+   * Focus is a pane's; a file viewer's current column is where in it. This one
+   * setter moves both and puts DOM focus in the column -- its editor once it has
+   * drawn (a tab switch redraws it), else the column, else the viewer -- so
+   * nothing else decides which pane has the keyboard.
+   */
+  function focusColumn(pane: PaneKey, side: number) {
+    setKeyboardPane(pane);
+    focusFileEntry(pane, side);
+    setFilePane(pane);
+    let tries = 0;
+    const land = () => {
+      const surface = paneElement(pane)?.querySelector<HTMLElement>(".file-viewer-surface");
+      const columns = [...(surface?.querySelectorAll<HTMLElement>(".workspace-file-viewer > .workspace-preview:not(.file-viewer-empty-side)") ?? [])];
+      const column = side >= columns.length ? surface?.querySelector<HTMLElement>(".file-viewer-empty-side") : columns[side];
+      if (column?.contains(document.activeElement) && document.activeElement !== column) return;
+      const editor = column?.querySelector<HTMLElement>(".cm-content");
+      (editor ?? column ?? surface)?.focus({ preventScroll: true });
+      if (!editor && tries++ < 8) setTimeout(land, 60);
+    };
+    requestAnimationFrame(land);
+  }
   // A review comment on a file, for the viewer that shows it to scroll to.
   const [fileReveal, setFileReveal] = createSignal<{ entry: FileEntry; request: ReviewNavigationRequest } | null>(null);
   const openFileDocument = (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest }) => {
@@ -2821,7 +2861,7 @@ function App() {
     }
     const target = parseFileView(viewOf(pane))!;
     if (!target.length) return void setPaneView(pane, formatFileView([entry]));
-    if (hasEmptySide(pane) && (fileFocus()[String(pane)] ?? 0) === 1) { setPaneView(pane, formatFileView([target[0]!, entry])); return focusFileEntry(pane, 1); }
+    if (emptyFocused(pane)) return fillEmptySide(pane, entry);
     const index = Math.min(fileFocus()[String(pane)] ?? 0, target.length - 1);
     if (handlesOf(pane)[index]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and open another file?")) return;
     handlesOf(pane)[index]?.discardChanges();
@@ -2830,15 +2870,28 @@ function App() {
     setPaneView(pane, formatFileView(target.map((item, at) => at === index ? entry : item)));
   };
   // The split opens an empty second side, which the next file opened into the viewer fills.
-  const [emptySides, setEmptySides] = createSignal<Record<string, true>>({});
-  const hasEmptySide = (pane: PaneKey) => Boolean(emptySides()[String(pane)]) && parseFileView(viewOf(pane))?.length === 1;
+  // An empty column beside a viewer's one file: at 1 (the split) or 0 (its last tab dragged away).
+  const [emptySides, setEmptySides] = createSignal<Record<string, 0 | 1>>({});
+  const hasEmptySide = (pane: PaneKey) => emptySides()[String(pane)] !== undefined && parseFileView(viewOf(pane))?.length === 1;
+  const emptyFirst = (pane: PaneKey) => hasEmptySide(pane) && emptySides()[String(pane)] === 0;
+  // The empty column is focused as index 1, past the one file, wherever it sits.
+  const emptyFocused = (pane: PaneKey) => hasEmptySide(pane) && fileFocus()[String(pane)] === 1;
+  // A file into the empty column: the viewer holds two again, in their places.
+  const fillEmptySide = (pane: PaneKey, entry: FileEntry) => {
+    const held = parseFileView(viewOf(pane)) ?? [];
+    if (held.length !== 1) return;
+    const first = emptyFirst(pane);
+    if (first) moveSideTabs(sideKey(pane, 0), sideKey(pane, 1));
+    setPaneView(pane, formatFileView(first ? [entry, held[0]!] : [held[0]!, entry]));
+    focusColumn(pane, first ? 0 : 1);
+  };
   const closeEmptySide = (pane: PaneKey) => { setEmptySides((current) => { const next = { ...current }; delete next[String(pane)]; return next; }); focusFileEntry(pane, 0); };
   createEffect(() => { for (const key of Object.keys(emptySides())) { const pane: PaneKey = key === "main" ? "main" : Number(key); if (!panesShown().includes(pane) || parseFileView(viewOf(pane))?.length !== 1) untrack(() => closeEmptySide(pane)); } });
   const [sideShares, setSideShares] = createSignal<Record<string, number>>({});
   const splitFileViewer = (pane: PaneKey) => {
     const entries = parseFileView(viewOf(pane));
     if (!entries || entries.length !== 1) return;
-    setEmptySides((current) => ({ ...current, [String(pane)]: true }));
+    setEmptySides((current) => ({ ...current, [String(pane)]: 1 }));
     focusFileEntry(pane, 1);
     setFilePane(pane);
   };
@@ -2862,19 +2915,19 @@ function App() {
         <header class="chat-header file-tabs-header"><nav class="chat-header-title"><strong>No file open</strong></nav><div class="chat-header-actions">{paneTabActions(pane)}</div></header>
         <div class="file-viewer-empty" role="status">Open a file from Files, or Ctrl-click one to add it as a tab.</div>
       </>}>
-        <FileViewer entries={entries()} focused={fileFocus()[String(pane)] ?? 0} wrap={(side) => sideWrap(pane, side)} onToggleWrap={(side) => toggleSideWrap(pane, side)} commentChatId={focusedChat().loadedId()}
+        <FileViewer entries={entries()} focused={keyboardPane() === pane ? fileFocus()[String(pane)] ?? 0 : -1} wrap={(side) => sideWrap(pane, side)} onToggleWrap={(side) => toggleSideWrap(pane, side)} commentChatId={focusedChat().loadedId()}
           tabs={(side) => fileSideTabs(pane, side)} paneActions={() => paneTabActions(pane)}
           sideMenu={(side) => fileSideMenu(pane, side)} onSwapSides={() => swapSides(pane)}
           share={sideShares()[String(pane)]} onShare={(share) => setSideShares((current) => ({ ...current, [String(pane)]: share }))}
-          splitEmpty={hasEmptySide(pane)}
+          splitEmpty={hasEmptySide(pane)} emptyFirst={emptyFirst(pane)}
           emptySide={<Show when={hasEmptySide(pane)}>
-            <section class="workspace-preview file-viewer-empty-side" data-focused={fileFocus()[String(pane)] === 1} onPointerDown={() => { focusFileEntry(pane, 1); setFilePane(pane); }}>
+            <section class="workspace-preview file-viewer-empty-side" tabIndex={-1} style={emptyFirst(pane) ? { order: -1 } : undefined} data-focused={keyboardPane() === pane && emptyFocused(pane)} onPointerDown={() => { focusFileEntry(pane, 1); setFilePane(pane); }}>
               <header class="workspace-preview-header">
                 <nav aria-label="Tabs" class="chat-header-title chat-header-tabs file-side-tabs"><div class="pane-tabs"><span class="pane-tab pane-tab-active pane-tab-none">
                   <span class="pane-tab-open"><span class="pane-tab-title"><span>No file open</span></span></span>
                   <button type="button" class="pane-tab-close" tabIndex={-1} aria-label="Close this side" title="Close this side" onClick={() => closeEmptySide(pane)}><XIcon /></button>
                 </span></div></nav>
-                {paneTabActions(pane)}
+                <Show when={!emptyFirst(pane)}>{paneTabActions(pane)}</Show>
               </header>
               <div class="file-viewer-empty" role="status">Open a file from Files to show it here.</div>
             </section>
@@ -2917,6 +2970,7 @@ function App() {
     const from = paneOf(document.activeElement);
     const at = from === null ? -1 : panes.indexOf(from);
     const to: PaneKey = at >= 0 ? panes[(at + step + panes.length) % panes.length]! : panes.includes(keyboardPane()) ? keyboardPane() : "main";
+    if (parseFileView(viewOf(to))) { focusAnyPane(to); return true; }
     const last = lastPaneFocus.get(to);
     if (last?.isConnected && last.closest(paneSelector(to)) && last.getClientRects().length) {
       last.focus({ preventScroll: true });
@@ -3443,15 +3497,21 @@ function App() {
   // Stepping round the focused pane's tabs, in the row's order, and the
   // panes (the shortcuts Next/Previous tab and pane).
   // A file viewer's step skips the file showing on its other side.
-  const fileTabsToStep = () => { const pane: PaneKey = keyboardPaneSlot() ?? "main"; const side = shownFileSide(pane); const list = fileTabsOf(pane, side); return !isMobileLayout() && parseFileView(viewOf(pane))?.length && list && list.entries.length > 1 ? { pane, side, list } : null; };
+  // A viewer's tabs in the order they read: its first column's, then its second's.
+  const fileTabsToStep = () => {
+    const pane: PaneKey = keyboardPaneSlot() ?? "main";
+    const shown = parseFileView(viewOf(pane)) ?? [];
+    const items = shown.flatMap((entry, side) => (fileTabsOf(pane, side)?.entries ?? [entry]).map((item) => ({ side, key: fileEntryKey(item) })));
+    return !isMobileLayout() && items.length > 1 ? { pane, shown, items } : null;
+  };
   const tabsToStep = () => { const pane: PaneKey = keyboardPaneSlot() ?? "main"; const list = tabsOf(pane); return !isMobileLayout() && list && list.ids.length > 1 && list.ids.includes(activeChatOf(pane) ?? "") ? { pane, list } : null; };
   const stepTab = (step: number) => {
     const files = fileTabsToStep();
     if (files) {
-      const keys = files.list.entries.map(fileEntryKey);
-      const shown = (parseFileView(viewOf(files.pane)) ?? []).map(fileEntryKey);
-      const at = keys.indexOf(shown[files.side] ?? "");
-      return showFileTab(files.pane, files.side, keys[(at + step + keys.length) % keys.length]!);
+      const side = shownFileSide(files.pane);
+      const at = files.items.findIndex((item) => item.side === side && item.key === fileEntryKey(files.shown[side]!));
+      const next = files.items[(at + step + files.items.length) % files.items.length]!;
+      return showFileTab(files.pane, next.side, next.key);
     }
     const found = tabsToStep();
     if (!found) return;
@@ -3607,9 +3667,7 @@ function App() {
       keepFileNext.add(sideKey(pane, side));
       setPaneView(pane, formatFileView(shown.map((item, at) => at === side ? entry : item)));
     }
-    focusFileEntry(pane, side);
-    setFilePane(pane);
-    focusAnyPane(pane);
+    focusColumn(pane, side);
   };
   const closeFileTab = (pane: PaneKey, side: number, key: string) => {
     const tabs = fileTabsOf(pane, side);
@@ -3641,10 +3699,10 @@ function App() {
   // The files the viewers show, for the navigator to mark: "focused" in the viewer with the keyboard.
   const openFileKeys = createMemo(() => {
     const keys = new Map<string, "focused" | "shown">();
-    for (const pane of panesShown()) for (const entry of parseFileView(viewOf(pane)) ?? []) {
+    for (const pane of panesShown()) (parseFileView(viewOf(pane)) ?? []).forEach((entry, side) => {
       const key = fileEntryKey(entry);
-      if (pane === keyboardPane()) keys.set(key, "focused"); else if (!keys.has(key)) keys.set(key, "shown");
-    }
+      if (pane === keyboardPane() && side === shownFileSide(pane) && !emptyFocused(pane)) keys.set(key, "focused"); else if (!keys.has(key)) keys.set(key, "shown");
+    });
     return keys;
   }, new Map(), { equals: (a, b) => a.size === b.size && [...a].every(([key, value]) => b.get(key) === value) });
   // Two sides trade places, their tabs, wrapping and focus with them.
@@ -3672,6 +3730,24 @@ function App() {
     else { setFileTabs((current) => { const next = { ...current }; delete next[sideKey(pane, side)]; return next; }); lastShownFiles.delete(sideKey(pane, side)); }
     setPaneView(pane, formatFileView(shown.filter((_, at) => at !== side)));
     focusFileEntry(pane, 0);
+    movingDocuments = false;
+  };
+  // A tab dragged away: a hidden one is forgotten, a showing one gives way to its
+  // column's last used; a column's last leaves it empty -- a move never closes one.
+  const leaveSide = (pane: PaneKey, side: number, key: string) => {
+    const shown = parseFileView(viewOf(pane)) ?? [];
+    const others = (fileTabsOf(pane, side)?.entries ?? []).filter((entry) => fileEntryKey(entry) !== key);
+    if (!shown[side] || fileEntryKey(shown[side]!) !== key || others.length) return closeFileTab(pane, side, key);
+    handlesOf(pane)[side]?.discardChanges();
+    handlesOf(pane)[side] = undefined;
+    movingDocuments = true;
+    if (side === 0 && shown.length === 2) moveSideTabs(sideKey(pane, 1), sideKey(pane, 0));
+    else { setFileTabs((current) => { const next = { ...current }; delete next[sideKey(pane, side)]; return next; }); lastShownFiles.delete(sideKey(pane, side)); }
+    if (shown.length === 2) {
+      setPaneView(pane, formatFileView(shown.filter((_, at) => at !== side)));
+      setEmptySides((current) => ({ ...current, [String(pane)]: side as 0 | 1 }));
+      focusFileEntry(pane, 0);
+    } else setPaneView(pane, EMPTY_FILE_VIEW);
     movingDocuments = false;
   };
   const closeOtherTabs = (pane: PaneKey, side: number) => {
@@ -3710,7 +3786,7 @@ function App() {
       hint: (key) => `${placeLabelOf(key.slice(0, key.indexOf(":")))} / ${key.slice(key.indexOf(":") + 1)}`,
       icon: (key) => <FileTypeIcon name={key.slice(key.indexOf(":") + 1)} />,
       // Lit on the side with the keyboard; the other side's showing file in the text colour.
-      lit: () => { const shown = parseFileView(viewOf(pane)) ?? []; return shownFileSide(pane) === side && shown[side] && !(hasEmptySide(pane) && fileFocus()[String(pane)] === 1) ? fileEntryKey(shown[side]!) : null; },
+      lit: () => { const shown = parseFileView(viewOf(pane)) ?? []; return shownFileSide(pane) === side && shown[side] && !emptyFocused(pane) ? fileEntryKey(shown[side]!) : null; },
       shown: (key) => { const shown = parseFileView(viewOf(pane)) ?? []; return Boolean(shown[side] && fileEntryKey(shown[side]!) === key); },
       used: () => fileTabsOf(pane, side)?.used ?? [],
       // Only a showing file can hold edits: leaving one discards them.
@@ -5163,7 +5239,8 @@ function App() {
     <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
     <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </div>
-    <Show when={docDrop()}>{(drop) => <div class="doc-drop" aria-hidden="true" style={{ left: `${drop().rect.left}px`, top: `${drop().rect.top}px`, width: `${drop().rect.width}px`, height: `${drop().rect.height}px` }} />}</Show>
+    <Show when={dragHint()}>{(hint) => <div class="drag-hint" aria-hidden="true" style={{ left: `${hint().x + 14}px`, top: `${hint().y + 18}px` }}><Show when={hint().column} fallback={<PanelTopIcon />}><Columns2Icon /></Show>{hint().text}</div>}</Show>
+    <Show when={docDrop() && ["left", "middle", "right"].includes(docDrop()!.zone) ? docDrop() : null}>{(drop) => <div class="doc-drop" aria-hidden="true" style={{ left: `${drop().rect.left}px`, top: `${drop().rect.top}px`, width: `${drop().rect.width}px`, height: `${drop().rect.height}px` }} />}</Show>
     <WorkspaceRail tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard"].includes(routeKind()) && selectedProject() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
       panes={splitShown() ? shownSlots().length + 1 : 1} onLayout={applyPaneLayout}
       folded={foldedSlots().map((slot) => ({ slot, letter: slotOrder().filter((item) => slotView(item)).indexOf(slot) === 0 ? "B" : "C", name: viewName(slotView(slot)) }))} onShowFolded={(slot) => void showFolded(slot)}
