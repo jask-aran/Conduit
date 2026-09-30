@@ -42,6 +42,8 @@ export default function FileViewer(props: {
   emptySide?: JSX.Element;
   /** An empty second side shows (the split, before a file fills it). */
   splitEmpty?: boolean;
+  /** The empty column sits first (its file was dragged away), the file second. */
+  emptyFirst?: boolean;
   /** The first side's share of the width, with two. */
   share?: number;
   onShare?: (share: number) => void;
@@ -173,7 +175,7 @@ export default function FileViewer(props: {
     event.preventDefault();
   };
   const splitButton = () => <Show when={props.entries.length === 1 && !props.splitEmpty}><WorkbenchButton type="button" class="workspace-preview-action" data-fold="1" aria-label="Open this file again beside" title="Split" onClick={() => props.onSplit()}><Columns2Icon /></WorkbenchButton></Show>;
-  return <div ref={(element) => { root = element; resized.observe(element); changed.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-need"] }); }} class="workspace-files workspace-file-viewer" data-count={sides()} style={sides() > 1 ? { "--side-a": String(share()), "--side-b": String(1 - share()) } : undefined}>
+  return <div ref={(element) => { root = element; resized.observe(element); changed.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-need"] }); }} class="workspace-files workspace-file-viewer" data-count={sides()} style={sides() > 1 ? { "--side-a": String(props.emptyFirst ? 1 - share() : share()), "--side-b": String(props.emptyFirst ? share() : 1 - share()) } : undefined}>
     <Index each={props.entries}>{(entry, index) =>
       <Show when={entry().mode} fallback={
         <WorkspaceFileSlot
@@ -190,7 +192,7 @@ export default function FileViewer(props: {
           onShowDiff={(staged) => { if (leaveContents(index)) props.onSetMode(index, staged ? "staged" : "changes"); }}
           headerSuffix={splitButton()}
           headerTabs={props.tabs?.(index)}
-          headerEnd={index === props.entries.length - 1 && !props.splitEmpty ? props.paneActions?.() : undefined}
+          headerEnd={index === props.entries.length - 1 && !(props.splitEmpty && !props.emptyFirst) ? props.paneActions?.() : undefined}
           headerMenuItems={(folded) => <>
             <Show when={props.entries.length === 1 && !props.splitEmpty && folded("1")}><MenuItem onSelect={() => props.onSplit()}><Columns2Icon />Open again beside</MenuItem></Show>
             {props.sideMenu?.(index)}
@@ -206,7 +208,7 @@ export default function FileViewer(props: {
           onDispose={() => { handles[index] = undefined; props.ref(index, undefined); }}
         />
       }>{(mode) =>
-        <ChangesEntry entry={entry()} mode={mode()} status={statuses()[entryKey(entry())]} focused={sides() > 1 && props.focused === index} tabs={props.tabs?.(index)} end={index === props.entries.length - 1 && !props.splitEmpty ? props.paneActions?.() : undefined}
+        <ChangesEntry entry={entry()} mode={mode()} status={statuses()[entryKey(entry())]} focused={sides() > 1 && props.focused === index} tabs={props.tabs?.(index)} end={index === props.entries.length - 1 && !(props.splitEmpty && !props.emptyFirst) ? props.paneActions?.() : undefined}
           split={splitButton()} onFocus={() => props.onFocusEntry(index)} onClose={() => props.onCloseEntry(index)} onSetMode={(next) => props.onSetMode(index, next)}
           ref={(handle) => { handles[index] = handle; props.ref(index, handle); }} />
       }</Show>
