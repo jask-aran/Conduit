@@ -4081,10 +4081,20 @@ function App() {
   // announce every change of the room they take from pane A.
   let splitMotionId = 0;
   let splitSize = 0;
-  const announceSplit = (phase: "begin" | "change" | "end", size: number) => dispatchPanelGeometryMotion({ phase, id: splitMotionId, source: "workspace", size });
+  // Open from a drag's or ease's begin to its end: the weights effect below
+  // stays out of the way meanwhile. Firing on every frame's new weights, it
+  // started a motion of its own each frame -- every transcript measured,
+  // pinned and relaid out with its anchor, and the drag's own changes, now
+  // under a stale id, ignored (docs/design/performance-pass.md, 3).
+  let splitMotionOpen = false;
+  const announceSplit = (phase: "begin" | "change" | "end", size: number) => {
+    splitMotionOpen = phase !== "end";
+    dispatchPanelGeometryMotion({ phase, id: splitMotionId, source: "workspace", size });
+  };
   const besideWidth = () => shownSlots().reduce((sum, slot) => sum + (paneSlot(slot).host()?.getBoundingClientRect().width ?? 0), 0);
   createEffect(on(() => [shownSlots(), paneWeights().join()] as const, () => {
     requestAnimationFrame(() => {
+      if (splitMotionOpen) return;
       const next = besideWidth();
       if (Math.abs(next - splitSize) < 0.5) return;
       splitMotionId += 1;
@@ -4201,6 +4211,9 @@ function App() {
     const weightSum = weights.reduce((sum, weight) => sum + weight, 0);
     const widthSum = widths.reduce((sum, width) => sum + width, 0);
     let pending = [...weights];
+    // The room the panes beside A will take, from the widths just worked out:
+    // announcing it needs no measuring after the weights are written.
+    let pendingBeside = widths.slice(1).reduce((sum, width) => sum + width, 0);
     let frame = 0;
     const apply = (next: number[]) => { if (next.length === 2) setSplitRatio(next[1]!); else setSplitRatios3(next); };
     splitMotionId += 1;
@@ -4217,10 +4230,11 @@ function App() {
       }
       next[delta > 0 ? position - 1 : position]! += Math.abs(delta) - owed;
       pending = next.map((width) => width / widthSum * weightSum);
+      pendingBeside = next.slice(1).reduce((sum, width) => sum + width, 0);
       if (!frame) frame = requestAnimationFrame(() => {
         frame = 0;
         apply(pending);
-        announceSplit("change", besideWidth());
+        announceSplit("change", pendingBeside);
       });
     };
     const stop = () => {
