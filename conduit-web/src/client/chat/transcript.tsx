@@ -37,7 +37,7 @@ import {
   createTailFollowState,
   decideTailScroll,
   rebaseTailFollowState,
-  HISTORY_LOAD_TOP_PX,
+  HISTORY_LOAD_TOP_PX, HISTORY_REVEAL_BUDGET_MS,
   TAIL_NEAR_LATEST_PX,
   shouldFollowAfterHistoryRestore,
   shouldLoadEarlierHistory,
@@ -313,6 +313,21 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     props.chat.streaming,
   );
   const empty = createMemo(() => !timeline.length && !isChatContentActivity(props.chat.activity()));
+  /*
+   * A page of older history is drawn a few rows a frame rather than at once:
+   * a page rendered and laid out in one task took 20-30ms, three frames at
+   * 144Hz (docs/design/performance-pass.md, 10). While `holdKey` is set, rows
+   * before that one wait, and the nearest `holdShown` of them are drawn.
+   */
+  const [holdKey, setHoldKey] = createSignal<string | null>(null);
+  const [holdShown, setHoldShown] = createSignal(0);
+  const heldRows = () => { const key = holdKey(); return key === null ? -1 : [...timeline].findIndex((row) => row.key === key); };
+  const shownTimeline = createMemo(() => {
+    const rows = [...timeline];
+    const key = holdKey();
+    const at = key === null ? -1 : rows.findIndex((row) => row.key === key);
+    return at <= 0 ? rows : rows.slice(Math.max(0, at - holdShown()));
+  });
 
   let scrollFrame: number | null = null;
   let typewriterTailFrame: number | null = null;
@@ -619,18 +634,33 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       }
     };
     let loadedMore = false;
+    setHoldShown(0);
+    setHoldKey(timeline[0]?.key ?? null);
     historyLoad = props.chat.loadOlder().then((loaded) => {
-      if (!loaded) return;
+      if (!loaded) { setHoldKey(null); return; }
       loadedMore = true;
+      // The loading row has gone; the page itself is held back.
       queueMicrotask(restoreAnchor);
-      return new Promise<void>((resolve) => requestAnimationFrame(() => {
-        restoreAnchor();
-        requestAnimationFrame(() => {
+      // Each frame draws the nearest held rows one by one, the anchor restored
+      // after each so none shows out of place, until ~4ms has gone.
+      return new Promise<void>((resolve) => {
+        const reveal = () => {
+          const started = performance.now();
+          let waiting = heldRows();
+          while (holdShown() < waiting && performance.now() - started < HISTORY_REVEAL_BUDGET_MS) {
+            setHoldShown((count) => count + 1);
+            restoreAnchor();
+            waiting = heldRows();
+          }
+          if (holdShown() < waiting) return void requestAnimationFrame(reveal);
+          setHoldKey(null);
           restoreAnchor();
           resolve();
-        });
-      }));
+        };
+        requestAnimationFrame(reveal);
+      });
     }).finally(() => {
+      setHoldKey(null);
       viewport.style.overflowAnchor = previousOverflowAnchor;
       historyLoad = null;
       // Still short after this page, it asks for the next.
@@ -1121,7 +1151,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
           <div data-slot="message-scroller-item" class="flex justify-center" role="status" aria-label="Loading earlier messages"><Spinner /></div>
         </Show>
         <Show when={empty()}><div class="empty-thread" data-slot="message-scroller-item"><div class="welcome"><h1>How can I help you today?</h1></div></div></Show>
-        <For each={timeline}>{(item) => {
+        <For each={shownTimeline()}>{(item) => {
           if (item.type === "trace") {
             let traceRow!: HTMLDivElement;
             const chatId = () => props.chat.loadedId();
