@@ -1,8 +1,9 @@
 # Fade streamed text instead of typing it
 
-> **Status (2026-09-30): built as a pacing option, "Fade words".** It sits beside
-> Buffered, Adaptive and Fixed in Settings → Appearance → Streaming rather than
-> replacing them, so the two can be compared on the same turn. The review at the
+> **Status (2026-09-30): built as Incremark's Fade reveal.** It sits beside
+> Buffered, Adaptive and Fixed in Settings → Appearance → Streaming, with a Word
+> fade time (100–600ms) beneath it, so the reveals can be compared on the same
+> turn. The review at the
 > end of this document changed three parts of the design; read it before this
 > sketch.
 
@@ -374,3 +375,19 @@ What the real turns found, in order:
   whether each removed node is back in the page found every inline-math removal
   was a list reorder, mostly from the span cleanup at settle. No KaTeX was
   redrawn.
+
+## Open issues closed (2026-09-30)
+
+- **A word remounted mid-fade** resumes its fade with a negative
+  `animation-delay` taken from the block's recent reveals, instead of snapping
+  to full colour.
+- **The settle cleanup no longer moves formulas.** Each fading text node has
+  one `.stream-text` wrapper that stays; only the word spans inside it are
+  swapped for text.
+- **A list, quote or table's first item no longer mounts twice.**
+  `smartMergeAst` merged into an empty children array at index -1, leaving an
+  empty first slot. That affected every reveal, not only Fade.
+- **Marker-only last lines are held back while streaming.** Until a line
+  reaches its first word, the parser keeps re-reading it: `-`, `- `, `- *`.
+- **A streaming code block morphs its lines** instead of replacing its
+  innerHTML on every token.

@@ -491,6 +491,67 @@ paint back by ~110ms -- but costs a parse rather than a render.
 What remains on a reopen is the open's own long tasks (targets 2 and 11)
 holding the frames the queue needs.
 
+## 16. Streaming cost that grew with the answer (fixed 2026-09-30)
+
+**Method.** Headed Windows Chrome at 144Hz, traced over raw CDP with the lean
+categories, measuring whole streams rather than the first 10 seconds. The
+test profile's replays were used: long aligned blocks, the formula
+compendium, and a new Markdown mix sent in uneven bursts. A 10-second window
+had shown the KaTeX replays near budget (§15). Whole streams showed that
+frames over budget climbed steadily after that, to about 230 every 5 seconds
+late in the compendium. Causes were found by toggling one CSS or script
+change at a time in 3-second windows of a single stream, then by CPU profile.
+
+**Causes, in order of size:**
+
+1. **`:has()` rules Chrome cannot narrow.** A `:has()` whose argument is a
+   pseudo-class, attribute or tag (`:focus-visible`, `[data-held]`, `svg`,
+   `> input[type]`, `+ input`) made every DOM change anywhere re-check
+   ancestors. Deleting only those rules at runtime took late-stream style work
+   from ~380ms to ~105ms per 3s, the same as deleting every `:has()`;
+   class-only arguments cost nothing measurable. The rules were rewritten:
+   - Visible focus and held sidebar rows are marked by listeners
+     (`preferences/focus-shown.ts`, `data-held-within`).
+   - The project chevron reads `data-open`.
+   - Settings marks stacking fields itself.
+   - The terminal row reads `[data-highlighted]` on itself.
+   - Selectors that repeated a broader one, or matched nothing, were deleted.
+
+   **Rule:** a new `:has()` takes a class-only argument or doesn't go in.
+2. **Display math re-recorded its paint every frame.** Consecutive `$$`
+   lines are one paragraph, so the formula being written changed the box every
+   formula above it sat in. `contain: layout paint` on display math (already
+   clipped, so nothing visible changes) cut paint about tenfold, from ~560ms to
+   ~50ms per 3s.
+3. **The Incremark message's sizing `:has(.chat-markdown…)`** searched the
+   answer on every restyle of its wrapper. It is now an attribute.
+4. **Transcript visibility re-scanned every row on every streamed frame,**
+   with a display-math query per block. It now syncs only the rows a mutation
+   touched, with one query per row.
+5. **`loadEarlier()`** ran on every tail-follow frame and queried the whole
+   thread for a skeleton that matters only when a page is too short to scroll.
+6. **Settlement recalculated style once per block.** The size observer read
+   each block's borders between writes to the ones before it. Borders are now
+   cached and read before any write. This removed a 72–80ms task at the end of a
+   long answer.
+7. **The display store's `reconcile`** walked every block's tree each frame.
+   It is now a signal plus a per-block identity memo. `shareUnchanged` keeps the
+   identity of unchanged subtrees in the block being revealed, which the store
+   used to provide.
+
+**Tasks over 6.94ms, whole stream:**
+
+| Replay | Before | After (Buffered / Fade) |
+|---|---|---|
+| KaTeX · long aligned blocks | 946 | 8 / 13 |
+| KaTeX · hundreds of formulas | 1702 | 83 / 108 |
+| Markdown mix in bursts | 7–8 | 8 / 1 |
+
+The worst single task in the compendium fell from 72–91ms to ~25ms. What
+remains in the compendium is per-frame work that still scales with the size
+of the open block, one paragraph of dozens of `$$` lines: style, layout and
+layerize of that paragraph.
+
 ## 14. Measured and fine (2026-09-30)
 
 So the pass need not look again: scrolling a long file (30 wheel steps: 1
