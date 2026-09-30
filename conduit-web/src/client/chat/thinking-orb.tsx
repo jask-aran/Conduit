@@ -51,16 +51,38 @@ type Shown = { state: OrbState; opts?: ModeOpts; frame?: ModeFrame };
 type Player = { draw: (now: number) => void; interval: number; last: number };
 const players = new Set<Player>();
 let tick = 0;
+let wait: ReturnType<typeof setTimeout> | undefined;
+// Asking for a frame makes the browser run a whole frame -- style, intersection
+// observers, commit -- whether or not anything draws in it. So with only
+// throttled orbs playing, the loop sleeps until the next is due.
+const schedule = () => {
+  if (tick || wait !== undefined || !players.size) return;
+  const now = performance.now();
+  let due = Infinity;
+  for (const player of players) due = Math.min(due, player.last + player.interval - now);
+  if (due <= 8) tick = requestAnimationFrame(run);
+  else wait = setTimeout(() => { wait = undefined; tick = requestAnimationFrame(run); }, due - 8);
+};
 const run = (now: number) => {
+  tick = 0;
   for (const player of players) {
     if (now - player.last < player.interval - 1) continue;
     player.last = now;
     player.draw(now);
   }
-  tick = players.size ? requestAnimationFrame(run) : 0;
+  schedule();
 };
-const play = (player: Player) => { players.add(player); if (!tick) tick = requestAnimationFrame(run); };
-const stop = (player: Player) => { players.delete(player); if (!players.size && tick) { cancelAnimationFrame(tick); tick = 0; } };
+// A newly playing orb (a live one draws every frame) may be due before the
+// sleep ends, so the sleep is redone.
+const play = (player: Player) => { players.add(player); clearTimeout(wait); wait = undefined; schedule(); };
+const stop = (player: Player) => {
+  players.delete(player);
+  if (players.size) return;
+  if (tick) cancelAnimationFrame(tick);
+  clearTimeout(wait);
+  tick = 0;
+  wait = undefined;
+};
 
 /* A settled orb's slow turn (a full one in ~12s: ~0.3px a step at 20px) reads
    the same at 15 draws a second as at the display's rate; the sputter's
@@ -132,8 +154,9 @@ export function ThinkingOrb(props: { state: OrbState; opts?: ModeOpts; frame?: M
       if (fading && progress >= 1) setLeaving(null);
       paintOn(frontContext, frontPreset(), seconds);
       paintOn(backContext, progress < 1 ? fading : null, seconds);
-      front.style.opacity = String(progress);
-      back.style.opacity = String(1 - progress);
+      // Written only when it changes: each write is a style recalc, per draw.
+      const opacity = String(progress);
+      if (front.style.opacity !== opacity) { front.style.opacity = opacity; back.style.opacity = String(1 - progress); }
     };
 
     let visible = true;
