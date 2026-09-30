@@ -191,6 +191,7 @@ const harnessConfig = {
   chatgptWebScript: process.env.CONDUIT_CHATGPT_WEB_SIDECAR
     || path.join(config.repositoryRoot, "working-files/chatgpt_web_sidecar.py"),
   chatgptWebDataDir: path.join(config.dataRoot, "chatgpt-web"),
+  testStreamDataDir: path.join(config.dataRoot, "test-stream"),
 };
 const backends = ChatBackendRegistry.fromManifests(MANIFESTS, await detect(MANIFESTS, harnessConfig), harnessConfig);
 // Distinct adapter instances: Pi answers to two implementation keys.

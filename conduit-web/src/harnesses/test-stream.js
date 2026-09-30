@@ -12,7 +12,7 @@ export const manifest = {
   id: "test-stream",
   label: "Test stream",
   profileLabel: "Test profile",
-  description: "A synthetic backend that streams tokens at a fixed rate, for profiling the transcript",
+  description: "A synthetic backend that streams tokens, or replays a real reply, at a fixed rate, for profiling the transcript",
   protocol: "native_api",
   installationId: "conduit-test-stream",
   capabilities: TEST_STREAM_CAPABILITIES,
@@ -27,5 +27,5 @@ export const manifest = {
   profile: true,
   builtIn: true,
   probe: () => READY(),
-  build: (config) => new TestStreamAdapter({ logs: config.logs }),
+  build: (config) => new TestStreamAdapter({ dataDir: config.testStreamDataDir, logs: config.logs }),
 };
