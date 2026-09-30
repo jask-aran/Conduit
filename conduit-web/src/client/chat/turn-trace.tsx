@@ -6,7 +6,7 @@ import type { TraceSegment, TurnTraceData } from "../turn-rows";
 import { KIND_ICONS, stepDuration, ToolStep, VERBS } from "./tool-card";
 import "./turn-trail.css";
 import { ORBITS_TRAILED, PLAIN_SPHERE, SPUTTERING_SPHERE } from "./orb-frames";
-import { ThinkingOrb, type ModeFrame, type OrbState } from "./thinking-orb";
+import { ThinkingOrb, type ModeFrame, type OrbState, settledOrbRate } from "./thinking-orb";
 import { Disclosure } from "./disclosure";
 import type { MarkdownRendererId } from "./markdown-settings";
 import type { IncremarkPacingMode } from "./incremark-pacing";
@@ -325,7 +325,7 @@ export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sess
           ends. A turn that did not finish -- stopped or failed -- tints the
           orb. */}
       <span class="turn-trace-mark">
-        <ThinkingOrb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} />
+        <ThinkingOrb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />
       </span>
       <div class="turn-trace-preview">
         {/* Two lines: what it is doing, and its latest step. The first is
