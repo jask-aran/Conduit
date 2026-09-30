@@ -471,6 +471,26 @@ Headed Windows Chrome, 10s of each stream:
 What is left over budget is the long-block frames that re-render KaTeX (~0.5-1ms)
 and patch at once with a typewriter step and the tail follow's layout read.
 
+**Opening a chat of formulas.** A settled formula waited in the math queue,
+oldest first, 8ms of a frame -- so a chat, which opens at its end, filled
+every formula above the fold before the ones on screen, top to bottom, and
+did it again on every load because the rendered HTML lived in memory only.
+Now settled formulas are drawn last first within 5ms of a frame, and their
+HTML is kept across loads (`chat/math-html-store.ts`: localStorage, 2M
+characters, oldest out, keyed by KaTeX's version). A stored formula still goes
+through the queue -- inserted synchronously, sixteen of them held the first
+paint back by ~110ms -- but costs a parse rather than a render.
+
+| Replay chat, 5 formulas on screen | First paint | On-screen formulas filled |
+| --- | --- | --- |
+| Before, headless | ~360-400ms | +500-670ms |
+| After, first open, headless | ~360-430ms | +170-260ms |
+| After, reopen, headless | ~330-420ms | +50-75ms |
+| After, reopen, headed Windows | ~450-475ms | +80-145ms |
+
+What remains on a reopen is the open's own long tasks (targets 2 and 11)
+holding the frames the queue needs.
+
 ## 14. Measured and fine (2026-09-30)
 
 So the pass need not look again: scrolling a long file (30 wheel steps: 1
