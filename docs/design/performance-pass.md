@@ -7,6 +7,13 @@ The probes were headless Chromium (Playwright) against the local server on
 :4310, sampling once per animation frame; numbers are single runs on the dev
 box unless noted.
 
+**The budget is 6.94ms a frame (144Hz), everywhere**: every main-thread task
+during an interaction -- a drag, a stream, a keystroke, a scroll -- should
+finish inside it at full speed. Measure it per task from a trace (CDP
+`Tracing` with `devtools.timeline`, the renderer main thread's
+`ThreadControllerImpl::RunTask` durations), not from rAF gaps: headless
+Chromium paints at 60Hz, so a 12ms frame looks the same as a 5ms one.
+
 Before and after each change, run the regression cover for the panes
 (`docs/testing.md`, "Panes smoke"): `node --test test/file-tabs.test.js` and
 `npm run smoke:panes -- --project <a place whose page lists files>`.
@@ -96,6 +103,39 @@ divider in the same setup cost the same with or without the rules: ~1.9s of
 main-thread work, ~600-680ms style and 210-220 layouts over 30 pointer moves
 (~7 layouts per move), so the drag half is forced layout of its own -- the
 per-frame measuring described below is the first suspect.
+
+**Divider drag fixed (2026-09-30).** Three causes, in order of cost:
+
+1. The effect that announces pane widths (`main.tsx`, on `paneWeights()`)
+   fired on every frame of a drag and started a geometry motion of its own
+   each time -- a new id, then begin and end -- so every open transcript
+   measured, pinned and fully relaid out (anchor included) every frame, and
+   ignored the drag's own changes under the stale id. It now stays quiet while
+   a drag or ease has a motion open (`splitMotionOpen`).
+2. The drag measured every pane (`besideWidth()`) straight after writing the
+   new weights, and each transcript measured its own width in turn. The drag
+   now announces the widths it worked out, and passes each pane's width in
+   the event (`panes` in `PanelGeometryMotionDetail`), so transcripts do not
+   read.
+3. `workspace-resizing` on body set an inherited cursor and user-select,
+   restyling the whole page at the drag's start and end (~6-7ms each). Both
+   resize handles now keep their cursor by pointer capture.
+
+Two chats side by side, 40 pointer moves, per-task trace:
+
+| | Before | After |
+| --- | --- | --- |
+| Layouts / style recalcs over 30 moves | 210 / 526 | 40 / 130 |
+| Worst task, full speed | 15.2ms | 7.8ms |
+| Tasks over 6.94ms, full speed | 3 | 2 (the press, 7.8ms; the final relayout, 7.6ms) |
+| Tasks over 6.94ms, CPU 4× slower | 57 | 49 |
+
+Every frame of the drag itself is now inside the budget at full speed; the
+press (the transcripts' one measure as the motion begins) and the last frame
+(each transcript taking its new width) are just over. Under 4× slowdown
+what is left is paint and layerize (~4-5ms each a frame) plus the thinking
+orb's canvas, redrawn every frame (`fill`/`arc` in its rAF loop) -- a lead for
+target 13 too.
 
 **Leads.** Which gesture it is (divider drag, pane open/close ease, layout
 preset, sidebar toggle, window resize, or during streaming). In side-by-side
