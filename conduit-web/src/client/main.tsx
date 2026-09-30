@@ -2838,7 +2838,8 @@ function App() {
       if (column?.contains(document.activeElement) && document.activeElement !== column) return;
       const editor = column?.querySelector<HTMLElement>(".cm-content");
       (editor ?? column ?? surface)?.focus({ preventScroll: true });
-      if (!editor && tries++ < 8) setTimeout(land, 60);
+      // A column still loading (a large file) is waited for longer than an editor to draw.
+      if (!editor && tries++ < (column ? 8 : 40)) setTimeout(land, 60);
     };
     requestAnimationFrame(land);
   }
