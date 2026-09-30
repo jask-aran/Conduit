@@ -366,7 +366,20 @@ export function mountTranscriptVisibility(
     }
     scheduleRefresh(true);
   };
-  const onScrollEnd = () => scheduleRefresh();
+  // After a scroll, repair any intersection the observer missed (upward
+  // scrolls were seen to leave a block hidden in view) by observing every
+  // managed block afresh: an observer reports each new target's current state,
+  // computed in the frame's own intersection step. This was a measurePass --
+  // every block's rect read, repeated each frame a block was revealed -- which
+  // on a long transcript put 20-odd frames over budget in one scroll
+  // (docs/design/performance-pass.md, 10).
+  const onScrollEnd = () => {
+    if (!fontsReady || activeIds.size) return;
+    for (const element of managed) {
+      visibilityObserver.unobserve(element);
+      visibilityObserver.observe(element);
+    }
+  };
   window.addEventListener(PANEL_GEOMETRY_MOTION_EVENT, onMotion);
   document.addEventListener("visibilitychange", onVisibility);
   viewport.addEventListener("scrollend", onScrollEnd);
