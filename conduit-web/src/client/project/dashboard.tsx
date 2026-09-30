@@ -118,6 +118,10 @@ export function ProjectDashboard(props: {
   onContextAction: (type: string, target: Omit<SidebarCommand, "type" | "nonce">) => void;
   isPinned: (type: "chat" | "project" | "terminal", id: string) => boolean;
   onOpenView: (view: WorkspaceView) => void;
+  /** A file opens as from Files -- a pane's file viewer, Ctrl a kept tab, Alt beside; absent where panes do not fit. */
+  onOpenFile?: (path: string) => void;
+  /** A file's view, for dragging it to a pane as from Files. */
+  fileView?: (path: string) => string;
   onOpenTerminal: (terminal: Pty) => void;
   onOpenTerminalMaximized: (terminal: Pty) => void;
   onPrefetchTerminal: () => void;
@@ -465,7 +469,7 @@ export function ProjectDashboard(props: {
   const filesGroup = () => <SplitGroup id="dashboard-files" label="Files" actions={<button type="button" onClick={() => props.onOpenView("files")}>Browse</button>}>
     <Show when={payload()?.recentFiles.length} fallback={<SplitEmpty>{payload() ? "No files yet." : "Loading…"}</SplitEmpty>}>
       <For each={payload()!.recentFiles}>{(file) =>
-        <SplitRow element="button" onClick={() => props.onOpenView("files")} lead={<FileTypeIcon name={file.name} />} primary={file.name} trailing={relativeActivity(file.modifiedAt, now())} />}
+        <SplitRow element="button" title={file.name} draggable={props.fileView ? "true" : undefined} data-doc-view={props.fileView?.(file.name)} onClick={() => props.onOpenFile ? props.onOpenFile(file.name) : props.onOpenView("files")} lead={<FileTypeIcon name={file.name} />} primary={file.name} trailing={relativeActivity(file.modifiedAt, now())} />}
       </For>
     </Show>
   </SplitGroup>;
