@@ -5036,6 +5036,8 @@ function App() {
       onContextAction={(type, target) => runSidebar(type, target)}
       isPinned={isSidebarPinned}
       onOpenView={(view) => openWorkspaceView(view)}
+      onOpenFile={canOpenFilePanes() ? (path) => openFileDocument({ projectId: props.project.id, path }, { beside: altActivation(), edit: false }) : undefined}
+      fileView={canOpenFilePanes() ? (path) => formatFileView([{ projectId: props.project.id, path }]) : undefined}
       onOpenTerminal={(terminal) => openWorkspaceView("terminal", terminal.id)}
       onOpenTerminalMaximized={(terminal) => { openWorkspaceView("terminal", terminal.id); setWorkspaceExpanded(true); }}
       onPrefetchTerminal={prefetchWorkspaceTerminal}
