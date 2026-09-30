@@ -14,14 +14,56 @@ function isEscaped(source: string, index: number) {
   return slashCount % 2 === 1;
 }
 
-function balanceBraces(source: string) {
-  let depth = 0;
+/**
+ * What a partial formula still has open, innermost last: braces,
+ * `\left` delimiters and `\begin{...}` environments. Closing them in reverse
+ * is what lets a half-written `aligned` block render its finished rows; closing
+ * only braces left every environment invalid until its `\end` arrived, so a
+ * long display block appeared all at once.
+ */
+function openGroups(source: string) {
+  const stack: string[] = [];
+  // Where a two-argument command ended: a brace opening right there is its
+  // first argument, and closing it early still owes the second.
+  let firstArgumentAt = -1;
   for (let index = 0; index < source.length; index += 1) {
-    if (isEscaped(source, index)) continue;
-    if (source[index] === "{") depth += 1;
-    else if (source[index] === "}") depth = Math.max(0, depth - 1);
+    const char = source[index];
+    if (char === "\\") {
+      const command = /^\\([a-zA-Z]+)/.exec(source.slice(index));
+      if (!command) { index += 1; continue; }
+      const name = command[1]!;
+      const after = index + command[0].length;
+      if (name === "begin" || name === "end") {
+        const environment = /^\s*\{([a-zA-Z*]+)\}/.exec(source.slice(after));
+        if (environment) {
+          if (name === "begin") stack.push(`env:${environment[1]}`);
+          else {
+            const at = stack.lastIndexOf(`env:${environment[1]}`);
+            if (at >= 0) stack.length = at;
+          }
+          index = after + environment[0].length - 1;
+          continue;
+        }
+      } else if (name === "left") stack.push("left");
+      else if (name === "right" && stack.at(-1) === "left") stack.pop();
+      else if (TWO_ARGUMENT_COMMANDS.has(name)) firstArgumentAt = after;
+      index = after - 1;
+      continue;
+    }
+    if (char === "{") stack.push(firstArgumentAt >= 0 && !source.slice(firstArgumentAt, index).trim() ? "{2" : "{");
+    else if (char === "}" && stack.at(-1)?.startsWith("{")) stack.pop();
+    if (!/\s/.test(char!)) firstArgumentAt = -1;
   }
-  return `${source}${"}".repeat(depth)}`;
+  return stack;
+}
+
+function closeOpenGroups(source: string) {
+  // A `\left` with no delimiter yet takes the invisible one.
+  let closed = /\\left\s*$/.test(source) ? `${source}.` : source;
+  for (const group of openGroups(closed).reverse()) {
+    closed += group === "{" ? "}" : group === "{2" ? "}{}" : group === "left" ? "\\right." : `\\end{${group.slice(4)}}`;
+  }
+  return closed;
 }
 
 function consumeBracedArgument(source: string, start: number) {
@@ -69,10 +111,22 @@ function appendMissingCommandArguments(source: string) {
  * rejected by the renderer and replaced with the last valid preview.
  */
 export function repairSyntheticMathSource(source: string) {
-  let repaired = balanceBraces(source);
-  repaired = appendMissingCommandArguments(repaired);
+  let repaired = appendMissingCommandArguments(source);
   if (/(^|[^\\])(?:\^|_)\s*$/.test(repaired)) repaired += "{}";
-  return repaired;
+  return closeOpenGroups(repaired);
+}
+
+/**
+ * A partial's tail with what cannot be finished yet taken off: a command still
+ * being written (`\ome` of `\omega`, `\begin{alig`), a lone backslash starting
+ * one, then a row break with nothing after it. Tried only when the repaired
+ * source is rejected, because a finished formula may end in a command.
+ */
+export function trimUnfinishedMathTail(source: string) {
+  return source
+    .replace(/\\(?:begin|end)\s*\{[a-zA-Z*]*$|\\[a-zA-Z]+\s*$/, "")
+    .replace(/(^|[^\\])\\$/, "$1")
+    .replace(/\\\\(?:\[[^\]]*)?\s*$/, "");
 }
 
 function replacePendingInlineMath(node: MarkdownNode, opening: string, body: string): [MarkdownNode, boolean] {
