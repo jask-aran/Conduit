@@ -35,9 +35,12 @@
    else -- 9 of them 10.5ms a frame, 2 of them 7.1ms -- and containing the
    formula inside its scroller took the 9-block case to 7.3ms. Containment goes
    on the formula rather than the scroller; on the scroller it does nothing,
-   because the box really is the part that has to change. */
+   because the box really is the part that has to change.
+   Layout only: paint containment snapped each formula to the device pixel
+   grid while it applied, so under fractional scaling the formulas sitting
+   between pixels moved sideways on pointer-down and back on release. */
 .transcript[data-panel-motion] .chat-markdown .katex-display > .katex {
-  contain: layout paint;
+  contain: layout;
 }
 
 /* Incremark Fade: a newly shown word fades in once. Its layout is final when
