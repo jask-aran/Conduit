@@ -15,21 +15,22 @@ import type { IncremarkPlugin } from "@incremark/core";
  * The guard below is that same test and nothing more; the block rule and the
  * rest of the inline rule are Incremark's own.
  */
+import { inlineDollarClose } from "./inline-dollar.ts";
+
 type MathExtensionOptions = { tex?: boolean };
 
-function opensMath(source: string, index: number) {
-  const next = source[index + 1];
-  return Boolean(next) && next !== "$" && !/[\s\d]/.test(next!);
-}
+const INLINE_DOUBLE_DOLLAR = /\$\$(?!\$)((?:\\.|[^\\\n$])+?)\$\$/;
 
 function inlineMathStart(source: string, tex: boolean) {
   let dollarIndex = -1;
   for (let index = source.indexOf("$"); index >= 0; index = source.indexOf("$", index + 1)) {
-    if (opensMath(source, index)) {
+    if (inlineDollarClose(source, index) >= 0) {
       dollarIndex = index;
       break;
     }
   }
+  const doubled = INLINE_DOUBLE_DOLLAR.exec(source)?.index ?? -1;
+  if (doubled >= 0 && (dollarIndex < 0 || doubled < dollarIndex)) dollarIndex = doubled;
   const parenIndex = tex ? source.indexOf("\\(") : -1;
   if (dollarIndex >= 0 && parenIndex >= 0) return Math.min(dollarIndex, parenIndex);
   if (dollarIndex >= 0) return dollarIndex;
@@ -64,12 +65,15 @@ const inlineMathExtension = (tex: boolean) => ({
     return inlineMathStart(source, tex);
   },
   tokenizer(source: string) {
-    // `opensMath` is the whole difference from Incremark: "$174k" and "$ 5" are
-    // currency, so they never open a formula that a later `$` can close.
-    if (opensMath(source, 0)) {
-      const dollarMatch = /^\$(?!\$)((?:\\.|[^\\\n$])+?)\$(?!\d)/.exec(source);
-      if (dollarMatch) return { type: "inlineMath", raw: dollarMatch[0], text: dollarMatch[1]!.trim() };
-    }
+    // The whole difference from Incremark: prose money is not a formula; see
+    // inline-dollar.ts for where one opens and closes.
+    // `$$…$$` in the middle of a line: display delimiters written inline,
+    // which models do and remark-math reads as an inline formula. At a line's
+    // start the block rule has already taken it.
+    const doubled = INLINE_DOUBLE_DOLLAR.exec(source);
+    if (doubled?.index === 0) return { type: "inlineMath", raw: doubled[0], text: doubled[1]!.trim() };
+    const close = inlineDollarClose(source, 0);
+    if (close > 0) return { type: "inlineMath", raw: source.slice(0, close + 1), text: source.slice(1, close).trim() };
     if (!tex) return undefined;
     const parenMatch = /^\\\(([\s\S]*?)\\\)/.exec(source);
     if (parenMatch) return { type: "inlineMath", raw: parenMatch[0], text: parenMatch[1]!.trim() };
