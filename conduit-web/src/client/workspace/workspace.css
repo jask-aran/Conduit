@@ -16,7 +16,7 @@
 }
 .workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 0 6.4px 0; flex: none; overflow: visible; pointer-events: none; border-radius: 12.8px; transition: width 220ms var(--panel-motion-easing), margin-right 220ms var(--panel-motion-easing); }
 .workspace-panel.workspace-panel-open { pointer-events: auto; background: var(--background); }
-.workspace-panel[data-edge-instant="true"],
+.workspace-panel[data-edge-instant="true"] { transition: none !important; }
 /* Surface keeps settled panel width, right-anchored inside the shell. */
 .workspace-panel-surface { position: absolute; inset: 0; display: flex; min-width: 0; height: 100%; contain: layout paint; container-name: workspace-surface; container-type: inline-size; flex: none; flex-direction: column; overflow: hidden; border-radius: 12.8px; background: var(--background); }
 .workspace-panel-surface > * { max-width: 100%; }
@@ -562,7 +562,7 @@
 /* Workspace panel geometry, file views, and artifact surfaces. */
 .workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - 16px); margin: 8px 0 8px 0; flex: none; overflow: visible; pointer-events: none; border-radius: 16px; transition: width 220ms var(--panel-motion-easing), margin-right 220ms var(--panel-motion-easing); }
 .workspace-panel.workspace-panel-open { pointer-events: auto; background: var(--background); }
-.workspace-panel[data-edge-instant="true"],
+.workspace-panel[data-edge-instant="true"] { transition: none !important; }
 /* Surface keeps settled panel width, right-anchored inside the shell. */
 .workspace-panel-surface { position: absolute; inset: 0; display: flex; min-width: 0; height: 100%; contain: layout paint; flex: none; flex-direction: column; overflow: hidden; border-radius: 16px; background: var(--background); }
 .workspace-panel-surface > * { max-width: 100%; }
