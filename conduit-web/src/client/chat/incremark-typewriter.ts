@@ -20,6 +20,8 @@ export const TYPEWRITER_FIXED_STEP = 32;
 export const TYPEWRITER_ADAPTIVE_BACKLOG_WINDOW_MS = 250;
 /** The longest a delivered word may wait to be shown under fade pacing. */
 export const FADE_MAX_WINDOW_MS = 300;
+/** Per delivery, how much of the longest recent gap the window still covers. */
+export const FADE_GAP_DECAY = 0.9;
 /** A delivery drains no faster than this per character: a paragraph reads in, not pops. */
 export const FADE_MS_PER_CHARACTER = 0.7;
 const TYPEWRITER_MATH_SOURCE = "__conduitMathSource";
@@ -281,7 +283,7 @@ export class BufferedIncremarkTypewriter {
   private lastObservedSourceAt: number | null = null;
   private backlogStartedAt: number | null = null;
   private deliveries: FadeDelivery[] = [];
-  private deliveryGapEmaMs: number | null = null;
+  private deliveryGapMs: number | null = null;
   private lastDeliveryAt: number | null = null;
   private lastMetrics: TypewriterMetrics = {
     scheduler: "buffered",
@@ -380,7 +382,7 @@ export class BufferedIncremarkTypewriter {
     this.lastObservedSourceAt = null;
     this.backlogStartedAt = null;
     this.deliveries = [];
-    this.deliveryGapEmaMs = null;
+    this.deliveryGapMs = null;
     this.lastDeliveryAt = null;
     this.terminalEmitted = false;
     this.setBusy(false);
@@ -389,11 +391,16 @@ export class BufferedIncremarkTypewriter {
 
   private recordDelivery(sourceCharacters: number, delta: number, now: number) {
     if (this.lastDeliveryAt != null) {
-      this.deliveryGapEmaMs = updateEma(this.deliveryGapEmaMs, Math.min(FADE_MAX_WINDOW_MS, now - this.lastDeliveryAt));
+      // The gap to cover is the long one, not the average: an average of
+      // uneven gaps finishes each drain early and leaves the rest of the gap
+      // still. A long gap raises the estimate at once; it eases back over the
+      // deliveries after it.
+      const gap = Math.min(FADE_MAX_WINDOW_MS, now - this.lastDeliveryAt);
+      this.deliveryGapMs = Math.max(gap, (this.deliveryGapMs ?? gap) * FADE_GAP_DECAY);
     }
     this.lastDeliveryAt = now;
     const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const span = reduced ? 0 : fadeWindow(delta, this.deliveryGapEmaMs);
+    const span = reduced ? 0 : fadeWindow(delta, this.deliveryGapMs);
     this.deliveries.push({ end: sourceCharacters, deadline: now + span });
   }
 

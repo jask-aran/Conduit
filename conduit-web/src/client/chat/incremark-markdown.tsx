@@ -20,14 +20,13 @@ import { citationHost, resolveMarkdownUrl } from "./markdown-security";
 import { projectTableMathSource, promoteTableCellDisplayMath, restoreTableMathAst, restoreTableMathSentinel } from "./table-math";
 import type { StreamingPending } from "./streaming-markdown";
 import { splitStreamingMarkdown } from "./streaming-markdown";
+import { streamFadeMs } from "@/client/preferences/stream-fade";
 import "./incremark-markdown.css";
 
 type MarkdownNode = any;
 type Definition = { url?: string; title?: string | null };
 /** Quiet frames a message must hold before its source is frozen. */
 const SETTLE_DELAY_FRAMES = 2;
-/** Matches `.stream-word`'s animation; the spans are dropped once it is over. */
-const STREAM_WORD_FADE_MS = 220;
 
 const incremarkParserOptions = { gfm: true, plugins: [conduitMathPlugin({ tex: true })], htmlTree: true, containers: true };
 type RendererContext = {
@@ -1263,7 +1262,8 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   const [fadeOver, setFadeOver] = createSignal(false);
   createEffect(() => {
     if (!settled()) return;
-    const timer = setTimeout(() => setFadeOver(true), STREAM_WORD_FADE_MS);
+    // The spans outlive the longest fade that could still be running.
+    const timer = setTimeout(() => setFadeOver(true), streamFadeMs() + 20);
     onCleanup(() => clearTimeout(timer));
   });
   const displayContext: RendererContext = { ...context, fadeWords: () => pacing() === "fade" && !props.inline && !fadeOver() };
