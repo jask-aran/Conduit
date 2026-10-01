@@ -567,7 +567,7 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     group: "workspace-panel",
     icon: "workspace-panel",
     keywords: ["workspace", "split", "dock", "move"],
-    contexts: ["workspace-panel", "chat", "dashboard"],
+    contexts: ["workspace-panel", "chat"],
     defaultBindings: [scopedBinding("KeyD", "D")],
     allowInExclusiveTarget: true,
   }),
