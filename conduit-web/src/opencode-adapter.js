@@ -11,7 +11,7 @@ import { formatHistoryTool } from "./harnesses/history-tool.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
-import { countCacheRequest } from "./cache-stats.js";
+import { countCacheRequest, usageFromRequests } from "./cache-stats.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 const execFile = promisify(execFileCallback);
@@ -1041,6 +1041,21 @@ export class OpenCodeAdapter extends EventEmitter {
       contextUsage, sessionStats: { cost: session.cost || 0, tokens: { input: session.tokens?.input || 0, output: session.tokens?.output || 0,
         cacheRead: session.tokens?.cache?.read || 0, cacheWrite: session.tokens?.cache?.write || 0 } }, cacheStats: record.cache.stats || null });
     return contextUsage;
+  }
+
+  /** An old thread's context from OpenCode's own messages; no live process needed. */
+  async contextFromHistory({ opaqueSession, project }) {
+    const sessionId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId || opaqueSession?.sessionId;
+    if (!sessionId) return null;
+    const rows = await this.messageRows(sessionId, { limit: 100 }).catch(() => []);
+    const requests = rows.filter((row) => row.type === "assistant" && row.tokens).reverse();
+    const last = requests.at(-1);
+    if (!last) return null;
+    const model = modelSpec(last.model);
+    return usageFromRequests(requests.map((row) => ({ input: row.tokens.input || 0, output: row.tokens.output || 0,
+      cacheRead: row.tokens.cache?.read || 0, cacheWrite: row.tokens.cache?.write || 0, reasoning: row.tokens.reasoning ?? null })),
+    { model, contextWindow: model ? await this.contextLimit(model, project?.workingRoot) : null,
+      cost: requests.reduce((sum, row) => sum + (row.cost || 0), 0) });
   }
 
   /** A model's context limit from OpenCode's catalogue, asked once per model. */

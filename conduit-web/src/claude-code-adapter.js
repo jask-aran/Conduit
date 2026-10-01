@@ -8,7 +8,7 @@ import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
-import { countCacheRequest } from "./cache-stats.js";
+import { countCacheRequest, usageFromRequests } from "./cache-stats.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 // Claude Code's tools, by what they do.
@@ -154,6 +154,16 @@ const requestUsage = (usage) => {
  * A steer is saved as the command it was queued as, and read back as the
  * prompt it became.
  */
+async function readSessionText(sessionId) {
+  const root = path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"), "projects");
+  let dirs = [];
+  try { dirs = await fs.promises.readdir(root); } catch { return null; }
+  for (const dir of dirs) {
+    try { return await fs.promises.readFile(path.join(root, dir, `${sessionId}.jsonl`), "utf8"); } catch { /* not this project */ }
+  }
+  return null;
+}
+
 async function readSavedSession(sessionId) {
   const root = path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"), "projects");
   let dirs = [];
@@ -329,6 +339,9 @@ function contextCategories(context) {
 }
 
 export class ClaudeCodeAdapter extends EventEmitter {
+  /** Each model's window as Claude Code last reported it, for threads read from history. */
+  static windows = new Map();
+
   /** `sdk` is the Agent SDK's surface; a test hands in its own. */
   constructor({ command = "claude", logs = null, sdk = claudeAgentSdk } = {}) {
     super();
@@ -594,6 +607,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
       record.contextUsage = { ...record.contextUsage, tokens: context.totalTokens, contextWindow: context.maxTokens || null,
         percent: context.maxTokens ? (context.totalTokens / context.maxTokens) * 100 : null,
         model: context.model || null, categories: contextCategories(context) };
+      if (context.model && context.maxTokens) ClaudeCodeAdapter.windows.set(context.model, context.maxTokens);
     } catch { /* the last request's count stands */ }
     if (!record.contextUsage && !record.sessionStats) return null;
     this.publish(record, { type: "usage", generationId: record.generation?.id || null,
@@ -1120,6 +1134,33 @@ export class ClaudeCodeAdapter extends EventEmitter {
       last.stopReason = message.outcome === "interrupted" ? "aborted" : "stop";
     }
     return { messages: messages.filter((message) => message.role === "user" || message.blocks.length), tools };
+  }
+
+  /**
+   * An old thread's context from its saved session: each request's usage once
+   * (Claude Code writes a message's usage on every line of it), a compaction
+   * boundary resetting the cache prefix. The window is the one Claude Code
+   * last reported for the model while this server ran, if any.
+   */
+  async contextFromHistory({ opaqueSession }) {
+    const sessionId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
+    const text = sessionId ? await readSessionText(sessionId) : null;
+    if (!text) return null;
+    const requests = [];
+    const seen = new Set();
+    let model = null;
+    for (const line of text.split("\n")) {
+      let entry;
+      try { entry = line.trim() ? JSON.parse(line) : null; } catch { entry = null; }
+      if (!entry || entry.isSidechain) continue;
+      if (entry.type === "system" && entry.subtype === "compact_boundary") { requests.push(null); continue; }
+      const message = entry.message;
+      if (entry.type !== "assistant" || !message?.usage || seen.has(message.id)) continue;
+      seen.add(message.id);
+      if (message.model && message.model !== "<synthetic>") model = message.model;
+      requests.push(requestUsage(message.usage));
+    }
+    return usageFromRequests(requests, { model, contextWindow: model ? ClaudeCodeAdapter.windows.get(model) : null });
   }
 
   async readTranscript({ liveSessionId, opaqueSession }) {

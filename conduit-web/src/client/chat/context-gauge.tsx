@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { ChevronRightIcon } from "lucide-solid";
 import { Popover, PopoverContent } from "@/components/primitives";
 import type { ActiveChatStore } from "../state/active-chat";
@@ -54,6 +54,7 @@ export function ContextGauge(props: { chat: ActiveChatStore; compact?: boolean }
   const close = () => { clearTimeout(timer); setHeld(false); setHovered(false); };
   onCleanup(() => clearTimeout(timer));
 
+  createEffect(on(() => hovered() || held(), (open) => { if (open) props.chat.refreshContext(); }, { defer: true }));
   return <Popover open={hovered() || held()} onOpenChange={(open) => { if (!open) close(); }} anchorRef={() => trigger} placement="top-end">
     <button ref={trigger} type="button" class="chat-context-trigger" data-state={tone()} aria-label={`Context usage: ${Math.round(percent())}%`}
       aria-expanded={held()} onPointerEnter={hover(true)} onPointerLeave={hover(false)} onClick={() => { if (held()) close(); else setHeld(true); }}>

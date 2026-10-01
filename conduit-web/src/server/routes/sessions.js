@@ -1,5 +1,6 @@
 import path from "node:path";
 import { conduitPiSessionFile } from "../../backend-session.js";
+import { usageFromRequests } from "../../cache-stats.js";
 import { chatView, isChatId } from "../../chat-store.js";
 import { applyMessageIds, entryMessageRows } from "../../message-ids.js";
 import { applyTranscriptOps } from "../../transcript-fold.js";
@@ -34,6 +35,7 @@ export function registerSessionRoutes(app, {
   projects,
   readSessionPage,
   registry,
+  piModelWindow,
 }) {
   /**
    * What the server believes this chat holds, not only what the harness wrote.
@@ -71,6 +73,44 @@ export function registerSessionRoutes(app, {
     });
     return transcriptFromMessages(projection.messages || []).trim();
   }
+
+  /*
+   * The context a chat last had, for one with no live process to ask: read
+   * from the harness's stored history. A live process answers for itself.
+   */
+  app.get("/v0/sessions/:id/context", async (request, response, next) => {
+    try {
+      const context = await findChatContext(request.params.id);
+      if (!context) return response.status(404).json({ error: "chat_not_found" });
+      const live = backends.getByChatId?.(context.chat.id);
+      if (live?.contextUsage?.tokens != null) {
+        return response.json({ contextUsage: live.contextUsage, sessionStats: live.sessionStats || null, cacheStats: live.cacheStats || live.cache?.stats || null });
+      }
+      if (context.chat.backend?.implementation === "conduit_pi") {
+        const session = await findRegisteredSession(context.chat.id);
+        const requests = [];
+        let model = null;
+        let cost = 0;
+        for (const entry of session?.entries || []) {
+          if (entry.type === "compaction" || entry.type === "branch_summary") { requests.push(null); continue; }
+          const message = entry.type === "message" && entry.message?.role === "assistant" ? entry.message : null;
+          if (!message?.usage) continue;
+          if (message.provider && message.model) model = `${message.provider}/${message.model}`;
+          cost += Number(message.usage.cost?.total) || 0;
+          requests.push({ input: message.usage.input || 0, output: message.usage.output || 0,
+            cacheRead: message.usage.cacheRead || 0, cacheWrite: message.usage.cacheWrite || 0 });
+        }
+        const contextWindow = model ? await piModelWindow?.(model, context.project.workingRoot).catch(() => null) : null;
+        return response.json(usageFromRequests(requests, { model, contextWindow, cost }) || {});
+      }
+      const adapter = backends.forChat(context.chat);
+      const usage = await adapter.contextFromHistory?.({ chatId: context.chat.id,
+        opaqueSession: context.chat.backend?.opaqueSession, project: context.project }).catch(() => null);
+      response.json(usage || {});
+    } catch (error) {
+      next(error);
+    }
+  });
 
   app.get("/v0/sessions/:id", async (request, response, next) => {
     try {
