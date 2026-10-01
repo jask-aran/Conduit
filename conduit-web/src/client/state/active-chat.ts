@@ -601,8 +601,29 @@ export function createActiveChat(options: ActiveChatOptions) {
 
   const loadDetail = async (chatId: string, reconcile = false, selection = selectionToken) => {
     const detail = await api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(chatId)}`);
-    if (selection === selectionToken && selectedId() === chatId) applyDetail(detail, reconcile);
+    if (selection === selectionToken && selectedId() === chatId) {
+      applyDetail(detail, reconcile);
+      if (!contextUsage()) void contextFromHistory(chatId);
+    }
     return detail;
+  };
+
+  /* A chat with no live process still has the context its history records. */
+  const contextFromHistory = async (chatId: string) => {
+    const usage = await api<{ contextUsage?: ContextUsage; sessionStats?: SessionStats; cacheStats?: CacheStats | null }>(
+      `/v0/sessions/${encodeURIComponent(chatId)}/context`).catch(() => null);
+    if (!usage?.contextUsage || selectedId() !== chatId) return;
+    setContextUsage(usage.contextUsage);
+    if (usage.sessionStats) setSessionStats(usage.sessionStats);
+    if (usage.cacheStats) setCacheStats(usage.cacheStats);
+  };
+
+  /** Ask again without sending anything: the live process when there is one, else the history. */
+  const refreshContext = () => {
+    const chatId = selectedId();
+    if (!chatId) return;
+    if (session.isOpen()) { try { session.send({ type: "refresh_context" }); } catch { /* the next turn reports it */ } return; }
+    void contextFromHistory(chatId);
   };
 
   const applySnapshot = (event: RuntimeStateEvent) => {
@@ -1370,7 +1391,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   return {
     status, setStatus, title, setTitle, templateId, setTemplateId, runtimeIdentity, setRuntimeIdentity, backendImplementation,
     live, messages, setMessages, tools, loadedId, pageBefore, loadingOlder, draft, setDraft,
-    generation, editingEntryId, contextUsage, sessionStats, cacheStats, compacting, hostUiRequests, queue, pendingMessages, capabilities, harnessCommands, activeGeneration, activeGenerationChange, turnArtifacts,
+    generation, editingEntryId, contextUsage, sessionStats, cacheStats, refreshContext, compacting, hostUiRequests, queue, pendingMessages, capabilities, harnessCommands, activeGeneration, activeGenerationChange, turnArtifacts,
     navigatingId, presentation, interactionReady: () => presentation().kind === "ready" && Boolean(loadedId()), streaming, stopping, activity,
     initialize, select, prefetch, loadDetail, ensureAgent, reset, send, stop, regenerate, rehydrateDraft,
     continueResponse, compact, loadHarnessCommands, loadOlder, edit, cancelEdit, respondHostUi, clearQueue, interruptAndSend, editQueued, discardQueued,

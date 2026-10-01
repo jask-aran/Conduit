@@ -502,7 +502,7 @@ function ChatHeader(props: {
               <MenuLabel class="chat-header-menu-meta">{menuLine()}</MenuLabel>
             </MenuGroup>
             <Show when={!props.dashboard}>
-              <Show when={props.chat}>{(chat) => <MenuSub>
+              <Show when={props.chat}>{(chat) => <MenuSub onOpenChange={(open) => { if (open) chat().refreshContext(); }}>
                 <MenuSubTrigger class="chat-header-menu-context-trigger">
                   <span class="chat-header-menu-context-line"><span>Context</span><span>{contextUsagePercent(chat().contextUsage()) == null ? "Unavailable" : `${Math.round(contextUsagePercent(chat().contextUsage())!)}% used`}</span></span>
                   <ContextBar chat={chat()} />

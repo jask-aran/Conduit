@@ -51,3 +51,30 @@ export function countCacheRequest(tracker, usage) {
 
 /** After a compaction the next prompt repeats nothing. */
 export function resetCachePrefix(tracker) { if (tracker) tracker.previousPromptTokens = null; }
+
+/**
+ * What a harness's stored history says about its context, for a thread with
+ * no live process: the last request's tokens against the window, the cache
+ * over every request, and the session's token totals. `requests` are in
+ * order, as Conduit's request usage; a null is a compaction.
+ */
+export function usageFromRequests(requests, { contextWindow = null, model = null, cost = null } = {}) {
+  const tracker = { stats: null, previousPromptTokens: null };
+  const tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  let last = null;
+  for (const usage of requests) {
+    if (!usage) { resetCachePrefix(tracker); continue; }
+    countCacheRequest(tracker, usage);
+    for (const key of Object.keys(tokens)) tokens[key] += count(usage[key], 0) || 0;
+    last = usage;
+  }
+  if (!last) return null;
+  const used = (last.input || 0) + (last.cacheRead || 0) + (last.cacheWrite || 0) + (last.output || 0);
+  const window = count(contextWindow);
+  return {
+    contextUsage: { tokens: used, contextWindow: window || null, percent: window ? (used / window) * 100 : null,
+      model: model || null, lastRequestUsage: last, source: "history" },
+    sessionStats: { tokens: { ...tokens, total: tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite }, cost: cost ?? 0 },
+    cacheStats: tracker.stats,
+  };
+}

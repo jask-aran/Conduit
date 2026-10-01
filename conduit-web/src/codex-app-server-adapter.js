@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
 import { execFile } from "node:child_process";
 import { EventEmitter } from "node:events";
 import net from "node:net";
@@ -10,7 +11,7 @@ import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageDrop, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
-import { countCacheRequest } from "./cache-stats.js";
+import { countCacheRequest, usageFromRequests } from "./cache-stats.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 export const CODEX_CAPABILITIES = Object.freeze({
@@ -470,6 +471,40 @@ export class CodexAppServerAdapter extends EventEmitter {
     }
     closeTurn();
     return { messages, tools };
+  }
+
+  /**
+   * An old thread's context from its rollout file, where Codex records every
+   * token_count it reported live: the last one's request and window, each new
+   * total a request for the cache.
+   */
+  async contextFromHistory({ opaqueSession }) {
+    const threadId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
+    if (!threadId) return null;
+    const root = path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "sessions");
+    const name = (await fs.promises.readdir(root, { recursive: true }).catch(() => []))
+      .find((file) => file.endsWith(`${threadId}.jsonl`));
+    const text = name ? await fs.promises.readFile(path.join(root, name), "utf8").catch(() => null) : null;
+    if (!text) return null;
+    const requests = [];
+    let window = null;
+    let model = null;
+    let total = null;
+    for (const line of text.split("\n")) {
+      let entry;
+      try { entry = line.trim() ? JSON.parse(line) : null; } catch { entry = null; }
+      const payload = entry?.payload;
+      if (entry?.type === "turn_context" && payload?.model) model = payload.model;
+      if (payload?.type === "context_compacted") requests.push(null);
+      const info = payload?.type === "token_count" ? payload.info : null;
+      if (!info?.last_token_usage || info.total_token_usage?.total_tokens === total) continue;
+      total = info.total_token_usage?.total_tokens;
+      window = info.model_context_window || window;
+      const last = info.last_token_usage;
+      requests.push({ input: Math.max(0, last.input_tokens - last.cached_input_tokens), output: last.output_tokens,
+        cacheRead: last.cached_input_tokens, cacheWrite: last.cache_write_input_tokens || 0, reasoning: last.reasoning_output_tokens });
+    }
+    return usageFromRequests(requests, { contextWindow: window, model });
   }
 
   async readTranscript({ liveSessionId, chatId, opaqueSession, project, turns: turnLimit, before = null }) {

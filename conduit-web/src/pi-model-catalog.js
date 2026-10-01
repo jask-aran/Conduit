@@ -128,6 +128,7 @@ export class PiModelCatalog {
       label: model.name || model.id,
       reasoning: model.reasoning === true,
       thinkingLevels: getSupportedThinkingLevels(model),
+      contextWindow: Number(model.contextWindow) || null,
     };
   }
 

@@ -685,6 +685,7 @@ registerChatRoutes(app, {
 });
 registerHarnessRoutes(app, { backends, harnessModels, preferences, projects, registry });
 registerSessionRoutes(app, {
+  piModelWindow: async (spec, cwd) => (await catalogFor({}, config.piTemplate).list(cwd)).models.find((model) => model.spec === spec)?.contextWindow || null,
   attachments,
   backends,
   chatLogs,
