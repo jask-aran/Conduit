@@ -294,6 +294,7 @@ How panes, tabs, the dock and the window behave. Every arrangement follows these
 
 - **The rail opens the dock**, one tool at a time; pressing the open tool again closes it, and a tool that cannot be used here is dimmed. The rail also holds chat search and the command palette, so no pane's header carries them.
 - **Files follows the pane with the keyboard**: it shows that pane's place, so focus and the dock never disagree; a pane with no place leaves it where it was.
+- **Tools open in the dock by default**, the terminal included; Alt on a rail tool or a shell, or dragging it to a pane, opens it as a pane instead.
 - **A tool can move out of the dock** into a pane beside the chat, by its header's button, the leader, or dragging its header, and back the same ways. Its rail icon is then white at the resting weight: open, not current.
 - **A pane's swap and close sit once at its right edge**, as small quiet icons acting on the whole pane.
 

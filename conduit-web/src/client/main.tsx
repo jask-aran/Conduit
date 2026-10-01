@@ -2246,7 +2246,7 @@ function App() {
     focusWorkspacePanel();
   };
   const openWorkspaceView = (view: WorkspaceView, terminalId?: string) => {
-    if (view === "terminal" && terminalId && canOpenFilePanes()) return openTerminalDocument(terminalId, altActivation());
+    if (view === "terminal" && terminalId && altActivation() && canOpenFilePanes()) return openTerminalDocument(terminalId, true);
     if (!workspacePanelScope()) return;
     setWorkspaceViewRequest({ tab: view, ...(terminalId ? { terminalId } : {}), nonce: Date.now() });
     if (isMobileLayout()) setMobileSidebarOpen(false);
@@ -2463,7 +2463,7 @@ function App() {
     if (splitToolShown() === tool && toolInPaneA()) focusFirst(paneAToolHost()?.querySelector<HTMLElement>(".workspace-panel-content"));
     else if (splitToolShown() === tool) focusSplit(toolSlot());
     else if (panelOpen() && dockTool() === tool) closePanel();
-    else if (tool === "terminal" && canOpenFilePanes()) void openTerminalTool(altActivation());
+    else if (tool === "terminal" && altActivation() && canOpenFilePanes()) void openTerminalTool(true);
     else openWorkspaceView(tool);
   };
   /*
@@ -2498,9 +2498,8 @@ function App() {
     openBeside(view, true);
   };
   /*
-   * The rail's Terminal opens a shell as a pane rather than a dock view: a
-   * click focuses the pane already showing one, or opens one in a new pane;
-   * Alt opens another. Either takes a running shell of the place no pane
+   * The rail's Terminal opens in the dock; Alt (or dragging it from the rail)
+   * opens a shell as a pane instead. That takes a running shell of the place no pane
    * shows, or starts one; the terminal's own menu manages shells from there.
    * With no room for a pane it says so; on a phone the dock keeps it.
    */
