@@ -45,10 +45,10 @@ test("repository templates are discoverable launch presets", () => {
   const general = templates.find((template) => template.id === "assistant");
   const view = templatePublicView(workspace);
   assert.equal(view.label, "Coding");
-  assert.equal(workspace.version, "6");
+  assert.equal(workspace.version, "8");
   assert.equal(view.defaultable, true);
-  assert.deepEqual(workspace.tools, ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check"]);
-  assert.deepEqual(workspace.extensions, [path.resolve(root, "../conduit-web/node_modules/pi-web-access")]);
+  assert.deepEqual(workspace.tools, ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check", "codemode"]);
+  assert.deepEqual(workspace.extensions, [path.resolve(root, "../conduit-web/node_modules/pi-web-access"), path.resolve(root, "coding/extensions/codemode-only.js")]);
   assert.ok(view.skillCount >= 1);
   assert.deepEqual(workspace.skills, [path.resolve(root, "coding/skills/git-github"), path.resolve(root, "coding/skills/web-research"), path.resolve(root, "coding/skills/develop-loop")]);
   assert.equal(general.label, "Assistant");
@@ -61,7 +61,7 @@ test("repository templates are discoverable launch presets", () => {
   assert.match(systemPrompt, /use `python` from Bash/);
   assert.match(systemPrompt, /Use this sequence:/);
   assert.match(systemPrompt, /fetch_content.*selected pages/s);
-  assert.equal(view.extensionCount, 1);
+  assert.equal(view.extensionCount, 2);
   assert.equal(templatePublicView(templates.find((template) => template.id === "runtime")).defaultable, false);
 });
 
