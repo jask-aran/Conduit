@@ -132,3 +132,10 @@ summary.context-breakdown-row:hover { background: oklch(1 0 0 / 10%); color: var
 .composer-actions :is(button, [role="button"]):focus-visible { outline: none; box-shadow: none; background: var(--accent); }
 .composer-actions [data-pointer-opened]:focus-visible:not(:hover) { background: transparent; }
 .context-breakdown-load small { margin-left: auto; color: var(--muted-foreground); font-size: 9.6px; }
+/* The compaction threshold: a rule across the bar where the harness will
+   compact, named under it. */
+.context-breakdown-meter { position: relative; }
+.context-breakdown-meter[data-threshold] { padding-bottom: 14px; }
+.context-breakdown-threshold { position: absolute; top: -3px; width: 1px; height: 10px; background: var(--foreground); opacity: .7; }
+.context-breakdown-threshold-label { position: absolute; top: 9px; translate: -100% 0; padding-right: 2px; color: var(--muted-foreground); font-size: 9px; white-space: nowrap; }
+.context-breakdown-load:disabled { opacity: .5; }

@@ -36,6 +36,7 @@ export function registerSessionRoutes(app, {
   readSessionPage,
   registry,
   piModelWindow,
+  piCompactReserve,
 }) {
   /**
    * What the server believes this chat holds, not only what the harness wrote.
@@ -101,7 +102,9 @@ export function registerSessionRoutes(app, {
             cacheRead: message.usage.cacheRead || 0, cacheWrite: message.usage.cacheWrite || 0 });
         }
         const contextWindow = model ? await piModelWindow?.(model, context.project.workingRoot).catch(() => null) : null;
-        return response.json(usageFromRequests(requests, { model, contextWindow, cost }) || {});
+        const reserve = piCompactReserve?.();
+        const compactAt = reserve && contextWindow > reserve ? contextWindow - reserve : null;
+        return response.json(usageFromRequests(requests, { model, contextWindow, cost, compactAt }) || {});
       }
       const adapter = backends.forChat(context.chat);
       const usage = await adapter.contextFromHistory?.({ chatId: context.chat.id,

@@ -58,12 +58,13 @@ export function resetCachePrefix(tracker) { if (tracker) tracker.previousPromptT
  * over every request, and the session's token totals. `requests` are in
  * order, as Conduit's request usage; a null is a compaction.
  */
-export function usageFromRequests(requests, { contextWindow = null, model = null, cost = null } = {}) {
+export function usageFromRequests(requests, { contextWindow = null, model = null, cost = null, compactAt = null, plan = null } = {}) {
   const tracker = { stats: null, previousPromptTokens: null };
   const tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   let last = null;
+  let compactions = 0;
   for (const usage of requests) {
-    if (!usage) { resetCachePrefix(tracker); continue; }
+    if (!usage) { resetCachePrefix(tracker); compactions += 1; continue; }
     countCacheRequest(tracker, usage);
     for (const key of Object.keys(tokens)) tokens[key] += count(usage[key], 0) || 0;
     last = usage;
@@ -73,8 +74,16 @@ export function usageFromRequests(requests, { contextWindow = null, model = null
   const window = count(contextWindow);
   return {
     contextUsage: { tokens: used, contextWindow: window || null, percent: window ? (used / window) * 100 : null,
-      model: model || null, lastRequestUsage: last, source: "history" },
+      model: model || null, lastRequestUsage: last, source: "history", compactions, compactAt: compactAt || null, plan: plan || null },
     sessionStats: { tokens: { ...tokens, total: tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite }, cost: cost ?? 0 },
     cacheStats: tracker.stats,
   };
+}
+
+/** A plan window's name from its length: the 5-hour and weekly ones by name. */
+export function planWindowLabel(minutes) {
+  if (minutes === 300) return "5-hour";
+  if (minutes === 10080) return "Weekly";
+  if (!minutes) return "Window";
+  return minutes % 1440 === 0 ? `${minutes / 1440}-day` : `${Math.round(minutes / 60)}-hour`;
 }

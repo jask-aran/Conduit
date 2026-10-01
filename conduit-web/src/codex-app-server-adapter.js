@@ -11,7 +11,7 @@ import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageDrop, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
-import { countCacheRequest, usageFromRequests } from "./cache-stats.js";
+import { countCacheRequest, planWindowLabel, usageFromRequests } from "./cache-stats.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 export const CODEX_CAPABILITIES = Object.freeze({
@@ -129,7 +129,24 @@ const truncate = (output) => {
   return `${output.slice(0, REPLAY_OUTPUT_LIMIT)}\n… ${output.length - REPLAY_OUTPUT_LIMIT} more characters`;
 };
 
+/** The ChatGPT plan's windows, in Conduit's shape, from a rate-limit snapshot (camel or the rollout's snake case). */
+function codexPlan(snapshot, previous = null) {
+  if (!snapshot) return previous;
+  const window = (id, value) => value && (value.usedPercent ?? value.used_percent) != null ? {
+    id, label: planWindowLabel(value.windowDurationMins ?? value.window_minutes),
+    usedPercent: value.usedPercent ?? value.used_percent,
+    resetsAt: (value.resetsAt ?? value.resets_at) ? new Date((value.resetsAt ?? value.resets_at) * 1000).toISOString() : null,
+  } : null;
+  const windows = [window("primary", snapshot.primary), window("secondary", snapshot.secondary)].filter(Boolean);
+  // A rolling update is sparse: what it leaves out stands.
+  const merged = windows.length ? windows : previous?.windows || [];
+  return merged.length ? { name: snapshot.planType ?? snapshot.plan_type ?? previous?.name ?? null, windows: merged } : previous;
+}
+
 export class CodexAppServerAdapter extends EventEmitter {
+  /** The account's plan windows; Codex's are the account's, not a thread's. */
+  static plan = { at: 0, value: null };
+
   constructor({ command = "codex", socketPath = path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"),
     "app-server-control", "app-server-control.sock"), requestTimeoutMs = 15_000, discoveryIdleMs = 60_000,
     logs = null } = {}) {
@@ -473,6 +490,19 @@ export class CodexAppServerAdapter extends EventEmitter {
     return { messages, tools };
   }
 
+  /** The plan's windows, asked at most once a minute and published when they arrive. */
+  refreshPlan(record) {
+    if (Date.now() - CodexAppServerAdapter.plan.at < 60_000) return;
+    CodexAppServerAdapter.plan.at = Date.now();
+    void this.request(record, "account/rateLimits/read", {}).then((result) => {
+      CodexAppServerAdapter.plan.value = codexPlan(result?.rateLimits, CodexAppServerAdapter.plan.value);
+      if (!record.contextUsage) return;
+      record.contextUsage = { ...record.contextUsage, plan: CodexAppServerAdapter.plan.value };
+      this.publish(record, { type: "usage", generationId: record.generation?.id || null, contextUsage: record.contextUsage,
+        sessionStats: record.sessionStats || null, cacheStats: record.cache?.stats || null });
+    }).catch(() => {});
+  }
+
   /**
    * An old thread's context from its rollout file, where Codex records every
    * token_count it reported live: the last one's request and window, each new
@@ -490,6 +520,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     let window = null;
     let model = null;
     let total = null;
+    let plan = null;
     for (const line of text.split("\n")) {
       let entry;
       try { entry = line.trim() ? JSON.parse(line) : null; } catch { entry = null; }
@@ -500,11 +531,12 @@ export class CodexAppServerAdapter extends EventEmitter {
       if (!info?.last_token_usage || info.total_token_usage?.total_tokens === total) continue;
       total = info.total_token_usage?.total_tokens;
       window = info.model_context_window || window;
+      if (payload.rate_limits) plan = codexPlan(payload.rate_limits, plan);
       const last = info.last_token_usage;
       requests.push({ input: Math.max(0, last.input_tokens - last.cached_input_tokens), output: last.output_tokens,
         cacheRead: last.cached_input_tokens, cacheWrite: last.cache_write_input_tokens || 0, reasoning: last.reasoning_output_tokens });
     }
-    return usageFromRequests(requests, { contextWindow: window, model });
+    return usageFromRequests(requests, { contextWindow: window, model, plan: CodexAppServerAdapter.plan.value || plan });
   }
 
   async readTranscript({ liveSessionId, chatId, opaqueSession, project, turns: turnLimit, before = null }) {
@@ -902,7 +934,15 @@ export class CodexAppServerAdapter extends EventEmitter {
         cacheRead: usage.cachedInputTokens, cacheWrite: usage.cacheWriteInputTokens || 0, reasoning: usage.reasoningOutputTokens, totalTokens: usage.totalTokens });
       const window = modelContextWindow || null;
       record.contextUsage = { tokens: last.totalTokens, contextWindow: window, percent: window ? (last.totalTokens / window) * 100 : null,
-        model: record.model || null, lastRequestUsage: split(last) };
+        model: record.model || null, lastRequestUsage: split(last), compactions: record.compactions || 0,
+        plan: CodexAppServerAdapter.plan.value };
+      this.refreshPlan(record);
+      if (record.compactions == null) {
+        record.compactions = 0;
+        void this.contextFromHistory({ opaqueSession: record.sessionId }).then((history) => {
+          record.compactions += history?.contextUsage.compactions || 0;
+        }).catch(() => {});
+      }
       // Each request reports once, but its update can repeat; a new total is a new request.
       record.cache ||= { stats: null, previousPromptTokens: null };
       if (total.totalTokens !== record.cache.total) { record.cache.total = total.totalTokens; countCacheRequest(record.cache, split(last)); }
@@ -913,7 +953,14 @@ export class CodexAppServerAdapter extends EventEmitter {
       record.compacting = true;
       record.activity = "compacting";
       this.publish(record, { type: "compaction", generationId: turnId, active: true });
+    } else if (method === "account/rateLimits/updated" && params.rateLimits) {
+      CodexAppServerAdapter.plan = { at: Date.now(), value: codexPlan(params.rateLimits, CodexAppServerAdapter.plan.value) };
+      if (record.contextUsage) {
+        record.contextUsage = { ...record.contextUsage, plan: CodexAppServerAdapter.plan.value };
+        this.publish(record, { type: "usage", generationId: turnId, contextUsage: record.contextUsage, sessionStats: record.sessionStats || null, cacheStats: record.cache?.stats || null });
+      }
     } else if ((method === "item/completed" && params.item?.type === "contextCompaction") || method === "thread/compacted") {
+      if (record.compacting || method === "thread/compacted") record.compactions = (record.compactions || 0) + 1;
       record.compacting = false;
       record.activity = record.active ? "working" : "idle";
       this.publish(record, { type: "compaction", generationId: turnId, active: false });
