@@ -122,13 +122,13 @@ export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean 
       <div class="context-breakdown-separator" />
       <div class="context-breakdown-rows">
         <For each={categories()}>{(category, index) => {
-          const cells = <><span class="context-breakdown-dot" data-kind={category.kind} style={{ background: colourOf(category, index()) }} />
+          const cells = <><i class="context-breakdown-dot" data-kind={category.kind} style={{ background: colourOf(category, index()) }} />
             <span>{category.label}<Show when={category.items?.length}> ({category.items!.length})</Show></span>
             <small>{compactTokens(category.tokens)}</small>
             <small class="context-breakdown-share">{category.kind === "deferred" ? "" : share(category.tokens)}</small></>;
           return <Show when={category.items?.length} fallback={<div class="menu-row composer-model-option context-breakdown-row">{cells}</div>}>
             <details class="context-breakdown-group"><summary class="menu-row composer-model-option context-breakdown-row">{cells}<ChevronRightIcon class="context-breakdown-chevron" /></summary>
-              <For each={category.items}>{(item) => <div class="menu-row composer-model-option context-breakdown-row context-breakdown-item"><span class="context-breakdown-dot" /><span>{item.label}</span><small>{compactTokens(item.tokens)}</small><small class="context-breakdown-share" /></div>}</For>
+              <For each={category.items}>{(item) => <div class="menu-row composer-model-option context-breakdown-row context-breakdown-item"><i class="context-breakdown-dot" /><span>{item.label}</span><small>{compactTokens(item.tokens)}</small><small class="context-breakdown-share" /></div>}</For>
             </details>
           </Show>;
         }}</For>
