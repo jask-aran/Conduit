@@ -5,7 +5,7 @@ import { For, Show, createSignal, createUniqueId, onCleanup } from "solid-js";
 // @ts-expect-error Kobalte does not publish declarations for this internal chunk.
 import { useMenuContext } from "../../../node_modules/@kobalte/core/dist/chunk/L544S5A4.jsx";
 import type { FocusOutsideEvent } from "@kobalte/core";
-import { ChevronRightIcon, FolderIcon, PaperclipIcon, PlusIcon, SearchIcon, ShieldCheckIcon } from "lucide-solid";
+import { ChevronRightIcon, FolderIcon, GaugeIcon, PaperclipIcon, PlusIcon, SearchIcon, ShieldCheckIcon } from "lucide-solid";
 import {
   Menu,
   MenuContent,
@@ -28,7 +28,7 @@ import { isWorkspace, PlaceGlyph, type PlaceOptions } from "./place-picker";
 import type { ComposerFold } from "./composer-folds";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
-type MobileOptionsPanel = "root" | "models" | "effort" | "profiles" | "permissions" | "places";
+type MobileOptionsPanel = "root" | "models" | "effort" | "profiles" | "permissions" | "service" | "places";
 
 export function MobileComposerOptions(props: {
   composer: {
@@ -57,6 +57,7 @@ export function MobileComposerOptions(props: {
   const selectedModel = () => composer.models.models().find((item) => item.spec === composer.models.model());
   const selectedModelLabel = () => selectedModel()?.label || composer.models.model() || "Not selected";
   const selectedProfileLabel = () => composer.activeProfile?.label || composer.activeProfile?.id || "General";
+  const selectedServiceLabel = () => composer.serviceLevels?.levels().find((level) => level.id === composer.serviceLevels?.selected())?.label || "Default";
   const selectedPermissionLabel = () => composer.permissions?.profiles().find((profile) => profile.id === composer.permissions?.selected())?.label || "Default";
   const levels = () => selectedModel()?.thinkingLevels?.length ? selectedModel()!.thinkingLevels! : ["off"];
   const profileLocked = () => composer.chat.status() !== "draft";
@@ -232,11 +233,18 @@ export function MobileComposerOptions(props: {
                 onClick={() => go("effort")}>{label()}<ChevronRightIcon /></button>}
               onChange={(value) => void composer.models.chooseEffort(value)} />
           </Show>
-          <Show when={show("permissions") && hasPermissions()}>
+          <Show when={show("permissions") && composer.permissions?.profiles().length}>
             <Show when={settingsAbove()}><MenuSeparator /></Show>
-            <MenuLabel class="composer-options-label">{composer.permissions?.profiles().length ? "Permissions" : "Service level"}</MenuLabel>
+            <MenuLabel class="composer-options-label">Permissions</MenuLabel>
             <MenuItem closeOnSelect={false} onSelect={() => go("permissions")} class="composer-options-value" aria-label={`Permissions ${selectedPermissionLabel()}`}>
-              <ShieldCheckIcon /><span>{composer.permissions?.profiles().length ? selectedPermissionLabel() : composer.serviceLevels?.levels().find((level) => level.id === composer.serviceLevels?.selected())?.label || "Default"}</span><ChevronRightIcon />
+              <ShieldCheckIcon /><span>{selectedPermissionLabel()}</span><ChevronRightIcon />
+            </MenuItem>
+          </Show>
+          <Show when={props.desktop && show("permissions") && composer.serviceLevels?.levels().length}>
+            <Show when={settingsAbove() || composer.permissions?.profiles().length}><MenuSeparator /></Show>
+            <MenuLabel class="composer-options-label">Service level</MenuLabel>
+            <MenuItem closeOnSelect={false} onSelect={() => go("service")} class="composer-options-value" aria-label={`Service level ${selectedServiceLabel()}`}>
+              <GaugeIcon /><span>{selectedServiceLabel()}</span><ChevronRightIcon />
             </MenuItem>
           </Show>
           <Show when={settingsAbove() || (show("permissions") && hasPermissions())}><MenuSeparator /></Show>
@@ -317,8 +325,20 @@ export function MobileComposerOptions(props: {
                 <For each={composer.permissions?.profiles() || []}>{(profile) => <MenuRadioItem class="composer-model-option" value={profile.id} disabled={!profile.allowed} closeOnSelect={false}><span>{profile.label}</span><Show when={profile.description}><small>{profile.description}</small></Show></MenuRadioItem>}</For>
               </MenuRadioGroup>
             </MenuGroup></Show>
-            <Show when={composer.serviceLevels?.levels().length}>
+            <Show when={!props.desktop && composer.serviceLevels?.levels().length}>
               <Show when={composer.permissions?.profiles().length}><MenuSeparator /></Show>
+              <MenuGroup>
+                <MenuLabel class="composer-options-label">Service level</MenuLabel>
+                <MenuRadioGroup value={composer.serviceLevels?.selected() || ""} onChange={(value) => chosen(() => void composer.serviceLevels?.choose(value))}>
+                  <For each={composer.serviceLevels?.levels() || []}>{(level) => <MenuRadioItem value={level.id} closeOnSelect={false}>{level.label}</MenuRadioItem>}</For>
+                </MenuRadioGroup>
+              </MenuGroup>
+            </Show>
+          </div>
+        </Show>
+        <Show when={panel() === "service"}>
+          <div class="composer-options-submenu composer-permissions-menu">
+            <Show when={composer.serviceLevels?.levels().length}>
               <MenuGroup>
                 <MenuLabel class="composer-options-label">Service level</MenuLabel>
                 <MenuRadioGroup value={composer.serviceLevels?.selected() || ""} onChange={(value) => chosen(() => void composer.serviceLevels?.choose(value))}>
