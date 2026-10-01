@@ -1,4 +1,5 @@
-import { createMemo, createSignal, For, Show, type Component } from "solid-js";
+import { createMemo, createSignal, Index, Show, type Component } from "solid-js";
+import { Dynamic } from "solid-js/web";
 import { CodeXmlIcon, FilePenLineIcon, FileTextIcon, GlobeIcon, SearchIcon, SquareTerminalIcon, WrenchIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { ToolCallStep, ToolItem, ToolKind } from "../api/contracts";
@@ -49,23 +50,26 @@ export function stepDuration(from?: string, to?: string): string {
    until it ends -- one line each and not expandable: the script's output
    below is what they came to. */
 function ScriptCalls(props: { calls: ToolCallStep[] }) {
+  // Rows are updated in place as calls start and settle, so every part of a
+  // row reads its call as it is now.
   return <ol class="tool-step-calls">
-    <For each={props.calls}>{(call) => {
-      const kind = call.kind in KIND_ICONS ? call.kind : "other";
-      const KindIcon = KIND_ICONS[kind];
-      const running = call.done === false;
-      if (call.earlier) return <li data-status="earlier"><span class="trail-verb">{call.earlier} earlier {call.earlier === 1 ? "call" : "calls"}</span></li>;
-      return <li data-status={call.planned ? "planned" : running ? "running" : call.isError ? "failed" : "done"}>
-        <Show when={running} fallback={<KindIcon class="trail-icon" />}><Spinner class="trail-icon" /></Show>
-        <span class="trail-verb">{VERBS[kind][running || call.planned ? 0 : 1]}<Show when={kind === "other"}> {call.name}</Show></span>
-        <Show when={call.subject}><span class="trail-subject">{call.subject}</span></Show>
-        <span class="trail-meta">
-          <Show when={call.repeats}><span>repeats</span></Show>
-          <Show when={call.isError}><span class="trail-flag">Failed</span></Show>
-          {call.durationMs != null ? stepDuration("1970-01-01T00:00:00.000Z", new Date(call.durationMs).toISOString()) : ""}
-        </span>
+    <Index each={props.calls}>{(call) => {
+      const kind = () => call().kind in KIND_ICONS ? call().kind : "other";
+      const running = () => call().done === false;
+      const status = () => call().earlier ? "earlier" : call().planned ? "planned" : running() ? "running" : call().isError ? "failed" : "done";
+      return <li data-status={status()}>
+        <Show when={!call().earlier} fallback={<span class="trail-verb">{call().earlier} earlier {call().earlier === 1 ? "call" : "calls"}</span>}>
+          <Show when={running()} fallback={<Dynamic component={KIND_ICONS[kind()]} class="trail-icon" />}><Spinner class="trail-icon" /></Show>
+          <span class="trail-verb">{VERBS[kind()][running() || call().planned ? 0 : 1]}<Show when={kind() === "other"}> {call().name}</Show></span>
+          <Show when={call().subject}><span class="trail-subject">{call().subject}</span></Show>
+          <span class="trail-meta">
+            <Show when={call().repeats}><span>repeats</span></Show>
+            <Show when={call().isError}><span class="trail-flag">Failed</span></Show>
+            {call().durationMs != null ? stepDuration("1970-01-01T00:00:00.000Z", new Date(call().durationMs!).toISOString()) : ""}
+          </span>
+        </Show>
       </li>;
-    }}</For>
+    }}</Index>
   </ol>;
 }
 
