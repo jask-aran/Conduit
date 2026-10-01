@@ -54,11 +54,13 @@ function ScriptCalls(props: { calls: ToolCallStep[] }) {
       const kind = call.kind in KIND_ICONS ? call.kind : "other";
       const KindIcon = KIND_ICONS[kind];
       const running = call.done === false;
-      return <li data-status={running ? "running" : call.isError ? "failed" : "done"}>
+      if (call.earlier) return <li data-status="earlier"><span class="trail-verb">{call.earlier} earlier {call.earlier === 1 ? "call" : "calls"}</span></li>;
+      return <li data-status={call.planned ? "planned" : running ? "running" : call.isError ? "failed" : "done"}>
         <Show when={running} fallback={<KindIcon class="trail-icon" />}><Spinner class="trail-icon" /></Show>
-        <span class="trail-verb">{VERBS[kind][running ? 0 : 1]}<Show when={kind === "other"}> {call.name}</Show></span>
+        <span class="trail-verb">{VERBS[kind][running || call.planned ? 0 : 1]}<Show when={kind === "other"}> {call.name}</Show></span>
         <Show when={call.subject}><span class="trail-subject">{call.subject}</span></Show>
         <span class="trail-meta">
+          <Show when={call.repeats}><span>repeats</span></Show>
           <Show when={call.isError}><span class="trail-flag">Failed</span></Show>
           {call.durationMs != null ? stepDuration("1970-01-01T00:00:00.000Z", new Date(call.durationMs).toISOString()) : ""}
         </span>

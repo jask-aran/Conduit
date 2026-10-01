@@ -64,10 +64,9 @@ export const piToolSubject = (name, input) => {
  */
 export const piResultSubject = (name, details) => {
   if (name === "get_search_content") return toolSubject(details?.url);
-  const calls = piResultCalls(name, details);
-  if (!calls?.length) return null;
+  if (name !== "codemode" || !Array.isArray(details?.calls) || !details.calls.length) return null;
   const counts = new Map();
-  for (const call of calls) counts.set(call.name, (counts.get(call.name) || 0) + 1);
+  for (const call of details.calls) counts.set(String(call.name || ""), (counts.get(String(call.name || "")) || 0) + 1);
   return [...counts].map(([tool, count]) => count > 1 ? `${tool} ×${count}` : tool).join(" · ");
 };
 
@@ -77,7 +76,9 @@ export const piResultSubject = (name, details) => {
  */
 export const piResultCalls = (name, details) => {
   if (name !== "codemode" || !Array.isArray(details?.calls)) return null;
-  return details.calls.map((call) => {
+  const shown = details.calls.slice(-40);
+  const earlier = details.calls.length - shown.length;
+  return [...(earlier ? [{ name: "earlier", kind: "other", earlier, done: true }] : []), ...shown.map((call) => {
     let input = call.args;
     if (typeof input === "string") try { input = JSON.parse(input); } catch { input = null; }
     const tool = String(call.name || "");
@@ -89,7 +90,7 @@ export const piResultCalls = (name, details) => {
       isError: call.status != null && call.status !== "ok",
       ...(Number.isFinite(call.durationMs) ? { durationMs: Math.round(call.durationMs) } : {}),
     };
-  });
+  })];
 };
 export const piResultFailed = (name, details) => {
   if (!details || typeof details !== "object") return false;
