@@ -2390,6 +2390,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .workspace-panel:not(.workspace-panel-open)::after { display: none; }
 /* Over the panes, or switching layer, the dock is its surface, not its room in the row. */
 :is(.workspace-panel-overlay, .workspace-panel[data-layer-switch])::after { left: auto; width: calc(var(--workspace-shell-width) - 32px); }
+.workspace-panel-overlay::after { right: 24px; }
 .region-cue {
   position: fixed;
   z-index: 73;
