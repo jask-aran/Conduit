@@ -140,6 +140,26 @@ For streaming-render faults, replay the Test profile's KaTeX models in the
 `test` project. Check every frame for three things: a math element removed, a
 math element emptied, or TeX commands in text outside math.
 
+#### Probes
+
+The instruments behind the sections below are in `conduit-web/scripts/probes/`.
+Run them from `conduit-web/` in the checkout the server serves. Each one opens
+a page of its own in headless Chromium, with a minted session. With
+`--windows`, it uses the headed Windows Chrome on :9222 instead, which is the
+only place display scaling and frame cost are real.
+
+| Probe | Answers |
+| --- | --- |
+| `press-shift.mjs` | Does pressing and holding a resize handle move any formula, table or block, or change a pixel? |
+| `reload-settle.mjs --out <dir>` | What moves after the first open's fade starts? Saves a frame series and an attribute and animation timeline. |
+| `placeholder-heights.mjs` | Do off-screen blocks hold their real height? |
+| `motion-rules.mjs` | Which loaded CSS rules set containment, `will-change`, transforms or `content-visibility`, and which only apply under an interaction state? |
+| `dock-layer-frames.mjs` | Does the dock hold still when it switches between beside the panes and over them? |
+| `stream-budget.mjs` | While an answer streams: tasks over 6.94ms, what ran inside them, and how evenly the text appeared. It makes a live model call. |
+
+A probe killed mid-run leaves its page open in Windows Chrome. Close it before
+the next run, or the next page load can hang.
+
 #### Layout stability
 
 Text that shifts and then settles ("sizzle") is measured, not judged by eye.

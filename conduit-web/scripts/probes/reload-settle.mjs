@@ -26,7 +26,7 @@ const { identifier } = await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
 ` });
 const { width, height } = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
 const clip = flag("--right-half") ? { x: width / 2, y: 0, width: width / 2, height, scale: 1 } : { x: 0, y: 0, width, height, scale: 1 };
-const within = (promise) => Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 800))]);
+const within = (promise) => Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 2500))]);
 page.reload().catch(() => {});
 const shots = [];
 const end = Date.now() + Number(arg("--seconds", "4.5")) * 1000;
