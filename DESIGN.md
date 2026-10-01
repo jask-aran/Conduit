@@ -260,7 +260,7 @@ How panes, tabs, the dock and the window behave. Every arrangement follows these
 
 - **A pane holds one document**: a chat, a page, a file viewer, a tool or a shell. Pane A holds the route; panes beside it are opened, never navigated to.
 - **A document declares its minimum width to its pane**, and nothing is drawn narrower. Chats and pages declare the dashboard composer's least plus its gutters (420px, `MIN_MAIN_PANE_WIDTH`); file viewers and tools declare the dock's (240px, `MIN_SPLIT_PANE_WIDTH`). The dock imposes no minimum of its own: it takes the minimum of whatever it shows. Containers lay out from those declarations, never from their own guesses.
-- **Room runs out in one order.** Panes show while the width holds every one at its minimum. The dock narrows to its minimum first, then panes fold, last first. A folded pane keeps its document and waits in the workspace rail's foot as a small lettered tile; choosing it brings it back in trade for the pane with the keyboard. A dragged edge takes room from its neighbour down to that neighbour's minimum, then from the next.
+- **Room runs out in one order.** Panes show while the width holds every one at its minimum. The dock narrows to its minimum first, then panes move to the dock, last first, exactly as a docked pane: a rail icon, shown in the dock on a click, document and state kept. They come back to the row by themselves once the width holds them again. A dragged edge takes room from its neighbour down to that neighbour's minimum, then from the next.
 - **Up to three panes.** The rail's foot offers Equalise and share presets while panes are open. Not on a phone.
 
 **Focus**
@@ -417,7 +417,7 @@ Choosing in a menu:
 
 **Input-bordered** — 1px hairline inside settings and forms, `{rounded.md}`, as tall as its row needs.
 
-**Workspace rail** — mirrors the sidebar's collapsed rail on the right edge, on the frame: one icon per tool, grey at rest, the wash as the cursor, the dock's tool current. Below a short hairline, chat search and the command palette; while panes are open, folded panes, Equalise and Layouts at its foot. It is out of the tab order; the tool keys and Ctrl+Shift+3 reach the dock.
+**Workspace rail** — mirrors the sidebar's collapsed rail on the right edge, on the frame: one icon per tool, grey at rest, the wash as the cursor, the dock's tool current. Below a short hairline, chat search and the command palette; while panes are open, Equalise and Layouts at its foot. It is out of the tab order; the tool keys and Ctrl+Shift+3 reach the dock.
 
 **Pane header** — shares the top line of the app. A document's name or its tab row at the left; its modes as a segmented switch; quiet ghost controls at the right in the order they are reached for, grouped by short hairlines, folding into a ⋯ rather than scrolling; the pane's swap and close last.
 
