@@ -85,6 +85,7 @@ export const piResultCalls = (name, details) => {
       name: tool,
       kind: Object.hasOwn(PI_TOOL_KINDS, tool) ? PI_TOOL_KINDS[tool] : "other",
       ...(piToolSubject(tool, input) ? { subject: piToolSubject(tool, input) } : {}),
+      done: true,
       isError: call.status != null && call.status !== "ok",
       ...(Number.isFinite(call.durationMs) ? { durationMs: Math.round(call.durationMs) } : {}),
     };

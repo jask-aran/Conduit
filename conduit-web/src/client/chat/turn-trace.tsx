@@ -90,7 +90,7 @@ const GROUP_WORDS: Record<ToolKind, (count: number) => string> = {
   edit: (count) => `Made ${count} edits`,
   search: (count) => `Ran ${count} searches`,
   fetch: (count) => `Ran ${count} fetches`,
-  script: (count) => `Ran ${count} scripts`,
+  script: (count) => `Scripted tools ${count} times`,
   other: (count) => `Used ${count} tools`,
 };
 function ToolGroup(props: RowProps & { kind: ToolKind; tools: ToolItem[] }) {
@@ -120,8 +120,10 @@ function trailOf(segments: TraceSegment[]): TrailItem[] {
   const items: TrailItem[] = [];
   let run: ToolItem[] = [];
   const flush = () => {
-    if (run.length > 1) items.push({ type: "group", kind: run[0]!.kind || "other", tools: run });
-    else if (run.length) items.push({ type: "tool", tool: run[0]! });
+    // A script already holds its own list of tools; scripts are never folded
+    // into a count of scripts on top of that.
+    if (run.length > 1 && run[0]!.kind !== "script") items.push({ type: "group", kind: run[0]!.kind || "other", tools: run });
+    else for (const tool of run) items.push({ type: "tool", tool });
     run = [];
   };
   let hiddenSaid = false;
@@ -210,7 +212,7 @@ function workOf(tools: ToolItem[]): string {
 
 /* What a running tool of each kind is doing. */
 const KIND_VERBS: Record<Exclude<ToolKind, "other">, string> = {
-  command: "Running", read: "Reading", edit: "Editing", search: "Searching", fetch: "Fetching", script: "Running a script",
+  command: "Running", read: "Reading", edit: "Editing", search: "Searching", fetch: "Fetching", script: "Scripting tools",
 };
 
 /* One verb for what it is doing, or how it ended -- always there, so a clean

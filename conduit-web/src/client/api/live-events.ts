@@ -99,6 +99,7 @@ export type LiveEvent = EventBase & (
   | { type: "transcript_op"; op: "tool.open"; toolCallId: string; name: string; kind?: ToolKind; subject?: string; input: unknown; timestamp?: string;
     messageId: string | null }
   | { type: "transcript_op"; op: "tool.close"; toolCallId: string; output: unknown; isError: boolean; cancelled?: boolean; kind?: ToolKind; subject?: string; calls?: ToolCallStep[]; completedAt?: string }
+  | { type: "transcript_op"; op: "tool.calls"; toolCallId: string; calls: ToolCallStep[] }
   | { type: "transcript_op"; op: "turn.settle"; promptId: string; outcome: TurnOutcome }
   | { type: "log_state"; log: LogStamp }
   | { type: "log_reset" }
@@ -113,7 +114,7 @@ const text = (value: unknown) => value == null ? "" : String(value);
 const optionalText = (value: unknown) => value == null || value === "" ? null : String(value);
 const list = (value: unknown) => Array.isArray(value) ? value : [];
 const number = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : undefined;
-const TRANSCRIPT_OPS = new Set(["message.open", "message.close", "message.drop", "tool.open", "tool.close", "turn.settle"]);
+const TRANSCRIPT_OPS = new Set(["message.open", "message.close", "message.drop", "tool.open", "tool.close", "tool.calls", "turn.settle"]);
 /**
  * The phases each generation event is allowed to arrive in.
  *

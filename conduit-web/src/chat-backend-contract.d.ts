@@ -450,6 +450,9 @@ export type TranscriptOpEvent = EventBase & { type: "transcript_op" } & (
       calls?: { name: string; kind: string; subject?: string; isError?: boolean; durationMs?: number }[];
       /** When it finished, stamped as it did. */
       completedAt: string }
+  /** A script's calls so far, each running (`done: false`) or ended. */
+  | { op: "tool.calls"; toolCallId: string;
+      calls: { name: string; kind: string; subject?: string; done?: boolean; isError?: boolean; durationMs?: number }[] }
   /**
    * How a turn ended, on the prompt it answers: stated by every harness when a
    * turn ends, before the event that ends it. The browser refuses a finished

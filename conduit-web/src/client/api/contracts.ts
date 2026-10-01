@@ -324,6 +324,8 @@ export interface ToolCallStep {
   name: string;
   kind: ToolKind;
   subject?: string;
+  /** False while it runs; a call without it has ended. */
+  done?: boolean;
   isError?: boolean;
   durationMs?: number;
 }

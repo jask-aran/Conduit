@@ -15,7 +15,7 @@ import {
 } from "./active-generation.js";
 import { createPiEventNormalizer } from "./pi-event-normalizer.js";
 import { projectSessionEntries, readSessionPage } from "./session-store.js";
-import { messageClose, messageDrop, messageOpen, toolClose, toolKind, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
+import { messageClose, messageDrop, messageOpen, toolCalls, toolClose, toolKind, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
 import { PI_CAPABILITIES, PI_TOOL_KINDS, piToolSubject } from "./pi-capabilities.js";
 import { withConduitNote } from "./attachment-envelope.js";
 import { PiCommandCatalog } from "./pi-command-catalog.js";
@@ -1045,6 +1045,9 @@ export class PiManager extends EventEmitter {
       if (event.type === "tool_execution_started" && this.logFor(record)) {
         this.publish(record, toolOpen({ toolCallId: event.toolCallId, name: event.name,
           kind: toolKind(PI_TOOL_KINDS, event.name), subject: piToolSubject(event.name, event.input), input: event.input, generationId: record.generation?.id || null }));
+      }
+      if (event.type === "tool_execution_calls" && this.logFor(record)) {
+        this.publish(record, toolCalls({ toolCallId: event.toolCallId, calls: event.calls, generationId: record.generation?.id || null }));
       }
       if (event.type === "tool_execution_completed" && this.logFor(record)) {
         // Pi kills a running tool when the turn is stopped and reports it as

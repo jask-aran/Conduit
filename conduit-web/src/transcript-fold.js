@@ -140,6 +140,9 @@ export function applyToolOp(tools, event) {
     next[held] = { ...next[held], ...incoming };
     return next;
   }
+  if (event.op === "tool.calls") {
+    return tools.map((tool) => (tool.toolCallId === event.toolCallId && !tool.done ? { ...tool, calls: event.calls } : tool));
+  }
   if (event.op === "tool.close") {
     if (!event.toolCallId) return tools;
     return tools.map((tool) => (tool.toolCallId === event.toolCallId
@@ -154,7 +157,7 @@ export function applyToolOp(tools, event) {
 }
 
 /** Whether this op is about a tool rather than a message. */
-export const isToolOp = (event) => event?.op === "tool.open" || event?.op === "tool.close";
+export const isToolOp = (event) => event?.op === "tool.open" || event?.op === "tool.close" || event?.op === "tool.calls";
 
 /**
  * A transcript read back from a harness, brought up to what the server has said.
