@@ -36,6 +36,7 @@ export const PI_TOOL_KINDS = Object.freeze({
   edit: "edit", write: "edit",
   web_search: "search",
   fetch_content: "fetch", get_search_content: "fetch",
+  codemode: "script",
 });
 
 /** And the field of each that says what it acted on. */
@@ -61,7 +62,34 @@ export const piToolSubject = (name, input) => {
  * for every query or page as an ordinary result with the errors written into
  * its text -- the counts in `details` are what say none of it worked.
  */
-export const piResultSubject = (name, details) => (name === "get_search_content" ? toolSubject(details?.url) : null);
+export const piResultSubject = (name, details) => {
+  if (name === "get_search_content") return toolSubject(details?.url);
+  const calls = piResultCalls(name, details);
+  if (!calls?.length) return null;
+  const counts = new Map();
+  for (const call of calls) counts.set(call.name, (counts.get(call.name) || 0) + 1);
+  return [...counts].map(([tool, count]) => count > 1 ? `${tool} ×${count}` : tool).join(" · ");
+};
+
+/**
+ * The tools a codemode script called, in order, each read the way the same
+ * tool called directly is: what it does, what it acted on, whether it failed.
+ */
+export const piResultCalls = (name, details) => {
+  if (name !== "codemode" || !Array.isArray(details?.calls)) return null;
+  return details.calls.map((call) => {
+    let input = call.args;
+    if (typeof input === "string") try { input = JSON.parse(input); } catch { input = null; }
+    const tool = String(call.name || "");
+    return {
+      name: tool,
+      kind: Object.hasOwn(PI_TOOL_KINDS, tool) ? PI_TOOL_KINDS[tool] : "other",
+      ...(piToolSubject(tool, input) ? { subject: piToolSubject(tool, input) } : {}),
+      isError: call.status != null && call.status !== "ok",
+      ...(Number.isFinite(call.durationMs) ? { durationMs: Math.round(call.durationMs) } : {}),
+    };
+  });
+};
 export const piResultFailed = (name, details) => {
   if (!details || typeof details !== "object") return false;
   if (name === "web_search") return details.queryCount > 0 && details.successfulQueries === 0;

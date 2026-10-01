@@ -21,7 +21,7 @@ type Glance = { prompt: string; answer: string; answerMath: string | null; outco
 
 const WORK_WORDS: Record<ToolKind, [string, string]> = {
   command: ["command", "commands"], read: ["read", "reads"], edit: ["edit", "edits"],
-  search: ["search", "searches"], fetch: ["fetch", "fetches"], other: ["tool", "tools"],
+  search: ["search", "searches"], fetch: ["fetch", "fetches"], script: ["script", "scripts"], other: ["tool", "tools"],
 };
 const cache = new Map<string, Glance>();
 

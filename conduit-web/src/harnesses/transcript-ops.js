@@ -57,7 +57,7 @@ const text = (value) => typeof value === "string" && value.length > 0;
  * names to these, and the browser never guesses from a name. A tool the table
  * does not know is `other`, which is still counted, just not named.
  */
-export const TOOL_KINDS = new Set(["command", "read", "edit", "search", "fetch", "other"]);
+export const TOOL_KINDS = new Set(["command", "read", "edit", "search", "fetch", "script", "other"]);
 export const toolKind = (table, name) => (Object.hasOwn(table, name) ? table[name] : "other");
 
 /**
@@ -243,13 +243,14 @@ export const toolOpen = ({ toolCallId, name, kind = "other", subject = null, inp
  * Their `kind` and `subject` are restated here and replace what the open said.
  */
 export const toolClose = ({ toolCallId, output, isError = false, cancelled = false, generationId = null,
-  kind = undefined, subject = null, completedAt = new Date().toISOString() }) =>
+  kind = undefined, subject = null, calls = null, completedAt = new Date().toISOString() }) =>
   assertTranscriptOp({
     type: "transcript_op", op: "tool.close", toolCallId, output, completedAt,
     isError: Boolean(isError) && !cancelled,
     ...(cancelled ? { cancelled: true } : {}),
     ...(kind ? { kind } : {}),
     ...(subject ? { subject } : {}),
+    ...(calls?.length ? { calls } : {}),
     ...(generationId ? { generationId } : {}),
   });
 

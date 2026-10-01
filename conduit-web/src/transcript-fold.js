@@ -146,6 +146,7 @@ export function applyToolOp(tools, event) {
       ? { ...tool, output: event.output, isError: Boolean(event.isError), cancelled: event.cancelled === true, done: true,
         ...(event.kind ? { kind: event.kind } : {}),
         ...(event.subject ? { subject: event.subject } : {}),
+        ...(event.calls ? { calls: event.calls } : {}),
         ...(event.completedAt ? { completedAt: event.completedAt } : {}) }
       : tool));
   }

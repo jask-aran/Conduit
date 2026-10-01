@@ -1,4 +1,4 @@
-import { PI_TOOL_KINDS, piResultFailed, piResultSubject, piSubjectFields } from "./pi-capabilities.js";
+import { PI_TOOL_KINDS, piResultCalls, piResultFailed, piResultSubject, piSubjectFields } from "./pi-capabilities.js";
 import { toolKind, toolSubject } from "./harnesses/transcript-ops.js";
 function record(value) {
   return value && typeof value === "object" ? value : {};
@@ -219,6 +219,7 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0, cl
       case "tool_execution_end": {
         const name = String(source.toolName || "");
         const subject = piResultSubject(name, source.result?.details);
+        const calls = piResultCalls(name, source.result?.details);
         return [emit({
           type: "tool_execution_completed",
           toolCallId: String(source.toolCallId || ""),
@@ -226,6 +227,7 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0, cl
           output: piToolText(source.result),
           isError: Boolean(source.isError) || piResultFailed(name, source.result?.details),
           ...(subject ? { subject } : {}),
+          ...(calls ? { calls } : {}),
           at: new Date().toISOString(),
         })];
       }

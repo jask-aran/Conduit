@@ -1,7 +1,7 @@
 import { createMemo, createSignal, Show, type Component } from "solid-js";
-import { FilePenLineIcon, FileTextIcon, GlobeIcon, SearchIcon, SquareTerminalIcon, WrenchIcon } from "lucide-solid";
+import { CodeXmlIcon, FilePenLineIcon, FileTextIcon, GlobeIcon, SearchIcon, SquareTerminalIcon, WrenchIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
-import type { ToolItem, ToolKind } from "../api/contracts";
+import type { ToolCallStep, ToolItem, ToolKind } from "../api/contracts";
 import { httpUrl } from "../api/transport";
 import { authorizedFetch } from "../api/native-auth-client";
 import { Disclosure } from "./disclosure";
@@ -25,11 +25,11 @@ function stringify(value: unknown) {
    it runs, past once it has -- and what it acted on in mono beside it. */
 export const KIND_ICONS: Record<ToolKind, Component<{ class?: string }>> = {
   command: SquareTerminalIcon, read: FileTextIcon, edit: FilePenLineIcon,
-  search: SearchIcon, fetch: GlobeIcon, other: WrenchIcon,
+  search: SearchIcon, fetch: GlobeIcon, script: CodeXmlIcon, other: WrenchIcon,
 };
 export const VERBS: Record<ToolKind, [string, string]> = {
   command: ["Running", "Ran"], read: ["Reading", "Read"], edit: ["Editing", "Edited"],
-  search: ["Searching", "Searched"], fetch: ["Fetching", "Fetched"], other: ["Using", "Used"],
+  search: ["Searching", "Searched"], fetch: ["Fetching", "Fetched"], script: ["Running script", "Ran script"], other: ["Using", "Used"],
 };
 
 /* How long a step took: milliseconds under a second, tenths under ten
@@ -43,6 +43,26 @@ export function stepDuration(from?: string, to?: string): string {
   if (seconds < 60) return `${Math.round(seconds)}s`;
   const whole = Math.round(seconds);
   return `${Math.floor(whole / 60)}m ${String(whole % 60).padStart(2, "0")}s`;
+}
+
+/* The tools a script called, as the trail's own rows: one line each, not
+   expandable -- the script's output below is what they came to. */
+function ScriptCalls(props: { calls: ToolCallStep[] }) {
+  return <ol class="tool-step-calls">
+    {props.calls.map((call) => {
+      const kind = call.kind in KIND_ICONS ? call.kind : "other";
+      const KindIcon = KIND_ICONS[kind];
+      return <li data-status={call.isError ? "failed" : "done"}>
+        <KindIcon class="trail-icon" />
+        <span class="trail-verb">{VERBS[kind][1]}<Show when={kind === "other"}> {call.name}</Show></span>
+        <Show when={call.subject}><span class="trail-subject">{call.subject}</span></Show>
+        <span class="trail-meta">
+          <Show when={call.isError}><span class="trail-flag">Failed</span></Show>
+          {call.durationMs != null ? stepDuration("1970-01-01T00:00:00.000Z", new Date(call.durationMs).toISOString()) : ""}
+        </span>
+      </li>;
+    })}
+  </ol>;
 }
 
 export function ToolStep(props: { tool?: ToolItem; sessionId?: string | null; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; settled?: boolean }) {
@@ -105,6 +125,7 @@ export function ToolStep(props: { tool?: ToolItem; sessionId?: string | null; in
         </span>
       </>}
       body={() => <>
+        <Show when={current().calls?.length}><ScriptCalls calls={current().calls!} /></Show>
         <pre>{loading() ? "Loading…" : preview()}</pre>
         <Show when={!loading() && output().length > MAX_PREVIEW}>
           <Button variant="ghost" size="sm" onClick={() => setFull((value) => !value)}>{full() ? "Show preview" : `Show full output · ${output().length - MAX_PREVIEW} hidden characters`}</Button>

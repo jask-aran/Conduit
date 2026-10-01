@@ -266,7 +266,7 @@ export type ToolActivityEvent = EventBase & {
   toolCallId: string;
   name: string;
   /** On `start`: what it did, as `tool.open` states it; on `end`, only if it is known only then. */
-  kind?: "command" | "read" | "edit" | "search" | "fetch" | "other";
+  kind?: "command" | "read" | "edit" | "search" | "fetch" | "script" | "other";
   subject?: string;
   /** On `start` and `end`: when, stated once where it is published. */
   at?: string;
@@ -437,7 +437,7 @@ export type TranscriptOpEvent = EventBase & { type: "transcript_op" } & (
   | { op: "message.drop"; messageId: string; keep?: boolean; inclusive?: boolean }
   | { op: "tool.open"; toolCallId: string; name: string;
       /** What it did, from the adapter's own table of its tool names. */
-      kind: "command" | "read" | "edit" | "search" | "fetch" | "other";
+      kind: "command" | "read" | "edit" | "search" | "fetch" | "script" | "other";
       /** What it acted on, in one line: the command, path, query or page. */
       subject?: string; input: unknown;
       /** When it started, stamped as it did. */
@@ -445,7 +445,9 @@ export type TranscriptOpEvent = EventBase & { type: "transcript_op" } & (
   /** A tool the user's stop killed is `cancelled`, never `isError`. */
   | { op: "tool.close"; toolCallId: string; output: unknown; isError: boolean; cancelled?: true;
       /** What it did and to what, when that was only known once it had. */
-      kind?: "command" | "read" | "edit" | "search" | "fetch" | "other"; subject?: string;
+      kind?: "command" | "read" | "edit" | "search" | "fetch" | "script" | "other"; subject?: string;
+      /** The tools a script step called, in order. */
+      calls?: { name: string; kind: string; subject?: string; isError?: boolean; durationMs?: number }[];
       /** When it finished, stamped as it did. */
       completedAt: string }
   /**
