@@ -671,6 +671,9 @@ function App() {
   const [dockedSlots, setDockedSlots] = createSignal<number[]>([2, 3, 4].filter((slot) => initialViews[slot]));
   const [dockSlot, setDockSlot] = createSignal<number | null>(null);
   const isDocked = (slot: PaneKey) => slot !== "main" && dockedSlots().includes(slot);
+  // What the dock holds: panes docked by hand, then those the row has no room for.
+  const dockContents = () => [...dockedSlots(), ...foldedSlots()];
+  const inDock = (slot: PaneKey) => slot !== "main" && dockContents().includes(slot);
   const [dockDocHost, setDockDocHost] = createSignal<HTMLElement>();
   // The dock beside the panes, taking its room, or over them; per device.
   const [dockOverlay, setDockOverlayState] = createSignal(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "dock-overlay") === "true");
@@ -1934,7 +1937,7 @@ function App() {
     if (isMobileLayout()) setMobileSidebarOpen(false);
     // The dock showing a docked pane: that pane is what it holds, so it takes the keyboard.
     const docked = dockSlot();
-    if (docked !== null && isDocked(docked)) {
+    if (docked !== null && inDock(docked)) {
       if (!panelOpen()) setPanelOpenForChat(true);
       return requestAnimationFrame(() => focusPane(docked));
     }
@@ -2288,7 +2291,7 @@ function App() {
   // A free slot for a pane in the row or, `docked`, in the dock -- each has its own room.
   const freeSlot = (docked = false) => (docked ? dockedSlots().length < MAX_DOCKED : rowSlots().length < 2) ? SLOT_IDS.find((slot) => !slotOrder().includes(slot)) ?? null : null;
   // The dock is as narrow as what it shows may go: a docked pane's document, else a tool.
-  const dockMinWidth = () => { const slot = dockSlot(); return slot !== null && isDocked(slot) ? viewMinWidth(slotView(slot)) : MIN_SPLIT_PANE_WIDTH; };
+  const dockMinWidth = () => { const slot = dockSlot(); return slot !== null && inDock(slot) ? viewMinWidth(slotView(slot)) : MIN_SPLIT_PANE_WIDTH; };
   /*
    * Each document declares the narrowest its pane may go: one with a
    * composer, a chat or a page, the dashboard composer's least; a file viewer
@@ -2311,30 +2314,9 @@ function App() {
     }
     return shown;
   }, [], { equals: (a, b) => a.length === b.length && a.every((slot, index) => slot === b[index]) });
-  /*
-   * The panes drawn: those shown, plus one folding away because the window
-   * narrowed, which stays for its fade while the rest ease into its room
-   * (foldPane). Closing a pane has its own motion (closeSlot).
-   */
-  let foldingSlot: number | null = null;
-  let foldedSlot: number | null = null;
-  const [foldTick, setFoldTick] = createSignal(0);
-  const renderSlots = createMemo<number[]>((before) => {
-    foldTick();
-    const now = shownSlots();
-    const lost = before.filter((slot) => !now.includes(slot));
-    if (foldingSlot !== null && !lost.includes(foldingSlot)) foldingSlot = null;
-    if (foldingSlot === null && lost.length === 1 && lost[0] !== foldedSlot && untrack(() => slotView(lost[0]!) !== null && animatePanes())) {
-      foldingSlot = lost[0]!;
-      const slot = foldingSlot;
-      queueMicrotask(() => foldPane(slot));
-    }
-    foldedSlot = null;
-    if (foldingSlot === null) return now;
-    const drawn = [...now];
-    drawn.splice(Math.min(before.indexOf(foldingSlot), drawn.length), 0, foldingSlot);
-    return drawn;
-  }, []);
+  // The panes drawn in the row. One the window can no longer hold goes to the
+  // dock (foldedSlots), so nothing lingers here to fade.
+  const renderSlots = shownSlots;
   const splitShown = () => shownSlots().length > 0;
   // A tool the dock lends a pane (a whole tool, the legacy file beside, a
   // terminal) -- not a chat, a page or a file viewer, which panes draw themselves.
@@ -2422,7 +2404,7 @@ function App() {
   });
   const [keyboardPane, setKeyboardPane] = createSignal<PaneKey>("main");
   // The pane beside A with the keyboard, when it holds a chat or a page.
-  const keyboardSlot = () => { const pane = keyboardPane(); return pane !== "main" && (shownSlots().includes(pane) || dockSlot() === pane) && isPaneView(slotView(pane)) ? pane : null; };
+  const keyboardSlot = () => { const pane = keyboardPane(); return pane !== "main" && (shownSlots().includes(pane) || (dockSlot() === pane && inDock(pane))) && isPaneView(slotView(pane)) ? pane : null; };
   const sideHasKeyboard = () => keyboardSlot() !== null;
   const slotHasKeyboard = (slot: number) => keyboardSlot() === slot;
   const focusPane = (slot: number) => { setKeyboardPane(slot); focusSplit(slot); };
@@ -3425,10 +3407,10 @@ function App() {
     }
   };
   /*
-   * Panes the window is too narrow for keep their documents and come back as
-   * it widens; meanwhile the rail lists them. Choosing one trades it with the
-   * pane that has the keyboard: pane A's document moves into the folded pane,
-   * a pane beside A trades places with it.
+   * Panes the window is too narrow for move to the dock, as a docked pane
+   * does -- a rail icon, shown there on a click -- and come back to the row on
+   * their own once it widens. Nothing marks them: a pane in the row that does
+   * not fit is simply drawn in the dock until it does.
    */
   const foldedSlots = () => !dockAvailable() || isMobileLayout() ? [] : slotOrder().filter((slot) => slotView(slot) && !isDocked(slot)).slice(0, 2).filter((slot) => !shownSlots().includes(slot));
   const viewName = (view: SplitView | null): string => {
@@ -3446,44 +3428,6 @@ function App() {
     if (files) return files.length ? files.map((entry) => entry.path.split("/").pop()).join(", ") : "File viewer";
     if (view.startsWith("term:")) return "Terminal";
     return isPanelTab(view) ? WORKSPACE_TOOL_LABELS[view] : "Pane";
-  };
-  const showFolded = async (slot: number) => {
-    const shown = shownSlots();
-    const held = keyboardPane();
-    const target: PaneKey = held === "main" || shown.includes(held) ? held : shown.at(-1) ?? "main";
-    const element = paneElement(target);
-    if (!element || swappingPanes || !foldedSlots().includes(slot)) return;
-    swappingPanes = true;
-    try {
-      if (target === "main") {
-        const aView = paneAView();
-        const view = slotView(slot)!;
-        if (!aView) return;
-        const unsaved = [...handlesOf("main"), ...handlesOf(slot)].some((handle) => handle?.hasUnsavedChanges());
-        if (unsaved && !window.confirm("Discard unsaved changes to swap these panes?")) return;
-        movingDocuments = true;
-        swapTabs("main", slot);
-        await crossfadeUnder([element], async () => {
-          setSlotView(slot, aView);
-          if (isPaneView(view)) { setPaneAOverride(null); await openInPaneA(view); } else setPaneView("main", view);
-          const id = view.startsWith("chat:") ? view.slice("chat:".length) : null;
-          await waitFor(() => !id || (chat.loadedId() === id && chatDrawn("main")), 1500);
-        });
-        focusAnyPane("main");
-      } else {
-        await crossfadeUnder([element], async () => {
-          setSlotOrder((order) => order.map((item) => item === target ? slot : item === slot ? target : item));
-          persistSlots();
-          const id = slotChatId(slot);
-          await waitFor(() => Boolean(paneSlot(slot).host()) && (!id || (paneSlot(slot).session.chat.loadedId() === id && chatDrawn(slot))), 1500);
-        });
-        focusAnyPane(slot);
-      }
-    } finally {
-      swappingPanes = false;
-      movingDocuments = false;
-      reconcileTabs();
-    }
   };
   /*
    * Chat tabs (panes-and-rail.md, 6c). A pane showing a chat holds up to
@@ -4144,14 +4088,18 @@ function App() {
     if (focus && shownSlots().includes(slot)) focusPane(slot);
     return true;
   };
+  createEffect(on(dockContents, (contents) => {
+    const slot = dockSlot();
+    if (slot !== null && !contents.includes(slot)) batch(() => { setDockSlot(null); closePanel(); });
+  }, { defer: true }));
   const chooseDocked = (slot: number, alt: boolean) => {
-    if (alt) return void undockPane(slot);
+    if (alt) return void (isDocked(slot) ? undockPane(slot) : toast.info("It comes back by itself once the window has room for it."));
     if (panelOpen() && dockSlot() === slot) return closePanel();
     showDocked(slot);
   };
-  const paneTabActions = (pane: PaneKey) => <Show when={isDocked(pane)} fallback={paneRowActions(pane)}>
+  const paneTabActions = (pane: PaneKey) => <Show when={inDock(pane)} fallback={paneRowActions(pane)}>
     <span class="pane-tab-actions">
-      <button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Move to a pane" title="Move to a pane" onClick={() => void undockPane(pane as number)}><Columns2Icon /></button>
+      <Show when={isDocked(pane)}><button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Move to a pane" title="Move to a pane" onClick={() => void undockPane(pane as number)}><Columns2Icon /></button></Show>
       <button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Close this pane" title="Close" onClick={() => closeSlot(pane as number)}><XIcon /></button>
     </span>
   </Show>;
@@ -4294,20 +4242,6 @@ function App() {
       announceSplit("end", splitSize);
     };
     requestAnimationFrame(follow);
-  };
-  const foldPane = (slot: number) => {
-    const element = paneSlot(slot).host();
-    const index = renderSlots().indexOf(slot);
-    const finish = () => {
-      element?.getAnimations().forEach((animation) => animation.cancel());
-      batch(() => { setWeightOverride(null); setPaneMotion(null); foldedSlot = slot; foldingSlot = null; setFoldTick((tick) => tick + 1); });
-    };
-    if (!element || index < 0 || foldingSlot !== slot) return finish();
-    setPaneMotion({ slot, phase: "leaving" });
-    void element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_FADE_MS, easing: "ease-out", fill: "forwards" });
-    const target = weightsFor(shownSlots().length + 1).slice();
-    target.splice(index + 1, 0, 0);
-    requestAnimationFrame(() => requestAnimationFrame(() => easePaneWeights(normalized(target), finish)));
   };
   createEffect(on(shownSlots, (now, before) => {
     const added = now.filter((slot) => !(before ?? []).includes(slot));
@@ -5379,7 +5313,7 @@ function App() {
     <For each={renderSlots()}>{(slot, position) => renderSlot(slot, position, false)}</For>
     {/* Docked panes stay mounted, so each keeps its state and tabs; the dock shows one. */}
     <Show when={dockDocHost()} keyed>{(host) =>
-      <For each={dockedSlots()}>{(slot) => <Portal mount={host}>{renderSlot(slot, () => 0, true)}</Portal>}</For>}</Show>
+      <For each={dockContents()}>{(slot) => <Portal mount={host}>{renderSlot(slot, () => 0, true)}</Portal>}</For>}</Show>
     <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
     <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </div>
@@ -5389,8 +5323,7 @@ function App() {
     <Show when={docDrop() && ["left", "middle", "right", "dock"].includes(docDrop()!.zone) ? docDrop() : null}>{(drop) => <div class="doc-drop" aria-hidden="true" style={{ left: `${drop().rect.left}px`, top: `${drop().rect.top}px`, width: `${drop().rect.width}px`, height: `${drop().rect.height}px` }} />}</Show>
     <WorkspaceRail tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard"].includes(routeKind()) && selectedProject() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
       panes={splitShown() ? shownSlots().length + 1 : 1} onLayout={applyPaneLayout}
-      folded={foldedSlots().map((slot) => ({ slot, letter: rowSlots().indexOf(slot) === 0 ? "B" : "C", name: viewName(slotView(slot)) }))} onShowFolded={(slot) => void showFolded(slot)}
-      docked={dockedSlots().filter((slot) => slotView(slot)).map((slot) => ({ slot, view: slotView(slot)!, name: viewName(slotView(slot)) }))} currentDocked={panelOpen() ? dockSlot() : null} onChooseDocked={chooseDocked} dockOverlay={dockOverlay()} onToggleDockOverlay={toggleDockOverlay}
+      docked={dockContents().filter((slot) => slotView(slot)).map((slot) => ({ slot, view: slotView(slot)!, name: isDocked(slot) ? viewName(slotView(slot)) : `${viewName(slotView(slot))} (no room; returns when there is)` }))} currentDocked={panelOpen() ? dockSlot() : null} onChooseDocked={chooseDocked} dockOverlay={dockOverlay()} onToggleDockOverlay={toggleDockOverlay}
       current={panelOpen() && dockSlot() === null ? dockTool() : null} inSplit={splitToolShown()} onDock={moveToDock} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : dockProject()?.kind === "workspace"} onChoose={chooseRailTool} />
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>
