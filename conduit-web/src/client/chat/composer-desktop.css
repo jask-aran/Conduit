@@ -112,3 +112,8 @@ summary.context-breakdown-row:hover { background: var(--accent); }
 .context-breakdown-item { color: var(--muted-foreground); font-size: 11px; }
 .context-breakdown-session { padding-top: 6px; border-top: 1px solid color-mix(in oklch, var(--foreground), transparent 90%); font-size: 11px; }
 .context-breakdown-session code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: all; }
+/* The chat menu's context row: the bar under its share; a tap opens the breakdown. */
+.chat-header-menu-context-trigger { display: grid; gap: 6px; }
+.chat-header-menu-context-trigger > svg { display: none; }
+.chat-header-menu-context-line { display: flex; justify-content: space-between; gap: 8px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.chat-header-menu-context-trigger .context-breakdown-bar { margin-inline: 0; }

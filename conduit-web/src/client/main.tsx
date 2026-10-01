@@ -13,7 +13,9 @@ import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
-import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/primitives";
+import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from "@/components/primitives";
+import { ContextBar, ContextBreakdown } from "./chat/context-gauge";
+import { contextUsagePercent } from "./chat/context-metrics";
 import { api, apiWhenServed, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./api/client";
 import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl } from "./api/transport";
 import { startPathSelection } from "./platform/path-selector";
@@ -500,6 +502,13 @@ function ChatHeader(props: {
               <MenuLabel class="chat-header-menu-meta">{menuLine()}</MenuLabel>
             </MenuGroup>
             <Show when={!props.dashboard}>
+              <Show when={props.chat}>{(chat) => <MenuSub>
+                <MenuSubTrigger class="chat-header-menu-context-trigger">
+                  <span class="chat-header-menu-context-line"><span>Context</span><span>{contextUsagePercent(chat().contextUsage()) == null ? "Unavailable" : `${Math.round(contextUsagePercent(chat().contextUsage())!)}% used`}</span></span>
+                  <ContextBar chat={chat()} />
+                </MenuSubTrigger>
+                <MenuSubContent class="chat-context-menu"><ContextBreakdown chat={chat()} /></MenuSubContent>
+              </MenuSub>}</Show>
               <Show when={sessionId()}><MenuGroup class="chat-header-menu-context" aria-label="Session"><MenuLabel class="chat-header-menu-section-label">Session ID</MenuLabel><div class="chat-header-menu-context-values"><code>{sessionId()}</code></div></MenuGroup></Show>
             </Show>
             <MenuSeparator />
