@@ -346,6 +346,14 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   const minWidth = () => props.minWidth?.() ?? MIN_WORKSPACE_PANE_WIDTH;
   const clampWidth = (next: number) => Math.max(minWidth(), Math.min(Math.floor(window.innerWidth * 0.65), room(), next));
   createEffect(on(minWidth, () => { if (props.open()) animatePanelGeometry(true); }, { defer: true }));
+  // Switching between beside and over the panes keeps the dock exactly as it
+  // is: its width transitions would otherwise squeeze it to the shell's new
+  // width and back.
+  createEffect(on(() => Boolean(props.overlay?.()), () => {
+    if (!panelRoot) return;
+    panelRoot.dataset.edgeInstant = "true";
+    requestAnimationFrame(() => requestAnimationFrame(() => { if (panelRoot) delete panelRoot.dataset.edgeInstant; }));
+  }, { defer: true }));
   // Every atomic width commit has to announce itself. The transcript learns its
   // own width only from geometry motion, so a commit that skips the event
   // leaves it laid out for the panel's previous size until something unrelated
