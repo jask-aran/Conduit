@@ -8,12 +8,13 @@ import { Portal, render } from "solid-js/web";
 import { androidShell, desktopShell, isInstalledClient } from "./platform/installed-client.ts";
 import {
   ArrowLeftRightIcon, Columns2Icon, PanelTopIcon, EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ServerIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon, XIcon,
+  ChevronRightIcon,
 } from "lucide-solid";
 import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
-import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from "@/components/primitives";
+import { Button, Dialog, DialogContent, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/primitives";
 import { ContextBar, ContextBreakdown } from "./chat/context-gauge";
 import { contextUsagePercent } from "./chat/context-metrics";
 import { api, apiWhenServed, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./api/client";
@@ -502,13 +503,20 @@ function ChatHeader(props: {
               <MenuLabel class="chat-header-menu-meta">{menuLine()}</MenuLabel>
             </MenuGroup>
             <Show when={!props.dashboard}>
-              <Show when={props.chat}>{(chat) => <MenuSub onOpenChange={(open) => { if (open) chat().refreshContext(); }}>
-                <MenuSubTrigger class="chat-header-menu-context-trigger">
-                  <span class="chat-header-menu-context-line"><span>Context</span><span>{contextUsagePercent(chat().contextUsage()) == null ? "Unavailable" : `${Math.round(contextUsagePercent(chat().contextUsage())!)}% used`}</span></span>
-                  <ContextBar chat={chat()} />
-                </MenuSubTrigger>
-                <MenuSubContent class="chat-context-menu"><ContextBreakdown chat={chat()} /></MenuSubContent>
-              </MenuSub>}</Show>
+              <Show when={props.chat}>{(chat) => {
+                // Opens in place: a submenu has nowhere to go beside a menu that fills a phone.
+                const [expanded, setExpanded] = createSignal(false);
+                const used = () => contextUsagePercent(chat().contextUsage());
+                return <div class="chat-header-menu-context-block">
+                  <button type="button" class="chat-header-menu-context-trigger" aria-expanded={expanded()}
+                    onClick={() => { if (!expanded()) chat().refreshContext(); setExpanded(!expanded()); }}>
+                    <span class="chat-header-menu-context-line"><span class="chat-header-menu-section-label">Context</span>
+                      <span>{used() == null ? "Unavailable" : `${Math.round(used()!)}% used`}</span><ChevronRightIcon class="chat-header-menu-context-chevron" /></span>
+                    <Show when={!expanded()}><ContextBar chat={chat()} /></Show>
+                  </button>
+                  <Show when={expanded()}><ContextBreakdown chat={chat()} bare /></Show>
+                </div>;
+              }}</Show>
               <Show when={sessionId()}><MenuGroup class="chat-header-menu-context" aria-label="Session"><MenuLabel class="chat-header-menu-section-label">Session ID</MenuLabel><div class="chat-header-menu-context-values"><code>{sessionId()}</code></div></MenuGroup></Show>
             </Show>
             <MenuSeparator />
