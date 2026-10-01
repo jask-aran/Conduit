@@ -222,6 +222,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   const [thinking, setThinking] = createSignal(false);
   const [responding, setResponding] = createSignal(false);
   const [activeToolName, setActiveToolName] = createSignal<string | null>(null);
+  const [activeToolKind, setActiveToolKind] = createSignal<string | null>(null);
   const [retry, setRetry] = createSignal<RetryState | null>(null);
   const [activeGenerationRoot, setActiveGenerationRoot] = createSignal<ActiveGenerationView | null>(null);
   const [activeGenerationRevision, setActiveGenerationRevision] = createSignal(0);
@@ -559,6 +560,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       setResponding(latest?.kind === "text" && latest.status === "streaming");
       const runningTool = Object.values(next.toolExecutions).find((tool) => tool.status === "running");
       setActiveToolName(runningTool?.name || null);
+      setActiveToolKind(runningTool?.kind || null);
       setRetry((next as { retry?: RetryState | null }).retry || null);
     }
     if (next.status === "stopping") setGeneration("stopping");
@@ -1370,6 +1372,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       thinking: thinking(),
       responding: responding(),
       toolName: activeToolName(),
+      toolKind: activeToolKind(),
       retry: retry(),
     });
     if (hostUiRequests().length) return { kind: "waiting_for_user",
