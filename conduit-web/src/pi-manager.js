@@ -23,6 +23,7 @@ import { ChatLogs, isLoggedEvent } from "./server/chat-log.js";
 import { normalizePiBackendEvent, toNeutralPiEvent } from "./pi-rpc-adapter.js";
 import { DELIVERY_FLUSH_MS, clampFrameMs, deliveryKey } from "./harnesses/socket-delivery.js";
 import { emptyCacheStats, finishCacheStats, promptTokenParts } from "./cache-stats.js";
+import { piPlanUsage } from "./plan-usage.js";
 import { messageIsInterim } from "./active-generation.js";
 
 export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = "", models, template }) {
@@ -885,6 +886,13 @@ export class PiManager extends EventEmitter {
       sessionStats: record.sessionStats || null,
       cacheStats: record.cacheStats || null,
     });
+    // The plan arrives on its own clock; it joins the readout when it does.
+    void piPlanUsage(this.agentDir, record.model).then((plan) => {
+      if (!plan || record.contextUsage?.plan === plan) return;
+      record.contextUsage = { ...record.contextUsage, plan };
+      this.publish(record, { type: "context_usage", contextUsage: record.contextUsage,
+        sessionStats: record.sessionStats || null, cacheStats: record.cacheStats || null });
+    }).catch(() => {});
   }
 
   scheduleContextRefresh(record, { afterCompaction = false } = {}) {

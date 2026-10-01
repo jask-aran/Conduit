@@ -10,6 +10,7 @@ import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { countCacheRequest, usageFromRequests } from "./cache-stats.js";
 import { conduitCategories } from "./context-categories.js";
+import { claudePlanUsage } from "./plan-usage.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 // Claude Code's tools, by what they do.
@@ -351,7 +352,9 @@ export class ClaudeCodeAdapter extends EventEmitter {
   static plan = { at: 0, value: null };
 
   static async planUsage(query) {
-    if (Date.now() - ClaudeCodeAdapter.plan.at < 60_000) return ClaudeCodeAdapter.plan.value;
+    const polled = await claudePlanUsage();
+    if (polled) return (ClaudeCodeAdapter.plan = { at: Date.now(), value: polled }).value;
+    if (!query || Date.now() - ClaudeCodeAdapter.plan.at < 60_000) return ClaudeCodeAdapter.plan.value;
     ClaudeCodeAdapter.plan.at = Date.now();
     try {
       const usage = await query.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true });
@@ -1198,7 +1201,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     }
     const window = model ? ClaudeCodeAdapter.windows.get(model) : null;
     const usage = usageFromRequests(requests, { model, contextWindow: window,
-      compactAt: ClaudeCodeAdapter.compactAt(model, window), plan: ClaudeCodeAdapter.plan.value });
+      compactAt: ClaudeCodeAdapter.compactAt(model, window), plan: await ClaudeCodeAdapter.planUsage(null) });
     // The categories need Claude Code itself; the readout offers to ask it.
     if (usage) usage.contextUsage.breakdown = "loadable";
     return usage;
