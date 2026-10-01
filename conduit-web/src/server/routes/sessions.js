@@ -112,6 +112,19 @@ export function registerSessionRoutes(app, {
     }
   });
 
+  // The full breakdown for a thread whose harness can only give it running.
+  app.post("/v0/sessions/:id/context/breakdown", async (request, response, next) => {
+    try {
+      const context = await findChatContext(request.params.id);
+      if (!context) return response.status(404).json({ error: "chat_not_found" });
+      const adapter = backends.forChat(context.chat);
+      if (!adapter.contextBreakdown) return response.status(409).json({ error: "breakdown_unavailable" });
+      response.json(await adapter.contextBreakdown({ opaqueSession: context.chat.backend?.opaqueSession, project: context.project }) || {});
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.get("/v0/sessions/:id", async (request, response, next) => {
     try {
       const context = await findChatContext(request.params.id);

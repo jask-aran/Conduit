@@ -618,6 +618,18 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (usage.cacheStats) setCacheStats(usage.cacheStats);
   };
 
+  /** An old thread's full breakdown, from a harness that has to be running to give it. */
+  const loadBreakdown = async () => {
+    const chatId = selectedId();
+    if (!chatId) return;
+    const usage = await api<{ contextUsage?: ContextUsage; sessionStats?: SessionStats; cacheStats?: CacheStats | null }>(
+      `/v0/sessions/${encodeURIComponent(chatId)}/context/breakdown`, { method: "POST" });
+    if (selectedId() !== chatId || !usage?.contextUsage) return;
+    setContextUsage(usage.contextUsage);
+    if (usage.sessionStats) setSessionStats(usage.sessionStats);
+    if (usage.cacheStats) setCacheStats(usage.cacheStats);
+  };
+
   /** Ask again without sending anything: the live process when there is one, else the history. */
   const refreshContext = () => {
     const chatId = selectedId();
@@ -1391,7 +1403,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   return {
     status, setStatus, title, setTitle, templateId, setTemplateId, runtimeIdentity, setRuntimeIdentity, backendImplementation,
     live, messages, setMessages, tools, loadedId, pageBefore, loadingOlder, draft, setDraft,
-    generation, editingEntryId, contextUsage, sessionStats, cacheStats, refreshContext, compacting, hostUiRequests, queue, pendingMessages, capabilities, harnessCommands, activeGeneration, activeGenerationChange, turnArtifacts,
+    generation, editingEntryId, contextUsage, sessionStats, cacheStats, refreshContext, loadBreakdown, compacting, hostUiRequests, queue, pendingMessages, capabilities, harnessCommands, activeGeneration, activeGenerationChange, turnArtifacts,
     navigatingId, presentation, interactionReady: () => presentation().kind === "ready" && Boolean(loadedId()), streaming, stopping, activity,
     initialize, select, prefetch, loadDetail, ensureAgent, reset, send, stop, regenerate, rehydrateDraft,
     continueResponse, compact, loadHarnessCommands, loadOlder, edit, cancelEdit, respondHostUi, clearQueue, interruptAndSend, editQueued, discardQueued,

@@ -94,6 +94,12 @@ export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean 
     return typeof value === "string" ? value : "";
   };
   const model = () => usage()?.model?.split("/").pop() || "";
+  const [loading, setLoading] = createSignal(false);
+  const [failed, setFailed] = createSignal(false);
+  const load = () => {
+    setLoading(true); setFailed(false);
+    props.chat.loadBreakdown().catch(() => setFailed(true)).finally(() => setLoading(false));
+  };
   const [copied, setCopied] = createSignal(false);
   const copySession = () => void navigator.clipboard?.writeText(sessionId()).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); });
   /* Built from the model menu's parts: the slider's header for each section,
@@ -110,6 +116,12 @@ export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean 
     </div>
     <Show when={categories().length}>
       <div class="context-breakdown-separator" />
+      <Show when={usage()?.breakdown === "loadable" && !usage()?.categories?.length}>
+        <button type="button" class="menu-row context-breakdown-load" disabled={loading()} onClick={load}>
+          <span>{loading() ? "Asking Claude Code…" : failed() ? "Could not load the breakdown" : "Load breakdown"}</span>
+          <small>starts Claude Code</small>
+        </button>
+      </Show>
       <div class="context-breakdown-rows">
         <For each={categories()}>{(category, index) => {
           const cells = <><i class="context-breakdown-dot" data-kind={category.kind} style={{ background: colourOf(category, index()) }} />
