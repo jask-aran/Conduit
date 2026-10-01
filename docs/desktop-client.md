@@ -116,7 +116,8 @@ building to change that fallback. Development builds permit plain HTTP for
 direct routes; the client verifies the archive with its built-in signature key
 before installation. Released clients keep using GitHub Releases.
 
-**A development build names its own version**: the patch after the last tag, as
+**A development build names its own version**: the patch after the last release
+tag (`v*`; other tags, such as checkpoints, are ignored), as
 a prerelease carrying the build time and the commit. It sorts above the release
 it was built from, below the release it anticipates — so a real release always
 wins — and above the development build before it. Nothing has to be chosen by
