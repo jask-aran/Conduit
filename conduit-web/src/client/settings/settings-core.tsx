@@ -10,7 +10,6 @@ import { Button, Field, FieldGroup, FieldLabel, Input, Spinner } from "@/compone
 import { api } from "../api/client";
 import { COMPOSER_SURFACE_OPTIONS, type ComposerSurfaceMode } from "../chat/composer-surface";
 import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
-import { CONTEXT_METRIC_GROUPS, CONTEXT_METRIC_OPTIONS, CONTEXT_METRIC_PRESETS, contextMetricPreset, metricsForContextMetricPreset, type ContextMetricId, type ContextMetricPresetId } from "../chat/context-metrics";
 import { formatMicrophoneError, hasAudioSignal, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
 import { shortcutFromKeyboardEvent } from "../chat/voice-dictation";
 import type { VoiceDictationSettings } from "../chat/voice-dictation-types";
@@ -241,8 +240,6 @@ export function Settings(props: {
   onVoiceSettingsSave: (settings: VoiceDictationSettings) => void;
   sidebarChatLimit: number;
   onSidebarChatLimitChange: (limit: number) => void;
-  contextMetrics: ContextMetricId[];
-  onContextMetricsChange: (metrics: ContextMetricId[]) => void;
   onOpenModelSelector: () => void;
   shortcuts: ShortcutManager;
 }) {
@@ -1063,10 +1060,6 @@ export function Settings(props: {
     return props.templates.find((item) => item.id === id)?.label || `Inherit global (${props.templates.find((item) => item.id === props.defaultTemplateId)?.label || "General"})`;
   };
   const saveWorkspace = async (workspace: Project, templateId: string | null) => props.onWorkspaceDefaultChange(workspace.id, templateId);
-  const toggleContextMetric = (id: ContextMetricId, enabled: boolean) => {
-    const next = enabled ? [...props.contextMetrics, id] : props.contextMetrics.filter((current) => current !== id);
-    props.onContextMetricsChange(next);
-  };
 
   const editRuntime = (field: keyof RuntimeDraft, text: string) => {
     const draft = { ...runtimeDraft(), [field]: text };
@@ -1243,27 +1236,6 @@ export function Settings(props: {
               <section class="settings-group" aria-label="Graphics">
                 <h3>Graphics</h3>
                 <div class="settings-line" title="For smooth animations, backdrop blur and high-refresh-rate rendering, turn on “Use graphics acceleration when available” in your browser settings, then relaunch the browser."><span>Hardware acceleration</span><span class="settings-line-value">Turn on in browser</span></div>
-              </section>
-              <section class="settings-group" aria-label="Context metrics">
-                <h3>Context metrics</h3>
-                  <label class="settings-line" for="context-metric-preset"><span>Preset</span>
-                    <select id="context-metric-preset" aria-label="Composer context metric preset" value={contextMetricPreset(props.contextMetrics)} onChange={(event) => {
-                      const value = event.currentTarget.value as ContextMetricPresetId | "custom";
-                      if (value !== "custom") props.onContextMetricsChange(metricsForContextMetricPreset(value));
-                    }}>
-                      <option value="custom">Custom</option>
-                      <For each={CONTEXT_METRIC_PRESETS}>{(preset) => <option value={preset.id}>{preset.label}</option>}</For>
-                    </select>
-                  </label>
-                  <div class="settings-subgroups" role="group" aria-label="Composer context metrics">
-                    <For each={CONTEXT_METRIC_GROUPS}>{(group) => <fieldset>
-                      <legend>{group.label}</legend>
-                      <For each={CONTEXT_METRIC_OPTIONS.filter((option) => option.group === group.id)}>{(option) => <label class="settings-line" for={`context-metric-${option.id}`}>
-                        <span>{option.label}</span>
-                        <Switch id={`context-metric-${option.id}`} label={option.label} checked={props.contextMetrics.includes(option.id)} onChange={(checked) => toggleContextMetric(option.id, checked)} />
-                      </label>}</For>
-                    </fieldset>}</For>
-                  </div>
               </section>
             </div>
           </Show>

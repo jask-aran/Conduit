@@ -10,7 +10,6 @@ export interface UiPreferences {
   sidebarCollapsed: boolean | null;
   markdownRenderer: string | null;
   composerSurface: string | null;
-  contextMetrics: string[] | null;
   meteorField: boolean | null;
   incremarkPacing: string | null;
   transcriptWidth: string | null;
