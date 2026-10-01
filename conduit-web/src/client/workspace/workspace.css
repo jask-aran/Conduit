@@ -79,6 +79,11 @@
    frame beside the chat, as the dock is. The chat's 8px right margin is the
    gutter; the drag edge sits in it. */
 .main-split { position: relative; display: flex; min-width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 8px 6.4px 0; flex-direction: column; border-radius: 12.8px; background: var(--background); }
+/* A pane moved into the dock fills it in place of the tools (their state kept). */
+.workspace-dock-document { display: none; }
+.workspace-panel-documented > :not(.workspace-dock-document) { display: none !important; }
+.workspace-panel-documented > .workspace-dock-document { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
+.main-split.main-split-docked { height: auto; flex: 1; margin: 0; border-radius: inherit; }
 .main-split > div:not(.main-split-resize) { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; }
 /* Pane A holding the dock's tool, over its route (5f). */
 .pane-a-tool-host { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
