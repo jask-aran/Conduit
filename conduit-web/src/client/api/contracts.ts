@@ -462,6 +462,11 @@ export interface ContextUsage {
   categories?: ContextCategory[] | null;
   /** Whether the categories can be asked for (an old Claude Code thread), or were. */
   breakdown?: "loadable" | "loaded";
+  /** How many times this session has compacted, and the fill at which it will next. */
+  compactions?: number;
+  compactAt?: number | null;
+  /** The account's plan windows, when the harness declares them. */
+  plan?: { name?: string | null; windows: { id: string; label: string; usedPercent: number; resetsAt: string | null }[] } | null;
   lastRequestUsage?: RequestUsage | null;
 }
 

@@ -113,12 +113,26 @@ function normalizeSessionStats(stats) {
 
 
 
+/**
+ * Where Pi compacts: its window less the reserve its settings keep
+ * (`compaction.reserveTokens`, 16384 unless set), or nowhere when off.
+ */
+export function piCompactionReserve(agentDir) {
+  try {
+    const compaction = JSON.parse(fsSync.readFileSync(path.join(agentDir, "settings.json"), "utf8"))?.compaction || {};
+    if (compaction.enabled === false) return null;
+    return Number(compaction.reserveTokens) || 16384;
+  } catch { return 16384; }
+}
+
 function cacheStatsFromEntries(entries) {
   let previousPromptTokens = null;
+  let compactions = 0;
   const stats = emptyCacheStats();
   for (const entry of entries || []) {
     if (entry.type === "compaction" || entry.type === "branch_summary") {
       previousPromptTokens = null;
+      if (entry.type === "compaction") compactions += 1;
       continue;
     }
     if (entry.type !== "message" || entry.message?.role !== "assistant") continue;
@@ -137,6 +151,7 @@ function cacheStatsFromEntries(entries) {
   return {
     stats: stats.eligibleRequests > 0 ? finishCacheStats(stats) : null,
     previousPromptTokens,
+    compactions,
   };
 }
 
@@ -557,6 +572,7 @@ export class PiManager extends EventEmitter {
       sessionStats: null,
       cacheStats: restoredCache.stats,
       cachePreviousPromptTokens: restoredCache.previousPromptTokens,
+      compactions: restoredCache.compactions || 0,
       clients: new Set(),
       delivery: new Map(),
       events: [],
@@ -764,6 +780,7 @@ export class PiManager extends EventEmitter {
           this.send(record.id, { type: "get_state" });
           this.scheduleContextRefresh(record);
         }
+        if (event.type === "compaction_end" && !event.aborted && !event.errorMessage) record.compactions = (record.compactions || 0) + 1;
         if (event.type === "compaction_end" && record.status === "running") {
           this.scheduleContextRefresh(record, { afterCompaction: true });
         }
@@ -856,6 +873,9 @@ export class PiManager extends EventEmitter {
       contextWindow: Number.isFinite(contextWindow) && contextWindow > 0 ? contextWindow : null,
       percent: Number.isFinite(percent) ? percent : null,
       model: record.model || null,
+      compactions: record.compactions || 0,
+      compactAt: (() => { const reserve = piCompactionReserve(this.agentDir); const window = Number(usage.contextWindow);
+        return reserve && window > reserve ? window - reserve : null; })(),
       reportedAt: new Date().toISOString(),
       source,
     };

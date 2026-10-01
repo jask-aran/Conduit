@@ -514,7 +514,7 @@ function ChatHeader(props: {
                       <span>{used() == null ? "Unavailable" : `${Math.round(used()!)}% used`}</span><ChevronRightIcon class="chat-header-menu-context-chevron" /></span>
                     <Show when={!expanded()}><ContextBar chat={chat()} /></Show>
                   </button>
-                  <Show when={expanded()}><ContextBreakdown chat={chat()} bare /></Show>
+                  <Show when={expanded()}><ContextBreakdown chat={chat()} bare canCompact={chat().capabilities()?.compaction !== false} /></Show>
                 </div>;
               }}</Show>
               <Show when={sessionId()}><MenuGroup class="chat-header-menu-context" aria-label="Session"><MenuLabel class="chat-header-menu-section-label">Session ID</MenuLabel><div class="chat-header-menu-context-values"><code>{sessionId()}</code></div></MenuGroup></Show>

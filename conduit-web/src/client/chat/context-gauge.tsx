@@ -12,6 +12,14 @@ const CATEGORY_COLOURS: Record<string, string> = {
   "system-prompt": "oklch(0.7 0.02 260)", tools: "oklch(0.74 0.12 230)",
   instructions: "oklch(0.78 0.14 75)", other: "oklch(0.75 0.15 30)",
 };
+/** When a plan window resets: the time today, else the weekday. */
+const resetText = (iso: string) => {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "";
+  return at.getTime() - Date.now() < 86_400_000
+    ? at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : at.toLocaleDateString([], { weekday: "short" });
+};
 const SPARES = ["oklch(0.72 0.16 350)", "oklch(0.8 0.12 95)", "oklch(0.7 0.13 150)", "oklch(0.7 0.1 50)"];
 const colourOf = (category: ContextCategory, index: number) => category.kind === "free" ? "transparent"
   : category.kind === "buffer" ? "color-mix(in oklch, var(--muted-foreground), transparent 55%)"
@@ -23,7 +31,7 @@ const colourOf = (category: ContextCategory, index: number) => category.kind ===
 
    Hovering previews it; a click holds it open, so the session ID can be
    selected and copied, and a tap is how touch opens it at all. */
-export function ContextGauge(props: { chat: ActiveChatStore; compact?: boolean }) {
+export function ContextGauge(props: { chat: ActiveChatStore; compact?: boolean; canCompact?: boolean }) {
   /* An adaptor that reports no context usage still gets a gauge: it reads 0%
      and greys out, which is the honest answer, rather than leaving a hole in
      the row that moves the controls beside it. */
@@ -55,24 +63,35 @@ export function ContextGauge(props: { chat: ActiveChatStore; compact?: boolean }
     <PopoverContent class="chat-context-menu" aria-label="Context usage"
       onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}
       onPointerDownOutside={(event) => { if (trigger?.contains(event.target as Node)) event.preventDefault(); }}>
-      <ContextBreakdown chat={props.chat} />
+      <ContextBreakdown chat={props.chat} canCompact={props.canCompact} />
     </PopoverContent>
   </Popover>;
 }
 
-/** The window as one bar of its parts, in their colours. */
+/** The window as one bar of its parts, in their colours, and where it compacts. */
 export function ContextBar(props: { chat: ActiveChatStore }) {
   const usage = () => props.chat.contextUsage();
   const inWindow = () => contextBreakdown(usage()).filter((category) => category.kind !== "deferred");
+  const threshold = () => {
+    const at = usage()?.compactAt;
+    const window = contextWindow(usage());
+    return at && window ? Math.min(100, (at / window) * 100) : null;
+  };
   return <Show when={contextWindow(usage()) && inWindow().length}>
-    <div class="context-breakdown-bar" aria-hidden="true">
-      <For each={inWindow()}>{(category, index) => <span style={{ "flex-grow": category.tokens, background: colourOf(category, index()) }} />}</For>
+    <div class="context-breakdown-meter" data-threshold={threshold() != null || undefined}>
+      <div class="context-breakdown-bar" aria-hidden="true">
+        <For each={inWindow()}>{(category, index) => <span style={{ "flex-grow": category.tokens, background: colourOf(category, index()) }} />}</For>
+      </div>
+      <Show when={threshold()}>{(at) => <>
+        <i class="context-breakdown-threshold" style={{ left: `${at()}%` }} />
+        <small class="context-breakdown-threshold-label" style={{ left: `${at()}%` }}>compacts at {Math.round(at())}%</small>
+      </>}</Show>
     </div>
   </Show>;
 }
 
 /** What fills the window: the total, the bar, and each part with its share. */
-export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean }) {
+export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean; canCompact?: boolean }) {
   const reported = () => contextUsagePercent(props.chat.contextUsage());
   const usage = () => props.chat.contextUsage();
   const categories = createMemo(() => contextBreakdown(usage()));
@@ -92,6 +111,9 @@ export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean 
     return typeof value === "string" ? value : "";
   };
   const model = () => usage()?.model?.split("/").pop() || "";
+  const plan = () => usage()?.plan?.windows?.length ? usage()!.plan! : null;
+  const compactions = () => usage()?.compactions || 0;
+  const busy = () => props.chat.compacting() || props.chat.generation() === "active";
   const [loading, setLoading] = createSignal(false);
   const [failed, setFailed] = createSignal(false);
   const load = () => {
@@ -144,6 +166,22 @@ export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean 
         </Show>
       </div>
     </Show>
+    <Show when={plan()}>{(current) => <>
+      <div class="context-breakdown-separator" />
+      <div class="step-slider context-breakdown-section">
+        <div class="step-slider-header"><label>Plan{current().name ? ` · ${current().name}` : ""}</label>
+          <span class="step-slider-value">{Math.round(Math.max(...current().windows.map((window) => window.usedPercent)))}% used</span></div>
+        <For each={current().windows}>{(window) => <div class="context-breakdown-total">
+          <span>{window.label}</span><span>{Math.round(window.usedPercent)}%<Show when={window.resetsAt}> · resets {resetText(window.resetsAt!)}</Show></span>
+        </div>}</For>
+      </div>
+    </>}</Show>
+    <div class="context-breakdown-separator" />
+    <button type="button" class="menu-row context-breakdown-load" disabled={!props.canCompact || busy()} onClick={() => void props.chat.compact()}
+      title={props.canCompact ? "Summarise the conversation so far to free the window" : "This harness cannot be asked to compact"}>
+      <span>{props.chat.compacting() ? "Compacting…" : "Compact now"}</span>
+      <small>{compactions() ? `${compactions()} so far` : props.canCompact ? "" : "not supported"}</small>
+    </button>
     <Show when={model() || sessionId()}>
       <div class="context-breakdown-separator" />
       <div class="context-breakdown-footer">

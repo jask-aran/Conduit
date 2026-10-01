@@ -13,7 +13,7 @@ import { ProjectStore } from "./project-store.js";
 import { pageSessionEntries, projectSessionEntries, readSessionMetadata, readSessionPage } from "./session-store.js";
 import { ChatLogs } from "./server/chat-log.js";
 import { MessageIds, applyArtifactMessageIds, applyMessageIds, entryMessageRows } from "./message-ids.js";
-import { PiManager } from "./pi-manager.js";
+import { PiManager, piCompactionReserve } from "./pi-manager.js";
 import { manifestForImplementation } from "./harnesses/index.js";
 import { ChatStore, chatView, isChatId } from "./chat-store.js";
 import { resolveComputerContext } from "./computer-context.js";
@@ -685,6 +685,7 @@ registerChatRoutes(app, {
 });
 registerHarnessRoutes(app, { backends, harnessModels, preferences, projects, registry });
 registerSessionRoutes(app, {
+  piCompactReserve: () => piCompactionReserve(config.piAgentDir),
   piModelWindow: async (spec, cwd) => (await catalogFor({}, config.piTemplate).list(cwd)).models.find((model) => model.spec === spec)?.contextWindow || null,
   attachments,
   backends,

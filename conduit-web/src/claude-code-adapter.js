@@ -345,6 +345,31 @@ function contextCategories(context) {
 export class ClaudeCodeAdapter extends EventEmitter {
   /** Each model's window as Claude Code last reported it, for threads read from history. */
   static windows = new Map();
+  /** Each model's autocompact reserve as Claude Code last reported it. */
+  static buffers = new Map();
+  /** The claude.ai plan's windows, asked at most once a minute: they are the account's, not a chat's. */
+  static plan = { at: 0, value: null };
+
+  static async planUsage(query) {
+    if (Date.now() - ClaudeCodeAdapter.plan.at < 60_000) return ClaudeCodeAdapter.plan.value;
+    ClaudeCodeAdapter.plan.at = Date.now();
+    try {
+      const usage = await query.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true });
+      const labels = { five_hour: "5-hour", seven_day: "Weekly" };
+      const windows = usage?.rate_limits_available ? Object.entries(usage.rate_limits || {})
+        .filter(([, window]) => window && window.utilization != null)
+        .map(([id, window]) => ({ id, label: labels[id] || id.replace(/^seven_day_/, "Weekly · ").replace(/_/g, " "),
+          usedPercent: window.utilization, resetsAt: window.resets_at || null })) : [];
+      ClaudeCodeAdapter.plan.value = windows.length ? { name: usage.subscription_type || null, windows } : null;
+    } catch { /* experimental; the readout goes without */ }
+    return ClaudeCodeAdapter.plan.value;
+  }
+
+  /** Where Claude Code compacts: the window less its autocompact reserve. */
+  static compactAt(model, window) {
+    const buffer = ClaudeCodeAdapter.buffers.get(model);
+    return window && buffer ? window - buffer : null;
+  }
 
   /** `sdk` is the Agent SDK's surface; a test hands in its own. */
   constructor({ command = "claude", logs = null, sdk = claudeAgentSdk } = {}) {
@@ -568,6 +593,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
   setCompacting(record, compacting) {
     if (record.compacting === compacting) return;
     record.compacting = compacting;
+    if (!compacting) record.compactions = (record.compactions || 0) + 1;
     record.activity = compacting ? "compacting" : record.active ? "working" : "idle";
     this.publish(record, { type: "compaction", generationId: record.generation?.id || null, active: compacting });
     // Its quick count goes by the last response, which a compaction outdates.
@@ -612,6 +638,11 @@ export class ClaudeCodeAdapter extends EventEmitter {
         percent: context.maxTokens ? (context.totalTokens / context.maxTokens) * 100 : null,
         model: context.model || null, categories: contextCategories(context) };
       if (context.model && context.maxTokens) ClaudeCodeAdapter.windows.set(context.model, context.maxTokens);
+      const buffer = (context.categories || []).find((category) => category.kind === "buffer")?.tokens;
+      if (context.model && buffer) ClaudeCodeAdapter.buffers.set(context.model, buffer);
+      if (record.compactions == null) record.compactions = (await this.contextFromHistory({ opaqueSession: record.sessionId }))?.contextUsage.compactions ?? 0;
+      record.contextUsage = { ...record.contextUsage, compactions: record.compactions,
+        compactAt: ClaudeCodeAdapter.compactAt(context.model, context.maxTokens), plan: await ClaudeCodeAdapter.planUsage(record.query) };
     } catch { /* the last request's count stands */ }
     if (!record.contextUsage && !record.sessionStats) return null;
     this.publish(record, { type: "usage", generationId: record.generation?.id || null,
@@ -1164,7 +1195,9 @@ export class ClaudeCodeAdapter extends EventEmitter {
       if (message.model && message.model !== "<synthetic>") model = message.model;
       requests.push(requestUsage(message.usage));
     }
-    const usage = usageFromRequests(requests, { model, contextWindow: model ? ClaudeCodeAdapter.windows.get(model) : null });
+    const window = model ? ClaudeCodeAdapter.windows.get(model) : null;
+    const usage = usageFromRequests(requests, { model, contextWindow: window,
+      compactAt: ClaudeCodeAdapter.compactAt(model, window), plan: ClaudeCodeAdapter.plan.value });
     // The categories need Claude Code itself; the readout offers to ask it.
     if (usage) usage.contextUsage.breakdown = "loadable";
     return usage;
@@ -1192,10 +1225,14 @@ export class ClaudeCodeAdapter extends EventEmitter {
       await query.initializationResult();
       const context = await query.getContextUsage({ detail: "full" });
       if (context.model && context.maxTokens) ClaudeCodeAdapter.windows.set(context.model, context.maxTokens);
+      const buffer = (context.categories || []).find((category) => category.kind === "buffer")?.tokens;
+      if (context.model && buffer) ClaudeCodeAdapter.buffers.set(context.model, buffer);
+      const plan = await ClaudeCodeAdapter.planUsage(query);
       const history = await this.contextFromHistory({ opaqueSession });
       return { ...(history || {}), contextUsage: { ...(history?.contextUsage || {}), tokens: context.totalTokens,
         contextWindow: context.maxTokens || null, percent: context.maxTokens ? (context.totalTokens / context.maxTokens) * 100 : null,
-        model: context.model || history?.contextUsage?.model || null, categories: contextCategories(context), breakdown: "loaded" } };
+        model: context.model || history?.contextUsage?.model || null, categories: contextCategories(context), breakdown: "loaded",
+        compactAt: ClaudeCodeAdapter.compactAt(context.model, context.maxTokens), plan } };
     } finally {
       input.end();
       try { query.close(); } catch { /* already gone */ }
