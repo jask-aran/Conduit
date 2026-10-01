@@ -61,3 +61,5 @@
 .tool-step-calls > li { display: flex; min-width: 0; align-items: center; gap: 0.5rem; padding: 0.0625rem 0.375rem; color: var(--muted-foreground); font-size: 0.8125rem; line-height: 1.5; }
 .tool-step-calls .trail-icon { width: 0.875rem; height: 0.875rem; flex: none; }
 .tool-step-calls > li[data-status="failed"] .trail-icon { color: var(--destructive); }
+.tool-step-calls > li[data-status="planned"] { opacity: 0.45; }
+.tool-step-calls > li[data-status="earlier"] .trail-verb { color: var(--muted-foreground); font-weight: 400; }

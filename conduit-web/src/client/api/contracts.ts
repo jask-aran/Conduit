@@ -324,6 +324,11 @@ export interface ToolCallStep {
   name: string;
   kind: ToolKind;
   subject?: string;
+  /** Read from the script's code before it runs; `repeats` when it sits in a loop. */
+  planned?: boolean;
+  repeats?: boolean;
+  /** A row standing for this many earlier calls, no longer listed. */
+  earlier?: number;
   /** False while it runs; a call without it has ended. */
   done?: boolean;
   isError?: boolean;
