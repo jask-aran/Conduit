@@ -103,31 +103,54 @@ export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean 
     const value = (props.chat.live() as { sessionId?: unknown } | null)?.sessionId;
     return typeof value === "string" ? value : "";
   };
+  const model = () => usage()?.model?.split("/").pop() || "";
+  const [copied, setCopied] = createSignal(false);
+  const copySession = () => void navigator.clipboard?.writeText(sessionId()).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); });
+  /* Built from the model menu's parts: the slider's header for each section,
+     its track for the bar, the model rows for the categories. */
   return <div class="context-breakdown">
-        <Show when={!props.bare}><div class="context-breakdown-head"><strong>{reported() == null ? "Context unavailable" : `${Math.round(reported()!)}% used`}</strong>
-</div></Show>
-        <Show when={contextTokens(usage()) != null}>
-          <div class="context-breakdown-total">{compactTokens(contextTokens(usage())!)}{window() ? ` of ${compactTokens(window()!)} tokens` : " tokens"}{usage()?.model ? ` · ${usage()!.model}` : ""}{cost() ? ` · $${cost().toFixed(2)}` : ""}</div>
+    <div class="step-slider context-breakdown-section">
+      <Show when={!props.bare}><div class="step-slider-header"><label>Context</label>
+        <span class="step-slider-value">{reported() == null ? "Unavailable" : `${Math.round(reported()!)}% used`}</span></div></Show>
+      <ContextBar chat={props.chat} />
+      <Show when={contextTokens(usage()) != null}>
+        <div class="context-breakdown-total"><span>{compactTokens(contextTokens(usage())!)}{window() ? ` of ${compactTokens(window()!)}` : ""} tokens</span>
+          <Show when={cost()}><span>${cost().toFixed(2)}</span></Show></div>
+      </Show>
+    </div>
+    <Show when={categories().length}>
+      <div class="context-breakdown-separator" />
+      <div class="context-breakdown-rows">
+        <For each={categories()}>{(category, index) => {
+          const cells = <><span class="context-breakdown-dot" data-kind={category.kind} style={{ background: colourOf(category, index()) }} />
+            <span>{category.label}<Show when={category.items?.length}> ({category.items!.length})</Show></span>
+            <small>{compactTokens(category.tokens)}</small>
+            <small class="context-breakdown-share">{category.kind === "deferred" ? "" : share(category.tokens)}</small></>;
+          return <Show when={category.items?.length} fallback={<div class="menu-row composer-model-option context-breakdown-row">{cells}</div>}>
+            <details class="context-breakdown-group"><summary class="menu-row composer-model-option context-breakdown-row">{cells}<ChevronRightIcon class="context-breakdown-chevron" /></summary>
+              <For each={category.items}>{(item) => <div class="menu-row composer-model-option context-breakdown-row context-breakdown-item"><span class="context-breakdown-dot" /><span>{item.label}</span><small>{compactTokens(item.tokens)}</small><small class="context-breakdown-share" /></div>}</For>
+            </details>
+          </Show>;
+        }}</For>
+      </div>
+    </Show>
+    <Show when={cache() != null || eligible() != null}>
+      <div class="context-breakdown-separator" />
+      <div class="step-slider context-breakdown-section" title="Share of input served from cache; of what the previous request already sent, how much was reused">
+        <div class="step-slider-header"><label>Cache</label>
+          <span class="step-slider-value">{uncached() ? "No reads yet" : cache() != null ? `${Math.round(cache()!)}% of input` : `${Math.round(eligible()! * 100)}% reused`}</span></div>
+        <Show when={!uncached() && cache() != null && eligible() != null}>
+          <div class="context-breakdown-total"><span>Of what could be reused</span><span>{Math.round(eligible()! * 100)}%</span></div>
         </Show>
-        <ContextBar chat={props.chat} />
-        <Show when={cache() != null || eligible() != null}>
-          <div class="context-breakdown-total" title="Share of input served from cache; of what the previous request already sent, how much was reused">
-            <span>Cache</span><span>{uncached() ? "No cache reads reported" : [cache() != null ? `${Math.round(cache()!)}% of input` : "", eligible() != null ? `${Math.round(eligible()! * 100)}% of reusable` : ""].filter(Boolean).join(" · ")}</span>
-          </div>
-        </Show>
-        <div class="context-breakdown-rows">
-          <For each={categories()}>{(category, index) => {
-            const row = <><span class="context-breakdown-dot" data-kind={category.kind} style={{ background: colourOf(category, index()) }} />
-              <span class="context-breakdown-name">{category.label}<Show when={category.items?.length}> ({category.items!.length})</Show></span>
-              <span class="context-breakdown-tokens">{compactTokens(category.tokens)}</span>
-              <span class="context-breakdown-share">{category.kind === "deferred" ? "" : share(category.tokens)}</span></>;
-            return <Show when={category.items?.length} fallback={<div class="context-breakdown-row">{row}</div>}>
-              <details class="context-breakdown-group"><summary class="context-breakdown-row">{row}<ChevronRightIcon class="context-breakdown-chevron" /></summary>
-                <For each={category.items}>{(item) => <div class="context-breakdown-row context-breakdown-item"><span /><span class="context-breakdown-name">{item.label}</span><span class="context-breakdown-tokens">{compactTokens(item.tokens)}</span><span class="context-breakdown-share" /></div>}</For>
-              </details>
-            </Show>;
-          }}</For>
-        </div>
-        <Show when={sessionId()}><div class="context-breakdown-session"><span>Session</span><code>{sessionId()}</code></div></Show>
-      </div>;
+      </div>
+    </Show>
+    <Show when={model() || sessionId()}>
+      <div class="context-breakdown-separator" />
+      <div class="context-breakdown-footer">
+        <span>{model()}</span>
+        <Show when={sessionId()}><button type="button" class="composer-menu-shortcut context-breakdown-session" title={`Copy session ID ${sessionId()}`} onClick={copySession}>
+          {copied() ? "Copied" : `${sessionId().slice(0, 6)}…${sessionId().slice(-4)}`}</button></Show>
+      </div>
+    </Show>
+  </div>;
 }
