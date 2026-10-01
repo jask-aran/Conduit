@@ -123,23 +123,6 @@ Wrapper and `cli` commands:
 - Memory: `take_heapsnapshot`, `get_heapsnapshot_summary`, `get_heapsnapshot_details`, `compare_heapsnapshots`
 - Reference: `chrome-devtools --help` or `chrome-devtools <command> --help`
 
-#### Frame budget
-
-The budget is 6.94ms per task (144Hz), measured from a trace, not from gaps
-between animation frames. Use headed Windows Chrome: its CDP port is reachable
-from WSL at `http://127.0.0.1:9222`. To trace, drive the logged-in page with
-Playwright `chromium.connectOverCDP` and call `Tracing.start` with only the
-`devtools.timeline,toplevel` categories.
-
-Don't use the CLI's `performance_start_trace` for frame numbers on DOM-heavy
-work. It turns on invalidation tracking, which records a stack for every DOM
-write. On a KaTeX stream it reported ten times the over-budget tasks that a
-lean trace found.
-
-For streaming-render faults, replay the Test profile's KaTeX models in the
-`test` project. Check every frame for three things: a math element removed, a
-math element emptied, or TeX commands in text outside math.
-
 #### Probes
 
 The instruments behind the sections below are in `conduit-web/scripts/probes/`.
@@ -160,11 +143,30 @@ only place display scaling and frame cost are real.
 A probe killed mid-run leaves its page open in Windows Chrome. Close it before
 the next run, or the next page load can hang.
 
+#### Frame budget
+
+The budget is 6.94ms per task (144Hz), measured from a trace, not from gaps
+between animation frames. Use headed Windows Chrome: its CDP port is reachable
+from WSL at `http://127.0.0.1:9222`. To trace, drive the logged-in page with
+Playwright `chromium.connectOverCDP` and call `Tracing.start` with only the
+`devtools.timeline,toplevel` categories; `scripts/probes/stream-budget.mjs --windows` does this for a streamed answer.
+
+Don't use the CLI's `performance_start_trace` for frame numbers on DOM-heavy
+work. It turns on invalidation tracking, which records a stack for every DOM
+write. On a KaTeX stream it reported ten times the over-budget tasks that a
+lean trace found.
+
+For streaming-render faults, replay the Test profile's KaTeX models in the
+`test` project. Check every frame for three things: a math element removed, a
+math element emptied, or TeX commands in text outside math.
+
 #### Layout stability
 
 Text that shifts and then settles ("sizzle") is measured, not judged by eye.
 DESIGN.md (Transcript → Nothing moves once drawn) states the rule. Prefer
-finding the structure that changes geometry over adding delays.
+finding the structure that changes geometry over adding delays. Each check
+below has a probe: `motion-rules`, `press-shift`, `placeholder-heights` and
+`reload-settle`.
 
 - **Use headed Windows Chrome at the user's scaling.** At a fractional
   `devicePixelRatio` (1.25, 1.5), anything that gets its own paint or
