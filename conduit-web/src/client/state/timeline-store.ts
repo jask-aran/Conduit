@@ -197,7 +197,7 @@ export function createTimelineStore(
 
     if (current.type !== "trace") return null;
     const nextSegment = block.kind === "tool_call"
-      ? buildLiveToolSegment(inputGeneration, block)
+      ? buildLiveToolSegment(inputGeneration, block, inputTools)
       : {
         kind: block.kind === "thinking" ? "thinking" : "narration",
         id: block.identity,
@@ -229,7 +229,7 @@ export function createTimelineStore(
     const nextSegment: TraceSegment = {
       kind: "tool",
       id: segment.id,
-      tool: buildLiveToolItem(change.toolCallId, execution, { name: segment.tool.name, kind: segment.tool.kind, subject: segment.tool.subject, input: segment.tool.input }),
+      tool: buildLiveToolItem(change.toolCallId, execution, { name: segment.tool.name, kind: segment.tool.kind, subject: segment.tool.subject, input: segment.tool.input, calls: segment.tool.calls }),
     };
     const nextValue = updateTraceSegment(current, location.segmentIndex, nextSegment);
     if (!nextValue) return null;
@@ -274,7 +274,7 @@ export function createTimelineStore(
       persistedTools = inputTools;
     }
     const projected = stableProjection(previousProjectedRows, assertStatedOutcomes(inputGeneration
-      ? projectLiveTurn(persistedRows, inputMessages, inputGeneration)
+      ? projectLiveTurn(persistedRows, inputMessages, inputGeneration, inputTools)
       : persistedRows, turnOpen()));
     // Diffing the row sets allocates a Map and a Set the size of the whole
     // transcript, and the result is only ever a metric field. Every other
