@@ -1687,12 +1687,12 @@ svg.lucide { stroke-width: 2.4; }
   .chat-header-more { display: inline-flex; flex: none; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
   .chat-header-more:hover { background: var(--accent); }
   .chat-header-menu {
-    width: min(20rem, calc(100vw - 16px));
+    width: min(17rem, calc(100vw - 16px));
     max-width: calc(100vw - 16px);
     max-height: calc(var(--app-height, 100dvh) - 16px);
     overflow-y: auto;
   }
-  [data-slot="menu-content"].chat-header-menu [role="menuitem"] { min-height: 44px; padding: 10px 12px; font-size: 15px; }
+  [data-slot="menu-content"].chat-header-menu [role="menuitem"] { min-height: 38px; padding: 8px 9px; gap: 8px; border-radius: 9px; font-size: 13px; }
   .settings-shell { width: calc(100vw - 24px); height: calc(100dvh - 24px); }
   .settings-rail { width: 132px; }
   /* The mobile palette fills the visual viewport while keeping the inset frame

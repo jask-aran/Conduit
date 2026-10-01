@@ -84,7 +84,7 @@ export function ContextBar(props: { chat: ActiveChatStore }) {
 }
 
 /** What fills the window: the total, the bar, and each part with its share. */
-export function ContextBreakdown(props: { chat: ActiveChatStore }) {
+export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean }) {
   const reported = () => contextUsagePercent(props.chat.contextUsage());
   const usage = () => props.chat.contextUsage();
   const categories = createMemo(() => contextBreakdown(usage()));
@@ -98,8 +98,8 @@ export function ContextBreakdown(props: { chat: ActiveChatStore }) {
     return typeof value === "string" ? value : "";
   };
   return <div class="context-breakdown">
-        <div class="context-breakdown-head"><strong>{reported() == null ? "Context unavailable" : `${Math.round(reported()!)}% used`}</strong>
-</div>
+        <Show when={!props.bare}><div class="context-breakdown-head"><strong>{reported() == null ? "Context unavailable" : `${Math.round(reported()!)}% used`}</strong>
+</div></Show>
         <Show when={contextTokens(usage()) != null}>
           <div class="context-breakdown-total">{compactTokens(contextTokens(usage())!)}{window() ? ` of ${compactTokens(window()!)} tokens` : " tokens"}{usage()?.model ? ` · ${usage()!.model}` : ""}{cost() ? ` · $${cost().toFixed(2)}` : ""}</div>
         </Show>
