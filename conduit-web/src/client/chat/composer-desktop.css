@@ -18,6 +18,11 @@
   .composer-permission-trigger > span { max-width: 72px; }
   .composer-actions-status { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .composer-actions-left .chat-context-trigger { color: var(--muted-foreground); padding-inline: 3px; }
+  /* The +: attach, and whatever the row had no room for. A live action, so the text colour. */
+  .composer-desktop-plus { display: flex; flex: none; align-items: center; }
+  .composer-desktop-plus .composer-plus-trigger { display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; border: 0; border-radius: 8px; background: transparent; color: var(--foreground); }
+  .composer-desktop-plus .composer-plus-trigger:hover, .composer-desktop-plus .composer-plus-trigger[aria-expanded="true"] { background: var(--accent); }
+  .composer-desktop-plus .composer-plus-trigger svg { width: 15px; height: 15px; }
 }
 .composer-menu-shortcut { margin-left: auto; color: var(--muted-foreground); font-size: 10px; }
 .composer-quick-model-menu { width: max-content; min-width: 240px; max-width: min(380px, calc(100vw - 24px)); }
