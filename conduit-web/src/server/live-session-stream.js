@@ -5,7 +5,7 @@ import { parseAttachmentEnvelope } from "../attachment-envelope.js";
 import { ChatBackendRegistry } from "../pi-rpc-adapter.js";
 import { manifestForImplementation } from "../harnesses/index.js";
 import { startWebSocketKeepalive } from "./ws-keepalive.js";
-import { applyMessageIds } from "../message-ids.js";
+import { applyMessageIds, isConduitMessageId } from "../message-ids.js";
 
 /**
  * An id a client chose for the message it is sending.
@@ -519,8 +519,11 @@ export function createLiveSessionStream({
       // it already sits instead of being taken away and sent back as a copy.
       // A prompt adopted from history has no Conduit name to keep, and gets a
       // fresh one as before.
-      const messageId = context
-        ? await messageIds.reclaim(context.project, context.chat, command.entryId) : null;
+      // A harness that names its prompts with Conduit's own ids (Claude Code)
+      // has no ledger entry to reclaim; its prompt's id is the name to keep.
+      const messageId = !context ? null : messageIds.owns(context.chat)
+        ? await messageIds.reclaim(context.project, context.chat, command.entryId)
+        : isConduitMessageId(command.entryId) ? command.entryId : null;
       return sendPrompt(record, prepared, { sourceCheckpointId, messageId });
     }
     if (command.type === "continue") {
