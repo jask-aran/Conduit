@@ -10,7 +10,7 @@ import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { countCacheRequest, usageFromRequests } from "./cache-stats.js";
 import { conduitCategories } from "./context-categories.js";
-import { claudePlanUsage } from "./plan-usage.js";
+import { claudePlanUsage, declarePlan } from "./plan-usage.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 // Claude Code's tools, by what they do.
@@ -508,6 +508,23 @@ export class ClaudeCodeAdapter extends EventEmitter {
     // A steer Claude Code has taken up is the prompt it now answers.
     if (message.type === "command_lifecycle") {
       if (message.state === "started") this.takeSteer(record, message.command_uuid);
+      return;
+    }
+    // Claude Code's own word on the plan, from the request it just made.
+    if (message.type === "rate_limit_event") {
+      const info = message.rate_limit_info;
+      if (info?.utilization == null || !/^(five_hour|seven_day)(_(opus|sonnet))?$/.test(info.rateLimitType || "")) return;
+      const labels = { five_hour: "5-hour", seven_day: "Weekly" };
+      const plan = declarePlan("claude", { windows: [{ id: info.rateLimitType,
+        label: labels[info.rateLimitType] || info.rateLimitType.replace(/^seven_day_/, "Weekly · "),
+        usedPercent: info.utilization <= 1 ? info.utilization * 100 : info.utilization,
+        resetsAt: info.resetsAt ? new Date(info.resetsAt * 1000).toISOString() : null }] });
+      ClaudeCodeAdapter.plan = { at: Date.now(), value: plan };
+      if (record.contextUsage) {
+        record.contextUsage = { ...record.contextUsage, plan };
+        this.publish(record, { type: "usage", generationId: record.generation?.id || null,
+          contextUsage: record.contextUsage, sessionStats: record.sessionStats, cacheStats: record.cache?.stats || null });
+      }
       return;
     }
     if (message.type === "system" && message.subtype === "init") {

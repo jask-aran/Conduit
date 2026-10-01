@@ -12,13 +12,20 @@ import path from "node:path";
 import { planWindowLabel } from "./cache-stats.js";
 
 const TTL_MS = 60_000;
+// A live harness's own declaration outranks a poll: it says what the request
+// it just made counted against. Polls wait this long after one before asking.
+const DECLARED_HOLD_MS = 5 * 60_000;
 const cache = new Map();
 
 function cached(key, ask) {
   const entry = cache.get(key);
+  if (entry?.declaredAt && Date.now() - entry.declaredAt < DECLARED_HOLD_MS) return Promise.resolve(entry.value);
   if (entry && (entry.pending || Date.now() - entry.at < TTL_MS)) return entry.pending || Promise.resolve(entry.value);
   const pending = ask().catch(() => null).then((value) => {
     // A failed read keeps the last good answer rather than blanking it.
+    const current = cache.get(key);
+    // A declaration that landed while this poll was out stands.
+    if (current?.declaredAt && current.declaredAt > (entry?.declaredAt || 0)) return current.value;
     cache.set(key, { at: Date.now(), value: value ?? entry?.value ?? null });
     return value ?? entry?.value ?? null;
   });
@@ -86,4 +93,19 @@ export function piPlanUsage(agentDir, model) {
     if (auth?.type !== "oauth" || (auth.expires && auth.expires < Date.now())) return null;
     return chatgptPlan(auth.access, auth.accountId);
   });
+}
+
+/**
+ * What a live harness declared about its plan (`codex`, `claude`): its windows
+ * replace the same windows from any poll, the rest stand, and polls hold off.
+ */
+export function declarePlan(key, plan) {
+  if (!plan?.windows?.length) return cache.get(key)?.value ?? null;
+  const previous = cache.get(key)?.value;
+  const known = previous?.windows || [];
+  const windows = [...known.map((window) => plan.windows.find((declared) => declared.id === window.id) || window),
+    ...plan.windows.filter((declared) => !known.some((window) => window.id === declared.id))];
+  const value = { name: plan.name ?? previous?.name ?? null, windows };
+  cache.set(key, { at: Date.now(), declaredAt: Date.now(), value });
+  return value;
 }
