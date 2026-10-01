@@ -1,4 +1,4 @@
-import type { ContextCategory, ContextUsage, RequestUsage } from "../api/contracts";
+import type { ContextCategory, ContextUsage, RequestUsage, SessionTokenUsage } from "../api/contracts";
 
 const numberValue = (value: unknown): number | null => {
   if (value == null) return null;
@@ -34,8 +34,9 @@ export function contextBreakdown(usage: ContextUsage | null): ContextCategory[] 
   ];
 }
 
-/** How much of the last request's input the provider served from its cache. */
-export function cacheHitPercent(usage: RequestUsage | null | undefined) {
+/** How much of the input the provider served from its cache: over the session
+    when the harness keeps totals, else for the last request. */
+export function cacheHitPercent(usage: RequestUsage | Partial<SessionTokenUsage> | null | undefined) {
   const read = numberValue(usage?.cacheRead);
   if (read == null) return null;
   const input = read + (numberValue(usage?.input) ?? 0) + (numberValue(usage?.cacheWrite) ?? 0);

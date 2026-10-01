@@ -42,7 +42,7 @@ export function ContextGauge(props: { chat: ActiveChatStore; compact?: boolean }
   const window = () => contextWindow(usage());
   const share = (tokens: number) => window() ? `${(tokens / window()! * 100).toFixed(1)}%` : "";
   const inWindow = () => categories().filter((category) => category.kind !== "deferred");
-  const cache = () => cacheHitPercent(usage()?.lastRequestUsage);
+  const cache = () => cacheHitPercent(props.chat.sessionStats()?.tokens) ?? cacheHitPercent(usage()?.lastRequestUsage);
   const cost = () => props.chat.sessionStats()?.cost || 0;
   const sessionId = () => {
     const value = (props.chat.live() as { sessionId?: unknown } | null)?.sessionId;
