@@ -9,6 +9,7 @@ import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js
 import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { countCacheRequest, usageFromRequests } from "./cache-stats.js";
+import { conduitCategories } from "./context-categories.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 // Claude Code's tools, by what they do.
@@ -329,13 +330,16 @@ function contextCategories(context) {
     "Custom agents": (context.agents || []).map((agent) => ({ label: agent.agentType, tokens: agent.tokens })),
     "Memory files": (context.memoryFiles || []).map((file) => ({ label: file.path.split(/[\\/]/).pop() || file.path, tokens: file.tokens })),
   };
-  return context.categories.map((category) => ({
-    id: category.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
-    label: category.name,
-    tokens: category.tokens,
-    kind: category.kind || (category.isDeferred ? "deferred" : "used"),
-    ...(items[category.name]?.length ? { items: items[category.name] } : {}),
-  }));
+  // Claude Code's kind first (classify on it, never on the English name, its
+  // docs say), then its names for the parts that occupy the window.
+  const category = ({ name, kind, isDeferred }) => kind === "free" ? "free" : kind === "buffer" ? "buffer"
+    : kind === "deferred" || isDeferred ? "deferred-tools"
+    : /system prompt/i.test(name) ? "system-prompt"
+    : /instruction|memory|skill|agent/i.test(name) ? "instructions"
+    : /tool/i.test(name) ? "tools"
+    : /message/i.test(name) ? "messages" : "other";
+  return conduitCategories(context.categories.map((part) => ({ category: category(part), label: part.name, tokens: part.tokens,
+    ...(items[part.name]?.length ? { items: items[part.name] } : {}) })));
 }
 
 export class ClaudeCodeAdapter extends EventEmitter {

@@ -465,8 +465,11 @@ export interface ContextUsage {
   lastRequestUsage?: RequestUsage | null;
 }
 
+/** Conduit's own set, the same for every harness (src/context-categories.js). */
+export type ContextCategoryId = "system-prompt" | "tools" | "instructions" | "messages" | "other" | "used" | "buffer" | "deferred-tools" | "free";
+
 export interface ContextCategory {
-  id: string;
+  id: ContextCategoryId;
   label: string;
   tokens: number;
   /** used occupies the window; free is what is left; buffer is the compaction reserve; deferred sits outside it. */

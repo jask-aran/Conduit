@@ -29,8 +29,8 @@ export function contextBreakdown(usage: ContextUsage | null): ContextCategory[] 
   if (tokens == null) return [];
   const window = contextWindow(usage);
   return [
-    { id: "used", label: "Used", tokens, kind: "used" },
-    ...(window != null ? [{ id: "free-space", label: "Free space", tokens: Math.max(0, window - tokens), kind: "free" as const }] : []),
+    { id: "used" as const, label: "Used", tokens, kind: "used" as const },
+    ...(window != null ? [{ id: "free" as const, label: "Free space", tokens: Math.max(0, window - tokens), kind: "free" as const }] : []),
   ];
 }
 
