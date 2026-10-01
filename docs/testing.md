@@ -123,6 +123,51 @@ Wrapper and `cli` commands:
 - Memory: `take_heapsnapshot`, `get_heapsnapshot_summary`, `get_heapsnapshot_details`, `compare_heapsnapshots`
 - Reference: `chrome-devtools --help` or `chrome-devtools <command> --help`
 
+#### Frame budget
+
+The budget is 6.94ms per task (144Hz), measured from a trace, not from gaps
+between animation frames. Use headed Windows Chrome: its CDP port is reachable
+from WSL at `http://127.0.0.1:9222`. To trace, drive the logged-in page with
+Playwright `chromium.connectOverCDP` and call `Tracing.start` with only the
+`devtools.timeline,toplevel` categories.
+
+Don't use the CLI's `performance_start_trace` for frame numbers on DOM-heavy
+work. It turns on invalidation tracking, which records a stack for every DOM
+write. On a KaTeX stream it reported ten times the over-budget tasks that a
+lean trace found.
+
+For streaming-render faults, replay the Test profile's KaTeX models in the
+`test` project. Check every frame for three things: a math element removed, a
+math element emptied, or TeX commands in text outside math.
+
+#### Layout stability
+
+Text that shifts and then settles ("sizzle") is measured, not judged by eye.
+DESIGN.md (Transcript → Nothing moves once drawn) states the rule. Prefer
+finding the structure that changes geometry over adding delays.
+
+- **Use headed Windows Chrome at the user's scaling.** At a fractional
+  `devicePixelRatio` (1.25, 1.5), anything that gets its own paint or
+  compositing layer snaps to whole device pixels: `contain: paint`,
+  `will-change`, a transform on a layer. Text that sat between pixels jumps
+  when such a rule switches on. Headless WSL at DPR 1 cannot show this.
+- **Read the stylesheet before instrumenting.** List the rules that change
+  containment, `will-change`, `transform` or `content-visibility` under an
+  interaction state such as `[data-panel-motion]`. A rule that only applies
+  while a handle is held is the first suspect for a shift on press.
+- **Diff screenshots around the interaction.** Use CDP
+  `Input.dispatchMouseEvent` to press a handle, hold it and release it, and
+  take a screenshot at each step. Zero changed pixels between rest and press is
+  the bar.
+- **Take every element's rect, not a sample.** Record
+  `getBoundingClientRect()` for every `.katex`, table and block before, during
+  and after. Only some formulas move, and always the same ones, so a sample can
+  miss them.
+- **Check placeholders against the real heights.** For "moves on load, then
+  settles", compare each off-screen block's `contain-intrinsic-block-size` with
+  its height once revealed. A placeholder measured while the block was still
+  rendering stays short.
+
 ### Android shell on an emulator
 
 A headless AVD driven over ADB, with Chrome DevTools into the Capacitor
@@ -381,6 +426,11 @@ installed by hand, with no update channel of its own. It reports version
 the latest release -- and because the identifiers differ, taking that offer
 installs the *released* app beside the dev one rather than updating it. To test
 a new dev build, build and sideload it again.
+
+The Vite-based builds all write `conduit-web/dist`: `npm run build` (the
+server's), `android:build` and `desktop:build:win`. Run them one at a time.
+Run in parallel, they delete each other's assets, and the build fails with
+`ENOENT` under `dist/assets` or, worse, packages a mix of two builds.
 
 Both dev builds carry whatever is in the working tree. Neither is a release
 candidate: a candidate is a CI artifact from a tag, and only CI holds the
