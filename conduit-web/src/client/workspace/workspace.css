@@ -91,7 +91,7 @@
 .workspace-panel-documented > .workspace-dock-document { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
 .workspace-dock-document > div { display: contents; }
 .main-split.main-split-docked-hidden { display: none; }
-.main-split.main-split-docked { height: auto; flex: 1; margin: 0; border-radius: inherit; }
+.main-split.main-split-docked { height: auto; min-height: 0; flex: 1; margin: 0; border-radius: inherit; }
 .main-split > div:not(.main-split-resize) { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; }
 /* Pane A holding the dock's tool, over its route (5f). */
 .pane-a-tool-host { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
