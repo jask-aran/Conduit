@@ -7,6 +7,7 @@ export interface FineActivityInput {
   thinking?: boolean;
   responding?: boolean;
   toolName?: string | null;
+  toolKind?: string | null;
   retry?: RetryState | null;
 }
 

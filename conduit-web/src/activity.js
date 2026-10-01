@@ -90,6 +90,7 @@ export function deriveFineActivity({
   thinking = false,
   responding = false,
   toolName = null,
+  toolKind = null,
   retry = null,
 } = {}) {
   if (coarse === "failed" || processStatus === "failed") return { kind: "runtime_failed", label: "Agent failed" };
@@ -114,7 +115,7 @@ export function deriveFineActivity({
   if (generation === "idle" && !toolName && !thinking && !responding && !retry) {
     return { kind: "idle", label: null };
   }
-  if (toolName) return { kind: "using_tool", label: `Running ${toolName}` };
+  if (toolName) return { kind: "using_tool", label: toolKind === "script" ? "Scripting tools" : `Running ${toolName}` };
   if (thinking) return { kind: "thinking", label: "Thinking" };
   if (responding) return { kind: "responding", label: "Responding" };
   if (generation === "active" || generation === "submitting" || coarse === "working") {
