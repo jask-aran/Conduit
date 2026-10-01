@@ -17,7 +17,12 @@
   .composer-model-trigger > span:nth-child(2) { flex: none; }
   .composer-permission-trigger > span { max-width: 72px; }
   .composer-actions-status { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .composer-actions-left .chat-context-trigger { color: var(--muted-foreground); padding-inline: 3px; }
+  /* The ring sits with the row's icons: their size and a tenth-of-size stroke,
+     in the text colour, its track a clear step back rather than a ghost. */
+  .composer-actions-left .chat-context-trigger, .composer-actions-left .chat-context-trigger[data-state="idle"] { color: var(--foreground); padding-inline: 3px; }
+  .composer-actions-left .chat-context-gauge { width: 14px; height: 14px; }
+  .composer-actions-left .chat-context-gauge-track, .composer-actions-left .chat-context-gauge-value { stroke-width: 2.4; }
+  .composer-actions-left .chat-context-gauge-track { stroke: color-mix(in oklch, currentColor, transparent 70%); }
   /* The +: attach, and whatever the row had no room for. A live action, so the text colour. */
   .composer-actions-left > .composer-plus-trigger { display: inline-flex; width: 28px; height: 28px; flex: none; align-items: center; justify-content: center; border: 0; border-radius: 8px; background: transparent; color: var(--foreground); }
   .composer-actions-left > .composer-plus-trigger:hover, .composer-actions-left > .composer-plus-trigger[aria-expanded="true"] { background: var(--accent); }

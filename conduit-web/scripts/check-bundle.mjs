@@ -26,8 +26,9 @@ const budgets = {
   // the navigation they dispatch; the excerpt preview that renders them is lazy
   // and costs the initial payload only its import. Revisit this allowance in the
   // planned performance review instead of hiding evidence behind a size cap.
-  // Docked panes (any pane moved into the dock, with its rail icon) add ~0.5 kB.
-  initialJs: Number(process.env.CONDUIT_BUDGET_INITIAL_JS_GZIP || 302_000),
+  // Docked panes (any pane moved into the dock, with its rail icon) and the
+  // desktop composer + menu add a few kB.
+  initialJs: Number(process.env.CONDUIT_BUDGET_INITIAL_JS_GZIP || 306_000),
   initialCss: Number(process.env.CONDUIT_BUDGET_INITIAL_CSS_GZIP || 80_000),
   lazyJs: Number(process.env.CONDUIT_BUDGET_LAZY_JS_GZIP || 300_000),
 };
