@@ -12,7 +12,7 @@ import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js
 import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageDrop, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { countCacheRequest, planWindowLabel, usageFromRequests } from "./cache-stats.js";
-import { codexPlanUsage } from "./plan-usage.js";
+import { codexPlanUsage, declarePlan } from "./plan-usage.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 export const CODEX_CAPABILITIES = Object.freeze({
@@ -956,7 +956,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       record.activity = "compacting";
       this.publish(record, { type: "compaction", generationId: turnId, active: true });
     } else if (method === "account/rateLimits/updated" && params.rateLimits) {
-      CodexAppServerAdapter.plan = { at: Date.now(), value: codexPlan(params.rateLimits, CodexAppServerAdapter.plan.value) };
+      CodexAppServerAdapter.plan = { at: Date.now(), value: declarePlan("codex", codexPlan(params.rateLimits, null)) };
       if (record.contextUsage) {
         record.contextUsage = { ...record.contextUsage, plan: CodexAppServerAdapter.plan.value };
         this.publish(record, { type: "usage", generationId: turnId, contextUsage: record.contextUsage, sessionStats: record.sessionStats || null, cacheStats: record.cache?.stats || null });
