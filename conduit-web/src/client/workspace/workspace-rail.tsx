@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js";
-import { Columns3Icon, CommandIcon, FolderIcon, GitCompareArrowsIcon, LayoutTemplateIcon, MessageSquareIcon, SearchIcon, TerminalIcon } from "lucide-solid";
+import { Columns3Icon, CommandIcon, FileTextIcon, FolderIcon, LayoutDashboardIcon, MessagesSquareIcon, SquareTerminalIcon, GitCompareArrowsIcon, LayoutTemplateIcon, MessageSquareIcon, SearchIcon, TerminalIcon } from "lucide-solid";
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuTrigger } from "@/components/primitives";
 import { isSplitView, type PanelTab, type SplitView } from "./workspace-types";
 
@@ -58,6 +58,10 @@ export function WorkspaceRail(props: {
   onLayout: (weights: number[]) => void;
   folded: { slot: number; letter: string; name: string }[];
   onShowFolded: (slot: number) => void;
+  /** Panes moved into the dock, each its own icon; Alt or a drag takes one back to a pane. */
+  docked: { slot: number; view: string; name: string }[];
+  currentDocked: number | null;
+  onChooseDocked: (slot: number, alt: boolean) => void;
 }) {
   return <nav class="workspace-rail" aria-label="Workspace tools"
     onDragOver={(event) => { if (document.body.dataset.toolDrag === "split" && event.dataTransfer?.types.includes(TOOL_DRAG_TYPE)) event.preventDefault(); }}
@@ -72,6 +76,15 @@ export function WorkspaceRail(props: {
         onClick={() => props.onChoose(tool)}><Icon /></button>;
     }}</For>
     <span class="workspace-rail-separator" aria-hidden="true" /></Show>
+    <Show when={props.docked.length}>
+      <For each={props.docked}>{(doc) => {
+        const Icon = doc.view.startsWith("chat:") ? MessagesSquareIcon : doc.view.startsWith("page:") ? LayoutDashboardIcon : doc.view.startsWith("term:") ? SquareTerminalIcon : FileTextIcon;
+        return <button type="button" class="workspace-rail-action" tabIndex={-1} draggable={true} data-doc-view={doc.view}
+          aria-label={`${doc.name} (docked)`} title={doc.name} aria-current={props.currentDocked === doc.slot ? "true" : undefined}
+          onClick={(event) => props.onChooseDocked(doc.slot, event.altKey)}><Icon /></button>;
+      }}</For>
+      <span class="workspace-rail-separator" aria-hidden="true" />
+    </Show>
     <button type="button" class="workspace-rail-action" tabIndex={-1} aria-label="Search chats" title="Search chats" onClick={() => props.onOpenSearch()}><SearchIcon /></button>
     <button type="button" class="workspace-rail-action" tabIndex={-1} aria-label="Open command palette" title="Command palette" onClick={() => props.onOpenPalette()}><CommandIcon /></button>
     <Show when={PANE_LAYOUTS[props.panes] || props.folded.length}><div class="workspace-rail-foot">

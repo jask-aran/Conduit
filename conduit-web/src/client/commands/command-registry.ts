@@ -563,11 +563,11 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
   command({
     id: COMMAND_IDS.workspaceMoveToDock,
     label: "Move to dock",
-    description: "Move the split's tool back into the dock",
+    description: "Move this pane, or the split's tool, into the dock",
     group: "workspace-panel",
     icon: "workspace-panel",
     keywords: ["workspace", "split", "dock", "move"],
-    contexts: ["workspace-panel"],
+    contexts: ["workspace-panel", "chat", "dashboard"],
     defaultBindings: [scopedBinding("KeyD", "D")],
     allowInExclusiveTarget: true,
   }),
