@@ -39,7 +39,7 @@ test("repository templates are discoverable launch presets", () => {
   const templates = listPiTemplates(root);
   assert.ok(templates.some((template) => template.id === "assistant"));
   assert.ok(templates.some((template) => template.id === "coding"));
-  assert.ok(templates.some((template) => template.id === "code-mode"));
+  assert.ok(!templates.some((template) => template.id === "code-mode"));
   assert.ok(templates.some((template) => template.id === "runtime"));
   const workspace = templates.find((template) => template.id === "coding");
   const general = templates.find((template) => template.id === "assistant");
@@ -61,15 +61,6 @@ test("repository templates are discoverable launch presets", () => {
   assert.match(systemPrompt, /use `python` from Bash/);
   assert.match(systemPrompt, /Use this sequence:/);
   assert.match(systemPrompt, /fetch_content.*selected pages/s);
-  const codemode = templates.find((template) => template.id === "code-mode");
-  assert.equal(codemode.label, "Code Mode");
-  assert.equal(codemode.version, "1");
-  assert.deepEqual(codemode.tools, ["code"]);
-  assert.deepEqual(codemode.extensions, [path.resolve(root, "../conduit-web/node_modules/pi-code-tool/extensions/index.js")]);
-  assert.equal(codemode.skills.length, 0);
-  const codemodePrompt = fs.readFileSync(codemode.systemPrompt, "utf8");
-  assert.match(codemodePrompt, /sandboxed Python/);
-  assert.match(codemodePrompt, /does not load Conduit's sandbox, web-search, or\s+skills extensions/);
   assert.equal(view.extensionCount, 1);
   assert.equal(templatePublicView(templates.find((template) => template.id === "runtime")).defaultable, false);
 });

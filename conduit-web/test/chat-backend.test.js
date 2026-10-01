@@ -105,10 +105,10 @@ test("public profile selection and legacy chat creation keep the same Pi identit
     assert.equal(chat.backend.implementation, "conduit_pi");
     assert.equal("opaqueSession" in chat.backend, false);
     const changed = await harness.request(`/v0/chats/${chat.id}`, {
-      method: "PATCH", body: JSON.stringify({ profileId: "code-mode" }),
+      method: "PATCH", body: JSON.stringify({ profileId: "coding" }),
     });
     assert.equal(changed.status, 200);
-    assert.equal((await changed.json()).profileId, "code-mode");
+    assert.equal((await changed.json()).profileId, "coding");
   }
   const warmedResponse = await harness.request("/v0/chats", {
     method: "POST", body: JSON.stringify({ profileId: "assistant" }),

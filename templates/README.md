@@ -10,7 +10,6 @@ Shipped profiles:
 |----|--------|------|
 | `assistant` | Assistant | Workspace files, code-mode shell, and model-agnostic web research |
 | `coding` | Coding | Full tools + git/web/develop skills for real folders |
-| `code-mode` | Code Mode | Experimental profile exposing only the `pi-code-tool` Python code tool |
 | `runtime` | Runtime | Special one-off admin chat for templates and Pi package management |
 
 `templates/chat-naming/SYSTEM.md` is the default prompt for the separate chat-title service. It is editable in Settings but is not a selectable profile.
@@ -23,9 +22,8 @@ stores `templateId` and `templateVersion` in `data/sessions.json`. Missing
 identity is stamped with the app (or project) default the next time the runtime
 touches the chat. Resume reloads the template by id from disk.
 
-Assistant, Coding, and Code Mode are ordinary selectable profiles. Code Mode is
-an experiment: it loads only `pi-code-tool`, exposes only the top-level `code`
-tool, and keeps the package's default mutation approval behavior. Runtime is special: it
+Assistant and Coding are ordinary selectable profiles; chats saved under the
+retired Code Mode profile open as Coding. Runtime is special: it
 cannot be an app or project default and does not appear in ordinary profile
 switching. Settings → Profiles shows its details separately and provides
 **Open runtime chat**; each activation creates a fresh management chat.
@@ -93,12 +91,6 @@ all Workspaces and does not create files inside them.
 Non-Docker setup installs pinned uv and its managed Python under
 `data/toolchains/`; neither tool must exist on the host. The production image
 copies the same uv release into the image and installs Python from Debian.
-
-The Code Mode profile explicitly loads the pinned `pi-code-tool` extension. Its
-Python workspace mount is read-only, and its bridged `bash`, `edit`, and `write`
-calls retain the package's approval gate. Conduit RPC has no native approval
-dialog, so mutation behavior must be validated before this profile is used for
-write-heavy work.
 
 ## Managing plugins and skills
 
