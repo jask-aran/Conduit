@@ -111,7 +111,11 @@ export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean;
     return typeof value === "string" ? value : "";
   };
   const model = () => usage()?.model?.split("/").pop() || "";
-  const plan = () => usage()?.plan?.windows?.length ? usage()!.plan! : null;
+  // A window whose reset has passed is a stale reading (history's last word), not today's.
+  const plan = () => {
+    const windows = usage()?.plan?.windows?.filter((window) => !window.resetsAt || Date.parse(window.resetsAt) > Date.now()) || [];
+    return windows.length ? { ...usage()!.plan!, windows } : null;
+  };
   const compactions = () => usage()?.compactions || 0;
   const busy = () => props.chat.compacting() || props.chat.generation() === "active";
   const [loading, setLoading] = createSignal(false);
