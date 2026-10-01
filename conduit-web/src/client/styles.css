@@ -2388,6 +2388,8 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 /* The sidebar runs to the foot of the window; its line sits on the cards'. */
 [data-region="sidebar"]::after { bottom: 6.4px; }
 .workspace-panel:not(.workspace-panel-open)::after { display: none; }
+/* Over the panes, or switching layer, the dock is its surface, not its room in the row. */
+:is(.workspace-panel-overlay, .workspace-panel[data-layer-switch])::after { left: auto; width: calc(var(--workspace-shell-width) - 32px); }
 .region-cue {
   position: fixed;
   z-index: 73;
