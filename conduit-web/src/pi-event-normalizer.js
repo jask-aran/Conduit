@@ -66,6 +66,14 @@ function subjectSoFar(name, args) {
   return null;
 }
 
+/* What a tool said, as text -- the same reading history makes of the stored
+   result. Pi's result also carries details and, since 0.99, structuredContent
+   for codemode scripts; neither is for the transcript. */
+function piToolText(result) {
+  if (typeof result === "string" || !Array.isArray(result?.content)) return result;
+  return result.content.filter((block) => block?.type === "text").map((block) => block.text || "").join("\n");
+}
+
 export function createPiEventNormalizer(generationId, { startingSequence = 0, claimMessageId = null } = {}) {
   let sequence = startingSequence;
   let messageSequence = 0;
@@ -203,7 +211,7 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0, cl
           toolCallId: String(source.toolCallId || ""),
           name: String(source.toolName || ""),
           input: source.args,
-          output: source.partialResult,
+          output: piToolText(source.partialResult),
         })];
       case "tool_execution_end": {
         const name = String(source.toolName || "");
@@ -212,7 +220,7 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0, cl
           type: "tool_execution_completed",
           toolCallId: String(source.toolCallId || ""),
           name,
-          output: source.result,
+          output: piToolText(source.result),
           isError: Boolean(source.isError) || piResultFailed(name, source.result?.details),
           ...(subject ? { subject } : {}),
           at: new Date().toISOString(),
