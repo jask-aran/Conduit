@@ -11,6 +11,7 @@ import { formatHistoryTool } from "./harnesses/history-tool.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
+import { countCacheRequest } from "./cache-stats.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 const execFile = promisify(execFileCallback);
@@ -1007,16 +1008,51 @@ export class OpenCodeAdapter extends EventEmitter {
   }
   async getModelState(id) { const record = this.get(id); return { model: record?.model || "", thinkingLevel: record?.thinkingLevel || "" }; }
 
+  /**
+   * The context is the last request's: what it sent (cache reads are counted
+   * apart from input) plus what it wrote back, against the model's limit.
+   * Requests not yet counted feed the cache tracker oldest first.
+   */
   async refreshContext(id) {
     const record = this.get(id);
     if (!record) return null;
-    const session = await this.request("GET", `/session/${encodeURIComponent(record.sessionId)}`);
-    const tokens = session.tokens?.input || 0;
-    const contextUsage = { tokens, contextWindow: null, percentUsed: null };
+    const [session, rows] = await Promise.all([
+      this.request("GET", `/session/${encodeURIComponent(record.sessionId)}`),
+      this.messageRows(record.sessionId, { limit: 20 }).catch(() => []),
+    ]);
+    const requests = rows.filter((row) => row.type === "assistant" && row.tokens).reverse();
+    const usageOf = (row) => ({ input: row.tokens.input || 0, output: row.tokens.output || 0, cacheRead: row.tokens.cache?.read || 0,
+      cacheWrite: row.tokens.cache?.write || 0, reasoning: row.tokens.reasoning ?? null });
+    record.cache ||= { stats: null, previousPromptTokens: null, counted: new Set() };
+    for (const row of requests) {
+      if (record.cache.counted.has(row.id)) continue;
+      record.cache.counted.add(row.id);
+      countCacheRequest(record.cache, usageOf(row));
+    }
+    const last = requests.at(-1);
+    const lastUsage = last ? usageOf(last) : null;
+    const model = last ? modelSpec(last.model) : record.model || "";
+    const contextWindow = model ? await this.contextLimit(model, record.cwd) : null;
+    const tokens = lastUsage ? lastUsage.input + lastUsage.cacheRead + lastUsage.cacheWrite + lastUsage.output : null;
+    const contextUsage = { tokens, contextWindow, percent: tokens != null && contextWindow ? (tokens / contextWindow) * 100 : null,
+      model: model || null, lastRequestUsage: lastUsage };
+    record.contextUsage = contextUsage;
     this.publish(record, { type: "usage", generationId: record.generation?.id || null,
-      contextUsage, sessionStats: { cost: session.cost || 0, tokens: { input: tokens, output: session.tokens?.output || 0,
-        cacheRead: session.tokens?.cache?.read || 0, cacheWrite: session.tokens?.cache?.write || 0 } }, cacheStats: null });
+      contextUsage, sessionStats: { cost: session.cost || 0, tokens: { input: session.tokens?.input || 0, output: session.tokens?.output || 0,
+        cacheRead: session.tokens?.cache?.read || 0, cacheWrite: session.tokens?.cache?.write || 0 } }, cacheStats: record.cache.stats || null });
     return contextUsage;
+  }
+
+  /** A model's context limit from OpenCode's catalogue, asked once per model. */
+  async contextLimit(spec, cwd) {
+    this.contextLimits ||= new Map();
+    if (!this.contextLimits.has(spec)) {
+      const models = await this.request("GET", "/model", { directory: cwd }).catch(() => null);
+      const found = (models || []).find((model) => modelSpec(model) === spec);
+      if (!models) return null;
+      this.contextLimits.set(spec, Number(found?.limit?.context) || null);
+    }
+    return this.contextLimits.get(spec);
   }
 
   async compact(id) {

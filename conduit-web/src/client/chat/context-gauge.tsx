@@ -90,6 +90,7 @@ export function ContextBreakdown(props: { chat: ActiveChatStore }) {
   const window = () => contextWindow(usage());
   const share = (tokens: number) => window() ? `${(tokens / window()! * 100).toFixed(1)}%` : "";
   const cache = () => cacheHitPercent(props.chat.sessionStats()?.tokens) ?? cacheHitPercent(usage()?.lastRequestUsage);
+  const eligible = () => props.chat.cacheStats()?.eligibleHitRate ?? null;
   const cost = () => props.chat.sessionStats()?.cost || 0;
   const sessionId = () => {
     const value = (props.chat.live() as { sessionId?: unknown } | null)?.sessionId;
@@ -97,11 +98,16 @@ export function ContextBreakdown(props: { chat: ActiveChatStore }) {
   };
   return <div class="context-breakdown">
         <div class="context-breakdown-head"><strong>{reported() == null ? "Context unavailable" : `${Math.round(reported()!)}% used`}</strong>
-          <Show when={cache() != null}><span>{Math.round(cache()!)}% cached</span></Show></div>
+</div>
         <Show when={contextTokens(usage()) != null}>
           <div class="context-breakdown-total">{compactTokens(contextTokens(usage())!)}{window() ? ` of ${compactTokens(window()!)} tokens` : " tokens"}{usage()?.model ? ` · ${usage()!.model}` : ""}{cost() ? ` · $${cost().toFixed(2)}` : ""}</div>
         </Show>
         <ContextBar chat={props.chat} />
+        <Show when={cache() != null || eligible() != null}>
+          <div class="context-breakdown-total" title="Share of input served from cache; of what the previous request already sent, how much was reused">
+            <span>Cache</span><span>{[cache() != null ? `${Math.round(cache()!)}% of input` : "", eligible() != null ? `${Math.round(eligible()! * 100)}% of reusable` : ""].filter(Boolean).join(" · ")}</span>
+          </div>
+        </Show>
         <div class="context-breakdown-rows">
           <For each={categories()}>{(category, index) => {
             const row = <><span class="context-breakdown-dot" data-kind={category.kind} style={{ background: colourOf(category, index()) }} />

@@ -10,6 +10,7 @@ import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageDrop, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
+import { countCacheRequest } from "./cache-stats.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 export const CODEX_CAPABILITIES = Object.freeze({
@@ -867,9 +868,12 @@ export class CodexAppServerAdapter extends EventEmitter {
       const window = modelContextWindow || null;
       record.contextUsage = { tokens: last.totalTokens, contextWindow: window, percent: window ? (last.totalTokens / window) * 100 : null,
         model: record.model || null, lastRequestUsage: split(last) };
+      // Each request reports once, but its update can repeat; a new total is a new request.
+      record.cache ||= { stats: null, previousPromptTokens: null };
+      if (total.totalTokens !== record.cache.total) { record.cache.total = total.totalTokens; countCacheRequest(record.cache, split(last)); }
       const tokens = split(total);
       record.sessionStats = { ...(record.sessionStats || {}), tokens: { ...tokens, total: total.totalTokens }, cost: 0 };
-      this.publish(record, { type: "usage", generationId: turnId, contextUsage: record.contextUsage, sessionStats: record.sessionStats, cacheStats: null });
+      this.publish(record, { type: "usage", generationId: turnId, contextUsage: record.contextUsage, sessionStats: record.sessionStats, cacheStats: record.cache.stats || null });
     } else if (method === "item/started" && params.item?.type === "contextCompaction") {
       record.compacting = true;
       record.activity = "compacting";
