@@ -27,6 +27,7 @@ import { conduitOwnsMessageIds } from "./harnesses/index.js";
  */
 /** A name Conduit minted, as opposed to one derived from a harness entry. */
 const CONDUIT_MESSAGE_ID = /^m_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const isConduitMessageId = (value) => CONDUIT_MESSAGE_ID.test(String(value || ""));
 
 export class MessageIds {
   constructor() {
