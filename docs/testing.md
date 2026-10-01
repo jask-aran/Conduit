@@ -168,6 +168,12 @@ finding the structure that changes geometry over adding delays.
   its height once revealed. A placeholder measured while the block was still
   rendering stays short.
 
+- **Step animations frame by frame.** For a layout switch or pane motion,
+  slow the page's animations with CDP `Animation.setPlaybackRate` (0.1–0.2)
+  and step the width across the switch in both directions, as a drag does.
+  Measure after the layout has changed: a Solid effect holds DOM updates until
+  it ends, so measure in a microtask after it, before the frame is painted.
+
 ### Android shell on an emulator
 
 A headless AVD driven over ADB, with Chrome DevTools into the Capacitor
