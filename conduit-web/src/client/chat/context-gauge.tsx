@@ -37,13 +37,6 @@ export function ContextGauge(props: { chat: ActiveChatStore; compact?: boolean }
     return value == null ? 0 : Math.max(0, Math.min(100, value));
   };
   const tone = () => reported() == null ? "idle" : percent() >= 90 ? "critical" : percent() >= 70 ? "warning" : "normal";
-  const usage = () => props.chat.contextUsage();
-  const categories = createMemo(() => contextBreakdown(usage()));
-  const window = () => contextWindow(usage());
-  const share = (tokens: number) => window() ? `${(tokens / window()! * 100).toFixed(1)}%` : "";
-  const inWindow = () => categories().filter((category) => category.kind !== "deferred");
-  const cache = () => cacheHitPercent(props.chat.sessionStats()?.tokens) ?? cacheHitPercent(usage()?.lastRequestUsage);
-  const cost = () => props.chat.sessionStats()?.cost || 0;
   const sessionId = () => {
     const value = (props.chat.live() as { sessionId?: unknown } | null)?.sessionId;
     return typeof value === "string" ? value : "";
@@ -73,17 +66,42 @@ export function ContextGauge(props: { chat: ActiveChatStore; compact?: boolean }
     <PopoverContent class="chat-context-menu" aria-label="Context usage"
       onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}
       onPointerDownOutside={(event) => { if (trigger?.contains(event.target as Node)) event.preventDefault(); }}>
-      <div class="context-breakdown" onPointerEnter={hover(true)} onPointerLeave={hover(false)}>
-        <div class="context-breakdown-head"><strong>{reported() == null ? "Context unavailable" : `${Math.round(percent())}% used`}</strong>
+      <div onPointerEnter={hover(true)} onPointerLeave={hover(false)}><ContextBreakdown chat={props.chat} /></div>
+    </PopoverContent>
+  </Popover>;
+}
+
+/** The window as one bar of its parts, in their colours. */
+export function ContextBar(props: { chat: ActiveChatStore }) {
+  const usage = () => props.chat.contextUsage();
+  const inWindow = () => contextBreakdown(usage()).filter((category) => category.kind !== "deferred");
+  return <Show when={contextWindow(usage()) && inWindow().length}>
+    <div class="context-breakdown-bar" aria-hidden="true">
+      <For each={inWindow()}>{(category, index) => <span style={{ "flex-grow": category.tokens, background: colourOf(category, index()) }} />}</For>
+    </div>
+  </Show>;
+}
+
+/** What fills the window: the total, the bar, and each part with its share. */
+export function ContextBreakdown(props: { chat: ActiveChatStore }) {
+  const reported = () => contextUsagePercent(props.chat.contextUsage());
+  const usage = () => props.chat.contextUsage();
+  const categories = createMemo(() => contextBreakdown(usage()));
+  const window = () => contextWindow(usage());
+  const share = (tokens: number) => window() ? `${(tokens / window()! * 100).toFixed(1)}%` : "";
+  const cache = () => cacheHitPercent(props.chat.sessionStats()?.tokens) ?? cacheHitPercent(usage()?.lastRequestUsage);
+  const cost = () => props.chat.sessionStats()?.cost || 0;
+  const sessionId = () => {
+    const value = (props.chat.live() as { sessionId?: unknown } | null)?.sessionId;
+    return typeof value === "string" ? value : "";
+  };
+  return <div class="context-breakdown">
+        <div class="context-breakdown-head"><strong>{reported() == null ? "Context unavailable" : `${Math.round(reported()!)}% used`}</strong>
           <Show when={cache() != null}><span>{Math.round(cache()!)}% cached</span></Show></div>
         <Show when={contextTokens(usage()) != null}>
           <div class="context-breakdown-total">{compactTokens(contextTokens(usage())!)}{window() ? ` of ${compactTokens(window()!)} tokens` : " tokens"}{usage()?.model ? ` · ${usage()!.model}` : ""}{cost() ? ` · $${cost().toFixed(2)}` : ""}</div>
         </Show>
-        <Show when={window() && inWindow().length}>
-          <div class="context-breakdown-bar" aria-hidden="true">
-            <For each={inWindow()}>{(category, index) => <span style={{ "flex-grow": category.tokens, background: colourOf(category, index()) }} />}</For>
-          </div>
-        </Show>
+        <ContextBar chat={props.chat} />
         <div class="context-breakdown-rows">
           <For each={categories()}>{(category, index) => {
             const row = <><span class="context-breakdown-dot" data-kind={category.kind} style={{ background: colourOf(category, index()) }} />
@@ -98,7 +116,5 @@ export function ContextGauge(props: { chat: ActiveChatStore; compact?: boolean }
           }}</For>
         </div>
         <Show when={sessionId()}><div class="context-breakdown-session"><span>Session</span><code>{sessionId()}</code></div></Show>
-      </div>
-    </PopoverContent>
-  </Popover>;
+      </div>;
 }
