@@ -1173,11 +1173,14 @@ export class ClaudeCodeAdapter extends EventEmitter {
   async contextBreakdown({ opaqueSession, project }) {
     const sessionId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!sessionId) return null;
+    const scratch = crypto.randomUUID();
     const input = new InputQueue();
     const query = this.sdk.query({ prompt: input, options: {
       cwd: project?.workingRoot,
       ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}),
-      resume: sessionId,
+      // A throwaway fork: resuming the thread itself appends Claude Code's
+      // cost bookkeeping to it, and reading must not write.
+      resume: sessionId, forkSession: true, sessionId: scratch,
       allowDangerouslySkipPermissions: true,
     } });
     const drained = (async () => { try { for await (const message of query) void message; } catch { /* closed below */ } })();
@@ -1193,6 +1196,10 @@ export class ClaudeCodeAdapter extends EventEmitter {
       input.end();
       try { query.close(); } catch { /* already gone */ }
       await Promise.race([drained, new Promise((resolve) => setTimeout(resolve, 2000))]);
+      const root = path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"), "projects");
+      for (const dir of await fs.promises.readdir(root).catch(() => [])) {
+        await fs.promises.rm(path.join(root, dir, `${scratch}.jsonl`), { force: true }).catch(() => {});
+      }
     }
   }
 
