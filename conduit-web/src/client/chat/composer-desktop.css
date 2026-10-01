@@ -19,11 +19,15 @@
   .composer-actions-status { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .composer-actions-left .chat-context-trigger { color: var(--muted-foreground); padding-inline: 3px; }
   /* The +: attach, and whatever the row had no room for. A live action, so the text colour. */
-  .composer-desktop-plus { display: flex; flex: none; align-items: center; }
-  .composer-desktop-plus .composer-plus-trigger { display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; border: 0; border-radius: 8px; background: transparent; color: var(--foreground); }
-  .composer-desktop-plus .composer-plus-trigger:hover, .composer-desktop-plus .composer-plus-trigger[aria-expanded="true"] { background: var(--accent); }
-  .composer-desktop-plus .composer-plus-trigger svg { width: 15px; height: 15px; }
+  .composer-actions-left > .composer-plus-trigger { display: inline-flex; width: 28px; height: 28px; flex: none; align-items: center; justify-content: center; border: 0; border-radius: 8px; background: transparent; color: var(--foreground); }
+  .composer-actions-left > .composer-plus-trigger:hover, .composer-actions-left > .composer-plus-trigger[aria-expanded="true"] { background: var(--accent); }
+  .composer-actions-left > .composer-plus-trigger svg { width: 15px; height: 15px; }
 }
+/* The +'s folded controls: a name, then its value muted at the right, as menu meta. */
+.composer-plus-menu { min-width: 220px; }
+.composer-plus-name { flex: none; }
+.composer-plus-value { min-width: 0; margin-left: auto; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
+.composer-plus-context { padding: 4px 8px; color: var(--muted-foreground); font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; }
 .composer-menu-shortcut { margin-left: auto; color: var(--muted-foreground); font-size: 10px; }
 .composer-quick-model-menu { width: max-content; min-width: 240px; max-width: min(380px, calc(100vw - 24px)); }
 .composer-model-option > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 560; }

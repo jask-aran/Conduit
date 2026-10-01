@@ -44,6 +44,7 @@ export const SPINNING_ACTIVITY = new Set(["starting", "reconnecting", "thinking"
 
 import { FolderPicker, PlacePicker, type FolderOptions, type PlaceOptions } from "./place-picker";
 import { COMPOSER_FOLDS, foldsFor, type ComposerFold } from "./composer-folds";
+import { ComposerPlusMenu } from "./composer-plus-menu";
 const MobileComposerOptions = lazy(() => import("./mobile-composer-options"));
 
 export interface ComposerStatus {
@@ -585,7 +586,10 @@ export function Composer(props: {
           </div>
           <div ref={actionsRow} class="composer-actions" data-mobile-actions-stacked={mobileActionsStacked()}>
             <div ref={actionsLeft} class="composer-actions-left">
-              <Show when={!phoneLayout()}><MobileComposerOptions composer={{ ...props, onOpenAttachments: attach }} desktop folded={folded()} /></Show>
+              <Show when={!phoneLayout()}><ComposerPlusMenu folded={folded()} chat={props.chat} models={props.models} permissions={props.permissions} serviceLevels={props.serviceLevels}
+                profiles={props.profiles} activeProfile={props.activeProfile} place={props.place} disabled={!props.serverOnline || !interactive()} modelSwitch={supports("modelSwitch")}
+                onChooseProfile={props.onChooseProfile} onOpenModelSelector={props.onOpenModelSelector} modelSelectorShortcut={props.modelSelectorShortcut}
+                onAttach={props.attachmentsSupported !== false ? attach : undefined} /></Show>
               <Show when={props.place && shows("place")}><div class="composer-desktop-setting" data-composer-fold="place"><PlacePicker {...props.place!} /></div></Show>
               <Show when={props.folder}>{(folder) => <FolderPicker {...folder()} />}</Show>
               <Show when={shows("context")}><div class="composer-desktop-setting" data-composer-fold="context"><ContextGauge chat={props.chat} metrics={props.contextMetrics} compact /></div></Show>
