@@ -26,7 +26,7 @@ import { isWorkspace, PlaceGlyph, type PlaceOptions } from "./place-picker";
 import { HarnessMark } from "../harness-brand";
 
 /**
- * The desktop composer's +: Attach, and each control the row has folded away
+ * The desktop composer's +: Attach, the project, and each control the row has folded away
  * for want of room, as a submenu showing its value -- the desktop menus'
  * parent and child pattern (the model selector's), with the same choices the
  * control itself offers. The phone has its own options menu.
@@ -100,7 +100,8 @@ export function ComposerPlusMenu(props: {
           </MenuSubContent>
         </MenuSub>
       </Show>
-      <Show when={has("place") && props.place}>
+      <Show when={props.place}>
+        <Show when={anyFolded()}><MenuSeparator /></Show>
         <MenuSub>
           <MenuSubTrigger disabled={props.place!.disabled}><PlaceGlyph project={placed()} /><span class="composer-plus-name">Project</span><span class="composer-plus-value">{placed()?.name || "None"}</span></MenuSubTrigger>
           <MenuSubContent class="w-72">
@@ -120,7 +121,7 @@ export function ComposerPlusMenu(props: {
         <div class="composer-plus-context">{Math.round(context()!)}% of context used</div>
       </Show>
       <Show when={props.onAttach}>
-        <Show when={anyFolded()}><MenuSeparator /></Show>
+        <Show when={anyFolded() || props.place}><MenuSeparator /></Show>
         <MenuItem onSelect={() => props.onAttach?.()}><PaperclipIcon /><span>Attach files</span></MenuItem>
       </Show>
     </MenuContent>
