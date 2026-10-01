@@ -9,10 +9,8 @@ import { cacheHitPercent, compactTokens, contextBreakdown, contextTokens, contex
    not named takes the next of the spares. */
 const CATEGORY_COLOURS: Record<string, string> = {
   messages: "oklch(0.72 0.15 300)", used: "oklch(0.72 0.15 300)",
-  "system-prompt": "oklch(0.7 0.02 260)", "system-tools": "oklch(0.74 0.12 230)",
-  "mcp-tools": "oklch(0.76 0.13 175)", "custom-agents": "oklch(0.78 0.14 75)",
-  "memory-files": "oklch(0.75 0.15 30)", skills: "oklch(0.8 0.14 120)",
-  "mcp-server-instructions": "oklch(0.72 0.12 200)",
+  "system-prompt": "oklch(0.7 0.02 260)", tools: "oklch(0.74 0.12 230)",
+  instructions: "oklch(0.78 0.14 75)", other: "oklch(0.75 0.15 30)",
 };
 const SPARES = ["oklch(0.72 0.16 350)", "oklch(0.8 0.12 95)", "oklch(0.7 0.13 150)", "oklch(0.7 0.1 50)"];
 const colourOf = (category: ContextCategory, index: number) => category.kind === "free" ? "transparent"
