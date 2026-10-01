@@ -19,7 +19,7 @@
   .composer-actions-status { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* The ring sits with the row's icons: their size and a tenth-of-size stroke,
      in the text colour, its track a clear step back rather than a ghost. */
-  .composer-actions-left .chat-context-trigger, .composer-actions-left .chat-context-trigger[data-state="idle"] { color: var(--foreground); padding-inline: 3px; }
+  .composer-actions-left .chat-context-trigger, .composer-actions-left .chat-context-trigger[data-state="idle"] { height: 24px; color: var(--foreground); padding-inline: 3px; }
   .composer-actions-left .chat-context-gauge { width: 14px; height: 14px; }
   .composer-actions-left .chat-context-gauge-track, .composer-actions-left .chat-context-gauge-value { stroke-width: 2.4; }
   .composer-actions-left .chat-context-gauge-track { stroke: color-mix(in oklch, currentColor, transparent 70%); }
@@ -126,3 +126,6 @@ summary.context-breakdown-row:hover { background: oklch(1 0 0 / 10%); color: var
 .chat-header-menu-context-trigger .context-breakdown-bar { margin-inline: 0; }
 .chat-header-menu-context-block .context-breakdown { padding-bottom: 4px; }
 .chat-header-menu-context-block .context-breakdown-separator { margin-inline: 0; }
+/* No focus rings (DESIGN.md, Never): a composer control that holds focus --
+   as one does when Escape hands it back from its popover -- shows the wash. */
+.composer-actions :is(button, [role="button"]):focus-visible { outline: none; box-shadow: none; background: var(--accent); }

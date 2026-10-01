@@ -19,8 +19,6 @@ const colourOf = (category: ContextCategory, index: number) => category.kind ===
   : category.kind === "buffer" ? "color-mix(in oklch, var(--muted-foreground), transparent 55%)"
   : CATEGORY_COLOURS[category.id] ?? SPARES[index % SPARES.length];
 
-const HOVER_DELAY_MS = 150;
-
 /* A live readout of how much room the next message has, so it sits with the
    composer's other "what will this send cost" controls rather than in the
    header, which holds identity and one-shot verbs.
@@ -42,22 +40,14 @@ export function ContextGauge(props: { chat: ActiveChatStore; compact?: boolean }
     return typeof value === "string" ? value : "";
   };
 
-  const [hovered, setHovered] = createSignal(false);
   const [held, setHeld] = createSignal(false);
   let trigger: HTMLButtonElement | undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const hover = (value: boolean) => (event: PointerEvent) => {
-    if (event.pointerType !== "mouse") return;
-    clearTimeout(timer);
-    timer = setTimeout(() => setHovered(value), HOVER_DELAY_MS);
-  };
-  const close = () => { clearTimeout(timer); setHeld(false); setHovered(false); };
-  onCleanup(() => clearTimeout(timer));
+  const close = () => setHeld(false);
 
-  createEffect(on(() => hovered() || held(), (open) => { if (open) props.chat.refreshContext(); }, { defer: true }));
-  return <Popover open={hovered() || held()} onOpenChange={(open) => { if (!open) close(); }} anchorRef={() => trigger} placement="top-end">
+  createEffect(on(held, (open) => { if (open) props.chat.refreshContext(); }, { defer: true }));
+  return <Popover open={held()} onOpenChange={(open) => { if (!open) close(); }} anchorRef={() => trigger} placement="top-end">
     <button ref={trigger} type="button" class="chat-context-trigger" data-state={tone()} aria-label={`Context usage: ${Math.round(percent())}%`}
-      aria-expanded={held()} onPointerEnter={hover(true)} onPointerLeave={hover(false)} onClick={() => { if (held()) close(); else setHeld(true); }}>
+      aria-expanded={held()} onClick={() => { if (held()) close(); else setHeld(true); }}>
       <svg class="chat-context-gauge" viewBox="0 0 24 24" aria-hidden="true">
         <circle class="chat-context-gauge-track" cx="12" cy="12" r="9" pathLength="100" />
         <circle class="chat-context-gauge-value" cx="12" cy="12" r="9" pathLength="100" style={`stroke-dasharray: ${percent() || 0} 100`} />
@@ -67,7 +57,7 @@ export function ContextGauge(props: { chat: ActiveChatStore; compact?: boolean }
     <PopoverContent class="chat-context-menu" aria-label="Context usage"
       onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}
       onPointerDownOutside={(event) => { if (trigger?.contains(event.target as Node)) event.preventDefault(); }}>
-      <div onPointerEnter={hover(true)} onPointerLeave={hover(false)}><ContextBreakdown chat={props.chat} /></div>
+      <ContextBreakdown chat={props.chat} />
     </PopoverContent>
   </Popover>;
 }
