@@ -8,6 +8,7 @@ import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
+import { countCacheRequest } from "./cache-stats.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 // Claude Code's tools, by what they do.
@@ -572,6 +573,12 @@ export class ClaudeCodeAdapter extends EventEmitter {
   async publishUsage(record, result = null, detail = "summary") {
     const last = [...record.stepOrder].reverse().find((step) => step.usage)?.usage;
     if (last) record.contextUsage = { ...record.contextUsage, lastRequestUsage: requestUsage(last) };
+    record.cache ||= { stats: null, previousPromptTokens: null };
+    for (const step of record.stepOrder) {
+      if (!step.usage || step.cacheCounted) continue;
+      step.cacheCounted = true;
+      countCacheRequest(record.cache, requestUsage(step.usage));
+    }
     if (result?.modelUsage) {
       const models = Object.values(result.modelUsage);
       const sum = (field) => models.reduce((total, model) => total + (model[field] || 0), 0);
@@ -590,7 +597,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     } catch { /* the last request's count stands */ }
     if (!record.contextUsage && !record.sessionStats) return null;
     this.publish(record, { type: "usage", generationId: record.generation?.id || null,
-      contextUsage: record.contextUsage, sessionStats: record.sessionStats, cacheStats: null });
+      contextUsage: record.contextUsage, sessionStats: record.sessionStats, cacheStats: record.cache?.stats || null });
     return record.contextUsage;
   }
 

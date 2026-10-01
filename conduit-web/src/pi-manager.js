@@ -22,6 +22,7 @@ import { PiCommandCatalog } from "./pi-command-catalog.js";
 import { ChatLogs, isLoggedEvent } from "./server/chat-log.js";
 import { normalizePiBackendEvent, toNeutralPiEvent } from "./pi-rpc-adapter.js";
 import { DELIVERY_FLUSH_MS, clampFrameMs, deliveryKey } from "./harnesses/socket-delivery.js";
+import { emptyCacheStats, finishCacheStats, promptTokenParts } from "./cache-stats.js";
 import { messageIsInterim } from "./active-generation.js";
 
 export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = "", models, template }) {
@@ -109,35 +110,8 @@ function normalizeSessionStats(stats) {
   };
 }
 
-function promptTokenParts(usage) {
-  if (!usage || typeof usage !== "object") return null;
-  const input = numericValue(usage.input ?? usage.inputTokens);
-  if (input == null) return null;
-  const cacheRead = numericValue(usage.cacheRead ?? usage.cachedInputTokens, 0);
-  const cacheWrite = numericValue(usage.cacheWrite, 0);
-  if (cacheRead == null || cacheWrite == null) return null;
-  return {
-    promptTokens: input + cacheRead + cacheWrite,
-    cacheRead,
-  };
-}
 
-function emptyCacheStats() {
-  return {
-    eligibleTokens: 0,
-    cacheHits: 0,
-    cacheMissedTokens: 0,
-    eligibleRequests: 0,
-    eligibleHitRate: null,
-  };
-}
 
-function finishCacheStats(stats) {
-  return {
-    ...stats,
-    eligibleHitRate: stats.eligibleTokens > 0 ? stats.cacheHits / stats.eligibleTokens : null,
-  };
-}
 
 function cacheStatsFromEntries(entries) {
   let previousPromptTokens = null;
@@ -881,6 +855,7 @@ export class PiManager extends EventEmitter {
       tokens: Number.isFinite(tokens) ? tokens : null,
       contextWindow: Number.isFinite(contextWindow) && contextWindow > 0 ? contextWindow : null,
       percent: Number.isFinite(percent) ? percent : null,
+      model: record.model || null,
       reportedAt: new Date().toISOString(),
       source,
     };
