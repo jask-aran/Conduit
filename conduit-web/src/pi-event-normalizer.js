@@ -1,4 +1,4 @@
-import { PI_TOOL_KINDS, piResultCalls, piResultFailed, piResultSubject, piSubjectFields } from "./pi-capabilities.js";
+import { PI_TOOL_KINDS, piResultCalls, piToolSubject, piResultFailed, piResultSubject, piSubjectFields } from "./pi-capabilities.js";
 import { toolKind, toolSubject } from "./harnesses/transcript-ops.js";
 function record(value) {
   return value && typeof value === "object" ? value : {};
@@ -85,14 +85,32 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0, cl
   let calls = new Map();
 
   const emit = (event) => ({ ...event, generationId, seq: ++sequence });
+  const scriptCalls = new Map();
   const normalize = (sourceValue) => {
     const source = record(sourceValue);
     const update = record(source.assistantMessageEvent);
     const partial = record(update.partial);
     const content = Array.isArray(partial.content) ? partial.content : [];
     // A call a codemode script made is part of that script's step, as history
-    // records it, not a step of the turn.
-    if (source.parentToolCallId && String(source.type).startsWith("tool_execution_")) return [];
+    // records it, not a step of the turn: it is restated as the script's list
+    // of calls, each running until it ends.
+    if (source.parentToolCallId && String(source.type).startsWith("tool_execution_")) {
+      const parent = String(source.parentToolCallId);
+      const calls = scriptCalls.get(parent) || [];
+      const id = String(source.toolCallId || "");
+      const name = String(source.toolName || "");
+      if (source.type === "tool_execution_start") {
+        const subject = piToolSubject(name, source.args);
+        calls.push({ id, name, kind: Object.hasOwn(PI_TOOL_KINDS, name) ? PI_TOOL_KINDS[name] : "other",
+          ...(subject ? { subject } : {}), done: false, startedAt: Date.now() });
+      } else if (source.type === "tool_execution_end") {
+        const call = calls.find((item) => item.id === id);
+        if (call) Object.assign(call, { done: true, isError: Boolean(source.isError), durationMs: Date.now() - call.startedAt });
+      } else return [];
+      scriptCalls.set(parent, calls);
+      return [emit({ type: "tool_execution_calls", toolCallId: parent,
+        calls: calls.map(({ id: _id, startedAt: _at, ...call }) => call) })];
+    }
 
     switch (source.type) {
       case "generation_started":
@@ -217,6 +235,7 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0, cl
           output: piToolText(source.partialResult),
         })];
       case "tool_execution_end": {
+        scriptCalls.delete(String(source.toolCallId || ""));
         const name = String(source.toolName || "");
         const subject = piResultSubject(name, source.result?.details);
         const calls = piResultCalls(name, source.result?.details);

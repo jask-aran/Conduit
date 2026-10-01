@@ -126,6 +126,9 @@ export function assertTranscriptOp(event) {
     if (event.kind !== undefined && !TOOL_KINDS.has(event.kind)) bad(`kind ${JSON.stringify(event.kind)}`);
     if (event.subject !== undefined && !text(event.subject)) bad("subject must be a line or left out");
     if (event.isError && event.cancelled) bad("a tool is stopped or it failed");
+  } else if (event.op === "tool.calls") {
+    if (!text(event.toolCallId)) bad("no tool call id");
+    if (!Array.isArray(event.calls)) bad("calls must be a list");
   } else if (event.op === "turn.settle") {
     if (!text(event.promptId)) bad("no prompt id");
     if (!OUTCOMES.has(event.outcome)) bad(`outcome ${JSON.stringify(event.outcome)}`);
@@ -232,6 +235,11 @@ export const toolOpen = ({ toolCallId, name, kind = "other", subject = null, inp
     ...(messageId ? { messageId } : {}),
     ...(generationId ? { generationId } : {}),
   });
+
+/** And, for a script, the tools it has called so far, each running or ended. */
+export const toolCalls = ({ toolCallId, calls, generationId = null }) =>
+  assertTranscriptOp({ type: "transcript_op", op: "tool.calls", toolCallId, calls,
+    ...(generationId ? { generationId } : {}) });
 
 /**
  * And what it returned. A tool the user's stop cut short was `cancelled`, not

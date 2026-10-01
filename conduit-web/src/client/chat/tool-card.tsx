@@ -1,4 +1,4 @@
-import { createMemo, createSignal, Show, type Component } from "solid-js";
+import { createMemo, createSignal, For, Show, type Component } from "solid-js";
 import { CodeXmlIcon, FilePenLineIcon, FileTextIcon, GlobeIcon, SearchIcon, SquareTerminalIcon, WrenchIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { ToolCallStep, ToolItem, ToolKind } from "../api/contracts";
@@ -29,7 +29,7 @@ export const KIND_ICONS: Record<ToolKind, Component<{ class?: string }>> = {
 };
 export const VERBS: Record<ToolKind, [string, string]> = {
   command: ["Running", "Ran"], read: ["Reading", "Read"], edit: ["Editing", "Edited"],
-  search: ["Searching", "Searched"], fetch: ["Fetching", "Fetched"], script: ["Running script", "Ran script"], other: ["Using", "Used"],
+  search: ["Searching", "Searched"], fetch: ["Fetching", "Fetched"], script: ["Scripting tools", "Scripted tools"], other: ["Using", "Used"],
 };
 
 /* How long a step took: milliseconds under a second, tenths under ten
@@ -45,23 +45,25 @@ export function stepDuration(from?: string, to?: string): string {
   return `${Math.floor(whole / 60)}m ${String(whole % 60).padStart(2, "0")}s`;
 }
 
-/* The tools a script called, as the trail's own rows: one line each, not
-   expandable -- the script's output below is what they came to. */
+/* The tools a script calls, in order, as the trail's own rows -- each spinning
+   until it ends -- one line each and not expandable: the script's output
+   below is what they came to. */
 function ScriptCalls(props: { calls: ToolCallStep[] }) {
   return <ol class="tool-step-calls">
-    {props.calls.map((call) => {
+    <For each={props.calls}>{(call) => {
       const kind = call.kind in KIND_ICONS ? call.kind : "other";
       const KindIcon = KIND_ICONS[kind];
-      return <li data-status={call.isError ? "failed" : "done"}>
-        <KindIcon class="trail-icon" />
-        <span class="trail-verb">{VERBS[kind][1]}<Show when={kind === "other"}> {call.name}</Show></span>
+      const running = call.done === false;
+      return <li data-status={running ? "running" : call.isError ? "failed" : "done"}>
+        <Show when={running} fallback={<KindIcon class="trail-icon" />}><Spinner class="trail-icon" /></Show>
+        <span class="trail-verb">{VERBS[kind][running ? 0 : 1]}<Show when={kind === "other"}> {call.name}</Show></span>
         <Show when={call.subject}><span class="trail-subject">{call.subject}</span></Show>
         <span class="trail-meta">
           <Show when={call.isError}><span class="trail-flag">Failed</span></Show>
           {call.durationMs != null ? stepDuration("1970-01-01T00:00:00.000Z", new Date(call.durationMs).toISOString()) : ""}
         </span>
       </li>;
-    })}
+    }}</For>
   </ol>;
 }
 
