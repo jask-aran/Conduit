@@ -339,13 +339,15 @@ export function buildLiveAnswerRow(
 export function buildLiveToolSegment(
   generation: ActiveGenerationView,
   block: LiveBlock,
+  tools: ToolItem[] = [],
 ): Extract<TraceSegment, { kind: "tool" }> {
   const execution = generation.toolExecutions[block.toolCallId || ""] || {};
   const toolCallId = block.toolCallId || block.identity;
   return {
     kind: "tool",
     id: `tool:${toolCallId}`,
-    tool: buildLiveToolItem(toolCallId, execution, { name: block.name, kind: block.toolKind, subject: block.subject, input: block.input }),
+    tool: buildLiveToolItem(toolCallId, execution, { name: block.name, kind: block.toolKind, subject: block.subject, input: block.input,
+      calls: tools.find((tool) => tool.toolCallId === toolCallId)?.calls }),
   };
 }
 
@@ -371,9 +373,11 @@ function buildLiveErrorSegment(
 export function buildLiveToolItem(
   toolCallId: string,
   execution: ActiveGenerationView["toolExecutions"][string] = {},
-  fallback: { name?: string; kind?: ToolKind; subject?: string; input?: unknown } = {},
+  fallback: { name?: string; kind?: ToolKind; subject?: string; input?: unknown; calls?: ToolItem["calls"] } = {},
 ): ToolItem {
   return {
+    // A script's calls are stated as transcript ops, not generation events.
+    ...(fallback.calls ? { calls: fallback.calls } : {}),
     toolCallId,
     name: execution.name || fallback.name || "tool",
     kind: execution.kind || fallback.kind || "other",
@@ -405,7 +409,7 @@ const turnTime = (startedAt?: string | null, endedAt?: string | null) => ({
   ...(endedAt ? { endedAt } : {}),
 });
 
-function liveRows(generation: ActiveGenerationView, owner: Message | null): TurnRow[] {
+function liveRows(generation: ActiveGenerationView, owner: Message | null, tools: ToolItem[]): TurnRow[] {
   const classifications = textBlockClassifications(generation) as Record<string, "interim" | "answer">;
   const segments: TraceSegment[] = [];
   const answers: TurnRow[] = [];
@@ -424,7 +428,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null): Turn
       } else if (block.kind === "text" && classifications[block.identity] === "interim") {
         segments.push({ kind: "narration", id: block.identity, text: block.text || "", live: block.status === "streaming" });
       } else if (block.kind === "tool_call") {
-        segments.push(buildLiveToolSegment(generation, block));
+        segments.push(buildLiveToolSegment(generation, block, tools));
       }
     }
     const terminalError = generation.status === "failed"
@@ -493,11 +497,12 @@ export function projectLiveTurn(
   persistedRows: TurnRow[],
   messages: Message[],
   generation: ActiveGenerationView,
+  tools: ToolItem[] = [],
 ): TurnRow[] {
   const owner = liveOwner(messages, generation);
-  if (!owner) return [...persistedRows, ...liveRows(generation, null)];
+  if (!owner) return [...persistedRows, ...liveRows(generation, null, tools)];
   const ownerRow = persistedRows.findIndex((row) => row.key === `message:${owner.id}`);
-  if (ownerRow < 0) return [...persistedRows, ...liveRows(generation, owner)];
+  if (ownerRow < 0) return [...persistedRows, ...liveRows(generation, owner, tools)];
   let nextTurn = ownerRow + 1;
   while (nextTurn < persistedRows.length) {
     const row = persistedRows[nextTurn]!;
@@ -506,7 +511,7 @@ export function projectLiveTurn(
   }
   return [
     ...persistedRows.slice(0, ownerRow + 1),
-    ...liveRows(generation, owner),
+    ...liveRows(generation, owner, tools),
     ...persistedRows.slice(nextTurn),
   ];
 }
@@ -666,5 +671,5 @@ export function buildTurnRows(
   } = {},
 ): TurnRow[] {
   const persisted = projectPersistedTurns(messages, tools).rows;
-  return assertStatedOutcomes(opts.activeGeneration ? projectLiveTurn(persisted, messages, opts.activeGeneration) : persisted);
+  return assertStatedOutcomes(opts.activeGeneration ? projectLiveTurn(persisted, messages, opts.activeGeneration, tools) : persisted);
 }

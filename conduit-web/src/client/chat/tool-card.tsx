@@ -83,7 +83,8 @@ export function ToolStep(props: { tool?: ToolItem; sessionId?: string | null; in
   });
   const source = createMemo(() => {
     const current = tool();
-    return loaded() ?? current?.output ?? current?.input ?? {};
+    // A script's input is its code; until it answers, its calls say what it does.
+    return loaded() ?? current?.output ?? (current?.kind === "script" ? "" : current?.input ?? {});
   });
   const output = createMemo(() => stringify(source()));
   const preview = createMemo(() => {
@@ -110,7 +111,7 @@ export function ToolStep(props: { tool?: ToolItem; sessionId?: string | null; in
     const kind = () => current().kind || "other";
     const verb = () => VERBS[kind()][status() === "running" ? 0 : 1];
     // What it acted on, or its own name when the adapter names nothing.
-    const subject = () => summary(current()) || (kind() === "other" ? "" : current().name || "");
+    const subject = () => summary(current()) || (kind() === "other" || kind() === "script" ? "" : current().name || "");
     const Icon = () => { const KindIcon = KIND_ICONS[kind()]; return <KindIcon class="trail-icon" />; };
     return <Disclosure class="trail-row tool-step" data-status={status()}
       headerClass="trail-row-header" bodyClass="tool-step-content"
@@ -128,7 +129,7 @@ export function ToolStep(props: { tool?: ToolItem; sessionId?: string | null; in
       </>}
       body={() => <>
         <Show when={current().calls?.length}><ScriptCalls calls={current().calls!} /></Show>
-        <pre>{loading() ? "Loading…" : preview()}</pre>
+        <Show when={loading() || preview()}><pre>{loading() ? "Loading…" : preview()}</pre></Show>
         <Show when={!loading() && output().length > MAX_PREVIEW}>
           <Button variant="ghost" size="sm" onClick={() => setFull((value) => !value)}>{full() ? "Show preview" : `Show full output · ${output().length - MAX_PREVIEW} hidden characters`}</Button>
         </Show>
