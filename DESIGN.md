@@ -331,7 +331,7 @@ No stacked card shadows, no colored glows, no frost on a row or a list.
 - Composer and header pill: `{rounded.composer}` (squircle, not a circle, not a sharp box). Overlay cards sit between rows and the composer.
 - Pills only for true pills (scope toggle, runtime dots). Do not pill section titles or metadata.
 
-**Icons** are Lucide, muted at rest, one size per context (the top of the app shares one size and one line). **An icon's stroke is a tenth of its size** (2.4 in Lucide's 24-unit box, `svg.lucide`), so weight scales with the icon and no size needs tuning; a current or selected icon is an eighth (3 units). Rules that set a stroke set it in those units; nothing overrides the ratio for one component. Artwork that is not Lucide (harness marks, the context gauge) draws its own weight. The composer's attach and mic wear the text colour rather than muted, because they are live actions.
+**Icons** are Lucide, muted at rest, one size per context (the top of the app shares one size and one line). **An icon's stroke is a tenth of its size** (2.4 in Lucide's 24-unit box, `svg.lucide`), so weight scales with the icon and no size needs tuning; a current or selected icon is an eighth (3 units). Rules that set a stroke set it in those units; nothing overrides the ratio for one component. Artwork that is not Lucide (harness marks, the context gauge) draws its own weight. The composer's + and mic wear the text colour rather than muted, because they are live actions.
 
 **The top line.** The sidebar header and every pane's header centre on one line, icons centred on the breadcrumb's capitals. A chat's breadcrumb names its place in caps before the title, with no slash; a page that is a place has no crumb.
 
