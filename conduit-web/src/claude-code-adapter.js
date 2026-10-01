@@ -306,6 +306,27 @@ const approvalAnswer = (pending, response) => {
   return { behavior: "deny", message: "The user denied this tool call." };
 };
 
+/**
+ * Claude Code's /context breakdown in Conduit's shape: each category with its
+ * kind, and the itemised ones (MCP tools, agents, memory files) carrying their
+ * items. Claude Code's own colours are terminal theme names, so they stay behind.
+ */
+function contextCategories(context) {
+  if (!Array.isArray(context?.categories) || !context.categories.length) return null;
+  const items = {
+    "MCP tools": (context.mcpTools || []).map((tool) => ({ label: tool.name, tokens: tool.tokens })),
+    "Custom agents": (context.agents || []).map((agent) => ({ label: agent.agentType, tokens: agent.tokens })),
+    "Memory files": (context.memoryFiles || []).map((file) => ({ label: file.path.split(/[\\/]/).pop() || file.path, tokens: file.tokens })),
+  };
+  return context.categories.map((category) => ({
+    id: category.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+    label: category.name,
+    tokens: category.tokens,
+    kind: category.kind || (category.isDeferred ? "deferred" : "used"),
+    ...(items[category.name]?.length ? { items: items[category.name] } : {}),
+  }));
+}
+
 export class ClaudeCodeAdapter extends EventEmitter {
   /** `sdk` is the Agent SDK's surface; a test hands in its own. */
   constructor({ command = "claude", logs = null, sdk = claudeAgentSdk } = {}) {
@@ -564,7 +585,8 @@ export class ClaudeCodeAdapter extends EventEmitter {
     try {
       const context = await record.query.getContextUsage({ detail });
       record.contextUsage = { ...record.contextUsage, tokens: context.totalTokens, contextWindow: context.maxTokens || null,
-        percent: context.maxTokens ? (context.totalTokens / context.maxTokens) * 100 : null };
+        percent: context.maxTokens ? (context.totalTokens / context.maxTokens) * 100 : null,
+        model: context.model || null, categories: contextCategories(context) };
     } catch { /* the last request's count stands */ }
     if (!record.contextUsage && !record.sessionStats) return null;
     this.publish(record, { type: "usage", generationId: record.generation?.id || null,

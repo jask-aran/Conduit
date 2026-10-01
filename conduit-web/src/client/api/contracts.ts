@@ -457,7 +457,19 @@ export interface ContextUsage {
   contextWindow?: number | null;
   limit?: number | null;
   percent?: number | null;
+  model?: string | null;
+  /** What fills the window, when the harness itemises it. Free space is a category of its own. */
+  categories?: ContextCategory[] | null;
   lastRequestUsage?: RequestUsage | null;
+}
+
+export interface ContextCategory {
+  id: string;
+  label: string;
+  tokens: number;
+  /** used occupies the window; free is what is left; buffer is the compaction reserve; deferred sits outside it. */
+  kind: "used" | "free" | "buffer" | "deferred";
+  items?: { label: string; tokens: number }[];
 }
 
 export interface RuntimeActivity { kind: string; label: string; }
