@@ -24,6 +24,11 @@ const handles = await page.evaluate((selector) => [...document.querySelectorAll(
 console.log(`${handles.length} × ${selector}, devicePixelRatio ${await page.evaluate(() => devicePixelRatio)}`);
 if (!handles.length) { await close(); process.exit(1); }
 
+// What changes pixels on its own -- the meteor field, the orbs' canvases, a
+// blinking caret, running animations -- is stilled, so a changed screenshot
+// means the layout moved.
+await page.addStyleTag({ content: ".solid-meteor-shower, canvas { visibility: hidden !important; } * { caret-color: transparent !important; animation-play-state: paused !important; }" });
+await page.waitForTimeout(300);
 await page.evaluate(() => {
   const watched = () => [...document.querySelectorAll(".katex-display > .katex, .markdown-table-scroll, .chat-markdown > .incremark > *")];
   const rect = (element) => { const box = element.getBoundingClientRect(); return [box.left, box.top, box.width]; };
