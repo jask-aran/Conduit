@@ -655,7 +655,7 @@ and cost values.
 
 `GET /v0/profiles` returns `profiles[]` with `id`, `label`, `management`, and
 `agent: { protocol, implementation, installationId }`. Assistant, Coding,
-Code Mode, and the special Runtime profile use `conduit_pi` on
+and the special Runtime profile use `conduit_pi` on
 `conduit-pinned`. Host Pi uses `native_pi` on `host-pi`, with agent-owned
 configuration. Both use `pi_rpc`. When the installed `codex` command is
 available, Codex CLI uses `native_api` on `host-codex` and connects to the

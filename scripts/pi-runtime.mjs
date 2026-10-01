@@ -7,7 +7,8 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 const LEGACY_TEMPLATE_IDS = new Map([
   ["chat", "assistant"],
   ["workspace", "coding"],
-  ["codemode", "code-mode"],
+  ["codemode", "coding"],
+  ["code-mode", "coding"],
 ]);
 
 export function normalizeTemplateId(value) {
