@@ -1932,6 +1932,12 @@ function App() {
   const focusWorkspacePanel = () => {
     if (!workspacePanelScope()) return;
     if (isMobileLayout()) setMobileSidebarOpen(false);
+    // The dock showing a docked pane: that pane is what it holds, so it takes the keyboard.
+    const docked = dockSlot();
+    if (docked !== null && isDocked(docked)) {
+      if (!panelOpen()) setPanelOpenForChat(true);
+      return requestAnimationFrame(() => focusPane(docked));
+    }
     if (!panelOpen()) setPanelOpenForChat(true);
     setWorkspaceFocusRequest((request) => request + 1);
   };
@@ -2374,7 +2380,8 @@ function App() {
     batch(() => {
       if (!next && isDocked(slot)) {
         setDockedSlots((current) => current.filter((item) => item !== slot));
-        if (dockSlot() === slot) setDockSlot(null);
+        // Closing the pane the dock shows closes the dock, rather than baring its tools.
+        if (dockSlot() === slot) { setDockSlot(null); closePanel(); }
       }
       setSlotViews((current) => current.map((view, index) => index === slot ? next : view));
       setSlotOrder((current) => {
