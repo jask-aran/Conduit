@@ -1,5 +1,5 @@
-import { For, Show } from "solid-js";
-import { FolderIcon, GaugeIcon, PaperclipIcon, PlusIcon, ShieldCheckIcon } from "lucide-solid";
+import { createSignal, For, Show } from "solid-js";
+import { GaugeIcon, PaperclipIcon, PlusIcon, ShieldCheckIcon } from "lucide-solid";
 import {
   Menu,
   MenuContent,
@@ -22,7 +22,7 @@ import type { ComposerPermissions } from "./composer-permissions";
 import type { ComposerFold } from "./composer-folds";
 import { contextUsagePercent } from "./context-metrics";
 import { ModelMenuItems } from "./model-selector";
-import { isWorkspace, PlaceGlyph, type PlaceOptions } from "./place-picker";
+import { PlaceGlyph, PlaceList, type PlaceOptions } from "./place-picker";
 import { HarnessMark } from "../harness-brand";
 
 /**
@@ -52,12 +52,11 @@ export function ComposerPlusMenu(props: {
   const permission = () => props.permissions?.profiles().find((profile) => profile.id === props.permissions?.selected());
   const service = () => props.serviceLevels?.levels().find((level) => level.id === props.serviceLevels?.selected());
   const context = () => contextUsagePercent(props.chat.contextUsage());
-  const places = () => (props.place?.projects ?? []).filter((project) => project.slug !== "chat" && project.state !== "cloning")
-    .sort((left, right) => Number(isWorkspace(left)) - Number(isWorkspace(right)) || left.name.localeCompare(right.name));
   const placed = () => props.place?.current && props.place.current.slug !== "chat" ? props.place.current : null;
   const anyFolded = () => props.folded.size > 0;
+  const [open, setOpen] = createSignal(false);
 
-  return <Menu>
+  return <Menu open={open()} onOpenChange={setOpen}>
     <MenuTrigger class="composer-plus-trigger" aria-label="Attach and more" title="Attach and more" disabled={props.disabled}><PlusIcon /></MenuTrigger>
     <MenuContent class="composer-plus-menu">
       <Show when={has("model")}>
@@ -104,16 +103,12 @@ export function ComposerPlusMenu(props: {
         <Show when={anyFolded()}><MenuSeparator /></Show>
         <MenuSub>
           <MenuSubTrigger disabled={props.place!.disabled}><PlaceGlyph project={placed()} /><span class="composer-plus-name">Project</span><span class="composer-plus-value">{placed()?.name || "None"}</span></MenuSubTrigger>
-          <MenuSubContent class="w-72">
-            <MenuGroup><MenuLabel>Project</MenuLabel>
-              <Show when={placed() && props.place!.projects.find((project) => project.slug === "chat")}>{(root) =>
-                <MenuItem onSelect={() => props.place!.onChoose(root())}><FolderIcon /><span>No folder</span></MenuItem>}</Show>
-              <For each={places()}>{(project) =>
-                <MenuItem class={project.id === props.place!.current?.id ? "composer-place-current" : undefined} onSelect={() => { if (project.id !== props.place!.current?.id) props.place!.onChoose(project); }}>
-                  <PlaceGlyph project={project} /><span>{project.name}</span>
-                </MenuItem>}
-              </For>
-            </MenuGroup>
+          <MenuSubContent class="composer-place-menu">
+            {/* The folder button's own list. Keys stay with its search, not the menu's typeahead. */}
+            <div ref={(element) => requestAnimationFrame(() => element.querySelector("input")?.focus())}
+              onKeyDown={(event) => { if (event.key !== "Escape") event.stopPropagation(); }}>
+              <PlaceList {...props.place!} onDone={() => setOpen(false)} />
+            </div>
           </MenuSubContent>
         </MenuSub>
       </Show>
