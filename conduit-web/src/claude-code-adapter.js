@@ -357,7 +357,8 @@ export class ClaudeCodeAdapter extends EventEmitter {
       const usage = await query.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true });
       const labels = { five_hour: "5-hour", seven_day: "Weekly" };
       const windows = usage?.rate_limits_available ? Object.entries(usage.rate_limits || {})
-        .filter(([, window]) => window && window.utilization != null)
+        // The plan's own windows; the endpoint also carries internal and add-on buckets.
+        .filter(([id, window]) => /^(five_hour|seven_day)(_|$)/.test(id) && window && window.utilization != null)
         .map(([id, window]) => ({ id, label: labels[id] || id.replace(/^seven_day_/, "Weekly · ").replace(/_/g, " "),
           usedPercent: window.utilization, resetsAt: window.resets_at || null })) : [];
       ClaudeCodeAdapter.plan.value = windows.length ? { name: usage.subscription_type || null, windows } : null;
