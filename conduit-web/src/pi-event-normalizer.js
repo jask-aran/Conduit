@@ -90,6 +90,9 @@ export function createPiEventNormalizer(generationId, { startingSequence = 0, cl
     const update = record(source.assistantMessageEvent);
     const partial = record(update.partial);
     const content = Array.isArray(partial.content) ? partial.content : [];
+    // A call a codemode script made is part of that script's step, as history
+    // records it, not a step of the turn.
+    if (source.parentToolCallId && String(source.type).startsWith("tool_execution_")) return [];
 
     switch (source.type) {
       case "generation_started":
