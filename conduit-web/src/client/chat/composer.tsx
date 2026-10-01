@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { ArrowUpIcon, ChevronDownIcon, MicIcon, PaperclipIcon, ShieldCheckIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
+import { ArrowUpIcon, ChevronDownIcon, MicIcon, ShieldCheckIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
 import {
   Button,
   Menu,
@@ -43,6 +43,7 @@ import "./composer-desktop.css";
 export const SPINNING_ACTIVITY = new Set(["starting", "reconnecting", "thinking", "responding", "using_tool", "retrying", "compacting", "stopping", "waiting_for_model"]);
 
 import { FolderPicker, PlacePicker, type FolderOptions, type PlaceOptions } from "./place-picker";
+import { COMPOSER_FOLDS, foldsFor, type ComposerFold } from "./composer-folds";
 const MobileComposerOptions = lazy(() => import("./mobile-composer-options"));
 
 export interface ComposerStatus {
@@ -89,6 +90,8 @@ export function Composer(props: {
 }) {
   let input!: HTMLTextAreaElement;
   let mobileActions!: HTMLDivElement;
+  let actionsRow!: HTMLDivElement;
+  let actionsLeft!: HTMLDivElement;
   const [slashOpen, setSlashOpen] = createSignal(false);
   const [dictationState, setDictationState] = createSignal<VoiceDictationState>("idle");
   const [dictationError, setDictationError] = createSignal("");
@@ -104,6 +107,39 @@ export function Composer(props: {
     return model || "Send a message...";
   };
   const [mobileActionsStacked, setMobileActionsStacked] = createSignal(false);
+  /* Desktop: the row's controls keep their size; those that do not fit fold
+     into the + menu, least used first. Each one's width is kept from when it
+     was last drawn, so a folded control comes back exactly when it fits. */
+  const [folded, setFolded] = createSignal<ReadonlySet<ComposerFold>>(new Set());
+  const foldWidths = new Map<ComposerFold, number>();
+  const foldPresent: Record<ComposerFold, () => boolean> = {
+    permissions: () => Boolean(props.permissions?.profiles().length || props.serviceLevels?.levels().length),
+    place: () => Boolean(props.place),
+    profile: () => props.profiles.length > 0,
+    context: () => true,
+    model: () => true,
+  };
+  let refitFrame = 0;
+  const refit = () => {
+    cancelAnimationFrame(refitFrame);
+    refitFrame = requestAnimationFrame(() => {
+      if (phoneLayout() || !actionsRow?.isConnected) { if (folded().size) setFolded(new Set<ComposerFold>()); return; }
+      for (const element of actionsLeft.querySelectorAll<HTMLElement>(":scope > [data-composer-fold]")) foldWidths.set(element.dataset.composerFold as ComposerFold, element.getBoundingClientRect().width);
+      const widths = new Map<ComposerFold, number>();
+      for (const key of COMPOSER_FOLDS) if (foldPresent[key]() && foldWidths.has(key)) widths.set(key, foldWidths.get(key)!);
+      const gap = parseFloat(getComputedStyle(actionsLeft).columnGap) || 0;
+      const fixedChildren = ([...actionsLeft.children] as HTMLElement[]).filter((child) => !child.dataset.composerFold);
+      const fixed = fixedChildren.reduce((sum, child) => sum + child.getBoundingClientRect().width, 0) + gap * Math.max(0, fixedChildren.length - 1);
+      const row = getComputedStyle(actionsRow);
+      const others = ([...actionsRow.children] as HTMLElement[]).filter((child) => child !== actionsLeft);
+      const available = actionsRow.clientWidth - (parseFloat(row.paddingLeft) || 0) - (parseFloat(row.paddingRight) || 0)
+        - others.reduce((sum, child) => sum + child.getBoundingClientRect().width + (parseFloat(row.columnGap) || 0), 0);
+      const next = foldsFor(available, fixed, widths, gap);
+      const current = folded();
+      if (next.size !== current.size || [...next].some((key) => !current.has(key))) setFolded(next);
+    });
+  };
+  const shows = (key: ComposerFold) => phoneLayout() || !folded().has(key);
   const dictationWaveform = createVoiceWaveformController(MAX_RESPONSIVE_BAR_COUNT);
   let dictationCancelled = false;
   let pushToTalkActive = false;
@@ -459,6 +495,17 @@ export function Composer(props: {
     };
     syncPhoneLayout();
     media?.addEventListener("change", syncPhoneLayout);
+    const foldObserver = new ResizeObserver(refit);
+    foldObserver.observe(actionsRow);
+    foldObserver.observe(mobileActions);
+    // What the controls say changes their width: a model's name, a permission.
+    createEffect(() => {
+      props.models.model(); props.models.effort(); props.permissions?.selected(); props.serviceLevels?.selected();
+      props.activeProfile; props.profiles.length; phoneLayout();
+      for (const key of COMPOSER_FOLDS) foldPresent[key]();
+      refit();
+    });
+    onCleanup(() => { foldObserver.disconnect(); cancelAnimationFrame(refitFrame); });
     props.onStatusChange?.(composerStatus);
     createEffect(() => {
       props.chat.draft();
@@ -536,17 +583,17 @@ export function Composer(props: {
             <textarea ref={input} rows={1} aria-label="Message the agent" data-has-text={hasText() ? "true" : "false"} data-dictated-range={dictationSelectionOwned() && dictatedRange() ? "true" : undefined} placeholder={!props.serverOnline ? "Server unavailable" : !props.chat.loadedId() ? "New chat" : interactive() ? placeholder() : "Reconnecting..."} value={props.chat.draft()} disabled={!props.serverOnline || !interactive()} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} />
             <Show when={slashOpen() && slashCommand()}>{(item) => <div class="slash-completion" aria-hidden="true"><span>{props.chat.draft()}</span>{item().command.slice(props.chat.draft().length)} <small>{item().description}</small></div>}</Show>
           </div>
-          <div class="composer-actions" data-mobile-actions-stacked={mobileActionsStacked()}>
-            <div class="composer-actions-left">
-              <Show when={props.attachmentsSupported !== false}><Button class="composer-desktop-attachment" variant="ghost" size="icon-sm" aria-label={`Attach files${props.attachments.items().length ? ` (${props.attachments.items().length})` : ""}`} disabled={!props.serverOnline || !interactive()} onClick={attach}><PaperclipIcon /></Button></Show>
-              <Show when={props.place}>{(place) => <PlacePicker {...place()} />}</Show>
+          <div ref={actionsRow} class="composer-actions" data-mobile-actions-stacked={mobileActionsStacked()}>
+            <div ref={actionsLeft} class="composer-actions-left">
+              <Show when={!phoneLayout()}><MobileComposerOptions composer={{ ...props, onOpenAttachments: attach }} desktop folded={folded()} /></Show>
+              <Show when={props.place && shows("place")}><div class="composer-desktop-setting" data-composer-fold="place"><PlacePicker {...props.place!} /></div></Show>
               <Show when={props.folder}>{(folder) => <FolderPicker {...folder()} />}</Show>
-              <div class="composer-desktop-setting"><ContextGauge chat={props.chat} metrics={props.contextMetrics} compact /></div>
-              <Show when={props.profiles.length}><div class="composer-desktop-setting"><Menu><MenuTrigger class="model-trigger composer-profile-trigger" title={props.activeProfile?.label || "Profile"} aria-label={`Profile ${props.activeProfile?.label || "General"}`} disabled={!props.serverOnline || !interactive()}><HarnessMark id={props.activeProfile?.implementation || "conduit"} class="size-4" /><ChevronDownIcon /></MenuTrigger><MenuContent class="w-72"><MenuGroup><MenuLabel>Profile</MenuLabel><MenuRadioGroup value={props.activeProfile?.id || ""} onChange={props.onChooseProfile}><For each={props.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={(props.chat.status() !== "draft" && item.id !== props.activeProfile?.id) || item.disabled}><HarnessMark id={item.implementation || "conduit"} class="size-4" /><span class="composer-profile-copy"><span>{item.label}</span><small>{item.implementation || "conduit"}</small></span></MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></MenuContent></Menu></div></Show>
-              <div class="composer-desktop-setting">
+              <Show when={shows("context")}><div class="composer-desktop-setting" data-composer-fold="context"><ContextGauge chat={props.chat} metrics={props.contextMetrics} compact /></div></Show>
+              <Show when={props.profiles.length && shows("profile")}><div class="composer-desktop-setting" data-composer-fold="profile"><Menu><MenuTrigger class="model-trigger composer-profile-trigger" title={props.activeProfile?.label || "Profile"} aria-label={`Profile ${props.activeProfile?.label || "General"}`} disabled={!props.serverOnline || !interactive()}><HarnessMark id={props.activeProfile?.implementation || "conduit"} class="size-4" /><ChevronDownIcon /></MenuTrigger><MenuContent class="w-72"><MenuGroup><MenuLabel>Profile</MenuLabel><MenuRadioGroup value={props.activeProfile?.id || ""} onChange={props.onChooseProfile}><For each={props.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={(props.chat.status() !== "draft" && item.id !== props.activeProfile?.id) || item.disabled}><HarnessMark id={item.implementation || "conduit"} class="size-4" /><span class="composer-profile-copy"><span>{item.label}</span><small>{item.implementation || "conduit"}</small></span></MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></MenuContent></Menu></div></Show>
+              <Show when={shows("model")}><div class="composer-desktop-setting" data-composer-fold="model">
                 <ModelSelector models={props.models.models()} model={props.models.model()} thinkingLevel={props.models.effort()} notice={props.models.notice()} loading={props.modelsLoading} disabled={!props.serverOnline || !interactive() || !supports("modelSwitch")} onModelChange={(value) => void props.models.chooseModel(value)} onThinkingLevelChange={(value) => void props.models.chooseEffort(value)} onSearchModels={props.onOpenModelSelector} searchShortcut={props.modelSelectorShortcut} />
-              </div>
-              <Show when={props.permissions?.profiles().length || props.serviceLevels?.levels().length}><div class="composer-desktop-setting"><Menu><MenuTrigger class="model-trigger composer-permission-trigger" aria-label="Session settings" disabled={!props.serverOnline || !interactive()}><ShieldCheckIcon /><span>{props.permissions?.profiles().find((profile) => profile.id === props.permissions?.selected())?.label || "Settings"}</span><ChevronDownIcon /></MenuTrigger><MenuContent class="w-72"><Show when={props.permissions?.profiles().length}><MenuGroup><MenuLabel>Permissions</MenuLabel><MenuRadioGroup value={props.permissions?.selected() || ""} onChange={(value) => void props.permissions?.choose(value)}><For each={props.permissions?.profiles() || []}>{(profile) => <MenuRadioItem value={profile.id} disabled={!profile.allowed}><span class="shrink-0 whitespace-nowrap">{profile.label}</span><Show when={profile.description}><span class="ml-auto max-w-40 truncate text-xs text-muted-foreground">{profile.description}</span></Show></MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></Show><Show when={props.serviceLevels?.levels().length}><Show when={props.permissions?.profiles().length}><MenuSeparator /></Show><MenuGroup><MenuLabel>Service level</MenuLabel><MenuRadioGroup value={props.serviceLevels?.selected() || ""} onChange={(value) => void props.serviceLevels?.choose(value)}><For each={props.serviceLevels?.levels() || []}>{(level) => <MenuRadioItem value={level.id}>{level.label}</MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></Show></MenuContent></Menu></div></Show>
+              </div></Show>
+              <Show when={(props.permissions?.profiles().length || props.serviceLevels?.levels().length) && shows("permissions")}><div class="composer-desktop-setting" data-composer-fold="permissions"><Menu><MenuTrigger class="model-trigger composer-permission-trigger" aria-label="Session settings" disabled={!props.serverOnline || !interactive()}><ShieldCheckIcon /><span>{props.permissions?.profiles().find((profile) => profile.id === props.permissions?.selected())?.label || "Settings"}</span><ChevronDownIcon /></MenuTrigger><MenuContent class="w-72"><Show when={props.permissions?.profiles().length}><MenuGroup><MenuLabel>Permissions</MenuLabel><MenuRadioGroup value={props.permissions?.selected() || ""} onChange={(value) => void props.permissions?.choose(value)}><For each={props.permissions?.profiles() || []}>{(profile) => <MenuRadioItem value={profile.id} disabled={!profile.allowed}><span class="shrink-0 whitespace-nowrap">{profile.label}</span><Show when={profile.description}><span class="ml-auto max-w-40 truncate text-xs text-muted-foreground">{profile.description}</span></Show></MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></Show><Show when={props.serviceLevels?.levels().length}><Show when={props.permissions?.profiles().length}><MenuSeparator /></Show><MenuGroup><MenuLabel>Service level</MenuLabel><MenuRadioGroup value={props.serviceLevels?.selected() || ""} onChange={(value) => void props.serviceLevels?.choose(value)}><For each={props.serviceLevels?.levels() || []}>{(level) => <MenuRadioItem value={level.id}>{level.label}</MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></Show></MenuContent></Menu></div></Show>
             </div>
             <Show when={recording() && !phoneLayout()}><VoiceWaveform class="composer-status-waveform composer-actions-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={3} ariaLabel={dictationLabel() || "Microphone input level"} /></Show>
             <div ref={mobileActions} class="composer-actions-right">

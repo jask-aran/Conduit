@@ -25,6 +25,7 @@ import { HarnessMark } from "../harness-brand";
 import { StepSlider } from "./step-slider";
 import { contextUsagePercent } from "./context-metrics";
 import { isWorkspace, PlaceGlyph, type PlaceOptions } from "./place-picker";
+import type { ComposerFold } from "./composer-folds";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
 type MobileOptionsPanel = "root" | "models" | "effort" | "profiles" | "permissions" | "places";
@@ -44,8 +45,15 @@ export function MobileComposerOptions(props: {
     onOpenAttachments: () => void;
     place?: PlaceOptions;
   };
+  /** On a desktop the + holds Attach, and whichever of the row's controls have
+   *  folded into it for want of room; on a phone it holds every setting. */
+  desktop?: boolean;
+  folded?: ReadonlySet<ComposerFold>;
 }) {
   const composer = props.composer;
+  const show = (key: ComposerFold) => !props.desktop || Boolean(props.folded?.has(key));
+  const hasPermissions = () => Boolean(composer.permissions?.profiles().length || composer.serviceLevels?.levels().length);
+  const settingsAbove = () => show("profile") && composer.profiles.length > 0 || show("model");
   const selectedModel = () => composer.models.models().find((item) => item.spec === composer.models.model());
   const selectedModelLabel = () => selectedModel()?.label || composer.models.model() || "Not selected";
   const selectedProfileLabel = () => composer.activeProfile?.label || composer.activeProfile?.id || "General";
@@ -183,7 +191,7 @@ export function MobileComposerOptions(props: {
   };
   onCleanup(() => stopWatchingOutside?.());
 
-  return <div class="composer-mobile-plus" ref={plusRoot}>
+  return <div class={props.desktop ? "composer-desktop-plus" : "composer-mobile-plus"} ref={plusRoot}>
     <Menu modal={false} onOpenChange={(open) => {
       stopWatchingOutside?.();
       stopWatchingOutside = undefined;
@@ -203,35 +211,39 @@ export function MobileComposerOptions(props: {
       <MenuContent class="composer-options-menu" data-settling={settling()} onOpenAutoFocus={preserveComposerFocus} onCloseAutoFocus={preserveComposerFocusOnClose} onFocusOutside={keepMenuOpenOnFocusOutside} onPointerDown={preserveComposerFocusOnPointerDown} onClick={restoreComposerFocusAfterInteraction}>
         <div class="composer-options-parent" data-panel-open={panel() !== "root"} onPointerDown={returnToRoot}>
          <MenuGroup>
-          <MenuLabel class="composer-options-label composer-options-header"><span>{composer.profiles.length ? "Profile" : "Model"}</span>
-            <Show when={context() != null}><span class="composer-options-context">{Math.round(context()!)}% context</span></Show></MenuLabel>
-          <Show when={composer.profiles.length}>
+          <Show when={settingsAbove() || (show("context") && context() != null)}>
+            <MenuLabel class="composer-options-label composer-options-header"><span>{show("profile") && composer.profiles.length ? "Profile" : show("model") ? "Model" : "Context"}</span>
+              <Show when={show("context") && context() != null}><span class="composer-options-context">{Math.round(context()!)}% context</span></Show></MenuLabel>
+          </Show>
+          <Show when={show("profile") && composer.profiles.length}>
             <MenuItem closeOnSelect={false} onSelect={() => go("profiles")} class="composer-options-value" aria-label={`Profile ${selectedProfileLabel()}`}>
               <HarnessMark id={composer.activeProfile?.implementation || "conduit"} class="size-4" /><span>{selectedProfileLabel()}</span><ChevronRightIcon />
             </MenuItem>
-            <MenuLabel class="composer-options-label">Model</MenuLabel>
+            <Show when={show("model")}><MenuLabel class="composer-options-label">Model</MenuLabel></Show>
           </Show>
-          <MenuItem disabled={!composer.serverOnline} closeOnSelect={false} onSelect={() => go("models")} class="composer-options-value composer-options-model" aria-label={`Model ${selectedModelLabel()}`}>
-            <span>{selectedModelLabel()}</span><ChevronRightIcon />
-          </MenuItem>
-          <MenuSeparator />
-          <StepSlider label="Effort" value={composer.models.effort()} disabled={!composer.serverOnline || levels().length < 2}
-            options={levels().map((level) => ({ value: level, label: thinkingLabel(level) }))}
-            valueControl={(label) => <button type="button" class="step-slider-value" disabled={!composer.serverOnline || levels().length < 2}
-              onClick={() => go("effort")}>{label()}<ChevronRightIcon /></button>}
-            onChange={(value) => void composer.models.chooseEffort(value)} />
-          <Show when={composer.permissions?.profiles().length}>
+          <Show when={show("model")}>
+            <MenuItem disabled={!composer.serverOnline} closeOnSelect={false} onSelect={() => go("models")} class="composer-options-value composer-options-model" aria-label={`Model ${selectedModelLabel()}`}>
+              <span>{selectedModelLabel()}</span><ChevronRightIcon />
+            </MenuItem>
             <MenuSeparator />
-            <MenuLabel class="composer-options-label">Permissions</MenuLabel>
+            <StepSlider label="Effort" value={composer.models.effort()} disabled={!composer.serverOnline || levels().length < 2}
+              options={levels().map((level) => ({ value: level, label: thinkingLabel(level) }))}
+              valueControl={(label) => <button type="button" class="step-slider-value" disabled={!composer.serverOnline || levels().length < 2}
+                onClick={() => go("effort")}>{label()}<ChevronRightIcon /></button>}
+              onChange={(value) => void composer.models.chooseEffort(value)} />
+          </Show>
+          <Show when={show("permissions") && hasPermissions()}>
+            <Show when={settingsAbove()}><MenuSeparator /></Show>
+            <MenuLabel class="composer-options-label">{composer.permissions?.profiles().length ? "Permissions" : "Service level"}</MenuLabel>
             <MenuItem closeOnSelect={false} onSelect={() => go("permissions")} class="composer-options-value" aria-label={`Permissions ${selectedPermissionLabel()}`}>
-              <ShieldCheckIcon /><span>{selectedPermissionLabel()}</span><ChevronRightIcon />
+              <ShieldCheckIcon /><span>{composer.permissions?.profiles().length ? selectedPermissionLabel() : composer.serviceLevels?.levels().find((level) => level.id === composer.serviceLevels?.selected())?.label || "Default"}</span><ChevronRightIcon />
             </MenuItem>
           </Show>
-          <MenuSeparator />
+          <Show when={settingsAbove() || (show("permissions") && hasPermissions())}><MenuSeparator /></Show>
           <MenuItem disabled={!composer.serverOnline} onSelect={composer.onOpenAttachments}>
             <PaperclipIcon /><span>Attach files</span>
           </MenuItem>
-          <Show when={composer.place}>{(place) => {
+          <Show when={show("place") && composer.place}>{(place) => {
             const placed = () => place().current && place().current!.slug !== "chat" ? place().current! : null;
             return <>
               <MenuSeparator />
@@ -299,14 +311,14 @@ export function MobileComposerOptions(props: {
         }}</Show>
         <Show when={panel() === "permissions"}>
           <div class="composer-options-submenu composer-permissions-menu">
-            <MenuGroup>
+            <Show when={composer.permissions?.profiles().length}><MenuGroup>
               <MenuLabel class="composer-options-label">Permissions</MenuLabel>
               <MenuRadioGroup value={composer.permissions?.selected() || ""} onChange={(value) => chosen(() => void composer.permissions?.choose(value))}>
                 <For each={composer.permissions?.profiles() || []}>{(profile) => <MenuRadioItem class="composer-model-option" value={profile.id} disabled={!profile.allowed} closeOnSelect={false}><span>{profile.label}</span><Show when={profile.description}><small>{profile.description}</small></Show></MenuRadioItem>}</For>
               </MenuRadioGroup>
-            </MenuGroup>
+            </MenuGroup></Show>
             <Show when={composer.serviceLevels?.levels().length}>
-              <MenuSeparator />
+              <Show when={composer.permissions?.profiles().length}><MenuSeparator /></Show>
               <MenuGroup>
                 <MenuLabel class="composer-options-label">Service level</MenuLabel>
                 <MenuRadioGroup value={composer.serviceLevels?.selected() || ""} onChange={(value) => chosen(() => void composer.serviceLevels?.choose(value))}>
