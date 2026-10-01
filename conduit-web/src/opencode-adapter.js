@@ -1014,7 +1014,8 @@ export class OpenCodeAdapter extends EventEmitter {
     const tokens = session.tokens?.input || 0;
     const contextUsage = { tokens, contextWindow: null, percentUsed: null };
     this.publish(record, { type: "usage", generationId: record.generation?.id || null,
-      contextUsage, sessionStats: { cost: session.cost || 0 }, cacheStats: null });
+      contextUsage, sessionStats: { cost: session.cost || 0, tokens: { input: tokens, output: session.tokens?.output || 0,
+        cacheRead: session.tokens?.cache?.read || 0, cacheWrite: session.tokens?.cache?.write || 0 } }, cacheStats: null });
     return contextUsage;
   }
 

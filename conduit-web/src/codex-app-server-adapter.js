@@ -26,7 +26,7 @@ export const CODEX_CAPABILITIES = Object.freeze({
   approvals: true, permissionModes: true,
   // `replay` means resuming a generation in progress, which Codex cannot do:
   // its `replay` returns the current runtime state, not a generation.
-  usage: false, replay: false,
+  usage: true, replay: false,
   attachments: true,
   interruptKeepsPartial: false,
 });
@@ -859,6 +859,17 @@ export class CodexAppServerAdapter extends EventEmitter {
       record.generation = { id: turnId, closed: false, settled: false };
       record.turn = null;
       this.publish(record, { type: "status", generationId: turnId, phase: "started", seq: ++record.generationSeq, status: "working", activity: "working", detail: null });
+    } else if (method === "thread/tokenUsage/updated" && params.tokenUsage) {
+      // OpenAI counts cached input inside input; Conduit's shape keeps them apart.
+      const { last, total, modelContextWindow } = params.tokenUsage;
+      const split = (usage) => ({ input: Math.max(0, usage.inputTokens - usage.cachedInputTokens), output: usage.outputTokens,
+        cacheRead: usage.cachedInputTokens, cacheWrite: usage.cacheWriteInputTokens || 0, reasoning: usage.reasoningOutputTokens, totalTokens: usage.totalTokens });
+      const window = modelContextWindow || null;
+      record.contextUsage = { tokens: last.totalTokens, contextWindow: window, percent: window ? (last.totalTokens / window) * 100 : null,
+        model: record.model || null, lastRequestUsage: split(last) };
+      const tokens = split(total);
+      record.sessionStats = { ...(record.sessionStats || {}), tokens: { ...tokens, total: total.totalTokens }, cost: 0 };
+      this.publish(record, { type: "usage", generationId: turnId, contextUsage: record.contextUsage, sessionStats: record.sessionStats, cacheStats: null });
     } else if (method === "item/started" && params.item?.type === "contextCompaction") {
       record.compacting = true;
       record.activity = "compacting";
@@ -1434,6 +1445,8 @@ export class CodexAppServerAdapter extends EventEmitter {
     }
     return result;
   }
+  /** Codex pushes its usage after every request; this answers with the latest. */
+  refreshContext(id) { return Promise.resolve(this.get(id)?.contextUsage || null); }
   get(id) { return this.sessions.get(id); }
   getByChatId(chatId) { return this.sessions.getByChatId(chatId); }
   rawRecords() { return this.sessions.rawRecords(); }
