@@ -265,6 +265,16 @@ function toolLine(tool: ToolItem): string {
    passed over. */
 type Detail = { text: string; markdown: boolean };
 function stepLine(tool: ToolItem, live: boolean): string {
+  // A running script is the tool it is running now, else the last it ran.
+  if (live && !tool.done && tool.kind === "script") {
+    const calls = (tool.calls || []).filter((call) => !call.planned && !call.earlier);
+    const call = calls.find((item) => item.done === false) || calls.at(-1);
+    if (!call) return "";
+    const kind = call.kind || "other";
+    const verb = VERBS[kind][call.done === false ? 0 : 1];
+    const line = toolLine({ toolCallId: "", kind, subject: call.subject });
+    return kind === "other" ? [verb, call.name, line].filter(Boolean).join(" ") : `${verb} ${line || call.name}`.trim();
+  }
   const subject = toolLine(tool);
   if (live && !tool.done) return subject;
   const kind = tool.kind || "other";
