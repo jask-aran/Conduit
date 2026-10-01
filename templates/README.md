@@ -9,7 +9,7 @@ Shipped profiles:
 | id | Label | Role |
 |----|--------|------|
 | `assistant` | Assistant | Workspace files, code-mode shell, and model-agnostic web research |
-| `coding` | Coding | Full tools + git/web/develop skills for real folders |
+| `coding` | Coding | Full tools + git/web/develop skills for real folders, plus Pi's `codemode` (the code mode test bed) |
 | `runtime` | Runtime | Special one-off admin chat for templates and Pi package management |
 
 `templates/chat-naming/SYSTEM.md` is the default prompt for the separate chat-title service. It is editable in Settings but is not a selectable profile.

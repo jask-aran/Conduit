@@ -1,11 +1,11 @@
 {
   "id": "coding",
-  "version": "6",
+  "version": "7",
   "label": "Coding",
-  "description": "Development Pi with filesystem, shell, Git/GitHub, and web research skills.",
-  "posture": "read / edit / shell / web search / source fetch",
+  "description": "Development Pi with filesystem, shell, Git/GitHub, web research, and Pi codemode for scripted tool calls.",
+  "posture": "read / edit / shell / codemode / web search / source fetch",
   "systemPrompt": "SYSTEM.md",
-  "tools": ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check"],
+  "tools": ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check", "codemode"],
   "models": [
     "openai-codex/gpt-5.6-luna",
     "openai-codex/gpt-5.6-sol",
