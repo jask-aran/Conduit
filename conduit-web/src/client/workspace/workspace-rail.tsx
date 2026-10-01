@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js";
-import { Columns3Icon, CommandIcon, FileTextIcon, FolderIcon, LayoutDashboardIcon, MessagesSquareIcon, SquareTerminalIcon, GitCompareArrowsIcon, LayoutTemplateIcon, MessageSquareIcon, SearchIcon, TerminalIcon } from "lucide-solid";
+import { Columns3Icon, CommandIcon, FileTextIcon, FolderIcon, LayoutDashboardIcon, MessageSquareTextIcon, SquareTerminalIcon, GitCompareArrowsIcon, LayoutTemplateIcon, MessageSquareIcon, SearchIcon, TerminalIcon } from "lucide-solid";
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuTrigger } from "@/components/primitives";
 import { isSplitView, type PanelTab, type SplitView } from "./workspace-types";
 
@@ -78,7 +78,7 @@ export function WorkspaceRail(props: {
     <span class="workspace-rail-separator" aria-hidden="true" /></Show>
     <Show when={props.docked.length}>
       <For each={props.docked}>{(doc) => {
-        const Icon = doc.view.startsWith("chat:") ? MessagesSquareIcon : doc.view.startsWith("page:") ? LayoutDashboardIcon : doc.view.startsWith("term:") ? SquareTerminalIcon : FileTextIcon;
+        const Icon = doc.view.startsWith("chat:") ? MessageSquareTextIcon : doc.view.startsWith("page:") ? LayoutDashboardIcon : doc.view.startsWith("term:") ? SquareTerminalIcon : FileTextIcon;
         return <button type="button" class="workspace-rail-action" tabIndex={-1} draggable={true} data-doc-view={doc.view}
           aria-label={`${doc.name} (docked)`} title={doc.name} aria-current={props.currentDocked === doc.slot ? "true" : undefined}
           onClick={(event) => props.onChooseDocked(doc.slot, event.altKey)}><Icon /></button>;
