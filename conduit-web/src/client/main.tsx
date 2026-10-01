@@ -652,20 +652,23 @@ function App() {
   const launchUrl = new URL(location.href);
   const urlNamesPanes = launchUrl.searchParams.has("pane") || launchUrl.searchParams.has("a");
   const atStart = launchUrl.pathname === "/" && !launchUrl.search;
+  // Pane slots: two for the row beside pane A, three more for panes in the dock.
+  const SLOT_IDS = [0, 1, 2, 3, 4];
+  const MAX_DOCKED = 3;
   const storedViews = (urlNamesPanes ? launchUrl.searchParams.getAll("pane").slice(0, 2)
     : atStart ? [readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split"), readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-2")] : [])
     .map((value) => isSplitView(value) ? value : null);
-  const initialViews: (SplitView | null)[] = storedViews[0] ? [storedViews[0], storedViews[1] ?? null] : [storedViews[1] ?? null, null];
+  const storedDocked = (urlNamesPanes ? launchUrl.searchParams.getAll("dock") : atStart ? (readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-docked") || "").split("\n") : []).filter(isSplitView).slice(0, MAX_DOCKED);
+  const initialViews: (SplitView | null)[] = [...(storedViews[0] ? [storedViews[0], storedViews[1] ?? null] : [storedViews[1] ?? null, null]), ...[0, 1, 2].map((index) => storedDocked[index] ?? null)];
   // Pane A shows its route's chat or page, or, over it, any other view.
   const storedPaneA = urlNamesPanes ? launchUrl.searchParams.get("a") : atStart ? readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-a") : null;
   const [paneAOverride, setPaneAOverrideState] = createSignal<SplitView | null>(isSplitView(storedPaneA) && !/^(chat|page):/.test(storedPaneA) ? storedPaneA : null);
   const setPaneAOverride = (view: SplitView | null) => { setPaneAOverrideState(view); writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-a", view ?? ""); };
   const [slotViews, setSlotViews] = createSignal(initialViews);
-  const [slotOrder, setSlotOrder] = createSignal<number[]>([0, 1].filter((slot) => initialViews[slot]));
+  const [slotOrder, setSlotOrder] = createSignal<number[]>(SLOT_IDS.filter((slot) => initialViews[slot]));
   // Panes moved into the dock: their slots keep their documents and sessions,
   // drawn in the dock rather than the row. The dock shows one at a time, or a tool.
-  const storedDocked = (urlNamesPanes ? launchUrl.searchParams.getAll("dock") : atStart ? (readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-docked") || "").split("\n") : []).filter(Boolean);
-  const [dockedSlots, setDockedSlots] = createSignal<number[]>([0, 1].filter((slot) => initialViews[slot] && storedDocked.includes(initialViews[slot]!)));
+  const [dockedSlots, setDockedSlots] = createSignal<number[]>([2, 3, 4].filter((slot) => initialViews[slot]));
   const [dockSlot, setDockSlot] = createSignal<number | null>(null);
   const isDocked = (slot: PaneKey) => slot !== "main" && dockedSlots().includes(slot);
   const [dockDocHost, setDockDocHost] = createSignal<HTMLElement>();
@@ -972,7 +975,7 @@ function App() {
   });
   const { chat, models, permissions, serviceLevels, attachments, activeProfile, composerStatus, setComposerStatus } = session;
   // Panes B and C: a slot each, with its own chat session (6b).
-  const paneSlots: PaneSlot[] = [0, 1].map((index) => {
+  const paneSlots: PaneSlot[] = SLOT_IDS.map((index) => {
     const [host, setHost] = createSignal<HTMLElement>();
     return {
       index, host, setHost, draft: null,
@@ -2271,6 +2274,12 @@ function App() {
    * move to it, as they did to the one split.
    */
   const slotView = (slot: number) => slotViews()[slot] ?? null;
+  // Panes in the row (folded ones included): two at most beside pane A.
+  const rowSlots = () => slotOrder().filter((slot) => slotView(slot) && !isDocked(slot));
+  // A free slot for a pane in the row or, `docked`, in the dock -- each has its own room.
+  const freeSlot = (docked = false) => (docked ? dockedSlots().length < MAX_DOCKED : rowSlots().length < 2) ? SLOT_IDS.find((slot) => !slotOrder().includes(slot)) ?? null : null;
+  // The dock is as narrow as what it shows may go: a docked pane's document, else a tool.
+  const dockMinWidth = () => { const slot = dockSlot(); return slot !== null && isDocked(slot) ? viewMinWidth(slotView(slot)) : MIN_SPLIT_PANE_WIDTH; };
   /*
    * Each document declares the narrowest its pane may go: one with a
    * composer, a chat or a page, the dashboard composer's least; a file viewer
@@ -2281,7 +2290,7 @@ function App() {
   const viewMinWidth = (view: SplitView | null) => !view || isPaneView(view) ? MIN_MAIN_PANE_WIDTH : MIN_SPLIT_PANE_WIDTH;
   const paneMinWidth = (pane: PaneKey) => viewMinWidth(pane === "main" ? paneAView() : slotView(pane));
   // The open dock keeps its own minimum; panes fold before it is pushed out.
-  const viewsFit = (views: (SplitView | null)[]) => layoutWidth() - (panelOpen() && dockAvailable() ? MIN_SPLIT_PANE_WIDTH + 8 : 0)
+  const viewsFit = (views: (SplitView | null)[]) => layoutWidth() - (panelOpen() && dockAvailable() ? dockMinWidth() + 8 : 0)
     >= views.reduce((sum, view) => sum + viewMinWidth(view) + 16, viewMinWidth(paneAView()));
   const splitFits = (extra: number) => viewsFit(Array(extra).fill("files:"));
   const shownSlots = createMemo(() => {
@@ -2341,7 +2350,7 @@ function App() {
     return () => { if (releaseSplitFile === release) releaseSplitFile = undefined; };
   };
   const persistSlots = () => {
-    const views = slotOrder().map(slotView).filter(Boolean);
+    const views = rowSlots().map(slotView);
     writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split", views[0] ?? "");
     writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-2", views[1] ?? "");
     writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-docked", dockedSlots().map(slotView).filter(Boolean).join("\n"));
@@ -2436,7 +2445,7 @@ function App() {
     let slot = isToolView(view) ? toolSlot() : null;
     if (slot === null && (shown.length >= 2 || !viewsFit([...shown.map(slotView), view]))) slot = shown[position] ?? shown[position - 1] ?? shown[shown.length - 1] ?? null;
     const displaced = slot === null ? null : slotView(slot);
-    if (slot === null) slot = [0, 1].find((candidate) => !slotOrder().includes(candidate)) ?? null;
+    if (slot === null) slot = freeSlot();
     if (slot === null) return;
     if (!setSlotView(slot, view, false, slotOrder().includes(slot) ? undefined : position)) return;
     if (panelOpen() && dockTool() === view) closePanel();
@@ -2724,7 +2733,7 @@ function App() {
     swappingPanes = true;
     try {
       if (target.zone !== "middle") {
-        const free = [0, 1].find((slot) => !slotOrder().includes(slot));
+        const free = freeSlot() ?? undefined;
         if (free === undefined) return;
         const index = panesShown().indexOf(target.pane);
         pane = free;
@@ -2790,8 +2799,7 @@ function App() {
     const next = view as SplitView;
     const docked = dockedSlots().find((slot) => slotView(slot) === next);
     if (docked !== undefined) {
-      undockPane(docked, false);
-      if (!shownSlots().includes(docked)) return;
+      if (!undockPane(docked, false) || !shownSlots().includes(docked)) return;
       if (target.pane === docked) return focusPane(docked);
       return void await movePaneDocument(docked, target);
     }
@@ -2809,7 +2817,7 @@ function App() {
       }
       return focusAnyPane(target.pane);
     }
-    const free = [0, 1].find((slot) => !slotOrder().includes(slot));
+    const free = freeSlot() ?? undefined;
     if (free === undefined) return;
     const index = panesShown().indexOf(target.pane);
     if (target.zone === "right") { if (setSlotView(free, next, false, index)) focusPane(free); return; }
@@ -3790,7 +3798,7 @@ function App() {
   const moveSideToPane = (pane: PaneKey, side: number) => {
     const shown = parseFileView(viewOf(pane)) ?? [];
     const entry = shown[side];
-    const free = [0, 1].find((slot) => !slotOrder().includes(slot));
+    const free = freeSlot() ?? undefined;
     if (!entry || free === undefined) return;
     const tabs = fileTabsOf(pane, side);
     if (handlesOf(pane)[side]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and move this side?")) return;
@@ -4082,19 +4090,19 @@ function App() {
    * take its place, and only into a free slot.
    */
   const canDock = (pane: PaneKey) => !isMobileLayout() && dockAvailable() && !isDocked(pane)
-    && (pane !== "main" || (shownSlots()[0] !== undefined && [0, 1].some((slot) => !slotOrder().includes(slot)) && Boolean(paneAView())));
+    && dockedSlots().length < MAX_DOCKED && (pane !== "main" || (shownSlots()[0] !== undefined && Boolean(paneAView())));
   const showDocked = (slot: number) => {
     batch(() => { setDockSlot(slot); setPanelOpenForChat(true); });
     requestAnimationFrame(() => focusPane(slot));
   };
   const dockPane = (pane: PaneKey) => {
-    if (!canDock(pane)) return void toast.info(pane === "main" ? "Pane A docks only while another pane can take its place." : "This pane cannot move to the dock here.");
+    if (!canDock(pane)) return void toast.info(pane === "main" ? "Pane A docks only while another pane can take its place." : "The dock holds three panes at most.");
     if (pane !== "main") {
       setDockedSlots((current) => [...current, pane]);
       persistSlots();
       return showDocked(pane);
     }
-    const free = [0, 1].find((slot) => !slotOrder().includes(slot))!;
+    const free = freeSlot(true)!;
     movingDocuments = true;
     batch(() => {
       setSlotView(free, paneAView());
@@ -4107,21 +4115,23 @@ function App() {
   };
   // Back out of the dock into the row, at the end, folding if there is no room.
   const undockPane = (slot: number, focus = true) => {
+    if (rowSlots().length >= 2) { toast.info("There is no room for another pane."); return false; }
     batch(() => {
       setDockedSlots((current) => current.filter((item) => item !== slot));
       if (dockSlot() === slot) { setDockSlot(null); closePanel(); }
     });
     persistSlots();
     if (focus && shownSlots().includes(slot)) focusPane(slot);
+    return true;
   };
   const chooseDocked = (slot: number, alt: boolean) => {
-    if (alt) return undockPane(slot);
+    if (alt) return void undockPane(slot);
     if (panelOpen() && dockSlot() === slot) return closePanel();
     showDocked(slot);
   };
   const paneTabActions = (pane: PaneKey) => <Show when={isDocked(pane)} fallback={paneRowActions(pane)}>
     <span class="pane-tab-actions">
-      <button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Move to a pane" title="Move to a pane" onClick={() => undockPane(pane as number)}><Columns2Icon /></button>
+      <button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Move to a pane" title="Move to a pane" onClick={() => void undockPane(pane as number)}><Columns2Icon /></button>
       <button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Close this pane" title="Close" onClick={() => closeSlot(pane as number)}><XIcon /></button>
     </span>
   </Show>;
@@ -4144,7 +4154,7 @@ function App() {
     const url = new URL(address, location.href);
     for (const name of PANE_PARAMS) url.searchParams.delete(name);
     if (paneAOverride()) url.searchParams.set("a", paneAOverride()!);
-    for (const view of slotOrder().map(slotView)) if (view) url.searchParams.append("pane", view);
+    for (const view of rowSlots().map(slotView)) if (view) url.searchParams.append("pane", view);
     for (const slot of dockedSlots()) { const view = slotView(slot); if (view) url.searchParams.append("dock", view); }
     for (const value of tabParams()) url.searchParams.append("tabs", value);
     for (const value of fileTabParams()) url.searchParams.append("ftabs", value);
@@ -4183,10 +4193,14 @@ function App() {
   const applyPanesFromUrl = () => {
     const params = new URLSearchParams(location.search);
     const views = params.getAll("pane").filter(isSplitView).slice(0, 2);
+    const docked = params.getAll("dock").filter(isSplitView).slice(0, MAX_DOCKED);
     const a = params.get("a");
     batch(() => {
-      setSlotViews([views[0] ?? null, views[1] ?? null]);
-      setSlotOrder(views.map((_, index) => index));
+      const next = [views[0] ?? null, views[1] ?? null, ...[0, 1, 2].map((index) => docked[index] ?? null)];
+      setSlotViews(next);
+      setSlotOrder(SLOT_IDS.filter((slot) => next[slot]));
+      setDockedSlots([2, 3, 4].filter((slot) => next[slot]));
+      if (dockSlot() !== null && !next[dockSlot()!]) setDockSlot(null);
       setPaneAOverride(isSplitView(a) && !/^(chat|page):/.test(a) ? a : null);
       setPaneTabs(tabsFromParams(params));
       setFileTabs(fileTabsFromParams(params));
@@ -5345,8 +5359,8 @@ function App() {
     <For each={renderSlots()}>{(slot, position) => renderSlot(slot, position, false)}</For>
     <Show when={dockSlot() !== null && isDocked(dockSlot()!) && dockDocHost() ? dockSlot() : null} keyed>{(slot) =>
       <Portal mount={dockDocHost()!}>{renderSlot(slot, () => 0, true)}</Portal>}</Show>
-    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} documentHost={setDockDocHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
-    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} documentHost={setDockDocHost} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
+    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} documentHost={setDockDocHost} minWidth={dockMinWidth} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
+    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} documentHost={setDockDocHost} minWidth={dockMinWidth} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </div>
     <Show when={dragHintContent()}>{(hint) => <div class="drag-hint" aria-hidden="true" ref={(element) => { dragHintElement = element; placeDragHint(); onCleanup(() => { if (dragHintElement === element) dragHintElement = undefined; }); }}>
       <Show when={hint().icon} keyed>{(icon) => ({ left: <PanelLeftIcon />, right: <PanelRightIcon />, column: <Columns2Icon />, tab: <PanelTopIcon />, swap: <ArrowLeftRightIcon />, here: <PanelTopIcon /> })[icon]}</Show>{hint().text}
@@ -5354,7 +5368,7 @@ function App() {
     <Show when={docDrop() && ["left", "middle", "right", "dock"].includes(docDrop()!.zone) ? docDrop() : null}>{(drop) => <div class="doc-drop" aria-hidden="true" style={{ left: `${drop().rect.left}px`, top: `${drop().rect.top}px`, width: `${drop().rect.width}px`, height: `${drop().rect.height}px` }} />}</Show>
     <WorkspaceRail tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard"].includes(routeKind()) && selectedProject() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
       panes={splitShown() ? shownSlots().length + 1 : 1} onLayout={applyPaneLayout}
-      folded={foldedSlots().map((slot) => ({ slot, letter: slotOrder().filter((item) => slotView(item)).indexOf(slot) === 0 ? "B" : "C", name: viewName(slotView(slot)) }))} onShowFolded={(slot) => void showFolded(slot)}
+      folded={foldedSlots().map((slot) => ({ slot, letter: rowSlots().indexOf(slot) === 0 ? "B" : "C", name: viewName(slotView(slot)) }))} onShowFolded={(slot) => void showFolded(slot)}
       docked={dockedSlots().filter((slot) => slotView(slot)).map((slot) => ({ slot, view: slotView(slot)!, name: viewName(slotView(slot)) }))} currentDocked={panelOpen() ? dockSlot() : null} onChooseDocked={chooseDocked}
       current={panelOpen() && dockSlot() === null ? dockTool() : null} inSplit={splitToolShown()} onDock={moveToDock} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : dockProject()?.kind === "workspace"} onChoose={chooseRailTool} />
     </Show>
