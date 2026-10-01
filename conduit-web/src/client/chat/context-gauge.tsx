@@ -91,6 +91,12 @@ export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean 
   const window = () => contextWindow(usage());
   const share = (tokens: number) => window() ? `${(tokens / window()! * 100).toFixed(1)}%` : "";
   const cache = () => cacheHitPercent(props.chat.sessionStats()?.tokens) ?? cacheHitPercent(usage()?.lastRequestUsage);
+  // A session that has never read or written the cache is not a run of misses:
+  // the provider (or a router switching models per request) never cached.
+  const uncached = () => {
+    const totals = props.chat.sessionStats()?.tokens ?? usage()?.lastRequestUsage;
+    return totals != null && !totals.cacheRead && !totals.cacheWrite;
+  };
   const eligible = () => props.chat.cacheStats()?.eligibleHitRate ?? null;
   const cost = () => props.chat.sessionStats()?.cost || 0;
   const sessionId = () => {
@@ -106,7 +112,7 @@ export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean 
         <ContextBar chat={props.chat} />
         <Show when={cache() != null || eligible() != null}>
           <div class="context-breakdown-total" title="Share of input served from cache; of what the previous request already sent, how much was reused">
-            <span>Cache</span><span>{[cache() != null ? `${Math.round(cache()!)}% of input` : "", eligible() != null ? `${Math.round(eligible()! * 100)}% of reusable` : ""].filter(Boolean).join(" · ")}</span>
+            <span>Cache</span><span>{uncached() ? "No cache reads reported" : [cache() != null ? `${Math.round(cache()!)}% of input` : "", eligible() != null ? `${Math.round(eligible()! * 100)}% of reusable` : ""].filter(Boolean).join(" · ")}</span>
           </div>
         </Show>
         <div class="context-breakdown-rows">
