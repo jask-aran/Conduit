@@ -126,6 +126,9 @@ summary.context-breakdown-row:hover { background: oklch(1 0 0 / 10%); color: var
 .chat-header-menu-context-trigger .context-breakdown-bar { margin-inline: 0; }
 .chat-header-menu-context-block .context-breakdown { padding-bottom: 4px; }
 .chat-header-menu-context-block .context-breakdown-separator { margin-inline: 0; }
-/* No focus rings (DESIGN.md, Never): a composer control that holds focus --
-   as one does when Escape hands it back from its popover -- shows the wash. */
+/* No focus rings (DESIGN.md, Never). Keyboard focus is the wash, but Escape
+   handing focus back to a control the pointer opened is not the keyboard
+   engaging: only a control opened from the keyboard shows it. */
 .composer-actions :is(button, [role="button"]):focus-visible { outline: none; box-shadow: none; background: var(--accent); }
+.composer-actions [data-pointer-opened]:focus-visible:not(:hover) { background: transparent; }
+.context-breakdown-load small { margin-left: auto; color: var(--muted-foreground); font-size: 9.6px; }

@@ -1160,7 +1160,40 @@ export class ClaudeCodeAdapter extends EventEmitter {
       if (message.model && message.model !== "<synthetic>") model = message.model;
       requests.push(requestUsage(message.usage));
     }
-    return usageFromRequests(requests, { model, contextWindow: model ? ClaudeCodeAdapter.windows.get(model) : null });
+    const usage = usageFromRequests(requests, { model, contextWindow: model ? ClaudeCodeAdapter.windows.get(model) : null });
+    // The categories need Claude Code itself; the readout offers to ask it.
+    if (usage) usage.contextUsage.breakdown = "loadable";
+    return usage;
+  }
+
+  /**
+   * An old thread's full /context breakdown: resume its session idle -- no
+   * prompt is sent, so nothing is written -- ask Claude Code, and close it.
+   */
+  async contextBreakdown({ opaqueSession, project }) {
+    const sessionId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
+    if (!sessionId) return null;
+    const input = new InputQueue();
+    const query = this.sdk.query({ prompt: input, options: {
+      cwd: project?.workingRoot,
+      ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}),
+      resume: sessionId,
+      allowDangerouslySkipPermissions: true,
+    } });
+    const drained = (async () => { try { for await (const message of query) void message; } catch { /* closed below */ } })();
+    try {
+      await query.initializationResult();
+      const context = await query.getContextUsage({ detail: "full" });
+      if (context.model && context.maxTokens) ClaudeCodeAdapter.windows.set(context.model, context.maxTokens);
+      const history = await this.contextFromHistory({ opaqueSession });
+      return { ...(history || {}), contextUsage: { ...(history?.contextUsage || {}), tokens: context.totalTokens,
+        contextWindow: context.maxTokens || null, percent: context.maxTokens ? (context.totalTokens / context.maxTokens) * 100 : null,
+        model: context.model || history?.contextUsage?.model || null, categories: contextCategories(context), breakdown: "loaded" } };
+    } finally {
+      input.end();
+      try { query.close(); } catch { /* already gone */ }
+      await Promise.race([drained, new Promise((resolve) => setTimeout(resolve, 2000))]);
+    }
   }
 
   async readTranscript({ liveSessionId, opaqueSession }) {
