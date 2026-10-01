@@ -1,6 +1,7 @@
 import path from "node:path";
 import { conduitPiSessionFile } from "../../backend-session.js";
 import { usageFromRequests } from "../../cache-stats.js";
+import { piPlanUsage } from "../../plan-usage.js";
 import { chatView, isChatId } from "../../chat-store.js";
 import { applyMessageIds, entryMessageRows } from "../../message-ids.js";
 import { applyTranscriptOps } from "../../transcript-fold.js";
@@ -104,7 +105,8 @@ export function registerSessionRoutes(app, {
         const contextWindow = model ? await piModelWindow?.(model, context.project.workingRoot).catch(() => null) : null;
         const reserve = piCompactReserve?.();
         const compactAt = reserve && contextWindow > reserve ? contextWindow - reserve : null;
-        return response.json(usageFromRequests(requests, { model, contextWindow, cost, compactAt }) || {});
+        const plan = model ? await piPlanUsage(config.piAgentDir, model).catch(() => null) : null;
+        return response.json(usageFromRequests(requests, { model, contextWindow, cost, compactAt, plan }) || {});
       }
       const adapter = backends.forChat(context.chat);
       const usage = await adapter.contextFromHistory?.({ chatId: context.chat.id,

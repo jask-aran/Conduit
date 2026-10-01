@@ -12,6 +12,7 @@ import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js
 import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageDrop, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { countCacheRequest, planWindowLabel, usageFromRequests } from "./cache-stats.js";
+import { codexPlanUsage } from "./plan-usage.js";
 import { unsupported } from "./harnesses/unsupported.js";
 
 export const CODEX_CAPABILITIES = Object.freeze({
@@ -494,8 +495,9 @@ export class CodexAppServerAdapter extends EventEmitter {
   refreshPlan(record) {
     if (Date.now() - CodexAppServerAdapter.plan.at < 60_000) return;
     CodexAppServerAdapter.plan.at = Date.now();
-    void this.request(record, "account/rateLimits/read", {}).then((result) => {
-      CodexAppServerAdapter.plan.value = codexPlan(result?.rateLimits, CodexAppServerAdapter.plan.value);
+    void codexPlanUsage().then(async (polled) => polled
+      || codexPlan((await this.request(record, "account/rateLimits/read", {}))?.rateLimits, CodexAppServerAdapter.plan.value)).then((plan) => {
+      CodexAppServerAdapter.plan.value = plan || CodexAppServerAdapter.plan.value;
       if (!record.contextUsage) return;
       record.contextUsage = { ...record.contextUsage, plan: CodexAppServerAdapter.plan.value };
       this.publish(record, { type: "usage", generationId: record.generation?.id || null, contextUsage: record.contextUsage,
@@ -536,7 +538,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       requests.push({ input: Math.max(0, last.input_tokens - last.cached_input_tokens), output: last.output_tokens,
         cacheRead: last.cached_input_tokens, cacheWrite: last.cache_write_input_tokens || 0, reasoning: last.reasoning_output_tokens });
     }
-    return usageFromRequests(requests, { contextWindow: window, model, plan: CodexAppServerAdapter.plan.value || plan });
+    return usageFromRequests(requests, { contextWindow: window, model, plan: await codexPlanUsage() || CodexAppServerAdapter.plan.value || plan });
   }
 
   async readTranscript({ liveSessionId, chatId, opaqueSession, project, turns: turnLimit, before = null }) {
