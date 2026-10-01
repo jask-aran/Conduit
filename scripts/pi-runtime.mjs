@@ -108,6 +108,8 @@ export function templatePublicView(template) {
   };
 }
 
+const PI_BUILTIN_TOOLS = new Map([["codemode", "builtin:codemode"], ["tool_search", "builtin:tool-search"]]);
+
 export function buildPiResourceArgs(template) {
   const args = [
     "--no-approve",
@@ -120,6 +122,9 @@ export function buildPiResourceArgs(template) {
     "--tools", template.tools.join(","),
   ];
   if (template.models?.length) args.push("--models", template.models.join(","));
+  // --no-extensions also turns off Pi's built-in extensions; a tool they own
+  // comes back by loading its extension by name.
+  for (const [tool, builtin] of PI_BUILTIN_TOOLS) if (template.tools.includes(tool)) args.push("--extension", builtin);
   for (const extension of template.extensions) args.push("--extension", extension);
   for (const skill of template.skills) args.push("--skill", skill);
   for (const promptTemplate of template.promptTemplates) args.push("--prompt-template", promptTemplate);
