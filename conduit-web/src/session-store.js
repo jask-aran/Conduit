@@ -6,7 +6,7 @@ import { wasAborted } from "./abort-signature.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { CONTINUE_PROMPT, mergeContinuation } from "./continuation.js";
 import { wasDiscarded } from "./abort-signature.js";
-import { PI_CAPABILITIES, PI_TOOL_KINDS, piResultFailed, piResultSubject, piToolSubject } from "./pi-capabilities.js";
+import { PI_CAPABILITIES, PI_TOOL_KINDS, piResultCalls, piResultFailed, piResultSubject, piToolSubject } from "./pi-capabilities.js";
 import { toolKind } from "./harnesses/transcript-ops.js";
 import { isPathInside } from "./workspace-paths.js";
 
@@ -726,10 +726,12 @@ export function toolsFromEntries(entries) {
       };
       const name = current.name || message.toolName;
       const subject = piResultSubject(name, message.details);
+      const calls = piResultCalls(name, message.details);
       tools.set(message.toolCallId, {
         ...current,
         name,
         ...(subject ? { subject } : {}),
+        ...(calls ? { calls } : {}),
         done: true,
         ...(entry.timestamp ? { completedAt: entry.timestamp } : {}),
         isError: message.isError === true || piResultFailed(name, message.details),

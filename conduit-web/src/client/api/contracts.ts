@@ -247,7 +247,7 @@ export interface ContentBlock {
 
 export type TurnOutcome = "complete" | "interrupted" | "failed";
 /** What a tool did, stated by the harness adapter from its own tool names. */
-export type ToolKind = "command" | "read" | "edit" | "search" | "fetch" | "other";
+export type ToolKind = "command" | "read" | "edit" | "search" | "fetch" | "script" | "other";
 
 export interface Message {
   id: string;
@@ -320,12 +320,22 @@ export interface Message {
  * that says whether it is finished. Nothing downstream had to ask which of the
  * two to render; it had to remember to ask.
  */
+export interface ToolCallStep {
+  name: string;
+  kind: ToolKind;
+  subject?: string;
+  isError?: boolean;
+  durationMs?: number;
+}
+
 export interface ToolItem {
   toolCallId: string;
   name?: string;
   kind?: ToolKind;
   /** What it acted on, in one line, as the adapter states it. */
   subject?: string;
+  /** The tools a script step called, in order (Pi's codemode). */
+  calls?: ToolCallStep[];
   input?: unknown;
   output?: unknown;
   outputDeferred?: boolean;

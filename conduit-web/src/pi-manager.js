@@ -1051,7 +1051,7 @@ export class PiManager extends EventEmitter {
         // failing ("Command aborted"). This process asked for the stop.
         this.publish(record, toolClose({ toolCallId: event.toolCallId, output: event.output,
           isError: event.isError, cancelled: Boolean(event.isError && record.generation?.aborting),
-          subject: event.subject || null, generationId: record.generation?.id || null }));
+          subject: event.subject || null, calls: event.calls || null, generationId: record.generation?.id || null }));
       }
       if (TURN_ENDINGS.has(event.type)) {
         this.dropUnwrittenMessages(record);
