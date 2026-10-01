@@ -17,6 +17,10 @@
 .workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 0 6.4px 0; flex: none; overflow: visible; pointer-events: none; border-radius: 12.8px; transition: width 220ms var(--panel-motion-easing), margin-right 220ms var(--panel-motion-easing); }
 .workspace-panel.workspace-panel-open { pointer-events: auto; background: var(--background); }
 .workspace-panel[data-edge-instant="true"] { transition: none !important; }
+/* Over the panes: the dock takes no room in the row and floats above it. */
+.workspace-panel.workspace-panel-overlay { z-index: 40; width: 0 !important; margin-right: 0 !important; background: transparent; }
+.workspace-panel-overlay .workspace-panel-surface { right: 0; left: auto; width: var(--workspace-shell-width); box-shadow: 0 18px 48px oklch(0 0 0 / 45%), 0 0 0 1px var(--border); }
+.workspace-panel-overlay .workspace-resize-handle { left: calc(-1 * var(--workspace-shell-width) - 12px); }
 /* Surface keeps settled panel width, right-anchored inside the shell. */
 .workspace-panel-surface { position: absolute; inset: 0; display: flex; min-width: 0; height: 100%; contain: layout paint; container-name: workspace-surface; container-type: inline-size; flex: none; flex-direction: column; overflow: hidden; border-radius: 12.8px; background: var(--background); }
 .workspace-panel-surface > * { max-width: 100%; }

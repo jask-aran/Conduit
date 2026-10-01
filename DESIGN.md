@@ -296,6 +296,7 @@ How panes, tabs, the dock and the window behave. Every arrangement follows these
 - **Files follows the pane with the keyboard**: it shows that pane's place, so focus and the dock never disagree; a pane with no place leaves it where it was.
 - **Tools open in the dock by default**, the terminal included; Alt on a rail tool or a shell, or dragging it to a pane, opens it as a pane instead.
 - **Any pane can move into the dock**, by its header's button, the leader (D, from a chat or tool; a page keeps D for Changes) or dragging its header onto the dock or the rail. It keeps its document and session and gets a rail icon of its own: a click shows it in the dock (again closes the dock), and Alt or dragging it from the rail puts it back in a pane. The dock holds up to three panes in addition to the row's and shows one thing at a time, a tool or a docked pane, at that document's own minimum width. Pane A docks only while another pane can take its place.
+- **The dock sits beside the panes or over them**, switched per device from the rail's foot. Beside, it takes its room from the row; over, it floats above the panes with a shadow, takes no room, and nothing beneath it moves.
 - **A tool can move out of the dock** into a pane beside the chat, by its header's button, the leader, or dragging its header, and back the same ways. Its rail icon is then white at the resting weight: open, not current.
 - **A pane's swap and close sit once at its right edge**, as small quiet icons acting on the whole pane.
 

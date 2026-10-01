@@ -44,7 +44,7 @@ function panelTab(value: string): PanelTab | null {
 
 const MIN_WORKSPACE_PANE_WIDTH = 240;
 
-export default function WorkspacePanel(props: { connectivity?: () => Connectivity; projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; commentChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; onFocusRequestComplete?: () => void; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onRequestOpen?: () => void; onToggleExpanded: () => void; onClose: () => void; onTabChange?: (tab: PanelTab) => void; splitView?: Accessor<SplitView | null>; splitHost?: Accessor<HTMLElement | undefined>; onOpenBeside?: (view: SplitView) => void; onMoveToDock?: (view: SplitView) => void; onCloseSplit?: (focus?: boolean) => void; bindSplit?: (release: (toDock: boolean) => boolean) => () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing>; onOpenFile?: (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest }) => void; openFiles?: Accessor<Map<string, "focused" | "shown">>; documentShown?: Accessor<boolean>; minWidth?: Accessor<number>; documentHost?: (element: HTMLElement | undefined) => void }) {
+export default function WorkspacePanel(props: { connectivity?: () => Connectivity; projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; commentChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; onFocusRequestComplete?: () => void; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onRequestOpen?: () => void; onToggleExpanded: () => void; onClose: () => void; onTabChange?: (tab: PanelTab) => void; splitView?: Accessor<SplitView | null>; splitHost?: Accessor<HTMLElement | undefined>; onOpenBeside?: (view: SplitView) => void; onMoveToDock?: (view: SplitView) => void; onCloseSplit?: (focus?: boolean) => void; bindSplit?: (release: (toDock: boolean) => boolean) => () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing>; onOpenFile?: (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest }) => void; openFiles?: Accessor<Map<string, "focused" | "shown">>; documentShown?: Accessor<boolean>; minWidth?: Accessor<number>; overlay?: Accessor<boolean>; documentHost?: (element: HTMLElement | undefined) => void }) {
   let panelRoot: HTMLElement | undefined;
   let resizeHandle: HTMLDivElement | undefined;
   let panelMotionId = 0;
@@ -330,8 +330,11 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   window.addEventListener(TURN_ARTIFACT_NAVIGATION_EVENT, resolveTurnArtifactNavigation);
   onCleanup(() => window.removeEventListener(TURN_ARTIFACT_NAVIGATION_EVENT, resolveTurnArtifactNavigation));
 
+  // Over the panes, the dock takes no room from them, so nothing beneath it moves.
+  const panelMotion = (detail: Parameters<typeof dispatchPanelGeometryMotion>[0]) => { if (!props.overlay?.()) dispatchPanelGeometryMotion(detail); };
   // The panel takes room from the main pane only down to its minimum.
   const room = () => {
+    if (props.overlay?.()) return Infinity;
     const main = document.querySelector<HTMLElement>('[data-slot="sidebar-inset"]');
     if (!main || isMobileLayout()) return Infinity;
     // Every pane gives way down to its document's minimum.
@@ -359,8 +362,8 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     const targetSize = value + shellGap();
     if (Math.abs(targetSize - startSize) > 0.5) {
       const id = ++panelMotionId;
-      dispatchPanelGeometryMotion({ phase: "begin", id, source: "workspace", size: startSize, targetSize, duration: 0 });
-      dispatchPanelGeometryMotion({ phase: "end", id, source: "workspace", size: targetSize });
+      panelMotion({ phase: "begin", id, source: "workspace", size: startSize, targetSize, duration: 0 });
+      panelMotion({ phase: "end", id, source: "workspace", size: targetSize });
     }
     return value;
   };
@@ -417,7 +420,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     // the pointer and the gutter/transcript fight the ease.
     panelRoot?.setAttribute("data-edge-instant", "true");
     if (panelRoot) panelRoot.style.transition = "none";
-    dispatchPanelGeometryMotion({ phase: "begin", id, source: "workspace", size: startWidth + shellGap() });
+    panelMotion({ phase: "begin", id, source: "workspace", size: startWidth + shellGap() });
     const apply = () => {
       frame = 0;
       const nextWidth = clampWidth(pendingWidth);
@@ -427,7 +430,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
         setWidth(nextWidth);
         setShellWidth(nextWidth);
       });
-      dispatchPanelGeometryMotion({ phase: "change", id, source: "workspace", size: nextWidth + shellGap() });
+      panelMotion({ phase: "change", id, source: "workspace", size: nextWidth + shellGap() });
     };
     const move = (moveEvent: PointerEvent) => {
       pendingWidth = startWidth + startX - moveEvent.clientX;
@@ -446,7 +449,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
         setShellWidth(nextWidth);
       });
       writeSetting(projectScope(), "width", String(nextWidth));
-      dispatchPanelGeometryMotion({ phase: "end", id, source: "workspace", size: nextWidth + shellGap() });
+      panelMotion({ phase: "end", id, source: "workspace", size: nextWidth + shellGap() });
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
       window.removeEventListener("pointercancel", stop);
@@ -609,7 +612,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     <Show when={props.open()}>
       <button type="button" class="mobile-panel-backdrop" data-mobile-backdrop="workspace" data-for="workspace" aria-label="Dismiss workspace panel" onClick={props.onClose} />
     </Show>
-    <aside ref={panelRoot} class="workspace-panel" data-region="workspace-panel" classList={{ "workspace-panel-open": props.open() || shellWidth() > 0.5, "workspace-panel-expanded": props.expanded() }} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} {...dockDrop} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
+    <aside ref={panelRoot} class="workspace-panel" data-region="workspace-panel" classList={{ "workspace-panel-open": props.open() || shellWidth() > 0.5, "workspace-panel-expanded": props.expanded(), "workspace-panel-overlay": Boolean(props.overlay?.()) }} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} {...dockDrop} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
     <div ref={resizeHandle} class="workspace-resize-handle" role="separator" aria-label="Resize workspace panel" aria-orientation="vertical" aria-valuemin={minWidth()} aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 16); if (event.key === "ArrowRight") saveWidth(width() - 16); }} />
     <div class="workspace-panel-surface" classList={{ "workspace-panel-documented": Boolean(props.documentShown?.()) }} onPointerDown={focusWorkspaceSurface}>
     {toolHeader(tab, "dock")}
