@@ -51,7 +51,7 @@ test("Codex adapter advertises only implemented capabilities", () => {
     history: "linear", fork: true, regenerate: true,
     steer: true, followUpQueue: true, cancel: true, compaction: true,
     thinkingLevels: true, modelSwitch: true, toolUse: true, approvals: true, permissionModes: true,
-    usage: false, replay: false, attachments: true,
+    usage: true, replay: false, attachments: true,
     // Measured against the installed app-server: a turn interrupted 300
     // characters into its answer reports as `status: "interrupted"` holding the
     // prompt and an empty reasoning stub. The partial is not persisted, so it
