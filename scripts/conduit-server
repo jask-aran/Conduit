@@ -34,6 +34,7 @@ INSTALL_URL="${CONDUIT_INSTALL_URL:-https://get.jask-aran.com/conduit}"
 UV_VERSION="0.11.29"
 DEFAULT_PORT=4310; [[ "$PROFILE" == sandbox ]] && DEFAULT_PORT=4321
 CURRENT="$APP_HOME/current"
+TILDE="~"
 
 # ---------------------------------------------------------------- appearance
 if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
@@ -54,7 +55,7 @@ code_label() {
   elif [[ "$(code_kind)" == release ]]; then echo "release $(cat "$CURRENT/VERSION")"
   else
     local root; root="$(readlink -f "$CURRENT")"
-    echo "dev ${root/#$HOME/~} @ $(git -C "$root" rev-parse --short HEAD 2>/dev/null || echo '?')"
+    echo "dev ${root/#$HOME/$TILDE} @ $(git -C "$root" rev-parse --short HEAD 2>/dev/null || echo '?')"
   fi
 }
 # A release runs on the Node it was built with; a clone on the Node its
@@ -194,11 +195,11 @@ status() {
   if running; then row state "${G}${TICK} running${N}"; else row state "${R}${CROSS} stopped${N}"; fi
   row open "http://$([[ "$CONDUIT_HOST" == 0.0.0.0 ]] && echo "<this-machine>" || echo localhost):$CONDUIT_PORT"
   row service "$(service_kind) ${D}($NAME)${N}"
-  row data "${CONDUIT_DATA_ROOT/#$HOME/~}"
+  row data "${CONDUIT_DATA_ROOT/#$HOME/$TILDE}"
   row logs "$(log_hint)"
   echo
 }
-log_hint() { [[ "$(service_kind)" == systemd ]] && echo "journalctl --user -u $NAME" || echo "${LOG_FILE/#$HOME/~}"; }
+log_hint() { [[ "$(service_kind)" == systemd ]] && echo "journalctl --user -u $NAME" || echo "${LOG_FILE/#$HOME/$TILDE}"; }
 logs() {
   if [[ "$(service_kind)" == systemd ]]; then exec journalctl --user -u "$NAME" -n 200 -f -o cat
   else exec tail -n 200 -f "$LOG_FILE"; fi
@@ -206,6 +207,7 @@ logs() {
 
 # ---------------------------------------------------------------- which code
 use() {
+  load_env
   local what="${1:-}"
   case "$what" in
     dev)
@@ -341,7 +343,7 @@ uninstall() {
   [[ "$(service_kind)" == systemd ]] && systemctl --user daemon-reload 2>/dev/null || true
   rm -rf "$APP_HOME"
   if [[ -n "$PROFILE" ]]; then rm -rf "$STATE_DIR"; ok "Removed the $PROFILE daemon and its data"
-  else ok "Removed. Your data stays in ${STATE_DIR/#$HOME/~}"; fi
+  else ok "Removed. Your data stays in ${STATE_DIR/#$HOME/$TILDE}"; fi
 }
 
 usage() {
@@ -357,7 +359,7 @@ usage() {
   ${B}rollback${N}           the release before this one
   ${B}password${N}           change the login password
   ${B}doctor${N}             check Node, Python, agents and the server
-  ${B}uninstall${N}          remove the daemon; keeps ${STATE_DIR/#$HOME/~}
+  ${B}uninstall${N}          remove the daemon; keeps ${STATE_DIR/#$HOME/$TILDE}
 
 EOF
 }
