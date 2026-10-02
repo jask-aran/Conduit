@@ -79,16 +79,31 @@ uninstall` removes all of it.
 
 ## Reaching it
 
-Conduit binds `127.0.0.1:4310` unless setup was told otherwise -- it controls
-the computer, so exposing it is a choice:
+Setup asks how Conduit will be reached, and the choices follow what it finds
+(`conduit-server connect` asks again). The server stays on `127.0.0.1` for
+every choice except "my network" -- it controls the computer.
 
-- **This computer:** open `http://localhost:4310`, or point the desktop client
-  at it.
-- **Your devices anywhere:** Tailscale, `tailscale serve 4310`, and connect the
-  phone or desktop client to the machine's tailnet address.
-- **Public:** a Cloudflare Tunnel or your own reverse proxy in front of
-  `127.0.0.1:4310`. Conduit's password login and the clients' bearer tokens
-  assume an untrusted network; terminate TLS at the proxy.
+**A laptop or desktop** (a screen, macOS, or WSL):
+
+- *Just this computer* -- `http://localhost:4310`, or the desktop app.
+- *My devices anywhere, with Tailscale* -- `tailscale serve` gives it
+  `https://<machine>.<tailnet>.ts.net` for your phone and other computers.
+- *Any device on my network* -- binds `0.0.0.0`, opened at the LAN address.
+
+**A VPS used as a remote dev box** (reached over SSH, no screen):
+
+- *Tailscale (recommended)* -- installs Tailscale if it is missing (sudo once),
+  runs `tailscale up` to sign the server in, then `tailscale serve`. If serve is
+  refused for a non-root user it offers `tailscale set --operator=$USER`; if
+  the tailnet has HTTPS off, it says where to turn it on.
+- *SSH tunnel* -- nothing to install; it prints the `ssh -NL 4310:localhost:4310
+  user@<ip>` to run on your computer, then `http://localhost:4310`.
+- *Own proxy or Cloudflare Tunnel* -- point it at `127.0.0.1:4310` and terminate
+  HTTPS there. Password login and the clients' bearer tokens assume an
+  untrusted network.
+
+The choice is `CONDUIT_ACCESS` in `conduit.env`; `conduit-server status` shows
+the addresses it gives.
 
 ## Backup and restore
 
