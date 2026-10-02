@@ -79,29 +79,25 @@ uninstall` removes all of it.
 
 ## Reaching it
 
-Setup asks how Conduit will be reached, and the choices follow what it finds
-(`conduit-server connect` asks again). The server stays on `127.0.0.1` for
-every choice except "my network" -- it controls the computer.
-
-**A laptop or desktop** (a screen, macOS, or WSL):
+Setup asks how Conduit will be reached -- one list on every machine, since a
+desktop can sit behind a tunnel and a VPS can be used only over SSH; what it
+finds only annotates the choices (`conduit-server connect` asks again). The
+server stays on `127.0.0.1` for every choice except "my network".
 
 - *Just this computer* -- `http://localhost:4310`, or the desktop app.
-- *My devices anywhere, with Tailscale* -- `tailscale serve` gives it
-  `https://<machine>.<tailnet>.ts.net` for your phone and other computers.
+- *Tailscale* -- installs it if missing (sudo once), signs the machine in with
+  `tailscale up`, then `tailscale serve` gives `https://<machine>.<tailnet>.ts.net`.
+  A refused serve offers `tailscale set --operator=$USER`; HTTPS off in the
+  tailnet is pointed out.
+- *A tunnel or reverse proxy* -- point it at `http://127.0.0.1:4310` and let it
+  do HTTPS (`cloudflared tunnel --url http://127.0.0.1:4310`, Caddy
+  `reverse_proxy 127.0.0.1:4310`); WebSockets must pass through. Its public
+  address, if given, is shown by setup and `status` (`CONDUIT_PUBLIC_URL`).
+- *An SSH tunnel* -- prints the `ssh -NL 4310:localhost:4310 user@<ip>` to run on
+  your computer, then `http://localhost:4310`.
 - *Any device on my network* -- binds `0.0.0.0`, opened at the LAN address.
 
-**A VPS used as a remote dev box** (reached over SSH, no screen):
-
-- *Tailscale (recommended)* -- installs Tailscale if it is missing (sudo once),
-  runs `tailscale up` to sign the server in, then `tailscale serve`. If serve is
-  refused for a non-root user it offers `tailscale set --operator=$USER`; if
-  the tailnet has HTTPS off, it says where to turn it on.
-- *SSH tunnel* -- nothing to install; it prints the `ssh -NL 4310:localhost:4310
-  user@<ip>` to run on your computer, then `http://localhost:4310`.
-- *Own proxy or Cloudflare Tunnel* -- point it at `127.0.0.1:4310` and terminate
-  HTTPS there. Password login and the clients' bearer tokens assume an
-  untrusted network.
-
+Password login and the clients' bearer tokens assume an untrusted network.
 The choice is `CONDUIT_ACCESS` in `conduit.env`; `conduit-server status` shows
 the addresses it gives.
 
