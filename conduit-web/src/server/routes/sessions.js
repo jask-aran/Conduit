@@ -300,9 +300,19 @@ export function registerSessionRoutes(app, {
           const sessionOptions = session && installationRoot
             ? { sessionsDir: path.dirname(session.file), allowedRoot: installationRoot }
             : { sessionsDir: sessionDirectoryForChat(config, context.chat, context.project) };
-          const family = session ? await sessionFamilyFiles(session.file, context.project, sessionOptions) : [];
+          // A transcript outside this installation (written by another checkout)
+          // is not Conduit's to remove, but the chat that names it still is:
+          // the file is left where it is and the chat goes.
+          let family = [];
+          let foreign = false;
+          try { family = session ? await sessionFamilyFiles(session.file, context.project, sessionOptions) : []; }
+          catch (error) {
+            if (error?.reason !== "outside-installation") throw error;
+            foreign = true;
+            console.warn("Chat deleted; its transcript is outside this installation and was left in place", { chatId: context.chat.id, file: session.file });
+          }
           await stopSessionFamilyProcesses(backends, context.chat, family);
-          if (session) await removeSessionFamily(session.file, context.project, sessionOptions);
+          if (session && !foreign) await removeSessionFamily(session.file, context.project, sessionOptions);
           const familyFiles = new Set(family.map((file) => path.resolve(file)));
           const relatedChats = registry.listProject(context.project.id, { includeHidden: true })
             .filter((chat) => chat.id === context.chat.id
