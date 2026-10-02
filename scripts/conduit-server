@@ -228,6 +228,9 @@ use() {
     *) fail "use dev <clone> | release | v<version>" ;;
   esac
   link_cli
+  if [[ "$(code_kind)" == release && ! -x "$CURRENT/working-files/.venv/bin/python" ]]; then
+    sync_python && ok "Python tools for this release" || warn "Python tools skipped"
+  fi
   ok "Now $(code_label)"
   running && restart || true
 }
