@@ -24,7 +24,8 @@ function printHelp() {
                                           every device. The password is unchanged.
   conduit-auth status                     Reports whether a password is set and the
                                           active session count.
-  conduit-auth handoff                    Print a one-time, one-minute sign-in code.
+  conduit-auth handoff [seconds]          Print a one-time sign-in code (default 60s).
+  conduit-auth qr <text>                  Draw a QR code in the terminal.
   conduit-auth sessions                   Signed-in devices, as JSON.
   conduit-auth revoke <id>|all            Sign out one device, or all of them.
   conduit-auth mint-session [options]     Create a local session without a password.
@@ -173,7 +174,24 @@ try {
     await status();
   } else if (command === "handoff") {
     const store = new AuthStore(authFile);
-    process.stdout.write(`${await store.createHandoff()}\n`);
+    const ttl = Number(process.argv[3]) || 60;
+    process.stdout.write(`${await store.createHandoff({ ttlMs: ttl * 1000 })}\n`);
+  } else if (command === "qr") {
+    // qr <text> -- the code drawn in half blocks, two rows to a line, with the quiet zone.
+    const { default: QRCode } = await import("../conduit-web/node_modules/qrcode/lib/core/qrcode.js");
+    const { modules } = QRCode.create(process.argv[3], { errorCorrectionLevel: "L" });
+    const size = modules.size, quiet = 2;
+    const dark = (x, y) => x >= 0 && y >= 0 && x < size && y < size && modules.get(y, x);
+    const lines = [];
+    for (let y = -quiet; y < size + quiet; y += 2) {
+      let line = "";
+      for (let x = -quiet; x < size + quiet; x += 1) {
+        const top = dark(x, y), bottom = dark(x, y + 1);
+        line += top && bottom ? " " : top ? "▄" : bottom ? "▀" : "█";
+      }
+      lines.push(line);
+    }
+    process.stdout.write(`${lines.join("\n")}\n`);
   } else if (command === "sessions") {
     const store = new AuthStore(authFile);
     await store.load();

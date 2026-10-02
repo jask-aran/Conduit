@@ -70,6 +70,18 @@ export function registerAuthRoutes(app, { authStore, socketTickets }) {
     response.set("Cache-Control", "no-store").redirect(303, after);
   });
 
+  // The app's half of `conduit-server pair`: the code from the QR becomes a
+  // token, as a password would at native-login.
+  app.post("/v0/auth/native-pair", async (request, response) => {
+    if (!isNativeRequest(request)) return response.status(403).json({ error: "native_origin_required" });
+    if (!isTrustworthyRequest(request)) return response.status(400).json({ error: "https_required", message: "Pairing requires HTTPS unless the client is on this machine or this network." });
+    if (!await authStore.consumeHandoff(String(request.body?.code || "")).catch(() => false)) {
+      return response.status(401).json({ error: "pairing_code_invalid", message: "That pairing code has expired or was already used. Run conduit-server pair again." });
+    }
+    const login = await authStore.createSession({ kind: "native", userAgent: String(request.headers["user-agent"] || "").slice(0, 256) || null });
+    response.set("Cache-Control", "no-store").json({ token: login.token });
+  });
+
   app.post("/v0/auth/native-login", async (request, response) => {
     if (!isNativeRequest(request)) return response.status(403).json({ error: "native_origin_required" });
     if (!isTrustworthyRequest(request)) return response.status(400).json({ error: "https_required", message: "Native login requires HTTPS unless the client is on this machine or this network." });

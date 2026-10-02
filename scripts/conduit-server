@@ -575,6 +575,41 @@ open_cmd() {
   ok "Opened ${C}$base${N} ${D}signed in${N}"
 }
 
+# A QR of a one-time, five-minute sign-in link. A phone's camera opens it in
+# the browser, signed in; the app's "Scan QR code" redeems the same code for a
+# token of its own (POST /v0/auth/native-pair).
+pair() {
+  load_env
+  healthy || fail "Conduit is not running. $NAME start"
+  local base; base="$(access_urls | cut -d'|' -f1 | grep -v -E '//(localhost|127\.0\.0\.1)[:/]' | head -1)"
+  if [[ -z "$base" ]]; then
+    title "Pair a device"
+    warn "Only this computer can reach Conduit"
+    note "Choose Tailscale, a tunnel or your network first: $NAME connect"
+    outro ""; return 1
+  fi
+  local count; count="$(auth sessions | grep -o '"id"' | wc -l)"
+  local url="$base/v0/auth/handoff?code=$(auth handoff 300)&after=%2F"
+  title "Pair a phone or computer"
+  auth qr "$url" | sed "s/^/${D}${S_BAR}${N}  /"
+  bar
+  note "Scan with the Conduit app (Add server ${ARROW} Scan QR code) or a camera."
+  note "Or paste into the app's address field: ${N}${C}$url${N}"
+  note "Works once, for five minutes, from ${N}${B}$base${N}"
+  bar
+  local frames="$FRAMES" i=0 waited=0
+  while (( waited < 300 )); do
+    if (( $(auth sessions | grep -o '"id"' | wc -l) > count )); then
+      [[ -t 1 ]] && printf '\r\e[K'
+      ok "Paired ${D}$NAME sessions lists it${N}"; outro ""; return
+    fi
+    [[ -t 1 ]] && printf '\r\e[K%s%s%s  Waiting for a scan %s%ss%s' "$M" "${frames:i++%${#frames}:1}" "$N" "$D" "$((300 - waited))" "$N"
+    sleep 1; waited=$((waited + 1))
+  done
+  [[ -t 1 ]] && printf '\r\e[K'
+  warn "The code expired. $NAME pair for a new one"; outro ""
+}
+
 sessions_cmd() {
   load_env
   if [[ "${1:-}" == revoke ]]; then
@@ -777,7 +812,7 @@ report() {
 }
 
 completion() {
-  local cmds="setup connect status start stop restart logs open sessions use update rollback backup restore config projects password doctor report uninstall completion version help"
+  local cmds="setup connect pair status start stop restart logs open sessions use update rollback backup restore config projects password doctor report uninstall completion version help"
   case "${1:-}" in
     bash) printf 'complete -W "%s" %s\n' "$cmds" "$NAME" ;;
     zsh) printf '#compdef %s\n_arguments "1: :(%s)"\n' "$NAME" "$cmds"
@@ -803,6 +838,7 @@ usage() {
   cmd setup "password, port, how it is reached; then start"
   cmd connect "change how it is reached"
   cmd open "open it in the browser, signed in"
+  cmd pair "a QR code a phone or the app scans to sign in"
   cmd "status [--json]" "what runs, where, its addresses"
   cmd "start · stop · restart" "restart waits for live answers"
   cmd "logs [--since 1h] [--errors]" "follow or search the server's log"
@@ -834,6 +870,7 @@ case "$command" in
   status) status "$@" ;;
   logs) logs_cmd "$@" ;;
   open) open_cmd ;;
+  pair) pair ;;
   sessions) sessions_cmd "$@" ;;
   backup) backup "$@" ;;
   restore) restore "$@" ;;

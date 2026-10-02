@@ -42,5 +42,7 @@
     <!-- Dictation: the WebView asks for the microphone, and Capacitor can only
          pass that on to Android for permissions declared here. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 </manifest>
