@@ -19,7 +19,12 @@ NAME="conduit-server-$VERSION-$os-$arch"
 STAGE="$(mktemp -d)/conduit"
 trap 'rm -rf "$(dirname "$STAGE")"' EXIT
 
-[[ -f "$ROOT/conduit-web/dist/index.html" ]] || (cd "$ROOT/conduit-web" && npm run build)
+# A client older than its source is rebuilt: a stale dist would ship last
+# week's interface under this week's version.
+built="$ROOT/conduit-web/dist/index.html"
+if [[ ! -f "$built" ]] || [[ -n "$(find "$ROOT/conduit-web/src" "$ROOT/conduit-web/index.html" "$ROOT/conduit-web/package.json" -newer "$built" -print -quit)" ]]; then
+  (cd "$ROOT/conduit-web" && npm run build >&2)
+fi
 pty="$ROOT/conduit-web/node_modules/node-pty/build/Release"
 [[ -f "$pty/pty.node" ]] || { echo "node-pty is not built here; run npm ci in conduit-web" >&2; exit 1; }
 
