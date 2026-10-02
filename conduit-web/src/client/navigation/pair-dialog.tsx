@@ -1,6 +1,5 @@
 import * as KDialog from "@kobalte/core/dialog";
 import { createEffect, createSignal, on, onCleanup, Show } from "solid-js";
-import QRCode from "qrcode";
 import { XIcon } from "lucide-solid";
 import { Button } from "@/components/primitives";
 import { FrostOverlay } from "@/components/frost";
@@ -46,6 +45,8 @@ export function PairDialog(props: { open: boolean; onOpenChange: (open: boolean)
       const url = `${path.origin}/v0/auth/handoff?code=${encodeURIComponent(body.code)}&after=%2F`;
       setLink(url);
       setExpiresAt(Date.parse(body.expiresAt || "") || Date.now() + 300_000);
+      // Loaded on first use: the dialog is rare and the encoder is not small.
+      const { default: QRCode } = await import("qrcode");
       setSvg(await QRCode.toString(url, { type: "svg", margin: 2, errorCorrectionLevel: "L", color: { dark: "#000000", light: "#ffffff" } }));
     } catch (cause) {
       setError((cause as Error).message);
