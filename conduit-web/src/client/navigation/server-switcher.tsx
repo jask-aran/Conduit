@@ -242,7 +242,7 @@ export function ServerSwitcher(props: {
         </MenuGroup>
         <MenuSeparator />
       </Show>
-      <MenuItem onSelect={() => setPairing(true)}><QrCodeIcon />Pair a device</MenuItem>
+      <MenuItem onSelect={() => setTimeout(() => setPairing(true), 0)}><QrCodeIcon />Pair a device</MenuItem>
       <MenuItem onSelect={props.onAddServer}><PlusIcon />Add server</MenuItem>
       <MenuSeparator />
       <MenuItem onSelect={props.onOpenSettings}>Manage settings</MenuItem>
