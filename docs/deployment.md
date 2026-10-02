@@ -40,16 +40,27 @@ A development checkout uses the same `~/.conduit/data` unless
 
 | Command | Does |
 | --- | --- |
-| `conduit-server status` | version, whether it is healthy, where its data and logs are |
-| `conduit-server start` / `stop` / `restart` | restart waits up to ten minutes for answers still being written |
-| `conduit-server logs` | follows the log |
-| `conduit-server update [v]` | installs the latest (or a given) release and restarts |
-| `conduit-server rollback` | returns to the previous release |
-| `conduit-server password` | changes the login password |
-| `conduit-server doctor` | Node, Python tools, password, agents on PATH, server health |
-| `conduit-server uninstall` | removes the app and service; `~/.conduit` stays |
-| `conduit-server use dev <clone>` | runs a development clone instead of a release, on the same data and port |
-| `conduit-server use release` / `use v<v>` | back to an installed release |
+| `setup` / `connect` | password, port, how it is reached; `connect` asks only the last |
+| `open` | opens Conduit in the browser, signed in by a one-minute, one-time code |
+| `status [--json]` | what runs, its addresses, service, data, and whether an update is out |
+| `start` / `stop` / `restart` | restart waits up to ten minutes for answers still being written |
+| `logs [--since 1h] [--errors]` | follows the log, or searches it |
+| `projects [add <folder> [name]]` | lists projects, or adds a folder (handy over SSH) |
+| `sessions [revoke <id>\|all]` | signed-in browsers and apps; signs one or all out |
+| `config [get\|set\|unset K [V]]` | `CONDUIT_*` settings in `conduit.env`; restarts if running |
+| `password` | changes the login password, signing everything out |
+| `update [v] [--channel beta]` | installs the latest (or a given) release; beta follows pre-releases |
+| `use dev <clone>` / `use release` / `use v<v>` | which code the daemon runs |
+| `rollback` | the release before this one |
+| `backup [--lean] [file]` / `restore <file>` | archives `~/.conduit/data` without toolchains and voice models (`--lean` also skips turn checkpoints and worktrees), pausing the server for a consistent copy; restore keeps the old data beside it |
+| `doctor [--fix] [--json]` | Node, Python, password, lingering, service file, agents installed and signed in, port, health; `--fix` repairs what it can |
+| `report` | a bundle for a bug report: status, doctor, system, settings and recent logs with tokens cut out |
+| `completion bash\|zsh` | shell completion |
+| `uninstall` | removes the app and service; `~/.conduit` stays |
+
+All are `conduit-server <command>`. Releases are checked against the release
+signing key (the Windows updater's) as well as their SHA-256, by a verifier
+carried in `install.sh` and run with the downloaded Node.
 
 The service is a `systemd --user` unit on Linux (with lingering enabled, so it
 survives logout on a headless machine) and a launchd agent on macOS. Without

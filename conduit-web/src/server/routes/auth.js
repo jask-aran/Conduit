@@ -59,6 +59,17 @@ export function registerAuthRoutes(app, { authStore, socketTickets }) {
     response.redirect(303, after);
   });
 
+  // A one-time code from `conduit-server open` becomes a browser session.
+  app.get("/v0/auth/handoff", async (request, response) => {
+    const after = safeRedirectTarget(request.query.after);
+    if (!await authStore.consumeHandoff(String(request.query.code || "")).catch(() => false)) {
+      return response.redirect(303, `/login?after=${encodeURIComponent(after)}`);
+    }
+    const login = await authStore.createSession({ userAgent: String(request.headers["user-agent"] || "").slice(0, 256) || null });
+    issueSessionCookie(response, login.token, { secure: isSecureRequest(request) });
+    response.set("Cache-Control", "no-store").redirect(303, after);
+  });
+
   app.post("/v0/auth/native-login", async (request, response) => {
     if (!isNativeRequest(request)) return response.status(403).json({ error: "native_origin_required" });
     if (!isTrustworthyRequest(request)) return response.status(400).json({ error: "https_required", message: "Native login requires HTTPS unless the client is on this machine or this network." });

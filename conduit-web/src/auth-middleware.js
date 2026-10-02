@@ -89,6 +89,7 @@ export function isAllowlistedPath(method, pathname) {
   // the server I paired with" without handing a credential to whatever
   // answered.
   if (method !== "GET") return method === "POST" && ["/v0/auth/login", "/v0/auth/native-login", "/v0/server/prove"].includes(pathname);
+  if (pathname === "/v0/auth/handoff") return true;
   if (UNAUTHENTICATED_EXACT.has(pathname)) return true;
   return UNAUTHENTICATED_PWA_PATTERNS.some((pattern) => pattern.test(pathname));
 }
