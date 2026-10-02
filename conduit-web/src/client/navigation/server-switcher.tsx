@@ -1,8 +1,9 @@
 import { createSignal, For, onCleanup, Show } from "solid-js";
-import { ExternalLinkIcon, PlusIcon, RefreshCwIcon } from "lucide-solid";
+import { ExternalLinkIcon, PlusIcon, QrCodeIcon, RefreshCwIcon } from "lucide-solid";
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger, Spinner } from "@/components/primitives";
 import { buildHttpUrl } from "../api/transport";
 import { proveServer } from "../platform/server-proof";
+import { PairDialog } from "./pair-dialog";
 
 /** Not an address: the row that hands the choice back to the client. */
 const AUTOMATIC = "automatic";
@@ -54,6 +55,7 @@ export function ServerSwitcher(props: {
   const [probing, setProbing] = createSignal(false);
   const [checking, setChecking] = createSignal("");
   const [routeError, setRouteError] = createSignal("");
+  const [pairing, setPairing] = createSignal(false);
   let timer: ReturnType<typeof setInterval> | undefined;
 
   // Every address of every server, not just the one each is filed under: the
@@ -167,7 +169,7 @@ export function ServerSwitcher(props: {
   // elsewhere to open, so it is not offered the move and not shown the mark.
   const away = (entry: ServerEntry) => !isInstalledClient() && !isStandaloneBrowser() && entry.origin !== location.origin;
 
-  return <Menu onOpenChange={onOpenChange}>
+  return <><Menu onOpenChange={onOpenChange}>
     <MenuTrigger class="sidebar-user" tabIndex={-1} onPointerDown={() => { focusBefore = document.activeElement; }} onFocus={(event: FocusEvent) => {
       if (giveBack === undefined) return;
       const before = giveBack;
@@ -240,6 +242,7 @@ export function ServerSwitcher(props: {
         </MenuGroup>
         <MenuSeparator />
       </Show>
+      <MenuItem onSelect={() => setPairing(true)}><QrCodeIcon />Pair a device</MenuItem>
       <MenuItem onSelect={props.onAddServer}><PlusIcon />Add server</MenuItem>
       <MenuSeparator />
       <MenuItem onSelect={props.onOpenSettings}>Manage settings</MenuItem>
@@ -249,5 +252,6 @@ export function ServerSwitcher(props: {
       </MenuItem>
       <MenuItem onSelect={props.onLogout}>{servers().length > 1 ? `Sign out of ${serverName()}` : "Sign out"}</MenuItem>
     </MenuContent>
-  </Menu>;
+  </Menu>
+  <PairDialog open={pairing()} onOpenChange={setPairing} /></>;
 }
