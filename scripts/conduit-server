@@ -193,7 +193,7 @@ status() {
   load_env
   title "$(code_label)"
   if running; then row state "${G}${TICK} running${N}"; else row state "${R}${CROSS} stopped${N}"; fi
-  row open "http://$([[ "$CONDUIT_HOST" == 0.0.0.0 ]] && echo "<this-machine>" || echo localhost):$CONDUIT_PORT"
+  local url how cmd; while IFS='|' read -r url how cmd; do row open "$url ${D}$how${cmd:+ $cmd}${N}"; done < <(access_urls)
   row service "$(service_kind) ${D}($NAME)${N}"
   row data "${CONDUIT_DATA_ROOT/#$HOME/$TILDE}"
   row logs "$(log_hint)"
@@ -282,15 +282,8 @@ setup() {
     ok "Password set"
   fi
   echo >/dev/tty
-  choose "Who can open Conduit?" \
-    "This computer ${D}— reach it from other devices with Tailscale or a tunnel${N}" \
-    "Any device on my network"
-  local host=127.0.0.1; [[ "$REPLY" == 2 ]] && host=0.0.0.0
-  ask "Port" "$CONDUIT_PORT"; local port="$REPLY"
-  mkdir -p "$STATE_DIR"
-  { grep -v -E '^(CONDUIT_HOST|CONDUIT_PORT)=' "$ENV_FILE" 2>/dev/null || true
-    printf 'CONDUIT_HOST=%s\nCONDUIT_PORT=%s\n' "$host" "$port"; } >"$ENV_FILE.tmp"
-  mv "$ENV_FILE.tmp" "$ENV_FILE"
+  ask "Port" "$CONDUIT_PORT"; set_env CONDUIT_PORT "$REPLY"; load_env
+  choose_access
   echo
   sync_python && ok "Python tools for spreadsheets and documents" || warn "Python tools skipped ${D}(see $NAME doctor)${N}"
   if [[ "$(service_kind)" == systemd ]] && command -v loginctl >/dev/null 2>&1 \
@@ -298,15 +291,123 @@ setup() {
     loginctl enable-linger "$USER" >/dev/null 2>&1 && ok "Keeps running after you log out" || true
   fi
   start
-  load_env
-  local url="http://localhost:$CONDUIT_PORT"
-  [[ "$CONDUIT_HOST" == 0.0.0.0 ]] && url="http://$( (hostname -I 2>/dev/null || ipconfig getifaddr en0 2>/dev/null) | awk '{print $1}'):$CONDUIT_PORT"
-  printf '\n  %s╭──────────────────────────────────────────────╮%s\n' "$D" "$N"
-  printf '  %s│%s  %sConduit is ready%s %-26s %s│%s\n' "$D" "$N" "$B" "$N" "" "$D" "$N"
-  printf '  %s│%s  %s%-44s%s%s│%s\n' "$D" "$N" "$C" "$url" "$N" "$D" "$N"
-  printf '  %s╰──────────────────────────────────────────────╯%s\n\n' "$D" "$N"
+  connect_access
+  ready_box
   note "Your agents (claude, codex, opencode) are found on PATH with their own logins."
   note "$NAME status · logs · update · use · doctor"
+  echo
+}
+
+# ---------------------------------------------------------------- reaching it
+# Setup asks how this computer will be reached, from what it can see: a
+# laptop or desktop wants this-computer-only (or the LAN), a VPS wants
+# Tailscale or an SSH tunnel. The server stays on loopback for every choice but
+# "my network": Tailscale serve, SSH and a proxy all reach it from there.
+set_env() {
+  mkdir -p "$STATE_DIR"
+  { grep -v -E "^$1=" "$ENV_FILE" 2>/dev/null || true; printf '%s=%s\n' "$1" "$2"; } >"$ENV_FILE.tmp"
+  mv "$ENV_FILE.tmp" "$ENV_FILE"
+}
+is_remote() { # a server reached over SSH, with no screen of its own
+  [[ -n "${CONDUIT_REMOTE:-}" ]] && { [[ "$CONDUIT_REMOTE" == 1 ]]; return; }
+  [[ "$(uname -s)" == Darwin ]] && return 1
+  grep -qi microsoft /proc/version 2>/dev/null && return 1
+  [[ -n "${SSH_CONNECTION:-}" || -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]
+}
+ts_state() { # missing | stopped | running
+  command -v tailscale >/dev/null 2>&1 || { echo missing; return; }
+  tailscale status --json 2>/dev/null | grep -q '"BackendState": *"Running"' && echo running || echo stopped
+}
+ts_name() { tailscale status --json 2>/dev/null | sed -n 's/.*"DNSName": *"\([^"]*\)\.".*/\1/p' | head -1; }
+public_ip() { curl -fsS --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}'; }
+lan_ip() { (hostname -I 2>/dev/null || ipconfig getifaddr en0 2>/dev/null) | tr ' ' '\n' | grep -E '^(192\.168|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)' | head -1; }
+
+choose_access() {
+  local ts; ts="$(ts_state)"
+  local ts_hint="${D}— your phone and laptops, from anywhere${N}"
+  [[ "$ts" == running ]] && ts_hint="${D}— $(ts_name), detected${N}"
+  [[ "$ts" == missing ]] && ts_hint="${D}— installs it, free for personal use${N}"
+  if is_remote; then
+    note "This looks like a remote server. Conduit stays private; pick how you reach it."
+    choose "How will you open Conduit?" \
+      "Tailscale ${D}(recommended)${N} $ts_hint" \
+      "SSH tunnel from my computer ${D}— nothing else to install${N}" \
+      "My own proxy or Cloudflare Tunnel ${D}— to 127.0.0.1:$CONDUIT_PORT${N}"
+    case "$REPLY" in 1) ACCESS=tailscale ;; 2) ACCESS=ssh ;; *) ACCESS=proxy ;; esac
+  else
+    choose "Who can open Conduit?" \
+      "Just this computer" \
+      "My devices anywhere, with Tailscale $ts_hint" \
+      "Any device on my network ${D}— $(lan_ip):$CONDUIT_PORT${N}"
+    case "$REPLY" in 2) ACCESS=tailscale ;; 3) ACCESS=lan ;; *) ACCESS=local ;; esac
+  fi
+  set_env CONDUIT_ACCESS "$ACCESS"
+  set_env CONDUIT_HOST "$([[ "$ACCESS" == lan ]] && echo 0.0.0.0 || echo 127.0.0.1)"
+  load_env
+}
+
+# Tailscale serve gives the loopback server an HTTPS name on the tailnet.
+connect_tailscale() {
+  if [[ "$(ts_state)" == missing ]]; then
+    if [[ "$(uname -s)" == Darwin ]]; then
+      warn "Install Tailscale from ${C}https://tailscale.com/download/mac${N}, sign in, then: $NAME connect"; return 1
+    fi
+    printf '  %s?%s Install Tailscale now? It needs sudo once. %s[Y/n]%s ' "$C" "$N" "$D" "$N" >/dev/tty
+    read -r REPLY </dev/tty || REPLY=n
+    [[ "$REPLY" =~ ^[Nn] ]] && { note "Later: curl -fsSL https://tailscale.com/install.sh | sh, then $NAME connect"; return 1; }
+    curl -fsSL https://tailscale.com/install.sh | sh </dev/tty || { warn "Tailscale did not install"; return 1; }
+  fi
+  if [[ "$(ts_state)" != running ]]; then
+    note "Sign this machine in to your tailnet:"
+    sudo tailscale up </dev/tty || { warn "Tailscale is not signed in. Then: $NAME connect"; return 1; }
+  fi
+  local out
+  if ! out="$(tailscale serve --bg "$CONDUIT_PORT" 2>&1)"; then
+    if [[ "$out" == *denied* || "$out" == *operator* ]]; then
+      note "Letting $USER manage Tailscale serve (sudo, once):"
+      sudo tailscale set --operator="$USER" </dev/tty && out="$(tailscale serve --bg "$CONDUIT_PORT" 2>&1)" || true
+    fi
+  fi
+  if ! tailscale serve status 2>/dev/null | grep -q ":$CONDUIT_PORT"; then
+    warn "Tailscale serve did not start:"; printf '%s\n' "$out" | sed 's/^/      /'
+    [[ "$out" == *https* || "$out" == *HTTPS* ]] && note "Turn on HTTPS for your tailnet (the link above), then: $NAME connect"
+    return 1
+  fi
+  ok "On your tailnet as ${B}$(ts_name)${N}"
+}
+
+connect_access() {
+  load_env
+  case "${CONDUIT_ACCESS:-local}" in
+    tailscale) connect_tailscale || true ;;
+  esac
+}
+connect() { load_env; choose_access; healthy && restart >/dev/null; connect_access; ready_box; }
+
+access_urls() { # url|how to get there|a command to run, if any
+  local access="${CONDUIT_ACCESS:-}"
+  [[ -z "$access" ]] && { [[ "$CONDUIT_HOST" == 0.0.0.0 ]] && access=lan || access=local; }
+  case "$access" in
+    tailscale) local n; n="$(ts_name)"
+      [[ -n "$n" ]] && echo "https://$n|from any device signed in to your tailnet"
+      is_remote || echo "http://localhost:$CONDUIT_PORT|on this computer" ;;
+    ssh) echo "http://localhost:$CONDUIT_PORT|on your computer, while this runs there:|ssh -NL $CONDUIT_PORT:localhost:$CONDUIT_PORT $USER@$(public_ip)" ;;
+    proxy) echo "http://127.0.0.1:$CONDUIT_PORT|point your proxy or cloudflared here; terminate HTTPS there" ;;
+    lan) echo "http://$(lan_ip):$CONDUIT_PORT|from devices on this network"; echo "http://localhost:$CONDUIT_PORT|on this computer" ;;
+    *) echo "http://localhost:$CONDUIT_PORT|on this computer, or the desktop app" ;;
+  esac
+}
+ready_box() {
+  local line url how width=50
+  printf '\n  %s╭%s╮%s\n' "$D" "$(printf '─%.0s' $(seq 1 $width))" "$N"
+  printf '  %s│%s  %sConduit is ready%s%*s%s│%s\n' "$D" "$N" "$B" "$N" $((width - 18)) "" "$D" "$N"
+  while IFS= read -r line; do
+    url="${line%%|*}"; how="${line#*|}"; how="${how%%|*}"
+    printf '  %s│%s  %s%-*s%s%s│%s\n' "$D" "$N" "$C" $((width - 2)) "$url" "$N" "$D" "$N"
+    printf '  %s│    %-*s│%s\n' "$D" $((width - 4)) "${how:0:$((width - 4))}" "$N"
+  done < <(access_urls)
+  printf '  %s╰%s╯%s\n' "$D" "$(printf '─%.0s' $(seq 1 $width))" "$N"
+  access_urls | awk -F'|' 'NF > 2 {print $3}' | while IFS= read -r line; do printf '  %s%s%s %s%s%s\n' "$C" "$ARROW" "$N" "$B" "$line" "$N"; done
   echo
 }
 
@@ -360,6 +461,7 @@ usage() {
   ${B}use${N} release ${D}|${N} v<v>   run an installed release
   ${B}update${N} [v]         install the latest (or a given) release
   ${B}rollback${N}           the release before this one
+  ${B}connect${N}            change how this computer is reached
   ${B}password${N}           change the login password
   ${B}doctor${N}             check Node, Python, agents and the server
   ${B}uninstall${N}          remove the daemon; keeps ${STATE_DIR/#$HOME/$TILDE}
@@ -370,6 +472,7 @@ EOF
 command="${1:-help}"; shift || true
 case "$command" in
   setup) setup ;;
+  connect) connect ;;
   start) start ;;
   stop) stop ;;
   restart) restart ;;
