@@ -1,3 +1,4 @@
+import os from "node:os";
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
@@ -12,7 +13,7 @@ import {
 } from "./pi-runtime.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const agentDir = path.resolve(process.env.CONDUIT_PI_AGENT_DIR || path.join(repositoryRoot, "data/pi"));
+const agentDir = path.resolve(process.env.CONDUIT_PI_AGENT_DIR || path.join(process.env.CONDUIT_DATA_ROOT || path.join(os.homedir(), ".conduit", "data"), "pi"));
 const templateFile = path.resolve(process.env.CONDUIT_PI_TEMPLATE || path.join(repositoryRoot, "templates/assistant/template.json"));
 const template = loadPiTemplate(templateFile);
 const bundledPi = path.join(repositoryRoot, "conduit-web/node_modules/@earendil-works/pi-coding-agent/dist/cli.js");

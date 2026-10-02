@@ -1,3 +1,4 @@
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { AuthStore, statusSummary } from "../conduit-web/src/auth-store.js";
@@ -9,7 +10,7 @@ export const DEFAULT_AGENT_USER = "conduit-local-agent";
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 export function resolveLocalAuthFile(env = process.env) {
-  const dataRoot = path.resolve(env.CONDUIT_DATA_ROOT || path.join(repositoryRoot, "data"));
+  const dataRoot = path.resolve(env.CONDUIT_DATA_ROOT || path.join(os.homedir(), ".conduit", "data"));
   return path.resolve(env.CONDUIT_AUTH_FILE || path.join(dataRoot, "auth.json"));
 }
 
