@@ -588,10 +588,10 @@ pair() {
     note "Choose Tailscale, a tunnel or your network first: $NAME connect"
     outro ""; return 1
   fi
-  local count; count="$(auth sessions | grep -o '"id"' | wc -l)"
-  local url="$base/v0/auth/handoff?code=$(auth handoff 300)&after=%2F"
+  local code; code="$(auth handoff 300)"
+  local url="$base/v0/auth/handoff?code=$code&after=%2F"
   title "Pair a phone or computer"
-  auth qr "$url" | sed "s/^/${D}${S_BAR}${N}  /"
+  auth qr "$url" 2>/dev/null | sed "s/^/${D}${S_BAR}${N}  /"
   bar
   note "Scan with the Conduit app (Add server ${ARROW} Scan QR code) or a camera."
   note "Or paste into the app's address field: ${N}${C}$url${N}"
@@ -599,7 +599,7 @@ pair() {
   bar
   local frames="$FRAMES" i=0 waited=0
   while (( waited < 300 )); do
-    if (( $(auth sessions | grep -o '"id"' | wc -l) > count )); then
+    if auth handoff-used "$code"; then
       [[ -t 1 ]] && printf '\r\e[K'
       ok "Paired ${D}$NAME sessions lists it${N}"; outro ""; return
     fi

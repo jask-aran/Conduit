@@ -176,6 +176,13 @@ try {
     const store = new AuthStore(authFile);
     const ttl = Number(process.argv[3]) || 60;
     process.stdout.write(`${await store.createHandoff({ ttlMs: ttl * 1000 })}\n`);
+  } else if (command === "handoff-used") {
+    // Exit 0 once the code has been redeemed (or has lapsed), 1 while it waits.
+    const { hashToken } = await import("../conduit-web/src/auth-store.js");
+    const store = new AuthStore(authFile);
+    await store.load({ force: true });
+    const hash = hashToken(process.argv[3] || "");
+    process.exitCode = (store.data.handoffs || []).some((item) => item.codeHash === hash) ? 1 : 0;
   } else if (command === "qr") {
     // qr <text> -- the code drawn in half blocks, two rows to a line, with the quiet zone.
     const { default: QRCode } = await import("../conduit-web/node_modules/qrcode/lib/core/qrcode.js");
