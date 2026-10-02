@@ -19,7 +19,9 @@ const MODULES = path.join(WEB_ROOT, "node_modules");
 const LINKED = ["transcribe-cpp", "@huggingface/transformers", "onnxruntime-node"];
 
 function wanted() {
-  const { dependencies = {} } = JSON.parse(readFileSync(path.join(WEB_ROOT, "package.json"), "utf8"));
+  // devDependencies: a production `npm ci --omit=dev` leaves them out.
+  const { dependencies = {}, devDependencies = {} } = JSON.parse(readFileSync(path.join(WEB_ROOT, "package.json"), "utf8"));
+  Object.assign(dependencies, devDependencies);
   // onnxruntime-node arrives with transformers, at the version it pins.
   return Object.fromEntries(["transcribe-cpp", "@huggingface/transformers"].filter((name) => dependencies[name]).map((name) => [name, dependencies[name]]));
 }

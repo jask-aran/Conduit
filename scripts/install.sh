@@ -215,6 +215,15 @@ VERIFY
 if [[ -z "${CONDUIT_TARBALL:-}" ]]; then step "Signature ${D}release key${N}" verify_signature
 elif [[ -f "${CONDUIT_TARBALL}.sig" ]]; then cp "${CONDUIT_TARBALL}.sig" "$work/conduit.sig"; step "Signature ${D}release key${N}" verify_signature; fi
 
+# A thin release carries no node_modules: its dependencies come from npm,
+# for this machine only (scripts/release-deps.mjs), after the signature check.
+if [[ ! -d "$work/release/conduit-web/node_modules" ]]; then
+  step "Dependencies ${D}npm, for $platform${N}" "$NODE_BIN" "$work/release/scripts/release-deps.mjs" "$work/release/conduit-web"
+fi
+# An older conduit-server finds Node only at node/<version>; point that at the
+# chosen one so a release from before NODE_BIN still starts.
+if [[ ! -x "$node_dir/bin/node" ]]; then mkdir -p "$node_dir/bin"; ln -sfn "$NODE_BIN" "$node_dir/bin/node"; fi
+
 install_release() {
   mkdir -p "$APP_HOME/versions" "$BIN_DIR"
   rm -rf "$APP_HOME/versions/$release_version"
