@@ -2785,3 +2785,10 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 /* What a file dropped on a file viewer's column will do, by the pointer (main.tsx dragHint). */
 .drag-hint { position: fixed; top: 0; left: 0; z-index: 80; will-change: transform; display: inline-flex; align-items: center; gap: 5.6px; padding: 3.2px 8px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--popover); color: var(--popover-foreground); box-shadow: 0 4px 14px rgb(0 0 0 / 22%); font-size: 11.2px; pointer-events: none; white-space: nowrap; }
 .drag-hint svg { width: 12px; height: 12px; color: var(--muted-foreground); }
+
+/* conduit-server pair: the camera fills the screen until it sees the code. */
+.qr-scanner { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: #000; }
+.qr-scanner video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.qr-scanner-frame { position: relative; width: min(64vw, 18rem); aspect-ratio: 1; border: 2px solid rgb(255 255 255 / 0.9); border-radius: 1rem; box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.45); }
+.qr-scanner p { position: absolute; bottom: calc(6rem + env(safe-area-inset-bottom)); margin: 0 1.5rem; color: #fff; text-align: center; font-size: 0.9375rem; }
+.qr-scanner-close { position: absolute; bottom: calc(2rem + env(safe-area-inset-bottom)); padding: 0.625rem 1.5rem; border: 0; border-radius: 999px; background: rgb(255 255 255 / 0.16); color: #fff; font: inherit; }

@@ -26,6 +26,7 @@ import { activeOrigin, addServer, forgetServer, learnIdentity, mergeServerDirect
 import { publishCertificatePins } from "./platform/certificate-pins.ts";
 import { verifyLeaf } from "./platform/server-proof.ts";
 import { publishServerDirectory } from "./platform/server-directory";
+import { canScanQr, parsePairingLink, QrScanner, redeemPairing } from "./platform/pairing";
 import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
 import { resolveCapability } from "./chat-capabilities";
 import type { ChatSummary, DashboardChat, HarnessManifestView, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
@@ -194,10 +195,31 @@ function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) =
   const [password, setPassword] = createSignal("");
   const [error, setError] = createSignal("");
   const [submitting, setSubmitting] = createSignal(false);
+  const [scanning, setScanning] = createSignal(false);
+
+  const pair = async (link: { origin: string; code: string }) => {
+    setScanning(false);
+    setError("");
+    setAddress(link.origin);
+    setSubmitting(true);
+    try {
+      const token = await redeemPairing(link);
+      addServer(link.origin);
+      await saveNativeBearerToken(token, link.origin);
+      props.onDone(link.origin);
+    } catch (cause) {
+      setError(cause instanceof TypeError ? "Could not reach this Conduit server from here." : (cause as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const submit = async (event: SubmitEvent) => {
     event.preventDefault();
     setError("");
+    // A pasted pairing link pairs; the address it carries is the server.
+    const link = !recordOnly && !verifiedOrigin() ? parsePairingLink(address()) : null;
+    if (link) return void pair(link);
     setSubmitting(true);
     try {
       if (recordOnly) {
@@ -331,9 +353,13 @@ function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) =
         </Show>
       </Show>
     </Show>
+    <Show when={!recordOnly && !verifiedOrigin() && canScanQr()}>
+      <Button type="button" variant="outline" onClick={() => setScanning(true)} disabled={submitting()}>Scan QR code</Button>
+    </Show>
+    <Show when={scanning()}><QrScanner onLink={(link) => void pair(link)} onClose={() => setScanning(false)} /></Show>
     <label for="native-server-address">Server address</label>
     <input id="native-server-address" type="text" inputMode="url" autocomplete="url" autocapitalize="none" spellcheck={false}
-      placeholder="https://conduit.your-tailnet.ts.net" value={address()} onInput={(event) => setAddress(event.currentTarget.value)}
+      placeholder={recordOnly ? "https://conduit.your-tailnet.ts.net" : "Address, or a link from conduit-server pair"} value={address()} onInput={(event) => setAddress(event.currentTarget.value)}
       disabled={submitting() || Boolean(verifiedOrigin())} />
     <Show when={verifiedOrigin()}>
       <label for="native-password">Password</label>
