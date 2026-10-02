@@ -299,20 +299,14 @@ setup() {
 }
 
 # ---------------------------------------------------------------- reaching it
-# Setup asks how this computer will be reached, from what it can see: a
-# laptop or desktop wants this-computer-only (or the LAN), a VPS wants
-# Tailscale or an SSH tunnel. The server stays on loopback for every choice but
-# "my network": Tailscale serve, SSH and a proxy all reach it from there.
+# Setup asks how Conduit will be reached -- one list for every machine, since a
+# desktop may sit behind a tunnel and a VPS may be used only over SSH; what it
+# finds (Tailscale signed in, cloudflared) only annotates the choices. The
+# server stays on loopback for every choice but "my network".
 set_env() {
   mkdir -p "$STATE_DIR"
   { grep -v -E "^$1=" "$ENV_FILE" 2>/dev/null || true; printf '%s=%s\n' "$1" "$2"; } >"$ENV_FILE.tmp"
   mv "$ENV_FILE.tmp" "$ENV_FILE"
-}
-is_remote() { # a server reached over SSH, with no screen of its own
-  [[ -n "${CONDUIT_REMOTE:-}" ]] && { [[ "$CONDUIT_REMOTE" == 1 ]]; return; }
-  [[ "$(uname -s)" == Darwin ]] && return 1
-  grep -qi microsoft /proc/version 2>/dev/null && return 1
-  [[ -n "${SSH_CONNECTION:-}" || -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]
 }
 ts_state() { # missing | stopped | running
   command -v tailscale >/dev/null 2>&1 || { echo missing; return; }
@@ -323,26 +317,27 @@ public_ip() { curl -fsS --max-time 3 https://api.ipify.org 2>/dev/null || hostna
 lan_ip() { (hostname -I 2>/dev/null || ipconfig getifaddr en0 2>/dev/null) | tr ' ' '\n' | grep -E '^(192\.168|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)' | head -1; }
 
 choose_access() {
-  local ts; ts="$(ts_state)"
-  local ts_hint="${D}— your phone and laptops, from anywhere${N}"
-  [[ "$ts" == running ]] && ts_hint="${D}— $(ts_name), detected${N}"
+  local ts; ts="$(ts_state)" ts_hint="${D}— your phone and other computers, from anywhere${N}"
+  [[ "$ts" == running ]] && ts_hint="${D}— $(ts_name) is signed in${N}"
   [[ "$ts" == missing ]] && ts_hint="${D}— installs it, free for personal use${N}"
-  if is_remote; then
-    note "This looks like a remote server. Conduit stays private; pick how you reach it."
-    choose "How will you open Conduit?" \
-      "Tailscale ${D}(recommended)${N} $ts_hint" \
-      "SSH tunnel from my computer ${D}— nothing else to install${N}" \
-      "My own proxy or Cloudflare Tunnel ${D}— to 127.0.0.1:$CONDUIT_PORT${N}"
-    case "$REPLY" in 1) ACCESS=tailscale ;; 2) ACCESS=ssh ;; *) ACCESS=proxy ;; esac
-  else
-    choose "Who can open Conduit?" \
-      "Just this computer" \
-      "My devices anywhere, with Tailscale $ts_hint" \
-      "Any device on my network ${D}— $(lan_ip):$CONDUIT_PORT${N}"
-    case "$REPLY" in 2) ACCESS=tailscale ;; 3) ACCESS=lan ;; *) ACCESS=local ;; esac
-  fi
+  local tunnel_hint="${D}— Cloudflare Tunnel, ngrok, Caddy, nginx…${N}"
+  command -v cloudflared >/dev/null 2>&1 && tunnel_hint="${D}— cloudflared is installed${N}"
+  choose "How will you open Conduit?" \
+    "Just this computer ${D}— the browser here, or the desktop app${N}" \
+    "Tailscale $ts_hint" \
+    "A tunnel or reverse proxy I run $tunnel_hint" \
+    "An SSH tunnel ${D}— for a server you SSH into; nothing to install${N}" \
+    "Any device on my network ${D}— $(lan_ip):$CONDUIT_PORT, no HTTPS${N}"
+  case "$REPLY" in 2) ACCESS=tailscale ;; 3) ACCESS=proxy ;; 4) ACCESS=ssh ;; 5) ACCESS=lan ;; *) ACCESS=local ;; esac
   set_env CONDUIT_ACCESS "$ACCESS"
   set_env CONDUIT_HOST "$([[ "$ACCESS" == lan ]] && echo 0.0.0.0 || echo 127.0.0.1)"
+  if [[ "$ACCESS" == proxy ]]; then
+    printf '\n  %sPoint it at%s %shttp://127.0.0.1:%s%s %s(HTTP; let the tunnel or proxy do HTTPS)%s\n' "$B" "$N" "$C" "$CONDUIT_PORT" "$N" "$D" "$N" >/dev/tty
+    printf '  %se.g.%s cloudflared tunnel --url http://127.0.0.1:%s   %s·%s  Caddy: reverse_proxy 127.0.0.1:%s\n' "$D" "$N" "$CONDUIT_PORT" "$D" "$N" "$CONDUIT_PORT" >/dev/tty
+    printf '  %sWebSockets must pass through; Cloudflare, ngrok and Caddy do by default.%s\n\n' "$D" "$N" >/dev/tty
+    ask "Its public address, to show here ${D}(optional, e.g. https://conduit.example.com)${N}" "${CONDUIT_PUBLIC_URL:-}"
+    set_env CONDUIT_PUBLIC_URL "$REPLY"
+  fi
   load_env
 }
 
@@ -390,9 +385,10 @@ access_urls() { # url|how to get there|a command to run, if any
   case "$access" in
     tailscale) local n; n="$(ts_name)"
       [[ -n "$n" ]] && echo "https://$n|from any device signed in to your tailnet"
-      is_remote || echo "http://localhost:$CONDUIT_PORT|on this computer" ;;
-    ssh) echo "http://localhost:$CONDUIT_PORT|on your computer, while this runs there:|ssh -NL $CONDUIT_PORT:localhost:$CONDUIT_PORT $USER@$(public_ip)" ;;
-    proxy) echo "http://127.0.0.1:$CONDUIT_PORT|point your proxy or cloudflared here; terminate HTTPS there" ;;
+      echo "http://localhost:$CONDUIT_PORT|on this computer" ;;
+    ssh) echo "http://localhost:$CONDUIT_PORT|on your computer, while this runs on it:|ssh -NL $CONDUIT_PORT:localhost:$CONDUIT_PORT $USER@$(public_ip)" ;;
+    proxy) [[ -n "${CONDUIT_PUBLIC_URL:-}" ]] && echo "$CONDUIT_PUBLIC_URL|through your tunnel or proxy"
+      echo "http://127.0.0.1:$CONDUIT_PORT|what the tunnel or proxy points at" ;;
     lan) echo "http://$(lan_ip):$CONDUIT_PORT|from devices on this network"; echo "http://localhost:$CONDUIT_PORT|on this computer" ;;
     *) echo "http://localhost:$CONDUIT_PORT|on this computer, or the desktop app" ;;
   esac
