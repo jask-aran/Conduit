@@ -42,6 +42,7 @@ A development checkout uses the same `~/.conduit/data` unless
 | --- | --- |
 | `setup` / `connect` | password, port, how it is reached; `connect` asks only the last |
 | `open` | opens Conduit in the browser, signed in by a one-minute, one-time code |
+| `pair` | a QR code of a one-time, five-minute sign-in link: a phone camera opens it signed in, and the app's **Scan QR code** (or the link pasted into its address field) redeems it for an app token at `POST /v0/auth/native-pair`; waits until it is used |
 | `status [--json]` | what runs, its addresses, service, data, and whether an update is out |
 | `start` / `stop` / `restart` | restart waits up to ten minutes for answers still being written |
 | `logs [--since 1h] [--errors]` | follows the log, or searches it |
