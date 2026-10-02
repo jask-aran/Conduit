@@ -297,7 +297,7 @@ setup() {
   local url="http://localhost:$CONDUIT_PORT"
   [[ "$CONDUIT_HOST" == 0.0.0.0 ]] && url="http://$( (hostname -I 2>/dev/null || ipconfig getifaddr en0 2>/dev/null) | awk '{print $1}'):$CONDUIT_PORT"
   printf '\n  %s╭──────────────────────────────────────────────╮%s\n' "$D" "$N"
-  printf '  %s│%s  %sConduit is ready%s %-27s %s│%s\n' "$D" "$N" "$B" "$N" "" "$D" "$N"
+  printf '  %s│%s  %sConduit is ready%s %-26s %s│%s\n' "$D" "$N" "$B" "$N" "" "$D" "$N"
   printf '  %s│%s  %s%-44s%s%s│%s\n' "$D" "$N" "$C" "$url" "$N" "$D" "$N"
   printf '  %s╰──────────────────────────────────────────────╯%s\n\n' "$D" "$N"
   note "Your agents (claude, codex, opencode) are found on PATH with their own logins."
