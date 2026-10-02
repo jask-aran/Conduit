@@ -115,6 +115,9 @@ install_release() {
   mkdir -p "$APP_HOME/versions" "$BIN_DIR"
   rm -rf "$APP_HOME/versions/$release_version"
   mv "$work/release" "$APP_HOME/versions/$release_version"
+  # A daemon running a development clone keeps running it: the release is
+  # added beside it, for `conduit-server use release`.
+  if [[ -L "$APP_HOME/current" && ! -f "$APP_HOME/current/NODE_VERSION" ]]; then return; fi
   ln -sfn "$APP_HOME/versions/$release_version" "$APP_HOME/current"
   CONDUIT_PROFILE="$PROFILE" "$APP_HOME/current/scripts/conduit-server" _link
   # Keep the two newest releases, for `conduit-server rollback`.
@@ -122,6 +125,10 @@ install_release() {
 }
 step "Installed to ${D}${APP_HOME/#$HOME/~}${N}" install_release
 
+if [[ ! -f "$APP_HOME/current/NODE_VERSION" ]]; then
+  printf '\n  %sThe daemon keeps running your clone.%s Try this release with %s%s use release%s\n\n' "$B" "$N" "$C" "$NAME" "$N"
+  exit 0
+fi
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *) printf '  %s· add %s to PATH:%s export PATH="%s:$PATH"\n' "$D" "${BIN_DIR/#$HOME/~}" "$N" "$BIN_DIR" ;;
