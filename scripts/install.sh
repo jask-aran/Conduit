@@ -31,31 +31,34 @@ NAME="conduit-server$SUFFIX"
 APP_HOME="${CONDUIT_APP_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/conduit$SUFFIX}"
 BIN_DIR="${CONDUIT_BIN_DIR:-$HOME/.local/bin}"
 
+# The same rail as conduit-server's setup, which it hands over to.
 if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
-  B=$'\e[1m'; D=$'\e[2m'; G=$'\e[32m'; R=$'\e[31m'; C=$'\e[36m'; M=$'\e[35m'; N=$'\e[0m'
-else B=""; D=""; G=""; R=""; C=""; M=""; N=""; fi
-UTF=0; [[ "${LANG:-}${LC_ALL:-}" == *UTF-8* ]] && UTF=1
-TICK="✓"; CROSS="✗"; (( UTF )) || { TICK="+"; CROSS="x"; }
+  B=$'\e[1m'; D=$'\e[2m'; G=$'\e[32m'; R=$'\e[31m'; C=$'\e[36m'; M=$'\e[35m'; N=$'\e[0m'; BADGE=$'\e[1;30;46m'
+else B=""; D=""; G=""; R=""; C=""; M=""; N=""; BADGE=""; fi
+UTF=0; [[ "${LANG:-}${LC_ALL:-}${LC_CTYPE:-}" == *UTF-8* ]] && UTF=1
+if (( UTF )); then BAR="│"; START="┌"; END="└"; DONE="◇"; ERR="■"; FRAMES="◒◐◓◑"
+else BAR="|"; START="T"; END="L"; DONE="o"; ERR="x"; FRAMES='-\|/'; fi
 
-fail() { printf '\n  %s%s%s %s\n\n' "$R" "$CROSS" "$N" "$*" >&2; exit 1; }
+fail() { printf '%s%s%s  %s\n%s%s%s\n\n' "$R" "$ERR" "$N" "$*" "$D" "$END" "$N" >&2; exit 1; }
+bar() { printf '%s%s%s\n' "$D" "$BAR" "$N"; }
 # step "message" command... — a spinner while it runs, then ✓ and how long it took.
 step() {
   local message="$1"; shift
   local log; log="$(mktemp)"; local started=$SECONDS
   "$@" >"$log" 2>&1 &
-  local pid=$! frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏' i=0
-  (( UTF )) || frames='-\|/'
+  local pid=$! i=0
   if [[ -t 1 ]]; then
     while kill -0 "$pid" 2>/dev/null; do
-      printf '\r  %s%s%s %s %s%ss%s' "$C" "${frames:i++%${#frames}:1}" "$N" "$message" "$D" "$((SECONDS - started))" "$N"
-      sleep 0.08
+      printf '\r\e[K%s%s%s  %s %s%ss%s' "$M" "${FRAMES:i++%${#FRAMES}:1}" "$N" "$message" "$D" "$((SECONDS - started))" "$N"
+      sleep 0.12
     done
     printf '\r\e[K'
   fi
   if wait "$pid"; then
-    printf '  %s%s%s %-44s %s%ss%s\n' "$G" "$TICK" "$N" "$message" "$D" "$((SECONDS - started))" "$N"; rm -f "$log"
+    printf '%s%s%s  %s %s%ss%s\n' "$G" "$DONE" "$N" "$message" "$D" "$((SECONDS - started))" "$N"; rm -f "$log"
   else
-    printf '  %s%s%s %s\n' "$R" "$CROSS" "$N" "$message"; sed 's/^/      /' "$log" | tail -20 >&2; rm -f "$log"; exit 1
+    printf '%s%s%s  %s\n' "$R" "$ERR" "$N" "$message"; sed "s/^/${D}${BAR}${N}    /" "$log" | tail -20 >&2; rm -f "$log"
+    printf '%s%s%s\n\n' "$D" "$END" "$N"; exit 1
   fi
 }
 
@@ -71,9 +74,8 @@ esac
 platform="$os-$arch"
 
 if (( ! UPDATE )); then
-  printf '\n  %s%sconduit-server%s  %sthe Conduit daemon for this computer%s\n' "$B" "$M" "$N" "$D" "$N"
-  [[ -n "$PROFILE" ]] && printf '  %s%s profile: separate data, port and service%s\n' "$D" "$PROFILE" "$N"
-  echo
+  printf '\n%s%s%s  %s conduit-server %s  %sinstall%s%s\n' "$D" "$START" "$N" "$BADGE" "$N" "$B" "$N" "${PROFILE:+  ${D}$PROFILE · its own data, port and service${N}}"
+  bar
 fi
 
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
@@ -123,15 +125,15 @@ install_release() {
   # Keep the two newest releases, for `conduit-server rollback`.
   ls -1t "$APP_HOME/versions" | tail -n +3 | while read -r old; do rm -rf "${APP_HOME:?}/versions/$old"; done
 }
-step "Installed to ${D}${APP_HOME/#$HOME/~}${N}" install_release
+step "Installed in ${D}${APP_HOME/#$HOME/~}${N}" install_release
 
 if [[ ! -f "$APP_HOME/current/NODE_VERSION" ]]; then
-  printf '\n  %sThe daemon keeps running your clone.%s Try this release with %s%s use release%s\n\n' "$B" "$N" "$C" "$NAME" "$N"
+  bar; printf '%s%s%s  The daemon keeps running your clone. Try this release: %s%s use release%s\n\n' "$D" "$END" "$N" "$C" "$NAME" "$N"
   exit 0
 fi
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
-  *) printf '  %s· add %s to PATH:%s export PATH="%s:$PATH"\n' "$D" "${BIN_DIR/#$HOME/~}" "$N" "$BIN_DIR" ;;
+  *) printf '%s%s  add %s to PATH:%s export PATH="%s:$PATH"\n' "$D" "$BAR" "${BIN_DIR/#$HOME/~}" "$N" "$BIN_DIR" ;;
 esac
 
 if (( UPDATE )); then
@@ -139,6 +141,6 @@ if (( UPDATE )); then
   exec env CONDUIT_PROFILE="$PROFILE" "$BIN_DIR/$NAME" restart
 fi
 if (( SETUP )) && { : </dev/tty; } 2>/dev/null; then
-  exec env CONDUIT_PROFILE="$PROFILE" "$BIN_DIR/$NAME" setup
+  exec env CONDUIT_PROFILE="$PROFILE" CONDUIT_RAIL=1 "$BIN_DIR/$NAME" setup
 fi
-printf '\n  Finish with %s%s setup%s\n\n' "$B" "$NAME" "$N"
+bar; printf '%s%s%s  Finish with %s%s setup%s\n\n' "$D" "$END" "$N" "$C" "$NAME" "$N"

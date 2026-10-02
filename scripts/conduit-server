@@ -37,16 +37,33 @@ CURRENT="$APP_HOME/current"
 TILDE="~"
 
 # ---------------------------------------------------------------- appearance
+# One rail down the left, like the installers people now expect: ┌ opens a
+# command, ◆ is a question being asked, ◇ a step done, └ closes it.
 if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
   B=$'\e[1m'; D=$'\e[2m'; G=$'\e[32m'; R=$'\e[31m'; Y=$'\e[33m'; C=$'\e[36m'; M=$'\e[35m'; N=$'\e[0m'
-else B=""; D=""; G=""; R=""; Y=""; C=""; M=""; N=""; fi
-if [[ "${LANG:-}${LC_ALL:-}" == *UTF-8* ]]; then TICK="✓"; CROSS="✗"; DOT="·"; ARROW="›"; else TICK="+"; CROSS="x"; DOT="-"; ARROW=">"; fi
-ok() { printf '  %s%s%s %s\n' "$G" "$TICK" "$N" "$*"; }
-warn() { printf '  %s!%s %s\n' "$Y" "$N" "$*"; }
-note() { printf '  %s%s %s%s\n' "$D" "$DOT" "$*" "$N"; }
-fail() { printf '  %s%s%s %s\n' "$R" "$CROSS" "$N" "$*" >&2; exit 1; }
-row() { printf '  %s%-9s%s %s\n' "$D" "$1" "$N" "$2"; }
-title() { printf '\n  %s%s%s%s  %s%s%s\n\n' "$B" "$M" "conduit-server" "$N" "$D" "$*" "$N"; }
+  BADGE=$'\e[1;30;46m'
+else B=""; D=""; G=""; R=""; Y=""; C=""; M=""; N=""; BADGE=""; fi
+if [[ "${LANG:-}${LC_ALL:-}${LC_CTYPE:-}" == *UTF-8* || "${LANG:-}" == *utf8* ]]; then
+  S_BAR="│"; S_START="┌"; S_END="└"; S_DONE="◇"; S_ASK="◆"; S_WARN="▲"; S_ERR="■"
+  S_ON="●"; S_OFF="○"; S_MASK="▪"; S_TICK="✓"; FRAMES="◒◐◓◑"; S_H="─"; S_TR="╮"; S_BR="╯"; S_LT="├"
+else
+  S_BAR="|"; S_START="T"; S_END="L"; S_DONE="o"; S_ASK="*"; S_WARN="!"; S_ERR="x"
+  S_ON=">"; S_OFF=" "; S_MASK="*"; S_TICK="+"; FRAMES='-\|/'; S_H="-"; S_TR="+"; S_BR="+"; S_LT="+"
+fi
+TICK="$S_TICK"; ARROW="›"
+bar() { printf '%s%s%s\n' "$D" "$S_BAR" "$N"; }
+ok() { printf '%s%s%s  %s\n' "$G" "$S_DONE" "$N" "$*"; }
+warn() { printf '%s%s%s  %s\n' "$Y" "$S_WARN" "$N" "$*"; }
+note() { printf '%s%s  %s%s\n' "$D" "$S_BAR" "$*" "$N"; }
+fail() { printf '%s%s%s  %s\n' "$R" "$S_ERR" "$N" "$*" >&2; exit 1; }
+row() { printf '%s%s%s  %s%-8s%s %s\n' "$D" "$S_BAR" "$N" "$D" "$1" "$N" "$2"; }
+title() {
+  if [[ -n "${CONDUIT_RAIL:-}" ]]; then bar; printf '%s%s%s  %s%s%s\n' "$M" "$S_ASK" "$N" "$B" "$*" "$N"
+  else printf '\n%s%s%s  %s conduit-server %s  %s\n' "$D" "$S_START" "$N" "$BADGE" "$N" "$*"; fi
+  bar
+}
+outro() { printf '%s%s%s  %s\n\n' "$D" "$S_END" "$N" "$*"; }
+plain() { sed 's/\x1b\[[0-9;]*m//g' <<<"$1"; }
 
 # ---------------------------------------------------------------- the code
 code_kind() { [[ -f "$CURRENT/NODE_VERSION" ]] && echo release || echo dev; }
@@ -140,10 +157,10 @@ EOF
 pid_alive() { [[ -f "$PID_FILE" ]] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; }
 
 wait_healthy() {
-  local frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏' i=0
+  local frames="$FRAMES" i=0
   for _ in $(seq 1 240); do
     healthy && { [[ -t 1 ]] && printf '\r\e[K'; return 0; }
-    [[ -t 1 ]] && printf '\r  %s%s%s Starting %s' "$C" "${frames:i++%10:1}" "$N" "$(code_label)"
+    [[ -t 1 ]] && printf '\r\e[K%s%s%s  Starting %s' "$M" "${frames:i++%${#frames}:1}" "$N" "$(code_label)"
     sleep 0.25
   done
   [[ -t 1 ]] && printf '\r\e[K'; return 1
@@ -192,12 +209,12 @@ running() { healthy; }
 status() {
   load_env
   title "$(code_label)"
-  if running; then row state "${G}${TICK} running${N}"; else row state "${R}${CROSS} stopped${N}"; fi
-  local url how cmd; while IFS='|' read -r url how cmd; do row open "$url ${D}$how${cmd:+ $cmd}${N}"; done < <(access_urls)
-  row service "$(service_kind) ${D}($NAME)${N}"
+  if running; then printf '%s%s%s  %sRunning%s\n' "$G" "$S_ON" "$N" "$B" "$N"; else printf '%s%s%s  %sStopped%s %s· %s start%s\n' "$R" "$S_ERR" "$N" "$B" "$N" "$D" "$NAME" "$N"; fi
+  local url how cmd; while IFS='|' read -r url how cmd; do row open "${C}$url${N} ${D}$how${N}"; [[ -n "$cmd" ]] && row "" "$cmd"; done < <(access_urls)
+  row service "$(service_kind) ${D}$NAME${N}"
   row data "${CONDUIT_DATA_ROOT/#$HOME/$TILDE}"
   row logs "$(log_hint)"
-  echo
+  outro ""
 }
 log_hint() { [[ "$(service_kind)" == systemd ]] && echo "journalctl --user -u $NAME" || echo "${LOG_FILE/#$HOME/$TILDE}"; }
 logs() {
@@ -258,34 +275,99 @@ sync_python() {
     --python 3.13 --managed-python --quiet
 }
 
-ask() { # ask "Question" default -> REPLY
-  printf '  %s%s%s %s %s' "$C" "?" "$N" "$1" "${2:+${D}$2${N} }" >/dev/tty
-  read -r REPLY </dev/tty || REPLY=""
-  REPLY="${REPLY:-${2:-}}"
+TTY=/dev/tty
+# A question settles into "◇ question / │ answer" once answered.
+settle() { # settle lines-to-clear "question" "answer"
+  printf '\r\e[%dA\e[J%s%s%s  %s\n%s%s  %s%s\n' "$1" "$G" "$S_DONE" "$N" "$2" "$D" "$S_BAR" "$3" "$N" >$TTY
 }
-choose() { # choose "Question" "one" "two" -> REPLY (1-based)
-  local prompt="$1"; shift
-  printf '  %s?%s %s\n' "$C" "$N" "$prompt" >/dev/tty
-  local i=1; for option in "$@"; do printf '    %s%d%s %s\n' "$B" "$i" "$N" "$option" >/dev/tty; i=$((i + 1)); done
-  printf '    %s%s%s ' "$C" "$ARROW" "$N" >/dev/tty
-  read -r REPLY </dev/tty || REPLY=1
-  [[ "$REPLY" =~ ^[0-9]+$ && "$REPLY" -ge 1 && "$REPLY" -le $# ]] || REPLY=1
+ask() { # ask "Question" default -> REPLY; the default is there to edit
+  printf '%s%s%s  %s\n%s%s%s  ' "$C" "$S_ASK" "$N" "$1" "$C" "$S_BAR" "$N" >$TTY
+  IFS= read -r -e -i "${2:-}" REPLY <$TTY 2>$TTY || REPLY=""
+  REPLY="${REPLY:-${2:-}}"
+  settle 2 "$1" "${REPLY:-${D}(none)${N}}"
+}
+secret() { # secret "Question" -> REPLY, typed as ▪▪▪
+  printf '%s%s%s  %s\n%s%s%s  ' "$C" "$S_ASK" "$N" "$1" "$C" "$S_BAR" "$N" >$TTY
+  REPLY=""; local ch
+  while IFS= read -rsn1 ch <$TTY; do
+    case "$ch" in
+      "") break ;;
+      $'\x7f'|$'\b') [[ -n "$REPLY" ]] && { REPLY="${REPLY%?}"; printf '\b \b' >$TTY; } ;;
+      *) REPLY+="$ch"; printf '%s' "$S_MASK" >$TTY ;;
+    esac
+  done
+  printf '\n' >$TTY
+  settle 2 "$1" "$(printf "%.0s$S_MASK" $(seq 1 ${#REPLY}))"
+}
+choose() { # choose "Question" "one" "two" … -> REPLY (1-based); ↑↓/jk/digits, enter
+  local q="$1"; shift
+  local -a opts=("$@"); local n=$# sel=0 i key rest
+  trap 'printf "\e[?25h" >/dev/tty 2>/dev/null || true' EXIT
+  printf '%s%s%s  %s\n\e[?25l' "$C" "$S_ASK" "$N" "$q" >$TTY
+  _draw() {
+    for i in "${!opts[@]}"; do
+      if (( i == sel )); then printf '\r\e[K%s%s%s  %s%s%s %s\n' "$C" "$S_BAR" "$N" "$G" "$S_ON" "$N" "${opts[i]}"
+      else printf '\r\e[K%s%s%s  %s%s %s%s\n' "$C" "$S_BAR" "$N" "$D" "$S_OFF" "$(plain "${opts[i]}")" "$N"; fi
+    done
+    printf '\r\e[K%s%s%s  %s↑↓ move · enter select%s' "$C" "$S_END" "$N" "$D" "$N"
+  } >$TTY
+  _draw
+  while IFS= read -rsn1 key <$TTY; do
+    if [[ "$key" == $'\e' ]]; then read -rsn2 -t 0.05 rest <$TTY || true; key+="$rest"; fi
+    case "$key" in
+      $'\e[A'|k) sel=$(( (sel - 1 + n) % n )) ;;
+      $'\e[B'|j) sel=$(( (sel + 1) % n )) ;;
+      [1-9]) (( key <= n )) && sel=$((key - 1)) ;;
+      "") break ;;
+    esac
+    printf '\e[%dA' "$n" >$TTY; _draw
+  done
+  local chosen; chosen="$(plain "${opts[sel]}")"; chosen="${chosen%% — *}"
+  printf '\e[?25h' >$TTY
+  settle "$n" "$q" "$chosen"
+  REPLY=$((sel + 1))
+}
+spin() { # spin "message" command… — the rail's spinner, then ◇ and the time it took
+  local message="$1"; shift
+  local log; log="$(mktemp)"; local started=$SECONDS i=0
+  "$@" >"$log" 2>&1 &
+  local pid=$!
+  if [[ -t 1 ]]; then
+    while kill -0 "$pid" 2>/dev/null; do
+      printf '\r\e[K%s%s%s  %s %s%ss%s' "$M" "${FRAMES:i++%${#FRAMES}:1}" "$N" "$message" "$D" "$((SECONDS - started))" "$N"; sleep 0.12
+    done
+    printf '\r\e[K'
+  fi
+  if wait "$pid"; then ok "$message ${D}$((SECONDS - started))s${N}"; rm -f "$log"
+  else warn "$message"; sed "s/^/${D}${S_BAR}${N}    /" "$log" | tail -12; rm -f "$log"; return 1; fi
+}
+box() { # box "Title" line… — a note hung off the rail
+  local t="$1"; shift; local w=${#t} l
+  for l in "$@"; do l="$(plain "$l")"; (( ${#l} > w )) && w=${#l}; done
+  w=$((w + 4))
+  local rule; rule="$(printf "%.0s$S_H" $(seq 1 $((w - ${#t} - 1))))"
+  bar
+  printf '%s%s%s  %s%s%s %s%s%s%s\n' "$G" "$S_DONE" "$N" "$B" "$t" "$N" "$D" "$rule" "$S_TR" "$N"
+  printf '%s%s%*s%s%s\n' "$D" "$S_BAR" "$((w + 2))" "" "$S_BAR" "$N"
+  for l in "$@"; do
+    local p; p="$(plain "$l")"
+    printf '%s%s%s  %s%*s%s%s%s\n' "$D" "$S_BAR" "$N" "$l" "$((w - ${#p}))" "" "$D" "$S_BAR" "$N"
+  done
+  printf '%s%s%*s%s%s\n' "$D" "$S_BAR" "$((w + 2))" "" "$S_BAR" "$N"
+  printf '%s%s%s%s%s\n' "$D" "$S_LT" "$(printf "%.0s$S_H" $(seq 1 $((w + 2))))" "$S_BR" "$N"
 }
 
 setup() {
   load_env
-  title "setup${PROFILE:+ ($PROFILE)}"
-  if [[ -f "$CONDUIT_DATA_ROOT/auth.json" ]]; then ok "Login password already set ${D}(change it: $NAME password)${N}"
-  else
-    printf '  %s?%s Choose a login password\n' "$C" "$N" >/dev/tty
-    CONDUIT_DATA_ROOT="$CONDUIT_DATA_ROOT" "$(node_bin)" "$CURRENT/scripts/conduit-auth.mjs" set-password </dev/tty >/dev/null
-    ok "Password set"
-  fi
-  echo >/dev/tty
+  title "Set up Conduit${PROFILE:+ ${D}($PROFILE)${N}}"
+  if [[ -f "$CONDUIT_DATA_ROOT/auth.json" ]]; then ok "Login password ${D}already set · $NAME password to change${N}"
+  else set_password; fi
+  bar
   ask "Port" "$CONDUIT_PORT"; set_env CONDUIT_PORT "$REPLY"; load_env
+  bar
   choose_access
-  echo
-  sync_python && ok "Python tools for spreadsheets and documents" || warn "Python tools skipped ${D}(see $NAME doctor)${N}"
+  bar
+  spin "Python tools for spreadsheets and documents" sync_python || note "Retry later: $NAME setup"
   if [[ "$(service_kind)" == systemd ]] && command -v loginctl >/dev/null 2>&1 \
     && [[ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null)" != yes ]]; then
     loginctl enable-linger "$USER" >/dev/null 2>&1 && ok "Keeps running after you log out" || true
@@ -293,9 +375,19 @@ setup() {
   start
   connect_access
   ready_box
-  note "Your agents (claude, codex, opencode) are found on PATH with their own logins."
-  note "$NAME status · logs · update · use · doctor"
-  echo
+  note "Agents (claude, codex, opencode) come from PATH, with their own logins."
+  outro "Manage it with ${B}$NAME${N} status · logs · connect · update"
+}
+set_password() {
+  while :; do
+    secret "Choose a login password"; local first="$REPLY"
+    [[ ${#first} -ge 8 ]] || { warn "At least 8 characters"; continue; }
+    secret "Once more"
+    [[ "$REPLY" == "$first" ]] && break
+    warn "Those didn't match"
+  done
+  printf '%s' "$first" | CONDUIT_DATA_ROOT="$CONDUIT_DATA_ROOT" "$(node_bin)" "$CURRENT/scripts/conduit-auth.mjs" set-password --stdin >/dev/null
+  printf '\e[4A\r\e[J' >$TTY; ok "Login password ${D}set${N}"
 }
 
 # ---------------------------------------------------------------- reaching it
@@ -332,10 +424,15 @@ choose_access() {
   set_env CONDUIT_ACCESS "$ACCESS"
   set_env CONDUIT_HOST "$([[ "$ACCESS" == lan ]] && echo 0.0.0.0 || echo 127.0.0.1)"
   if [[ "$ACCESS" == proxy ]]; then
-    printf '\n  %sPoint it at%s %shttp://127.0.0.1:%s%s %s(HTTP; let the tunnel or proxy do HTTPS)%s\n' "$B" "$N" "$C" "$CONDUIT_PORT" "$N" "$D" "$N" >/dev/tty
-    printf '  %se.g.%s cloudflared tunnel --url http://127.0.0.1:%s   %s·%s  Caddy: reverse_proxy 127.0.0.1:%s\n' "$D" "$N" "$CONDUIT_PORT" "$D" "$N" "$CONDUIT_PORT" >/dev/tty
-    printf '  %sWebSockets must pass through; Cloudflare, ngrok and Caddy do by default.%s\n\n' "$D" "$N" >/dev/tty
-    ask "Its public address, to show here ${D}(optional, e.g. https://conduit.example.com)${N}" "${CONDUIT_PUBLIC_URL:-}"
+    box "Point your tunnel or proxy at" \
+      "${C}${B}http://127.0.0.1:$CONDUIT_PORT${N}" \
+      "" \
+      "${D}cloudflared${N}  cloudflared tunnel --url http://127.0.0.1:$CONDUIT_PORT" \
+      "${D}Caddy${N}        reverse_proxy 127.0.0.1:$CONDUIT_PORT" \
+      "" \
+      "${D}It does HTTPS; WebSockets must pass through (they do by default).${N}"
+    bar
+    ask "Its public address ${D}optional, shown in status${N}" "${CONDUIT_PUBLIC_URL:-}"
     set_env CONDUIT_PUBLIC_URL "$REPLY"
   fi
   load_env
@@ -347,9 +444,8 @@ connect_tailscale() {
     if [[ "$(uname -s)" == Darwin ]]; then
       warn "Install Tailscale from ${C}https://tailscale.com/download/mac${N}, sign in, then: $NAME connect"; return 1
     fi
-    printf '  %s?%s Install Tailscale now? It needs sudo once. %s[Y/n]%s ' "$C" "$N" "$D" "$N" >/dev/tty
-    read -r REPLY </dev/tty || REPLY=n
-    [[ "$REPLY" =~ ^[Nn] ]] && { note "Later: curl -fsSL https://tailscale.com/install.sh | sh, then $NAME connect"; return 1; }
+    choose "Install Tailscale now? ${D}It needs sudo once.${N}" "Install it" "Not now"
+    [[ "$REPLY" == 2 ]] && { note "Later: curl -fsSL https://tailscale.com/install.sh | sh, then $NAME connect"; return 1; }
     curl -fsSL https://tailscale.com/install.sh | sh </dev/tty || { warn "Tailscale did not install"; return 1; }
   fi
   if [[ "$(ts_state)" != running ]]; then
@@ -377,7 +473,7 @@ connect_access() {
     tailscale) connect_tailscale || true ;;
   esac
 }
-connect() { load_env; choose_access; healthy && restart >/dev/null; connect_access; ready_box; }
+connect() { load_env; title "How Conduit is reached"; choose_access; healthy && restart >/dev/null; connect_access; ready_box; outro ""; }
 
 access_urls() { # url|how to get there|a command to run, if any
   local access="${CONDUIT_ACCESS:-}"
@@ -394,17 +490,14 @@ access_urls() { # url|how to get there|a command to run, if any
   esac
 }
 ready_box() {
-  local line url how width=50
-  printf '\n  %s╭%s╮%s\n' "$D" "$(printf '─%.0s' $(seq 1 $width))" "$N"
-  printf '  %s│%s  %sConduit is ready%s%*s%s│%s\n' "$D" "$N" "$B" "$N" $((width - 18)) "" "$D" "$N"
-  while IFS= read -r line; do
-    url="${line%%|*}"; how="${line#*|}"; how="${how%%|*}"
-    printf '  %s│%s  %s%-*s%s%s│%s\n' "$D" "$N" "$C" $((width - 2)) "$url" "$N" "$D" "$N"
-    printf '  %s│    %-*s│%s\n' "$D" $((width - 4)) "${how:0:$((width - 4))}" "$N"
+  local -a lines=(); local url how cmd first=1
+  while IFS='|' read -r url how cmd; do
+    (( first )) || lines+=("")
+    first=0
+    lines+=("${C}${B}$url${N}" "${D}$how${N}")
+    [[ -n "$cmd" ]] && lines+=("${B}$cmd${N}")
   done < <(access_urls)
-  printf '  %s╰%s╯%s\n' "$D" "$(printf '─%.0s' $(seq 1 $width))" "$N"
-  access_urls | awk -F'|' 'NF > 2 {print $3}' | while IFS= read -r line; do printf '  %s%s%s %s%s%s\n' "$C" "$ARROW" "$N" "$B" "$line" "$N"; done
-  echo
+  box "Conduit is ready" "${lines[@]}"
 }
 
 # ---------------------------------------------------------------- releases
@@ -433,7 +526,7 @@ doctor() {
     command -v "$agent" >/dev/null 2>&1 && ok "$agent ${D}$(command -v "$agent" | sed "s#^$HOME#~#")${N}" || note "$agent not found"
   done
   healthy && ok "Healthy on :$CONDUIT_PORT" || warn "Not running ${D}($NAME start)${N}"
-  echo
+  outro ""
 }
 
 uninstall() {
@@ -448,21 +541,23 @@ uninstall() {
 
 usage() {
   title "$(code_label)"
-  cat <<EOF
-  ${B}setup${N}              password, who can reach it, port; then start
-  ${B}status${N}             what runs, where, and its data
-  ${B}start${N} ${D}·${N} ${B}stop${N} ${D}·${N} ${B}restart${N}
-  ${B}logs${N}               follow the server's log
-  ${B}use${N} dev <clone>     run a development clone
-  ${B}use${N} release ${D}|${N} v<v>   run an installed release
-  ${B}update${N} [v]         install the latest (or a given) release
-  ${B}rollback${N}           the release before this one
-  ${B}connect${N}            change how this computer is reached
-  ${B}password${N}           change the login password
-  ${B}doctor${N}             check Node, Python, agents and the server
-  ${B}uninstall${N}          remove the daemon; keeps ${STATE_DIR/#$HOME/$TILDE}
-
-EOF
+  local c
+  cmd() { printf '%s%s%s  %s%s%s%*s %s%s%s\n' "$D" "$S_BAR" "$N" "$C" "$1" "$N" $((22 - ${#1})) "" "$D" "$2" "$N"; }
+  cmd setup "password, port, how it is reached; then start"
+  cmd connect "change how it is reached"
+  cmd status "what runs, where, its addresses"
+  cmd "start · stop · restart" "restart waits for live answers"
+  cmd logs "follow the server's log"
+  bar
+  cmd "use dev <clone>" "run a development clone"
+  cmd "use release · v<ver>" "run an installed release"
+  cmd "update [v]" "install the latest, or a given, release"
+  cmd rollback "the release before this one"
+  bar
+  cmd password "change the login password"
+  cmd doctor "check Node, Python, agents, the server"
+  cmd uninstall "remove the daemon; keeps ${STATE_DIR/#$HOME/$TILDE}"
+  outro ""
 }
 
 command="${1:-help}"; shift || true
@@ -477,7 +572,7 @@ case "$command" in
   use) use "$@" ;;
   update) update "$@" ;;
   rollback) rollback ;;
-  password) "$(node_bin)" "$CURRENT/scripts/conduit-auth.mjs" set-password ;;
+  password) load_env; title "Login password"; set_password; outro "Signed-in browsers and apps will sign in again" ;;
   doctor) doctor ;;
   uninstall) uninstall ;;
   _sync-python) load_env; sync_python ;;
