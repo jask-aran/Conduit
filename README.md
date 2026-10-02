@@ -50,15 +50,18 @@ The tlbx and Garcon entries reflect their public [tlbx README](https://github.co
   <img src="docs/images/workspace-files.png" width="49%" alt="Workspace files beside a chat" />
 </p>
 
-## Deploy
+## Install
 
-Use a Linux VPS with a public hostname. The installer can add Docker on Debian or Ubuntu when run as root.
+On any Linux or macOS computer you want to control (Windows: inside WSL):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jask-aran/Conduit/main/scripts/install.sh | bash
+curl -fsSL https://get.jask-aran.com/conduit | bash
 ```
 
-Enter the hostname and login password when prompted. See [deployment operations](docs/deployment.md) for updates, backup and restore.
+It installs Conduit and the Node it runs on into `~/.local/share/conduit`, then
+asks for a login password and who may reach it, and starts it as a service.
+Nothing needs root. Manage it with `conduit status`, `conduit logs` and
+`conduit update`; see [install and operations](docs/deployment.md).
 
 ## Start locally
 

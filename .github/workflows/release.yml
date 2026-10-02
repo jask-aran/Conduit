@@ -1,4 +1,4 @@
-name: Publish container image
+name: Release
 
 on:
   push:
@@ -8,14 +8,11 @@ on:
 
 permissions:
   contents: write
-  packages: write
 
 concurrency:
-  group: publish-container-${{ github.ref }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  REGISTRY: ghcr.io
 
 jobs:
   validate:
@@ -193,62 +190,39 @@ jobs:
             conduit-web/src-tauri/target/release/bundle/nsis/latest.json
           if-no-files-found: error
 
-  container:
+  server:
     needs: validate
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - runner: ubuntu-latest
+          - runner: ubuntu-24.04-arm
+          - runner: macos-latest
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      - name: Set image metadata
-        id: image
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # The Node this builds with is the Node install.sh downloads, so the
+      # native modules it compiles (node-pty) load on the machine it lands on.
+      - name: Build the server release
         shell: bash
         run: |
-          image="${REGISTRY}/${GITHUB_REPOSITORY,,}"
-          echo "name=$image" >> "$GITHUB_OUTPUT"
-          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            version="$GITHUB_REF_NAME"
-          else
-            version="manual-${GITHUB_SHA::12}"
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "release=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
-          {
-            echo "tags<<EOF"
-            echo "$image:$version"
-            echo "$image:sha-$GITHUB_SHA"
-            if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" != *-rc.* ]]; then
-              echo "$image:latest"
-            fi
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+          (cd conduit-web && npm ci --no-audit --no-fund && npm run build)
+          bash scripts/package-server.sh "${{ github.ref_type == 'tag' && github.ref_name || format('manual-{0}', github.sha) }}" release-assets
+      - uses: actions/upload-artifact@v4
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and publish
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
-        with:
-          context: .
-          push: true
-          platforms: linux/amd64
-          build-args: |
-            CONDUIT_RELEASE=${{ steps.image.outputs.release }}
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.version=${{ steps.image.outputs.version }}
-            org.opencontainers.image.revision=${{ github.sha }}
-          tags: ${{ steps.image.outputs.tags }}
-          provenance: mode=max
-          sbom: true
+          name: conduit-server-${{ github.ref_name }}-${{ matrix.runner }}
+          path: release-assets/conduit-server-*
+          if-no-files-found: error
 
   release:
     if: github.ref_type == 'tag'
     needs:
       - android
-      - container
+      - server
       - windows
     runs-on: ubuntu-latest
     steps:
@@ -258,6 +232,12 @@ jobs:
         with:
           name: conduit-android-${{ github.ref_name }}
           path: release-assets
+      - name: Download the server releases
+        uses: actions/download-artifact@v4
+        with:
+          pattern: conduit-server-${{ github.ref_name }}-*
+          path: release-assets
+          merge-multiple: true
       - name: Download the Windows build
         uses: actions/download-artifact@v4
         with:
@@ -284,6 +264,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$GITHUB_REF_NAME" release-assets/conduit-*.apk release-assets/conduit-*.apk.sha256 --clobber
+      - name: Upload the server releases and their installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" release-assets/conduit-server-* scripts/install.sh --clobber
       - name: Upload the Windows installer and its update
         env:
           GH_TOKEN: ${{ github.token }}

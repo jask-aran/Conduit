@@ -26,8 +26,8 @@ restart. An installed client can also switch between several servers; a browser
 installation belongs to one origin. See `docs/desktop-client.md` and
 `docs/servers.md`.
 
-The VPS/container replacement in `scripts/deploy.sh restart` does not use the
-local script's pre-restart notice. Any design that claims to cover deployed
+An installed server's `conduit restart` waits for live turns but does not yet
+send the local script's pre-restart notice. Any design that claims to cover deployed
 browser clients must address that route and when the new assets become
 available, not only the local development restart.
 

@@ -1,234 +1,84 @@
-# Deployment contract
+# Install and operations
 
-Conduit ships as one unprivileged application container with two explicit bind
-mounts. The image contains the server, compiled client, templates, production
-dependencies, and pinned Isolated Pi. It contains no credentials, transcripts,
-workspace contents, or mutable application state.
+Conduit runs as you, on a computer you own, with your permissions -- it is a
+GUI for the agents and tools already there. There is no container and nothing
+needs root.
 
-## Host and container layout
+## Install
 
-The default relative paths produce the intended VPS layout when the release is
-unpacked at `/srv/conduit`:
+```bash
+curl -fsSL https://get.jask-aran.com/conduit | bash
+```
 
-| Host path | Container path | Ownership |
+`get.jask-aran.com/conduit` serves `scripts/install.sh` from `main`. It:
+
+1. picks the build for this computer (Linux x64 or arm64, macOS arm64; Windows
+   runs it inside WSL);
+2. downloads that release from GitHub and checks its SHA-256, then the exact
+   Node it was built with;
+3. installs both into `~/.local/share/conduit` and links `~/.local/bin/conduit`;
+4. runs `conduit setup`: a login password, who may reach Conduit (this computer
+   only, or any device on the network), the port, the Python tools for
+   spreadsheets and documents, and the service that keeps it running.
+
+`--version v0.7.7` installs a given release, `--no-setup` stops before setup.
+
+## Layout
+
+| Path | Holds | Replaceable |
 | --- | --- | --- |
-| `/srv/conduit/data` | `/data` | Conduit UID/GID; durable |
-| `/srv/workspaces` | `/workspaces` | Conduit UID/GID; durable |
-| release source and image | `/app` | read-only; replaceable |
-| in-memory temporary files | `/tmp` | tmpfs; disposable |
+| `~/.local/share/conduit/versions/<v>` | one release: server, built client, production `node_modules`, templates | yes; the two newest are kept |
+| `~/.local/share/conduit/current` | link to the running release | yes |
+| `~/.local/share/conduit/node/<v>` | the Node the release runs on | yes |
+| `~/.conduit/data` | everything durable: registries, preferences, password, Pi credentials and transcripts, chat files, toolchains | **no** -- this is the backup |
+| `~/.conduit/conduit.env` | `CONDUIT_HOST`, `CONDUIT_PORT` and any other `CONDUIT_*` setting | edit, then `conduit restart` |
 
-`CONDUIT_DATA_ROOT=/data` is the single application-state boundary. It contains
-the project and chat registries, preferences, runtime policy, password and
-sessions, the server's own identity, Isolated Pi settings/credentials/JSONL
-transcripts, chat working files, and attachments. Clone reservations and atomic-write temporary files
-also live there; they may be transient individually, but retaining the whole
-root is the supported backup and restore contract.
+A development checkout uses the same `~/.conduit/data` unless
+`CONDUIT_DATA_ROOT` says otherwise.
 
-Workspace contents live under `/workspaces`. Persisted workspace catalogue
-paths use that container namespace rather than machine-specific host paths, so
-the catalogue remains valid when both mounts are restored on another machine.
-The default allowlist and default parent for new Workspaces expose only
-`/workspaces`; Conduit-owned chat files are handled by their reserved project
-and cannot be registered as Workspaces. `CONDUIT_WORKSPACE_DEFAULT_ROOT` is a
-container path, not the host path in `CONDUIT_WORKSPACES_DIR`. Set it to a
-directory under `/workspaces` when you want a narrower default. The directory
-must already exist and remain inside the allowlist.
+## Running
 
-Docker layers, npm caches, built client output, `/tmp`, logs emitted to stdout,
-and stopped process memory are rebuildable. No live Pi process can be migrated;
-after restore, Conduit resumes from its durable JSONL and registry state.
+| Command | Does |
+| --- | --- |
+| `conduit status` | version, whether it is healthy, where its data and logs are |
+| `conduit start` / `stop` / `restart` | restart waits up to ten minutes for answers still being written |
+| `conduit logs` | follows the log |
+| `conduit update [v]` | installs the latest (or a given) release and restarts |
+| `conduit rollback` | returns to the previous release |
+| `conduit password` | changes the login password |
+| `conduit doctor` | Node, Python tools, password, agents on PATH, server health |
+| `conduit uninstall` | removes the app and service; `~/.conduit` stays |
 
-## First deployment
+The service is a `systemd --user` unit on Linux (with lingering enabled, so it
+survives logout on a headless machine) and a launchd agent on macOS. Without
+either, `conduit` runs the server as a background process with a pid file.
 
-Requirements are Linux, Git, Docker Engine, and the Docker Compose plugin. No
-host Node.js or Pi installation is required.
+Agents are the user's own: Conduit finds `claude`, `codex` and `opencode` on
+PATH and uses their existing logins and sessions.
 
-```bash
-git clone https://github.com/jask-aran/Conduit.git conduit
-cd conduit
-./scripts/deploy.sh up
-```
+## Reaching it
 
-The script creates `.env` and the two host directories, builds the image, and
-prompts for the single-user login password before starting the container. It
-binds port 4310 to host loopback by default; put a TLS reverse proxy or
-Tailscale Serve in front of `127.0.0.1:4310`.
-The release directory must be owned by the account running Docker. Placing that
-directory at `/srv/conduit` yields the layout above, but it is not required.
+Conduit binds `127.0.0.1:4310` unless setup was told otherwise -- it controls
+the computer, so exposing it is a choice:
 
-Edit `.env` before the first run when the release directory is not the desired
-data location, the host user is not the intended file owner, or a different
-loopback port is needed. Secrets are not environment variables: the password
-hash, browser sessions, and Isolated Pi provider credentials remain inside the
-mounted `/data` root.
+- **This computer:** open `http://localhost:4310`, or point the desktop client
+  at it.
+- **Your devices anywhere:** Tailscale, `tailscale serve 4310`, and connect the
+  phone or desktop client to the machine's tailnet address.
+- **Public:** a Cloudflare Tunnel or your own reverse proxy in front of
+  `127.0.0.1:4310`. Conduit's password login and the clients' bearer tokens
+  assume an untrusted network; terminate TLS at the proxy.
 
-`data/identity.json` (mode `0600`) holds this server's stable id and its
-Ed25519 key pair, which is how a client recognises two addresses as one server
-and how it proves an address before sending a token there — see
-[`servers.md`](servers.md). Restore it with the rest of `/data`: losing it
-makes every paired client treat this as a server it has never met, which costs
-a re-pair rather than data. **Never copy it to a second deployment.** Two
-servers presenting the same identity are indistinguishable to every client, and
-each would prove the other's addresses.
+## Backup and restore
 
-Conduit advertises itself on the local network over mDNS so a client on the
-same LAN can find it without being told an address. On a VPS there is no such
-network and multicast does not leave the container, so the advertisement simply
-never publishes; set `CONDUIT_ADVERTISE_ON_LAN=false` to switch it off outright
-on a host whose network is not the owner's.
+Stop Conduit and copy `~/.conduit/data`; restore by putting it back and
+starting. Live agent processes are not part of a backup -- chats resume from
+their transcripts. Sessions belonging to other harnesses (Claude Code, Codex,
+OpenCode) live in those harnesses' own folders and are theirs to back up.
 
-The Workspace dialog shows `/workspaces` for container deployments and uses
-`~` only for a native Conduit home. Users cannot widen the allowlist in the
-browser. An operator can change the default parent in `.env`, then restart the
-deployment:
+## Releasing
 
-```dotenv
-CONDUIT_WORKSPACE_DEFAULT_ROOT=/workspaces/projects
-```
-
-Create `/workspaces/projects` under the host directory mounted at
-`CONDUIT_WORKSPACES_DIR` before using that setting.
-
-Useful operations:
-
-```bash
-./scripts/deploy.sh status
-./scripts/deploy.sh logs
-./scripts/deploy.sh auth
-./scripts/deploy.sh restart
-./scripts/deploy.sh down
-```
-
-Compose runs the image read-only, drops every Linux capability, has no Docker
-socket, and uses `no-new-privileges`; only `/data`, `/workspaces`, and tmpfs
-`/tmp` are writable. Its health check calls the unauthenticated `/healthz`
-readiness endpoint. SIGTERM first makes readiness fail, closes browser streams,
-stops resident Pi children, and then closes the HTTP server.
-
-## Exact-commit releases
-
-Every Git commit is independently packageable:
-
-```bash
-./scripts/package-release.sh <commit-or-tag>
-```
-
-This creates `release/conduit-<version>-<short-sha>.tar.gz` and a SHA-256 file.
-The archive contains exactly `git archive` output for that commit plus a small
-release manifest. Its `.env.example`, image tag, OCI revision label, startup
-log, and health response all carry the full commit SHA. The Node base image is
-pinned by multi-platform digest, npm installs from `package-lock.json`, and the
-bundled Pi packages remain exact versions.
-
-Tagged releases also require a short committed changelog at
-`docs/releases/<tag>.md`, for example `docs/releases/v0.3.2.md`. The publish
-workflow checks this file before it builds or pushes the image, then uses it as
-the GitHub release body. Keep the file to 40 lines or fewer and describe the
-user-visible changes and any important deployment note.
-Push the annotated release tag (`git push origin <tag>`) to trigger the publish
-workflow, which builds the container image, the Android APK and the Windows
-desktop client, and creates the GitHub Release only once all three succeed. The
-desktop client's installer, signed update and manifest are attached to that
-same Release; see `docs/desktop-client.md` for how it is built and updated.
-
-Deploying a packaged release is the same two-step flow:
-
-```bash
-tar -xzf conduit-<version>-<short-sha>.tar.gz -C /srv
-cd /srv/conduit-<version>-<short-sha>
-cp .env.example .env
-# Choose paths outside this versioned release directory before first start.
-# CONDUIT_DATA_DIR=/srv/conduit-data
-# CONDUIT_WORKSPACES_DIR=/srv/conduit-workspaces
-./scripts/deploy.sh up
-```
-
-Set `CONDUIT_DATA_DIR` and `CONDUIT_WORKSPACES_DIR` to fixed absolute paths
-outside the versioned release directory before the first packaged deployment;
-the defaults are appropriate only for a stable checkout directory. Copy that
-same `.env` configuration into each later release directory before
-`./scripts/deploy.sh restart` or `up`. For the default `latest` image, Conduit
-checks the latest GitHub Release first and skips the image pull when that
-release is already running. A GitHub Release is created only after its
-container image is published, so an incomplete release cannot replace the
-running deployment. An upgrade then builds another exact
-release against the same durable directories and replaces only the application
-container. Schema changes must remain forward-compatible or add an idempotent
-startup migration before they are released; the current JSON stores already
-normalize their versioned shape at load time and write atomically.
-
-## Backup, restore, and migration
-
-`backup.sh` makes a cold archive only. It refuses to run while the current
-Compose project has a running container, then archives `.env`, `/data`, and
-`/workspaces` as portable `data/` and `workspaces/` archive roots.
-
-```bash
-cd /srv/conduit
-./scripts/deploy.sh down
-./scripts/backup.sh /srv/conduit-backups
-```
-
-Each `*.tar.gz` has a sibling `*.tar.gz.manifest`. The manifest records the
-release SHA, archive SHA-256, mode/UID/GID of each durable root, and SHA-256
-checksums for every archived regular file. Keep the two files together. The
-script needs only Bash, GNU tar, gzip, and standard coreutils in addition to
-Docker Compose.
-
-`restore.sh` has no overwrite mode. Unpack the exact release on the target,
-leave its `data/` and adjacent `workspaces/` absent or empty, and restore the
-archive before starting Conduit:
-
-```bash
-tar -xzf conduit-<version>-<short-sha>.tar.gz -C /srv
-cd /srv/conduit-<version>-<short-sha>
-./scripts/restore.sh /transfer/conduit-backup-<sha>-<time>.tar.gz
-./scripts/deploy.sh up
-```
-
-Restore first verifies the archive SHA-256, archive layout, and every manifest
-file checksum. It then refuses a running Compose project or non-empty target
-`data/` or `workspaces/` roots. With no target `.env`, it restores the archived
-one; an existing target `.env` is preserved so an operator can choose
-independent target mount roots without overwriting configuration. The archive
-retains numeric ownership, modes, ACLs, and xattrs; run it as the intended
-owner, or as root when restoring original numeric owners. A failure after
-publication is not automatically rolled back, so inspect the empty-target
-preconditions and keep the original backup until the target has been verified.
-Source and target must never write the same restored data concurrently.
-
-## Local deployment proof
-
-Run this from a clean, committed checkout with Docker Engine available:
-
-```bash
-./scripts/prove-deployment.sh
-```
-
-The harness owns its release directories, Compose project names, loopback
-ports, test password, bind mounts, and cleanup. It packages the exact HEAD
-release, starts isolated source host A, creates an authenticated session, draft
-chat, attachment, Workspace and file, verifies the pinned Isolated Pi version,
-rebuilds A with `deploy.sh restart`, cold-backs it up, restores it into
-independent target host B mounts, and verifies the same identities and bytes.
-It also asserts that Host Pi remains unavailable. Evidence is retained under
-ignored `.deployment-evidence/`; temporary containers and mounts are removed
-on success or failure.
-
-This is a one-engine simulated-host proof, not a replacement for the required
-source and target run on two real Linux VMs. Keep draft PR #43 draft and issue
-#42 open until that acceptance run records both hosts' evidence.
-
-## Runtime boundary
-
-The container supports the bundled **Isolated Pi** runtime for ordinary chats
-and managed Workspace sessions. It deliberately reports **Host Pi** as
-unavailable: Native Pi means a host executable using the host toolchain and
-filesystem, which cannot be preserved safely by mounting the host root, home,
-Docker socket, or privileged capabilities into the web container.
-
-A later host-runtime service can attach through a local Unix socket and map its
-workspace roots into the stable `/workspaces` namespace. This deployment does
-not create that bridge or expose an experimental network port, so the
-application container can be replaced independently without constraining the
-future runtime adapter.
+A `v*` tag builds the server per platform with `scripts/package-server.sh` in
+`.github/workflows/release.yml` and attaches the archives, their checksums and
+`install.sh` to the GitHub Release; see [desktop and Android
+clients](desktop-client.md#releasing) for the rest of the release.
