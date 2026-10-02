@@ -20,9 +20,10 @@ curl -fsSL https://get.jask-aran.com/conduit | bash
    currently 22.19); otherwise offers a private copy of the Node the release
    was built with, leaving the system's alone;
 4. installs it into `~/.local/share/conduit` and links `~/.local/bin/conduit-server`;
-5. runs `conduit-server setup`: a login password, who may reach Conduit (this computer
-   only, or any device on the network), the port, the Python tools for
-   spreadsheets and documents, and the service that keeps it running.
+5. runs `conduit-server setup`: a login password, the port, any extra ways in
+   (below), and the service that keeps it running. npm dependencies and the
+   Python tools for spreadsheets and documents install in the background while
+   it asks; the server starts once they are done.
 
 `--version v0.7.7` installs a given release, `--no-setup` stops before setup.
 
@@ -105,27 +106,25 @@ uninstall` removes all of it.
 
 ## Reaching it
 
-Setup asks how Conduit will be reached -- one list on every machine, since a
-desktop can sit behind a tunnel and a VPS can be used only over SSH; what it
-finds only annotates the choices (`conduit-server connect` asks again). The
-server stays on `127.0.0.1` for every choice except "my network".
+Conduit always listens on `0.0.0.0`: `http://localhost:4310` on this computer
+(or the desktop app) and `http://<lan-ip>:4310` from devices on the same
+network. Setup then asks which extra ways in to add -- a checklist, none
+required (`conduit-server connect` asks again):
 
-- *Just this computer* -- `http://localhost:4310`, or the desktop app.
 - *Tailscale* -- installs it if missing (sudo once), signs the machine in with
   `tailscale up`, then `tailscale serve` gives `https://<machine>.<tailnet>.ts.net`.
   A refused serve offers `tailscale set --operator=$USER`; HTTPS off in the
-  tailnet is pointed out.
+  tailnet is pointed out. `uninstall` removes the serve entry it made.
 - *A tunnel or reverse proxy* -- point it at `http://127.0.0.1:4310` and let it
   do HTTPS (`cloudflared tunnel --url http://127.0.0.1:4310`, Caddy
   `reverse_proxy 127.0.0.1:4310`); WebSockets must pass through. Its public
   address, if given, is shown by setup and `status` (`CONDUIT_PUBLIC_URL`).
 - *An SSH tunnel* -- prints the `ssh -NL 4310:localhost:4310 user@<ip>` to run on
   your computer, then `http://localhost:4310`.
-- *Any device on my network* -- binds `0.0.0.0`, opened at the LAN address.
 
 Password login and the clients' bearer tokens assume an untrusted network.
-The choice is `CONDUIT_ACCESS` in `conduit.env`; `conduit-server status` shows
-the addresses it gives.
+The extras are `CONDUIT_ACCESS` (a comma list) in `conduit.env`;
+`conduit-server status` shows every address.
 
 ## Backup and restore
 

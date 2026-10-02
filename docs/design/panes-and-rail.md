@@ -1,6 +1,6 @@
 # The dock, the rail and main-pane splits
 
-> **Status (2026-09-28): stages 0 to 4 built; stage 5 (equal panes) next.** Rules this produces move
+> **Status (2026-10-03): stages 0 to 6 built (equal panes, then panes with tabs).** Rules this produces move
 > into `DESIGN.md` as each stage lands; this file stays the plan and is
 > deleted once the last stage is built.
 
