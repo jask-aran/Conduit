@@ -532,6 +532,9 @@ npm run perf:live -- --target local --origin http://127.0.0.1:4310 --chat-id <id
 
 # repository root: this checkout's installer against this checkout, packaged as a
 # thin release -- no push, no tag. --sandbox keeps it off the real daemon.
+# Read docs/deployment.md "Changing the installer" first: the live installer is
+# main's install.sh, and a sandbox still shares the tailnet and, without
+# CONDUIT_DATA_ROOT, the password.
 scripts/try-install.sh --sandbox            # --build rebuilds the client first
 conduit-server-sandbox uninstall
 ```
