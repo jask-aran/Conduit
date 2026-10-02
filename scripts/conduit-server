@@ -176,8 +176,23 @@ wait_healthy() {
   [[ -t 1 ]] && printf '\r\e[K'; return 1
 }
 
+# install.sh fetches a thin release's dependencies in the background while
+# setup asks its questions; nothing starts until they are in.
+wait_deps() {
+  [[ -f "$CURRENT/.deps-pending" ]] || return 0
+  local frames="$FRAMES" i=0
+  while [[ -f "$CURRENT/.deps-pending" ]]; do
+    [[ -t 1 ]] && printf '\r\e[K%s%s%s  Dependencies' "$M" "${frames:i++%${#frames}:1}" "$N"
+    sleep 0.15
+  done
+  [[ -t 1 ]] && printf '\r\e[K'
+  [[ -f "$CURRENT/.deps-failed" ]] && { sed "s/^/${D}${S_BAR}${N}    /" "$CURRENT/.deps-failed" | tail -12; fail "Dependencies did not install. Run the installer again."; }
+  return 0
+}
+
 start() {
   load_env
+  wait_deps
   [[ -e "$CURRENT" ]] || fail "Nothing installed. Run the installer, or: conduit-server use dev <clone>"
   mkdir -p "$STATE_DIR" "$CONDUIT_DATA_ROOT"
   case "$(service_kind)" in
@@ -292,11 +307,24 @@ TTY=/dev/tty
 settle() { # settle lines-to-clear "question" "answer"
   printf '\r\e[%dA\e[J%s%s%s  %s\n%s%s  %s%s\n' "$1" "$G" "$S_DONE" "$N" "$2" "$D" "$S_BAR" "$3" "$N" >$TTY
 }
-ask() { # ask "Question" default -> REPLY; the default is there to edit
-  printf '%s%s%s  %s\n%s%s%s  ' "$C" "$S_ASK" "$N" "$1" "$C" "$S_BAR" "$N" >$TTY
+ask() { # ask "Question" default -> REPLY; one line, the default there to edit
+  printf '%s%s%s  %s  ' "$C" "$S_ASK" "$N" "$1" >$TTY
   IFS= read -r -e -i "${2:-}" REPLY <$TTY 2>$TTY || REPLY=""
   REPLY="${REPLY:-${2:-}}"
-  settle 2 "$1" "${REPLY:-${D}(none)${N}}"
+  printf '\e[1A\r\e[K%s%s%s  %s  %s%s%s\n' "$G" "$S_DONE" "$N" "$1" "$D" "${REPLY:-(none)}" "$N" >$TTY
+}
+# line_secret "Label" "hint" -> REPLY: typed as ▪▪▪ on one line, left unfinished
+# so the next prompt can take the same line.
+line_secret() {
+  printf '\r\e[K%s%s%s  %s  %s%s%s' "$C" "$S_ASK" "$N" "$1" "$D" "${2:+$2  }" "$N" >$TTY
+  REPLY=""; local ch
+  while IFS= read -rsn1 ch <$TTY; do
+    case "$ch" in
+      "") break ;;
+      $'\x7f'|$'\b') [[ -n "$REPLY" ]] && { REPLY="${REPLY%?}"; printf '\b \b' >$TTY; } ;;
+      *) REPLY+="$ch"; printf '%s' "$S_MASK" >$TTY ;;
+    esac
+  done
 }
 secret() { # secret "Question" -> REPLY, typed as ▪▪▪
   printf '%s%s%s  %s\n%s%s%s  ' "$C" "$S_ASK" "$N" "$1" "$C" "$S_BAR" "$N" >$TTY
@@ -339,6 +367,38 @@ choose() { # choose "Question" "one" "two" … -> REPLY (1-based); ↑↓/jk/dig
   settle "$n" "$q" "$chosen"
   REPLY=$((sel + 1))
 }
+checklist() { # checklist "Question" "one" "two" … -> REPLY: chosen numbers, space-separated
+  local q="$1"; shift
+  local -a opts=("$@") on=(); local n=$# sel=0 i key rest
+  for i in "${!opts[@]}"; do on[i]=0; done
+  trap 'printf "\e[?25h" >/dev/tty 2>/dev/null || true' EXIT
+  printf '%s%s%s  %s\n\e[?25l' "$C" "$S_ASK" "$N" "$q" >$TTY
+  _draw() {
+    for i in "${!opts[@]}"; do
+      local box="$S_OFF"; (( on[i] )) && box="$S_ON"
+      if (( i == sel )); then printf '\r\e[K%s%s%s  %s%s%s %s\n' "$C" "$S_BAR" "$N" "$G" "$box" "$N" "${opts[i]}"
+      else printf '\r\e[K%s%s%s  %s%s %s%s\n' "$C" "$S_BAR" "$N" "$D" "$box" "$(plain "${opts[i]}")" "$N"; fi
+    done
+    printf '\r\e[K%s%s%s  %s↑↓ move · space choose · enter done%s' "$C" "$S_END" "$N" "$D" "$N"
+  } >$TTY
+  _draw
+  while IFS= read -rsn1 key <$TTY; do
+    if [[ "$key" == $'\e' ]]; then read -rsn2 -t 0.05 rest <$TTY || true; key+="$rest"; fi
+    case "$key" in
+      $'\e[A'|k) sel=$(( (sel - 1 + n) % n )) ;;
+      $'\e[B'|j) sel=$(( (sel + 1) % n )) ;;
+      " "|x) on[sel]=$(( 1 - on[sel] )) ;;
+      [1-9]) (( key <= n )) && { sel=$((key - 1)); on[sel]=$(( 1 - on[sel] )); } ;;
+      "") break ;;
+    esac
+    printf '\e[%dA' "$n" >$TTY; _draw
+  done
+  REPLY=""; local names=()
+  for i in "${!opts[@]}"; do (( on[i] )) && { REPLY+="$((i + 1)) "; local c; c="$(plain "${opts[i]}")"; names+=("${c%% — *}"); }; done
+  printf '\e[?25h\r\e[%dA\e[J' "$n" >$TTY
+  local IFS=","; local summary="${names[*]}"
+  printf '%s%s%s  %s  %s%s%s\n' "$G" "$S_DONE" "$N" "$q" "$D" "${summary:-none}" "$N" >$TTY
+}
 spin() { # spin "message" command… — the rail's spinner, then ◇ and the time it took
   local message="$1"; shift
   local log; log="$(mktemp)"; local started=$SECONDS i=0
@@ -371,36 +431,38 @@ box() { # box "Title" line… — a note hung off the rail
 
 setup() {
   load_env
-  title "Set up Conduit${PROFILE:+ ${D}($PROFILE)${N}}"
-  if [[ -f "$CONDUIT_DATA_ROOT/auth.json" ]]; then ok "Login password ${D}already set · $NAME password to change${N}"
+  # Python tools build while the questions are asked.
+  local py_log; py_log="$(mktemp)"
+  ( sync_python >"$py_log" 2>&1 && echo ok >"$py_log.done" || echo fail >"$py_log.done" ) &
+  [[ -n "${CONDUIT_RAIL:-}" ]] || title "setup${PROFILE:+ ${D}$PROFILE${N}}"
+  if [[ -f "$CONDUIT_DATA_ROOT/auth.json" ]]; then ok "Password ${D}already set${N}"
   else set_password; fi
-  bar
   ask "Port" "$CONDUIT_PORT"; set_env CONDUIT_PORT "$REPLY"; load_env
-  bar
   choose_access
-  bar
-  spin "Python tools for spreadsheets and documents" sync_python || note "Retry later: $NAME setup"
   if [[ "$(service_kind)" == systemd ]] && command -v loginctl >/dev/null 2>&1 \
     && [[ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null)" != yes ]]; then
-    loginctl enable-linger "$USER" >/dev/null 2>&1 && ok "Keeps running after you log out" || true
+    loginctl enable-linger "$USER" >/dev/null 2>&1 || true
   fi
+  spin "Finishing" bash -c 'while [ ! -f "$1" ]; do sleep 0.2; done' _ "$py_log.done" || true
+  [[ "$(cat "$py_log.done" 2>/dev/null)" == ok ]] || warn "Python tools did not build ${D}· $NAME doctor --fix${N}"
+  rm -f "$py_log" "$py_log.done"
   start
   connect_access
   ready_box
-  note "Agents (claude, codex, opencode) come from PATH, with their own logins."
   update_notice
-  outro "Manage it with ${B}$NAME${N} status · logs · connect · update"
+  outro "${D}$NAME${N} status · pair · logs · connect"
 }
 set_password() {
+  local hint="" first
   while :; do
-    secret "Choose a login password"; local first="$REPLY"
-    [[ ${#first} -ge 8 ]] || { warn "At least 8 characters"; continue; }
-    secret "Once more"
+    line_secret "Password" "$hint"; first="$REPLY"
+    [[ ${#first} -ge 8 ]] || { hint="${Y}at least 8 characters${N}${D}"; continue; }
+    line_secret "Password" "once more"
     [[ "$REPLY" == "$first" ]] && break
-    warn "Those didn't match"
+    hint="${Y}those didn't match${N}${D}"
   done
   printf '%s' "$first" | CONDUIT_DATA_ROOT="$CONDUIT_DATA_ROOT" "$(node_bin)" "$CURRENT/scripts/conduit-auth.mjs" set-password --stdin >/dev/null
-  printf '\e[4A\r\e[J' >$TTY; ok "Login password ${D}set${N}"
+  printf '\r\e[K' >$TTY; ok "Password ${D}set${N}"
 }
 
 # ---------------------------------------------------------------- reaching it
@@ -421,35 +483,32 @@ ts_name() { tailscale status --json 2>/dev/null | sed -n 's/.*"DNSName": *"\([^"
 public_ip() { curl -fsS --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}'; }
 lan_ip() { (hostname -I 2>/dev/null || ipconfig getifaddr en0 2>/dev/null) | tr ' ' '\n' | grep -E '^(192\.168|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)' | head -1; }
 
+# This computer and its network always reach Conduit; what is asked is which
+# further ways in to set up as well.
 choose_access() {
-  local ts; ts="$(ts_state)" ts_hint="${D}— your phone and other computers, from anywhere${N}"
-  [[ "$ts" == running ]] && ts_hint="${D}— $(ts_name) is signed in${N}"
-  [[ "$ts" == missing ]] && ts_hint="${D}— installs it, free for personal use${N}"
-  local tunnel_hint="${D}— Cloudflare Tunnel, ngrok, Caddy, nginx…${N}"
-  command -v cloudflared >/dev/null 2>&1 && tunnel_hint="${D}— cloudflared is installed${N}"
-  choose "How will you open Conduit?" \
-    "Just this computer ${D}— the browser here, or the desktop app${N}" \
+  local ts; ts="$(ts_state)" ts_hint="${D}— your devices, anywhere${N}"
+  [[ "$ts" == running ]] && ts_hint="${D}— $(ts_name)${N}"
+  [[ "$ts" == missing ]] && ts_hint="${D}— installs it${N}"
+  local tunnel_hint="${D}— Cloudflare Tunnel, Caddy, nginx…${N}"
+  command -v cloudflared >/dev/null 2>&1 && tunnel_hint="${D}— cloudflared found${N}"
+  checklist "Also reach it from" \
     "Tailscale $ts_hint" \
-    "A tunnel or reverse proxy I run $tunnel_hint" \
-    "An SSH tunnel ${D}— for a server you SSH into; nothing to install${N}" \
-    "Any device on my network ${D}— $(lan_ip):$CONDUIT_PORT, no HTTPS${N}"
-  case "$REPLY" in 2) ACCESS=tailscale ;; 3) ACCESS=proxy ;; 4) ACCESS=ssh ;; 5) ACCESS=lan ;; *) ACCESS=local ;; esac
-  set_env CONDUIT_ACCESS "$ACCESS"
-  set_env CONDUIT_HOST "$([[ "$ACCESS" == lan ]] && echo 0.0.0.0 || echo 127.0.0.1)"
-  if [[ "$ACCESS" == proxy ]]; then
-    box "Point your tunnel or proxy at" \
-      "${C}${B}http://127.0.0.1:$CONDUIT_PORT${N}" \
-      "" \
-      "${D}cloudflared${N}  cloudflared tunnel --url http://127.0.0.1:$CONDUIT_PORT" \
-      "${D}Caddy${N}        reverse_proxy 127.0.0.1:$CONDUIT_PORT" \
-      "" \
-      "${D}It does HTTPS; WebSockets must pass through (they do by default).${N}"
-    bar
-    ask "Its public address ${D}optional, shown in status${N}" "${CONDUIT_PUBLIC_URL:-}"
+    "A tunnel or reverse proxy $tunnel_hint" \
+    "An SSH tunnel ${D}— for a server you SSH into${N}"
+  local extras=()
+  [[ " $REPLY " == *" 1 "* ]] && extras+=(tailscale)
+  [[ " $REPLY " == *" 2 "* ]] && extras+=(proxy)
+  [[ " $REPLY " == *" 3 "* ]] && extras+=(ssh)
+  local IFS=","; set_env CONDUIT_ACCESS "${extras[*]}"; unset IFS
+  set_env CONDUIT_HOST 0.0.0.0
+  if [[ " ${extras[*]} " == *" proxy "* ]]; then
+    note "Point it at ${N}${C}http://127.0.0.1:$CONDUIT_PORT${N}${D} and let it do HTTPS · e.g. cloudflared tunnel --url http://127.0.0.1:$CONDUIT_PORT"
+    ask "Its public address ${D}(optional)${N}" "${CONDUIT_PUBLIC_URL:-}"
     set_env CONDUIT_PUBLIC_URL "$REPLY"
   fi
   load_env
 }
+has_access() { [[ ",${CONDUIT_ACCESS:-}," == *",$1,"* ]]; }
 
 # Tailscale serve gives the loopback server an HTTPS name on the tailnet.
 connect_tailscale() {
@@ -482,33 +541,24 @@ connect_tailscale() {
 
 connect_access() {
   load_env
-  case "${CONDUIT_ACCESS:-local}" in
-    tailscale) connect_tailscale || true ;;
-  esac
+  has_access tailscale && { connect_tailscale || true; }
+  return 0
 }
 connect() { load_env; title "How Conduit is reached"; choose_access; healthy && restart >/dev/null; connect_access; ready_box; outro ""; }
 
-access_urls() { # url|how to get there|a command to run, if any
-  local access="${CONDUIT_ACCESS:-}"
-  [[ -z "$access" ]] && { [[ "$CONDUIT_HOST" == 0.0.0.0 ]] && access=lan || access=local; }
-  case "$access" in
-    tailscale) local n; n="$(ts_name)"
-      [[ -n "$n" ]] && echo "https://$n|from any device signed in to your tailnet"
-      echo "http://localhost:$CONDUIT_PORT|on this computer" ;;
-    ssh) echo "http://localhost:$CONDUIT_PORT|on your computer, while this runs on it:|ssh -NL $CONDUIT_PORT:localhost:$CONDUIT_PORT $USER@$(public_ip)" ;;
-    proxy) [[ -n "${CONDUIT_PUBLIC_URL:-}" ]] && echo "$CONDUIT_PUBLIC_URL|through your tunnel or proxy"
-      echo "http://127.0.0.1:$CONDUIT_PORT|what the tunnel or proxy points at" ;;
-    lan) echo "http://$(lan_ip):$CONDUIT_PORT|from devices on this network"; echo "http://localhost:$CONDUIT_PORT|on this computer" ;;
-    *) echo "http://localhost:$CONDUIT_PORT|on this computer, or the desktop app" ;;
-  esac
+access_urls() { # url|where from|a command to run, if any
+  echo "http://localhost:$CONDUIT_PORT|this computer"
+  [[ "$CONDUIT_HOST" == 0.0.0.0 && -n "$(lan_ip)" ]] && echo "http://$(lan_ip):$CONDUIT_PORT|your network"
+  if has_access tailscale; then local n; n="$(ts_name)"; [[ -n "$n" ]] && echo "https://$n|your tailnet"; fi
+  has_access proxy && [[ -n "${CONDUIT_PUBLIC_URL:-}" ]] && echo "$CONDUIT_PUBLIC_URL|your tunnel"
+  has_access ssh && echo "http://localhost:$CONDUIT_PORT|over SSH, after:|ssh -NL $CONDUIT_PORT:localhost:$CONDUIT_PORT $USER@$(public_ip)"
+  return 0
 }
 ready_box() {
-  local -a lines=(); local url how cmd first=1
+  local -a lines=(); local url how cmd
   while IFS='|' read -r url how cmd; do
-    (( first )) || lines+=("")
-    first=0
-    lines+=("${C}${B}$url${N}" "${D}$how${N}")
-    [[ -n "$cmd" ]] && lines+=("${B}$cmd${N}")
+    lines+=("${C}${B}$url${N}  ${D}$how${N}")
+    [[ -n "$cmd" ]] && lines+=("  ${B}$cmd${N}")
   done < <(access_urls)
   box "Conduit is ready" "${lines[@]}"
 }
@@ -532,6 +582,7 @@ latest_release() {
 }
 update_available() { # prints the newer tag, if this runs a release older than it
   [[ "$(code_kind)" == release ]] || return 0
+  [[ "$(cat "$CURRENT/VERSION")" == *local* ]] && return 0
   local latest here; latest="$(latest_release)"; here="v$(cat "$CURRENT/VERSION")"
   [[ -n "$latest" && "$latest" != "$here" && "$(printf '%s\n%s\n' "$here" "$latest" | sort -V | tail -1)" == "$latest" ]] && echo "$latest"
   return 0
@@ -788,7 +839,7 @@ status_json() {
   while IFS='|' read -r url how cmd; do urls+="${urls:+,}{\"url\":$(json_str "$url"),\"how\":$(json_str "$how")}"; done < <(access_urls)
   printf '{"running":%s,"code":%s,"kind":"%s","port":%s,"access":%s,"urls":[%s],"service":"%s","data":%s,"update":%s}\n' \
     "$(healthy && echo true || echo false)" "$(json_str "$(code_label)")" "$(code_kind)" "$CONDUIT_PORT" \
-    "$(json_str "${CONDUIT_ACCESS:-local}")" "$urls" "$(service_kind)" "$(json_str "$CONDUIT_DATA_ROOT")" "$(json_str "$(update_available)")"
+    "$(json_str "${CONDUIT_ACCESS:-}")" "$urls" "$(service_kind)" "$(json_str "$CONDUIT_DATA_ROOT")" "$(json_str "$(update_available)")"
 }
 
 logs_cmd() {
@@ -835,6 +886,12 @@ completion() {
 }
 
 uninstall() {
+  load_env
+  # The Tailscale serve entry setup made, if it still points here.
+  if has_access tailscale && command -v tailscale >/dev/null 2>&1 \
+    && tailscale serve status 2>/dev/null | grep -q "127.0.0.1:$CONDUIT_PORT"; then
+    tailscale serve --https=443 off >/dev/null 2>&1 || true
+  fi
   stop >/dev/null 2>&1 || true
   [[ "$(service_kind)" == systemd ]] && { systemctl --user disable "$NAME" >/dev/null 2>&1 || true; }
   rm -f "$UNIT_FILE" "$PLIST" "${CONDUIT_BIN_DIR:-$HOME/.local/bin}/$NAME"
