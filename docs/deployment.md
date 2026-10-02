@@ -104,6 +104,42 @@ It is a second daemon, `conduit-server-sandbox`, with its own
 `~/.conduit-sandbox` data, port 4321 and service, and `conduit-server-sandbox
 uninstall` removes all of it.
 
+| | dev clone | installed release | sandbox |
+| --- | --- | --- | --- |
+| command | `conduit-server` after `use dev` | `conduit-server` after `use release` | `conduit-server-sandbox` |
+| code | the checkout | `~/.local/share/conduit/versions/<v>` | `~/.local/share/conduit-sandbox/` |
+| data | `~/.conduit/data` | `~/.conduit/data` (the same) | `~/.conduit-sandbox/data` |
+| port | 4310 | 4310 | 4321 |
+| rebuild | `start-conduit.sh restart` | `conduit-server update` | reinstall |
+
+Dev and release are one daemon; only one runs on :4310 at a time. The
+`conduit-server` on PATH is the copy inside whatever `current` points to, so
+after `use release` it is that release's CLI, not the checkout's.
+
+## Changing the installer
+
+| File | Role |
+| --- | --- |
+| `scripts/install.sh` | the curl script: picks the build, downloads with a progress bar, checks SHA-256 and signature, chooses Node, unpacks to `versions/<v>`, installs dependencies, links `conduit-server`, execs `setup` |
+| `scripts/conduit-server` | the daemon CLI, shipped inside each release; `setup` asks the questions, `connect` the ways in |
+| `scripts/release-deps.mjs` | npm dependencies for this machine only, run on the target |
+| `scripts/package-server.sh` | builds the thin release archive (rebuilds the client if its source is newer) |
+| `scripts/try-install.sh` | packages this checkout as `v0.0.0-local-<sha>`, signs it, and runs this checkout's `install.sh` against it |
+
+- **`get.jask-aran.com/conduit` serves `install.sh` from `main` on GitHub.**
+  Pushing main changes the live installer for everyone, before any tag.
+  Iterate with `scripts/try-install.sh --sandbox` instead; nothing is pushed.
+- **During an interactive setup the dependencies install in the background**
+  (`.deps-pending` / `.deps-failed` / `.deps-log` in the release folder) while
+  the questions are asked; `conduit-server start` waits for them. Python tools
+  sync the same way.
+- **A sandbox is still this machine.** Auth commands touch the real password
+  unless `CONDUIT_DATA_ROOT` is on the same command line; choosing Tailscale in
+  setup runs a real `tailscale serve` on the real tailnet. In tests, leave the
+  extra ways in unticked, and `conduit-server-sandbox uninstall` afterwards.
+- `CONDUIT_TARBALL`, `CONDUIT_RELEASE_URL` and `--version` point `install.sh` at
+  another archive; `--no-setup` stops before the questions.
+
 ## Reaching it
 
 Conduit always listens on `0.0.0.0`: `http://localhost:4310` on this computer
