@@ -60,8 +60,8 @@ curl -fsSL https://get.jask-aran.com/conduit | bash
 
 It installs Conduit and the Node it runs on into `~/.local/share/conduit`, then
 asks for a login password and who may reach it, and starts it as a service.
-Nothing needs root. Manage it with `conduit status`, `conduit logs` and
-`conduit update`; see [install and operations](docs/deployment.md).
+Nothing needs root. Manage it with `conduit-server status`, `logs` and
+`update`; see [install and operations](docs/deployment.md).
 
 ## Start locally
 

@@ -85,7 +85,7 @@ in the canonical `data/pi` directory. Conduit sets the extension workflow to
 Assistant, Coding, and Host Pi sessions receive the `bin` directory from the
 shared uv environment under `working-files/.venv` at the front of `PATH`.
 Agents use the normal `python` command in the session working directory.
-Conduit builds the environment during `conduit setup` (or `start-conduit.sh
+Conduit builds the environment during `conduit-server setup` (or `start-conduit.sh
 setup` in a checkout). It is shared by all Workspaces and does not create files
 inside them. Setup installs pinned uv and its managed Python under
 `~/.conduit/data/toolchains/`; neither tool must exist on the host.

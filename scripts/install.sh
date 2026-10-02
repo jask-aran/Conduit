@@ -1,73 +1,85 @@
 #!/usr/bin/env bash
-# Install Conduit on this computer:
+# Install the Conduit server on this computer:
 #
 #   curl -fsSL https://get.jask-aran.com/conduit | bash
 #
 # Downloads the latest release for this platform and the Node it runs on into
-# ~/.local/share/conduit, puts `conduit` on PATH, and runs `conduit setup`.
-# Nothing needs root. Re-running it updates Conduit; your data in ~/.conduit
-# is never touched.
+# ~/.local/share/conduit, puts `conduit-server` on PATH, and runs its setup.
+# Nothing needs root. Re-running it updates; ~/.conduit is never touched.
 #
 #   --version v0.7.7   install that release
-#   --no-setup         install only; run `conduit setup` later
-#   --update           update in place (what `conduit update` runs)
-#   CONDUIT_TARBALL=…  install from a local release tarball (testing)
+#   --sandbox          a separate throwaway daemon (~/.conduit-sandbox, port 4321)
+#   --no-setup         install only
+#   --update           update in place (what `conduit-server update` runs)
+#   CONDUIT_TARBALL=…  install from a local release archive (testing)
 set -euo pipefail
 
 REPOSITORY="${CONDUIT_REPOSITORY:-jask-aran/Conduit}"
-APP_HOME="${CONDUIT_APP_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/conduit}"
-BIN_DIR="${CONDUIT_BIN_DIR:-$HOME/.local/bin}"
+PROFILE="${CONDUIT_PROFILE:-}"
 VERSION=""; SETUP=1; UPDATE=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version) VERSION="$2"; shift 2 ;;
+    --sandbox) PROFILE=sandbox; shift ;;
     --no-setup) SETUP=0; shift ;;
     --update) UPDATE=1; SETUP=0; shift ;;
     *) shift ;;
   esac
 done
+SUFFIX="${PROFILE:+-$PROFILE}"
+NAME="conduit-server$SUFFIX"
+APP_HOME="${CONDUIT_APP_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/conduit$SUFFIX}"
+BIN_DIR="${CONDUIT_BIN_DIR:-$HOME/.local/bin}"
 
-if [[ -t 1 ]]; then
-  B=$'\e[1m'; D=$'\e[2m'; G=$'\e[32m'; R=$'\e[31m'; C=$'\e[36m'; N=$'\e[0m'
-else B=""; D=""; G=""; R=""; C=""; N=""; fi
-ok() { printf '  %s✓%s %s\n' "$G" "$N" "$*"; }
-fail() { printf '\n  %s✗%s %s\n\n' "$R" "$N" "$*" >&2; exit 1; }
-spin() { # spin "message" command... : a one-line spinner, replaced by ✓ or ✗
+if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
+  B=$'\e[1m'; D=$'\e[2m'; G=$'\e[32m'; R=$'\e[31m'; C=$'\e[36m'; M=$'\e[35m'; N=$'\e[0m'
+else B=""; D=""; G=""; R=""; C=""; M=""; N=""; fi
+UTF=0; [[ "${LANG:-}${LC_ALL:-}" == *UTF-8* ]] && UTF=1
+TICK="✓"; CROSS="✗"; (( UTF )) || { TICK="+"; CROSS="x"; }
+
+fail() { printf '\n  %s%s%s %s\n\n' "$R" "$CROSS" "$N" "$*" >&2; exit 1; }
+# step "message" command... — a spinner while it runs, then ✓ and how long it took.
+step() {
   local message="$1"; shift
-  local log; log="$(mktemp)"
+  local log; log="$(mktemp)"; local started=$SECONDS
   "$@" >"$log" 2>&1 &
   local pid=$! frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏' i=0
+  (( UTF )) || frames='-\|/'
   if [[ -t 1 ]]; then
     while kill -0 "$pid" 2>/dev/null; do
-      printf '\r  %s%s%s %s' "$C" "${frames:i++%${#frames}:1}" "$N" "$message"; sleep 0.08
+      printf '\r  %s%s%s %s %s%ss%s' "$C" "${frames:i++%${#frames}:1}" "$N" "$message" "$D" "$((SECONDS - started))" "$N"
+      sleep 0.08
     done
     printf '\r\e[K'
   fi
-  if wait "$pid"; then ok "$message"; rm -f "$log"
-  else printf '  %s✗%s %s\n' "$R" "$N" "$message"; sed 's/^/    /' "$log" | tail -20 >&2; rm -f "$log"; exit 1; fi
+  if wait "$pid"; then
+    printf '  %s%s%s %-44s %s%ss%s\n' "$G" "$TICK" "$N" "$message" "$D" "$((SECONDS - started))" "$N"; rm -f "$log"
+  else
+    printf '  %s%s%s %s\n' "$R" "$CROSS" "$N" "$message"; sed 's/^/      /' "$log" | tail -20 >&2; rm -f "$log"; exit 1
+  fi
 }
 
 for tool in curl tar; do command -v "$tool" >/dev/null 2>&1 || fail "$tool is required."; done
-
 case "$(uname -s)" in
-  Linux) os=linux ;;
-  Darwin) os=darwin ;;
+  Linux) os=linux ;; Darwin) os=darwin ;;
   *) fail "Conduit runs on Linux and macOS. On Windows, run this inside WSL." ;;
 esac
 case "$(uname -m)" in
-  x86_64|amd64) arch=x64 ;;
-  aarch64|arm64) arch=arm64 ;;
+  x86_64|amd64) arch=x64 ;; aarch64|arm64) arch=arm64 ;;
   *) fail "No Conduit build for $(uname -m)." ;;
 esac
 platform="$os-$arch"
 
-printf '\n  %sConduit%s %sinstaller%s\n\n' "$B" "$N" "$D" "$N"
+if (( ! UPDATE )); then
+  printf '\n  %s%sconduit-server%s  %sthe Conduit daemon for this computer%s\n' "$B" "$M" "$N" "$D" "$N"
+  [[ -n "$PROFILE" ]] && printf '  %s%s profile: separate data, port and service%s\n' "$D" "$PROFILE" "$N"
+  echo
+fi
 
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 
 if [[ -n "${CONDUIT_TARBALL:-}" ]]; then
-  cp "$CONDUIT_TARBALL" "$work/conduit.tar.gz"
-  ok "Using $(basename "$CONDUIT_TARBALL")"
+  step "Using $(basename "$CONDUIT_TARBALL")" cp "$CONDUIT_TARBALL" "$work/conduit.tar.gz"
 else
   if [[ -z "$VERSION" ]]; then
     VERSION="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPOSITORY/releases/latest" | sed 's#.*/tag/##')"
@@ -78,11 +90,12 @@ else
   fetch_release() {
     curl -fsSL "$base/$asset" -o "$work/conduit.tar.gz"
     curl -fsSL "$base/$asset.sha256" -o "$work/conduit.sha256"
-    local expected; expected="$(awk '{print $1}' "$work/conduit.sha256")"
-    local actual; actual="$( (sha256sum "$work/conduit.tar.gz" 2>/dev/null || shasum -a 256 "$work/conduit.tar.gz") | awk '{print $1}')"
+    local expected actual
+    expected="$(awk '{print $1}' "$work/conduit.sha256")"
+    actual="$( (sha256sum "$work/conduit.tar.gz" 2>/dev/null || shasum -a 256 "$work/conduit.tar.gz") | awk '{print $1}')"
     [[ "$expected" == "$actual" ]] || { echo "Checksum mismatch for $asset"; return 1; }
   }
-  spin "Downloading Conduit $VERSION for $platform" fetch_release
+  step "Conduit $VERSION ${D}$platform${N}" fetch_release
 fi
 
 mkdir -p "$work/release"
@@ -91,39 +104,34 @@ release_version="$(cat "$work/release/VERSION")"
 node_version="$(cat "$work/release/NODE_VERSION")"
 
 node_dir="$APP_HOME/node/$node_version"
-if [[ ! -x "$node_dir/bin/node" ]]; then
-  fetch_node() {
-    local name="node-$node_version-$os-$arch"
-    curl -fsSL "https://nodejs.org/dist/$node_version/$name.tar.gz" -o "$work/node.tar.gz"
-    mkdir -p "$node_dir"
-    tar -xzf "$work/node.tar.gz" -C "$node_dir" --strip-components=1
-  }
-  spin "Downloading Node $node_version" fetch_node
-else
-  ok "Node $node_version"
-fi
+fetch_node() {
+  curl -fsSL "https://nodejs.org/dist/$node_version/node-$node_version-$os-$arch.tar.gz" -o "$work/node.tar.gz"
+  mkdir -p "$node_dir"; tar -xzf "$work/node.tar.gz" -C "$node_dir" --strip-components=1
+}
+if [[ -x "$node_dir/bin/node" ]]; then step "Node $node_version ${D}cached${N}" true
+else step "Node $node_version" fetch_node; fi
 
 install_release() {
   mkdir -p "$APP_HOME/versions" "$BIN_DIR"
   rm -rf "$APP_HOME/versions/$release_version"
   mv "$work/release" "$APP_HOME/versions/$release_version"
   ln -sfn "$APP_HOME/versions/$release_version" "$APP_HOME/current"
-  ln -sfn "$APP_HOME/current/scripts/conduit" "$BIN_DIR/conduit"
-  # Keep the two newest releases, for `conduit rollback`.
+  CONDUIT_PROFILE="$PROFILE" "$APP_HOME/current/scripts/conduit-server" _link
+  # Keep the two newest releases, for `conduit-server rollback`.
   ls -1t "$APP_HOME/versions" | tail -n +3 | while read -r old; do rm -rf "${APP_HOME:?}/versions/$old"; done
 }
-spin "Installing to $APP_HOME" install_release
+step "Installed to ${D}${APP_HOME/#$HOME/~}${N}" install_release
 
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
-  *) printf '  %s·%s Add %s to your PATH: %sexport PATH="%s:$PATH"%s\n' "$D" "$N" "$BIN_DIR" "$B" "$BIN_DIR" "$N" ;;
+  *) printf '  %s· add %s to PATH:%s export PATH="%s:$PATH"\n' "$D" "${BIN_DIR/#$HOME/~}" "$N" "$BIN_DIR" ;;
 esac
 
 if (( UPDATE )); then
-  spin "Updating the Python tools" "$BIN_DIR/conduit" _sync-python
-  exec "$BIN_DIR/conduit" restart
+  step "Python tools" env CONDUIT_PROFILE="$PROFILE" "$BIN_DIR/$NAME" _sync-python
+  exec env CONDUIT_PROFILE="$PROFILE" "$BIN_DIR/$NAME" restart
 fi
-if (( SETUP )) && [[ -r /dev/tty ]]; then
-  exec "$BIN_DIR/conduit" setup
+if (( SETUP )) && { : </dev/tty; } 2>/dev/null; then
+  exec env CONDUIT_PROFILE="$PROFILE" "$BIN_DIR/$NAME" setup
 fi
-printf '\n  Run %sconduit setup%s to finish.\n\n' "$B" "$N"
+printf '\n  Finish with %s%s setup%s\n\n' "$B" "$NAME" "$N"
