@@ -108,7 +108,7 @@ export default function VoiceLocalCatalogue(props: VoiceLocalCatalogueProps) {
   const runtimeShortLabel = (runtimeId: string) => runtimeLabel(runtimeId).replace(/ ONNX worker$/, "");
   const variantShortLabel = (artifact: CatalogueArtifact) => `${precisionLabel(artifact.precision)} · ${Math.ceil(artifact.approximateBytes / 1024 / 1024)} MiB`;
   const filesState = () => props.installingModelId
-    ? props.installProgress ? `${props.installProgress.phase} · ${Math.round(100 * props.installProgress.completedBytes / Math.max(1, props.installProgress.totalBytes))}%` : "Installing…"
+    ? props.installProgress?.phase === "runtime" ? "Downloading the voice runtime…" : props.installProgress ? `${props.installProgress.phase} · ${Math.round(100 * props.installProgress.completedBytes / Math.max(1, props.installProgress.totalBytes))}%` : "Installing…"
     : artifactStateLabel(props.backendStatus?.artifactState).replace(/^./, (first) => first.toUpperCase());
   return <>
     <label class="settings-line" for="voice-local-family"><span>Model</span>

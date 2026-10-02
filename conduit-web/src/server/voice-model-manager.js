@@ -9,6 +9,7 @@ import { getVoiceModelManifest, ONNXRUNTIME_VERSION } from "./voice-model-manife
 import { LEGACY_LOCAL_VOICE_MODELS, VOICE_EXECUTION_CATALOG, publicVoiceExecutionCatalog } from "./voice-execution-catalog.js";
 import { SileroVad, VoiceVadObservationQueue } from "./voice-vad.js";
 import { defaultTranscribeRsWorkerCommand, TranscribeRsWorkerClient } from "./transcribe-rs-worker.js";
+import { ensureVoicePackages, importVoicePackage } from "./voice-packages.js";
 
 const MIB = 1024 * 1024;
 export const LOCAL_VOICE_MODELS = LEGACY_LOCAL_VOICE_MODELS;
@@ -165,7 +166,7 @@ async function download(fetchImpl, artifact, destination, signal, onBytes, { ret
 }
 
 async function defaultTransformersLoader(modelPath, precision = "q8") {
-  const { pipeline } = await import("@huggingface/transformers");
+  const { pipeline } = await importVoicePackage("@huggingface/transformers");
   return pipeline("automatic-speech-recognition", modelPath, { dtype: precision === "fp32" ? "fp32" : "q8", local_files_only: true });
 }
 
@@ -180,7 +181,7 @@ export const DEFAULT_TRANSCRIBE_CPP_STREAM = Object.freeze({
 });
 
 async function defaultTranscribeCppLoader(modelPath, modelDefinition) {
-  const native = await import("transcribe-cpp");
+  const native = await importVoicePackage("transcribe-cpp");
   const version = native.version();
   const availableBackends = native.getAvailableBackends();
   const model = await native.TranscribeModel.load(modelPath, { backend: "auto" });
@@ -395,6 +396,9 @@ export class VoiceModelManager {
     await fs.mkdir(this.root, { recursive: true, mode: 0o700 });
     const stats = await fs.statfs(this.root);
     if (Number(stats.bavail) * Number(stats.bsize) < model.minimumFreeBytes) throw modelError("voice_model_disk_space", `At least ${Math.ceil(model.minimumFreeBytes / MIB)} MiB of free space is required for ${model.label}`, 409);
+    // A release ships without the native voice packages; the first model
+    // brings them (voice-packages.js).
+    await ensureVoicePackages({ onPhase: (phase) => { this.progress.phase = phase; } });
     this.progress.phase = "manifest";
     const manifest = await this.manifestResolver(model, this.fetchImpl, signal);
     this.progress.totalBytes = manifest.artifacts.reduce((sum, artifact) => sum + Number(artifact.size || 0), 0);
