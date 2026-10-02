@@ -101,8 +101,6 @@
 
 /* The dialog: every attachment, larger and uncropped. */
 .attachment-dialog-card { display: flex; width: min(520px, 100%); flex-direction: column; gap: 12px; }
-.attachment-dialog-head h2 { margin: 0; }
-.attachment-dialog-head p { margin: 0; color: var(--muted-foreground); font-size: 12px; }
 .attachment-dialog-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .attachment-dialog-row { display: flex; align-items: center; gap: 12px; padding: 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
 .attachment-dialog-row[data-status="error"] { border-color: var(--destructive); }
@@ -114,7 +112,7 @@
 .attachment-dialog-copy { display: grid; min-width: 0; flex: 1; gap: 2px; }
 .attachment-dialog-copy strong { overflow-wrap: anywhere; font-size: 10.4px; font-weight: 600; }
 .attachment-dialog-copy small { color: var(--muted-foreground); font-size: 8.8px; }
-.attachment-dialog-actions { display: flex; justify-content: space-between; gap: 8px; }
+.attachment-dialog-card .frost-dialog-actions { justify-content: space-between; }
 
 @media (--conduit-phone-layout) {
   .attachment-strip-scroller { padding: 4px; scroll-padding-inline: 4px; }
@@ -122,7 +120,7 @@
   .attachment-chip-copy strong, .attachment-dialog-copy strong { font-size: 12px; }
   .attachment-chip-copy small, .attachment-dialog-copy small { font-size: 11px; }
   /* A bottom sheet, rising from the edge the composer sits on. */
-  .attachment-dialog.conduit-modal { place-items: end center; padding: 0; }
+  .attachment-dialog.frost-overlay { place-items: end center; padding: 0; }
   .attachment-dialog .attachment-dialog-card { width: 100%; max-height: 85dvh; padding-bottom: calc(16px + env(safe-area-inset-bottom)); border-radius: 16px 16px 0 0; }
   .attachment-dialog-preview[data-kind="image"] { width: 140px; }
 }

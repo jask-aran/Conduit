@@ -1,6 +1,5 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import type { JSX } from "solid-js";
-import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import * as KDialog from "@kobalte/core/dialog";
 import {
   ArrowLeftIcon, BrainIcon, CheckIcon, ChevronRightIcon, CopyIcon, FileInputIcon, FilePlus2Icon,
@@ -9,7 +8,7 @@ import {
   SlashIcon, SlidersHorizontalIcon, SquareIcon, TerminalIcon, Trash2Icon, XIcon,
 } from "lucide-solid";
 import { Button } from "@/components/primitives";
-import { FrostOverlay, Keycap } from "@/components/frost";
+import { FrostDialog, FrostOverlay, Keycap } from "@/components/frost";
 import { activityLabel } from "../../activity.js";
 import type { ChatSummary, ModelOption, Project } from "../api/contracts";
 import {
@@ -1057,58 +1056,38 @@ export function CommandMenu(props: {
               onTogglePreview={togglePreview}
             />
     </FrostOverlay>
-    <KAlertDialog.Root open={Boolean(pendingDelete())} onOpenChange={(open) => {
-      if (!open) {
-        setPendingDelete(null);
-        focusInput();
-      }
-    }}>
-      <KAlertDialog.Portal>
-        <KAlertDialog.Content
-          class="conduit-modal"
-          onOpenAutoFocus={(event) => {
-            event.preventDefault();
-            selectDeleteChoice("cancel");
-          }}
-          onEscapeKeyDown={(event) => {
-            event.preventDefault();
-            setPendingDelete(null);
-            focusInput();
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
-              event.preventDefault();
-              selectDeleteChoice("cancel");
-            } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
-              event.preventDefault();
-              selectDeleteChoice("confirm");
-            }
-          }}
-        >
-          <div class="conduit-modal-card">
-            <KAlertDialog.Title>Delete {pendingDelete()?.length || 0} chats?</KAlertDialog.Title>
-            <KAlertDialog.Description>This permanently deletes the selected session transcripts and attached files.</KAlertDialog.Description>
-            <div class="dialog-actions">
-              <Button
-                ref={deleteCancelButton}
-                class="delete-dialog-choice"
-                variant="outline"
-                data-selected={deleteChoice() === "cancel"}
-                onFocus={() => setDeleteChoice("cancel")}
-                onClick={() => { setPendingDelete(null); focusInput(); }}
-              >Cancel</Button>
-              <Button
-                ref={deleteConfirmButton}
-                class="delete-dialog-choice delete-dialog-confirm"
-                variant={deleteChoice() === "confirm" ? "destructive" : "outline"}
-                data-selected={deleteChoice() === "confirm"}
-                onFocus={() => setDeleteChoice("confirm")}
-                onClick={() => void confirmDelete()}
-              >Delete chats</Button>
-            </div>
-          </div>
-        </KAlertDialog.Content>
-      </KAlertDialog.Portal>
-    </KAlertDialog.Root>
+    <FrostDialog alert open={Boolean(pendingDelete())}
+      onOpenChange={(open) => { if (!open) { setPendingDelete(null); focusInput(); } }}
+      onOpenAutoFocus={(event) => { event.preventDefault(); selectDeleteChoice("cancel"); }}
+      onCloseAutoFocus={(event) => event.preventDefault()}
+      onKeyDown={(event) => {
+        if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+          event.preventDefault();
+          selectDeleteChoice("cancel");
+        } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+          event.preventDefault();
+          selectDeleteChoice("confirm");
+        }
+      }}
+      title={`Delete ${pendingDelete()?.length || 0} chats?`}
+      description="This permanently deletes the selected session transcripts and attached files."
+      actions={<>
+        <Button
+          ref={deleteCancelButton}
+          class="delete-dialog-choice"
+          variant="outline"
+          data-selected={deleteChoice() === "cancel"}
+          onFocus={() => setDeleteChoice("cancel")}
+          onClick={() => { setPendingDelete(null); focusInput(); }}
+        >Cancel</Button>
+        <Button
+          ref={deleteConfirmButton}
+          class="delete-dialog-choice delete-dialog-confirm"
+          variant={deleteChoice() === "confirm" ? "destructive" : "outline"}
+          data-selected={deleteChoice() === "confirm"}
+          onFocus={() => setDeleteChoice("confirm")}
+          onClick={() => void confirmDelete()}
+        >Delete chats</Button>
+      </>} />
   </>;
 }

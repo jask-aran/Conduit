@@ -535,19 +535,19 @@ svg.lucide { stroke-width: 2.4; }
 .chat-main-empty .composer-stack { position: absolute; inset-inline: 0; top: 50%; z-index: 2; width: min(563.2px, calc(100% - 38.4px)); margin-inline: auto; padding: 0; transform: translateY(43.2px); background: transparent; }
 .chat-bootstrap { display: grid; min-height: 100%; place-items: center; color: var(--muted-foreground); font-size: 11.2px; }
 
-.conduit-modal, .settings-dialog, .command-dialog, .external-link-dialog { position: fixed; inset: 0; z-index: 80; display: grid; width: 100vw; height: 100dvh; place-items: center; padding: 12.8px; background: rgb(0 0 0 / 55%); opacity: 1; visibility: visible; transition: opacity 150ms ease, visibility 0s; }
-.conduit-modal[data-state="closed"], .settings-dialog[data-state="closed"], .command-dialog[data-state="closed"], .external-link-dialog[data-state="closed"] { opacity: 0; visibility: hidden; pointer-events: none; transition-delay: 0s, 220ms; }
-.conduit-modal-card, .external-link-dialog-card { width: min(384px, 100%); max-height: calc(100dvh - 25.6px); overflow: auto; padding: 16px; border: 0.8px solid var(--border); border-radius: 9.6px; background: var(--background); box-shadow: 0 19.2px 56px rgb(0 0 0 / 35%); }
-.conduit-modal-card h2, .external-link-dialog-card h2 { margin: 0 0 4px; font-size: 15.2px; }
+.frost-overlay { position: fixed; inset: 0; z-index: 80; display: grid; width: 100vw; height: 100dvh; place-items: center; padding: 12.8px; background: rgb(0 0 0 / 55%); opacity: 1; visibility: visible; transition: opacity 150ms ease, visibility 0s; }
+.frost-overlay[data-state="closed"] { opacity: 0; visibility: hidden; pointer-events: none; transition-delay: 0s, 220ms; }
+.frost-dialog { position: relative; display: grid; width: min(384px, 100%); max-height: calc(100dvh - 25.6px); overflow: auto; padding: 16px; }
+.frost-dialog-title { margin: 0 0 4px; font-size: 15.2px; }
 .workspace-add-dialog { position: relative; width: min(1040px, calc(100vw - 32px)); }
 .workspace-add-dialog-explore { overflow: hidden; padding: 0; }
-.conduit-modal-close { position: absolute !important; top: 8px; right: 8px; z-index: 10; display: grid; width: 36px !important; height: 36px !important; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted-foreground); cursor: pointer; }
-.conduit-modal-close:hover { background: var(--accent); color: var(--foreground); }
-.conduit-modal-close svg { width: 15px; height: 15px; }
+.frost-dialog-close { position: absolute !important; top: 8px; right: 8px; z-index: 10; display: grid; width: 36px !important; height: 36px !important; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted-foreground); cursor: pointer; }
+.frost-dialog-close:hover { background: var(--accent); color: var(--foreground); }
+.frost-dialog-close svg { width: 15px; height: 15px; }
 .workspace-add-dialog-explore > h2 { margin: 0; padding: 14px 52px 10px 16px; border-bottom: 1px solid var(--border); }
 .workspace-add-dialog-explore > form, .workspace-add-dialog-explore > form > [data-slot="field-group"] { display: contents; }
 .external-link-url { display: block; max-height: 8rem; margin: 9.6px 0; overflow: auto; border-radius: 4.8px; background: var(--muted); padding: 8px; overflow-wrap: anywhere; }
-.conduit-modal select, .settings-content select, .workspace-settings-card [role="combobox"] { width: 100%; min-height: 28.8px; border: 0.8px solid var(--border); border-radius: 5.6px; background: var(--background); padding: 5.6px 7.2px; color: inherit; text-align: left; }
+.frost-dialog select, .settings-content select, .workspace-settings-card [role="combobox"] { width: 100%; min-height: 28.8px; border: 0.8px solid var(--border); border-radius: 5.6px; background: var(--background); padding: 5.6px 7.2px; color: inherit; text-align: left; }
 .workspace-path-preview small { color: var(--muted-foreground); font-size: 9.6px; line-height: 1.35; }
 .workspace-path-preview { display: grid; gap: 3.2px; border-left: 1px solid var(--primary); background: var(--muted); padding: 7.2px 8px; }
 .workspace-path-preview strong { overflow-wrap: anywhere; font: 9.6px/1.35 ui-monospace, monospace; }
@@ -657,9 +657,9 @@ svg.lucide { stroke-width: 2.4; }
 .command-hint-more summary::after { content: "▾"; margin-left: 4px; color: var(--muted-foreground); }
 .command-hint-more[open] summary::after { content: "▴"; }
 .command-hint-more-list { display: flex; flex-wrap: wrap; gap: 4.8px 9.6px; margin-top: 6.4px; border-top: 1px solid var(--border); padding-top: 6.4px; }
-.command-list, .settings-content, .artifact pre, .tool-step-content pre, .composer textarea, .attachment-tray, .external-link-url, .conduit-modal-card, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
-.command-list::-webkit-scrollbar, .settings-content::-webkit-scrollbar, .artifact pre::-webkit-scrollbar, .tool-step-content pre::-webkit-scrollbar, .composer textarea::-webkit-scrollbar, .attachment-tray::-webkit-scrollbar, .external-link-url::-webkit-scrollbar, .conduit-modal-card::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 5.6px; height: 5.6px; }
-.command-list::-webkit-scrollbar-thumb, .settings-content::-webkit-scrollbar-thumb, .artifact pre::-webkit-scrollbar-thumb, .tool-step-content pre::-webkit-scrollbar-thumb, .composer textarea::-webkit-scrollbar-thumb, .attachment-tray::-webkit-scrollbar-thumb, .external-link-url::-webkit-scrollbar-thumb, .conduit-modal-card::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 1.6px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
+.command-list, .settings-content, .artifact pre, .tool-step-content pre, .composer textarea, .attachment-tray, .external-link-url, .frost-dialog, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
+.command-list::-webkit-scrollbar, .settings-content::-webkit-scrollbar, .artifact pre::-webkit-scrollbar, .tool-step-content pre::-webkit-scrollbar, .composer textarea::-webkit-scrollbar, .attachment-tray::-webkit-scrollbar, .external-link-url::-webkit-scrollbar, .frost-dialog::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 5.6px; height: 5.6px; }
+.command-list::-webkit-scrollbar-thumb, .settings-content::-webkit-scrollbar-thumb, .artifact pre::-webkit-scrollbar-thumb, .tool-step-content pre::-webkit-scrollbar-thumb, .composer textarea::-webkit-scrollbar-thumb, .attachment-tray::-webkit-scrollbar-thumb, .external-link-url::-webkit-scrollbar-thumb, .frost-dialog::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 1.6px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 .command-empty { padding: 14.4px 9.6px; color: var(--muted-foreground); font-size: 11.2px; text-align: center; }
 .command-group-label { margin: 6.4px 6.4px 2.4px; color: var(--muted-foreground); font-size: 8.8px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
 .command-list > .command-group-label:first-child { margin-top: 1.6px; }
@@ -697,9 +697,7 @@ svg.lucide { stroke-width: 2.4; }
 /* The old solid surface. Palettes, Settings and menus have moved to frost
    (the frost blocks at the end of this file); dialogs still use it. */
 .command-shell,
-.settings-shell,
-.conduit-modal-card,
-.external-link-dialog-card {
+.settings-shell {
   background: var(--popover);
   border: 1px solid var(--border);
   box-shadow: 0 19.2px 56px rgb(0 0 0 / 45%);
@@ -1295,29 +1293,29 @@ svg.lucide { stroke-width: 2.4; }
 .chat-main-live-opening .composer-wrap > .review-comment-tray { visibility: hidden; }
 .chat-bootstrap { display: grid; min-height: 100%; place-items: center; color: var(--muted-foreground); font-size: 14px; }
 
-.conduit-modal, .settings-dialog, .command-dialog, .external-link-dialog { position: fixed; inset: 0; z-index: 80; display: grid; width: 100vw; height: 100dvh; place-items: center; padding: 16px; background: rgb(0 0 0 / 55%); opacity: 1; visibility: visible; transition: opacity 150ms ease, visibility 0s; }
-.conduit-modal[data-state="closed"], .settings-dialog[data-state="closed"], .command-dialog[data-state="closed"], .external-link-dialog[data-state="closed"] { opacity: 0; visibility: hidden; pointer-events: none; transition-delay: 0s, 220ms; }
-.conduit-modal-card, .external-link-dialog-card { width: min(480px, 100%); max-height: calc(100dvh - 32px); overflow: auto; padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--background); box-shadow: 0 24px 70px rgb(0 0 0 / 35%); }
-.conduit-modal-card h2, .external-link-dialog-card h2 { margin: 0 0 5px; font-size: 19px; }
+.frost-overlay { position: fixed; inset: 0; z-index: 80; display: grid; width: 100vw; height: 100dvh; place-items: center; padding: 16px; background: rgb(0 0 0 / 55%); opacity: 1; visibility: visible; transition: opacity 150ms ease, visibility 0s; }
+.frost-overlay[data-state="closed"] { opacity: 0; visibility: hidden; pointer-events: none; transition-delay: 0s, 220ms; }
+.frost-dialog { position: relative; display: grid; width: min(480px, 100%); max-height: calc(100dvh - 32px); overflow: auto; padding: 20px; }
+.frost-dialog-title { margin: 0 0 5px; font-size: 19px; }
 .external-link-url { display: block; max-height: 8rem; margin: 12px 0; overflow: auto; border-radius: 6px; background: var(--muted); padding: 10px; overflow-wrap: anywhere; }
-.conduit-modal select, .settings-content select, .workspace-settings-card [role="combobox"] { width: 100%; min-height: 36px; border: 1px solid var(--border); border-radius: 7px; background: var(--background); padding: 7px 9px; color: inherit; text-align: left; }
+.frost-dialog select, .settings-content select, .workspace-settings-card [role="combobox"] { width: 100%; min-height: 36px; border: 1px solid var(--border); border-radius: 7px; background: var(--background); padding: 7px 9px; color: inherit; text-align: left; }
 .workspace-path-preview small { color: var(--muted-foreground); font-size: 12px; line-height: 1.35; }
 .workspace-path-preview { display: grid; gap: 4px; border-left: 2px solid var(--primary); background: var(--muted); padding: 9px 10px; }
 .workspace-path-preview strong { overflow-wrap: anywhere; font: 12px/1.35 ui-monospace, monospace; }
 .workspace-add-dialog { width: min(1040px, calc(100vw - 32px)); }
 .workspace-add-dialog-explore { overflow: hidden; padding: 0; }
 .workspace-add-dialog { position: relative; }
-.conduit-modal-close { position: absolute !important; top: 8px; right: 8px; z-index: 10; display: grid; width: 36px !important; height: 36px !important; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted-foreground); cursor: pointer; }
-.conduit-modal-close:hover { background: var(--accent); color: var(--foreground); }
-.conduit-modal-close svg { width: 15px; height: 15px; }
+.frost-dialog-close { position: absolute !important; top: 8px; right: 8px; z-index: 10; display: grid; width: 36px !important; height: 36px !important; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted-foreground); cursor: pointer; }
+.frost-dialog-close:hover { background: var(--accent); color: var(--foreground); }
+.frost-dialog-close svg { width: 15px; height: 15px; }
 .workspace-add-dialog-explore > h2 { margin: 0; padding: 14px 52px 10px 16px; border-bottom: 1px solid var(--border); }
 .workspace-add-dialog-explore > form, .workspace-add-dialog-explore > form > [data-slot="field-group"] { display: contents; }
 @media (max-width: 640px) {
-  .conduit-modal:has(.workspace-add-dialog) { display: flex; align-items: stretch; justify-content: stretch; height: var(--app-height, 100dvh); padding: 4px; }
+  .frost-overlay:has(.workspace-add-dialog) { display: flex; align-items: stretch; justify-content: stretch; height: var(--app-height, 100dvh); padding: 4px; }
   .workspace-add-dialog { width: 100%; height: 100%; max-height: none; border-radius: 12px; }
   .workspace-add-dialog-explore { height: 100%; }
-  .workspace-add-dialog .conduit-modal-close { top: 7px; right: 7px; width: 44px !important; height: 44px !important; }
-  .workspace-add-dialog .conduit-modal-close svg { width: 20px; height: 20px; }
+  .workspace-add-dialog .frost-dialog-close { top: 7px; right: 7px; width: 44px !important; height: 44px !important; }
+  .workspace-add-dialog .frost-dialog-close svg { width: 20px; height: 20px; }
   .workspace-add-dialog-explore > h2 { min-height: 52px; padding: 14px 58px 11px 16px; font-size: 20px; }
 }
 .workspace-preview-error { margin: 0; color: var(--destructive); font-size: 13px; }
@@ -1436,9 +1434,9 @@ svg.lucide { stroke-width: 2.4; }
 .command-hint-more summary::after { content: "▾"; margin-left: 5px; color: var(--muted-foreground); }
 .command-hint-more[open] summary::after { content: "▴"; }
 .command-hint-more-list { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; }
-.command-list, .settings-content, .artifact pre, .tool-step-content pre, .composer textarea, .attachment-tray, .external-link-url, .conduit-modal-card, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
-.command-list::-webkit-scrollbar, .settings-content::-webkit-scrollbar, .artifact pre::-webkit-scrollbar, .tool-step-content pre::-webkit-scrollbar, .composer textarea::-webkit-scrollbar, .attachment-tray::-webkit-scrollbar, .external-link-url::-webkit-scrollbar, .conduit-modal-card::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 7px; height: 7px; }
-.command-list::-webkit-scrollbar-thumb, .settings-content::-webkit-scrollbar-thumb, .artifact pre::-webkit-scrollbar-thumb, .tool-step-content pre::-webkit-scrollbar-thumb, .composer textarea::-webkit-scrollbar-thumb, .attachment-tray::-webkit-scrollbar-thumb, .external-link-url::-webkit-scrollbar-thumb, .conduit-modal-card::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
+.command-list, .settings-content, .artifact pre, .tool-step-content pre, .composer textarea, .attachment-tray, .external-link-url, .frost-dialog, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
+.command-list::-webkit-scrollbar, .settings-content::-webkit-scrollbar, .artifact pre::-webkit-scrollbar, .tool-step-content pre::-webkit-scrollbar, .composer textarea::-webkit-scrollbar, .attachment-tray::-webkit-scrollbar, .external-link-url::-webkit-scrollbar, .frost-dialog::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 7px; height: 7px; }
+.command-list::-webkit-scrollbar-thumb, .settings-content::-webkit-scrollbar-thumb, .artifact pre::-webkit-scrollbar-thumb, .tool-step-content pre::-webkit-scrollbar-thumb, .composer textarea::-webkit-scrollbar-thumb, .attachment-tray::-webkit-scrollbar-thumb, .external-link-url::-webkit-scrollbar-thumb, .frost-dialog::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 .command-empty { padding: 18px 12px; color: var(--muted-foreground); font-size: 14px; text-align: center; }
 .command-group-label { margin: 8px 8px 3px; color: var(--muted-foreground); font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
 .command-list > .command-group-label:first-child { margin-top: 2px; }
@@ -1477,9 +1475,7 @@ svg.lucide { stroke-width: 2.4; }
    glass treatment is reserved for the composer (and the drop overlay's
    native blur); everywhere else translucent grey read as flat, not glassy. */
 .command-shell,
-.settings-shell,
-.conduit-modal-card,
-.external-link-dialog-card {
+.settings-shell {
   background: var(--popover);
   border: 1px solid var(--border);
   box-shadow: 0 24px 70px rgb(0 0 0 / 45%);
@@ -2638,19 +2634,25 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
    take the one cursor wash and show where you are by weight; keys are
    keycaps; the foot is a rail on the same frost. Last in the file so it wins
    over the older per-density shells. */
+:root {
+  --frost-blur: blur(24px);
+  --frost-shadow: 0 24px 70px rgb(0 0 0 / 38%), inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 10%);
+  /* A full-screen overlay on a phone has nothing dimmed around it, so its frost gets a darker core. */
+  --frost-core: linear-gradient(#ffffff2b, #ffffff2b), oklch(0.19 0.005 264 / 72%);
+}
 .frost-overlay { align-items: start; padding-top: clamp(40px, 10vh, 92px); background: rgb(0 0 0 / 42%); }
 .frost-card {
   border: 1px solid var(--frost-stroke, #ffffff4d);
   border-radius: 14px;
   background: var(--frost-fill, #ffffff2b);
-  backdrop-filter: blur(24px);
-  box-shadow: 0 24px 70px rgb(0 0 0 / 38%), inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 10%);
+  backdrop-filter: var(--frost-blur);
+  box-shadow: var(--frost-shadow);
 }
 .frost-overlay .frost-card { animation: frost-arrive 220ms cubic-bezier(.2, .8, .2, 1) both; }
 @keyframes frost-arrive { from { opacity: 0; transform: translateY(8px); } }
 @media (--conduit-mobile-layout) {
   .frost-overlay { align-items: stretch; padding: 8px; }
-  .frost-overlay .frost-card { width: 100%; height: 100%; max-height: none; background: linear-gradient(#ffffff2b, #ffffff2b), oklch(0.19 0.005 264 / 72%); }
+  .frost-overlay .frost-card { width: 100%; height: 100%; max-height: none; background: var(--frost-core); }
 }
 @media (prefers-reduced-motion: reduce) { .frost-overlay .frost-card { animation: none; } }
 .frost-row { min-height: 30px; gap: 10px; border-radius: 9px; padding: 4px 8px; }
@@ -2667,13 +2669,13 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .settings-dialog.frost-overlay { align-items: center; padding: 16px; }
 /* As wide as the rail plus the settings list's 640px column, no wider. */
 .settings-dialog .frost-card.settings-shell { width: min(900px, calc(100vw - 32px)); }
-.settings-dialog .frost-card.settings-shell { border: 1px solid #ffffff4d; border-radius: 14px; background: #ffffff2b; box-shadow: 0 24px 70px rgb(0 0 0 / 38%), inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 10%); }
+.settings-dialog .frost-card.settings-shell { border: 1px solid #ffffff4d; border-radius: 14px; background: #ffffff2b; box-shadow: var(--frost-shadow); }
 .settings-dialog .settings-shell .settings-rail { border-right-color: oklch(1 0 0 / 10%); background: transparent; }
 .settings-dialog .settings-shell .settings-content > header { background: transparent; }
 @media (--conduit-mobile-layout) {
   .settings-dialog.frost-overlay { align-items: stretch; padding: 8px; }
-  .settings-dialog .frost-card.settings-shell { width: 100%; height: 100%; background: linear-gradient(#ffffff2b, #ffffff2b), oklch(0.19 0.005 264 / 72%); }
-  .settings-dialog .settings-shell .settings-content > header { border-bottom-color: oklch(1 0 0 / 10%); background: oklch(0.24 0.005 264 / 70%); backdrop-filter: blur(24px); padding-top: 12px; }
+  .settings-dialog .frost-card.settings-shell { width: 100%; height: 100%; background: var(--frost-core); }
+  .settings-dialog .settings-shell .settings-content > header { border-bottom-color: oklch(1 0 0 / 10%); background: oklch(0.24 0.005 264 / 70%); backdrop-filter: var(--frost-blur); padding-top: 12px; }
   .settings-dialog .settings-shell .settings-rail { padding-top: 10px; }
 }
 
@@ -2684,7 +2686,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 :is([data-slot="menu-content"], [data-slot="menu-sub-content"], [data-slot="context-menu-content"], [data-slot="context-menu-sub-content"], [data-slot="popover-content"])[data-slot] {
   border: 1px solid #ffffff4d;
   background: #ffffff2b;
-  backdrop-filter: blur(24px);
+  backdrop-filter: var(--frost-blur);
   box-shadow: 0 18px 50px rgb(0 0 0 / 38%), inset 0 1px 0 rgb(255 255 255 / 45%), inset 0 -1px 0 rgb(255 255 255 / 8%);
   --tw-ring-shadow: 0 0 #0000;
 }
@@ -2734,40 +2736,40 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 :is([data-slot*="menu"] [role^="menuitem"], .menu-row) :is(span, strong):not(.composer-menu-shortcut) { font-size: inherit; }
 @media (--conduit-mobile-layout) { :is([data-slot*="menu"] [role^="menuitem"], .menu-row) { font-size: 0.875rem; } }
 
-/* Dialogs and confirms are overlays, so they are frost (DESIGN.md, Surfaces):
-   the page dims as it does under a palette and the card takes the
-   composer's material. A small confirm stays a centred card on a phone
-   rather than filling it; the attachment list keeps its bottom sheet. */
-.conduit-modal, .external-link-dialog, .conduit-dialog-overlay { background: rgb(0 0 0 / 42%); }
-:is(.conduit-modal-card, .external-link-dialog-card, .conduit-dialog, .review-comment-editor)[class] {
-  border: 1px solid #ffffff4d;
-  border-radius: 14px;
-  background: #ffffff2b;
-  backdrop-filter: blur(24px);
-  box-shadow: 0 24px 70px rgb(0 0 0 / 38%), inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 10%);
+/* FrostDialog (components/frost.tsx): confirms, one-field prompts and small
+   pieces of content. The card is frost-card; this is only its layout. Centred,
+   a small card on a phone too, rather than the full-screen bubble -- unless
+   it holds content (data-size="wide"), whose own class sets its width. The
+   title and the choice, nothing else: the description stays for screen
+   readers, and a one-field prompt's label is hidden since the title names it. */
+.frost-overlay[data-placement="center"] { align-items: center; padding: 16px; }
+@media (--conduit-mobile-layout) {
+  .frost-overlay .frost-card.frost-dialog { width: min(480px, 100%); height: auto; max-height: calc(100dvh - 32px); align-self: center; }
+  .attachment-dialog .attachment-dialog-card[class] { border-radius: 16px 16px 0 0; }
 }
-:is(.conduit-modal-card, .external-link-dialog-card) { animation: frost-arrive 220ms cubic-bezier(.2, .8, .2, 1) both; }
-@media (--conduit-mobile-layout) { .attachment-dialog .attachment-dialog-card[class] { border-radius: 16px 16px 0 0; } }
-@media (prefers-reduced-motion: reduce) { :is(.conduit-modal-card, .external-link-dialog-card) { animation: none; } }
-/* On frost an outline button is its hairline alone, not a black slab. */
-:is(.conduit-modal-card, .external-link-dialog-card, .conduit-dialog, .review-comment-editor) [data-slot="button"][data-variant="outline"] { border-color: oklch(1 0 0 / 16%); background: transparent; }
-:is(.conduit-modal-card, .external-link-dialog-card, .conduit-dialog, .review-comment-editor) [data-slot="button"][data-variant="outline"]:is(:hover, :focus-visible, [data-selected="true"]) { background: oklch(1 0 0 / 10%); }
-/* Dialogs are sleek: the title and the choice, no explanatory paragraph (it
-   stays for screen readers), at the menus' text size, in a narrower card. */
-:is(.conduit-modal-card, .external-link-dialog-card, .conduit-dialog) :is([id$="-description"], .dialog-description) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.frost-dialog { gap: 12px; }
+.frost-dialog-title { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.3; }
+.frost-dialog-description, .frost-dialog [data-slot="field"] > label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.frost-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.frost-dialog-close { position: absolute !important; top: 8px; right: 8px; z-index: 10; display: grid; width: 28px; height: 28px; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted-foreground); cursor: pointer; }
+.frost-dialog-close:hover { background: oklch(1 0 0 / 10%); color: var(--foreground); }
+.frost-dialog-close svg { width: 14px; height: 14px; }
+.frost-dialog:has(> .frost-dialog-close) > .frost-dialog-title { padding-right: 32px; }
 @media (min-width: 761px) {
-  :is(.conduit-modal-card, .external-link-dialog-card, .conduit-dialog)[class] { width: min(320px, calc(100vw - 32px)); gap: 10px; padding: 14px; font-size: 10.4px; }
-  :is(.conduit-modal-card, .external-link-dialog-card, .conduit-dialog) [id$="-title"] { margin: 0; font-size: 12px; font-weight: 600; line-height: 1.3; }
-  :is(.conduit-modal-card, .external-link-dialog-card, .conduit-dialog) label { font-size: 10.4px; font-weight: 500; }
-  :is(.conduit-modal-card, .external-link-dialog-card, .conduit-dialog) :is(input, select) { height: 28px; min-height: 28px; font-size: 11px; }
-  :is(.conduit-modal-card, .external-link-dialog-card, .conduit-dialog) [data-slot="button"] { height: 26px; min-height: 26px; padding: 0 10px; border-radius: 7px; font-size: 10.4px; }
-  :is(.conduit-modal-card, .external-link-dialog-card, .conduit-dialog) :is(.dialog-actions, .conduit-modal-actions) { gap: 6px; margin-top: 4px; }
-  .conduit-dialog > button[aria-label] { top: 10px; right: 10px; }
+  .frost-dialog:not([data-size="wide"]) { width: min(320px, calc(100vw - 32px)); }
+  .frost-dialog { gap: 10px; padding: 14px; font-size: 10.4px; }
+  .frost-dialog-title { font-size: 12px; }
+  .frost-dialog label { font-size: 10.4px; font-weight: 500; }
+  .frost-dialog :is(input, select) { height: 28px; min-height: 28px; font-size: 11px; }
+  .frost-dialog [data-slot="button"] { height: 26px; min-height: 26px; padding: 0 10px; border-radius: 7px; font-size: 10.4px; }
+  .frost-dialog-actions { gap: 6px; margin-top: 4px; }
 }
-:is(.conduit-modal-card, .external-link-dialog-card, .conduit-dialog) :is(input, select, textarea) { border: 1px solid oklch(1 0 0 / 14%); background: oklch(0 0 0 / 14%); box-shadow: none; outline: none; }
-:is(.conduit-modal-card, .external-link-dialog-card, .conduit-dialog) :is(input, select, textarea):focus { border-color: oklch(1 0 0 / 30%); box-shadow: none; outline: none; }
-/* A one-field prompt's title already names the field. */
-.conduit-modal-card [data-slot="field"] > label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+/* On frost an outline button is its hairline alone, not a black slab, and an
+   input a faint hairline that brightens on focus. */
+.frost-card [data-slot="button"][data-variant="outline"] { border-color: oklch(1 0 0 / 16%); background: transparent; }
+.frost-card [data-slot="button"][data-variant="outline"]:is(:hover, :focus-visible, [data-selected="true"]) { background: oklch(1 0 0 / 10%); }
+.frost-dialog :is(input, select, textarea) { border: 1px solid oklch(1 0 0 / 14%); background: oklch(0 0 0 / 14%); box-shadow: none; outline: none; }
+.frost-dialog :is(input, select, textarea):focus { border-color: oklch(1 0 0 / 30%); box-shadow: none; outline: none; }
 
 /* Keyboard focus on a button is the wash (quiet buttons) or a slight lift
    (filled ones), never a ring (DESIGN.md, Interaction). */
@@ -2795,10 +2797,8 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 
 /* Pair a device: a frost card holding the QR on its own white tile, with the
    server's details as plain label/value rows beneath it. */
-.pair-dialog.frost-overlay { align-items: center; padding: 16px; }
-.frost-card.pair-card { display: grid; gap: 14px; width: min(360px, calc(100vw - 32px)); padding: 16px 18px 18px; }
-.pair-head { display: flex; align-items: center; justify-content: space-between; }
-.pair-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.frost-dialog.pair-card[data-size] { gap: 14px; width: min(360px, calc(100vw - 32px)); padding: 16px 18px 18px; font-size: inherit; }
+.pair-card .frost-dialog-title { font-size: 15px; }
 .pair-qr { justify-self: center; width: min(232px, 64vw); aspect-ratio: 1; overflow: hidden; border-radius: 12px; background: #fff; transition: opacity 160ms; }
 .pair-qr:empty { background: oklch(1 0 0 / 8%); }
 .pair-qr svg { display: block; width: 100%; height: 100%; }
@@ -2809,7 +2809,3 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .pair-details { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; font-size: 12.5px; }
 .pair-details dt { color: var(--muted-foreground); }
 .pair-details dd { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
-.pair-actions { display: flex; justify-content: flex-end; gap: 8px; }
-@media (--conduit-mobile-layout) {
-  .pair-dialog.frost-overlay .frost-card.pair-card { height: auto; align-self: center; }
-}
