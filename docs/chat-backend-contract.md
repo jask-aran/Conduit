@@ -146,7 +146,7 @@ buffer and the chat's log. When a record's buffer is full, paint is evicted befo
 
 | Event | Channel | Contract |
 | --- | --- | --- |
-| `transcript_op` | record | `message.open` places a row and says what it answers; `message.close` states the finished message in full; `message.drop` cuts the history or takes one row back; `tool.open` / `tool.close` do the same for a tool row, and a tool the user's stop killed closes `cancelled`, never `isError`; `turn.settle` states how a turn ended -- `complete`, `interrupted` or `failed` -- on every prompt it answered, before the event that ends it. A reader states the same `outcome` on each prompt it reads back, and the browser refuses a finished turn that did not say. |
+| `transcript_op` | record | `message.open` places a row and says what it answers; `message.close` states the finished message in full; `message.drop` cuts the history or takes one row back; `tool.open` / `tool.close` do the same for a tool row, and a tool the user's stop killed closes `cancelled`, never `isError`; `tool.calls` restates a script step's calls while it runs; `turn.settle` states how a turn ended -- `complete`, `interrupted` or `failed` -- on every prompt it answered, before the event that ends it. A reader states the same `outcome` on each prompt it reads back, and the browser refuses a finished turn that did not say. |
 | `status` | record | A transition: `started`, `stopping`, `stopped`, `settled`. `running` is also sent but not numbered — `started` has already said the turn began. |
 | `error` | record when `scope: "runtime"` | `scope: "request"` is Conduit refusing a command and belongs to that command. Codes: `generation_limit`, `live_process_limit`, `rpc_timeout`, `rate_limited` (with `retryAfterMs`), `auth_expired`, `backend_unavailable`, `invalid_request`. |
 | `transcript_sync` | record | A window of the transcript, or with `replace: true` the whole of it. |
@@ -359,3 +359,25 @@ what the registry expects. `setFrameInterval` is optional; a backend that does
 not implement it is simply never paced by its reader.
 
 Client commands are documented in `conduit-web/README.md`.
+
+## Script steps
+
+A tool whose input is a program that calls other tools -- Pi's `codemode`, and
+whatever other harnesses ship as their equivalent -- is one tool row of kind
+`script`. What it called is the row's `calls`: each `{ name, kind, subject?,
+done?, isError?, durationMs? }`, in order, plus `planned`/`repeats` rows read
+from the code before it runs and one `earlier` row counting calls past the last
+forty. The browser draws all of it; nothing about the harness reaches it.
+
+An adapter wires one in with `src/harnesses/script-calls.js`, given its own
+`kindOf(name)` and `subjectOf(name, input)`:
+
+1. Map the script tool to kind `script` in its tool-kind table.
+2. Live: on the script's start, `open(id, code)` (a JavaScript script gets a
+   preview) and publish `toolCalls` if it returns a plan; on each nested call's
+   start and end, `start(...)` / `end(...)` and publish `toolCalls` with what
+   they return. Never publish a nested call as its own `tool.open`.
+3. On the script's end, `close(id)`, and pass `settledCalls(list)` as `calls`
+   and `callsSubject(list)` as `subject` to `toolClose`.
+4. History: the same `settledCalls` / `callsSubject` on the stored result, so a
+   reload draws what the live turn drew.

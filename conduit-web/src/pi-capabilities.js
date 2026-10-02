@@ -1,3 +1,4 @@
+import { callsSubject, settledCalls } from "./harnesses/script-calls.js";
 import { toolSubject } from "./harnesses/transcript-ops.js";
 
 /**
@@ -64,34 +65,25 @@ export const piToolSubject = (name, input) => {
  */
 export const piResultSubject = (name, details) => {
   if (name === "get_search_content") return toolSubject(details?.url);
-  if (name !== "codemode" || !Array.isArray(details?.calls) || !details.calls.length) return null;
-  const counts = new Map();
-  for (const call of details.calls) counts.set(String(call.name || ""), (counts.get(String(call.name || "")) || 0) + 1);
-  return [...counts].map(([tool, count]) => count > 1 ? `${tool} ×${count}` : tool).join(" · ");
+  return name === "codemode" ? callsSubject(details?.calls) : null;
 };
 
-/**
- * The tools a codemode script called, in order, each read the way the same
- * tool called directly is: what it does, what it acted on, whether it failed.
- */
+/** Pi's tools as a script step reads them: the same kinds and subjects as a direct call. */
+export const PI_SCRIPT_TOOLS = Object.freeze({
+  kindOf: (name) => (Object.hasOwn(PI_TOOL_KINDS, name) ? PI_TOOL_KINDS[name] : "other"),
+  subjectOf: (name, input) => piToolSubject(name, input),
+});
+
+/** The tools a codemode script called, from its result's `details.calls`. */
 export const piResultCalls = (name, details) => {
   if (name !== "codemode" || !Array.isArray(details?.calls)) return null;
-  const shown = details.calls.slice(-40);
-  const earlier = details.calls.length - shown.length;
-  return [...(earlier ? [{ name: "earlier", kind: "other", earlier, done: true }] : []), ...shown.map((call) => {
+  return settledCalls(details.calls.map((call) => {
     let input = call.args;
     if (typeof input === "string") try { input = JSON.parse(input); } catch { input = null; }
-    const tool = String(call.name || "");
-    return {
-      name: tool,
-      kind: Object.hasOwn(PI_TOOL_KINDS, tool) ? PI_TOOL_KINDS[tool] : "other",
-      ...(piToolSubject(tool, input) ? { subject: piToolSubject(tool, input) } : {}),
-      done: true,
-      isError: call.status != null && call.status !== "ok",
-      ...(Number.isFinite(call.durationMs) ? { durationMs: Math.round(call.durationMs) } : {}),
-    };
-  })];
+    return { name: call.name, input, isError: call.status != null && call.status !== "ok", durationMs: call.durationMs };
+  }), PI_SCRIPT_TOOLS);
 };
+
 export const piResultFailed = (name, details) => {
   if (!details || typeof details !== "object") return false;
   if (name === "web_search") return details.queryCount > 0 && details.successfulQueries === 0;
