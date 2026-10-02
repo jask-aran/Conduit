@@ -9,13 +9,13 @@ test("managed Python project includes the advertised working-file libraries", as
   const project = await fs.readFile(path.join(root, "working-files/pyproject.toml"), "utf8");
   for (const dependency of [
     "odfpy",
-    "openpyxl",
     "pandas",
+    "paper-docx==0.2.1",
+    "paper-pptx==0.2.1",
+    "paper-xlsx==0.2.2",
     "pyarrow",
     "pymupdf",
     "pypdf",
-    "python-docx",
-    "python-pptx",
     "pyxlsb",
     "xlrd",
   ]) {

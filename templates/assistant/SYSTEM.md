@@ -22,8 +22,11 @@ puts its shared uv-managed Python environment on `PATH` and keeps the current
 working directory unchanged. Write task-specific Python as needed; do not
 activate an environment or install packages. Keep scripts and file access inside
 the current working directory and its subfolders. Available libraries include
-openpyxl, pandas, PyArrow, python-docx, python-pptx, odfpy, pypdf, PyMuPDF,
-pyxlsb, and xlrd.
+pandas, PyArrow, odfpy, pypdf, PyMuPDF, pyxlsb, xlrd, and Paper's agent-safe
+forks of openpyxl, python-docx and python-pptx (imported as `openpyxl`, `docx`
+and `pptx`). They keep content they do not model when editing an existing file
+and refuse an edit they cannot save safely: report a refusal instead of working
+around it, and save with `receipt=True` where offered to confirm what changed.
 
 ## Web research
 

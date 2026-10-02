@@ -45,14 +45,14 @@ test("repository templates are discoverable launch presets", () => {
   const general = templates.find((template) => template.id === "assistant");
   const view = templatePublicView(workspace);
   assert.equal(view.label, "Coding");
-  assert.equal(workspace.version, "8");
+  assert.equal(workspace.version, "9");
   assert.equal(view.defaultable, true);
   assert.deepEqual(workspace.tools, ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check", "codemode"]);
   assert.deepEqual(workspace.extensions, [path.resolve(root, "../conduit-web/node_modules/pi-web-access"), path.resolve(root, "coding/extensions/codemode-only.js")]);
   assert.ok(view.skillCount >= 1);
   assert.deepEqual(workspace.skills, [path.resolve(root, "coding/skills/git-github"), path.resolve(root, "coding/skills/web-research"), path.resolve(root, "coding/skills/develop-loop")]);
   assert.equal(general.label, "Assistant");
-  assert.equal(general.version, "9");
+  assert.equal(general.version, "10");
   assert.deepEqual(general.skills, [path.resolve(root, "coding/skills/web-research")]);
   assert.deepEqual(general.tools, ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check"]);
   assert.deepEqual(general.extensions, [path.resolve(root, "../conduit-web/node_modules/pi-web-access")]);
