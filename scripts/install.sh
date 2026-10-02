@@ -173,8 +173,19 @@ install_release() {
 }
 step "Installed in ${D}${APP_HOME/#$HOME/~}${N}" install_release
 
+# Beside a development clone: the daemon keeps serving the clone unless asked
+# to switch; `conduit-server use release|dev` moves between them later.
 if [[ ! -f "$APP_HOME/current/NODE_VERSION" ]]; then
-  bar; printf '%s%s%s  The daemon keeps running your clone. Try this release: %s%s use release%s\n\n' "$D" "$END" "$N" "$C" "$NAME" "$N"
+  clone="$(readlink -f "$APP_HOME/current")"
+  if (( ! UPDATE )) && { : </dev/tty; } 2>/dev/null; then
+    bar
+    printf '%s?%s  Serve %s now, instead of %s? %s[y/N]%s ' "$C" "$N" "$release_version" "${clone/#$HOME/~}" "$D" "$N" >/dev/tty
+    read -r answer </dev/tty || answer=n
+    if [[ "$answer" =~ ^[Yy] ]]; then
+      exec env CONDUIT_PROFILE="$PROFILE" CONDUIT_RAIL=1 "$APP_HOME/versions/$release_version/scripts/conduit-server" use "$release_version"
+    fi
+  fi
+  bar; printf '%s%s%s  Still serving %s. Switch any time: %s%s use release%s · %suse dev %s%s\n\n' "$D" "$END" "$N" "${clone/#$HOME/~}" "$C" "$NAME" "$N" "$C" "${clone/#$HOME/~}" "$N"
   exit 0
 fi
 case ":$PATH:" in
