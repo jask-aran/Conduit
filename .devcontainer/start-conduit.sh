@@ -167,7 +167,30 @@ managed_pid_from_file() {
   return 1
 }
 
-managed_pid() { managed_pid_from_file "$PID_FILE" pid_is_server; }
+# When the conduit-server daemon runs this clone (`conduit-server use dev`),
+# this script builds and the daemon runs: start, stop, status and logs go to
+# it, so there is one server, one port and one set of data either way.
+DAEMON="$ROOT/scripts/conduit-server"
+daemon_runs_this_clone() {
+  [[ "$(readlink -f "${XDG_DATA_HOME:-$HOME/.local/share}/conduit/current" 2>/dev/null)" == "$ROOT" ]]
+}
+# What only a development run sets, for the daemon to pick up.
+write_dev_env() {
+  {
+    [[ -n "${CONDUIT_DESKTOP_UPDATE_DIR:-}" ]] && echo "CONDUIT_DESKTOP_UPDATE_DIR=$CONDUIT_DESKTOP_UPDATE_DIR"
+    [[ -n "${CONDUIT_PI_TRACE:-}" ]] && echo "CONDUIT_PI_TRACE=$CONDUIT_PI_TRACE"
+    true
+  } >"$STATE_DIR/dev.env"
+}
+daemon_pid() {
+  local pid
+  pid="$(systemctl --user show -p MainPID --value conduit-server 2>/dev/null || true)"
+  [[ -n "$pid" && "$pid" != 0 ]] && echo "$pid"
+}
+managed_pid() {
+  if daemon_runs_this_clone; then daemon_pid; return; fi
+  managed_pid_from_file "$PID_FILE" pid_is_server
+}
 managed_vite_pid() { managed_pid_from_file "$VITE_PID_FILE" pid_is_vite; }
 
 require_dependencies() {
@@ -261,6 +284,12 @@ start_server() {
   local watch="${1:-false}"
   prepare_dirs || return
   require_dependencies
+  if [[ "$watch" != "true" ]] && daemon_runs_this_clone; then
+    [[ -f "$WEB_DIR/dist/index.html" ]] || build
+    write_dev_env
+    "$DAEMON" start
+    return
+  fi
   if [[ "$watch" != "true" && ! -f "$WEB_DIR/dist/index.html" ]]; then
     echo "No production build found. Run: bash .devcontainer/start-conduit.sh build" >&2
     exit 1
@@ -347,7 +376,8 @@ stop() {
   prepare_dirs || return
   local pid
   if pid="$(managed_vite_pid)"; then stop_managed "Vite" "$pid" "$VITE_PID_FILE"; fi
-  if pid="$(managed_pid)"; then stop_managed "Conduit" "$pid" "$PID_FILE";
+  if daemon_runs_this_clone && [[ ! -f "$PID_FILE" ]]; then "$DAEMON" stop
+  elif pid="$(managed_pid_from_file "$PID_FILE" pid_is_server)"; then stop_managed "Conduit" "$pid" "$PID_FILE";
   elif is_healthy; then
     echo "A healthy Conduit server is running on port ${CONDUIT_PORT}, but this launcher does not manage it." >&2
     echo "Stop that server before using this launcher." >&2
@@ -360,6 +390,7 @@ stop() {
 
 status() {
   prepare_dirs || return
+  if daemon_runs_this_clone; then "$DAEMON" status; return; fi
   local pid
   if ! pid="$(managed_pid)"; then
     echo "Conduit is stopped."
@@ -376,6 +407,7 @@ status() {
 
 logs() {
   prepare_dirs || return
+  if daemon_runs_this_clone && [[ "${1:-}" != "vite" ]]; then exec "$DAEMON" logs; fi
   local log_file="$LOG_FILE"
   if [[ "${1:-}" == "vite" ]]; then log_file="$VITE_LOG_FILE"; shift
   elif [[ "${1:-}" == "server" ]]; then shift; fi

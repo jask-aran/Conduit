@@ -1,0 +1,384 @@
+#!/usr/bin/env bash
+# conduit-server — the Conduit daemon on this computer, and how to manage it.
+#
+# One service runs whichever code `current` points at: a downloaded release,
+# or a development clone (`conduit-server use dev ~/Conduit`). Either way it
+# reads the same ~/.conduit/data and answers on the same port, so the browser,
+# desktop and phone clients never notice which.
+#
+#   ~/.local/share/conduit/versions/<v>   releases, replaced whole
+#   ~/.local/share/conduit/current        the code the service runs
+#   ~/.local/share/conduit/node/<v>       the Node releases run on
+#   ~/.conduit/data                       everything durable
+#   ~/.conduit/conduit.env                host, port, PATH and other settings
+#
+# CONDUIT_PROFILE=sandbox (what `install.sh --sandbox` sets up) gives a second,
+# separate daemon -- ~/.conduit-sandbox, its own port and service -- for trying
+# a fresh install without touching the real one.
+set -euo pipefail
+
+PROFILE="${CONDUIT_PROFILE:-}"
+SUFFIX="${PROFILE:+-$PROFILE}"
+APP_HOME="${CONDUIT_APP_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/conduit$SUFFIX}"
+STATE_DIR="${CONDUIT_STATE_DIR:-$HOME/.conduit$SUFFIX}"
+export CONDUIT_DATA_ROOT="${CONDUIT_DATA_ROOT:-$STATE_DIR/data}"
+ENV_FILE="$STATE_DIR/conduit.env"
+LOG_FILE="$STATE_DIR/conduit.log"
+PID_FILE="$STATE_DIR/conduit.pid"
+NAME="conduit-server$SUFFIX"
+UNIT_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$NAME.service"
+LABEL="com.conduit.server$SUFFIX"
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+REPOSITORY="${CONDUIT_REPOSITORY:-jask-aran/Conduit}"
+INSTALL_URL="${CONDUIT_INSTALL_URL:-https://get.jask-aran.com/conduit}"
+UV_VERSION="0.11.29"
+DEFAULT_PORT=4310; [[ "$PROFILE" == sandbox ]] && DEFAULT_PORT=4321
+CURRENT="$APP_HOME/current"
+
+# ---------------------------------------------------------------- appearance
+if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
+  B=$'\e[1m'; D=$'\e[2m'; G=$'\e[32m'; R=$'\e[31m'; Y=$'\e[33m'; C=$'\e[36m'; M=$'\e[35m'; N=$'\e[0m'
+else B=""; D=""; G=""; R=""; Y=""; C=""; M=""; N=""; fi
+if [[ "${LANG:-}${LC_ALL:-}" == *UTF-8* ]]; then TICK="✓"; CROSS="✗"; DOT="·"; ARROW="›"; else TICK="+"; CROSS="x"; DOT="-"; ARROW=">"; fi
+ok() { printf '  %s%s%s %s\n' "$G" "$TICK" "$N" "$*"; }
+warn() { printf '  %s!%s %s\n' "$Y" "$N" "$*"; }
+note() { printf '  %s%s %s%s\n' "$D" "$DOT" "$*" "$N"; }
+fail() { printf '  %s%s%s %s\n' "$R" "$CROSS" "$N" "$*" >&2; exit 1; }
+row() { printf '  %s%-9s%s %s\n' "$D" "$1" "$N" "$2"; }
+title() { printf '\n  %s%s%s%s  %s%s%s\n\n' "$B" "$M" "conduit-server" "$N" "$D" "$*" "$N"; }
+
+# ---------------------------------------------------------------- the code
+code_kind() { [[ -f "$CURRENT/NODE_VERSION" ]] && echo release || echo dev; }
+code_label() {
+  if [[ ! -e "$CURRENT" ]]; then echo "not installed"
+  elif [[ "$(code_kind)" == release ]]; then echo "release $(cat "$CURRENT/VERSION")"
+  else
+    local root; root="$(readlink -f "$CURRENT")"
+    echo "dev ${root/#$HOME/~} @ $(git -C "$root" rev-parse --short HEAD 2>/dev/null || echo '?')"
+  fi
+}
+# A release runs on the Node it was built with; a clone on the Node its
+# node_modules were installed with -- the one on PATH.
+node_bin() {
+  if [[ "$(code_kind)" == release ]]; then echo "$APP_HOME/node/$(cat "$CURRENT/NODE_VERSION")/bin/node"
+  else command -v node || true; fi
+}
+
+# ---------------------------------------------------------------- settings
+load_env() {
+  CONDUIT_HOST=127.0.0.1; CONDUIT_PORT=$DEFAULT_PORT
+  # shellcheck disable=SC1090
+  [[ -f "$ENV_FILE" ]] && { set -a; . "$ENV_FILE"; set +a; }
+  export CONDUIT_HOST CONDUIT_PORT
+}
+health_url() { echo "http://127.0.0.1:${CONDUIT_PORT}/healthz"; }
+healthy() { curl -fsS --max-time 3 "$(health_url)" >/dev/null 2>&1; }
+active_turns() { curl -fsS --max-time 3 "$(health_url)" 2>/dev/null | sed -n 's/.*"activeGenerations":\([0-9]*\).*/\1/p'; }
+
+service_kind() {
+  if [[ -n "${CONDUIT_SERVICE:-}" ]]; then echo "$CONDUIT_SERVICE"
+  elif [[ "$(uname -s)" == Darwin ]]; then echo launchd
+  elif command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; then echo systemd
+  else echo process; fi
+}
+
+# The service runs `current`'s server with the PATH of whoever last started
+# it, so it finds the same claude, codex and opencode they do.
+write_service() {
+  local node; node="$(node_bin)"
+  [[ -x "$node" ]] || fail "No Node to run $(code_label) with."
+  local extra=""; [[ -f "$STATE_DIR/dev.env" ]] && extra="EnvironmentFile=-$STATE_DIR/dev.env"
+  case "$(service_kind)" in
+    systemd)
+      mkdir -p "$(dirname "$UNIT_FILE")"
+      cat >"$UNIT_FILE" <<EOF
+[Unit]
+Description=Conduit server${PROFILE:+ ($PROFILE)}
+After=network-online.target
+
+[Service]
+Environment=PATH=$PATH
+Environment=CONDUIT_DATA_ROOT=$CONDUIT_DATA_ROOT
+EnvironmentFile=-$ENV_FILE
+$extra
+WorkingDirectory=$HOME
+ExecStart=$node $CURRENT/conduit-web/src/server.js
+Restart=on-failure
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target
+EOF
+      systemctl --user daemon-reload ;;
+    launchd)
+      mkdir -p "$(dirname "$PLIST")"
+      cat >"$PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>$LABEL</string>
+  <key>ProgramArguments</key><array>
+    <string>/bin/bash</string><string>-c</string>
+    <string>set -a; [ -f "$ENV_FILE" ] &amp;&amp; . "$ENV_FILE"; exec "$node" "$CURRENT/conduit-web/src/server.js"</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>CONDUIT_DATA_ROOT</key><string>$CONDUIT_DATA_ROOT</string>
+    <key>PATH</key><string>$PATH</string>
+  </dict>
+  <key>WorkingDirectory</key><string>$HOME</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>StandardOutPath</key><string>$LOG_FILE</string>
+  <key>StandardErrorPath</key><string>$LOG_FILE</string>
+</dict></plist>
+EOF
+      ;;
+  esac
+}
+
+pid_alive() { [[ -f "$PID_FILE" ]] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; }
+
+wait_healthy() {
+  local frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏' i=0
+  for _ in $(seq 1 240); do
+    healthy && { [[ -t 1 ]] && printf '\r\e[K'; return 0; }
+    [[ -t 1 ]] && printf '\r  %s%s%s Starting %s' "$C" "${frames:i++%10:1}" "$N" "$(code_label)"
+    sleep 0.25
+  done
+  [[ -t 1 ]] && printf '\r\e[K'; return 1
+}
+
+start() {
+  load_env
+  [[ -e "$CURRENT" ]] || fail "Nothing installed. Run the installer, or: conduit-server use dev <clone>"
+  mkdir -p "$STATE_DIR" "$CONDUIT_DATA_ROOT"
+  case "$(service_kind)" in
+    systemd) write_service; systemctl --user enable "$NAME" >/dev/null 2>&1; systemctl --user restart "$NAME" ;;
+    launchd) write_service; launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true; launchctl bootstrap "gui/$(id -u)" "$PLIST" ;;
+    process)
+      pid_alive && kill "$(cat "$PID_FILE")" 2>/dev/null && sleep 1
+      cd "$HOME"
+      [[ -f "$STATE_DIR/dev.env" ]] && { set -a; . "$STATE_DIR/dev.env"; set +a; }
+      nohup setsid "$(node_bin)" "$CURRENT/conduit-web/src/server.js" >>"$LOG_FILE" 2>&1 </dev/null &
+      echo $! >"$PID_FILE"; disown ;;
+  esac
+  wait_healthy || fail "Did not come up. See: $NAME logs"
+  ok "Running $(code_label) on ${B}:$CONDUIT_PORT${N}"
+}
+
+stop() {
+  load_env
+  case "$(service_kind)" in
+    systemd) systemctl --user stop "$NAME" 2>/dev/null || true ;;
+    launchd) launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true ;;
+    process) if pid_alive; then kill "$(cat "$PID_FILE")"; rm -f "$PID_FILE"; fi ;;
+  esac
+  ok "Stopped"
+}
+
+# A restart waits for answers still being written, up to ten minutes.
+restart() {
+  load_env
+  local waited=0 turns
+  while turns="$(active_turns)" && [[ -n "$turns" && "$turns" -gt 0 && $waited -lt 600 ]]; do
+    (( waited == 0 )) && note "Waiting for $turns answer(s) to finish"
+    sleep 2; waited=$((waited + 2))
+  done
+  start
+}
+
+running() { healthy; }
+status() {
+  load_env
+  title "$(code_label)"
+  if running; then row state "${G}${TICK} running${N}"; else row state "${R}${CROSS} stopped${N}"; fi
+  row open "http://$([[ "$CONDUIT_HOST" == 0.0.0.0 ]] && echo "<this-machine>" || echo localhost):$CONDUIT_PORT"
+  row service "$(service_kind) ${D}($NAME)${N}"
+  row data "${CONDUIT_DATA_ROOT/#$HOME/~}"
+  row logs "$(log_hint)"
+  echo
+}
+log_hint() { [[ "$(service_kind)" == systemd ]] && echo "journalctl --user -u $NAME" || echo "${LOG_FILE/#$HOME/~}"; }
+logs() {
+  if [[ "$(service_kind)" == systemd ]]; then exec journalctl --user -u "$NAME" -n 200 -f -o cat
+  else exec tail -n 200 -f "$LOG_FILE"; fi
+}
+
+# ---------------------------------------------------------------- which code
+use() {
+  local what="${1:-}"
+  case "$what" in
+    dev)
+      local root; root="$(readlink -f "${2:-$PWD}")"
+      [[ -f "$root/conduit-web/src/server.js" ]] || fail "$root is not a Conduit clone."
+      [[ -d "$root/conduit-web/node_modules" ]] || fail "Install its dependencies first: bash .devcontainer/start-conduit.sh setup"
+      [[ -f "$root/conduit-web/dist/index.html" ]] || note "Its client is not built yet: bash .devcontainer/start-conduit.sh build"
+      mkdir -p "$APP_HOME"; ln -sfn "$root" "$CURRENT" ;;
+    release|latest)
+      local newest; newest="$(ls -1t "$APP_HOME/versions" 2>/dev/null | head -1 || true)"
+      [[ -n "$newest" ]] || fail "No release installed. Run: $NAME update"
+      ln -sfn "$APP_HOME/versions/$newest" "$CURRENT" ;;
+    v*|[0-9]*)
+      local v="${what#v}"
+      [[ -d "$APP_HOME/versions/$v" ]] || fail "Release $v is not installed. Run: $NAME update v$v"
+      ln -sfn "$APP_HOME/versions/$v" "$CURRENT" ;;
+    "") note "Running $(code_label)"; ls -1t "$APP_HOME/versions" 2>/dev/null | sed "s/^/    /"; return ;;
+    *) fail "use dev <clone> | release | v<version>" ;;
+  esac
+  link_cli
+  ok "Now $(code_label)"
+  running && restart || true
+}
+
+link_cli() {
+  local bin="${CONDUIT_BIN_DIR:-$HOME/.local/bin}"
+  mkdir -p "$bin"
+  if [[ -n "$PROFILE" ]]; then
+    printf '#!/usr/bin/env bash\nCONDUIT_PROFILE=%s exec "%s/scripts/conduit-server" "$@"\n' "$PROFILE" "$CURRENT" >"$bin/$NAME"
+    chmod +x "$bin/$NAME"
+  else
+    ln -sfn "$CURRENT/scripts/conduit-server" "$bin/$NAME"
+  fi
+}
+
+# ---------------------------------------------------------------- setup
+sync_python() {
+  local tools="$CONDUIT_DATA_ROOT/toolchains" uv="$CONDUIT_DATA_ROOT/toolchains/uv/$UV_VERSION/uv"
+  if [[ ! -x "$uv" ]]; then
+    mkdir -p "$(dirname "$uv")"
+    curl -fsSL "https://astral.sh/uv/$UV_VERSION/install.sh" | env UV_UNMANAGED_INSTALL="$(dirname "$uv")" sh >/dev/null 2>&1
+  fi
+  env UV_CACHE_DIR="$tools/uv-cache" UV_PYTHON_INSTALL_DIR="$tools/python" \
+    "$uv" sync --project "$CURRENT/working-files" --locked --no-dev --no-install-project \
+    --python 3.13 --managed-python --quiet
+}
+
+ask() { # ask "Question" default -> REPLY
+  printf '  %s%s%s %s %s' "$C" "?" "$N" "$1" "${2:+${D}$2${N} }" >/dev/tty
+  read -r REPLY </dev/tty || REPLY=""
+  REPLY="${REPLY:-${2:-}}"
+}
+choose() { # choose "Question" "one" "two" -> REPLY (1-based)
+  local prompt="$1"; shift
+  printf '  %s?%s %s\n' "$C" "$N" "$prompt" >/dev/tty
+  local i=1; for option in "$@"; do printf '    %s%d%s %s\n' "$B" "$i" "$N" "$option" >/dev/tty; i=$((i + 1)); done
+  printf '    %s%s%s ' "$C" "$ARROW" "$N" >/dev/tty
+  read -r REPLY </dev/tty || REPLY=1
+  [[ "$REPLY" =~ ^[0-9]+$ && "$REPLY" -ge 1 && "$REPLY" -le $# ]] || REPLY=1
+}
+
+setup() {
+  load_env
+  title "setup${PROFILE:+ ($PROFILE)}"
+  if [[ -f "$CONDUIT_DATA_ROOT/auth.json" ]]; then ok "Login password already set ${D}(change it: $NAME password)${N}"
+  else
+    printf '  %s?%s Choose a login password\n' "$C" "$N" >/dev/tty
+    CONDUIT_DATA_ROOT="$CONDUIT_DATA_ROOT" "$(node_bin)" "$CURRENT/scripts/conduit-auth.mjs" set-password </dev/tty >/dev/null
+    ok "Password set"
+  fi
+  echo >/dev/tty
+  choose "Who can open Conduit?" \
+    "This computer ${D}— reach it from other devices with Tailscale or a tunnel${N}" \
+    "Any device on my network"
+  local host=127.0.0.1; [[ "$REPLY" == 2 ]] && host=0.0.0.0
+  ask "Port" "$CONDUIT_PORT"; local port="$REPLY"
+  mkdir -p "$STATE_DIR"
+  { grep -v -E '^(CONDUIT_HOST|CONDUIT_PORT)=' "$ENV_FILE" 2>/dev/null || true
+    printf 'CONDUIT_HOST=%s\nCONDUIT_PORT=%s\n' "$host" "$port"; } >"$ENV_FILE.tmp"
+  mv "$ENV_FILE.tmp" "$ENV_FILE"
+  echo
+  sync_python && ok "Python tools for spreadsheets and documents" || warn "Python tools skipped ${D}(see $NAME doctor)${N}"
+  if [[ "$(service_kind)" == systemd ]] && command -v loginctl >/dev/null 2>&1 \
+    && [[ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null)" != yes ]]; then
+    loginctl enable-linger "$USER" >/dev/null 2>&1 && ok "Keeps running after you log out" || true
+  fi
+  start
+  load_env
+  local url="http://localhost:$CONDUIT_PORT"
+  [[ "$CONDUIT_HOST" == 0.0.0.0 ]] && url="http://$( (hostname -I 2>/dev/null || ipconfig getifaddr en0 2>/dev/null) | awk '{print $1}'):$CONDUIT_PORT"
+  printf '\n  %s╭──────────────────────────────────────────────╮%s\n' "$D" "$N"
+  printf '  %s│%s  %sConduit is ready%s %-27s %s│%s\n' "$D" "$N" "$B" "$N" "" "$D" "$N"
+  printf '  %s│%s  %s%-44s%s%s│%s\n' "$D" "$N" "$C" "$url" "$N" "$D" "$N"
+  printf '  %s╰──────────────────────────────────────────────╯%s\n\n' "$D" "$N"
+  note "Your agents (claude, codex, opencode) are found on PATH with their own logins."
+  note "$NAME status · logs · update · use · doctor"
+  echo
+}
+
+# ---------------------------------------------------------------- releases
+update() {
+  local version="${1:-}"
+  curl -fsSL "$INSTALL_URL" | CONDUIT_PROFILE="$PROFILE" bash -s -- --update ${version:+--version "$version"}
+}
+
+rollback() {
+  local here previous
+  here="$(basename "$(readlink -f "$CURRENT")")"
+  previous="$(ls -1t "$APP_HOME/versions" 2>/dev/null | grep -vx "$here" | head -1 || true)"
+  [[ -n "$previous" ]] || fail "No earlier release to return to."
+  use "$previous"
+}
+
+doctor() {
+  load_env
+  title "doctor"
+  local node; node="$(node_bin)"
+  row code "$(code_label)"
+  [[ -x "$node" ]] && ok "Node $("$node" --version)" || warn "No Node for this code"
+  [[ -x "$CURRENT/working-files/.venv/bin/python" ]] && ok "Python tools" || warn "Python tools missing ${D}($NAME setup)${N}"
+  [[ -f "$CONDUIT_DATA_ROOT/auth.json" ]] && ok "Login password" || warn "No login password ${D}($NAME password)${N}"
+  for agent in claude codex opencode2 opencode; do
+    command -v "$agent" >/dev/null 2>&1 && ok "$agent ${D}$(command -v "$agent" | sed "s#^$HOME#~#")${N}" || note "$agent not found"
+  done
+  healthy && ok "Healthy on :$CONDUIT_PORT" || warn "Not running ${D}($NAME start)${N}"
+  echo
+}
+
+uninstall() {
+  stop >/dev/null 2>&1 || true
+  [[ "$(service_kind)" == systemd ]] && { systemctl --user disable "$NAME" >/dev/null 2>&1 || true; }
+  rm -f "$UNIT_FILE" "$PLIST" "${CONDUIT_BIN_DIR:-$HOME/.local/bin}/$NAME"
+  [[ "$(service_kind)" == systemd ]] && systemctl --user daemon-reload 2>/dev/null || true
+  rm -rf "$APP_HOME"
+  if [[ -n "$PROFILE" ]]; then rm -rf "$STATE_DIR"; ok "Removed the $PROFILE daemon and its data"
+  else ok "Removed. Your data stays in ${STATE_DIR/#$HOME/~}"; fi
+}
+
+usage() {
+  title "$(code_label)"
+  cat <<EOF
+  ${B}setup${N}              password, who can reach it, port; then start
+  ${B}status${N}             what runs, where, and its data
+  ${B}start${N} ${D}·${N} ${B}stop${N} ${D}·${N} ${B}restart${N}
+  ${B}logs${N}               follow the server's log
+  ${B}use${N} dev <clone>     run a development clone
+  ${B}use${N} release ${D}|${N} v<v>   run an installed release
+  ${B}update${N} [v]         install the latest (or a given) release
+  ${B}rollback${N}           the release before this one
+  ${B}password${N}           change the login password
+  ${B}doctor${N}             check Node, Python, agents and the server
+  ${B}uninstall${N}          remove the daemon; keeps ${STATE_DIR/#$HOME/~}
+
+EOF
+}
+
+command="${1:-help}"; shift || true
+case "$command" in
+  setup) setup ;;
+  start) start ;;
+  stop) stop ;;
+  restart) restart ;;
+  status) status ;;
+  logs) logs ;;
+  use) use "$@" ;;
+  update) update "$@" ;;
+  rollback) rollback ;;
+  password) "$(node_bin)" "$CURRENT/scripts/conduit-auth.mjs" set-password ;;
+  doctor) doctor ;;
+  uninstall) uninstall ;;
+  _sync-python) load_env; sync_python ;;
+  _link) link_cli ;;
+  version|--version|-v) code_label ;;
+  help|--help|-h) usage ;;
+  *) usage; exit 2 ;;
+esac
