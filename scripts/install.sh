@@ -39,6 +39,7 @@ if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
   B=$'\e[1m'; D=$'\e[2m'; G=$'\e[32m'; R=$'\e[31m'; C=$'\e[36m'; M=$'\e[35m'; N=$'\e[0m'; BADGE=$'\e[1;30;46m'
 else B=""; D=""; G=""; R=""; C=""; M=""; N=""; BADGE=""; fi
 UTF=0; [[ "${LANG:-}${LC_ALL:-}${LC_CTYPE:-}" == *UTF-8* ]] && UTF=1
+if (( UTF )); then FILL="━"; EMPTY="─"; else FILL="#"; EMPTY="-"; fi
 if (( UTF )); then BAR="│"; START="┌"; END="└"; DONE="◇"; ERR="■"; FRAMES="◒◐◓◑"
 else BAR="|"; START="T"; END="L"; DONE="o"; ERR="x"; FRAMES='-\|/'; fi
 
@@ -63,6 +64,41 @@ step() {
     printf '%s%s%s  %s\n' "$R" "$ERR" "$N" "$message"; sed "s/^/${D}${BAR}${N}    /" "$log" | tail -20 >&2; rm -f "$log"
     printf '%s%s%s\n\n' "$D" "$END" "$N"; exit 1
   fi
+}
+
+# download "label" url file — a progress bar while it arrives, then ◇ with
+# its size and time. Falls back to step's spinner when the size is unknown.
+human() { awk -v b="$1" 'BEGIN { if (b >= 1048576) printf "%.1f MB", b / 1048576; else printf "%d kB", b / 1024 }'; }
+download() {
+  local label="$1" url="$2" out="$3" started=$SECONDS total size pid width=24
+  total="$( { curl -fsSLI "$url" 2>/dev/null || true; } | tr -d '\r' | awk 'tolower($1) == "content-length:" { n = $2 } END { print n + 0 }')"
+  if [[ ! -t 1 || "$total" -le 0 ]]; then step "$label" curl -fsSL "$url" -o "$out"; return; fi
+  curl -fsSL "$url" -o "$out" 2>"$work/curl.err" &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    size="$( { wc -c <"$out"; } 2>/dev/null | tr -d ' ' || true)"; size="${size:-0}"
+    local filled=$(( size * width / total )) elapsed=$(( SECONDS - started )) rate=""
+    (( filled > width )) && filled=$width
+    (( elapsed > 0 )) && rate=" · $(human $(( size / elapsed )))/s"
+    local done_part rest_part
+    printf -v done_part '%*s' "$filled" ''; printf -v rest_part '%*s' "$((width - filled))" ''
+    printf '\r\e[K%s%s%s  %s  %s%s%s%s%s  %s%d%% %s / %s%s%s' "$M" "${FRAMES:SECONDS%${#FRAMES}:1}" "$N" "$label" \
+      "$C" "${done_part// /$FILL}" "$D" "${rest_part// /$EMPTY}" "$N" \
+      "$D" $(( size * 100 / total )) "$(human "$size")" "$(human "$total")" "$rate" "$N"
+    sleep 0.15
+  done
+  printf '\r\e[K'
+  if wait "$pid"; then printf '%s%s%s  %s %s%s · %ss%s\n' "$G" "$DONE" "$N" "$label" "$D" "$(human "$total")" "$((SECONDS - started))" "$N"
+  else printf '%s%s%s  %s\n' "$R" "$ERR" "$N" "$label"; sed "s/^/${D}${BAR}${N}    /" "$work/curl.err" >&2; printf '%s%s%s\n\n' "$D" "$END" "$N"; exit 1; fi
+}
+ver_ge() { [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -1)" == "$2" ]]; }
+choose() { # choose "Question" "one" "two" -> REPLY (1-based); digits then enter
+  local q="$1"; shift; local i=1
+  printf '%s◆%s  %s\n' "$C" "$N" "$q" >/dev/tty
+  for option in "$@"; do printf '%s%s%s  %s%d%s %s\n' "$C" "$BAR" "$N" "$B" "$i" "$N" "$option" >/dev/tty; i=$((i + 1)); done
+  printf '%s%s%s  › ' "$C" "$END" "$N" >/dev/tty
+  read -r REPLY </dev/tty || REPLY=1
+  [[ "$REPLY" =~ ^[0-9]+$ && "$REPLY" -ge 1 && "$REPLY" -le $# ]] || REPLY=1
 }
 
 for tool in curl tar; do command -v "$tool" >/dev/null 2>&1 || fail "$tool is required."; done
@@ -91,17 +127,19 @@ else
     [[ "$VERSION" == v* ]] || fail "Could not find the latest Conduit release."
   fi
   asset="conduit-server-$VERSION-$platform.tar.gz"
-  base="https://github.com/$REPOSITORY/releases/download/$VERSION"
-  fetch_release() {
-    curl -fsSL "$base/$asset" -o "$work/conduit.tar.gz"
-    curl -fsSL "$base/$asset.sha256" -o "$work/conduit.sha256"
-    curl -fsSL "$base/$asset.sig" -o "$work/conduit.sig"
+  base="${CONDUIT_RELEASE_URL:-https://github.com/$REPOSITORY/releases/download/$VERSION}"
+  # The checksum and signature are small; they come alongside.
+  curl -fsSL "$base/$asset.sha256" -o "$work/conduit.sha256" 2>/dev/null &
+  curl -fsSL "$base/$asset.sig" -o "$work/conduit.sig" 2>/dev/null &
+  download "Conduit $VERSION ${D}$platform${N}" "$base/$asset" "$work/conduit.tar.gz"
+  wait
+  check_sum() {
     local expected actual
     expected="$(awk '{print $1}' "$work/conduit.sha256")"
     actual="$( (sha256sum "$work/conduit.tar.gz" 2>/dev/null || shasum -a 256 "$work/conduit.tar.gz") | awk '{print $1}')"
     [[ "$expected" == "$actual" ]] || { echo "Checksum mismatch for $asset"; return 1; }
   }
-  step "Conduit $VERSION ${D}$platform${N}" fetch_release
+  step "Checksum" check_sum
 fi
 
 mkdir -p "$work/release"
@@ -109,13 +147,31 @@ tar -xzf "$work/conduit.tar.gz" -C "$work/release" --strip-components=1
 release_version="$(cat "$work/release/VERSION")"
 node_version="$(cat "$work/release/NODE_VERSION")"
 
+node_min="$(cat "$work/release/NODE_MIN" 2>/dev/null || echo 22.19.0)"
+
+# Node: the one on PATH when it is new enough, otherwise a private copy of the
+# version the release was built with (asked first when an older one is there).
 node_dir="$APP_HOME/node/$node_version"
-fetch_node() {
-  curl -fsSL "https://nodejs.org/dist/$node_version/node-$node_version-$os-$arch.tar.gz" -o "$work/node.tar.gz"
+NODE_BIN=""
+system_node="$(command -v node 2>/dev/null || true)"
+system_version="$([[ -n "$system_node" ]] && "$system_node" --version 2>/dev/null | sed 's/^v//')"
+if [[ -n "$system_version" ]] && ver_ge "$system_version" "$node_min"; then
+  NODE_BIN="$system_node"
+  printf '%s%s%s  Node %s %s%s · on PATH%s\n' "$G" "$DONE" "$N" "v$system_version" "$D" "${system_node/#$HOME/~}" "$N"
+elif [[ -x "$node_dir/bin/node" ]]; then
+  NODE_BIN="$node_dir/bin/node"
+  printf '%s%s%s  Node %s %sprivate copy, cached%s\n' "$G" "$DONE" "$N" "$node_version" "$D" "$N"
+else
+  if [[ -n "$system_version" ]] && { : </dev/tty; } 2>/dev/null; then
+    choose "Node v$system_version is older than Conduit needs (v$node_min or newer)" \
+      "Download Node $node_version just for Conduit ${D}— leaves yours alone${N}" \
+      "Stop; I'll update Node and run this again"
+    [[ "$REPLY" == 2 ]] && { bar; printf '%s%s%s  Update Node to v%s or newer, then run the installer again.\n\n' "$D" "$END" "$N" "$node_min"; exit 0; }
+  fi
+  download "Node $node_version ${D}private copy${N}" "https://nodejs.org/dist/$node_version/node-$node_version-$os-$arch.tar.gz" "$work/node.tar.gz"
   mkdir -p "$node_dir"; tar -xzf "$work/node.tar.gz" -C "$node_dir" --strip-components=1
-}
-if [[ -x "$node_dir/bin/node" ]]; then step "Node $node_version ${D}cached${N}" true
-else step "Node $node_version" fetch_node; fi
+  NODE_BIN="$node_dir/bin/node"
+fi
 
 # Checked with the downloaded Node by a verifier carried in this script, not
 # one from the archive it is checking.
@@ -154,7 +210,7 @@ if (!crypto.verify(null, Buffer.concat([signature.subarray(10, 74), Buffer.from(
   fail("Trusted comment does not match");
 }
 VERIFY
-  "$node_dir/bin/node" "$work/verify.mjs" "$work/conduit.tar.gz" "$work/conduit.sig" "$SIGNING_KEY"
+  "$NODE_BIN" "$work/verify.mjs" "$work/conduit.tar.gz" "$work/conduit.sig" "$SIGNING_KEY"
 }
 if [[ -z "${CONDUIT_TARBALL:-}" ]]; then step "Signature ${D}release key${N}" verify_signature
 elif [[ -f "${CONDUIT_TARBALL}.sig" ]]; then cp "${CONDUIT_TARBALL}.sig" "$work/conduit.sig"; step "Signature ${D}release key${N}" verify_signature; fi
@@ -163,6 +219,7 @@ install_release() {
   mkdir -p "$APP_HOME/versions" "$BIN_DIR"
   rm -rf "$APP_HOME/versions/$release_version"
   mv "$work/release" "$APP_HOME/versions/$release_version"
+  printf '%s\n' "$NODE_BIN" >"$APP_HOME/versions/$release_version/NODE_BIN"
   # A daemon running a development clone keeps running it: the release is
   # added beside it, for `conduit-server use release`.
   if [[ -L "$APP_HOME/current" && ! -f "$APP_HOME/current/NODE_VERSION" ]]; then return; fi

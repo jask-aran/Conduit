@@ -78,7 +78,12 @@ code_label() {
 # A release runs on the Node it was built with; a clone on the Node its
 # node_modules were installed with -- the one on PATH.
 node_bin() {
-  if [[ "$(code_kind)" == release ]]; then echo "$APP_HOME/node/$(cat "$CURRENT/NODE_VERSION")/bin/node"
+  if [[ "$(code_kind)" == release ]]; then
+    # The Node install.sh chose: the system's when new enough, else a private copy.
+    local chosen; chosen="$(cat "$CURRENT/NODE_BIN" 2>/dev/null || true)"
+    if [[ -x "$chosen" ]]; then echo "$chosen"
+    elif [[ -x "$APP_HOME/node/$(cat "$CURRENT/NODE_VERSION")/bin/node" ]]; then echo "$APP_HOME/node/$(cat "$CURRENT/NODE_VERSION")/bin/node"
+    else command -v node || true; fi
   else command -v node || true; fi
 }
 

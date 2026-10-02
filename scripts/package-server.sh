@@ -38,8 +38,20 @@ rm -rf "$modules/lucide-solid" "$modules/onnxruntime-web"
 # Conduit drives Claude Code only through the user's own `claude` on PATH, so
 # the SDK's bundled copy of it is never run.
 rm -rf "$modules"/@anthropic-ai/claude-agent-sdk-*
+find "$modules" -type d -path '*/@anthropic-ai/claude-agent-sdk-*' -prune -exec rm -rf {} +
+# Local voice models' native packages are fetched on first model install
+# (src/server/voice-packages.js), not shipped: they are most of the weight.
+rm -rf "$modules/transcribe-cpp" "$modules/@transcribe-cpp" "$modules/@huggingface" \
+  "$modules/onnxruntime-node" "$modules/onnxruntime-common" "$modules/sharp" "$modules/@img"
+# node-pty is compiled for this machine; its prebuilds are for the others.
+rm -rf "$modules/node-pty/prebuilds" "$modules/node-pty/deps" "$modules/node-pty/third_party"
+find "$modules" -type d -path '*/@koromix/koffi-*' -prune ! -name "koffi-$os-$arch" -exec rm -rf {} +
+find "$modules" -name '*.map' -type f -delete
 printf '%s\n' "${VERSION#v}" >"$STAGE/VERSION"
 node -p 'process.version' >"$STAGE/NODE_VERSION"
+# The oldest Node it runs on (Pi's floor; the native modules are N-API, so
+# any Node from here up loads them). install.sh uses one on PATH that meets it.
+printf '22.19.0\n' >"$STAGE/NODE_MIN"
 
 tar -czf "$OUT/$NAME.tar.gz" -C "$(dirname "$STAGE")" conduit
 (cd "$OUT" && (sha256sum "$NAME.tar.gz" 2>/dev/null || shasum -a 256 "$NAME.tar.gz") >"$NAME.tar.gz.sha256")

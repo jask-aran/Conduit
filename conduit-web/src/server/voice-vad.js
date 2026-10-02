@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { SILERO_VAD_ARTIFACT } from "./voice-model-manifests.js";
+import { importVoicePackage } from "./voice-packages.js";
 
 export const SILERO_VAD_POLICY = Object.freeze({
   sampleRate: 16_000,
@@ -96,7 +97,7 @@ async function locateModel(root, explicitPath) {
 }
 
 async function defaultSessionFactory(filePath) {
-  const ort = await import("onnxruntime-node");
+  const ort = await importVoicePackage("onnxruntime-node");
   const session = await ort.InferenceSession.create(filePath, { executionProviders: ["cpu"] });
   return { ort, session };
 }

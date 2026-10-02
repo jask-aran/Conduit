@@ -14,14 +14,22 @@ curl -fsSL https://get.jask-aran.com/conduit | bash
 
 1. picks the build for this computer (Linux x64 or arm64, macOS arm64; Windows
    runs it inside WSL);
-2. downloads that release from GitHub and checks its SHA-256, then the exact
-   Node it was built with;
-3. installs both into `~/.local/share/conduit` and links `~/.local/bin/conduit-server`;
-4. runs `conduit-server setup`: a login password, who may reach Conduit (this computer
+2. downloads that release from GitHub, with a progress bar, and checks its
+   SHA-256 and signature;
+3. uses the `node` on PATH when it is new enough (`NODE_MIN` in the release,
+   currently 22.19); otherwise offers a private copy of the Node the release
+   was built with, leaving the system's alone;
+4. installs it into `~/.local/share/conduit` and links `~/.local/bin/conduit-server`;
+5. runs `conduit-server setup`: a login password, who may reach Conduit (this computer
    only, or any device on the network), the port, the Python tools for
    spreadsheets and documents, and the service that keeps it running.
 
 `--version v0.7.7` installs a given release, `--no-setup` stops before setup.
+
+Local voice models' native packages (transcribe-cpp, onnxruntime,
+transformers) are not in the release. Installing the first voice model fetches
+them with npm into `~/.conduit/data/runtime/` once per version set, and links
+them into the running release.
 
 ## Layout
 
