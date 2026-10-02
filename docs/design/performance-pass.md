@@ -1,7 +1,7 @@
 # Performance pass: targets for investigation
 
-Seeded 2026-09-29 from what turned up while building the panes (stage 6,
-`panes-and-rail.md`). These are observations and suspicions, not diagnoses:
+Seeded 2026-09-29 from what turned up while building the panes (stage 6 of
+the panes work). These are observations and suspicions, not diagnoses:
 each target says what was seen, how it was seen, and where to start looking.
 The probes were headless Chromium (Playwright) against the local server on
 :4310, sampling once per animation frame; numbers are single runs on the dev
