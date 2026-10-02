@@ -26,6 +26,12 @@ curl -fsSL https://get.jask-aran.com/conduit | bash
 
 `--version v0.7.7` installs a given release, `--no-setup` stops before setup.
 
+A release is thin -- about 5 MB of source, built client and lockfile, plus a
+prebuilt node-pty. The installer fetches the rest with npm for this machine only
+(`scripts/release-deps.mjs`: other platforms' packages and the Agent SDK's
+bundled Claude binary are pruned from the lock first), about 65 MB the first
+time and little on updates, from npm's cache.
+
 Local voice models' native packages (transcribe-cpp, onnxruntime,
 transformers) are not in the release. Installing the first voice model fetches
 them with npm into `~/.conduit/data/runtime/` once per version set, and links

@@ -530,9 +530,10 @@ npm test
 node --test test/<name>.test.js
 npm run perf:live -- --target local --origin http://127.0.0.1:4310 --chat-id <id>
 
-# repository root: an installable server for this platform, then a throwaway install of it
-bash scripts/package-server.sh v0.0.0-test /tmp/rel
-HOME=/tmp/fakehome CONDUIT_SERVICE=process CONDUIT_TARBALL=/tmp/rel/conduit-server-v0.0.0-test-linux-x64.tar.gz bash scripts/install.sh --no-setup
+# repository root: this checkout's installer against this checkout, packaged as a
+# thin release -- no push, no tag. --sandbox keeps it off the real daemon.
+scripts/try-install.sh --sandbox            # --build rebuilds the client first
+conduit-server-sandbox uninstall
 ```
 
 - `startConduitHarness()`: isolated HTTP, WebSocket, SSE, persistence, PTY, and Pi lifecycle tests
