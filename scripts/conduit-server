@@ -581,7 +581,15 @@ open_cmd() {
 pair() {
   load_env
   healthy || fail "Conduit is not running. $NAME start"
-  local base; base="$(access_urls | cut -d'|' -f1 | grep -v -E '//(localhost|127\.0\.0\.1)[:/]' | head -1)"
+  # The address another device is likeliest to reach, from the routes the
+  # server has seen (a tunnel shows up there), before the one setup chose.
+  local base; base="$(auth api GET /v0/server 2>/dev/null | "$(node_bin)" -e '
+    try { const { paths = [] } = JSON.parse(require("fs").readFileSync(0, "utf8"));
+      const rank = { public: 2, private: 1 };
+      const best = paths.filter((p) => rank[p.scope]).sort((a, b) => rank[b.scope] - rank[a.scope])[0];
+      if (best) console.log(best.origin);
+    } catch {}' 2>/dev/null)"
+  [[ -n "$base" ]] || base="$(access_urls | cut -d'|' -f1 | grep -v -E '//(localhost|127\.0\.0\.1)[:/]' | head -1)"
   if [[ -z "$base" ]]; then
     title "Pair a device"
     warn "Only this computer can reach Conduit"
