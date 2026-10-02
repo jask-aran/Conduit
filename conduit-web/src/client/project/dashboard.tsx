@@ -1,6 +1,6 @@
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
-import * as KAlertDialog from "@kobalte/core/alert-dialog";
+import { FrostDialog } from "@/components/frost";
 import {
   CopyIcon,
   FolderIcon,
@@ -28,8 +28,6 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
-  Dialog,
-  DialogContent,
   Field,
   FieldLabel,
   Input,
@@ -512,30 +510,24 @@ export function ProjectDashboard(props: {
         <Show when={payload()?.changes.length} fallback={filesGroup()}>{changesGroup()}</Show>
       </Show>} />
 
-    <Dialog open={appearanceOpen()} onOpenChange={(open) => { if (!savingAppearance()) setAppearanceOpen(open); }}>
-      <DialogContent class="workspace-appearance-dialog" title="Workspace identity" description="Choose a short mark or a Lucide icon, then choose a preset or custom color.">
+    <FrostDialog open={appearanceOpen()} onOpenChange={setAppearanceOpen} busy={savingAppearance()} close size="wide" class="workspace-appearance-dialog" title="Workspace identity" description="Choose a short mark or a Lucide icon, then choose a preset or custom color.">
         <Show when={appearanceOpen()}>
           <WorkspaceAppearanceEditor compact value={activeAppearance()} saving={savingAppearance()} onSave={(appearance) => void saveAppearance(appearance)} />
         </Show>
-      </DialogContent>
-    </Dialog>
+      </FrostDialog>
 
-    <KAlertDialog.Root open={destroyOpen()} onOpenChange={(open) => { if (!destroying()) setDestroyOpen(open); }}>
-      <KAlertDialog.Portal><KAlertDialog.Content class="conduit-modal" onEscapeKeyDown={(event) => { if (destroying()) event.preventDefault(); }}>
-        <div class="conduit-modal-card workspace-destroy-dialog">
-          <KAlertDialog.Title>Delete workspace and files?</KAlertDialog.Title>
-          <KAlertDialog.Description>This removes <strong>{props.project.name}</strong> from Conduit and permanently erases its working directory. Type the exact workspace name to continue.</KAlertDialog.Description>
-          <Field>
-            <FieldLabel for="workspace-destroy-confirmation">Workspace name</FieldLabel>
-            <Input id="workspace-destroy-confirmation" value={destroyConfirmation()} onInput={(event) => setDestroyConfirmation(event.currentTarget.value)} autocomplete="off" />
-          </Field>
-          <div class="conduit-modal-actions">
-            <Button variant="outline" size="sm" disabled={destroying()} onClick={() => setDestroyOpen(false)}>Cancel</Button>
-            <Button class="workspace-destroy-confirm" variant="destructive" size="sm" disabled={destroying() || destroyConfirmation() !== props.project.name} onClick={() => void destroyWorkspace()}><Trash2Icon />{destroying() ? "Deleting…" : "Delete workspace and files"}</Button>
-          </div>
-        </div>
-      </KAlertDialog.Content></KAlertDialog.Portal>
-    </KAlertDialog.Root>
+    <FrostDialog alert open={destroyOpen()} onOpenChange={setDestroyOpen} busy={destroying()} class="workspace-destroy-dialog"
+      title="Delete workspace and files?"
+      description={<>This removes <strong>{props.project.name}</strong> from Conduit and permanently erases its working directory. Type the exact workspace name to continue.</>}
+      actions={<>
+        <Button variant="outline" size="sm" disabled={destroying()} onClick={() => setDestroyOpen(false)}>Cancel</Button>
+        <Button class="workspace-destroy-confirm" variant="destructive" size="sm" disabled={destroying() || destroyConfirmation() !== props.project.name} onClick={() => void destroyWorkspace()}><Trash2Icon />{destroying() ? "Deleting…" : "Delete workspace and files"}</Button>
+      </>}>
+      <Field>
+        <FieldLabel for="workspace-destroy-confirmation">Workspace name</FieldLabel>
+        <Input id="workspace-destroy-confirmation" value={destroyConfirmation()} onInput={(event) => setDestroyConfirmation(event.currentTarget.value)} autocomplete="off" />
+      </Field>
+    </FrostDialog>
   </>;
 }
 

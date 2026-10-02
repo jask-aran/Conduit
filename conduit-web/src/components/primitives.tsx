@@ -1,7 +1,6 @@
 import type { JSX, ParentProps } from "solid-js";
 import type { FocusOutsideEvent } from "@kobalte/core";
 import { createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, Show, splitProps } from "solid-js";
-import * as KDialog from "@kobalte/core/dialog";
 import { DropdownMenu as KMenu } from "@kobalte/core/dropdown-menu";
 import { ContextMenu as KContextMenu } from "@kobalte/core/context-menu";
 import { Popover as KPopover } from "@kobalte/core/popover";
@@ -41,11 +40,7 @@ export function Badge(props: ParentProps<{ class?: string; variant?: "default" |
   return <span class={cn("inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium", props.variant === "secondary" && "bg-secondary text-secondary-foreground", props.class)}>{props.children}</span>;
 }
 
-export function Dialog(props: ParentProps<{ open: boolean; onOpenChange: (open: boolean) => void }>) {
-  return <KDialog.Root open={props.open} onOpenChange={props.onOpenChange}>{props.children}</KDialog.Root>;
-}
-
-function createFullscreenPortalMount() {
+export function createFullscreenPortalMount() {
   const [mount, setMount] = createSignal<HTMLElement>();
   const sync = () => setMount(document.fullscreenElement instanceof HTMLElement ? document.fullscreenElement : undefined);
   onMount(() => {
@@ -54,19 +49,6 @@ function createFullscreenPortalMount() {
   });
   onCleanup(() => document.removeEventListener("fullscreenchange", sync));
   return mount;
-}
-
-export function DialogContent(props: ParentProps<{ class?: string; title?: string; description?: string; closeLabel?: string }>) {
-  const portalMount = createFullscreenPortalMount();
-  return <KDialog.Portal mount={portalMount()}>
-    <KDialog.Overlay class="conduit-dialog-overlay fixed inset-0 z-[150] data-[expanded]:animate-in data-[closed]:animate-out" />
-    <KDialog.Content class={cn("conduit-dialog fixed left-1/2 top-1/2 z-[150] grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto p-6 outline-none", props.class)}>
-      <Show when={props.title}><KDialog.Title class="text-lg font-semibold">{props.title}</KDialog.Title></Show>
-      <Show when={props.description}><KDialog.Description class="text-sm text-muted-foreground">{props.description}</KDialog.Description></Show>
-      {props.children}
-      <KDialog.CloseButton class="absolute right-4 top-4 rounded-sm opacity-70 hover:opacity-100" aria-label={props.closeLabel || "Close"}><XIcon class="size-4" /></KDialog.CloseButton>
-    </KDialog.Content>
-  </KDialog.Portal>;
 }
 
 /* Menus share one dark, solid surface profile: --popover ground, hairline ring,

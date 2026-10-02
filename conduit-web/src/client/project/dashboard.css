@@ -64,7 +64,7 @@
 .workspace-appearance-actions [data-slot="button"] { font-size: 9.6px; }
 .project-chat-list { overflow: hidden; border: 0.8px solid var(--border); border-radius: 9.6px; }
 .workspace-destroy-dialog [data-slot="field"] { margin-top: 14.4px; }
-.workspace-destroy-dialog .conduit-modal-actions [data-slot="button"] { font-size: 9.6px; }
+.workspace-destroy-dialog .frost-dialog-actions [data-slot="button"] { font-size: 9.6px; }
 .workspace-destroy-confirm { white-space: nowrap; }
 
 @media (--conduit-mobile-layout) {
@@ -143,7 +143,7 @@
 .workspace-appearance-actions [data-slot="button"] { font-size: 12px; }
 .project-chat-list { overflow: hidden; border: 1px solid var(--border); border-radius: 12px; }
 .workspace-destroy-dialog [data-slot="field"] { margin-top: 18px; }
-.workspace-destroy-dialog .conduit-modal-actions [data-slot="button"] { font-size: 12px; }
+.workspace-destroy-dialog .frost-dialog-actions [data-slot="button"] { font-size: 12px; }
 .workspace-destroy-confirm { white-space: nowrap; }
 
 @media (--conduit-mobile-layout) {

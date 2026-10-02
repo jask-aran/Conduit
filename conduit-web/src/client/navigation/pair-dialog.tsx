@@ -1,8 +1,6 @@
-import * as KDialog from "@kobalte/core/dialog";
 import { createEffect, createSignal, on, onCleanup, Show } from "solid-js";
-import { XIcon } from "lucide-solid";
 import { Button } from "@/components/primitives";
-import { FrostOverlay } from "@/components/frost";
+import { FrostDialog } from "@/components/frost";
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
 import { activeServer, pathsOf, type ServerPath } from "../platform/servers.ts";
@@ -63,11 +61,7 @@ export function PairDialog(props: { open: boolean; onOpenChange: (open: boolean)
   const left = () => Math.max(0, Math.round((expiresAt() - now()) / 1000));
   const expired = () => Boolean(svg()) && left() === 0;
 
-  return <FrostOverlay open={props.open} onOpenChange={props.onOpenChange} class="conduit-modal pair-dialog" cardClass="pair-card">
-    <div class="pair-head">
-      <KDialog.Title>Pair a device</KDialog.Title>
-      <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onOpenChange(false)}><XIcon aria-hidden="true" /></Button>
-    </div>
+  return <FrostDialog open={props.open} onOpenChange={props.onOpenChange} title="Pair a device" close size="wide" class="pair-card">
     <Show when={route()} fallback={<p class="pair-note">Only this computer can reach {activeServer()?.name || "this server"}. On the server, run <code>conduit-server connect</code> to choose Tailscale, a tunnel or your network, then pair from here.</p>}>
       <div class="pair-qr" data-expired={expired() ? "" : undefined} innerHTML={svg()} aria-label="Pairing QR code" role="img" />
       <Show when={error()}><p class="pair-note pair-error" role="alert">{error()}</p></Show>
@@ -79,10 +73,10 @@ export function PairDialog(props: { open: boolean; onOpenChange: (open: boolean)
         <Show when={version()}><dt>Version</dt><dd>{version()}</dd></Show>
         <dt>Code</dt><dd>{expired() ? "Expired" : svg() ? `Expires in ${Math.floor(left() / 60)}:${String(left() % 60).padStart(2, "0")}` : "…"}</dd>
       </dl>
-      <div class="pair-actions">
+      <div class="frost-dialog-actions">
         <Button variant="ghost" size="sm" onClick={() => void navigator.clipboard.writeText(link())} disabled={!link() || expired()}>Copy link</Button>
         <Button variant="outline" size="sm" onClick={() => void fresh()}>New code</Button>
       </div>
     </Show>
-  </FrostOverlay>;
+  </FrostDialog>;
 }

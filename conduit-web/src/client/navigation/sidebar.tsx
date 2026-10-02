@@ -1,8 +1,7 @@
 import { isConduitManagedProject } from "./sidebar-preferences";
 import { ServerSwitcher } from "./server-switcher";
 import { batch, createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show } from "solid-js";
-import * as KAlertDialog from "@kobalte/core/alert-dialog";
-import * as KDialog from "@kobalte/core/dialog";
+import { FrostDialog } from "@/components/frost";
 import {
   CableIcon,
   ChevronRightIcon,
@@ -187,36 +186,6 @@ function SidebarSkeleton(props: { rows: number }) {
   return <div class="sidebar-skeleton" role="status" aria-label="Loading">
     <For each={Array.from({ length: props.rows })}>{() => <span />}</For>
   </div>;
-}
-
-export function Modal(props: { open: boolean; title: string; description?: string; children: unknown; onClose: () => void; class?: string; closeButton?: boolean }) {
-  let returnFocus: HTMLElement | null = null;
-  let wasOpen = false;
-  createEffect(() => { if (props.open && !wasOpen) returnFocus = document.activeElement as HTMLElement | null; wasOpen = props.open; });
-  return <KDialog.Root open={props.open} onOpenChange={(open) => { if (!open) props.onClose(); }}>
-    <KDialog.Portal><KDialog.Content data-state={props.open ? "open" : "closed"} class="conduit-modal" onEscapeKeyDown={(event) => { event.preventDefault(); event.stopPropagation(); props.onClose(); }} onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}>
-      <div class={`conduit-modal-card ${props.class || ""}`}>
-        <KDialog.Title>{props.title}</KDialog.Title><Show when={props.description}><KDialog.Description class="text-muted-foreground">{props.description}</KDialog.Description></Show>
-        <Show when={props.closeButton}><KDialog.CloseButton class="conduit-modal-close" aria-label="Close dialog"><XIcon /></KDialog.CloseButton></Show>
-        {props.children as never}
-      </div>
-    </KDialog.Content></KDialog.Portal>
-  </KDialog.Root>;
-}
-
-function AlertModal(props: { open: boolean; title: string; description: string; children: unknown; onClose: () => void }) {
-  let returnFocus: HTMLElement | null = null;
-  let wasOpen = false;
-  createEffect(() => { if (props.open && !wasOpen) returnFocus = document.activeElement as HTMLElement | null; wasOpen = props.open; });
-  return <KAlertDialog.Root open={props.open} onOpenChange={(open) => { if (!open) props.onClose(); }}>
-    <KAlertDialog.Portal><KAlertDialog.Content data-state={props.open ? "open" : "closed"} class="conduit-modal" onEscapeKeyDown={(event) => { event.preventDefault(); event.stopPropagation(); props.onClose(); }} onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}>
-      <div class="conduit-modal-card">
-        <KAlertDialog.Title>{props.title}</KAlertDialog.Title>
-        <KAlertDialog.Description>{props.description}</KAlertDialog.Description>
-        {props.children as never}
-      </div>
-    </KAlertDialog.Content></KAlertDialog.Portal>
-  </KAlertDialog.Root>;
 }
 
 export function Sidebar(props: {
@@ -1311,9 +1280,9 @@ export function Sidebar(props: {
       </div>
     </aside>
 
-    <Modal open={Boolean(newKind())} title={newKind() === "workspace" ? (workspaceStep() === "explore" ? "Add workspace" : mode() === "created" ? "Create workspace folder" : mode() === "cloned" ? "Clone repository" : "Workspace details") : "New folder"}
+    <FrostDialog open={Boolean(newKind())} title={newKind() === "workspace" ? (workspaceStep() === "explore" ? "Add workspace" : mode() === "created" ? "Create workspace folder" : mode() === "cloned" ? "Clone repository" : "Workspace details") : "New folder"}
       description={newKind() === "workspace" && workspaceStep() === "details" ? `Selected location: ${path()}` : newKind() === "folder" ? "Create a separate managed working directory and chat scope." : undefined}
-      onClose={closeNewDialog} closeButton={newKind() === "workspace"} class={newKind() === "workspace" ? `workspace-add-dialog workspace-add-dialog-${workspaceStep()}` : undefined}>
+      onOpenChange={(open) => { if (!open) closeNewDialog(); }} close={newKind() === "workspace"} size={newKind() === "workspace" ? "wide" : undefined} class={newKind() === "workspace" ? `workspace-add-dialog workspace-add-dialog-${workspaceStep()}` : undefined}>
       <form onSubmit={submitNew}><FieldGroup>
         <Show when={newKind() === "workspace" && workspaceStep() === "explore"}><ComputerExplorer dialog projects={props.projects} location={computerPicker()} loading={computerPickerLoading()} error={computerPickerError()} onBrowse={(target) => void browseComputerPicker(target)} onPrefetch={() => {}} onMakeWorkspace={() => {}} onCreateWorkspace={() => {}} onOpenWorkspace={props.onOpenProject} onManageWorkspace={() => {}} onStartWorkspaceAction={() => {}} onOpenView={() => {}} onOpenFile={() => {}} onSelectFolder={() => { selectWorkspaceMode("linked"); setWorkspaceStep("details"); }} onCreateFolder={() => { selectWorkspaceMode("created"); setWorkspaceStep("details"); }} onCloneRepository={() => { selectWorkspaceMode("cloned"); setWorkspaceStep("details"); }} /></Show>
         <Show when={newKind() === "folder" || workspaceStep() === "details"}>
@@ -1323,22 +1292,22 @@ export function Sidebar(props: {
           <Show when={mode() === "cloned"}><Field><FieldLabel for="clone-directory-name">Folder name (optional)</FieldLabel><Input id="clone-directory-name" value={cloneDirectoryName()} disabled={submitting()} placeholder="Defaults to the repository name" onInput={(event) => setCloneDirectoryName(event.currentTarget.value)} /></Field></Show>
           <Show when={mode() !== "linked" ? workspacePreview() : null}>{(preview) => <div class="workspace-path-preview"><strong>{preview().path}</strong><small>{preview().ownership}</small></div>}</Show>
           <Show when={previewError()}><p class="workspace-preview-error" role="alert">{previewError()}</p></Show>
-          <div class="flex justify-end gap-2"><Show when={newKind() === "workspace"}><Button type="button" variant="outline" disabled={submitting()} onClick={() => setWorkspaceStep("explore")}>Back</Button></Show><Button type="button" variant="outline" disabled={submitting()} onClick={closeNewDialog}>Cancel</Button><Button type="submit" disabled={!canCreate()}>{submitting() ? (mode() === "cloned" ? "Cloning…" : "Creating…") : mode() === "cloned" ? "Clone workspace" : mode() === "linked" ? "Add workspace" : mode() === "created" ? "Create workspace" : "Create folder"}</Button></div>
+          <div class="frost-dialog-actions"><Show when={newKind() === "workspace"}><Button type="button" variant="outline" disabled={submitting()} onClick={() => setWorkspaceStep("explore")}>Back</Button></Show><Button type="button" variant="outline" disabled={submitting()} onClick={closeNewDialog}>Cancel</Button><Button type="submit" disabled={!canCreate()}>{submitting() ? (mode() === "cloned" ? "Cloning…" : "Creating…") : mode() === "cloned" ? "Clone workspace" : mode() === "linked" ? "Add workspace" : mode() === "created" ? "Create workspace" : "Create folder"}</Button></div>
         </Show>
       </FieldGroup></form>
-    </Modal>
+    </FrostDialog>
 
-    <Modal open={Boolean(rename())} title={rename()?.type === "chat" ? "Rename chat" : rename()?.type === "terminal" ? "Rename terminal" : "Rename folder"}
+    <FrostDialog open={Boolean(rename())} title={rename()?.type === "chat" ? "Rename chat" : rename()?.type === "terminal" ? "Rename terminal" : "Rename folder"}
       description={rename()?.type === "chat" ? "Set the display name stored by Conduit." : rename()?.type === "terminal" ? "Set the terminal session name." : "Change the folder's display name without changing its working-directory path."}
-      onClose={() => setRename(null)}>
-      <form onSubmit={submitRename}><Field><FieldLabel for="rename-name">Name</FieldLabel><Input id="rename-name" value={renameValue()} onInput={(event) => setRenameValue(event.currentTarget.value)} /></Field><div class="mt-4 flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setRename(null)}>Cancel</Button><Button type="submit" disabled={!renameValue().trim()}>Rename</Button></div></form>
-    </Modal>
+      onOpenChange={(open) => { if (!open) setRename(null); }}>
+      <form onSubmit={submitRename}><Field><FieldLabel for="rename-name">Name</FieldLabel><Input id="rename-name" value={renameValue()} onInput={(event) => setRenameValue(event.currentTarget.value)} /></Field><div class="frost-dialog-actions"><Button type="button" variant="outline" onClick={() => setRename(null)}>Cancel</Button><Button type="submit" disabled={!renameValue().trim()}>Rename</Button></div></form>
+    </FrostDialog>
 
-    <AlertModal open={Boolean(deleting())} title={deleteCopy().title} description={deleteCopy().description} onClose={() => setDeleting(null)}>
-      <div class="mt-4 flex justify-end gap-2"><Button variant="outline" onClick={() => setDeleting(null)}>Cancel</Button><Button variant="destructive" onClick={() => void confirmDelete()}>{deleteButtonLabel()}</Button></div>
-    </AlertModal>
+    <FrostDialog alert open={Boolean(deleting())} title={deleteCopy().title} description={deleteCopy().description} onOpenChange={(open) => { if (!open) setDeleting(null); }}
+      actions={<><Button variant="outline" onClick={() => setDeleting(null)}>Cancel</Button><Button variant="destructive" onClick={() => void confirmDelete()}>{deleteButtonLabel()}</Button></>} />
 
-    <Modal open={Boolean(moving())} title="Move chat" description="Choose the working folder for this chat and its attachments." onClose={() => setMoving(null)}>
+    <FrostDialog open={Boolean(moving())} title="Move chat" description="Choose the working folder for this chat and its attachments." onOpenChange={(open) => { if (!open) setMoving(null); }}
+      actions={<Button type="button" variant="outline" onClick={() => setMoving(null)}>Cancel</Button>}>
       <div class="palette-move-list">
         <For each={props.projects.filter((item) => item.id !== moving()?.project.id)}>
           {(target) => <Button variant="ghost" class="palette-move-option" onClick={() => { const current = moving(); if (current) void props.onMoveChat(current.chat, current.project, target); setMoving(null); }}><FolderIcon /><span>{target.name}</span></Button>}
@@ -1347,7 +1316,6 @@ export function Sidebar(props: {
           <p class="text-sm text-muted-foreground">No other folders to move this chat to.</p>
         </Show>
       </div>
-      <div class="mt-4 flex justify-end"><Button type="button" variant="outline" onClick={() => setMoving(null)}>Cancel</Button></div>
-    </Modal>
+    </FrostDialog>
   </>;
 }

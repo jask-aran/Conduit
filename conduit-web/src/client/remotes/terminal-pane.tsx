@@ -1,10 +1,9 @@
 import { createEffect, createMemo, createSignal, For, Index, on, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, Columns2Icon, EllipsisIcon, FocusIcon, KeyboardIcon, Maximize2Icon, Minimize2Icon, GripVerticalIcon, PencilIcon, PlusIcon, Settings2Icon, TerminalIcon, Trash2Icon, UnplugIcon } from "lucide-solid";
 import { toast } from "solid-sonner";
+import { FrostDialog } from "@/components/frost";
 import {
   Button,
-  Dialog,
-  DialogContent,
   Field,
   FieldLabel,
   Input,
@@ -1070,21 +1069,19 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
   });
 
   return <>
-    <Dialog open={Boolean(renameSession())} onOpenChange={(open) => { if (!open) setRenameSession(null); }}>
-      <DialogContent title="Rename terminal" description="Choose the label shown in this Workspace terminal list.">
+    <FrostDialog open={Boolean(renameSession())} onOpenChange={(open) => { if (!open) setRenameSession(null); }} title="Rename terminal" description="Choose the label shown in this Workspace terminal list.">
         <form onSubmit={(event) => void submitRename(event)}>
           <Field>
             <FieldLabel for="terminal-rename-title">Name</FieldLabel>
             <Input id="terminal-rename-title" value={renameValue()} maxlength={80} autofocus
               onInput={(event) => setRenameValue(event.currentTarget.value)} />
           </Field>
-          <div class="mt-4 flex justify-end gap-2">
+          <div class="frost-dialog-actions">
             <Button type="button" variant="outline" onClick={() => setRenameSession(null)}>Cancel</Button>
             <Button type="submit" disabled={!renameValue().trim() || Boolean(sessionBusy())}>Rename</Button>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
+    </FrostDialog>
     <Popover open={shortcutEditorOpen()} anchorRef={shortcutAnchor}
       onOpenChange={(open) => { setShortcutEditorOpen(open); if (!open) setEditingShortcut(null); }}>
       <PopoverContent class="terminal-menu" aria-label="Terminal shortcuts"

@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense } from "solid-js";
-import * as KDialog from "@kobalte/core/dialog";
+import { FrostDialog } from "@/components/frost";
 import { FileIcon, Maximize2Icon, RotateCwIcon, Trash2Icon, XIcon } from "lucide-solid";
 import { Button } from "@/components/primitives";
 import type { UploadAttachment } from "../state/attachments";
@@ -66,15 +66,12 @@ function AttachmentsDialog(props: {
   const total = () => props.items.reduce((sum, item) => sum + (item.size || 0), 0);
   const removeAll = () => { props.onOpenChange(false); props.onRemoveAll(); };
   createEffect(() => { if (props.open && !props.items.length) props.onOpenChange(false); });
-  return <KDialog.Root open={props.open} onOpenChange={props.onOpenChange}>
-    <KDialog.Portal>
-      <KDialog.Content class="conduit-modal attachment-dialog" onClick={(event) => { if (event.target === event.currentTarget) props.onOpenChange(false); }}>
-        <div class="conduit-modal-card attachment-dialog-card">
-          <header class="attachment-dialog-head">
-            <KDialog.Title>{props.items.length === 1 ? "1 attachment" : `${props.items.length} attachments`}</KDialog.Title>
-            <KDialog.Description>{sizeLabel(total())}</KDialog.Description>
-          </header>
-          <ul class="attachment-dialog-list">
+  return <FrostDialog open={props.open} onOpenChange={props.onOpenChange} size="wide" overlayClass="attachment-dialog" class="attachment-dialog-card"
+    title={props.items.length === 1 ? "1 attachment" : `${props.items.length} attachments`}
+    description={sizeLabel(total())}
+    actions={<><Button variant="ghost" size="sm" onClick={removeAll}>Remove all</Button>
+            <Button size="sm" onClick={() => props.onOpenChange(false)}>Done</Button></>}>
+    <ul class="attachment-dialog-list">
             <For each={props.items.map((item) => item.id)}>{(id) => {
               const item = createMemo<UploadAttachment | undefined>((last) => props.items.find((candidate) => candidate.id === id) ?? last);
               const source = () => item() && previewOf(item()!, props.chatId);
@@ -90,14 +87,7 @@ function AttachmentsDialog(props: {
               </li>}</Show>;
             }}</For>
           </ul>
-          <footer class="attachment-dialog-actions">
-            <Button variant="ghost" size="sm" onClick={removeAll}>Remove all</Button>
-            <Button size="sm" onClick={() => props.onOpenChange(false)}>Done</Button>
-          </footer>
-        </div>
-      </KDialog.Content>
-    </KDialog.Portal>
-  </KDialog.Root>;
+  </FrostDialog>;
 }
 
 /**

@@ -165,7 +165,17 @@ Every surface is one of three materials. Choose it first, before any colour, bor
 
 Inside frost, content follows the pane's rules: one-line rows, headings and space, no boxes, and never frost on a row of its own.
 
-**Build an overlay from the shared pieces**, not a copy of another overlay: `FrostOverlay` (`components/frost.tsx`) gives the dim, the pinned card, the arrival and the phone bubble; inside it, rows take `frost-row` (the cursor wash on `data-highlighted`, where you are by `aria-current`), keys the `Keycap` / `keycap` class, and the foot `frost-rail`. A card that floats without covering the page (the leader menu) takes `frost-card` alone.
+**Build an overlay from the shared pieces in `components/frost.tsx`**, never a copy of another overlay -- the build fails on a hand-rolled Kobalte dialog:
+
+| Building | Use |
+| --- | --- |
+| a palette, search or any surface that filters | `FrostOverlay` (pinned near the top; `placement="center"` for one that does not filter, like Settings) |
+| a confirm, a one-field prompt, a small piece of content | `FrostDialog` (`alert` for a destructive choice, `size="wide"` when it holds content, `close` for a ×, `actions` for its buttons) |
+| a menu, context menu or submenu | `Menu*` / `ContextMenu*` (`components/primitives.tsx`) |
+| a pick list anchored to a control | `PopoverContent` holding `PopoverSearchList` |
+| a card that floats without covering the page (the leader menu) | `frost-card` alone |
+
+Inside them: rows take `frost-row` (the cursor wash on `data-highlighted`, where you are by `aria-current`), keys `Keycap`, the foot `frost-rail`, a dialog's buttons `frost-dialog-actions`. Material, dim, radius and arrival come from those pieces and the `--frost-*` tokens; a surface's own CSS sets only its layout. Something genuinely new (the context usage readout) is composed inside these, not beside them.
 
 **On a phone an overlay is a full-screen bubble:** it fills the visual viewport with a small inset and larger tap targets, and stays a dialog, never a new route -- Settings included. Frost over a full-screen overlay gets a darker core, because nothing around it is dimmed and the page behind would otherwise show through at full contrast. Desktop overlays keep plain frost over the dim.
 
@@ -399,7 +409,7 @@ Choosing in a menu:
 
 **Attachment strip** — every attachment for the draft in one short strip directly above the composer, in the queued pill's width and material: images as cropped thumbnails, files as chips with type icon, name and size. Remove on hover or focus (always on touch); uploading a thin progress ring; failed a red outline with retry. More chips scroll sideways with a fade at the edge; a quiet ⤢ opens the full list (a bottom sheet on a phone).
 
-**Dialog** — confirms and small prompts: a narrow frost card over the dim, centred, small on a phone too. The title and the choice, nothing else; a one-field prompt drops its label. An input is a faint hairline that brightens on focus, never a ring.
+**Dialog** (`FrostDialog`) — confirms and small prompts: a narrow frost card over the dim, centred, small on a phone too. The title and the choice, nothing else; a one-field prompt drops its label. An input is a faint hairline that brightens on focus, never a ring.
 
 **Input-quiet** — borderless inside frost composer or palette search.
 

@@ -1,7 +1,8 @@
 import { createSignal, For, lazy, Show, Suspense } from "solid-js";
 import { FileCode2Icon, FileDiffIcon, PencilIcon, XIcon } from "lucide-solid";
 import { reviewCommentParts, type ProjectedReviewComment, type ReviewComment } from "./review-comments";
-import { Button, Dialog, DialogContent, Textarea } from "@/components/primitives";
+import { Button, Textarea } from "@/components/primitives";
+import { FrostDialog } from "@/components/frost";
 import { requestReviewNavigation } from "./review-navigation";
 
 // The preview pulls in CodeMirror, so it arrives with the dialog, not the chat.
@@ -43,11 +44,14 @@ export function ReviewCommentCards(props: {
           <Show when={props.onUpdate && removable}>{(comment) => <Button variant="ghost" size="icon-sm" aria-label={`Edit comment for ${item.path}`} onClick={() => { setNote(comment().note); setEditing(true); }}><PencilIcon /></Button>}</Show>
           <Show when={props.onRemove && removable}>{(comment) => <Button variant="ghost" size="icon-sm" aria-label={`Remove reference to ${item.path}`} onClick={() => props.onRemove?.(comment())}><XIcon /></Button>}</Show>
         </div>
-        <Show when={props.onUpdate && removable}><Dialog open={editing()} onOpenChange={(open) => {
+        <Show when={props.onUpdate && removable}><FrostDialog open={editing()} onOpenChange={(open) => {
           if (!open) setNote(item.note);
           setEditing(open);
-        }}>
-          <DialogContent class="review-comment-editor" title="Edit review comment" description={`${item.path}${lines}${diff ? " · comparison" : ""}`} closeLabel="Close comment editor">
+        }} size="wide" class="review-comment-editor" title="Edit review comment" description={`${item.path}${lines}${diff ? " · comparison" : ""}`} close="Close comment editor"
+          actions={<>
+            <Button variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
+            <Button onClick={commit}>Save comment</Button>
+          </>}>
             <div class="review-comment-excerpt" data-scope={diff ? "comparison" : "file"}>
               <Suspense fallback={<pre class="review-comment-excerpt-fallback"><span>{parts().before}</span><mark>{parts().selected}</mark><span>{parts().after}</span></pre>}>
                 <WorkspaceExcerptView path={item.path} text={item.excerpt} firstLine={item.from} startColumn={item.startColumn} endColumn={item.endColumn} note={item.note} side={diff ? item.side : undefined} counterpart={item.counterpart} />
@@ -56,12 +60,7 @@ export function ReviewCommentCards(props: {
             <Textarea ref={(element: HTMLTextAreaElement) => queueMicrotask(() => grow(element))} autofocus aria-label={`Comment for ${item.path}`} maxlength={2000} rows={2} value={note()} onInput={(event) => { setNote(event.currentTarget.value); grow(event.currentTarget); }} onKeyDown={(event) => {
               if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); commit(); }
             }} />
-            <div class="review-comment-editor-actions">
-              <Button variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
-              <Button onClick={commit}>Save comment</Button>
-            </div>
-          </DialogContent>
-        </Dialog></Show>
+        </FrostDialog></Show>
       </>;
     }}</For>
   </div></Show>;
