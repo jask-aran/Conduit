@@ -70,8 +70,6 @@ export function registerAuthRoutes(app, { authStore, socketTickets }) {
     response.set("Cache-Control", "no-store").redirect(303, after);
   });
 
-  // The app's half of `conduit-server pair`: the code from the QR becomes a
-  // token, as a password would at native-login.
   // A signed-in client's "Pair a device": a code for the QR it shows.
   app.post("/v0/auth/pairing", async (_request, response) => {
     const ttlMs = 300_000;
@@ -79,6 +77,8 @@ export function registerAuthRoutes(app, { authStore, socketTickets }) {
     response.set("Cache-Control", "no-store").json({ code, expiresAt: new Date(Date.now() + ttlMs).toISOString() });
   });
 
+  // The app's half of pairing: the code from the QR becomes a token, as a
+  // password would at native-login.
   app.post("/v0/auth/native-pair", async (request, response) => {
     if (!isNativeRequest(request)) return response.status(403).json({ error: "native_origin_required" });
     if (!isTrustworthyRequest(request)) return response.status(400).json({ error: "https_required", message: "Pairing requires HTTPS unless the client is on this machine or this network." });
