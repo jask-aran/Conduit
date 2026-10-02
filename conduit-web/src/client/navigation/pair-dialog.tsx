@@ -5,7 +5,7 @@ import { XIcon } from "lucide-solid";
 import { Button } from "@/components/primitives";
 import { FrostOverlay } from "@/components/frost";
 import { authorizedFetch } from "../api/native-auth-client";
-import { buildHttpUrl } from "../api/transport";
+import { httpUrl } from "../api/transport";
 import { activeServer, pathsOf, type ServerPath } from "../platform/servers.ts";
 import { shortOrigin } from "./server-switcher";
 
@@ -40,7 +40,7 @@ export function PairDialog(props: { open: boolean; onOpenChange: (open: boolean)
     const path = route();
     if (!path) return;
     try {
-      const response = await authorizedFetch(buildHttpUrl("/v0/auth/pairing"), { method: "POST" });
+      const response = await authorizedFetch(httpUrl("/v0/auth/pairing"), { method: "POST" });
       const body = await response.json() as { code?: string; expiresAt?: string; message?: string };
       if (!response.ok || !body.code) throw new Error(body.message || "The server would not make a pairing code.");
       const url = `${path.origin}/v0/auth/handoff?code=${encodeURIComponent(body.code)}&after=%2F`;
@@ -55,7 +55,7 @@ export function PairDialog(props: { open: boolean; onOpenChange: (open: boolean)
   createEffect(on(() => props.open, (open) => {
     if (!open) return;
     void fresh();
-    void fetch(buildHttpUrl("/healthz"), { cache: "no-store" }).then((r) => r.json()).then((h: { release?: string }) => setVersion(h.release || "")).catch(() => {});
+    void fetch(httpUrl("/healthz"), { cache: "no-store" }).then((r) => r.json()).then((h: { release?: string }) => setVersion(h.release || "")).catch(() => {});
   }));
   const tick = setInterval(() => setNow(Date.now()), 1000);
   onCleanup(() => clearInterval(tick));
