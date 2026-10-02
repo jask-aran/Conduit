@@ -1,5 +1,7 @@
 # One install command
 
+> **Superseded** by what shipped in v0.7.7: the CLI is `conduit-server` (`scripts/conduit-server`), state is `~/.conduit/data`, and the current reference is [docs/deployment.md](../deployment.md). Kept as the reasoning behind it.
+
 Drafted 2026-10-02. A plan, not a spec: how Conduit goes from "clone the repo
 and run a dev script" (or "run the container on a VPS") to
 
