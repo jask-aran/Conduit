@@ -443,6 +443,7 @@ export async function sessionFamilyFiles(file, project, { sessionsDir = project.
   if (allowedRoot && !isPathInside(directory, allowedRoot)) {
     const error = new Error("Pi session mapping is outside the runtime installation directory");
     error.code = "invalid_session_mapping";
+    error.reason = "outside-installation";
     throw error;
   }
   if (path.dirname(target) !== directory) {

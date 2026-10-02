@@ -2079,7 +2079,9 @@ function App() {
     await refresh();
     if (failures.length) {
       const first = failures[0]!.error;
-      const detail = first instanceof Error ? first.message : String(first || "Request failed");
+      // Each distinct reason once, so one cause is not read as every failure's.
+      const reasons = [...new Set(failures.map(({ error }) => error instanceof Error ? error.message : String(error || "Request failed")))];
+      const detail = reasons.length > 3 ? `${reasons.slice(0, 3).join("; ")}; and ${reasons.length - 3} more` : reasons.join("; ");
       showError(Object.assign(new Error(`${failures.length} of ${targets.length} chats could not be moved: ${detail}`), {
         code: "bulk_move_failed",
         apiRequest: (first as { apiRequest?: unknown })?.apiRequest,
@@ -2159,7 +2161,9 @@ function App() {
     await refresh();
     if (failures.length) {
       const first = failures[0]!.error;
-      const detail = first instanceof Error ? first.message : String(first || "Request failed");
+      // Each distinct reason once, so one cause is not read as every failure's.
+      const reasons = [...new Set(failures.map(({ error }) => error instanceof Error ? error.message : String(error || "Request failed")))];
+      const detail = reasons.length > 3 ? `${reasons.slice(0, 3).join("; ")}; and ${reasons.length - 3} more` : reasons.join("; ");
       showError(Object.assign(new Error(`${failures.length} of ${targets.length} chats could not be deleted: ${detail}`), {
         code: "bulk_delete_failed",
         apiRequest: (first as { apiRequest?: unknown })?.apiRequest,
