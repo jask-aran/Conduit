@@ -40,7 +40,7 @@ export function PairDialog(props: { open: boolean; onOpenChange: (open: boolean)
     const path = route();
     if (!path) return;
     try {
-      const response = await authorizedFetch(httpUrl("/v0/auth/pairing"), { method: "POST" });
+      const response = await authorizedFetch(httpUrl("/v0/auth/pairing"), { method: "POST", headers: { accept: "application/json" } });
       const body = await response.json() as { code?: string; expiresAt?: string; message?: string };
       if (!response.ok || !body.code) throw new Error(body.message || "The server would not make a pairing code.");
       const url = `${path.origin}/v0/auth/handoff?code=${encodeURIComponent(body.code)}&after=%2F`;
