@@ -52,6 +52,9 @@ function normalizeAuthFile(raw) {
         userAgent: typeof session.userAgent === "string" ? session.userAgent : null,
         kind: session.kind === "native" ? "native" : "browser",
       })) : [],
+    // One-time sign-in codes `conduit-server open` hands a browser; a minute each.
+    handoffs: Array.isArray(raw.handoffs) ? raw.handoffs
+      .filter((item) => item && typeof item.codeHash === "string" && Date.parse(item.expiresAt) > Date.now()) : [],
   };
 }
 
@@ -438,6 +441,35 @@ export class AuthStore {
     return this._mutate((data) => {
       const before = data.sessions.length;
       data.sessions = data.sessions.filter((session) => timingSafeEqualString(session.tokenHash, tokenHash));
+      const removed = before - data.sessions.length;
+      return { changed: removed > 0, result: removed };
+    });
+  }
+
+  async createHandoff({ ttlMs = 60_000, now = Date.now() } = {}) {
+    const code = newSessionToken();
+    await this._mutate((data) => {
+      data.handoffs = [...(data.handoffs || []), { codeHash: hashToken(code), expiresAt: new Date(now + ttlMs).toISOString() }];
+      return { changed: true };
+    });
+    return code;
+  }
+
+  async consumeHandoff(code) {
+    if (!code) return false;
+    const codeHash = hashToken(code);
+    return this._mutate((data) => {
+      const handoffs = data.handoffs || [];
+      const kept = handoffs.filter((item) => !timingSafeEqualString(item.codeHash, codeHash));
+      data.handoffs = kept;
+      return { changed: kept.length !== handoffs.length, result: kept.length !== handoffs.length };
+    });
+  }
+
+  async removeSessionsByPrefix(prefix) {
+    return this._mutate((data) => {
+      const before = data.sessions.length;
+      data.sessions = data.sessions.filter((session) => prefix !== "all" && !session.tokenHash.startsWith(prefix));
       const removed = before - data.sessions.length;
       return { changed: removed > 0, result: removed };
     });

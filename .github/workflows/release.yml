@@ -264,6 +264,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$GITHUB_REF_NAME" release-assets/conduit-*.apk release-assets/conduit-*.apk.sha256 --clobber
+      - name: Sign the server releases
+        env:
+          CONDUIT_UPDATER_KEY: ${{ secrets.CONDUIT_UPDATER_KEY }}
+          CONDUIT_UPDATER_KEY_PASSWORD: ${{ secrets.CONDUIT_UPDATER_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/conduit-updater.key"
+          printf '%s' "$CONDUIT_UPDATER_KEY" > "$key"
+          for archive in release-assets/conduit-server-*.tar.gz; do
+            npx --yes @tauri-apps/cli@2 signer sign --private-key-path "$key" --password "${CONDUIT_UPDATER_KEY_PASSWORD:-}" "$archive"
+          done
       - name: Upload the server releases and their installer
         env:
           GH_TOKEN: ${{ github.token }}

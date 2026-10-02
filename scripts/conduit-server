@@ -117,6 +117,8 @@ After=network-online.target
 [Service]
 Environment=PATH=$PATH
 Environment=CONDUIT_DATA_ROOT=$CONDUIT_DATA_ROOT
+Environment=CONDUIT_HOST=$CONDUIT_HOST
+Environment=CONDUIT_PORT=$CONDUIT_PORT
 EnvironmentFile=-$ENV_FILE
 $extra
 WorkingDirectory=$HOME
@@ -141,6 +143,8 @@ EOF
   </array>
   <key>EnvironmentVariables</key><dict>
     <key>CONDUIT_DATA_ROOT</key><string>$CONDUIT_DATA_ROOT</string>
+    <key>CONDUIT_HOST</key><string>$CONDUIT_HOST</string>
+    <key>CONDUIT_PORT</key><string>$CONDUIT_PORT</string>
     <key>PATH</key><string>$PATH</string>
   </dict>
   <key>WorkingDirectory</key><string>$HOME</string>
@@ -160,6 +164,7 @@ wait_healthy() {
   local frames="$FRAMES" i=0
   for _ in $(seq 1 240); do
     healthy && { [[ -t 1 ]] && printf '\r\e[K'; return 0; }
+    [[ "$(service_kind)" == systemd ]] && systemctl --user is-failed -q "$NAME" 2>/dev/null && break
     [[ -t 1 ]] && printf '\r\e[K%s%s%s  Starting %s' "$M" "${frames:i++%${#frames}:1}" "$N" "$(code_label)"
     sleep 0.25
   done
@@ -208,12 +213,14 @@ restart() {
 running() { healthy; }
 status() {
   load_env
+  [[ "${1:-}" == --json ]] && { status_json; return; }
   title "$(code_label)"
   if running; then printf '%s%s%s  %sRunning%s\n' "$G" "$S_ON" "$N" "$B" "$N"; else printf '%s%s%s  %sStopped%s %s· %s start%s\n' "$R" "$S_ERR" "$N" "$B" "$N" "$D" "$NAME" "$N"; fi
   local url how cmd; while IFS='|' read -r url how cmd; do row open "${C}$url${N} ${D}$how${N}"; [[ -n "$cmd" ]] && row "" "$cmd"; done < <(access_urls)
   row service "$(service_kind) ${D}$NAME${N}"
   row data "${CONDUIT_DATA_ROOT/#$HOME/$TILDE}"
   row logs "$(log_hint)"
+  update_notice
   outro ""
 }
 log_hint() { [[ "$(service_kind)" == systemd ]] && echo "journalctl --user -u $NAME" || echo "${LOG_FILE/#$HOME/$TILDE}"; }
@@ -376,6 +383,7 @@ setup() {
   connect_access
   ready_box
   note "Agents (claude, codex, opencode) come from PATH, with their own logins."
+  update_notice
   outro "Manage it with ${B}$NAME${N} status · logs · connect · update"
 }
 set_password() {
@@ -501,9 +509,163 @@ ready_box() {
 }
 
 # ---------------------------------------------------------------- releases
+auth() { "$(node_bin)" "$CURRENT/scripts/conduit-auth.mjs" "$@"; }
+json_str() { local v="${1//\\/\\\\}"; v="${v//\"/\\\"}"; printf '"%s"' "$v"; }
+
+# The newest release on this machine's channel, asked of GitHub at most daily.
+latest_release() {
+  local cache="$STATE_DIR/latest-release" channel="${CONDUIT_CHANNEL:-stable}"
+  if [[ -f "$cache" && -n "$(find "$cache" -mmin -1440 2>/dev/null)" && "$(sed -n 2p "$cache")" == "$channel" ]]; then sed -n 1p "$cache"; return; fi
+  local tag
+  if [[ "$channel" == beta ]]; then
+    tag="$(curl -fsS --max-time 4 "https://api.github.com/repos/$REPOSITORY/releases?per_page=10" 2>/dev/null | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)"
+  else
+    tag="$(curl -fsSLI --max-time 4 -o /dev/null -w '%{url_effective}' "https://github.com/$REPOSITORY/releases/latest" 2>/dev/null | sed -n 's#.*/tag/##p')"
+  fi
+  [[ "$tag" == v* ]] || return 0
+  mkdir -p "$STATE_DIR"; printf '%s\n%s\n' "$tag" "$channel" >"$cache"; echo "$tag"
+}
+update_available() { # prints the newer tag, if this runs a release older than it
+  [[ "$(code_kind)" == release ]] || return 0
+  local latest here; latest="$(latest_release)"; here="v$(cat "$CURRENT/VERSION")"
+  [[ -n "$latest" && "$latest" != "$here" && "$(printf '%s\n%s\n' "$here" "$latest" | sort -V | tail -1)" == "$latest" ]] && echo "$latest"
+  return 0
+}
+update_notice() {
+  local newer; newer="$(update_available)"
+  [[ -n "$newer" ]] && printf '%s%s%s  %s%s available%s %s· %s update%s\n' "$Y" "$S_WARN" "$N" "$B" "$newer" "$N" "$D" "$NAME" "$N"
+  return 0
+}
+
 update() {
-  local version="${1:-}"
+  load_env
+  local version=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --channel) [[ "$2" == stable || "$2" == beta ]] || fail "--channel stable|beta"; set_env CONDUIT_CHANNEL "$2"; load_env; rm -f "$STATE_DIR/latest-release"; shift 2 ;;
+      *) version="$1"; shift ;;
+    esac
+  done
+  [[ -z "$version" && "${CONDUIT_CHANNEL:-stable}" == beta ]] && version="$(latest_release)"
   curl -fsSL "$INSTALL_URL" | CONDUIT_PROFILE="$PROFILE" bash -s -- --update ${version:+--version "$version"}
+  rm -f "$STATE_DIR/latest-release"
+}
+
+# ---------------------------------------------------------------- open, sessions
+opener() {
+  if grep -qi microsoft /proc/version 2>/dev/null; then
+    command -v wslview >/dev/null 2>&1 && { echo wslview; return; }
+    command -v powershell.exe >/dev/null 2>&1 && { echo powershell; return; }
+  fi
+  [[ "$(uname -s)" == Darwin ]] && { echo open; return; }
+  [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]] && command -v xdg-open >/dev/null 2>&1 && { echo xdg-open; return; }
+  return 0
+}
+open_cmd() {
+  load_env
+  healthy || fail "Conduit is not running. $NAME start"
+  local base; base="$(access_urls | head -1 | cut -d'|' -f1)"
+  local url="$base/v0/auth/handoff?code=$(auth handoff)&after=%2F"
+  case "$(opener)" in
+    wslview) wslview "$url" ;;
+    powershell) powershell.exe -NoProfile -Command "Start-Process '$url'" >/dev/null 2>&1 ;;
+    open|xdg-open) "$(opener)" "$url" >/dev/null 2>&1 & ;;
+    *) title "Open Conduit"; note "No browser here. Open this within a minute, on a device that can reach it:"; printf '%s%s%s  %s%s%s\n' "$D" "$S_BAR" "$N" "$C" "$url" "$N"; outro ""; return ;;
+  esac
+  ok "Opened ${C}$base${N} ${D}signed in${N}"
+}
+
+sessions_cmd() {
+  load_env
+  if [[ "${1:-}" == revoke ]]; then
+    [[ -n "${2:-}" ]] || fail "sessions revoke <id>|all"
+    ok "Signed out $(auth revoke "$2") device(s)"; return
+  fi
+  title "Signed-in devices"
+  auth sessions | "$(node_bin)" -e '
+    const rows = JSON.parse(require("fs").readFileSync(0, "utf8"));
+    const [D, N, C, B] = process.argv.slice(1);
+    const ago = (t) => { const s = (Date.now() - Date.parse(t)) / 1000; return s < 120 ? "just now" : s < 7200 ? `${Math.round(s / 60)}m ago` : s < 172800 ? `${Math.round(s / 3600)}h ago` : `${Math.round(s / 86400)}d ago`; };
+    const what = (ua, kind) => { if (!ua) return kind; if (/CLI|agent/i.test(ua)) return ua; const os = /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : /Windows/.test(ua) ? "Windows" : /Mac OS/.test(ua) ? "macOS" : /Linux/.test(ua) ? "Linux" : ""; const app = kind === "native" ? "Conduit app" : /Edg\//.test(ua) ? "Edge" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "browser"; return `${app}${os ? ` on ${os}` : ""}`; };
+    rows.sort((a, b) => Date.parse(b.lastSeenAt) - Date.parse(a.lastSeenAt));
+    for (const r of rows) console.log(`${D}│${N}  ${C}${r.id}${N}  ${what(r.userAgent, r.kind).padEnd(28)} ${D}${ago(r.lastSeenAt)}${N}`);
+    if (!rows.length) console.log(`${D}│  nobody is signed in${N}`);
+  ' "$D" "$N" "$C" "$B"
+  outro "${D}$NAME sessions revoke <id>|all${N}"
+}
+
+# ---------------------------------------------------------------- data
+backup() {
+  load_env
+  local lean=0 file=""
+  for a in "$@"; do [[ "$a" == --lean ]] && lean=1 || file="$a"; done
+  file="${file:-$HOME/conduit-backup-$(date +%Y%m%d-%H%M).tar.gz}"
+  local -a skip=(--exclude=./toolchains --exclude=./voice/models --exclude='./*.tmp')
+  (( lean )) && skip+=(--exclude=./turn-checkpoints --exclude=./worktrees)
+  title "Back up ${CONDUIT_DATA_ROOT/#$HOME/$TILDE}"
+  local was=0; healthy && was=1
+  (( was )) && { stop >/dev/null; ok "Paused Conduit for a consistent copy"; }
+  spin "Archiving" tar -czf "$file" -C "$CONDUIT_DATA_ROOT" "${skip[@]}" . || true
+  (( was )) && start >/dev/null && ok "Conduit running again"
+  [[ -s "$file" ]] || fail "No backup written"
+  ok "${B}${file/#$HOME/$TILDE}${N} ${D}$(du -h "$file" | cut -f1)${N}"
+  outro "${D}Restore with $NAME restore <file>; Python tools rebuild with $NAME setup${N}"
+}
+restore() {
+  load_env
+  local file="${1:-}"; [[ -f "$file" ]] || fail "restore <backup.tar.gz>"
+  title "Restore ${file/#$HOME/$TILDE}"
+  choose "Replace ${CONDUIT_DATA_ROOT/#$HOME/$TILDE} with this backup? ${D}The current data is kept beside it.${N}" "Restore" "Cancel"
+  [[ "$REPLY" == 1 ]] || { outro "Nothing changed"; return; }
+  stop >/dev/null
+  local aside; aside="$CONDUIT_DATA_ROOT.before-restore-$(date +%Y%m%d-%H%M%S)"
+  mv "$CONDUIT_DATA_ROOT" "$aside" && mkdir -p "$CONDUIT_DATA_ROOT"
+  spin "Restoring" tar -xzf "$file" -C "$CONDUIT_DATA_ROOT" || { rm -rf "$CONDUIT_DATA_ROOT"; mv "$aside" "$CONDUIT_DATA_ROOT"; fail "Restore failed; nothing changed"; }
+  [[ -d "$aside/toolchains" && ! -e "$CONDUIT_DATA_ROOT/toolchains" ]] && mv "$aside/toolchains" "$CONDUIT_DATA_ROOT/toolchains"
+  note "Previous data: ${aside/#$HOME/$TILDE}"
+  start
+  outro ""
+}
+
+# ---------------------------------------------------------------- settings, projects
+config_cmd() {
+  load_env
+  case "${1:-}" in
+    get) [[ -n "${2:-}" ]] || fail "config get <KEY>"; sed -n "s/^$2=//p" "$ENV_FILE" 2>/dev/null ;;
+    set) [[ -n "${2:-}" && $# -ge 3 ]] || fail "config set <KEY> <value>"
+      [[ "$2" =~ ^CONDUIT_[A-Z0-9_]+$ ]] || fail "Settings are CONDUIT_* names"
+      set_env "$2" "$3"; ok "$2=$3"; healthy && restart ;;
+    unset) [[ -n "${2:-}" ]] || fail "config unset <KEY>"
+      grep -v -E "^$2=" "$ENV_FILE" >"$ENV_FILE.tmp" 2>/dev/null || true; mv "$ENV_FILE.tmp" "$ENV_FILE"; ok "Unset $2"; healthy && restart ;;
+    ""|list) title "Settings ${D}${ENV_FILE/#$HOME/$TILDE}${N}"
+      local k v; while IFS='=' read -r k v; do [[ -n "$k" && "$k" != \#* ]] && row "${k#CONDUIT_}" "$v"; done <"$ENV_FILE" 2>/dev/null
+      outro "${D}$NAME config set <KEY> <value>${N}" ;;
+    *) fail "config [get|set|unset] <KEY> [value]" ;;
+  esac
+}
+
+projects_cmd() {
+  load_env
+  healthy || fail "Conduit is not running. $NAME start"
+  case "${1:-}" in
+    add)
+      local dir; dir="$(cd "${2:-.}" 2>/dev/null && pwd -P)" || fail "No such folder: ${2:-.}"
+      local name="${3:-}" body
+      body="{\"mode\":\"link\",\"path\":$(json_str "$dir")${name:+,\"name\":$(json_str "$name")}}"
+      local reply; reply="$(auth api POST /v0/projects "$body")" \
+        || fail "Not added: $(sed -n 's/.*"message":"\([^"]*\)".*/\1/p; t; s/.*"error":"\([^"]*\)".*/\1/p' <<<"$reply")"
+      ok "Added ${B}${dir/#$HOME/$TILDE}${N}" ;;
+    ""|list)
+      title "Projects"
+      auth api GET /v0/projects | "$(node_bin)" -e '
+        const { projects = [] } = JSON.parse(require("fs").readFileSync(0, "utf8"));
+        const [D, N, C, home] = process.argv.slice(1);
+        for (const p of projects) console.log(`${D}│${N}  ${C}${String(p.name).padEnd(24)}${N} ${D}${String(p.path || p.workspacePath || "").replace(home, "~")}${N}`);
+        if (!projects.length) console.log(`${D}│  none yet: conduit-server projects add <folder>${N}`);
+      ' "$D" "$N" "$C" "$HOME"
+      outro "" ;;
+    *) fail "projects [list|add <folder> [name]]" ;;
+  esac
 }
 
 rollback() {
@@ -514,19 +676,114 @@ rollback() {
   use "$previous"
 }
 
+# Each check: state (ok|warn|info) | label | detail | what --fix does
+doctor_checks() {
+  local node; node="$(node_bin)"
+  [[ -x "$node" ]] && echo "ok|Node $("$node" --version)||" || echo "warn|No Node for $(code_label)||"
+  [[ -x "$CURRENT/working-files/.venv/bin/python" ]] && echo "ok|Python tools||" || echo "warn|Python tools missing||python"
+  [[ -f "$CONDUIT_DATA_ROOT/auth.json" ]] && echo "ok|Login password||" || echo "warn|No login password|$NAME password|"
+  if [[ "$(service_kind)" == systemd ]]; then
+    [[ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null)" == yes ]] && echo "ok|Runs after you log out||" || echo "warn|Stops when you log out|lingering is off|linger"
+    if [[ -f "$UNIT_FILE" ]] && ! grep -qF "ExecStart=$node $CURRENT/" "$UNIT_FILE"; then echo "warn|Service file is out of date||service"; fi
+  fi
+  local newer; newer="$(update_available)"; [[ -n "$newer" ]] && echo "warn|$newer available|$NAME update|"
+  local agent auth_file
+  for agent in claude:.claude/.credentials.json codex:.codex/auth.json opencode:.local/share/opencode/auth.json; do
+    auth_file="$HOME/${agent#*:}"; agent="${agent%%:*}"
+    if ! command -v "$agent" >/dev/null 2>&1; then echo "info|$agent not installed||"
+    elif [[ -f "$auth_file" ]]; then echo "ok|$agent|$(command -v "$agent" | sed "s#^$HOME#~#")|"
+    else echo "warn|$agent is not signed in|run $agent once to sign in|"; fi
+  done
+  if healthy; then echo "ok|Healthy on :$CONDUIT_PORT||"
+  elif (ss -ltn 2>/dev/null || netstat -an 2>/dev/null) | grep -qE "[:.]$CONDUIT_PORT\b.*LISTEN|LISTEN.*[:.]$CONDUIT_PORT\b"; then
+    echo "warn|Port $CONDUIT_PORT is taken by something else|$NAME config set CONDUIT_PORT <other>|"
+  else echo "warn|Not running||start"; fi
+}
 doctor() {
   load_env
-  title "doctor"
-  local node; node="$(node_bin)"
-  row code "$(code_label)"
-  [[ -x "$node" ]] && ok "Node $("$node" --version)" || warn "No Node for this code"
-  [[ -x "$CURRENT/working-files/.venv/bin/python" ]] && ok "Python tools" || warn "Python tools missing ${D}($NAME setup)${N}"
-  [[ -f "$CONDUIT_DATA_ROOT/auth.json" ]] && ok "Login password" || warn "No login password ${D}($NAME password)${N}"
-  for agent in claude codex opencode2 opencode; do
-    command -v "$agent" >/dev/null 2>&1 && ok "$agent ${D}$(command -v "$agent" | sed "s#^$HOME#~#")${N}" || note "$agent not found"
-  done
-  healthy && ok "Healthy on :$CONDUIT_PORT" || warn "Not running ${D}($NAME start)${N}"
+  local fix=0 as_json=0
+  for a in "$@"; do [[ "$a" == --fix ]] && fix=1; [[ "$a" == --json ]] && as_json=1; done
+  local checks; checks="$(doctor_checks)"
+  if (( as_json )); then
+    printf '['; local first=1 state label detail action
+    while IFS='|' read -r state label detail action; do
+      (( first )) || printf ','; first=0
+      printf '{"state":"%s","check":%s,"detail":%s,"fixable":%s}' "$state" "$(json_str "$label")" "$(json_str "$detail")" "$([[ -n "$action" ]] && echo true || echo false)"
+    done <<<"$checks"; printf ']\n'; return
+  fi
+  title "doctor ${D}$(code_label)${N}"
+  local state label detail action fixes=()
+  while IFS='|' read -r state label detail action; do
+    case "$state" in
+      ok) ok "$label${detail:+ ${D}$detail${N}}" ;;
+      warn) warn "$label${detail:+ ${D}· $detail${N}}${action:+ ${D}(--fix)${N}}" ;;
+      *) note "$label" ;;
+    esac
+    [[ -n "$action" ]] && fixes+=("$action")
+  done <<<"$checks"
+  if (( fix && ${#fixes[@]} )); then
+    bar
+    for action in "${fixes[@]}"; do
+      case "$action" in
+        python) spin "Rebuilding the Python tools" sync_python || true ;;
+        linger) loginctl enable-linger "$USER" >/dev/null 2>&1 && ok "Lingering on" || warn "Could not turn on lingering (try: sudo loginctl enable-linger $USER)" ;;
+        service) write_service; ok "Service file rewritten"; healthy && restart ;;
+        start) start ;;
+      esac
+    done
+  elif (( ${#fixes[@]} )); then bar; note "$NAME doctor --fix sees to the ones marked (--fix)"; fi
   outro ""
+}
+
+status_json() {
+  local urls="" url how cmd
+  while IFS='|' read -r url how cmd; do urls+="${urls:+,}{\"url\":$(json_str "$url"),\"how\":$(json_str "$how")}"; done < <(access_urls)
+  printf '{"running":%s,"code":%s,"kind":"%s","port":%s,"access":%s,"urls":[%s],"service":"%s","data":%s,"update":%s}\n' \
+    "$(healthy && echo true || echo false)" "$(json_str "$(code_label)")" "$(code_kind)" "$CONDUIT_PORT" \
+    "$(json_str "${CONDUIT_ACCESS:-local}")" "$urls" "$(service_kind)" "$(json_str "$CONDUIT_DATA_ROOT")" "$(json_str "$(update_available)")"
+}
+
+logs_cmd() {
+  load_env
+  local since="" errors=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in --since) since="$2"; shift 2 ;; --errors) errors=1; shift ;; *) shift ;; esac
+  done
+  local filter=(cat); (( errors )) && filter=(grep -iE --line-buffered "error|fail|exception|unhandled|stalled|warn")
+  if [[ "$(service_kind)" == systemd ]]; then
+    local -a j=(journalctl --user -u "$NAME" -o cat)
+    if [[ -n "$since" ]]; then j+=(--since "-${since}" --no-pager); "${j[@]}" | "${filter[@]}"
+    else "${j[@]}" -n 200 -f | "${filter[@]}"; fi
+  else
+    [[ -n "$since" ]] && note "--since needs the systemd journal; showing the last 500 lines"
+    if [[ -n "$since" ]]; then tail -n 500 "$LOG_FILE" | "${filter[@]}"; else tail -n 200 -f "$LOG_FILE" | "${filter[@]}"; fi
+  fi
+}
+
+report() {
+  load_env
+  local dir; dir="$(mktemp -d)"; local out="$HOME/conduit-report-$(date +%Y%m%d-%H%M).tar.gz"
+  title "Bug report"
+  status_json >"$dir/status.json" 2>&1
+  doctor --json >"$dir/doctor.json" 2>&1
+  { uname -a; echo; cat /etc/os-release 2>/dev/null; echo; "$(node_bin)" --version; } >"$dir/system.txt" 2>&1
+  grep -v -iE 'TOKEN|KEY|SECRET|PASSWORD' "$ENV_FILE" >"$dir/conduit.env" 2>/dev/null || true
+  # Long opaque strings are tokens more often than not; they are cut out.
+  { if [[ "$(service_kind)" == systemd ]]; then journalctl --user -u "$NAME" -o short-iso -n 3000 --no-pager; else tail -n 3000 "$LOG_FILE"; fi; } 2>/dev/null \
+    | sed -E 's/[A-Za-z0-9_+\/-]{40,}={0,2}/[redacted]/g; s#'"$HOME"'#~#g' >"$dir/server.log"
+  tar -czf "$out" -C "$dir" . && rm -rf "$dir"
+  ok "${B}${out/#$HOME/$TILDE}${N} ${D}status, doctor, system, settings and the last 3000 log lines, tokens removed${N}"
+  outro "${D}Look it over, then attach it to an issue${N}"
+}
+
+completion() {
+  local cmds="setup connect status start stop restart logs open sessions use update rollback backup restore config projects password doctor report uninstall completion version help"
+  case "${1:-}" in
+    bash) printf 'complete -W "%s" %s\n' "$cmds" "$NAME" ;;
+    zsh) printf '#compdef %s\n_arguments "1: :(%s)"\n' "$NAME" "$cmds"
+      note "Save as a file named _$NAME on your fpath, or: source <($NAME completion zsh)" >&2 ;;
+    *) fail "completion bash|zsh" ;;
+  esac
 }
 
 uninstall() {
@@ -542,20 +799,27 @@ uninstall() {
 usage() {
   title "$(code_label)"
   local c
-  cmd() { printf '%s%s%s  %s%s%s%*s %s%s%s\n' "$D" "$S_BAR" "$N" "$C" "$1" "$N" $((22 - ${#1})) "" "$D" "$2" "$N"; }
+  cmd() { printf '%s%s%s  %s%s%s%*s %s%s%s\n' "$D" "$S_BAR" "$N" "$C" "$1" "$N" $((30 - ${#1})) "" "$D" "$2" "$N"; }
   cmd setup "password, port, how it is reached; then start"
   cmd connect "change how it is reached"
-  cmd status "what runs, where, its addresses"
+  cmd open "open it in the browser, signed in"
+  cmd "status [--json]" "what runs, where, its addresses"
   cmd "start · stop · restart" "restart waits for live answers"
-  cmd logs "follow the server's log"
+  cmd "logs [--since 1h] [--errors]" "follow or search the server's log"
   bar
-  cmd "use dev <clone>" "run a development clone"
-  cmd "use release · v<ver>" "run an installed release"
-  cmd "update [v]" "install the latest, or a given, release"
+  cmd "projects [add <folder>]" "list projects, or add a folder"
+  cmd "sessions [revoke <id>]" "signed-in devices; sign one out"
+  cmd "config [set K V]" "settings in conduit.env"
+  cmd password "change the login password"
+  bar
+  cmd "update [v] [--channel beta]" "install the latest, or a given, release"
+  cmd "use dev <clone> · release" "run a development clone or a release"
   cmd rollback "the release before this one"
   bar
-  cmd password "change the login password"
-  cmd doctor "check Node, Python, agents, the server"
+  cmd "backup [--lean] · restore" "archive ~/.conduit/data, or put one back"
+  cmd "doctor [--fix] [--json]" "check, and repair, the install"
+  cmd report "a bug report bundle, tokens removed"
+  cmd "completion bash|zsh" "shell completion"
   cmd uninstall "remove the daemon; keeps ${STATE_DIR/#$HOME/$TILDE}"
   outro ""
 }
@@ -567,13 +831,21 @@ case "$command" in
   start) start ;;
   stop) stop ;;
   restart) restart ;;
-  status) status ;;
-  logs) logs ;;
+  status) status "$@" ;;
+  logs) logs_cmd "$@" ;;
+  open) open_cmd ;;
+  sessions) sessions_cmd "$@" ;;
+  backup) backup "$@" ;;
+  restore) restore "$@" ;;
+  config) config_cmd "$@" ;;
+  projects) projects_cmd "$@" ;;
+  report) report ;;
+  completion) completion "$@" ;;
   use) use "$@" ;;
   update) update "$@" ;;
   rollback) rollback ;;
   password) load_env; title "Login password"; set_password; outro "Signed-in browsers and apps will sign in again" ;;
-  doctor) doctor ;;
+  doctor) doctor "$@" ;;
   uninstall) uninstall ;;
   _sync-python) load_env; sync_python ;;
   _link) link_cli ;;

@@ -24,6 +24,9 @@ function printHelp() {
                                           every device. The password is unchanged.
   conduit-auth status                     Reports whether a password is set and the
                                           active session count.
+  conduit-auth handoff                    Print a one-time, one-minute sign-in code.
+  conduit-auth sessions                   Signed-in devices, as JSON.
+  conduit-auth revoke <id>|all            Sign out one device, or all of them.
   conduit-auth mint-session [options]     Create a local session without a password.
 
 Mint options:
@@ -168,6 +171,34 @@ try {
     await resetSessions();
   } else if (command === "status") {
     await status();
+  } else if (command === "handoff") {
+    const store = new AuthStore(authFile);
+    process.stdout.write(`${await store.createHandoff()}\n`);
+  } else if (command === "sessions") {
+    const store = new AuthStore(authFile);
+    await store.load();
+    console.log(JSON.stringify(store.sessions().map((s) => ({ id: s.tokenHash.slice(0, 8), kind: s.kind, userAgent: s.userAgent, createdAt: s.createdAt, lastSeenAt: s.lastSeenAt }))));
+  } else if (command === "revoke") {
+    const id = process.argv[3];
+    if (!id || (id !== "all" && id.length < 4)) throw new Error("revoke <id>|all");
+    console.log(await new AuthStore(authFile).removeSessionsByPrefix(id));
+  } else if (command === "api") {
+    // api METHOD /path [json] -- one request as a short-lived session, then signed out.
+    const [method, route, body] = process.argv.slice(3);
+    const store = new AuthStore(authFile);
+    const { token } = await store.createSession({ userAgent: "conduit-server CLI" });
+    try {
+      const port = process.env.CONDUIT_PORT || 4310;
+      const response = await fetch(`http://127.0.0.1:${port}${route}`, {
+        method,
+        headers: { cookie: `conduit_session=${token}`, "content-type": "application/json", origin: `http://127.0.0.1:${port}` },
+        body: body || undefined,
+      });
+      process.stdout.write(`${await response.text()}\n`);
+      if (!response.ok) process.exitCode = 1;
+    } finally {
+      await store.removeSession(token);
+    }
   } else if (command === "mint-session") {
     await mintSession();
   } else {
