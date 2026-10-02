@@ -113,14 +113,15 @@ esac
 platform="$os-$arch"
 
 if (( ! UPDATE )); then
-  printf '\n%s%s%s  %s conduit-server %s  %sinstall%s%s\n' "$D" "$START" "$N" "$BADGE" "$N" "$B" "$N" "${PROFILE:+  ${D}$PROFILE · its own data, port and service${N}}"
+  printf '\n%s%s%s  %s conduit-server %s  %sinstall%s%s\n' "$D" "$START" "$N" "$BADGE" "$N" "$B" "$N" "${PROFILE:+  ${D}$PROFILE${N}}"
   bar
 fi
 
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 
 if [[ -n "${CONDUIT_TARBALL:-}" ]]; then
-  step "Using $(basename "$CONDUIT_TARBALL")" cp "$CONDUIT_TARBALL" "$work/conduit.tar.gz"
+  cp "$CONDUIT_TARBALL" "$work/conduit.tar.gz"
+  printf '%s%s%s  Conduit %slocal build · %s%s\n' "$G" "$DONE" "$N" "$D" "$(human "$(wc -c <"$work/conduit.tar.gz")")" "$N"
 else
   if [[ -z "$VERSION" ]]; then
     VERSION="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPOSITORY/releases/latest" | sed 's#.*/tag/##')"
@@ -139,7 +140,7 @@ else
     actual="$( (sha256sum "$work/conduit.tar.gz" 2>/dev/null || shasum -a 256 "$work/conduit.tar.gz") | awk '{print $1}')"
     [[ "$expected" == "$actual" ]] || { echo "Checksum mismatch for $asset"; return 1; }
   }
-  step "Checksum" check_sum
+  check_sum >"$work/sum.err" 2>&1 || fail "$(cat "$work/sum.err")"
 fi
 
 mkdir -p "$work/release"
@@ -157,10 +158,10 @@ system_node="$(command -v node 2>/dev/null || true)"
 system_version="$([[ -n "$system_node" ]] && "$system_node" --version 2>/dev/null | sed 's/^v//')"
 if [[ -n "$system_version" ]] && ver_ge "$system_version" "$node_min"; then
   NODE_BIN="$system_node"
-  printf '%s%s%s  Node %s %s%s · on PATH%s\n' "$G" "$DONE" "$N" "v$system_version" "$D" "${system_node/#$HOME/~}" "$N"
+  printf '%s%s%s  Node v%s %s· yours%s\n' "$G" "$DONE" "$N" "$system_version" "$D" "$N"
 elif [[ -x "$node_dir/bin/node" ]]; then
   NODE_BIN="$node_dir/bin/node"
-  printf '%s%s%s  Node %s %sprivate copy, cached%s\n' "$G" "$DONE" "$N" "$node_version" "$D" "$N"
+  printf '%s%s%s  Node %s %s· private copy%s\n' "$G" "$DONE" "$N" "$node_version" "$D" "$N"
 else
   if [[ -n "$system_version" ]] && { : </dev/tty; } 2>/dev/null; then
     choose "Node v$system_version is older than Conduit needs (v$node_min or newer)" \
@@ -212,14 +213,14 @@ if (!crypto.verify(null, Buffer.concat([signature.subarray(10, 74), Buffer.from(
 VERIFY
   "$NODE_BIN" "$work/verify.mjs" "$work/conduit.tar.gz" "$work/conduit.sig" "$SIGNING_KEY"
 }
-if [[ -z "${CONDUIT_TARBALL:-}" ]]; then step "Signature ${D}release key${N}" verify_signature
-elif [[ -f "${CONDUIT_TARBALL}.sig" ]]; then cp "${CONDUIT_TARBALL}.sig" "$work/conduit.sig"; step "Signature ${D}release key${N}" verify_signature; fi
+# Quiet when it passes; the installer stops with the reason when it does not.
+[[ -n "${CONDUIT_TARBALL:-}" && -f "${CONDUIT_TARBALL}.sig" ]] && cp "${CONDUIT_TARBALL}.sig" "$work/conduit.sig"
+if [[ -f "$work/conduit.sig" ]]; then verify_signature >"$work/sig.err" 2>&1 || fail "The release signature did not verify: $(cat "$work/sig.err")"
+elif [[ -z "${CONDUIT_TARBALL:-}" ]]; then fail "The release has no signature."; fi
 
 # A thin release carries no node_modules: its dependencies come from npm,
 # for this machine only (scripts/release-deps.mjs), after the signature check.
-if [[ ! -d "$work/release/conduit-web/node_modules" ]]; then
-  step "Dependencies ${D}npm, for $platform${N}" "$NODE_BIN" "$work/release/scripts/release-deps.mjs" "$work/release/conduit-web"
-fi
+thin=0; [[ -d "$work/release/conduit-web/node_modules" ]] || thin=1
 # An older conduit-server finds Node only at node/<version>; point that at the
 # chosen one so a release from before NODE_BIN still starts.
 if [[ ! -x "$node_dir/bin/node" ]]; then mkdir -p "$node_dir/bin"; ln -sfn "$NODE_BIN" "$node_dir/bin/node"; fi
@@ -237,7 +238,20 @@ install_release() {
   # Keep the two newest releases, for `conduit-server rollback`.
   ls -1t "$APP_HOME/versions" | tail -n +3 | while read -r old; do rm -rf "${APP_HOME:?}/versions/$old"; done
 }
-step "Installed in ${D}${APP_HOME/#$HOME/~}${N}" install_release
+install_release >/dev/null
+dest="$APP_HOME/versions/$release_version"
+# Going on to setup, the dependencies install in the background while its
+# questions are asked (conduit-server waits on .deps-pending before starting);
+# otherwise here and now.
+interactive=0; (( SETUP )) && { : </dev/tty; } 2>/dev/null && [[ -f "$APP_HOME/current/NODE_VERSION" ]] && interactive=1
+if (( thin )); then
+  if (( interactive )); then
+    touch "$dest/.deps-pending"
+    nohup bash -c '"$1" "$2/scripts/release-deps.mjs" "$2/conduit-web" >"$2/.deps-log" 2>&1 || cp "$2/.deps-log" "$2/.deps-failed"; rm -f "$2/.deps-pending"' _ "$NODE_BIN" "$dest" >/dev/null 2>&1 &
+  else
+    step "Dependencies" "$NODE_BIN" "$dest/scripts/release-deps.mjs" "$dest/conduit-web"
+  fi
+fi
 
 # Beside a development clone: the daemon keeps serving the clone unless asked
 # to switch; `conduit-server use release|dev` moves between them later.

@@ -38,7 +38,7 @@ fs.writeFileSync(lockFile, `${JSON.stringify(lock, null, 2)}\n`);
 
 const cli = path.join(path.dirname(fs.realpathSync(process.execPath)), "..", "lib", "node_modules", "npm", "bin", "npm-cli.js");
 const [npm, prefix] = fs.existsSync(cli) ? [process.execPath, [cli]] : ["npm", []];
-execFileSync(npm, [...prefix, "ci", "--omit=dev", "--omit=optional", "--ignore-scripts", "--no-audit", "--no-fund", "--loglevel=error"], { cwd: web, stdio: ["ignore", "ignore", "inherit"] });
+execFileSync(npm, [...prefix, "ci", "--omit=dev", "--omit=optional", "--ignore-scripts", "--prefer-offline", "--no-audit", "--no-fund", "--loglevel=error"], { cwd: web, stdio: ["ignore", "ignore", "inherit"] });
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "conduit-deps-"));
 try {
