@@ -1,3 +1,4 @@
+import os from "node:os";
 import crypto from "node:crypto";
 import { execFile as execFileCallback } from "node:child_process";
 import fs from "node:fs/promises";
@@ -31,7 +32,7 @@ export async function removeUnresponsiveSocket(name, error) {
 }
 
 export function terminalRegistryFile(env = process.env) {
-  const dataRoot = path.resolve(env.CONDUIT_DATA_ROOT || path.join(repositoryRoot, "data"));
+  const dataRoot = path.resolve(env.CONDUIT_DATA_ROOT || path.join(os.homedir(), ".conduit", "data"));
   return path.resolve(env.CONDUIT_REMOTES_FILE || path.join(dataRoot, "remotes.json"));
 }
 

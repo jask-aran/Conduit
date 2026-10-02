@@ -43,7 +43,7 @@ export function loadConfig(env = process.env) {
     discovered.push(piTemplate);
     discovered.sort((a, b) => a.id.localeCompare(b.id));
   }
-  const dataRoot = absolute(env.CONDUIT_DATA_ROOT || path.join(repositoryRoot, "data"));
+  const dataRoot = absolute(env.CONDUIT_DATA_ROOT || path.join(os.homedir(), ".conduit", "data"));
   const filesRoot = absolute(env.CONDUIT_FILES_ROOT || path.join(dataRoot, "chat/files"));
   const workspaceAllowlist = parseAllowlist(env.CONDUIT_WORKSPACE_ALLOWLIST, {
     fallback: [os.homedir(), repositoryRoot, filesRoot],
