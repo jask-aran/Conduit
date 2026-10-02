@@ -52,7 +52,7 @@ than that the thing at this address holds it. Something on a hostile network
 can forward a client's nonce to the real server over any route it has and relay
 the answer, and the client will accept the address. Closing that means binding
 the proof to the connection, which cleartext HTTP cannot do —
-[`pinned-tls-plan.md`](pinned-tls-plan.md) is the plan for 0.7.5. Until then,
+[`connections.md`](connections.md) has the plan. Until then,
 treat a cleartext route as checked against a passive impostor and not against
 an active one.
 
