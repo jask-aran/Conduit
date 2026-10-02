@@ -1,9 +1,9 @@
-import { createSignal, For, onCleanup, Show } from "solid-js";
+import { createSignal, For, lazy, onCleanup, Show } from "solid-js";
 import { ExternalLinkIcon, PlusIcon, QrCodeIcon, RefreshCwIcon } from "lucide-solid";
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger, Spinner } from "@/components/primitives";
 import { buildHttpUrl } from "../api/transport";
 import { proveServer } from "../platform/server-proof";
-import { PairDialog } from "./pair-dialog";
+const PairDialog = lazy(() => import("./pair-dialog").then((module) => ({ default: module.PairDialog })));
 
 /** Not an address: the row that hands the choice back to the client. */
 const AUTOMATIC = "automatic";
@@ -253,5 +253,5 @@ export function ServerSwitcher(props: {
       <MenuItem onSelect={props.onLogout}>{servers().length > 1 ? `Sign out of ${serverName()}` : "Sign out"}</MenuItem>
     </MenuContent>
   </Menu>
-  <PairDialog open={pairing()} onOpenChange={setPairing} /></>;
+  <Show when={pairing()}><PairDialog open={pairing()} onOpenChange={setPairing} /></Show></>;
 }
