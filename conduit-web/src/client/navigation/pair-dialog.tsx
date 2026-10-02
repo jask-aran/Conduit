@@ -62,7 +62,7 @@ export function PairDialog(props: { open: boolean; onOpenChange: (open: boolean)
   const left = () => Math.max(0, Math.round((expiresAt() - now()) / 1000));
   const expired = () => Boolean(svg()) && left() === 0;
 
-  return <FrostOverlay open={props.open} onOpenChange={props.onOpenChange} class="pair-dialog" cardClass="pair-card">
+  return <FrostOverlay open={props.open} onOpenChange={props.onOpenChange} class="conduit-modal pair-dialog" cardClass="pair-card">
     <div class="pair-head">
       <KDialog.Title>Pair a device</KDialog.Title>
       <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onOpenChange(false)}><XIcon aria-hidden="true" /></Button>
