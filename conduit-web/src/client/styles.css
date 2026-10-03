@@ -1758,67 +1758,63 @@ svg.lucide { stroke-width: 2.4; }
   }
 }
 
-/* Capacitor first-launch server selection. */
+/* Capacitor first-launch server selection, on the frame (DESIGN.md,
+   Surfaces): the Conduit mark, a heading, then the ways in as sidebar rows --
+   scan, this computer, what the network has -- and the address field last,
+   for when none of those is the answer. */
 .native-server-setup {
   min-height: var(--app-height, 100dvh);
   display: grid;
   place-items: center;
   padding: calc(24px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 20px calc(24px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
-  background: var(--background);
+  background: var(--frame);
 }
-.native-server-card { display: grid; gap: 12px; width: min(100%, 420px); }
-.native-server-brand { font-family: var(--font-serif); font-size: 42px; line-height: 1; }
-.native-server-card h1 { margin: 20px 0 0; font-size: 24px; }
-.native-server-card p { margin: 0; color: var(--muted-foreground); }
-.native-server-card label { margin-top: 12px; font-size: 13px; font-weight: 600; }
+.native-server-card { display: grid; gap: 10px; width: min(100%, 380px); }
+.native-server-mark { width: 34px; height: 22px; color: var(--foreground); }
+.native-server-card h1 { margin: 14px 0 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+.native-server-card p { margin: 0; color: var(--muted-foreground); font-size: 13px; line-height: 1.45; }
+.native-server-card .native-server-lede { margin-bottom: 8px; }
+.native-server-card label { margin-top: 8px; color: var(--muted-foreground); font-size: 12px; font-weight: 600; }
 .native-server-card input {
   width: 100%;
   min-height: 44px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: 1px solid oklch(1 0 0 / 12%);
+  border-radius: 10px;
   padding: 0 12px;
   color: var(--foreground);
-  background: var(--background);
+  background: oklch(1 0 0 / 4%);
+  outline: none;
 }
+.native-server-card input:focus { border-color: oklch(1 0 0 / 28%); }
+.native-server-card input:disabled { opacity: 0.6; }
+.native-server-card > [data-slot="button"] { min-height: 44px; border-radius: 10px; }
 .native-server-card .native-server-error { color: var(--destructive); }
-/* What was found on the network: a tile of rows, which is what a list of
-   things to pick is everywhere else in Conduit. */
-.native-server-hint { color: var(--muted-foreground); font-size: 11px; }
-.native-server-found {
-  display: flex;
-  margin: 0;
-  flex-direction: column;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 4px;
-  gap: 2px;
-  list-style: none;
-}
+.native-server-hint { color: var(--muted-foreground); font-size: 12px; }
+.native-server-card .native-server-group { margin-top: 6px; color: color-mix(in oklch, var(--foreground), transparent 50%); font-size: 12px; font-weight: 700; }
+/* The ways in: one-line rows with no box, the wash as the cursor. */
+.native-server-found { display: flex; margin: 0 -8px; flex-direction: column; padding: 0; gap: 2px; list-style: none; }
 .native-server-found > li > button {
   display: grid;
   width: 100%;
+  min-height: 44px;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   border: 0;
-  border-radius: var(--radius-md);
-  padding: 7px 8px;
-  gap: 8px;
+  border-radius: 10px;
+  padding: 0 8px;
+  gap: 10px;
   background: transparent;
   color: var(--foreground);
   font: inherit;
+  font-size: 14px;
+  font-weight: 520;
   text-align: left;
   cursor: pointer;
 }
-.native-server-found > li > button:hover:not(:disabled) { background: var(--accent); }
+.native-server-found > li > button:is(:hover, :focus-visible):not(:disabled) { background: var(--accent); outline: none; }
 .native-server-found > li > button:disabled { cursor: default; opacity: 0.6; }
-.native-server-found svg { width: 15px; height: 15px; color: var(--muted-foreground); }
-.native-server-found code {
-  overflow: hidden;
-  color: var(--muted-foreground);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.native-server-found svg { width: 16px; height: 16px; color: var(--muted-foreground); }
+.native-server-found code { overflow: hidden; color: var(--muted-foreground); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 /* The same form, minus the page it owns on first launch. */
 .add-server-dialog { width: min(92vw, 420px); }
 .add-server-dialog .native-server-card { width: 100%; gap: 10px; }
