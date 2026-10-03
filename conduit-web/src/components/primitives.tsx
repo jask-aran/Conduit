@@ -1,3 +1,4 @@
+import "./phone-overlays";
 import type { JSX, ParentProps } from "solid-js";
 import type { FocusOutsideEvent } from "@kobalte/core";
 import { createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, Show, splitProps } from "solid-js";
@@ -65,9 +66,9 @@ export const MenuTrigger = KMenu.Trigger;
 export const MenuGroup = KMenu.Group;
 export const MenuRadioGroup = KMenu.RadioGroup;
 
-export function MenuContent(props: ParentProps<{ class?: string; onOpenAutoFocus?: (event: Event) => void; onCloseAutoFocus?: (event: Event) => void; onFocusOutside?: (event: FocusOutsideEvent) => void; onPointerDown?: (event: PointerEvent) => void; onClick?: (event: MouseEvent) => void }>) {
+export function MenuContent(props: ParentProps<{ class?: string; onOpenAutoFocus?: (event: Event) => void; onCloseAutoFocus?: (event: Event) => void; onFocusOutside?: (event: FocusOutsideEvent) => void; onPointerDown?: (event: PointerEvent) => void; onClick?: (event: MouseEvent) => void; "data-settling"?: boolean; onPointerDownOutside?: (event: Event) => void }>) {
   const portalMount = createFullscreenPortalMount();
-  return <KMenu.Portal mount={portalMount()}><KMenu.Content data-slot="menu-content" onOpenAutoFocus={props.onOpenAutoFocus} onCloseAutoFocus={props.onCloseAutoFocus} onFocusOutside={props.onFocusOutside} onPointerDown={props.onPointerDown} onClick={props.onClick} class={cn(menuContentClass, props.class)}>{props.children}</KMenu.Content></KMenu.Portal>;
+  return <KMenu.Portal mount={portalMount()}><KMenu.Content data-slot="menu-content" data-settling={props["data-settling"]} onPointerDownOutside={props.onPointerDownOutside} onOpenAutoFocus={props.onOpenAutoFocus} onCloseAutoFocus={props.onCloseAutoFocus} onFocusOutside={props.onFocusOutside} onPointerDown={props.onPointerDown} onClick={props.onClick} class={cn(menuContentClass, props.class)}>{props.children}</KMenu.Content></KMenu.Portal>;
 }
 export function MenuItem(props: ParentProps<{ class?: string; disabled?: boolean; closeOnSelect?: boolean; variant?: "destructive"; onSelect?: () => void; textValue?: string; "aria-label"?: string }>) {
   return <KMenu.Item disabled={props.disabled} closeOnSelect={props.closeOnSelect} onSelect={props.onSelect} textValue={props.textValue} aria-label={props["aria-label"]} data-variant={props.variant} class={cn(menuItemClass, props.class)}>{props.children}</KMenu.Item>;
