@@ -1,10 +1,11 @@
-import { For, Show, createSignal, createUniqueId, onCleanup } from "solid-js";
+import { Portal } from "solid-js/web";
+import { createFullscreenPortalMount } from "@/components/primitives";
+import { For, Show, createSignal, createUniqueId, onCleanup, onMount, type ParentProps } from "solid-js";
 // Kobalte's public dropdown-menu entrypoint does not expose this hook, but its
 // menu content uses the same context. The compiled chunk keeps the context
 // identity shared with the public component.
 // @ts-expect-error Kobalte does not publish declarations for this internal chunk.
 import { useMenuContext } from "../../../node_modules/@kobalte/core/dist/chunk/L544S5A4.jsx";
-import type { FocusOutsideEvent } from "@kobalte/core";
 import { ChevronRightIcon, FolderIcon, PaperclipIcon, PlusIcon, SearchIcon, ShieldCheckIcon } from "lucide-solid";
 import {
   Menu,
@@ -93,70 +94,16 @@ export function MobileComposerOptions(props: {
     window.removeEventListener("pointerdown", nextTap, true);
     for (const type of ghostEvents) window.removeEventListener(type, dropGhost, true);
   });
-  let composerFocusBeforeOpen: HTMLTextAreaElement | null = null;
-  let keyboardOpenBeforeOpen = false;
-  let restoreFocusOnClose = false;
-
-  const captureComposerFocus = () => {
-    if (composerFocusBeforeOpen) {
-      return;
-    }
-    const active = document.activeElement;
-    if (!(active instanceof HTMLTextAreaElement) || active.getAttribute("aria-label") !== "Message the agent") {
-      composerFocusBeforeOpen = null;
-      keyboardOpenBeforeOpen = false;
-      return;
-    }
-    composerFocusBeforeOpen = active;
-    const viewport = window.visualViewport;
-    keyboardOpenBeforeOpen = !viewport || window.innerHeight - viewport.height > 120;
-  };
-
-  const focusComposer = () => {
-    if (keyboardOpenBeforeOpen && composerFocusBeforeOpen?.isConnected) composerFocusBeforeOpen.focus({ preventScroll: true });
-  };
-
-  const preserveComposerFocus = (event: Event) => {
+  const [open, setOpen] = createSignal(false);
+  const preserveFocus = (event: Event) => event.preventDefault();
+  const back = (event: KeyboardEvent) => {
+    if (!open() || panel() === "root" || event.key !== "Escape") return;
     event.preventDefault();
-    focusComposer();
+    event.stopImmediatePropagation();
+    go("root");
   };
-
-  const restoreComposerFocusAfterClose = () => {
-    const target = composerFocusBeforeOpen;
-    const restore = keyboardOpenBeforeOpen;
-    const refocus = () => { if (restore && target?.isConnected) target.focus({ preventScroll: true }); };
-    refocus();
-    if (restore) {
-      window.setTimeout(refocus, 80);
-      window.setTimeout(refocus, 240);
-    }
-    focusComposer();
-    composerFocusBeforeOpen = null;
-    keyboardOpenBeforeOpen = false;
-    restoreFocusOnClose = false;
-  };
-
-  const preserveComposerFocusOnClose = (event: Event) => {
-    if (restoreFocusOnClose) {
-      event.preventDefault();
-      restoreComposerFocusAfterClose();
-      return;
-    }
-    composerFocusBeforeOpen = null;
-    keyboardOpenBeforeOpen = false;
-  };
-
-  const preserveComposerFocusOnPointerDown = (_event: PointerEvent) => {
-    captureComposerFocus();
-  };
-
-  const restoreComposerFocusAfterInteraction = (event: MouseEvent) => {
-    const target = event.target;
-    if (target instanceof Element && target.closest('[aria-haspopup="true"]')) return;
-    requestAnimationFrame(focusComposer);
-  };
-
-  const keepMenuOpenOnFocusOutside = (event: FocusOutsideEvent) => event.preventDefault();
+  document.addEventListener("keydown", back, true);
+  onCleanup(() => document.removeEventListener("keydown", back, true));
   const returnToRoot = (event: PointerEvent) => {
     if (panel() === "root") return;
     event.preventDefault();
@@ -164,43 +111,12 @@ export function MobileComposerOptions(props: {
     go("root");
   };
 
-  /* A tap outside the open menu only closes it, as a tap beside a submenu only
-     returns to the options: the tap's own click and the mouse events that
-     follow it never reach the transcript underneath. */
-  let plusRoot: HTMLDivElement | undefined;
-  let stopWatchingOutside: (() => void) | undefined;
-  const swallow = (event: Event) => { event.preventDefault(); event.stopPropagation(); };
-  const watchOutside = () => {
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (!target || (target instanceof Element && target.closest(".composer-options-menu")) || plusRoot?.contains(target)) return;
-      const kinds = ["pointerup", "mouseup", "click", "touchend"] as const;
-      kinds.forEach((kind) => document.addEventListener(kind, swallow, true));
-      window.setTimeout(() => kinds.forEach((kind) => document.removeEventListener(kind, swallow, true)), 450);
-    };
-    document.addEventListener("pointerdown", onPointerDown, true);
-    stopWatchingOutside = () => document.removeEventListener("pointerdown", onPointerDown, true);
-  };
-  onCleanup(() => stopWatchingOutside?.());
-
-  return <div class="composer-mobile-plus" ref={plusRoot}>
-    <Menu modal={false} onOpenChange={(open) => {
-      stopWatchingOutside?.();
-      stopWatchingOutside = undefined;
-      if (open) watchOutside(); else setPanel("root");
-    }}>
-      <MobileComposerPlusTrigger
-        serverOnline={composer.serverOnline}
-        captureComposerFocus={captureComposerFocus}
-        onToggle={(wasOpen) => {
-          restoreFocusOnClose = wasOpen;
-          if (wasOpen) {
-            requestAnimationFrame(() => { if (restoreFocusOnClose) focusComposer(); });
-            window.setTimeout(() => { if (restoreFocusOnClose) restoreComposerFocusAfterClose(); }, 500);
-          }
-        }}
-      />
-      <MenuContent class="composer-options-menu" data-settling={settling()} onOpenAutoFocus={preserveComposerFocus} onCloseAutoFocus={preserveComposerFocusOnClose} onFocusOutside={keepMenuOpenOnFocusOutside} onPointerDown={preserveComposerFocusOnPointerDown} onClick={restoreComposerFocusAfterInteraction}>
+  return <div class="composer-mobile-plus">
+    <Menu modal={false} open={open()} onOpenChange={(value) => { setOpen(value); if (!value) setPanel("root"); }}>
+      <MobileComposerPlusTrigger serverOnline={composer.serverOnline} />
+      <MenuContent class="composer-options-menu" data-settling={settling()} onOpenAutoFocus={preserveFocus} onCloseAutoFocus={preserveFocus} onFocusOutside={preserveFocus} onPointerDownOutside={(event) => {
+        if (event.target instanceof Element && event.target.closest(".composer-options-submenu")) event.preventDefault();
+      }}>
         <div class="composer-options-parent" data-panel-open={panel() !== "root"} onPointerDown={returnToRoot}>
          <MenuGroup>
           <MenuLabel class="composer-options-label composer-options-header"><span>{composer.profiles.length ? "Profile" : "Model"}</span>
@@ -244,7 +160,7 @@ export function MobileComposerOptions(props: {
          </MenuGroup>
         </div>
         <Show when={panel() === "models"}>
-          <div class="composer-options-submenu composer-model-menu">
+          <MobileOptionsSubmenu settling={settling()} class="composer-model-menu">
             <MenuGroup>
               <Show when={composer.onOpenModelSelector}>
                 <MenuItem onSelect={() => composer.onOpenModelSelector?.()}><SearchIcon /><span>Search all models…</span></MenuItem>
@@ -252,38 +168,38 @@ export function MobileComposerOptions(props: {
               </Show>
               <MenuLabel class="composer-options-label">Model</MenuLabel>
               <MenuRadioGroup value={composer.models.model()} onChange={(value) => chosen(() => void composer.models.chooseModel(value))}>
-                <For each={composer.models.models()}>{(item) => <MenuRadioItem class="composer-model-option" value={item.spec} closeOnSelect={false}><span>{item.label}</span><small>{item.provider}</small></MenuRadioItem>}</For>
+                <For each={composer.models.models()}>{(item) => <MenuRadioItem onSelect={() => go("root")} class="composer-model-option" value={item.spec} closeOnSelect={false}><span>{item.label}</span><small>{item.provider}</small></MenuRadioItem>}</For>
               </MenuRadioGroup>
             </MenuGroup>
-          </div>
+          </MobileOptionsSubmenu>
         </Show>
         <Show when={panel() === "effort"}>
-          <div class="composer-options-submenu composer-effort-menu">
+          <MobileOptionsSubmenu settling={settling()} class="composer-effort-menu">
             <MenuGroup>
               <MenuLabel class="composer-options-label">Effort</MenuLabel>
               <MenuRadioGroup value={composer.models.effort()} onChange={(value) => chosen(() => void composer.models.chooseEffort(value))}>
-                <For each={levels()}>{(level) => <MenuRadioItem value={level} closeOnSelect={false}>{thinkingLabel(level)}</MenuRadioItem>}</For>
+                <For each={levels()}>{(level) => <MenuRadioItem onSelect={() => go("root")} value={level} closeOnSelect={false}>{thinkingLabel(level)}</MenuRadioItem>}</For>
               </MenuRadioGroup>
             </MenuGroup>
-          </div>
+          </MobileOptionsSubmenu>
         </Show>
         <Show when={panel() === "profiles"}>
-          <div class="composer-options-submenu composer-profile-menu">
+          <MobileOptionsSubmenu settling={settling()} class="composer-profile-menu">
             <MenuGroup>
               <MenuLabel class="composer-options-label">Profile</MenuLabel>
               <MenuRadioGroup value={composer.activeProfile?.id || ""} onChange={(value) => chosen(() => composer.onChooseProfile(value))}>
-                <For each={composer.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={(profileLocked() && item.id !== composer.activeProfile?.id) || item.disabled} closeOnSelect={false}>
+                <For each={composer.profiles}>{(item) => <MenuRadioItem onSelect={() => go("root")} value={item.id} disabled={(profileLocked() && item.id !== composer.activeProfile?.id) || item.disabled} closeOnSelect={false}>
                   <HarnessMark id={item.implementation || "conduit"} class="size-4" /><span class="composer-profile-copy"><span>{item.label}</span><small>{item.implementation || "conduit"}</small></span></MenuRadioItem>}</For>
               </MenuRadioGroup>
             </MenuGroup>
-          </div>
+          </MobileOptionsSubmenu>
         </Show>
         <Show when={panel() === "places" && composer.place}>{(_) => {
           const place = composer.place!;
           const root = () => place.projects.find((project) => project.slug === "chat");
           const places = () => place.projects.filter((project) => project.slug !== "chat" && project.state !== "cloning")
             .sort((left, right) => Number(isWorkspace(left)) - Number(isWorkspace(right)) || left.name.localeCompare(right.name));
-          return <div class="composer-options-submenu composer-places-menu">
+          return <MobileOptionsSubmenu settling={settling()} class="composer-places-menu">
             <MenuGroup>
               <MenuLabel class="composer-options-label">Project</MenuLabel>
               <Show when={place.current && place.current.slug !== "chat" && root()}>
@@ -295,14 +211,14 @@ export function MobileComposerOptions(props: {
                 </MenuItem>}
               </For>
             </MenuGroup>
-          </div>;
+          </MobileOptionsSubmenu>;
         }}</Show>
         <Show when={panel() === "permissions"}>
-          <div class="composer-options-submenu composer-permissions-menu">
+          <MobileOptionsSubmenu settling={settling()} class="composer-permissions-menu">
             <MenuGroup>
               <MenuLabel class="composer-options-label">Permissions</MenuLabel>
               <MenuRadioGroup value={composer.permissions?.selected() || ""} onChange={(value) => chosen(() => void composer.permissions?.choose(value))}>
-                <For each={composer.permissions?.profiles() || []}>{(profile) => <MenuRadioItem class="composer-model-option" value={profile.id} disabled={!profile.allowed} closeOnSelect={false}><span>{profile.label}</span><Show when={profile.description}><small>{profile.description}</small></Show></MenuRadioItem>}</For>
+                <For each={composer.permissions?.profiles() || []}>{(profile) => <MenuRadioItem onSelect={() => go("root")} class="composer-model-option" value={profile.id} disabled={!profile.allowed} closeOnSelect={false}><span>{profile.label}</span><Show when={profile.description}><small>{profile.description}</small></Show></MenuRadioItem>}</For>
               </MenuRadioGroup>
             </MenuGroup>
             <Show when={composer.serviceLevels?.levels().length}>
@@ -310,11 +226,11 @@ export function MobileComposerOptions(props: {
               <MenuGroup>
                 <MenuLabel class="composer-options-label">Service level</MenuLabel>
                 <MenuRadioGroup value={composer.serviceLevels?.selected() || ""} onChange={(value) => chosen(() => void composer.serviceLevels?.choose(value))}>
-                  <For each={composer.serviceLevels?.levels() || []}>{(level) => <MenuRadioItem value={level.id} closeOnSelect={false}>{level.label}</MenuRadioItem>}</For>
+                  <For each={composer.serviceLevels?.levels() || []}>{(level) => <MenuRadioItem onSelect={() => go("root")} value={level.id} closeOnSelect={false}>{level.label}</MenuRadioItem>}</For>
                 </MenuRadioGroup>
               </MenuGroup>
             </Show>
-          </div>
+          </MobileOptionsSubmenu>
         </Show>
       </MenuContent>
     </Menu>
@@ -323,8 +239,6 @@ export function MobileComposerOptions(props: {
 
 function MobileComposerPlusTrigger(props: {
   serverOnline: boolean;
-  captureComposerFocus: () => void;
-  onToggle: (wasOpen: boolean) => void;
 }) {
   const menu = useMenuContext();
   const triggerId = `composer-plus-${createUniqueId()}`;
@@ -341,10 +255,38 @@ function MobileComposerPlusTrigger(props: {
     aria-expanded={menu.isOpen()}
     aria-controls={menu.isOpen() ? menu.contentId() : undefined}
     disabled={!props.serverOnline}
-    onPointerDown={(event) => { props.captureComposerFocus(); event.preventDefault(); }}
-    onTouchStart={props.captureComposerFocus}
-    onClick={(event) => { event.preventDefault(); props.onToggle(menu.isOpen()); menu.toggle(false); }}
+    onPointerDown={(event) => { event.preventDefault(); }}
+    onClick={(event) => { event.preventDefault(); menu.toggle(false); }}
   ><PlusIcon /></button>;
 }
 
 export default MobileComposerOptions;
+
+/** Portal the child beside its parent: nested backdrop filters cannot sample
+ * the transcript through the parent's backdrop root on Android Chromium. */
+function MobileOptionsSubmenu(props: ParentProps<{ class: string; settling: boolean }>) {
+  const mount = createFullscreenPortalMount();
+  const [position, setPosition] = createSignal({ left: "0px", bottom: "0px" });
+  let panel: HTMLDivElement | undefined;
+  onMount(() => {
+    const parent = document.querySelector<HTMLElement>(".composer-options-menu");
+    if (!parent) return;
+    const place = () => {
+      const box = parent.getBoundingClientRect();
+      const width = panel?.getBoundingClientRect().width ?? 258;
+      const inset = panel ? parseFloat(getComputedStyle(panel).getPropertyValue("--composer-submenu-offset")) : 64;
+      setPosition({ left: `${Math.max(8, Math.min(box.left + inset, innerWidth - width - 8))}px`, bottom: `${innerHeight - box.bottom}px` });
+    };
+    const observer = new ResizeObserver(place);
+    observer.observe(parent);
+    place();
+    window.addEventListener("resize", place);
+    window.visualViewport?.addEventListener("resize", place);
+    onCleanup(() => {
+      observer.disconnect();
+      window.removeEventListener("resize", place);
+      window.visualViewport?.removeEventListener("resize", place);
+    });
+  });
+  return <Portal mount={mount()}><div ref={panel} data-settling={props.settling} data-slot="menu-sub-content" class={`composer-options-submenu ${props.class}`} style={{ position: "fixed", ...position() }}>{props.children}</div></Portal>;
+}
