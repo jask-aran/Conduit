@@ -1,4 +1,4 @@
-//! Keep the main window where it was when a quiet updater relaunches Conduit.
+//! Keep the main window's placement across ordinary exits and updater relaunches.
 
 use std::fs;
 
@@ -12,6 +12,10 @@ struct Placement {
     width: u32,
     height: u32,
     maximized: bool,
+    /// Windows stores restored outer bounds, even while maximized/minimized.
+    /// Old updater snapshots stored inner size and remain readable.
+    #[serde(default)]
+    outer: bool,
 }
 
 fn path<R: Runtime>(app: &AppHandle<R>) -> Result<std::path::PathBuf, String> {
@@ -26,15 +30,31 @@ pub fn remember_update_window<R: Runtime>(app: AppHandle<R>) -> Result<(), Strin
     let window = app
         .get_webview_window("main")
         .ok_or("Main window is unavailable.")?;
-    let position = window.outer_position().map_err(|error| error.to_string())?;
-    let size = window.inner_size().map_err(|error| error.to_string())?;
-    let maximized = window.is_maximized().map_err(|error| error.to_string())?;
-    let placement = Placement {
-        x: position.x,
-        y: position.y,
-        width: size.width,
-        height: size.height,
-        maximized,
+    #[cfg(windows)]
+    let placement = {
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::{GetWindowPlacement, WINDOWPLACEMENT, SW_SHOWMAXIMIZED, WPF_RESTORETOMAXIMIZED};
+        let mut native = WINDOWPLACEMENT { length: std::mem::size_of::<WINDOWPLACEMENT>() as u32, ..Default::default() };
+        let hwnd = window.hwnd().map_err(|error| error.to_string())?;
+        unsafe { GetWindowPlacement(HWND(hwnd.0), &mut native) }.map_err(|error| error.to_string())?;
+        let rect = native.rcNormalPosition;
+        Placement {
+            x: rect.left, y: rect.top,
+            width: (rect.right - rect.left).max(0) as u32,
+            height: (rect.bottom - rect.top).max(0) as u32,
+            maximized: native.showCmd == SW_SHOWMAXIMIZED.0 as u32 || native.flags.contains(WPF_RESTORETOMAXIMIZED),
+            outer: true,
+        }
+    };
+    #[cfg(not(windows))]
+    let placement = {
+        let position = window.outer_position().map_err(|error| error.to_string())?;
+        let size = window.inner_size().map_err(|error| error.to_string())?;
+        Placement {
+            x: position.x, y: position.y, width: size.width, height: size.height,
+            maximized: window.is_maximized().map_err(|error| error.to_string())?,
+            outer: false,
+        }
     };
     let file = path(&app)?;
     if let Some(directory) = file.parent() {
@@ -52,7 +72,6 @@ pub fn restore<R: Runtime>(app: &AppHandle<R>) {
     let placement = fs::read(&file)
         .ok()
         .and_then(|bytes| serde_json::from_slice::<Placement>(&bytes).ok());
-    let _ = fs::remove_file(file);
     let Some(placement) = placement else { return };
     let Some(window) = app.get_webview_window("main") else {
         return;
@@ -74,6 +93,25 @@ pub fn restore<R: Runtime>(app: &AppHandle<R>) {
         })
     });
     if !on_screen {
+        return;
+    }
+    #[cfg(windows)]
+    if placement.outer {
+        use windows::Win32::Foundation::{HWND, RECT};
+        use windows::Win32::UI::WindowsAndMessaging::{SetWindowPlacement, WINDOWPLACEMENT, SW_SHOWMAXIMIZED, SW_SHOWNORMAL};
+        if let Ok(hwnd) = window.hwnd() {
+            let native = WINDOWPLACEMENT {
+                length: std::mem::size_of::<WINDOWPLACEMENT>() as u32,
+                showCmd: if placement.maximized { SW_SHOWMAXIMIZED.0 as u32 } else { SW_SHOWNORMAL.0 as u32 },
+                rcNormalPosition: RECT {
+                    left: placement.x, top: placement.y,
+                    right: placement.x.saturating_add(placement.width as i32),
+                    bottom: placement.y.saturating_add(placement.height as i32),
+                },
+                ..Default::default()
+            };
+            unsafe { let _ = SetWindowPlacement(HWND(hwnd.0), &native); }
+        }
         return;
     }
     let _ = window.set_size(PhysicalSize::new(placement.width, placement.height));
