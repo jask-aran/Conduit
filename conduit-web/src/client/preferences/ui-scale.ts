@@ -1,6 +1,7 @@
 import { installedClientKind } from "../platform/installed-client.ts";
 
 export const UI_SCALE_STORAGE_KEY = "conduit:ui-scale";
+const DESKTOP_ZOOM_STORAGE_KEY = "conduit:desktop-zoom";
 export const UI_SCALE_OPTIONS = [0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5] as const;
 export type UiScale = typeof UI_SCALE_OPTIONS[number];
 
@@ -18,6 +19,30 @@ export function parseUiScale(value: string | null): UiScale {
   return isUiScale(parsed) ? parsed : 1;
 }
 
+function savedDesktopZoom(): number | null {
+  const zoom = Number(localStorage.getItem(DESKTOP_ZOOM_STORAGE_KEY));
+  return Number.isFinite(zoom) && zoom >= 0.25 && zoom <= 5 ? zoom : null;
+}
+
+let desktopZoomTracking: Promise<void> | undefined;
+function trackDesktopZoom(): Promise<void> {
+  return desktopZoomTracking ??= import("@tauri-apps/api/window").then(async ({ getCurrentWindow }) => {
+    const nativeWindow = getCurrentWindow();
+    let monitorScale = await nativeWindow.scaleFactor();
+    const remember = () => {
+      // WebView2's pixel ratio includes both monitor DPI and browser zoom.
+      const zoom = Math.round(window.devicePixelRatio / monitorScale * 1000) / 1000;
+      if (zoom >= 0.25 && zoom <= 5 && localStorage.getItem(DESKTOP_ZOOM_STORAGE_KEY) !== String(zoom)) {
+        localStorage.setItem(DESKTOP_ZOOM_STORAGE_KEY, String(zoom));
+      }
+    };
+    window.addEventListener("resize", remember);
+    window.addEventListener("pagehide", remember);
+    await nativeWindow.onScaleChanged(({ payload }) => { monitorScale = payload.scaleFactor; remember(); });
+    remember();
+  });
+}
+
 /**
  * In a browser the scale is a CSS variable the whole stylesheet is written
  * against. In the desktop shell it is the webview's own zoom -- the same thing
@@ -26,11 +51,15 @@ export function parseUiScale(value: string | null): UiScale {
  * remembered to multiply. The two must not both apply, or the scale is
  * squared, so the desktop leaves the variable at 1.
  */
-export function applyUiScale(scale: UiScale): UiScale {
+export function applyUiScale(scale: UiScale, restoreZoom = false): UiScale {
   if (installedClientKind === "desktop") {
     document.documentElement.style.setProperty("--ui-scale", "1");
+    const zoom = restoreZoom ? savedDesktopZoom() ?? scale : scale;
     void import("@tauri-apps/api/webview")
-      .then(({ getCurrentWebview }) => getCurrentWebview().setZoom(scale))
+      .then(async ({ getCurrentWebview }) => {
+        await getCurrentWebview().setZoom(zoom);
+        await trackDesktopZoom();
+      })
       .catch(() => { /* an older shell keeps the zoom it has */ });
     return scale;
   }

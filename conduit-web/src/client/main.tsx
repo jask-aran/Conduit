@@ -130,7 +130,7 @@ if (desktopShell) {
 }
 
 const nativeApp = isInstalledClient();
-applyUiScale(selectedUiScale());
+applyUiScale(selectedUiScale(), true);
 // Stamp the reading-surface presets before first paint so the transcript is
 // never laid out at the default width and then reflowed to the chosen one.
 applyTranscriptAppearance({

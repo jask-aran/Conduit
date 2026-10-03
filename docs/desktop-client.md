@@ -194,6 +194,12 @@ quiet NSIS mode closes Conduit, installs without an installer window, and
 relaunches it. The window returns to its previous size and screen position,
 and the client reopens its previous route.
 
+Ordinary restarts also retain window placement: close, focus loss and orderly
+exit save the normal bounds and maximized state in the app's configuration
+directory. A disconnected monitor does not restore an unreachable placement.
+The webview remembers Settings scale and Ctrl+/Ctrl− zoom locally, separately
+from monitor DPI; dev and release apps retain their own state.
+
 The verified package is held by the running client. If the app closes before
 Restart is pressed, the next launch checks and downloads again. A download
 failure leaves the current app running and does not offer Restart.

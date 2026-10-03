@@ -59,6 +59,9 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if matches!(event, WindowEvent::Focused(false) | WindowEvent::CloseRequested { .. }) {
+                let _ = update_window::remember_update_window(window.app_handle().clone());
+            }
             if let WindowEvent::CloseRequested { api, .. } = event {
                 // With the tray on, the close button means "put it away". With
                 // it off the button means what it says, and Quit is the only
@@ -80,6 +83,11 @@ pub fn run() {
             discovery::discover_servers,
             update_window::remember_update_window
         ])
-        .run(tauri::generate_context!())
-        .expect("Conduit desktop failed to start");
+        .build(tauri::generate_context!())
+        .expect("Conduit desktop failed to start")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::ExitRequested { .. }) {
+                let _ = update_window::remember_update_window(app.clone());
+            }
+        });
 }
