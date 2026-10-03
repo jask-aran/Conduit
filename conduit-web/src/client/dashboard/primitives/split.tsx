@@ -149,11 +149,12 @@ export function SplitDashboard(props: {
       <div class="split-dashboard-head">{props.header}{props.quickActions}</div>
       <Show when={props.notice}><div class="split-dashboard-notice">{props.notice}</div></Show>
       <div class="split-dashboard-main">
-        <Show when={props.composer}><div class="split-dashboard-composer">{props.composer}</div></Show>
+        <Show when={!phone() && props.composer}><div class="split-dashboard-composer">{props.composer}</div></Show>
         {props.list}
       </div>
       <div class="split-dashboard-aside">{props.aside}</div>
     </div>
+    <Show when={phone() && props.composer}><div class="composer-stack split-dashboard-composer">{props.composer}</div></Show>
   </section></Phone.Provider>;
 }
 
