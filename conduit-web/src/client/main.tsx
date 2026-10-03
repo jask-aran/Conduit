@@ -5377,6 +5377,10 @@ function App() {
  */
 void publishCertificatePins(pinnedFingerprints());
 
+// Solid inserts into the mount; it does not remove index.html's launch mark.
+// That fixed, full-window placeholder would remain behind panes and intercept rail clicks.
+const mount = document.getElementById("root")!;
+mount.replaceChildren();
 render(() => <ErrorBoundary fallback={(error) => <div class="crash-screen"><div class="crash-card"><h1>Conduit hit a UI error</h1><p>{error instanceof Error ? error.message : "Unknown interface error"}</p><Button onClick={() => location.reload()}>Reload Conduit</Button></div></div>}>
   {nativeApp ? <NativeRoot /> : <App />}
-</ErrorBoundary>, document.getElementById("root")!);
+</ErrorBoundary>, mount);

@@ -23,12 +23,12 @@
     <!--
       Until the bundle's stylesheet arrives, the page is the frame with the
       Conduit mark on it -- the same launch screen as the Android app and the
-      installed PWA's splash -- rather than a blank page. Solid's render
-      replaces #root's contents, so the mark goes the moment the app mounts.
+      installed PWA's splash -- rather than a blank page. main.tsx clears
+      this placeholder before mounting; Solid's render only inserts content.
     -->
     <style>
       html, body { margin: 0; background: #08090a; }
-      .launch-mark { position: fixed; inset: 0; display: grid; place-items: center; }
+      .launch-mark { position: fixed; inset: 0; display: grid; place-items: center; pointer-events: none; }
       .launch-mark svg { width: 56px; color: #edeef0; }
     </style>
     <title>Conduit</title>
