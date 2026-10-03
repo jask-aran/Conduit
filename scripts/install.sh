@@ -103,12 +103,12 @@ choose() { # choose "Question" "one" "two" -> REPLY (1-based); digits then enter
 
 for tool in curl tar; do command -v "$tool" >/dev/null 2>&1 || fail "$tool is required."; done
 case "$(uname -s)" in
-  Linux) os=linux ;; Darwin) os=darwin ;;
-  *) fail "Conduit runs on Linux and macOS. On Windows, run this inside WSL." ;;
+  Linux) os=linux ;;
+  *) fail "Conduit server releases support Linux x64. On Windows, run this inside WSL." ;;
 esac
 case "$(uname -m)" in
-  x86_64|amd64) arch=x64 ;; aarch64|arm64) arch=arm64 ;;
-  *) fail "No Conduit build for $(uname -m)." ;;
+  x86_64|amd64) arch=x64 ;;
+  *) fail "Conduit server releases support x64 only; no build for $(uname -m)." ;;
 esac
 platform="$os-$arch"
 

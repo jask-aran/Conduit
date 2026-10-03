@@ -220,7 +220,7 @@ checks, not the secrecy of the URL it came from.
 
 A tag runs `validate → {android, server, windows} → release` in
 `.github/workflows/release.yml`. The server job builds the installable server
-for Linux x64, Linux arm64 and macOS arm64 (`scripts/package-server.sh`), and
+for Linux x64 only (`scripts/package-server.sh`), and
 the release carries those with `install.sh`. The release job waits for all three,
 so one tag produces artifacts that agree with each other. As for every release,
 the tag needs a changelog at `docs/releases/<tag>.md`.
