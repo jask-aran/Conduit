@@ -13,8 +13,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="${1:?usage: package-server.sh <version> [output-dir]}"
 OUT="${2:-$ROOT/release}"
-case "$(uname -s)" in Linux) os=linux ;; Darwin) os=darwin ;; *) echo "unsupported OS" >&2; exit 1 ;; esac
-case "$(uname -m)" in x86_64|amd64) arch=x64 ;; aarch64|arm64) arch=arm64 ;; *) echo "unsupported arch" >&2; exit 1 ;; esac
+case "$(uname -s)" in Linux) os=linux ;; *) echo "Server releases support Linux x64 only (Windows: inside WSL)." >&2; exit 1 ;; esac
+case "$(uname -m)" in x86_64|amd64) arch=x64 ;; *) echo "Server releases support x64 only." >&2; exit 1 ;; esac
 NAME="conduit-server-$VERSION-$os-$arch"
 STAGE="$(mktemp -d)/conduit"
 trap 'rm -rf "$(dirname "$STAGE")"' EXIT

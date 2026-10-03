@@ -12,7 +12,7 @@ curl -fsSL https://get.jask-aran.com/conduit | bash
 
 `get.jask-aran.com/conduit` serves `scripts/install.sh` from `main`. It:
 
-1. picks the build for this computer (Linux x64 or arm64, macOS arm64; Windows
+1. picks the build for this computer (Linux x64; Windows
    runs it inside WSL);
 2. downloads that release from GitHub, with a progress bar, and checks its
    SHA-256 and signature;

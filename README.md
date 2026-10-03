@@ -52,7 +52,7 @@ The tlbx and Garcon entries reflect their public [tlbx README](https://github.co
 
 ## Install
 
-On any Linux or macOS computer you want to control (Windows: inside WSL):
+On a Linux x64 computer you want to control (Windows: inside WSL):
 
 ```bash
 curl -fsSL https://get.jask-aran.com/conduit | bash
