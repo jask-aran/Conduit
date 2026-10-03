@@ -104,6 +104,12 @@ Nothing is installed, so no version is compared and none has to be invented.
 | Version | the release's | `0.7.2-dev.<timestamp>.<commit>` |
 | Updates from | GitHub releases | `https://localconduit.jask-aran.com/desktop-updates` by default |
 
+Development desktop icons invert the shared C artwork: black C on a light
+background, versus the release's white C on black. The caption, tray, executable
+and installer use the same variant. Regenerate both sets from `public/favicon.svg`
+with `node scripts/generate-desktop-icons.mjs` from `conduit-web/`. Generated
+assets live in `src-tauri/icons/` and `src-tauri/icons/dev/`.
+
 The identifier is what does the work. Windows keys the install entry, the
 per-user data directory, the single-instance lock and the credential entry on
 it, so settings, webview storage, the lock and the token all separate without

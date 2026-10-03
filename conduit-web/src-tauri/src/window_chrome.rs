@@ -12,9 +12,10 @@
 pub fn paint_caption<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
     use std::ffi::c_void;
     use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
-    use std::sync::OnceLock;
+    use std::os::windows::ffi::OsStrExt;
+    use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_UPDATEITEM, SHCNF_FLUSHNOWAIT, SHCNF_PATHW};
     use windows::Win32::UI::WindowsAndMessaging::{
-        CreateIcon, SendMessageW, ICON_BIG, ICON_SMALL, ICON_SMALL2, WM_GETICON, WM_SETICON,
+        SendMessageW, ICON_BIG, ICON_SMALL2, WM_GETICON, WM_SETICON,
     };
     use windows::Win32::Graphics::Dwm::{
         DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR,
@@ -33,15 +34,12 @@ pub fn paint_caption<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
         if icon.0 != 0 {
             SendMessageW(hwnd, WM_SETICON, Some(WPARAM(ICON_BIG as usize)), Some(LPARAM(icon.0)));
         }
-        // A null caption icon falls back to the large icon. Supply an explicit
-        // transparent one instead; keep its handle alive for the process lifetime.
-        static EMPTY_CAPTION_ICON: OnceLock<isize> = OnceLock::new();
-        let empty = *EMPTY_CAPTION_ICON.get_or_init(|| {
-            CreateIcon(None, 16, 16, 1, 32, [0xff; 32].as_ptr(), [0; 1024].as_ptr())
-                .map(|icon| icon.0 as isize).unwrap_or(0)
-        });
-        if empty != 0 {
-            SendMessageW(hwnd, WM_SETICON, Some(WPARAM(ICON_SMALL as usize)), Some(LPARAM(empty)));
+        // Updating replaces this file in place; tell Explorer to refresh its
+        // cached executable artwork without clearing unrelated app icon caches.
+        if let Ok(exe) = std::env::current_exe() {
+            let path: Vec<u16> = exe.as_os_str().encode_wide().chain(Some(0)).collect();
+            SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATHW | SHCNF_FLUSHNOWAIT,
+                Some(path.as_ptr() as *const c_void), None);
         }
     }
     for (attribute, value) in [

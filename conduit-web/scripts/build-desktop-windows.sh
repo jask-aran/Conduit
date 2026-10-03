@@ -158,6 +158,8 @@ node -e '
     // installer asks to close "Conduit" when the other one is running, and
     // both read as the same entry when searched for.
     overlay.mainBinaryName = "conduit-desktop-dev";
+    overlay.bundle.icon = config.bundle.icon.map((icon) => icon.replace("icons/", "icons/dev/"));
+    overlay.bundle.windows = { nsis: { installerIcon: "icons/dev/icon.ico", uninstallerIcon: "icons/dev/icon.ico" } };
     overlay.app = { windows: [{ ...config.app.windows[0], title: "" }] };
   }
   require("fs").writeFileSync(out, JSON.stringify(overlay, null, 2) + "\n");
