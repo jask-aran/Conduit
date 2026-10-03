@@ -158,7 +158,7 @@ node -e '
     // installer asks to close "Conduit" when the other one is running, and
     // both read as the same entry when searched for.
     overlay.mainBinaryName = "conduit-desktop-dev";
-    overlay.app = { windows: [{ ...config.app.windows[0], title: "Conduit Dev" }] };
+    overlay.app = { windows: [{ ...config.app.windows[0], title: "" }] };
   }
   require("fs").writeFileSync(out, JSON.stringify(overlay, null, 2) + "\n");
 ' "$overlay" "$build_version" "$local_updates" "$update_base" "$dev_client"
