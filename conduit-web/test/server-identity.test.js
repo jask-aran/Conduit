@@ -12,11 +12,18 @@ const request = (headers, protocol = "http") => ({ headers, protocol });
 
 test("a server keeps the same identity and key across restarts", async () => {
   const file = await temporaryFile();
-  const first = await new ServerIdentity(file, { port: 4310 }).load();
+  const first = await new ServerIdentity(file, { port: 4310, name: "Home workstation" }).load();
   const second = await new ServerIdentity(file, { port: 4310 }).load();
   assert.match(first.id, /^[0-9a-f]{32}$/);
   assert.equal(second.id, first.id, "two addresses cannot be recognised as one server if the id moves");
   assert.equal(second.publicKeyValue(), first.publicKeyValue(), "a client that paired once can still check it");
+
+  assert.equal(second.name, "Home workstation");
+  assert.equal(second.describe().name, "Home workstation");
+  const renamed = await new ServerIdentity(file, { name: "Development" }).load();
+  assert.equal(renamed.describe().name, "Development");
+  assert.equal(renamed.id, first.id, "renaming does not change identity");
+  assert.equal(renamed.publicKeyValue(), first.publicKeyValue(), "renaming preserves pairing");
 
   // The file holds the private half, so it is the owner's alone.
   const mode = (await fs.stat(file)).mode & 0o777;

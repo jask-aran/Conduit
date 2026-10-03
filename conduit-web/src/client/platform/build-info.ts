@@ -12,6 +12,7 @@ export interface BuildStamp {
   /** The tag, when this build came from a release. Empty otherwise. */
   release: string;
   builtAt: string;
+  dirty?: boolean;
 }
 
 declare const __CONDUIT_BUILD__: BuildStamp;
@@ -24,8 +25,8 @@ export const clientBuild: BuildStamp = typeof __CONDUIT_BUILD__ === "undefined"
 
 /** How a build is named in one line: the release if it is one, else the commit. */
 export function buildLabel(build: BuildStamp): string {
-  if (build.release) return `${build.release} · ${build.commit}`;
-  return `${build.version} · ${build.commit}`;
+  const label = build.release || build.version;
+  return `${label}${build.release || !label.endsWith(build.commit.slice(0, 7)) ? ` · ${build.commit}` : ""}${build.dirty ? " · modified" : ""}`;
 }
 
 /**

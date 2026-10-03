@@ -97,8 +97,6 @@ if [ -n "$stale" ]; then
   exit 1
 fi
 
-npm run build
-
 # The Windows half is a script file rather than a -Command string so the
 # signing key passes through one layer of quoting instead of three.
 # What this build overrides, written next to the config it overrides so the
@@ -111,9 +109,16 @@ npm run build
 # built from, and ordered against other development builds by the timestamp.
 # The commit is carried for reading, not for ordering.
 if [ -n "$dev_client" ] && [ -z "$build_version" ]; then
-  last_tag=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || echo "v0.0.0")
-  next=$(node -p "const p='${last_tag}'.replace(/^v/,'').split('.').map(Number); \`\${p[0]||0}.\${p[1]||0}.\${(p[2]||0)+1}\`")
-  build_version="$next-dev.$(date -u +%Y%m%d%H%M%S).$(git rev-parse --short=7 HEAD 2>/dev/null || echo nogit)"
+  build_version=$(CONDUIT_RELEASE_TAG= GITHUB_REF_TYPE= node --input-type=module -e 'import { buildStamp } from "./src/build-info.js"; console.log(buildStamp().version)')
+fi
+
+# Stamp the interface with exactly the version carried by the shell.
+if [ -n "$dev_client" ]; then
+  CONDUIT_RELEASE_TAG= GITHUB_REF_TYPE= CONDUIT_BUILD_VERSION="$build_version" npm run build
+elif [ -n "$build_version" ]; then
+  CONDUIT_RELEASE_TAG="v${build_version#v}" CONDUIT_BUILD_VERSION="$build_version" npm run build
+else
+  npm run build
 fi
 
 if [ -n "$dev_client" ]; then

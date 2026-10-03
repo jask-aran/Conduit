@@ -437,6 +437,7 @@ setup() {
   [[ -n "${CONDUIT_RAIL:-}" ]] || title "setup${PROFILE:+ ${D}$PROFILE${N}}"
   if [[ -f "$CONDUIT_DATA_ROOT/auth.json" ]]; then ok "Password ${D}already set${N}"
   else set_password; fi
+  set_server_name
   ask "Port" "$CONDUIT_PORT"; set_env CONDUIT_PORT "$REPLY"; load_env
   choose_access
   if [[ "$(service_kind)" == systemd ]] && command -v loginctl >/dev/null 2>&1 \
@@ -451,6 +452,24 @@ setup() {
   ready_box
   update_notice
   outro "${D}$NAME${N} status · pair · logs · connect"
+}
+set_server_name() {
+  load_env
+  local value="${1:-}" default_name="${CONDUIT_SERVER_NAME:-}"
+  if [[ -z "$default_name" && -f "${CONDUIT_IDENTITY_FILE:-$CONDUIT_DATA_ROOT/identity.json}" ]]; then
+    default_name="$("$(node_bin)" -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).name || "")' "${CONDUIT_IDENTITY_FILE:-$CONDUIT_DATA_ROOT/identity.json}" 2>/dev/null || true)"
+  fi
+  if [[ -z "$value" ]]; then ask "Server name" "${default_name:-$(hostname)}"; value="$REPLY"; fi
+  value="$("$(node_bin)" -e '
+    const name = process.argv[1].trim();
+    if (!name || name.length > 63 || /[\u0000-\u001f\u007f]/.test(name)) {
+      console.error("Server name must be 1–63 characters with no control characters."); process.exit(1);
+    }
+    console.log(name);
+  ' "$value")" || fail "Invalid server name"
+  local quoted; printf -v quoted '%q' "$value"
+  set_env CONDUIT_SERVER_NAME "$quoted"
+  ok "Server name: $value"
 }
 set_password() {
   local hint="" first
@@ -876,7 +895,7 @@ report() {
 }
 
 completion() {
-  local cmds="setup connect pair status start stop restart logs open sessions use update rollback backup restore config projects password doctor report uninstall completion version help"
+  local cmds="setup name connect pair status start stop restart logs open sessions use update rollback backup restore config projects password doctor report uninstall completion version help"
   case "${1:-}" in
     bash) printf 'complete -W "%s" %s\n' "$cmds" "$NAME" ;;
     zsh) printf '#compdef %s\n_arguments "1: :(%s)"\n' "$NAME" "$cmds"
@@ -905,7 +924,8 @@ usage() {
   title "$(code_label)"
   local c
   cmd() { printf '%s%s%s  %s%s%s%*s %s%s%s\n' "$D" "$S_BAR" "$N" "$C" "$1" "$N" $((30 - ${#1})) "" "$D" "$2" "$N"; }
-  cmd setup "password, port, how it is reached; then start"
+  cmd setup "password, server name, port, access; then start"
+  cmd "name [<name>]" "set the server's name; keeps its identity"
   cmd connect "change how it is reached"
   cmd open "open it in the browser, signed in"
   cmd pair "a QR code a phone or the app scans to sign in"
@@ -933,6 +953,7 @@ usage() {
 command="${1:-help}"; shift || true
 case "$command" in
   setup) setup ;;
+  name) title "Server name"; set_server_name "${1:-}"; if healthy; then restart; fi; outro "" ;;
   connect) connect ;;
   start) start ;;
   stop) stop ;;

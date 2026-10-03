@@ -19,16 +19,18 @@ NAME="conduit-server-$VERSION-$os-$arch"
 STAGE="$(mktemp -d)/conduit"
 trap 'rm -rf "$(dirname "$STAGE")"' EXIT
 
-# A client older than its source is rebuilt: a stale dist would ship last
-# week's interface under this week's version.
-built="$ROOT/conduit-web/dist/index.html"
-if [[ ! -f "$built" ]] || [[ -n "$(find "$ROOT/conduit-web/src" "$ROOT/conduit-web/index.html" "$ROOT/conduit-web/package.json" -newer "$built" -print -quit)" ]]; then
-  (cd "$ROOT/conduit-web" && npm run build >&2)
-fi
+# Stamp the interface and server from the same release, never reuse a dev bundle.
+export CONDUIT_RELEASE_TAG="$VERSION"
+(cd "$ROOT/conduit-web" && npm run build >&2)
 pty="$ROOT/conduit-web/node_modules/node-pty/build/Release"
 [[ -f "$pty/pty.node" ]] || { echo "node-pty is not built here; run npm ci in conduit-web" >&2; exit 1; }
 
 mkdir -p "$STAGE/conduit-web" "$STAGE/working-files" "$STAGE/prebuilt/node-pty/build" "$OUT"
+node --input-type=module -e '
+  import { buildStamp } from "'"$ROOT"'/conduit-web/src/build-info.js";
+  import { writeFileSync } from "node:fs";
+  writeFileSync(process.argv[1], JSON.stringify(buildStamp()) + "\n");
+' "$STAGE/BUILD.json"
 cp -R "$ROOT/conduit-web/dist" "$ROOT/conduit-web/package.json" "$ROOT/conduit-web/package-lock.json" "$STAGE/conduit-web/"
 # The server's source; the client's is already built into dist.
 (cd "$ROOT/conduit-web" && find src -path src/client -prune -o -path src/components -prune -o -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.json' -o -name '*.html' \) -print \
