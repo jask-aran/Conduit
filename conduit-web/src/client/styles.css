@@ -1820,7 +1820,7 @@ svg.lucide { stroke-width: 2.4; }
 .add-server-dialog .native-server-card { width: 100%; gap: 10px; }
 .add-server-dialog .native-server-card label { margin-top: 6px; }
 .server-row-latency { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-variant-numeric: tabular-nums; }
-.server-switcher-menu { width: min(300px, calc(100vw - 24px)); }
+.server-switcher-menu { width: max-content; max-width: min(220px, calc(100vw - 24px)); }
 .server-route-choice { align-items: flex-start; }
 .server-route-label { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 .server-route-label code { overflow: hidden; color: var(--muted-foreground); font-size: 10px; font-weight: 400; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
@@ -2698,7 +2698,6 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   border: 1px solid #ffffff4d;
   background: #ffffff2b;
   backdrop-filter: var(--frost-blur);
-  -webkit-backdrop-filter: var(--frost-blur);
   box-shadow: 0 18px 50px rgb(0 0 0 / 38%), inset 0 1px 0 rgb(255 255 255 / 45%), inset 0 -1px 0 rgb(255 255 255 / 8%);
   --tw-ring-shadow: 0 0 #0000;
 }
