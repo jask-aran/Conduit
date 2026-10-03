@@ -1820,6 +1820,11 @@ svg.lucide { stroke-width: 2.4; }
 .add-server-dialog .native-server-card { width: 100%; gap: 10px; }
 .add-server-dialog .native-server-card label { margin-top: 6px; }
 .server-row-latency { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-variant-numeric: tabular-nums; }
+.server-switcher-menu { width: min(300px, calc(100vw - 24px)); }
+.server-route-choice { align-items: flex-start; }
+.server-route-label { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+.server-route-label code { overflow: hidden; color: var(--muted-foreground); font-size: 10px; font-weight: 400; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.server-route-choice > .server-row-latency { flex: none; }
 /* A sentence inside a menu: it explains the rows rather than labelling them,
    so it wraps and is not shouted like a group heading. */
 .server-route-note { max-width: 260px; text-transform: none; font-weight: 400; letter-spacing: 0; white-space: normal; line-height: 1.35; }

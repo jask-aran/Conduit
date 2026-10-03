@@ -6,7 +6,7 @@ import { clearNativeBearerToken } from "../api/native-auth-client.ts";
 import { isInstalledClient, isStandaloneBrowser } from "../platform/installed-client.ts";
 import { saveServerDirectory } from "../platform/server-directory.ts";
 import {
-  activeOrigin, activePath, forgetServer, pathsOf, renameServer, servers, setServerShared,
+  activeOrigin, activePath, forgetServer, pathsOf, renameServer, serverPathLabel, servers, setServerShared,
   type ServerEntry, type ServerPath,
 } from "../platform/servers.ts";
 
@@ -48,11 +48,6 @@ export function ServersSettingsTile() {
     await saveServerDirectory();
   };
 
-  // What the address is, rather than what it says: "this machine" is the
-  // useful fact about 127.0.0.1, and it is the same fact on every client.
-  const reach = (path: ServerPath) => path.scope === "loopback" ? "This machine"
-    : path.scope === "private" ? "This network" : "Anywhere";
-
   const inUse = (entry: ServerEntry, path: ServerPath) =>
     entry.origin === activeOrigin() && path.origin === (activePath() || activeOrigin());
 
@@ -78,7 +73,7 @@ export function ServersSettingsTile() {
         * address rather than about the server.
         */}
       <For each={pathsOf(entry)}>{(path) => <div class="settings-line" data-current={inUse(entry, path) || undefined}>
-        <span><code>{path.origin}</code><em>{reach(path)}</em></span>
+        <span><code>{path.origin}</code><em>{serverPathLabel(path)}</em></span>
         <span class="settings-line-value">{inUse(entry, path) ? "In use" : ""}</span>
       </div>}</For>
       {/* The one in use withholds only the button that would break it. */}

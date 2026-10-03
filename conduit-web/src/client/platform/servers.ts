@@ -165,6 +165,12 @@ export function scopeOf(origin: string): PathScope {
   return PRIVATE_HOST.test(host) ? "private" : "public";
 }
 
+/** Display the route provider without changing its trust or selection scope. */
+export function serverPathLabel(path: ServerPath): string {
+  if (hostOf(path.origin).endsWith(".ts.net")) return "Tailscale";
+  return path.scope === "loopback" ? "This machine" : path.scope === "private" ? "This network" : "Internet";
+}
+
 /** Every address that reaches this server, its own included, nearest first. */
 export function pathsOf(entry: ServerEntry): ServerPath[] {
   const all = [{ origin: entry.origin, scope: scopeOf(entry.origin) }, ...(entry.paths ?? [])];

@@ -8,7 +8,7 @@ const PairDialog = lazy(() => import("./pair-dialog").then((module) => ({ defaul
 /** Not an address: the row that hands the choice back to the client. */
 const AUTOMATIC = "automatic";
 import { canReachOtherOrigins, isInstalledClient, isStandaloneBrowser } from "../platform/installed-client.ts";
-import { activePath, activeOrigin, activeServer, clearActivePath, pathIsPinned, pathsOf, servers, setActivePath, switchToServer, type ServerEntry, type ServerPath } from "../platform/servers.ts";
+import { activePath, activeOrigin, activeServer, clearActivePath, pathIsPinned, pathsOf, serverPathLabel, servers, setActivePath, switchToServer, type ServerEntry } from "../platform/servers.ts";
 
 /** An origin as somebody would say it aloud: no scheme, no default port. */
 export const shortOrigin = (origin: string) => origin.replace(/^https?:\/\//, "");
@@ -115,11 +115,6 @@ export function ServerSwitcher(props: {
     return value === null ? "Unreachable" : `${value} ms`;
   };
 
-  // What the address is, rather than what it says: "on this machine" is the
-  // useful fact about 127.0.0.1, and it is the same fact on every client.
-  const scopeLabel = (path: ServerPath) => path.scope === "loopback" ? "This machine"
-    : path.scope === "private" ? "This network" : "Anywhere";
-
   const activeServerPaths = () => {
     const entry = activeServer();
     return entry ? pathsOf(entry) : [];
@@ -182,7 +177,7 @@ export function ServerSwitcher(props: {
         <Show when={props.connectivity === "connecting" || props.connectivity === "reconnecting"} fallback={<span class="runtime-indicator-dot" />}><Spinner class="size-3" /></Show>
       </span>
     </MenuTrigger>
-    <MenuContent onCloseAutoFocus={(event) => event.preventDefault()}>
+    <MenuContent class="server-switcher-menu" onCloseAutoFocus={(event) => event.preventDefault()}>
       <Show when={servers().length > 0}>
         <MenuGroup>
           <MenuLabel>Servers</MenuLabel>
@@ -199,9 +194,9 @@ export function ServerSwitcher(props: {
       </Show>
       {/*
         * The routes to the server already open, which is a different question
-        * from which server to open. Shown only when there is a choice.
+        * from which server to open. Even one route says how it is reached.
         */}
-      <Show when={activeServerPaths().length > 1}>
+      <Show when={activeServerPaths().length > 0}>
         <MenuGroup>
           <MenuLabel>Route to {serverName()}</MenuLabel>
           {/*
@@ -222,16 +217,18 @@ export function ServerSwitcher(props: {
               * background.
               */}
             <Show when={isInstalledClient()}>
-              <MenuRadioItem value={AUTOMATIC}>
-                <span class="truncate">Automatic</span>
+              <MenuRadioItem class="server-route-choice" value={AUTOMATIC}>
+                <span class="server-route-label"><span>Automatic</span>
+                  <Show when={inUse()}>{(path) => <code title={path().origin}>{path().origin}</code>}</Show>
+                </span>
                 <span class="server-row-latency ml-auto text-xs text-muted-foreground">
-                  {inUse() ? scopeLabel(inUse()!) : ""}
+                  {inUse() ? serverPathLabel(inUse()!) : ""}
                 </span>
               </MenuRadioItem>
             </Show>
             <For each={activeServerPaths()}>{(path) =>
-              <MenuRadioItem value={path.origin} disabled={!canReachOtherOrigins() && path.origin !== location.origin}>
-                <span class="truncate">{scopeLabel(path)}</span>
+              <MenuRadioItem class="server-route-choice" value={path.origin} disabled={!canReachOtherOrigins() && path.origin !== location.origin}>
+                <span class="server-route-label"><span>{serverPathLabel(path)}</span><code title={path.origin}>{path.origin}</code></span>
                 <Show when={!isInstalledClient() && !isStandaloneBrowser() && path.origin !== location.origin}><ExternalLinkIcon class="size-3 text-muted-foreground" /></Show>
                 <span class="server-row-latency ml-auto text-xs text-muted-foreground">
                   {checking() === path.origin ? "Checking…" : latencyLabel(path.origin)}
