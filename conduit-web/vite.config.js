@@ -78,19 +78,19 @@ export default defineConfig(() => {
         // does not expose the update lifecycle to the page that has to decide
         // when it is replaced.
         injectRegister: false,
-        includeAssets: ["favicon.svg", "pwa-192x192.png", "pwa-512x512.png"],
+        includeAssets: ["favicon.svg", "pwa-192x192.png", "pwa-512x512.png", "pwa-maskable-512x512.png", "apple-touch-icon.png"],
         manifest: {
           name: "Conduit",
           short_name: "Conduit",
           description: "Your personal AI agent platform",
-          theme_color: "#18181b",
-          background_color: "#18181b",
+          theme_color: "#08090a",
+          background_color: "#08090a",
           display: "standalone",
           start_url: "/",
           icons: [
             { src: "pwa-192x192.png", sizes: "192x192", type: "image/png" },
             { src: "pwa-512x512.png", sizes: "512x512", type: "image/png" },
-            { src: "pwa-512x512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+            { src: "pwa-maskable-512x512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
           ],
         },
         workbox: {
