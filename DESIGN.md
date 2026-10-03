@@ -468,6 +468,8 @@ A "sizzle", text that shifts and settles, is a broken rule here, not a tuning ma
 
 **Harness mark** — rests greyed with its row, and shows its own colour on hover, focus, or the current chat. Live activity or an unread reply shows in its place first. The Conduit mark is `public/brand/conduit-mark.svg`.
 
+**App icons** — derive only platform-required assets from `public/favicon.svg`: release C is white-on-black, all dev artifacts (Windows and Android) invert it to black-on-white; the Windows caption keeps the icon but no text.
+
 **Runtime dot** — live green / warn amber / danger red / muted, colour on the dot only. A healthy indicator is the dot alone; it gains a label only when it has something to say, and a busy state is a small spinner in its place. One indicator per surface, worst state first.
 
 **Held focus** — a region reached by a go-to-region shortcut shows a thin line along its bottom edge in the near-neutral `{colors.ring}` tone, fading at both ends; the regions' bottoms line up, so it reads as one baseline with the held region lit. On arrival the rest of the app dims briefly around it. It stays while focus is in that region or in none (a menu, a dialog), and goes when focus reaches another region any other way; a click or Tab never lights one. Not on a phone.

@@ -104,11 +104,18 @@ Nothing is installed, so no version is compared and none has to be invented.
 | Version | the release's | `0.7.2-dev.<timestamp>.<commit>` |
 | Updates from | GitHub releases | `https://localconduit.jask-aran.com/desktop-updates` by default |
 
-Development desktop icons invert the shared C artwork: black C on a light
-background, versus the release's white C on black. The caption, tray, executable
-and installer use the same variant. Regenerate both sets from `public/favicon.svg`
-with `node scripts/generate-desktop-icons.mjs` from `conduit-web/`. Generated
-assets live in `src-tauri/icons/` and `src-tauri/icons/dev/`.
+**All development artifact icons invert the shared C artwork:** black C on a
+light background, versus the release's white C on black. Windows `--dev`
+selects the inverted caption, tray, executable and installer assets; Android's
+`debug` source set overrides icon colours for the launcher and native splash.
+The splash is light in debug builds; the app's charcoal frame is unchanged.
+
+`public/favicon.svg` is the source of truth. Run `npm run icons:generate` from
+`conduit-web/` after changing it; commit the generated assets, not hand edits.
+Desktop keeps just a multi-resolution `icon.ico` and a 128px `icon.png` in each
+of `src-tauri/icons/` and `src-tauri/icons/dev/`. Android uses shared vectors,
+adaptive icons on API 26+, a vector fallback on API 24–25, and debug-only colour
+overrides. No macOS, AppX/store or density-specific PNG icon sets are retained.
 
 The identifier is what does the work. Windows keys the install entry, the
 per-user data directory, the single-instance lock and the credential entry on
