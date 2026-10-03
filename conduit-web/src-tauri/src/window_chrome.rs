@@ -11,7 +11,13 @@
 #[cfg(windows)]
 pub fn paint_caption<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
     use std::ffi::c_void;
-    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetWindowLongPtrW, SendMessageW, SetWindowLongPtrW, SetWindowPos,
+        GWL_EXSTYLE, ICON_BIG, ICON_SMALL2, SWP_FRAMECHANGED, SWP_NOMOVE,
+        SWP_NOSIZE, SWP_NOZORDER, SWP_NOACTIVATE, WM_GETICON, WM_SETICON,
+        WS_EX_DLGMODALFRAME,
+    };
     use windows::Win32::Graphics::Dwm::{
         DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR,
     };
@@ -22,6 +28,20 @@ pub fn paint_caption<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
 
     let Ok(handle) = window.hwnd() else { return };
     let hwnd = HWND(handle.0);
+    unsafe {
+        // Tao supplies the small window icon, but leaves the taskbar icon unset.
+        // Reuse that owned handle instead of Explorer's cached executable icon.
+        let icon = SendMessageW(hwnd, WM_GETICON, Some(WPARAM(ICON_SMALL2 as usize)), None);
+        if icon.0 != 0 {
+            SendMessageW(hwnd, WM_SETICON, Some(WPARAM(ICON_BIG as usize)), Some(LPARAM(icon.0)));
+        }
+        // Hide only the caption icon: keep the taskbar icon, resizing and all
+        // native window controls. An empty title already removes caption text.
+        let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_DLGMODALFRAME.0 as isize);
+        let _ = SetWindowPos(hwnd, None, 0, 0, 0, 0,
+            SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
     for (attribute, value) in [
         (DWMWA_CAPTION_COLOR, &FRAME),
         (DWMWA_BORDER_COLOR, &FRAME),
