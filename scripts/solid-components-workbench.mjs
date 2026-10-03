@@ -116,7 +116,8 @@ async function status() {
   const state = await readState();
   if (!state) {
     console.log("solid-components mode: registry");
-    console.log(`version: ${(await readJson(path.join(webRoot, "package.json"))).dependencies[SOLID_COMPONENTS_PACKAGE]}`);
+    const pkg = await readJson(path.join(webRoot, "package.json"));
+    console.log(`version: ${pkg.dependencies?.[SOLID_COMPONENTS_PACKAGE] ?? pkg.devDependencies?.[SOLID_COMPONENTS_PACKAGE]}`);
     return;
   }
   console.log(`solid-components mode: ${state.mode}`);
