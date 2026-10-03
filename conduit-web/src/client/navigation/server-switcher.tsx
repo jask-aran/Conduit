@@ -219,7 +219,7 @@ export function ServerSwitcher(props: {
             <Show when={isInstalledClient()}>
               <MenuRadioItem class="server-route-choice" value={AUTOMATIC}>
                 <span class="server-route-label"><span>Automatic</span>
-                  <Show when={inUse()}>{(path) => <code title={path().origin}>{path().origin}</code>}</Show>
+                  <Show when={inUse()}>{(path) => <code title={path().origin}>{shortOrigin(path().origin)}</code>}</Show>
                 </span>
                 <span class="server-row-latency ml-auto text-xs text-muted-foreground">
                   {inUse() ? serverPathLabel(inUse()!) : ""}
@@ -228,7 +228,7 @@ export function ServerSwitcher(props: {
             </Show>
             <For each={activeServerPaths()}>{(path) =>
               <MenuRadioItem class="server-route-choice" value={path.origin} disabled={!canReachOtherOrigins() && path.origin !== location.origin}>
-                <span class="server-route-label"><span>{serverPathLabel(path)}</span><code title={path.origin}>{path.origin}</code></span>
+                <span class="server-route-label"><span>{serverPathLabel(path)}</span><code title={path.origin}>{shortOrigin(path.origin)}</code></span>
                 <Show when={!isInstalledClient() && !isStandaloneBrowser() && path.origin !== location.origin}><ExternalLinkIcon class="size-3 text-muted-foreground" /></Show>
                 <span class="server-row-latency ml-auto text-xs text-muted-foreground">
                   {checking() === path.origin ? "Checking…" : latencyLabel(path.origin)}

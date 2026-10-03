@@ -72,9 +72,10 @@ an active one.
 
 ### Choosing one
 
-The server menu shows each known route's full origin on a second line, including
-when only one route is known. It stays compact by truncating long origins; hover
-reveals the complete address. Public routes read **Internet**; `.ts.net` routes
+The server menu shows each known route's host and port on a second line,
+including when only one route is known. It omits HTTP/HTTPS schemes, sizes to
+content within a compact cap, and truncates long addresses; hover reveals the
+complete origin. Public routes read **Internet**; `.ts.net` routes
 read **Tailscale**, a provider label that does not change their selection or
 security scope. Automatic also shows the address currently in use.
 

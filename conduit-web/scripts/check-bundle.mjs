@@ -92,6 +92,10 @@ if (!frostedLiveRule) {
     frostedLiveFailures.push("frosted-live rule dropped -webkit-backdrop-filter");
   }
 }
+const popoverFrostRule = cssText.match(/:is\(\[data-slot=menu-content\][^{]*\[data-slot\]\{[^}]+\}/);
+if (!popoverFrostRule || !/(?<!-webkit-)backdrop-filter:var\(--frost-blur\)/.test(popoverFrostRule[0])) {
+  frostedLiveFailures.push("popover frost rule dropped unprefixed backdrop-filter");
+}
 if (frostedLiveFailures.length) {
   for (const failure of frostedLiveFailures) console.error(`CSS: ${failure}`);
   process.exitCode = 1;
