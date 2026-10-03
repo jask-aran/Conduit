@@ -120,6 +120,13 @@ Add an entry through `$tacit-knowledge` after explicit approval or validated rep
 
 ## UI and component heuristics
 
+### Distinguish Windows icon resources from shell caches
+
+- **Type:** Gotcha.
+- **Rule:** Extract the executable's icon resource directly before treating old taskbar or Properties artwork as a build failure; tray artwork, window icons and Explorer's cached executable artwork are separate paths. Set the taskbar's large icon explicitly, notify Explorer of the updated executable, and track ICO inputs in `build.rs`. Do not clear the caption icon expecting it to stay blank: Windows can fall back to the large icon.
+- **Scope:** Windows desktop icon changes and dev artifact validation.
+- **Evidence:** `ExtractIconEx` showed the C embedded in both installed and built executables while Properties displayed the old cable icon; `WM_GETICON` showed a small icon but no large icon. The user accepted the restored caption and inverted dev artwork at `09fcaf97`.
+
 ### Reconcile transcript visibility after scroll momentum
 
 - **Type:** Gotcha.
