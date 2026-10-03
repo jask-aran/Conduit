@@ -7,7 +7,7 @@ import { batch, createEffect, createMemo, createRenderEffect, createSignal, Erro
 import { Portal, render } from "solid-js/web";
 import { androidShell, desktopShell, isInstalledClient } from "./platform/installed-client.ts";
 import {
-  ArrowLeftRightIcon, Columns2Icon, PanelTopIcon, EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ServerIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon, XIcon,
+  ArrowLeftRightIcon, Columns2Icon, PanelTopIcon, EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ServerIcon, QrCodeIcon, MonitorIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon, XIcon,
   ChevronRightIcon,
 } from "lucide-solid";
 import { Toaster, toast } from "solid-sonner";
@@ -90,7 +90,7 @@ import { dispatchPanelGeometryMotion } from "./panel-motion";
 import { publishUiPreference, queueUiPreferenceSave, uiPreferenceSaves, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
 import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
 import { INCREMARK_PACING_STORAGE_KEY } from "./chat/incremark-pacing";
-import { harnessLabelFor } from "./harness-brand";
+import { harnessLabelFor, HarnessMark } from "./harness-brand";
 import { NO_ATTACHMENTS } from "./chat/composer-attachments";
 import { OutsideThreadChip } from "./chat/outside-thread-chip";
 import type { HarnessChoices, HarnessThreadTarget } from "./dashboard/harness-dashboard";
@@ -320,13 +320,11 @@ function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) =
   };
 
   return <form class="native-server-card" onSubmit={submit}>
-    <Show when={!props.adding}><span class="native-server-brand">Conduit</span><h1>Connect to your server</h1></Show>
-    <p>{recordOnly ? "This browser can only be signed in to the server that served it, so Conduit remembers the address and opens it in place."
+    <Show when={!props.adding}><HarnessMark id="conduit" class="native-server-mark" /><h1>Connect to your server</h1></Show>
+    <p class="native-server-lede">{recordOnly ? "This browser can only be signed in to the server that served it, so Conduit remembers the address and opens it in place."
       : verifiedOrigin() ? "Server confirmed. Enter your Conduit password."
         : "Enter the address of your Conduit server. HTTPS, unless it is on this machine or this network."}</p>
-    <Show when={localServer() && !verifiedOrigin()}>
-      <Button type="button" variant="outline" onClick={useLocalServer}>Use the server on this computer</Button>
-    </Show>
+
     {/*
       * What is on this network, offered before the address field rather than
       * beside it: a server found is the answer to the question the field asks,
@@ -337,11 +335,18 @@ function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) =
       * the alternative is a search that spins forever over something that was
       * never going to work.
       */}
+    <Show when={!verifiedOrigin() && ((!recordOnly && canScanQr()) || localServer())}>
+      <ul class="native-server-found">
+        <Show when={!recordOnly && canScanQr()}><li><button type="button" onClick={() => setScanning(true)} disabled={submitting()}><QrCodeIcon /><span>Scan QR code</span><code>conduit-server pair</code></button></li></Show>
+        <Show when={localServer()}><li><button type="button" onClick={useLocalServer} disabled={submitting()}><MonitorIcon /><span>This computer</span><code>{localServer()!.replace(/^https?:\/\//, "")}</code></button></li></Show>
+      </ul>
+    </Show>
     <Show when={!verifiedOrigin()}>
       <Show when={canDiscoverServers()} fallback={<p class="native-server-hint">Finding servers on this network needs the Conduit app.</p>}>
         <Show when={found().length} fallback={
           <p class="native-server-hint">{searching() ? "Looking for servers on this network…" : "No servers found on this network."}</p>
         }>
+          <p class="native-server-group">On this network</p>
           <ul class="native-server-found">
             <For each={found()}>{(server) => <li>
               <button type="button" onClick={() => void chooseFound(server)} disabled={submitting()}>
@@ -353,9 +358,6 @@ function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) =
           </ul>
         </Show>
       </Show>
-    </Show>
-    <Show when={!recordOnly && !verifiedOrigin() && canScanQr()}>
-      <Button type="button" variant="outline" onClick={() => setScanning(true)} disabled={submitting()}>Scan QR code</Button>
     </Show>
     <Show when={scanning()}><QrScanner onLink={(link) => void pair(link)} onClose={() => setScanning(false)} /></Show>
     <label for="native-server-address">Server address</label>

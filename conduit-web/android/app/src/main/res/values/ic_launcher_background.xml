@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- The frame (DESIGN.md, colors.frame). -->
+    <color name="ic_launcher_background">#08090A</color>
+    <color name="conduit_frame">#08090A</color>
 </resources>
