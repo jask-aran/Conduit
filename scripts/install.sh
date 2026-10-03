@@ -155,7 +155,7 @@ node_min="$(cat "$work/release/NODE_MIN" 2>/dev/null || echo 22.19.0)"
 node_dir="$APP_HOME/node/$node_version"
 NODE_BIN=""
 system_node="$(command -v node 2>/dev/null || true)"
-system_version="$([[ -n "$system_node" ]] && "$system_node" --version 2>/dev/null | sed 's/^v//')"
+system_version="$([[ -n "$system_node" ]] && "$system_node" --version 2>/dev/null | sed 's/^v//' || true)"
 if [[ -n "$system_version" ]] && ver_ge "$system_version" "$node_min"; then
   NODE_BIN="$system_node"
   printf '%s%s%s  Node v%s %s· yours%s\n' "$G" "$DONE" "$N" "$system_version" "$D" "$N"
