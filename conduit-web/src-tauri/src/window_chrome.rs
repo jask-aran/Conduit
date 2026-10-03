@@ -12,11 +12,9 @@
 pub fn paint_caption<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
     use std::ffi::c_void;
     use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+    use std::sync::OnceLock;
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetWindowLongPtrW, SendMessageW, SetWindowLongPtrW, SetWindowPos,
-        GWL_EXSTYLE, ICON_BIG, ICON_SMALL2, SWP_FRAMECHANGED, SWP_NOMOVE,
-        SWP_NOSIZE, SWP_NOZORDER, SWP_NOACTIVATE, WM_GETICON, WM_SETICON,
-        WS_EX_DLGMODALFRAME,
+        CreateIcon, SendMessageW, ICON_BIG, ICON_SMALL, ICON_SMALL2, WM_GETICON, WM_SETICON,
     };
     use windows::Win32::Graphics::Dwm::{
         DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR,
@@ -35,12 +33,16 @@ pub fn paint_caption<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
         if icon.0 != 0 {
             SendMessageW(hwnd, WM_SETICON, Some(WPARAM(ICON_BIG as usize)), Some(LPARAM(icon.0)));
         }
-        // Hide only the caption icon: keep the taskbar icon, resizing and all
-        // native window controls. An empty title already removes caption text.
-        let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_DLGMODALFRAME.0 as isize);
-        let _ = SetWindowPos(hwnd, None, 0, 0, 0, 0,
-            SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        // A null caption icon falls back to the large icon. Supply an explicit
+        // transparent one instead; keep its handle alive for the process lifetime.
+        static EMPTY_CAPTION_ICON: OnceLock<isize> = OnceLock::new();
+        let empty = *EMPTY_CAPTION_ICON.get_or_init(|| {
+            CreateIcon(None, 16, 16, 1, 32, [0xff; 32].as_ptr(), [0; 1024].as_ptr())
+                .map(|icon| icon.0 as isize).unwrap_or(0)
+        });
+        if empty != 0 {
+            SendMessageW(hwnd, WM_SETICON, Some(WPARAM(ICON_SMALL as usize)), Some(LPARAM(empty)));
+        }
     }
     for (attribute, value) in [
         (DWMWA_CAPTION_COLOR, &FRAME),
