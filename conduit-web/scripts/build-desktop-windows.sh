@@ -163,6 +163,9 @@ node -e '
   require("fs").writeFileSync(out, JSON.stringify(overlay, null, 2) + "\n");
 ' "$overlay" "$build_version" "$local_updates" "$update_base" "$dev_client"
 
+windows_args=()
+if [ -n "$dev_client" ]; then windows_args+=(-FastBuild); fi
+
 powershell.exe -NoProfile -ExecutionPolicy Bypass \
   -File "$(wslpath -w "$PWD/scripts/build-desktop-windows.ps1")" \
   -Project "$(wslpath -w "$PWD/src-tauri")" \
@@ -171,6 +174,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass \
   -SigningKey "$signing_key" \
   -SigningKeyPassword "${CONDUIT_UPDATER_KEY_PASSWORD:-}" \
   -ConfigFile "$(basename "$overlay")" \
+  ${windows_args[@]+"${windows_args[@]}"} \
   ${passthrough[@]+"${passthrough[@]}"}
 
 bundle=$(wslpath -u "$target_dir")/release/bundle/nsis
