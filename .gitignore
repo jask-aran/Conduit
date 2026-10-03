@@ -28,3 +28,4 @@ working-files/.venv/
 .hero-state/
 .hero-tools/
 .smoke-tools/
+.worktrees/
