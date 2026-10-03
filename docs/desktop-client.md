@@ -64,12 +64,23 @@ Options, all of which write to a temporary overlay config rather than editing
   touch an image a process is running from — so a `desktop:dev:win` session and
   an artifact build sharing one directory means the build fails until the
   window somebody is working in is closed. `start-conduit.sh` prefers this
-  directory when serving updates.
+  directory when serving updates. Dev artifacts use no LTO, 16 codegen units,
+  optimisation level 1 and incremental Rust compilation; release-shaped builds
+  without `--dev` retain the release profile. Installer paths, signatures and
+  updater behaviour are unchanged. The first build after switching compiler
+  settings recompiles dependencies; later builds reuse them. Dev binaries may
+  be larger and less optimised than release binaries.
 
 The script refuses to start while another `cargo-tauri.exe` is alive. An
 interrupted build orphans the Windows process — `powershell.exe` under WSL is a
 shim, so killing it from here leaves the real build holding the target lock —
 and the next build would otherwise wait on that lock with no explanation.
+
+CI also compiles the Windows release shell on `main`, without bundling,
+signing or publishing. It shares the `windows-release` dependency cache with
+release jobs: a new tag can restore `main`'s cache, but not another tag's.
+This adds a Windows build to main-branch checks and preserves release
+optimisation. A changed toolchain or dependency set still needs a cold build.
 
 ### Iterating without building an installer
 

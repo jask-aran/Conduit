@@ -12,12 +12,21 @@ param(
   [Parameter(Mandatory = $true)][string] $SigningKey,
   [string] $ConfigFile = 'tauri.prebuilt.conf.json',
   [string] $SigningKeyPassword = '',
+  [switch] $FastBuild,
   [Parameter(ValueFromRemainingArguments = $true)][string[]] $BuildArgs = @()
 )
 
 $ErrorActionPreference = 'Stop'
 
 $env:CARGO_TARGET_DIR = $TargetDir
+# Keep release-shaped installers and paths, but optimise development artifacts
+# for rebuild speed. These overrides live only in this PowerShell process.
+if ($FastBuild) {
+  $env:CARGO_PROFILE_RELEASE_LTO = 'off'
+  $env:CARGO_PROFILE_RELEASE_CODEGEN_UNITS = '16'
+  $env:CARGO_PROFILE_RELEASE_OPT_LEVEL = '1'
+  $env:CARGO_PROFILE_RELEASE_INCREMENTAL = 'true'
+}
 # Passed through for a Windows build that signs for itself; the WSL path turns
 # updater artifacts off in tauri.prebuilt.conf.json and signs on the bash side,
 # because a key with an empty password cannot be expressed in the Windows
