@@ -3,6 +3,7 @@ import { installedClientKind } from "../client/platform/installed-client";
 
 const menus = '[data-slot="menu-content"], [data-slot="menu-sub-content"], [data-slot="context-menu-content"], [data-slot="context-menu-sub-content"], [data-slot="popover-content"]';
 const visibleMenus = () => [...document.querySelectorAll<HTMLElement>(menus)].filter((element) => element.checkVisibility());
+export const phoneLayerOpen = () => visibleMenus().length > 0;
 const escape = () => {
   const child = visibleMenus().findLast((element) => element.matches('[data-slot="menu-sub-content"], [data-slot="context-menu-sub-content"]') && element.getAttribute("role") === "menu");
   if (child) {

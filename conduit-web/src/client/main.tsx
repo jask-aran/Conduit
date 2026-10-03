@@ -14,6 +14,7 @@ import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
+import { phoneLayerOpen } from "@/components/phone-overlays";
 import { Button, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/primitives";
 import { ContextBar, ContextBreakdown } from "./chat/context-gauge";
 import { contextUsagePercent } from "./chat/context-metrics";
@@ -4586,6 +4587,9 @@ function App() {
     if (event.defaultPrevented || event.key !== "Escape") return;
     const target = event.target instanceof Element ? event.target : null;
     if (target?.closest("[data-shortcut-exclusive='terminal']")) return;
+    // A menu opened from the drawer is the top layer. Escape, including the
+    // one an outside tap synthesises, closes that menu and leaves the drawer.
+    if (phoneLayerOpen()) return;
     if (event.key === "Escape" && !paletteOpen() && !settingsOpen()) {
       if (mobileSidebarOpen()) { event.preventDefault(); setMobileSidebarOpen(false); return; }
     }
