@@ -72,6 +72,18 @@ an active one.
 
 ### Choosing one
 
+The server menu shows each known route's full origin on a second line, including
+when only one route is known. It stays compact by truncating long origins; hover
+reveals the complete address. Public routes read **Internet**; `.ts.net` routes
+read **Tailscale**, a provider label that does not change their selection or
+security scope. Automatic also shows the address currently in use.
+
+Tailscale and a tunnel can coexist as two routes under one server identity.
+Their hostnames appear after authenticated connections teach them to the server;
+setup alone does not publish those configured hostnames. Automatic has no
+explicit Tailscale-over-tunnel preference: both are currently public-scope
+routes, with loopback and private routes considered first.
+
 `src/client/platform/path-selector.ts` probes the routes and takes the nearest
 one that answers and can prove it is this server, preferring loopback, then
 private, then public. A route picked by hand is a decision and is pinned;
