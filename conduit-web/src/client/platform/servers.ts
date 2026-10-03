@@ -27,6 +27,8 @@ export interface ServerPath {
 
 export interface ServerEntry {
   name: string;
+  /** Last canonical name learned from the authenticated server. */
+  serverName?: string;
   origin: string;
   /**
    * What the server says it is, once it has been asked over a connection it
@@ -200,12 +202,13 @@ export function readServers(storage: Storageish | null): ServerEntry[] {
     if (seen.has(origin)) continue;
     seen.add(origin);
     const name = typeof item?.name === "string" && item.name.trim() ? item.name.trim() : defaultServerName(origin);
+    const serverName = typeof item?.serverName === "string" && item.serverName.trim() ? item.serverName.trim().slice(0, 63) : undefined;
     const shared = typeof item?.shared === "boolean" ? item.shared : sharedByDefault(origin);
     const id = typeof item?.id === "string" && /^[0-9a-f]{32}$/.test(item.id) ? item.id : undefined;
     const publicKey = typeof item?.publicKey === "string" && item.publicKey.length <= 128 ? item.publicKey : undefined;
     const paths = readPaths(item?.paths, origin);
     const secure = readSecure(item?.secure);
-    list.push({ origin, name, shared, ...(id ? { id } : {}), ...(publicKey ? { publicKey } : {}), ...(paths.length ? { paths } : {}), ...(secure ? { secure } : {}) });
+    list.push({ origin, name, shared, ...(serverName ? { serverName } : {}), ...(id ? { id } : {}), ...(publicKey ? { publicKey } : {}), ...(paths.length ? { paths } : {}), ...(secure ? { secure } : {}) });
   }
   return list;
 }
@@ -384,8 +387,8 @@ export function addServer(value: string, name?: string): ServerEntry {
 }
 
 export function renameServer(origin: string, name: string) {
-  const label = name.trim() || defaultServerName(origin);
-  persist(serverList().map((entry) => entry.origin === origin ? { ...entry, name: label } : entry), active());
+  persist(serverList().map((entry) => entry.origin === origin
+    ? { ...entry, name: name.trim() || entry.serverName || defaultServerName(origin) } : entry), active());
 }
 
 /**
@@ -452,7 +455,7 @@ export function setServerShared(origin: string, shared: boolean) {
  */
 export function learnIdentity(
   origin: string,
-  identity: { id?: unknown; publicKey?: unknown; paths?: unknown },
+  identity: { id?: unknown; name?: unknown; publicKey?: unknown; paths?: unknown },
   secure?: { port: number; fingerprint: string },
 ) {
   const id = typeof identity?.id === "string" && /^[0-9a-f]{32}$/.test(identity.id) ? identity.id : "";
@@ -462,6 +465,12 @@ export function learnIdentity(
   const self = list.find((entry) => entry.origin === origin);
   if (!self) return;
 
+  const serverName = typeof identity.name === "string" && identity.name.trim()
+    ? identity.name.trim().slice(0, 63) : "";
+  // Follow canonical renames, but preserve labels explicitly chosen before or
+  // after this server learned to publish a name. Clearing a label resets it.
+  const name = serverName && (self.name === defaultServerName(origin) || self.name === self.serverName)
+    ? serverName : self.name;
   const offered = readPaths(identity?.paths, origin);
   // An address the user already added, which this server now says is itself.
   const absorbed = list.filter((entry) => entry.origin !== origin
@@ -476,7 +485,7 @@ export function learnIdentity(
   const next = list
     .filter((entry) => !absorbed.includes(entry))
     .map((entry) => entry.origin === origin
-      ? { ...entry, id, paths, ...(publicKey ? { publicKey } : {}), ...(secure ? { secure } : {}) }
+      ? { ...entry, name, ...(serverName ? { serverName } : {}), id, paths, ...(publicKey ? { publicKey } : {}), ...(secure ? { secure } : {}) }
       : entry);
 
   if (sameList(next, list)) return;

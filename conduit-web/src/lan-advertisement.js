@@ -52,7 +52,7 @@ export class LanAdvertisement {
     this.enabled = enabled;
     // The instance name is what a person picks from a list, so it names the
     // machine rather than the software: every one of these is a Conduit.
-    this.instance = String(hostname || "conduit").replace(/\..*$/, "").slice(0, 63) || "conduit";
+    this.instance = String(identity.name || hostname || "conduit").slice(0, 63) || "conduit";
     this.log = log;
     this.bonjour = null;
     this.service = null;

@@ -1,4 +1,5 @@
 import os from "node:os";
+import { buildStamp, buildLabel } from "./build-info.js";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -61,7 +62,7 @@ export function loadConfig(env = process.env) {
   return {
     host: env.CONDUIT_HOST || env.HOST || "127.0.0.1",
     port,
-    release: String(env.CONDUIT_RELEASE || "development"),
+    release: String(env.CONDUIT_RELEASE || buildLabel(buildStamp(env))),
     piCommand: installations.get("conduit-pinned").command,
     repositoryRoot,
     dataRoot,

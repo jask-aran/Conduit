@@ -96,8 +96,10 @@ export function originOfRequest(request) {
 const MAX_OBSERVED = 10;
 
 export class ServerIdentity {
-  constructor(filePath, { port = 4310, now = Date.now } = {}) {
+  constructor(filePath, { port = 4310, now = Date.now, name = process.env.CONDUIT_SERVER_NAME } = {}) {
     this.filePath = filePath;
+    this.configuredName = name;
+    this.name = "";
     this.port = port;
     this.now = now;
     this.id = "";
@@ -114,6 +116,7 @@ export class ServerIdentity {
     // A file that will not parse is treated like a missing one: a new identity
     // costs a re-pair, a server that cannot start costs everything.
     try { saved = text == null ? null : JSON.parse(text); } catch { saved = null; }
+    this.name = String(this.configuredName || saved?.name || os.hostname() || "Conduit").trim().slice(0, 63) || "Conduit";
     this.id = typeof saved?.id === "string" && /^[0-9a-f]{32}$/.test(saved.id) ? saved.id : crypto.randomBytes(16).toString("hex");
     for (const entry of Array.isArray(saved?.observed) ? saved.observed : []) {
       if (typeof entry?.origin === "string" && Number.isFinite(entry.seenAt)) this.observed.set(entry.origin, entry.seenAt);
@@ -121,7 +124,7 @@ export class ServerIdentity {
     const restored = typeof saved?.privateKey === "string" ? this.restoreKey(saved.privateKey) : null;
     this.privateKey = restored || crypto.generateKeyPairSync("ed25519").privateKey;
     this.publicKey = crypto.createPublicKey(this.privateKey);
-    if (saved?.id !== this.id || !restored) await this.save();
+    if (saved?.id !== this.id || saved?.name !== this.name || !restored) await this.save();
     return this;
   }
 
@@ -223,6 +226,7 @@ export class ServerIdentity {
   describe() {
     return {
       id: this.id,
+      name: this.name,
       publicKey: this.publicKeyValue(),
       paths: this.paths(),
       ...(this.leaf ? { secure: this.leaf } : {}),
@@ -240,6 +244,7 @@ export class ServerIdentity {
   async save() {
     const payload = JSON.stringify({
       id: this.id,
+      name: this.name,
       privateKey: this.privateKey.export({ format: "der", type: "pkcs8" }).toString("base64"),
       observed: [...this.observed].map(([origin, seenAt]) => ({ origin, seenAt })),
     }, null, 2);

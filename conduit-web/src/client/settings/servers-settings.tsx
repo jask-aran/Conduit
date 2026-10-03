@@ -59,8 +59,14 @@ export function ServersSettingsTile() {
   return <div class="settings-list">
     <For each={servers()}>{(entry) => <section class="settings-group" aria-label={entry.name}>
       <h3>{entry.name}</h3>
-      <label class="settings-line"><span>Name</span>
-        <Input aria-label={`Name for ${entry.name}`} value={entry.name}
+      <Show when={entry.serverName}>
+        <div class="settings-line"><span>Server name</span><span class="settings-line-value">{entry.serverName}</span></div>
+      </Show>
+      <Show when={entry.id}>
+        <div class="settings-line"><span>Identity</span><span class="settings-line-value"><code>{entry.id?.slice(0, 8)}</code></span></div>
+      </Show>
+      <label class="settings-line" title="A list label, shared when this entry is shared. Clear it to use the server's name. Change the server's own name with conduit-server name."><span>List label</span>
+        <Input aria-label={`List label for ${entry.name}`} value={entry.name}
           onChange={(event) => void rename(entry.origin, event.currentTarget.value)} /></label>
       <div class="settings-line"><span>Share with other clients</span>
         <Switch label={`Share ${entry.name} with other clients`} checked={entry.shared} onChange={(shared) => void share(entry.origin, shared)} /></div>

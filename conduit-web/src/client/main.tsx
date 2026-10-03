@@ -3160,28 +3160,30 @@ function App() {
   for (const pane of paneSlots) {
     const slot = pane.index;
     const side = pane.session;
-    // The pane's chat follows its view: opened when it names one, let go when
-    // it names something else, and the pane closed when its chat is deleted --
-    // gone from a catalogue that listed it, not merely not listed yet, as on a
-    // reload before the chat's place has loaded.
-    let listed: string | null = null;
+    // The pane follows its view. A missing chat in the loaded catalogue is
+    // gone even if it was deleted before this page restored the saved pane.
     createEffect(on(() => slotChatId(slot), (id) => {
       const thread = paneThreads.get(slot);
       if (thread && id !== thread) { paneThreads.delete(slot); void api(`/v0/sessions/${encodeURIComponent(thread)}`, { method: "DELETE" }).catch(() => {}); }
     }));
     createEffect(on(() => [slotChatId(slot), catalogue.loaded(), catalogue.projects()] as const, ([id, loaded, projects]) => {
       if (!id) {
-        listed = null;
         if (!untrack(() => slotPage(slot)) && untrack(side.selectedId)) side.close();
         return;
       }
       if (!loaded) return;
       const found = projects.flatMap((project) => project.sessions.map((item) => ({ chat: item, project }))).find((item) => item.chat.id === id);
       if (!found) {
-        if (listed === id) { if ((tabsOf(slot)?.ids.length ?? 0) > 1) void closeTab(slot, id); else setSlotView(slot, null); }
+        // setProjects marks the catalogue loaded before publishing its list.
+        // Recheck after both writes, and never close a pane that moved on.
+        queueMicrotask(() => {
+          if (slotChatId(slot) !== id || !catalogue.loaded()
+            || catalogue.projects().some((project) => project.sessions.some((item) => item.id === id))) return;
+          if ((tabsOf(slot)?.ids.length ?? 0) > 1) void closeTab(slot, id);
+          else setSlotView(slot, null);
+        });
         return;
       }
-      listed = id;
       if (untrack(side.selectedId) !== id) void side.open(found.chat, found.project).catch(showError);
     }));
     /*
@@ -4777,7 +4779,7 @@ function App() {
       // may be believed about identity: an open endpoint saying "I am the
       // server you hold a token for" is the thing worth being unable to say.
       // A server too old to answer leaves the list exactly as it was.
-      void api<{ id?: string; publicKey?: string; paths?: unknown; secure?: unknown }>("/v0/server")
+      void api<{ id?: string; name?: string; publicKey?: string; paths?: unknown; secure?: unknown }>("/v0/server")
         .then(async (identity) => {
           const origin = activeOrigin();
           if (!origin) return;
