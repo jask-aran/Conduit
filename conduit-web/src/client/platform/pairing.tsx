@@ -29,10 +29,7 @@ export async function redeemPairing(link: { origin: string; code: string }): Pro
   return body.token;
 }
 
-type Detector = { detect(source: HTMLVideoElement): Promise<Array<{ rawValue: string }>> };
-const BarcodeDetectorClass = () => (globalThis as { BarcodeDetector?: new (options: { formats: string[] }) => Detector }).BarcodeDetector;
-
-export const canScanQr = () => Boolean(BarcodeDetectorClass() && navigator.mediaDevices?.getUserMedia);
+export const canScanQr = () => Boolean(navigator.mediaDevices?.getUserMedia);
 
 /** The camera, full screen, until it sees a pairing link. */
 export function QrScanner(props: { onLink: (link: { origin: string; code: string }) => void; onClose: () => void }) {
@@ -40,28 +37,47 @@ export function QrScanner(props: { onLink: (link: { origin: string; code: string
   const [message, setMessage] = createSignal("Point the camera at the code from conduit-server pair");
   let stream: MediaStream | null = null;
   let stopped = false;
+  let timer = 0;
   onMount(async () => {
+    let stage = "QR decoder";
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      const { default: decodeQr } = await import("jsqr");
+      if (stopped) return;
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) throw new Error("Could not read camera frames");
+      stage = "Camera";
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } } });
+      if (stopped) return stream.getTracks().forEach((track) => track.stop());
       video.srcObject = stream;
+      stage = "Camera preview";
       await video.play();
-      const detector = new (BarcodeDetectorClass()!)({ formats: ["qr_code"] });
-      const look = async () => {
+      const look = () => {
         if (stopped) return;
-        const codes = await detector.detect(video).catch(() => []);
-        for (const code of codes) {
-          const link = parsePairingLink(code.rawValue);
-          if (link) return props.onLink(link);
-          setMessage("That QR code is not a Conduit pairing code");
+        if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth && video.videoHeight) {
+          const scale = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight));
+          canvas.width = Math.round(video.videoWidth * scale);
+          canvas.height = Math.round(video.videoHeight * scale);
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const frame = context.getImageData(0, 0, canvas.width, canvas.height);
+          const code = decodeQr(frame.data, frame.width, frame.height, { inversionAttempts: "dontInvert" });
+          if (code) {
+            const link = parsePairingLink(code.data);
+            if (link) return props.onLink(link);
+            setMessage("That QR code is not a Conduit pairing code");
+          }
         }
-        setTimeout(look, 200);
+        timer = window.setTimeout(look, 200);
       };
-      void look();
-    } catch {
-      setMessage("The camera is not available. Paste the link from conduit-server pair instead.");
+      stage = "QR scanner";
+      look();
+    } catch (cause) {
+      stream?.getTracks().forEach((track) => track.stop());
+      video.srcObject = null;
+      if (!stopped) setMessage(`${stage} could not start: ${cause instanceof Error ? cause.message : "Unknown error"}. Paste the link from conduit-server pair instead.`);
     }
   });
-  onCleanup(() => { stopped = true; stream?.getTracks().forEach((track) => track.stop()); });
+  onCleanup(() => { stopped = true; clearTimeout(timer); stream?.getTracks().forEach((track) => track.stop()); });
   return <div class="qr-scanner" role="dialog" aria-label="Scan pairing code">
     <video ref={video} playsinline muted />
     <div class="qr-scanner-frame" />
@@ -69,4 +85,3 @@ export function QrScanner(props: { onLink: (link: { origin: string; code: string
     <button type="button" class="qr-scanner-close" onClick={props.onClose}>Cancel</button>
   </div>;
 }
-
