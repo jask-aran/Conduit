@@ -15,6 +15,8 @@ const UNAUTHENTICATED_EXACT = new Set([
   "/favicon.svg",
   "/pwa-192x192.png",
   "/pwa-512x512.png",
+  "/pwa-maskable-512x512.png",
+  "/apple-touch-icon.png",
 ]);
 const UNAUTHENTICATED_PWA_PATTERNS = [
   /^\/[^/]+\.webmanifest$/,

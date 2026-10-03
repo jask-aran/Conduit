@@ -15,15 +15,26 @@
       decides which, and Chromium is now never it.
     -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=overlays-content" />
-    <meta name="theme-color" content="#18181b" />
+    <meta name="theme-color" content="#08090a" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/pwa-192x192.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!--
+      Until the bundle's stylesheet arrives, the page is the frame with the
+      Conduit mark on it -- the same launch screen as the Android app and the
+      installed PWA's splash -- rather than a blank page. Solid's render
+      replaces #root's contents, so the mark goes the moment the app mounts.
+    -->
+    <style>
+      html, body { margin: 0; background: #08090a; }
+      .launch-mark { position: fixed; inset: 0; display: grid; place-items: center; }
+      .launch-mark svg { width: 56px; color: #edeef0; }
+    </style>
     <title>Conduit</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="launch-mark" aria-hidden="true"><svg viewBox="0 0 1170 774"><path fill="currentColor" d="M579 774Q452 774 359.5 757Q267 740 203 711.5Q139 683 99 645Q59 607 37 565.5Q15 524 7.5 481.5Q0 439 0 400V370Q0 331 7.5 288.5Q15 246 36.5 205Q58 164 97.5 126.5Q137 89 201.5 61Q266 33 358.5 16.5Q451 0 579 0H614Q737 0 826 16Q915 32 977 57.5Q1039 83 1077 116.5Q1115 150 1135.5 185Q1156 220 1163 254.5Q1170 289 1170 316V331H785Q783 325 777 309.5Q771 294 751 278Q731 262 693 249.5Q655 237 591 237Q527 237 488 249.5Q449 262 427.5 282Q406 302 398.5 327Q391 352 391 376V388Q391 412 399 438Q407 464 428.5 485.5Q450 507 489 521Q528 535 591 535Q657 535 695 521.5Q733 508 752.5 490.5Q772 473 778 456.5Q784 440 785 433H1170V459Q1170 485 1163 518.5Q1156 552 1135.5 587Q1115 622 1077 655.5Q1039 689 977.5 715.5Q916 742 826.5 758Q737 774 614 774Z"/></svg></div></div>
     <script>
       /*
        * Recovery for a client that never starts.
@@ -73,7 +84,8 @@
         var GUARD = "conduit.recovered";
         setTimeout(function () {
           var root = document.getElementById("root");
-          if (root && root.childElementCount) return;
+          // The launch mark is the placeholder, not a drawn app.
+          if (root && root.querySelector(":scope > :not(.launch-mark)")) return;
           try {
             if (sessionStorage.getItem(GUARD)) return;
             sessionStorage.setItem(GUARD, "1");
