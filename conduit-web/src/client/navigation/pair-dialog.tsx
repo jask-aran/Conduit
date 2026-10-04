@@ -3,7 +3,7 @@ import { Button } from "@/components/primitives";
 import { FrostDialog } from "@/components/frost";
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
-import { activeServer, pathsOf, type ServerPath } from "../platform/servers.ts";
+import { activeServer, pathsOf, serverPathLabel, type ServerPath } from "../platform/servers.ts";
 import { shortOrigin } from "./server-switcher";
 import { pairingFragment } from "../platform/pairing";
 
@@ -17,7 +17,6 @@ import { pairingFragment } from "../platform/pairing";
  * means nothing to a phone.
  */
 const reach = (path: ServerPath) => path.scope === "loopback" ? 0 : path.scope === "private" ? 1 : 2;
-const scopeWords = (path: ServerPath) => path.scope === "private" ? "Devices on this network" : "Any device that can reach it";
 
 export function PairDialog(props: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [svg, setSvg] = createSignal("");
@@ -68,15 +67,16 @@ export function PairDialog(props: { open: boolean; onOpenChange: (open: boolean)
   const expired = () => Boolean(svg()) && left() === 0;
 
   return <FrostDialog open={props.open} onOpenChange={props.onOpenChange} title="Pair a device" close size="wide" class="pair-card">
-    <Show when={route()} fallback={<p class="pair-note">Only this computer can reach {activeServer()?.name || "this server"}. On the server, run <code>conduit-server connect</code> to choose Tailscale, a tunnel or your network, then pair from here.</p>}>
+    <Show when={route()} fallback={<p class="pair-note">Only this machine reaches {activeServer()?.name || "this server"}. Run <code>conduit-server connect</code> on it to add your network, Tailscale or a tunnel, then pair from here.</p>}>
       <div class="pair-qr" data-expired={expired() ? "" : undefined} innerHTML={svg()} aria-label="Pairing QR code" role="img" />
       <Show when={error()}><p class="pair-note pair-error" role="alert">{error()}</p></Show>
       <p class="pair-note">Scan with a phone's camera, or with <strong>Add server → Scan QR code</strong> in the Conduit app. It works once.</p>
       <dl class="pair-details">
         <dt>Server</dt><dd>{activeServer()?.name}</dd>
-        <dt>Address</dt><dd>{shortOrigin(route()!.origin)}</dd>
-        <dt>Reachable by</dt><dd>{scopeWords(route()!)}</dd>
-        <Show when={version()}><dt>Version</dt><dd>{version()}</dd></Show>
+        {/* The address a camera opens, in the route words the menus use. The
+            app takes the nearest route that proves it is this server. */}
+        <dt>Opens on</dt><dd>{serverPathLabel(route()!)} · {shortOrigin(route()!.origin)}</dd>
+        <Show when={version()}><dt>Version</dt><dd>{version().replace(/\.\d{14}\./, " · ")}</dd></Show>
         <dt>Code</dt><dd>{expired() ? "Expired" : svg() ? `Expires in ${Math.floor(left() / 60)}:${String(left() % 60).padStart(2, "0")}` : "…"}</dd>
       </dl>
       <div class="frost-dialog-actions">

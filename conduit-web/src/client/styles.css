@@ -1805,6 +1805,8 @@ svg.lucide { stroke-width: 2.4; }
 .native-server-card .native-server-error { color: var(--destructive); }
 .native-server-hint { color: var(--muted-foreground); font-size: 12px; }
 .native-server-card .native-server-group { margin-top: 6px; color: color-mix(in oklch, var(--foreground), transparent 50%); font-size: 12px; font-weight: 700; }
+.native-server-card .native-server-group { display: flex; align-items: center; gap: 6px; }
+.native-server-searching { width: 11px; height: 11px; }
 /* The ways in: one-line rows with no box, the wash as the cursor. */
 .native-server-found { display: flex; margin: 0 -8px; flex-direction: column; padding: 0; gap: 2px; list-style: none; }
 .native-server-found > li > button {
@@ -2777,7 +2779,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .frost-dialog-description, .frost-dialog [data-slot="field"] > label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .frost-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .frost-dialog-close { position: absolute !important; top: 8px; right: 8px; z-index: 10; display: grid; width: 28px; height: 28px; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted-foreground); cursor: pointer; }
-.frost-dialog-close:hover { background: oklch(1 0 0 / 10%); color: var(--foreground); }
+.frost-dialog-close:is(:hover, :focus-visible) { outline: none; background: oklch(1 0 0 / 10%); color: var(--foreground); }
 .frost-dialog-close svg { width: 14px; height: 14px; }
 .frost-dialog:has(> .frost-dialog-close) > .frost-dialog-title { padding-right: 32px; }
 @media (min-width: 761px) {
