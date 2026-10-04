@@ -107,7 +107,7 @@ export function MobileComposerOptions(props: {
          </MenuGroup>
         </div>
         <Show when={panel() === "models"}>
-          <PhoneMenuSubmenu parent=".composer-options-menu" settling={settling()} class="composer-model-menu">
+          <PhoneMenuSubmenu parent=".composer-options-menu" settling={settling()} class="composer-options-submenu composer-model-menu">
             <MenuGroup>
               <Show when={composer.onOpenModelSelector}>
                 <MenuItem onSelect={() => composer.onOpenModelSelector?.()}><SearchIcon /><span>Search all models…</span></MenuItem>
@@ -121,7 +121,7 @@ export function MobileComposerOptions(props: {
           </PhoneMenuSubmenu>
         </Show>
         <Show when={panel() === "effort"}>
-          <PhoneMenuSubmenu parent=".composer-options-menu" settling={settling()} class="composer-effort-menu">
+          <PhoneMenuSubmenu parent=".composer-options-menu" settling={settling()} class="composer-options-submenu composer-effort-menu">
             <MenuGroup>
               <MenuLabel class="composer-options-label">Effort</MenuLabel>
               <MenuRadioGroup value={composer.models.effort()} onChange={(value) => chosen(() => void composer.models.chooseEffort(value))}>
@@ -131,7 +131,7 @@ export function MobileComposerOptions(props: {
           </PhoneMenuSubmenu>
         </Show>
         <Show when={panel() === "profiles"}>
-          <PhoneMenuSubmenu parent=".composer-options-menu" settling={settling()} class="composer-profile-menu">
+          <PhoneMenuSubmenu parent=".composer-options-menu" settling={settling()} class="composer-options-submenu composer-profile-menu">
             <MenuGroup>
               <MenuLabel class="composer-options-label">Profile</MenuLabel>
               <MenuRadioGroup value={composer.activeProfile?.id || ""} onChange={(value) => chosen(() => composer.onChooseProfile(value))}>
@@ -146,7 +146,7 @@ export function MobileComposerOptions(props: {
           const root = () => place.projects.find((project) => project.slug === "chat");
           const places = () => place.projects.filter((project) => project.slug !== "chat" && project.state !== "cloning")
             .sort((left, right) => Number(isWorkspace(left)) - Number(isWorkspace(right)) || left.name.localeCompare(right.name));
-          return <PhoneMenuSubmenu parent=".composer-options-menu" settling={settling()} class="composer-places-menu">
+          return <PhoneMenuSubmenu parent=".composer-options-menu" settling={settling()} class="composer-options-submenu composer-places-menu">
             <MenuGroup>
               <MenuLabel class="composer-options-label">Project</MenuLabel>
               <Show when={place.current && place.current.slug !== "chat" && root()}>
@@ -161,7 +161,7 @@ export function MobileComposerOptions(props: {
           </PhoneMenuSubmenu>;
         }}</Show>
         <Show when={panel() === "permissions"}>
-          <PhoneMenuSubmenu parent=".composer-options-menu" settling={settling()} class="composer-permissions-menu">
+          <PhoneMenuSubmenu parent=".composer-options-menu" settling={settling()} class="composer-options-submenu composer-permissions-menu">
             <MenuGroup>
               <MenuLabel class="composer-options-label">Permissions</MenuLabel>
               <MenuRadioGroup value={composer.permissions?.selected() || ""} onChange={(value) => chosen(() => void composer.permissions?.choose(value))}>

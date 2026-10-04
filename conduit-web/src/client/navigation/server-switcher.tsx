@@ -180,7 +180,9 @@ export function ServerSwitcher(props: {
   const phone = () => isMobileLayout();
   const [menuOpen, setMenuOpen] = createSignal(false);
   const { panel, go, settling, returnToRoot, keepForChild, reset } = createPhoneMenuPanels<"root" | "routes">("root", menuOpen);
-  const RouteChoices = () => <>
+  // Its own group: the phone panel renders it outside the menu's groups, and
+  // a group label needs one.
+  const RouteChoices = () => <MenuGroup>
     <MenuLabel>Route to {serverName()}</MenuLabel>
     {/*
       * An installed-to-home-screen browser is shown the routes and
@@ -218,7 +220,7 @@ export function ServerSwitcher(props: {
           </span>
         </MenuRadioItem>}</For>
     </MenuRadioGroup>
-  </>;
+  </MenuGroup>;
 
   return <><Menu onOpenChange={(open) => { setMenuOpen(open); if (!open) reset(); onOpenChange(open); }}>
     <MenuTrigger class="sidebar-user" tabIndex={-1} onPointerDown={() => { focusBefore = document.activeElement; }} onFocus={(event: FocusEvent) => {
