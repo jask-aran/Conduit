@@ -99,6 +99,11 @@ test("a server offers the addresses it holds, and the ones it has answered on", 
   assert.equal(originOfRequest(request({})), null);
 });
 
+test("a server for this machine only publishes no network routes", async () => {
+  const identity = await new ServerIdentity(await temporaryFile(), { port: 4310, network: false }).load();
+  assert.deepEqual(identity.describe().paths.map((path) => path.scope), ["loopback"]);
+});
+
 test("paths stay plain HTTP until both shells verify TLS", async () => {
   const identity = await new ServerIdentity(await temporaryFile(), { port: 4310 }).load();
   assert.ok(identity.describe().paths.every((path) => path.origin.startsWith("http://")));

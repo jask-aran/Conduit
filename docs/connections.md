@@ -175,10 +175,14 @@ route as checked against a passive impostor, not an active one.
   verified against it, so the code never crosses cleartext.
 - Local-only setup still offers pairing, labelled "This machine only".
 
-Setup offers an explicit choice between **This machine only** and **This
-machine and network**. Configure Tailscale, proxies, and SSH separately so they
-can coexist with either choice. CLI setup, status, and pairing output use the
-same server name and route terms as the clients.
+Built: setup (and `conduit-server connect`, to change it later) asks between
+**This machine only** and **This machine and network**. The first binds
+loopback; such a server publishes no network routes and does not advertise on
+the LAN, so a VPS no longer offers its private addresses as routes. Tailscale,
+proxies and SSH are configured separately and coexist with either choice.
+
+Still to do: CLI status and pairing output use the same server name and route
+terms as the clients.
 
 ## 3. Knowing who is connected at restart
 
