@@ -43,6 +43,17 @@ export function ServersSettingsTile() {
   // client from there. Only the server this client is connected to can be
   // asked; the others are renamed from a client connected to them.
   const [renameError, setRenameError] = createSignal("");
+  // Who is connected to the server this client is on, and on which build:
+  // live connections only, read once as the page opens.
+  const [connected, setConnected] = createSignal("");
+  void api<{ clients?: { kind: string; build: string }[] }>("/v0/runtime/clients").then(({ clients = [] }) => {
+    const groups = new Map<string, number>();
+    for (const client of clients) {
+      const key = `${client.kind === "android" ? "Android" : client.kind === "desktop" ? "Desktop" : "Browser"}${client.build ? ` ${client.build}` : ""}`;
+      groups.set(key, (groups.get(key) ?? 0) + 1);
+    }
+    setConnected([...groups].map(([key, count]) => count > 1 ? `${count}× ${key}` : key).join(" · "));
+  }).catch(() => {});
   const rename = async (origin: string, name: string) => {
     setRenameError("");
     try {
@@ -69,6 +80,9 @@ export function ServersSettingsTile() {
       <h3>{entry.name}</h3>
       <Show when={entry.id}>
         <div class="settings-line"><span>Identity</span><span class="settings-line-value"><code>{entry.id?.slice(0, 8)}</code></span></div>
+      </Show>
+      <Show when={entry.origin === activeOrigin() && connected()}>
+        <div class="settings-line"><span>Connected</span><span class="settings-line-value">{connected()}</span></div>
       </Show>
       <Show when={entry.origin === activeOrigin()} fallback={
         <div class="settings-line"><span>Name</span><span class="settings-line-value">Rename it while connected to it</span></div>}>

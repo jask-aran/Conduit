@@ -1,10 +1,12 @@
 import { createSignal, onCleanup, onMount } from "solid-js";
-import { isInstalledClient } from "../platform/installed-client.ts";
+import { installedClientKind, isInstalledClient } from "../platform/installed-client.ts";
 import type { RuntimeProcess } from "../api/contracts";
 import { onPathChange } from "../platform/servers";
 import { eventSourceUrl } from "../api/transport";
 import { authorizedFetch } from "../api/native-auth-client";
-import { finishPwaRestart, preparePwaRestart } from "../pwa-update";
+import { browserRegistrationId, finishPwaRestart, preparePwaRestart } from "../pwa-update";
+import { api } from "../api/client";
+import { buildLabel, clientBuild } from "../platform/build-info";
 
 export type Connectivity = "connecting" | "online" | "reconnecting" | "offline";
 
@@ -45,6 +47,24 @@ export function createRuntimeStore() {
     });
   };
 
+  /*
+   * A restart is coming. A browser installs the new build and says so; the
+   * server waits for that (or for its limit) before restarting. An installed
+   * client carries its build in the shell and is never waited on.
+   */
+  const prepare = (attempt: unknown, target: unknown) => {
+    if (isInstalledClient()) return;
+    preparePwaRestart(typeof attempt === "string" ? attempt : "", typeof target === "string" ? target : "",
+      (ready) => api("/v0/runtime/restart/ready", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(ready) }).then(() => {}));
+  };
+
+  /** Who this stream is, for the server's list of connected clients. */
+  const streamUrl = () => {
+    const query = new URLSearchParams({ client: installedClientKind || "browser", build: buildLabel(clientBuild) });
+    if (!isInstalledClient()) query.set("registration", browserRegistrationId());
+    return eventSourceUrl(`/v0/runtime/stream?${query}`);
+  };
+
   const connect = () => {
     if (reconnectTimer) clearTimeout(reconnectTimer);
     reconnectTimer = undefined;
@@ -72,7 +92,7 @@ export function createRuntimeStore() {
         } else if (event.type === "runtime_global_snapshot") {
           replaceAll((event.processes || []) as RuntimeProcess[]);
           restartPrepared = event.restartPrepared === true;
-          if (restartPrepared) preparePwaRestart();
+          if (restartPrepared) prepare(event.restartAttempt, event.restartTarget);
           attempts = 0;
           setConnectivity("online");
           setStale(false);
@@ -86,7 +106,7 @@ export function createRuntimeStore() {
           window.dispatchEvent(new Event("conduit:ptys-changed"));
         } else if (event.type === "pwa_restart_prepared") {
           restartPrepared = true;
-          preparePwaRestart();
+          prepare(event.attempt, event.target);
         }
       } catch {
         // A malformed global update must not take the app down.
@@ -111,7 +131,7 @@ export function createRuntimeStore() {
       const controller = new AbortController();
       const next = { close: () => controller.abort() };
       source = next;
-      void authorizedFetch(eventSourceUrl("/v0/runtime/stream"), {
+      void authorizedFetch(streamUrl(), {
         headers: { accept: "text/event-stream" },
         signal: controller.signal,
       }).then(async (response) => {
@@ -133,7 +153,7 @@ export function createRuntimeStore() {
         }
       }).catch(() => { if (!controller.signal.aborted) onError(next); });
     } else {
-      const next = new EventSource(eventSourceUrl("/v0/runtime/stream"));
+      const next = new EventSource(streamUrl());
       source = next;
       next.onmessage = (message) => onMessage(message.data);
       next.onerror = () => onError(next);

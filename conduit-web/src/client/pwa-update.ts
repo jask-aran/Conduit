@@ -216,11 +216,60 @@ export async function checkForPwaUpdate(background = false) {
   }
 }
 
+/**
+ * One id per service-worker registration, shared by every tab of this origin,
+ * so a restart counts the registration once however many tabs it has. Kept in
+ * localStorage, which is per origin exactly as a registration is.
+ */
+export function browserRegistrationId(): string {
+  const key = "conduit:sw-registration";
+  try {
+    const held = localStorage.getItem(key);
+    if (held && /^[A-Za-z0-9_-]{8,64}$/.test(held)) return held;
+    const made = Array.from(crypto.getRandomValues(new Uint8Array(12)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    localStorage.setItem(key, made);
+    return made;
+  } catch {
+    return "";
+  }
+}
+
+export type RestartReady = (ready: { attempt: string; target: string; registration: string }) => Promise<void>;
+
+/**
+ * Once this registration holds the announced build, say so. After `update()`
+ * the waiting worker is the script just fetched, and with none waiting the
+ * active one is byte-identical to it, so the hash of what the server now
+ * serves at that URL is the build this registration is holding.
+ */
+async function reportWhenInstalled(attempt: string, target: string, report: RestartReady) {
+  await preparation;
+  const registration = registeredServiceWorker || await navigator.serviceWorker.getRegistration();
+  if (!registration) return;
+  const installing = registration.installing;
+  if (installing) await new Promise<void>((resolve) => {
+    const settle = () => { if (installing.state !== "installing") resolve(); };
+    installing.addEventListener("statechange", settle);
+    settle();
+  });
+  const worker = registration.waiting || registration.active;
+  if (!worker) return;
+  const bytes = await (await fetch(worker.scriptURL, { cache: "no-store" })).arrayBuffer();
+  const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  if (target && hash !== target) return;
+  await report({ attempt, target, registration: browserRegistrationId() });
+}
+
 /** Download the next client while this server still serves its static files. */
-export function preparePwaRestart() {
-  if (!("serviceWorker" in navigator) || preparing) return;
+export function preparePwaRestart(attempt = "", target = "", report?: RestartReady) {
+  if (!("serviceWorker" in navigator)) return;
+  if (preparing) {
+    if (attempt && report) void reportWhenInstalled(attempt, target, report).catch(() => {});
+    return;
+  }
   preparing = true;
   preparation = checkForPwaUpdate(true).catch(() => {});
+  if (attempt && report) void reportWhenInstalled(attempt, target, report).catch(() => {});
   preparationTimer = window.setTimeout(() => {
     if (!preparing) return;
     preparing = false;

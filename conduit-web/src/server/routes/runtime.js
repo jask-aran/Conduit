@@ -75,8 +75,9 @@ export function registerRuntimeRoutes(app, {
   });
 
   app.get("/healthz", (request, response) => {
-    // The launcher must not signal an older server that has no SIGUSR2 handler.
-    response.setHeader("X-Conduit-Pwa-Prepare", "1");
+    // "2": prepares restarts through /v0/runtime/restart/*. The launcher does
+    // not try that against a server that does not say so.
+    response.setHeader("X-Conduit-Pwa-Prepare", "2");
     const activeGenerations = runtimeHub.snapshot().processes.filter((process) => drainsOnRestart(process)
       && (process.active || process.stopping || process.compacting || process.retrying
         || process.generation && !process.generation.settled)).length;
@@ -231,13 +232,41 @@ export function registerRuntimeRoutes(app, {
     response.json(runtimeHub.snapshot());
   });
 
+  // Who is connected, and what a prepared restart is still waiting for.
+  app.get("/v0/runtime/clients", (_request, response) => {
+    response.json({ clients: runtimeHub.connections(), restart: runtimeHub.restartStatus() });
+  });
+
+  // The launcher: a restart to this service-worker hash is coming.
+  app.post("/v0/runtime/restart/prepare", (request, response) => {
+    const attempt = String(request.body?.attempt || "");
+    const target = String(request.body?.target || "");
+    if (!/^[A-Za-z0-9_-]{6,64}$/.test(attempt) || !/^[0-9a-f]{0,64}$/.test(target)) return response.status(400).json({ error: "invalid_attempt" });
+    response.json(runtimeHub.prepareRestart({ attempt, target }));
+  });
+
+  // A browser: its registration has that worker installed.
+  app.post("/v0/runtime/restart/ready", (request, response) => {
+    const accepted = runtimeHub.acknowledgeRestart({
+      attempt: String(request.body?.attempt || ""),
+      target: String(request.body?.target || ""),
+      registration: String(request.body?.registration || ""),
+    });
+    response.status(accepted ? 200 : 409).json({ accepted });
+  });
+
   app.get("/v0/runtime/stream", (request, response) => {
     response.setHeader("Content-Type", "text/event-stream");
     response.setHeader("Cache-Control", "no-cache, no-transform");
     response.setHeader("Connection", "keep-alive");
     response.flushHeaders?.();
     const client = { kind: "sse", response };
-    const detach = runtimeHub.attach(client);
+    // What the connection says it is. Only shown and counted, never trusted
+    // for anything: a stream is already authenticated.
+    const kind = ["browser", "android", "desktop"].includes(request.query.client) ? request.query.client : "browser";
+    const build = typeof request.query.build === "string" ? request.query.build.slice(0, 80) : "";
+    const registration = typeof request.query.registration === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(request.query.registration) ? request.query.registration : "";
+    const detach = runtimeHub.attach(client, { kind, build, registration });
     // A real frame, not an SSE comment: the client watches for silence to tell
     // a live stream from one that died without ever firing an error.
     const heartbeat = setInterval(() => {

@@ -29,6 +29,8 @@ function printHelp() {
   conduit-auth sessions                   Signed-in devices, as JSON.
   conduit-auth revoke <id>|all            Sign out one device, or all of them.
   conduit-auth mint-session [options]     Create a local session without a password.
+  conduit-auth prepare-restart <hash> [s] Ready connected browsers for a restart to
+                                          this service worker; wait up to s (20).
 
 Mint options:
   --user-agent <label>                    Session label (default: ${DEFAULT_AGENT_USER}).
@@ -221,6 +223,41 @@ try {
       });
       process.stdout.write(`${await response.text()}\n`);
       if (!response.ok) process.exitCode = 1;
+    } finally {
+      await store.removeSession(token);
+    }
+  } else if (command === "prepare-restart") {
+    // prepare-restart <target-hash> [seconds] -- tell connected browsers a
+    // restart to this service worker is coming, then wait until every one the
+    // server is waiting on has installed it, or the limit. One session for
+    // the whole wait, signed out at the end.
+    const [target = "", seconds = "20"] = process.argv.slice(3);
+    const limit = Date.now() + Math.max(0, Number(seconds) || 0) * 1000;
+    const store = new AuthStore(authFile);
+    const { token } = await store.createSession({ userAgent: "conduit-server restart" });
+    const port = process.env.CONDUIT_PORT || 4310;
+    const call = async (method, route, body) => {
+      const response = await fetch(`http://127.0.0.1:${port}${route}`, {
+        method,
+        headers: { cookie: `conduit_session=${token}`, "content-type": "application/json", origin: `http://127.0.0.1:${port}` },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (!response.ok) throw new Error(`${route} answered ${response.status}`);
+      return response.json();
+    };
+    try {
+      const attempt = crypto.randomUUID().replace(/-/g, "");
+      let status = await call("POST", "/v0/runtime/restart/prepare", { attempt, target });
+      const started = Date.now();
+      while (status?.waiting?.length && Date.now() < limit) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        status = (await call("GET", "/v0/runtime/clients")).restart;
+      }
+      const waited = ((Date.now() - started) / 1000).toFixed(1);
+      const left = status?.waiting?.length || 0;
+      console.log(left
+        ? `${status.ready}/${status.eligible} browsers ready after ${waited}s; restarting without ${left}.`
+        : `${status?.eligible || 0} browser${status?.eligible === 1 ? "" : "s"} ready after ${waited}s.`);
     } finally {
       await store.removeSession(token);
     }

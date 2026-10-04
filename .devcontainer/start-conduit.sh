@@ -58,7 +58,7 @@ if [ -n "${CONDUIT_DESKTOP_UPDATE_DIR:-}" ]; then export CONDUIT_DESKTOP_UPDATE_
 HEALTH_URL="http://127.0.0.1:${CONDUIT_PORT}/healthz"
 DRAIN_TIMEOUT_SECONDS="${CONDUIT_RESTART_DRAIN_TIMEOUT_SECONDS:-600}"
 PWA_GRACE_SECONDS="${CONDUIT_PWA_RESTART_GRACE_SECONDS:-20}"
-PWA_GRACE_STARTED_AT=0
+PWA_PREPARE_PID=0
 
 usage() {
   cat <<EOF
@@ -253,6 +253,11 @@ worker_hash() {
   if [[ -f "$WEB_DIR/dist/sw.js" ]]; then sha256sum "$WEB_DIR/dist/sw.js" | cut -d ' ' -f1; fi
 }
 
+# A new client build is ready. Connected browsers are told a restart to its
+# worker is coming and install it; the restart waits until every browser the
+# server is waiting on says it has (two tabs of one registration are one), or
+# PWA_GRACE_SECONDS, whichever is first. Native clients are never waited on.
+# Runs beside the generation drain, and is collected before the restart.
 prepare_client_restart() {
   local previous_hash="$1"
   local forced="${2:-false}"
@@ -262,22 +267,19 @@ prepare_client_restart() {
     return 1
   }
   (( PWA_GRACE_SECONDS > 0 )) || return 0
-  local pid
-  pid="$(managed_pid)" || return 0
   is_healthy || return 0
-  # The first deployment of this handshake still has an older server running.
-  # SIGUSR2 would terminate that process instead of notifying its clients.
+  # A server older than the readiness handshake has no route for it.
   if ! curl --silent --fail --max-time 2 --dump-header - --output /dev/null "$HEALTH_URL" \
-    | grep -qi '^x-conduit-pwa-prepare: 1'; then return 0; fi
-  kill -USR2 "$pid" || return 1
-  echo "Giving connected browsers ${PWA_GRACE_SECONDS}s to install the new client."
-  PWA_GRACE_STARTED_AT="$(date +%s)"
+    | grep -qi '^x-conduit-pwa-prepare: 2'; then return 0; fi
+  echo "Readying connected browsers for the new client (up to ${PWA_GRACE_SECONDS}s)."
+  node "$ROOT/scripts/conduit-auth.mjs" prepare-restart "$(worker_hash)" "$PWA_GRACE_SECONDS" &
+  PWA_PREPARE_PID=$!
 }
 
 wait_for_client_restart_grace() {
-  (( PWA_GRACE_STARTED_AT > 0 )) || return 0
-  local remaining=$(( PWA_GRACE_SECONDS - ($(date +%s) - PWA_GRACE_STARTED_AT) ))
-  if (( remaining > 0 )); then sleep "$remaining"; fi
+  (( PWA_PREPARE_PID > 0 )) || return 0
+  wait "$PWA_PREPARE_PID" || echo "Could not confirm browsers were ready; restarting anyway." >&2
+  PWA_PREPARE_PID=0
 }
 
 start_server() {

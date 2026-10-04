@@ -986,9 +986,6 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
   });
 }
 
-// The launcher has completed a new client build. The old server stays up long
-// enough for connected browsers to install its worker before the restart.
-process.on("SIGUSR2", () => runtimeHub.prepareRestart());
 
 // When the server stalls, say so and by how much. Everything here shares one
 // thread, so a slow open is usually not the work somebody asked for -- it is
