@@ -116,7 +116,7 @@ export function ServersSettingsTile() {
       <section class="settings-group" aria-label={`Routes to ${entry.name}`}>
         <h3>Routes to {entry.name}</h3>
         <For each={pathsOf(entry)}>{(path) => <div class="settings-line" data-current={inUse(entry, path) || undefined}>
-          <span>{serverPathLabel(path)}<em><code>{path.origin.replace(/^https?:\/\//, "")}</code></em></span>
+          <span>{serverPathLabel(path)}<em class="settings-route-address">{path.origin.replace(/^https?:\/\//, "")}</em></span>
           <span class="settings-line-value">{inUse(entry, path) ? "In use" : ""}</span>
         </div>}</For>
       </section>

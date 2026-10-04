@@ -262,3 +262,4 @@
   .settings-rail-about dl > div { padding: 4px 9px; }
   .settings-rail-about dt, .settings-rail-about dd { font-size: 12.5px; }
 }
+.settings-line em.settings-route-address { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
