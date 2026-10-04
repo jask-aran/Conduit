@@ -2219,7 +2219,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   .settings-dialog .settings-content [data-slot="field"][data-stack] { grid-template-columns: minmax(0, 1fr); }
   /* Where a row does stack, the help reads before the control it explains. */
   .settings-dialog .settings-content [data-slot="field"][data-stack] > :not(label):not(small) { grid-column: 1; grid-row: 3; margin-top: 7px; justify-self: stretch; }
-  .settings-dialog .settings-rail { width: 100%; padding: calc(10px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom)); border-right: 0; overflow-y: auto; }
+  .settings-dialog .settings-rail { width: 100%; padding: 10px 12px 12px; border-right: 0; overflow-y: auto; }
   .settings-dialog .settings-rail-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 4px 14px; }
   /* Undoes the old icon-rail breakpoints, which hid the title because there
      was no room for it beside a pane. There is room: this is the pane. */
@@ -2241,7 +2241,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   .settings-dialog .settings-nav-item > button[aria-selected="true"] { background: transparent; }
 
   /* Tiles need air around them, and each other, or the page is one grey slab. */
-  .settings-dialog .settings-content { padding: 0 12px calc(24px + env(safe-area-inset-bottom)); }
+  .settings-dialog .settings-content { padding: 0 12px 24px; }
   .settings-dialog .settings-content > .settings-stack,
   .settings-dialog .settings-content > .settings-section-block,
   .settings-dialog .settings-content .settings-control-grid { margin-bottom: 12px; }
@@ -2286,7 +2286,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   .settings-dialog .settings-back { flex: none; border: 0; background: transparent; margin-left: -4px; }
   /* Full-bleed by its own padding rather than by a negative margin: the pull
      up left the first paragraph of a section drawn underneath it. */
-  .settings-dialog .settings-content > header { display: flex; position: sticky; top: 0; z-index: 1; align-items: flex-start; gap: 8px; margin: 0 -12px 14px; border-bottom: 1px solid var(--border); background: var(--settings-ground); padding: calc(12px + env(safe-area-inset-top)) 12px 12px; }
+  .settings-dialog .settings-content > header { display: flex; position: sticky; top: 0; z-index: 1; align-items: flex-start; gap: 8px; margin: 0 -12px 14px; border-bottom: 1px solid var(--border); background: var(--settings-ground); padding: 12px 12px 12px; }
   .settings-dialog .settings-content > header > div { flex: 1; min-width: 0; }
   .settings-dialog .settings-content > header h2 { font-size: 18px; }
   .settings-dialog .settings-content > header p { margin: 2px 0 0; }
@@ -2439,7 +2439,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   /* The phone header centres its title between back and close; the status
      sits beside close without taking a place in that row. */
   .settings-dialog .settings-content > header { position: sticky; }
-  .settings-dialog .settings-save-status { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: 48px; min-width: 0; height: 32px; margin: 0; }
+  .settings-dialog .settings-save-status { position: absolute; top: 12px; right: 48px; min-width: 0; height: 32px; margin: 0; }
 }
 
 /* Command and search overlays: layout. The material is the frost block at
@@ -2680,7 +2680,10 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .frost-overlay .frost-card { animation: frost-arrive 220ms cubic-bezier(.2, .8, .2, 1) both; }
 @keyframes frost-arrive { from { opacity: 0; transform: translateY(8px); } }
 @media (--conduit-mobile-layout) {
-  .frost-overlay { align-items: stretch; padding: 8px; }
+  /* The bubble sits inside the status and navigation bars, not under them:
+     the shell's insets (Android's env() reads 0 in its WebView), then the
+     bubble's own small margin. */
+  .frost-overlay { align-items: stretch; padding: calc(8px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 8px calc(8px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
   .frost-overlay .frost-card { width: 100%; height: 100%; max-height: none; background: var(--frost-core); }
 }
 @media (prefers-reduced-motion: reduce) { .frost-overlay .frost-card { animation: none; } }
@@ -2702,7 +2705,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .settings-dialog .settings-shell .settings-rail { border-right-color: oklch(1 0 0 / 10%); background: transparent; }
 .settings-dialog .settings-shell .settings-content > header { background: transparent; }
 @media (--conduit-mobile-layout) {
-  .settings-dialog.frost-overlay { align-items: stretch; padding: 8px; }
+  .settings-dialog.frost-overlay { align-items: stretch; padding: calc(8px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 8px calc(8px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
   .settings-dialog .frost-card.settings-shell { width: 100%; height: 100%; background: var(--frost-core); }
   .settings-dialog .settings-shell .settings-content > header { border-bottom-color: oklch(1 0 0 / 10%); background: oklch(0.24 0.005 264 / 70%); backdrop-filter: var(--frost-blur); padding-top: 12px; }
   .settings-dialog .settings-shell .settings-rail { padding-top: 10px; }
@@ -2773,7 +2776,8 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
    readers, and a one-field prompt's label is hidden since the title names it. */
 .frost-overlay[data-placement="center"] { align-items: center; padding: 16px; }
 @media (--conduit-mobile-layout) {
-  .frost-overlay .frost-card.frost-dialog { width: min(480px, 100%); height: auto; max-height: calc(100dvh - 32px); align-self: center; }
+  .frost-overlay[data-placement="center"] { padding: calc(16px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 16px calc(16px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
+  .frost-overlay .frost-card.frost-dialog { width: min(480px, 100%); height: auto; max-height: 100%; align-self: center; }
   .attachment-dialog .attachment-dialog-card[class] { border-radius: 16px 16px 0 0; }
 }
 .frost-dialog { gap: 12px; }
@@ -2821,8 +2825,8 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .qr-scanner { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: #000; }
 .qr-scanner video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .qr-scanner-frame { position: relative; width: min(64vw, 18rem); aspect-ratio: 1; border: 2px solid rgb(255 255 255 / 0.9); border-radius: 1rem; box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.45); }
-.qr-scanner p { position: absolute; bottom: calc(6rem + env(safe-area-inset-bottom)); margin: 0 1.5rem; color: #fff; text-align: center; font-size: 0.9375rem; }
-.qr-scanner-close { position: absolute; bottom: calc(2rem + env(safe-area-inset-bottom)); padding: 0.625rem 1.5rem; border: 0; border-radius: 999px; background: rgb(255 255 255 / 0.16); color: #fff; font: inherit; }
+.qr-scanner p { position: absolute; bottom: calc(6rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); margin: 0 1.5rem; color: #fff; text-align: center; font-size: 0.9375rem; }
+.qr-scanner-close { position: absolute; bottom: calc(2rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); padding: 0.625rem 1.5rem; border: 0; border-radius: 999px; background: rgb(255 255 255 / 0.16); color: #fff; font: inherit; }
 
 /* Pair a device: a frost card holding the QR on its own white tile, with the
    server's details as plain label/value rows beneath it. */
