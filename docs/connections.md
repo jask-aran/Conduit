@@ -201,33 +201,29 @@ about who they are. `conduit-server restart` on an installed server waits for
 live turns but sends no pre-restart notice, so browsers on a released server
 are not warned.
 
-### To build
+### Built
 
-Extend the existing runtime stream rather than replacing its transport.
-
-- Give each live connection a short-lived ID and report client kind and build.
-  Remove it when the connection closes.
-- Identify browser service-worker registrations separately from tabs. Browsers
-  expose no stable registration ID, so the client generates one and stores it
-  in IndexedDB, where the worker and every page of that registration read the
-  same value. Show tabs individually, but count each registration once for
-  restart readiness, so a frozen background tab cannot hold a restart that
-  another tab of the same registration has already acknowledged.
-- A restart attempt carries a unique attempt ID and target worker hash. An
-  authenticated HTTP acknowledgement counts only for that attempt and target.
-- Snapshot the eligible registrations when preparation starts. Reconnects
-  retain their registration membership; late arrivals receive preparation
-  without extending the waiting set. Disconnected registrations stop holding
-  the restart.
-- A browser is ready when the target worker is installed and waiting, or
-  already active. Preserve the current update and draft behaviour.
-- Native clients report builds but never delay restart. Keep the existing
-  active-turn drain and force-restart behaviour.
-- Both server launch scripts use the same preparation and readiness mechanism.
-  Proceed when all eligible registrations are ready, or after 20 seconds.
-- Show connected clients, builds, and waiting reasons in Settings → Servers and
-  CLI status. In Settings these are muted state after the server's name, per
-  the Settings list rules, not a new row type.
+- Each runtime stream says what it is (`client=browser|android|desktop`,
+  `build`, and for a browser `registration`, an id its tabs share for one
+  service-worker registration, kept in localStorage since that is per origin
+  exactly as a registration is). `GET /v0/runtime/clients` lists live
+  connections.
+- `POST /v0/runtime/restart/prepare {attempt, target}` (target is the new
+  `sw.js` hash) snapshots the browser registrations connected then and tells
+  every client. A browser installs the build and posts
+  `/v0/runtime/restart/ready`, counted only for that attempt and target and
+  once per registration. Late arrivals are told but not waited on; a
+  disconnected registration stops holding; native clients never hold.
+- `conduit-auth prepare-restart <hash> [s]` prepares and polls on one
+  short-lived session. `start-conduit.sh` runs it beside the generation drain;
+  `conduit-server restart` runs it when the server already serves the new
+  worker (a release serves its own files until it restarts). Both proceed when
+  nobody is waiting, or after 20 s. The active-turn drain and `--force` are
+  unchanged.
+- Settings → Servers (for the connected server) and `conduit-server status`
+  show connected clients and builds.
+- Measured: two headless tabs of one registration acknowledged a prepared
+  restart and the wait ended after 0.5 s, counted as one browser.
 
 Connection identity is scoped to the server and lasts only for a live
 connection. It is not a device registry. Client application updates remain
