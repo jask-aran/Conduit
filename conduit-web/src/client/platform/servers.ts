@@ -48,15 +48,6 @@ export interface ServerEntry {
    */
   paths?: ServerPath[];
   /**
-   * The certificate this server answers on over TLS, once this client has
-   * checked the server's own identity key signed it -- see `server-proof.ts`.
-   *
-   * Only ever written after that check. An unverified fingerprint here would
-   * be worse than none, because it is what the shell then accepts on every
-   * network it meets that certificate on.
-   */
-  secure?: { port: number; fingerprint: string };
-  /**
    * Whether this address travels. The directory is kept by the servers, which
    * is the only channel two origins on one device share -- and it is a channel
    * every other device reads too, so what belongs on this machine and what
@@ -177,25 +168,6 @@ export function pathsOf(entry: ServerEntry): ServerPath[] {
   return all.sort((left, right) => SCOPES.indexOf(left.scope) - SCOPES.indexOf(right.scope));
 }
 
-/*
- * A stored pin, read back as strictly as it was written.
- *
- * What came out of storage is not what this client verified -- it is what was
- * in a file another process could have edited -- so the shape is checked
- * again. It cannot be re-verified here without the server, which is why the
- * only thing standing between a tampered file and a pinned certificate is
- * that a fingerprint of the wrong shape is dropped.
- */
-function readSecure(value: unknown): { port: number; fingerprint: string } | undefined {
-  const secure = value as { port?: unknown; fingerprint?: unknown } | undefined;
-  const port = Number(secure?.port);
-  const fingerprint = typeof secure?.fingerprint === "string" ? secure.fingerprint : "";
-  if (!Number.isInteger(port) || port < 1 || port > 65535) return undefined;
-  // SHA-256, base64: 44 characters with one pad. Anything else is not one.
-  if (!/^[A-Za-z0-9+/]{43}=$/.test(fingerprint)) return undefined;
-  return { port, fingerprint };
-}
-
 export function readServers(storage: Storageish | null): ServerEntry[] {
   const raw = storage?.getItem(SERVERS_STORAGE_KEY);
   let parsed: unknown = [];
@@ -213,8 +185,7 @@ export function readServers(storage: Storageish | null): ServerEntry[] {
     const id = typeof item?.id === "string" && /^[0-9a-f]{32}$/.test(item.id) ? item.id : undefined;
     const publicKey = typeof item?.publicKey === "string" && item.publicKey.length <= 128 ? item.publicKey : undefined;
     const paths = readPaths(item?.paths, origin);
-    const secure = readSecure(item?.secure);
-    list.push({ origin, name, shared, ...(serverName ? { serverName } : {}), ...(id ? { id } : {}), ...(publicKey ? { publicKey } : {}), ...(paths.length ? { paths } : {}), ...(secure ? { secure } : {}) });
+    list.push({ origin, name, shared, ...(serverName ? { serverName } : {}), ...(id ? { id } : {}), ...(publicKey ? { publicKey } : {}), ...(paths.length ? { paths } : {}) });
   }
   return list;
 }
@@ -463,7 +434,6 @@ export function setServerShared(origin: string, shared: boolean) {
 export function learnIdentity(
   origin: string,
   identity: { id?: unknown; name?: unknown; publicKey?: unknown; paths?: unknown },
-  secure?: { port: number; fingerprint: string },
 ) {
   const id = typeof identity?.id === "string" && /^[0-9a-f]{32}$/.test(identity.id) ? identity.id : "";
   if (!id) return;
@@ -498,7 +468,7 @@ export function learnIdentity(
   const next = list
     .filter((entry) => !absorbed.includes(entry))
     .map((entry) => entry.origin === origin
-      ? { ...entry, name, ...(serverName ? { serverName } : {}), id, paths, ...(publicKey ? { publicKey } : {}), ...(secure ? { secure } : {}) }
+      ? { ...entry, name, ...(serverName ? { serverName } : {}), id, paths, ...(publicKey ? { publicKey } : {}) }
       : entry);
 
   if (!reachedHere && publicKey && isInstalledClient()) {

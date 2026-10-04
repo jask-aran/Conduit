@@ -123,47 +123,28 @@ changes after pairing; it does not remove the first-contact risk accepted above.
 ### Built
 
 - **Server.** `src/server-tls.js` issues a self-signed ECDSA P-256 leaf (P-256
-  because Chromium refuses Ed25519 certificates). It has IP SANs for the local
-  addresses, lasts 398 days, is re-issued when the address set changes, and is
-  kept in `data/leaf.json`. The identity key signs
-  `conduit-leaf-spki-sha256.v1.<id>.<sha256 of SPKI>`. The server listens over
-  TLS on `CONDUIT_TLS_PORT`, 4319 by default; that number is permanent once a
-  client pins it. `/v0/server` reports `secure: { port, fingerprint,
-  attestation }`, kept out of `paths` until clients can use it.
-- **Android.** `ConduitWebViewClient` checks the leaf in
-  `onReceivedSslError`, which also fires for `wss://` (measured). The page
-  verifies the attestation with WebCrypto, falling back to `@noble/ed25519` on
-  WebViews older than 137 (`client/platform/signatures.ts`), and hands the
-  SPKI fingerprint to `ConduitTlsPlugin` (`client/platform/certificate-pins.ts`).
+  because Chromium refuses Ed25519 certificates), kept in `data/leaf.json` for
+  398 days and re-issued only near expiry. The identity key signs
+  `conduit-leaf-spki-sha256.v1.<id>.<base64 sha256 of SPKI>`, and the leaf
+  carries that signature in a non-critical `2.25.<uuid>` extension
+  (`ATTESTATION_EXTENSION_OID`), so a client holding the identity key can
+  accept the leaf from the certificate alone. TLS and plain HTTP share one
+  port: the listener reads each connection's first byte and hands a TLS
+  handshake (`0x16`) to the HTTPS server, anything else to HTTP.
+- **Android.** The page hands `ConduitTlsPlugin` the identity keys of its
+  paired servers (`client/platform/certificate-pins.ts`).
+  `ConduitWebViewClient.onReceivedSslError` (which also fires for `wss://`)
+  accepts a leaf whose embedded attestation verifies against one of them,
+  answering only an untrusted authority or a name mismatch; expired and
+  not-yet-valid leaves are refused. Platform Ed25519 needs API 33; older
+  devices refuse every leaf. Remembered decisions are cleared when the set
+  changes.
 
 ### To build
 
-**Trust the identity key, not each leaf.** Today a pin is a leaf fingerprint,
-so every re-issue needs a new attestation delivered before the TLS route
-works again. `/v0/server` needs a session, and the TLS port fails until the
-pin is updated, so neither can deliver it. Instead:
-
-- Carry the attestation inside the leaf as a non-critical X.509 extension.
-- Each shell accepts a self-signed leaf whose embedded attestation verifies
-  against an identity public key the client holds. The shell holds identity
-  keys, not leaf fingerprints.
-- Stop re-issuing on address changes. Re-issue only near expiry; an attested
-  leaf needs no client-side change. Android's `getPrimaryError()` reports
-  `SSL_UNTRUSTED` over `SSL_IDMISMATCH`, so SANs are not what is checked anyway.
 - Discovery already advertises the identity key, so a discovered server can be
   connected over TLS before login without a temporary pin or an advertised
   attestation. Save the identity only after successful authentication.
-- Forgetting a server removes its key from the shell and clears cached
-  certificate approvals.
-
-The cost: shells verify Ed25519 natively. Rust has `ed25519-dalek`; Android
-needs API 33+ `Signature.getInstance("Ed25519")` or a small dependency.
-
-**Android.** Move verification from the fingerprint set to the embedded
-attestation. Check each error flag with `error.hasError(...)` rather than
-`getPrimaryError()`: an expired self-signed leaf currently reports
-`SSL_UNTRUSTED` as its primary error and is accepted, contrary to the class
-comment.
 
 **Windows.** Handle WebView2's `ServerCertificateErrorDetected` in the Tauri
 shell with the same rule, for both Network and Loopback. Verify in a debug

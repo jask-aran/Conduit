@@ -96,6 +96,27 @@ test("a leaf without an embedded attestation is replaced", async () => {
   assert.ok(embeddedAttestation(replaced.certificate));
 });
 
+test("one port answers both plain HTTP and TLS, and the TLS leaf carries the attestation", async (t) => {
+  const { startConduitHarness } = await import("./helpers/conduit-harness.js");
+  const harness = await startConduitHarness();
+  t.after(() => harness.stop());
+  const { hostname, port } = new URL(harness.origin);
+
+  assert.equal((await fetch(`${harness.origin}/healthz`)).status, 200);
+  const { status, certificate } = await new Promise((resolve, reject) => {
+    const socket = tls.connect({ host: hostname, port: Number(port), rejectUnauthorized: false }, () => {
+      const peer = socket.getPeerX509Certificate();
+      socket.write(`GET /healthz HTTP/1.1\r\nHost: ${hostname}\r\nConnection: close\r\n\r\n`);
+      let body = "";
+      socket.on("data", (chunk) => { body += chunk; });
+      socket.on("end", () => resolve({ status: Number(body.split(" ")[1]), certificate: peer }));
+    });
+    socket.on("error", reject);
+  });
+  assert.equal(status, 200);
+  assert.ok(embeddedAttestation(certificate.raw));
+});
+
 test("a leaf near its expiry is replaced before it stops working", async () => {
   const file = await temporaryFile();
   const options = { commonName: "Conduit test", hosts: ["127.0.0.1"], ...attested("a".repeat(32), identityKeys()) };
