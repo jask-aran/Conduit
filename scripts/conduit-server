@@ -227,7 +227,35 @@ restart() {
     (( waited == 0 )) && note "Waiting for $turns answer(s) to finish"
     sleep 2; waited=$((waited + 2))
   done
+  prepare_browsers
   start
+}
+
+# Ready connected browsers for the client this restart brings, as the dev
+# launcher does: they install it now, and the restart waits until each
+# browser registration says so (native clients never hold it), up to 20s.
+# Only when the running server already serves that worker -- a release keeps
+# serving its own files until it restarts, and then there is nothing to
+# install ahead of time.
+prepare_browsers() {
+  local sw="$CURRENT/conduit-web/dist/sw.js" target served
+  [[ -f "$sw" ]] && healthy || return 0
+  curl -fsS --max-time 2 -D - -o /dev/null "$(health_url)" 2>/dev/null | grep -qi '^x-conduit-pwa-prepare: 2' || return 0
+  target="$(sha256sum "$sw" | cut -d' ' -f1)"
+  served="$(curl -fsS --max-time 3 "http://127.0.0.1:$CONDUIT_PORT/sw.js" 2>/dev/null | sha256sum | cut -d' ' -f1)"
+  [[ "$served" == "$target" ]] || return 0
+  local out; out="$(auth prepare-restart "$target" 20 2>/dev/null)" && note "$out"
+  return 0
+}
+
+# Who is connected right now, by kind and build. Live connections only.
+connected_clients() {
+  auth api GET /v0/runtime/clients 2>/dev/null | "$(node_bin)" -e '
+    try { const { clients = [] } = JSON.parse(require("fs").readFileSync(0, "utf8"));
+      const groups = new Map();
+      for (const c of clients) { const key = c.kind + (c.build ? " " + c.build : ""); groups.set(key, (groups.get(key) || 0) + 1); }
+      console.log([...groups].map(([key, n]) => (n > 1 ? n + "× " : "") + key).join(", ") || "none");
+    } catch {}' 2>/dev/null
 }
 
 running() { healthy; }
@@ -237,6 +265,7 @@ status() {
   title "$(code_label)"
   if running; then printf '%s%s%s  %sRunning%s\n' "$G" "$S_ON" "$N" "$B" "$N"; else printf '%s%s%s  %sStopped%s %s· %s start%s\n' "$R" "$S_ERR" "$N" "$B" "$N" "$D" "$NAME" "$N"; fi
   row name "$(server_name)"
+  running && row clients "$(connected_clients)"
   local url how cmd; while IFS='|' read -r url how cmd; do row open "${C}$url${N} ${D}$how${N}"; [[ -n "$cmd" ]] && row "" "$cmd"; done < <(access_urls)
   row service "$(service_kind) ${D}$NAME${N}"
   row data "${CONDUIT_DATA_ROOT/#$HOME/$TILDE}"

@@ -7,19 +7,26 @@ export class RuntimeHub {
   constructor({ listViews } = {}) {
     this.listViews = listViews || (() => []);
     this.clients = new Set();
-    this.restartPrepared = false;
+    /** The restart being prepared: who it waits for, and who is ready. */
+    this.restart = null;
   }
 
   snapshot() {
     return {
       type: "runtime_global_snapshot",
       processes: this.listViews(),
-      ...(this.restartPrepared ? { restartPrepared: true } : {}),
+      ...(this.restart ? { restartPrepared: true, restartAttempt: this.restart.attempt, restartTarget: this.restart.target } : {}),
       at: new Date().toISOString(),
     };
   }
 
-  attach(client) {
+  /**
+   * `peer` is what the connection said about itself: its client kind, build
+   * and, for a browser, the id its tabs share for one service-worker
+   * registration. Scoped to this live connection -- not a device registry.
+   */
+  attach(client, peer = {}) {
+    client.peer = { kind: peer.kind || "browser", build: peer.build || "", registration: peer.registration || "", connectedAt: new Date().toISOString() };
     this.clients.add(client);
     this.send(client, this.snapshot());
     return () => this.clients.delete(client);
@@ -31,10 +38,40 @@ export class RuntimeHub {
     for (const client of this.clients) this.write(client, payload);
   }
 
-  prepareRestart() {
-    if (this.restartPrepared) return;
-    this.restartPrepared = true;
-    this.publish({ type: "pwa_restart_prepared", at: new Date().toISOString() });
+  /** The live connections, as Settings and the CLI show them. */
+  connections() {
+    return [...this.clients].map((client) => ({ ...client.peer }));
+  }
+
+  /**
+   * A restart to `target` (the new service worker's hash) is coming. The
+   * browsers connected now are the ones it waits for, each registration once
+   * however many tabs it has open; later arrivals are told but not waited on,
+   * and native clients never hold it.
+   */
+  prepareRestart({ attempt, target } = {}) {
+    if (!attempt || this.restart?.attempt === attempt) return this.restartStatus();
+    const eligible = new Set(this.connections().filter((peer) => peer.kind === "browser" && peer.registration).map((peer) => peer.registration));
+    this.restart = { attempt, target: target || "", eligible, ready: new Set() };
+    this.publish({ type: "pwa_restart_prepared", attempt, target: target || "", at: new Date().toISOString() });
+    return this.restartStatus();
+  }
+
+  /** Counts only for the attempt and target it names, from a registration waited on. */
+  acknowledgeRestart({ attempt, target, registration } = {}) {
+    const restart = this.restart;
+    if (!restart || attempt !== restart.attempt || (target || "") !== restart.target || !restart.eligible.has(registration)) return false;
+    restart.ready.add(registration);
+    return true;
+  }
+
+  /** Who is still holding the restart: waited-on registrations that are connected and not ready. */
+  restartStatus() {
+    const restart = this.restart;
+    if (!restart) return null;
+    const connected = new Set(this.connections().map((peer) => peer.registration).filter(Boolean));
+    const waiting = [...restart.eligible].filter((registration) => connected.has(registration) && !restart.ready.has(registration));
+    return { attempt: restart.attempt, target: restart.target, eligible: restart.eligible.size, ready: restart.ready.size, waiting };
   }
 
   publishProcess(view, reason = "update") {
