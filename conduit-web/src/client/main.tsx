@@ -283,10 +283,17 @@ function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) =
    */
   onMount(() => {
     if (!canDiscoverServers()) return;
-    void discoverServers().then((all) => {
-      const heldOrigins = new Set(servers().map((entry) => entry.origin));
-      const heldIds = new Set(servers().map((entry) => entry.id).filter(Boolean));
-      setFound(all.filter((server) => !heldOrigins.has(server.origin) && !heldIds.has(server.id)));
+    const heldOrigins = new Set(servers().map((entry) => entry.origin));
+    const heldIds = new Set(servers().map((entry) => entry.id).filter(Boolean));
+    // Rows arrive as servers resolve and keep their place: a server seen
+    // again at another address updates its row rather than moving it.
+    void discoverServers({
+      onFound: (server) => {
+        if (heldIds.has(server.id) || server.candidates.some((origin) => heldOrigins.has(origin))) return;
+        setFound((list) => list.some((item) => item.id === server.id)
+          ? list.map((item) => item.id === server.id ? server : item)
+          : [...list, server]);
+      },
     }).finally(() => setSearching(false));
   });
 
@@ -303,8 +310,15 @@ function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) =
   const chooseFound = async (server: FoundServer) => {
     setError("");
     setAddress(server.origin);
-    const proof = await proveServer(server.origin, server.id, server.publicKey);
-    if (proof.ok) return setVerifiedOrigin(server.origin);
+    // Every address it was found at, asked at once; the first that proves
+    // itself is the one kept. An unreachable interface costs nothing then.
+    const proofs = await Promise.all(server.candidates.map((origin) => proveServer(origin, server.id, server.publicKey)));
+    const proved = server.candidates.find((_, index) => proofs[index]?.ok);
+    if (proved) {
+      setAddress(proved);
+      return setVerifiedOrigin(proved);
+    }
+    const proof = proofs.find((item) => item.reason !== "unreachable") ?? { ok: false, reason: "unreachable" as const };
     if (proof.reason === "unreachable") return setError("That server did not answer. It may have gone since it was found.");
     if (proof.reason === "mismatch") return setError("That address did not prove it is the server that advertised it.");
     // Unverifiable: this client cannot check an Ed25519 signature at all. The

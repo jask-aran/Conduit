@@ -169,6 +169,9 @@ public class ConduitDiscoveryPlugin extends Plugin {
             entry.put("id", text(service, "id"));
             entry.put("publicKey", text(service, "key"));
             found.put(service.getServiceName() + ":" + service.getPort(), entry);
+            // As it resolves, so a list can show it without waiting out the
+            // whole browse; the call still resolves with everything at the end.
+            notifyListeners("found", entry);
         }
 
         private List<InetAddress> hostAddresses(NsdServiceInfo service) {
