@@ -169,13 +169,17 @@ route as checked against a passive impostor, not an active one.
 
 ### Pairing and setup
 
-- Extend the existing pairing link with an identity-and-route bundle in the URL
-  fragment. Keep one-use, five-minute redemption. Apps select a usable verified
-  route; ordinary cameras retain a browser-compatible sign-in link where
-  reachable.
-- When the bundle carries the identity, redeem the pairing code over TLS
-  verified against it, so the code never crosses cleartext.
-- Local-only setup still offers pairing, labelled "This machine only".
+Built: the pairing link ("Pair a device" and `conduit-server pair`) keeps the
+browser-compatible `<widest route>/v0/auth/handoff?code=…` and adds
+`#conduit=<base64url {id, key, routes}>` in the fragment, which no browser
+sends. The app trusts that identity, probes every route at once (local ones
+over TLS the identity must vouch for), redeems the code on the nearest that
+answers, and saves the server with its identity, routes and `tls` already
+known. Verified on the emulator from a wiped app: paired on
+`https://192.168.0.128:4310`, the leaf accepted as `5abbb638…`, not on the
+public address the link opened with.
+
+Local-only setup still offers pairing, labelled "This machine only".
 
 Built: setup (and `conduit-server connect`, to change it later) asks between
 **This machine only** and **This machine and network**. The first binds

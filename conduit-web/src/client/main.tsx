@@ -23,10 +23,10 @@ import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl
 import { startPathSelection } from "./platform/path-selector";
 import { canDiscoverServers, discoverServers, type FoundServer } from "./platform/discovery";
 import { proveServer } from "./platform/server-proof";
-import { activeOrigin, addServer, forgetServer, learnIdentity, mergeServerDirectory, servers, trustedIdentities, setActiveServer, switchToServer } from "./platform/servers";
+import { activeOrigin, addServer, forgetServer, learnIdentity, mergeServerDirectory, scopeOf, servers, trustedIdentities, setActiveServer, switchToServer } from "./platform/servers";
 import { publishTrustedIdentities } from "./platform/certificate-pins.ts";
 import { publishServerDirectory } from "./platform/server-directory";
-import { canScanQr, parsePairingLink, QrScanner, redeemPairing } from "./platform/pairing";
+import { canScanQr, parsePairingLink, QrScanner, redeemPairing, type PairingLink } from "./platform/pairing";
 import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
 import { resolveCapability } from "./chat-capabilities";
 import type { ChatSummary, DashboardChat, HarnessManifestView, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
@@ -198,16 +198,22 @@ function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) =
   const [submitting, setSubmitting] = createSignal(false);
   const [scanning, setScanning] = createSignal(false);
 
-  const pair = async (link: { origin: string; code: string }) => {
+  const pair = async (link: PairingLink) => {
     setScanning(false);
     setError("");
     setAddress(link.origin);
     setSubmitting(true);
     try {
-      const token = await redeemPairing(link);
-      addServer(link.origin);
-      await saveNativeBearerToken(token, link.origin);
-      props.onDone(link.origin);
+      const { token, origin } = await redeemPairing(link);
+      addServer(origin);
+      // Saved knowing who it is: the identity came from the paired device's
+      // trusted setup, and the routes are the ones it offered.
+      if (link.identity) {
+        learnIdentity(origin, { id: link.identity.id, publicKey: link.identity.publicKey, tls: true,
+          paths: (link.routes ?? []).map((route) => ({ origin: route, scope: scopeOf(route) })) });
+      }
+      await saveNativeBearerToken(token, origin);
+      props.onDone(origin);
     } catch (cause) {
       setError(cause instanceof TypeError ? "Could not reach this Conduit server from here." : (cause as Error).message);
     } finally {
