@@ -1,6 +1,6 @@
 import { createEffect, createSignal, on } from "solid-js";
 import { isInstalledClient } from "./installed-client.ts";
-import { publishCertificatePins } from "./certificate-pins.ts";
+import { publishTrustedIdentities, type TrustedIdentity } from "./certificate-pins.ts";
 import { LOOPBACK_HOST, PRIVATE_HOST } from "../../network-hosts.js";
 
 /**
@@ -406,7 +406,7 @@ export function forgetServer(origin: string) {
   persist(list, active() === origin ? list[0]?.origin ?? null : active());
   // The shell keeps accepting a pinned certificate until it is sent a set
   // without it, so a forgotten server has to take its pin with it here.
-  void publishCertificatePins(pinnedFingerprints());
+  void publishTrustedIdentities(trustedIdentities());
 }
 
 /**
@@ -555,16 +555,15 @@ export function switchToServer(origin: string, installed: boolean) {
 }
 
 /**
- * Every certificate this client has been given reason to accept.
+ * Every identity this client lets vouch for a certificate.
  *
  * One flat set, not one per server, because the shell's certificate callback
  * is reached with a certificate and nothing else -- there is no server record
  * in hand at the moment the decision is made. That is looser than it could
- * be: a pin for one server would be accepted on another server's address.
- * What it is not is looser than the protocol underneath, since a pin is only
- * ever written after that server's own identity key signed it, so the set only
- * ever holds certificates belonging to servers this client has paired with.
+ * be: a certificate one paired server attested would be accepted on another
+ * server's address. It is not looser than pairing itself, since only servers
+ * this client holds a record for are in the set.
  */
-export function pinnedFingerprints(list: ServerEntry[] = serverList()): string[] {
-  return [...new Set(list.map((entry) => entry.secure?.fingerprint).filter((value): value is string => !!value))];
+export function trustedIdentities(list: ServerEntry[] = serverList()): TrustedIdentity[] {
+  return list.flatMap((entry) => entry.id && entry.publicKey ? [{ id: entry.id, publicKey: entry.publicKey }] : []);
 }

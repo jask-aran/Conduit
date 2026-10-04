@@ -37,19 +37,23 @@ public class MainActivity extends BridgeActivity {
          */
         getBridge().setWebViewClient(new ConduitWebViewClient(getBridge()));
         /*
-         * A pin handed in at launch, for a development build only.
+         * Identities handed in at launch, for a development build only, as
+         * `id:spkiBase64` pairs separated by commas.
          *
-         * The real one arrives from a paired server record, once an
-         * attestation has been verified against the identity key the client
-         * already holds. Until that is plumbed this is how a build under test
-         * is told which certificate to expect, and it is gated on the app
-         * being debuggable because a pin any launcher can set is a pin
-         * anything on the device can set.
+         * The real set arrives from the page's paired server records. This
+         * lets a build under test reach a server's TLS port before it has
+         * paired, and it is gated on the app being debuggable because a key
+         * any launcher can set is a key anything on the device can set.
          */
         if ((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
-            String pin = getIntent() == null ? null : getIntent().getStringExtra("conduitPin");
-            if (pin != null && !pin.isEmpty()) {
-                ConduitWebViewClient.pin(new java.util.HashSet<>(java.util.Arrays.asList(pin.split(","))));
+            String trust = getIntent() == null ? null : getIntent().getStringExtra("conduitTrust");
+            if (trust != null && !trust.isEmpty()) {
+                java.util.Map<String, String> identities = new java.util.HashMap<>();
+                for (String pair : trust.split(",")) {
+                    int colon = pair.indexOf(':');
+                    if (colon > 0) identities.put(pair.substring(0, colon), pair.substring(colon + 1));
+                }
+                ConduitWebViewClient.trust(identities);
             }
         }
     }

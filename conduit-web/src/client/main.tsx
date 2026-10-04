@@ -23,8 +23,8 @@ import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl
 import { startPathSelection } from "./platform/path-selector";
 import { canDiscoverServers, discoverServers, type FoundServer } from "./platform/discovery";
 import { proveServer } from "./platform/server-proof";
-import { activeOrigin, addServer, forgetServer, learnIdentity, mergeServerDirectory, pinnedFingerprints, servers, setActiveServer, switchToServer } from "./platform/servers";
-import { publishCertificatePins } from "./platform/certificate-pins.ts";
+import { activeOrigin, addServer, forgetServer, learnIdentity, mergeServerDirectory, servers, trustedIdentities, setActiveServer, switchToServer } from "./platform/servers";
+import { publishTrustedIdentities } from "./platform/certificate-pins.ts";
 import { verifyLeaf } from "./platform/server-proof.ts";
 import { publishServerDirectory } from "./platform/server-directory";
 import { canScanQr, parsePairingLink, QrScanner, redeemPairing } from "./platform/pairing";
@@ -4795,7 +4795,7 @@ function App() {
            */
           const secure = await verifyLeaf(String(identity.id || ""), String(identity.publicKey || ""), identity.secure);
           learnIdentity(origin, identity, secure ?? undefined);
-          void publishCertificatePins(pinnedFingerprints());
+          void publishTrustedIdentities(trustedIdentities());
         })
         .catch(() => { /* an older server has no identity, and needs none */ });
       const migration: Partial<UiPreferences> = {};
@@ -5379,7 +5379,7 @@ function App() {
  * happens before the first of those, and a pin that arrives after the
  * connection it was for is no pin at all.
  */
-void publishCertificatePins(pinnedFingerprints());
+void publishTrustedIdentities(trustedIdentities());
 
 // Solid inserts into the mount; it does not remove index.html's launch mark.
 // That fixed, full-window placeholder would remain behind panes and intercept rail clicks.
