@@ -10,6 +10,11 @@
      is still owed once the keyboard has covered part of it. Everywhere else
      the resting value is the answer. */
   --safe-area-inset-bottom: var(--safe-area-inset-bottom-rest, env(safe-area-inset-bottom, 0px));
+  /* Every full-screen surface on a phone -- frost overlays, Settings, the
+     palette, the workspace picker -- sits inside the status and navigation
+     bars by this, then its own small margin. The shell's insets first:
+     Android's WebView reports env() as 0. */
+  --phone-overlay-padding: calc(8px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 8px calc(8px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   /* Type and rem chrome scale from the root. Explicit px does not. Viewport
      geometry stays in real CSS pixels so scroll, fixed overlays, and popovers
      share one coordinate space. */
@@ -1311,7 +1316,7 @@ svg.lucide { stroke-width: 2.4; }
 .workspace-add-dialog-explore > h2 { margin: 0; padding: 14px 52px 10px 16px; border-bottom: 1px solid var(--border); }
 .workspace-add-dialog-explore > form, .workspace-add-dialog-explore > form > [data-slot="field-group"] { display: contents; }
 @media (max-width: 640px) {
-  .frost-overlay:has(.workspace-add-dialog) { display: flex; align-items: stretch; justify-content: stretch; height: var(--app-height, 100dvh); padding: 4px; }
+  .frost-overlay:has(.workspace-add-dialog) { display: flex; align-items: stretch; justify-content: stretch; height: var(--app-height, 100dvh); padding: var(--phone-overlay-padding); }
   .workspace-add-dialog { width: 100%; height: 100%; max-height: none; border-radius: 12px; }
   .workspace-add-dialog-explore { height: 100%; }
   .workspace-add-dialog .frost-dialog-close { top: 7px; right: 7px; width: 44px !important; height: 44px !important; }
@@ -2540,7 +2545,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-hint-action:hover, .command-hint-action:focus-visible { outline: none; background: oklch(1 0 0 / 10%); }
 
 @media (--conduit-mobile-layout) {
-  .command-dialog { align-items: stretch; padding: 8px; }
+  .command-dialog { align-items: stretch; padding: var(--phone-overlay-padding); }
   .command-dialog .command-shell { width: 100%; height: 100%; max-height: none; border-radius: 14px; }
   .command-input-row { min-height: 52px; padding-inline: 12px; }
   .command-input { min-height: 44px; font-size: 16px; }
@@ -2683,7 +2688,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   /* The bubble sits inside the status and navigation bars, not under them:
      the shell's insets (Android's env() reads 0 in its WebView), then the
      bubble's own small margin. */
-  .frost-overlay { align-items: stretch; padding: calc(8px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 8px calc(8px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
+  .frost-overlay { align-items: stretch; padding: var(--phone-overlay-padding); }
   .frost-overlay .frost-card { width: 100%; height: 100%; max-height: none; background: var(--frost-core); }
 }
 @media (prefers-reduced-motion: reduce) { .frost-overlay .frost-card { animation: none; } }
@@ -2705,7 +2710,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .settings-dialog .settings-shell .settings-rail { border-right-color: oklch(1 0 0 / 10%); background: transparent; }
 .settings-dialog .settings-shell .settings-content > header { background: transparent; }
 @media (--conduit-mobile-layout) {
-  .settings-dialog.frost-overlay { align-items: stretch; padding: calc(8px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 8px calc(8px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
+  .settings-dialog.frost-overlay { align-items: stretch; padding: var(--phone-overlay-padding); }
   .settings-dialog .frost-card.settings-shell { width: 100%; height: 100%; background: var(--frost-core); }
   .settings-dialog .settings-shell .settings-content > header { border-bottom-color: oklch(1 0 0 / 10%); background: oklch(0.24 0.005 264 / 70%); backdrop-filter: var(--frost-blur); padding-top: 12px; }
   .settings-dialog .settings-shell .settings-rail { padding-top: 10px; }
