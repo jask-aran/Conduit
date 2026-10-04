@@ -196,6 +196,48 @@ below has a probe: `motion-rules`, `press-shift`, `placeholder-heights` and
   Measure after the layout has changed: a Solid effect holds DOM updates until
   it ends, so measure in a microtask after it, before the frame is painted.
 
+### Paired physical Android phone
+
+The operator's Samsung SM-S936B is paired for wireless ADB as of
+2026-10-03. It runs the Android dev client, `com.jaskaran.conduit.dev`,
+which installs beside the released app. Device geometry and WebView details
+are in **Matching the device** below; check the current WebView version
+before using that recorded version as evidence.
+
+Use the Windows Android SDK's `adb.exe` for this pairing. Linux ADB pairing
+failed with `error: protocol fault (couldn't read status message): Success`;
+Windows ADB paired and connected successfully. WSL's Linux ADB client can
+use that Windows server through `ADB_SERVER_SOCKET`. Android CLI did not
+find the phone through that server; direct ADB installs worked. Preserve the
+working server rather than replacing it to make Android CLI see the phone.
+
+Check `adb devices -l` through the working server before each session. Select
+the connected SM-S936B explicitly with `-s`; the same phone can appear under
+two connection aliases. Read connection values from the current session.
+Keep phone addresses, connection ports, pairing codes and device identifiers
+out of this document.
+
+The verified update command, with `PHONE_SERIAL` set from that device list,
+is:
+
+```bash
+adb -s "$PHONE_SERIAL" install -r ~/conduit-dev.apk
+```
+
+This updates Conduit Dev and keeps its app data. Check for `Success`, then
+reopen Conduit Dev. The latest successful install of this artifact was on
+2026-10-03.
+
+Measured on this connection: five shell commands took 19–40 ms, median
+30 ms; a screenshot took 958 ms. Scripted input is fast enough for short
+interaction tests. Screen recording runs on the phone; retrieve the video
+afterward instead of relying on a live screenshot loop. Recording frame rate
+on this phone has not been measured.
+
+Use headless checks for routine menu and focus permutations. Use the phone
+for native Back, real keyboard timing, camera scanning and WebView frost
+rendering. Pairing and successful installation do not prove those behaviours.
+
 ### Android shell on an emulator
 
 A headless AVD driven over ADB, with Chrome DevTools into the Capacitor
