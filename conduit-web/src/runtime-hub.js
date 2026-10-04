@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 /**
  * Global runtime fan-out: snapshot-first, low-frequency process updates.
  * Subscribers are SSE/WS response streams; browser disconnect does not stop Pi.
@@ -26,9 +28,11 @@ export class RuntimeHub {
    * registration. Scoped to this live connection -- not a device registry.
    */
   attach(client, peer = {}) {
-    client.peer = { kind: peer.kind || "browser", build: peer.build || "", registration: peer.registration || "", connectedAt: new Date().toISOString() };
+    // A short id per connection, told to that connection alone, so a client
+    // can find itself in the list. It lasts as long as the stream.
+    client.peer = { id: randomBytes(6).toString("hex"), kind: peer.kind || "browser", build: peer.build || "", registration: peer.registration || "", connectedAt: new Date().toISOString() };
     this.clients.add(client);
-    this.send(client, this.snapshot());
+    this.send(client, { ...this.snapshot(), connection: client.peer.id });
     return () => this.clients.delete(client);
   }
 
