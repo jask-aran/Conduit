@@ -347,11 +347,10 @@ export const activeServer = (): ServerEntry | null => serverList().find((entry) 
 
 /**
  * Whether this shell accepts a leaf by its embedded attestation
- * (`certificate-pins.ts`). Android needs platform Ed25519, which arrived in
- * Android 13; below that the shell refuses every leaf, so it stays on HTTP.
+ * (`certificate-pins.ts`). Both shells verify it themselves (Android with
+ * Tink, Windows with ed25519-dalek), so every installed client does.
  */
-const shellVerifiesTls = installedClientKind === "desktop" || (installedClientKind === "android"
-  && Number(/Android (\d+)/.exec(typeof navigator === "undefined" ? "" : navigator.userAgent)?.[1] ?? 0) >= 13);
+const shellVerifiesTls = installedClientKind === "desktop" || installedClientKind === "android";
 
 /**
  * The origin to actually dial for a route of `entry`.
