@@ -177,7 +177,7 @@ Inside frost, content follows the pane's rules: one-line rows, headings and spac
 
 Inside them: rows take `frost-row` (the cursor wash on `data-highlighted`, where you are by `aria-current`), keys `Keycap`, the foot `frost-rail`, a dialog's buttons `frost-dialog-actions`. Material, dim, radius and arrival come from those pieces and the `--frost-*` tokens; a surface's own CSS sets only its layout. Something genuinely new (the context usage readout) is composed inside these, not beside them.
 
-**On a phone an overlay is a full-screen bubble:** it fills the visual viewport with a small inset and larger tap targets, and stays a dialog, never a new route -- Settings included. Frost over a full-screen overlay gets a darker core, because nothing around it is dimmed and the page behind would otherwise show through at full contrast. Desktop overlays keep plain frost over the dim.
+**On a phone an overlay is a full-screen bubble:** it fills the visual viewport inside the status and navigation bars (`--phone-overlay-padding`, never its own inset) with a small margin and larger tap targets, and stays a dialog, never a new route -- Settings included. Frost over a full-screen overlay gets a darker core, because nothing around it is dimmed and the page behind would otherwise show through at full contrast. Desktop overlays keep plain frost over the dim.
 
 # Interaction
 
