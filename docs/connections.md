@@ -138,24 +138,22 @@ changes after pairing; it does not remove the first-contact risk accepted above.
   answering only an untrusted authority or a name mismatch; expired and
   not-yet-valid leaves are refused. Platform Ed25519 needs API 33; older
   devices refuse every leaf. Remembered decisions are cleared when the set
-  changes.
+  changes. Measured on the SM-S936B: an attested leaf is accepted, and the
+  same server is refused when only another identity is trusted.
+- **Windows.** The page hands the Tauri shell the same keys
+  (`trust_identities`, `src-tauri/src/certificate_trust.rs`), and WebView2's
+  `ServerCertificateErrorDetected` applies the same rule. It checks the
+  leaf's validity dates itself, because WebView2 reports a single status and
+  an untrusted authority outranks expiry. Approvals are cleared when the set
+  changes. Measured in the dev client: the event fires for both HTTPS and WSS,
+  and an `AlwaysAllow` does not carry over to a different leaf on the same
+  host and port.
 
 ### To build
 
 - Discovery already advertises the identity key, so a discovered server can be
   connected over TLS before login without a temporary pin or an advertised
   attestation. Save the identity only after successful authentication.
-
-**Windows.** Handle WebView2's `ServerCertificateErrorDetected` in the Tauri
-shell with the same rule, for both Network and Loopback. Verify in a debug
-build:
-
-- HTTPS and WSS both raise the event (WebSocket coverage is not documented).
-- Whether an `AlwaysAllow` approval is cached by host alone or by host and
-  certificate. If by host alone, a `192.168.0.x` approved on one network stays
-  approved where another machine holds that address. Clear approvals on every
-  route change in that case.
-  [WebView2 reference](https://learn.microsoft.com/en-us/dotnet/api/microsoft.web.webview2.core.corewebview2.servercertificateerrordetected)
 
 With proof in the handshake, addresses become candidates rather than trusted
 instructions. Enable `https` origins in `paths()` only after both shells
