@@ -95,11 +95,14 @@ export function originOfRequest(request) {
 const MAX_OBSERVED = 10;
 
 export class ServerIdentity {
-  constructor(filePath, { port = 4310, now = Date.now, name = process.env.CONDUIT_SERVER_NAME } = {}) {
+  constructor(filePath, { port = 4310, network = true, now = Date.now, name = process.env.CONDUIT_SERVER_NAME } = {}) {
     this.filePath = filePath;
     this.configuredName = name;
     this.name = "";
     this.port = port;
+    // False when the server is bound to loopback ("This machine only"): its
+    // private addresses are then not routes anything can take.
+    this.network = network;
     this.now = now;
     this.id = "";
     /** origin -> last seen, for addresses this server has actually answered on. */
@@ -193,7 +196,8 @@ export class ServerIdentity {
   paths() {
     const seen = new Set();
     const rows = [];
-    for (const origin of [...localPaths(this.port), ...this.observed.keys()]) {
+    const local = localPaths(this.port).filter((origin) => this.network || scopeForHost(new URL(origin).hostname) !== PATH_SCOPES.private);
+    for (const origin of [...local, ...this.observed.keys()]) {
       if (seen.has(origin)) continue;
       seen.add(origin);
       rows.push({ origin, scope: scopeForHost(new URL(origin).hostname) });

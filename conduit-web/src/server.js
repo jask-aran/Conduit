@@ -103,7 +103,11 @@ const attachments = new AttachmentStore(registry, { maxBytes: config.maxAttachme
 const terminalPastes = new TerminalPasteStore({ root: config.terminalPasteRoot });
 const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, defaultsFromEnv(process.env));
 await runtimeSettings.load();
-const serverIdentity = await new ServerIdentity(config.identityFile, { port: config.port }).load();
+// Bound to loopback ("This machine only" in setup), the server is reached only
+// through this machine -- directly, or by Tailscale, a tunnel or SSH landing
+// here -- so it neither publishes its network addresses nor advertises on one.
+const reachableOnNetwork = !/^(127\.\d+\.\d+\.\d+|localhost|::1|\[::1\])$/.test(config.host);
+const serverIdentity = await new ServerIdentity(config.identityFile, { port: config.port, network: reachableOnNetwork }).load();
 /*
  * The certificate this server answers on over TLS, and the identity's word
  * that it is this server's.
@@ -122,7 +126,7 @@ const leafFor = () => ({
 let serverLeaf = await leafStore.ensure(leafFor());
 const lanAdvertisement = new LanAdvertisement({
   identity: serverIdentity,
-  enabled: config.advertiseOnLan,
+  enabled: config.advertiseOnLan && reachableOnNetwork,
   log: (event) => console.log(JSON.stringify(event)),
 });
 const searchSettings = new SearchSettingsStore({ filePath: config.searchConfigFile, environment: process.env });

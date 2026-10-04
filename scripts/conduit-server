@@ -502,9 +502,26 @@ ts_name() { tailscale status --json 2>/dev/null | sed -n 's/.*"DNSName": *"\([^"
 public_ip() { curl -fsS --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}'; }
 lan_ip() { (hostname -I 2>/dev/null || ipconfig getifaddr en0 2>/dev/null) | tr ' ' '\n' | grep -E '^(192\.168|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)' | head -1; }
 
-# This computer and its network always reach Conduit; what is asked is which
-# further ways in to set up as well.
+# Who reaches Conduit directly, then which further ways in to set up as well.
+#
+# "This machine only" binds loopback: the server then publishes no network
+# routes and does not advertise itself on the LAN, which is right for a VPS
+# whose private addresses are not anybody's network. Tailscale, a tunnel and
+# SSH all reach it through loopback, so they work with either choice.
+choose_reach() {
+  local machine="This machine only ${D}— a VPS, or only through Tailscale, a tunnel or SSH${N}"
+  local network="This machine and network ${D}— phones and laptops on the same Wi-Fi${N}"
+  # The current choice is listed first, so pressing enter keeps it.
+  if [[ "${CONDUIT_HOST:-}" == 127.0.0.1 && -f "$ENV_FILE" ]] && grep -q '^CONDUIT_HOST=' "$ENV_FILE"; then
+    choose "Reach it directly from" "$machine" "$network"; [[ "$REPLY" == 1 ]] && REPLY=machine || REPLY=network
+  else
+    choose "Reach it directly from" "$network" "$machine"; [[ "$REPLY" == 1 ]] && REPLY=network || REPLY=machine
+  fi
+  if [[ "$REPLY" == machine ]]; then set_env CONDUIT_HOST 127.0.0.1; else set_env CONDUIT_HOST 0.0.0.0; fi
+}
+
 choose_access() {
+  choose_reach
   local ts; ts="$(ts_state)" ts_hint="${D}— your devices, anywhere${N}"
   [[ "$ts" == running ]] && ts_hint="${D}— $(ts_name)${N}"
   [[ "$ts" == missing ]] && ts_hint="${D}— installs it${N}"
@@ -519,7 +536,6 @@ choose_access() {
   [[ " $REPLY " == *" 2 "* ]] && extras+=(proxy)
   [[ " $REPLY " == *" 3 "* ]] && extras+=(ssh)
   local IFS=","; set_env CONDUIT_ACCESS "${extras[*]}"; unset IFS
-  set_env CONDUIT_HOST 0.0.0.0
   if [[ " ${extras[*]} " == *" proxy "* ]]; then
     note "Point it at ${N}${C}http://127.0.0.1:$CONDUIT_PORT${N}${D} and let it do HTTPS · e.g. cloudflared tunnel --url http://127.0.0.1:$CONDUIT_PORT"
     ask "Its public address ${D}(optional)${N}" "${CONDUIT_PUBLIC_URL:-}"
