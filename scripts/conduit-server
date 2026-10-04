@@ -255,7 +255,7 @@ connected_clients() {
       const kind = { android: "Android", desktop: "Desktop" };
       const since = (at) => { const m = Math.max(0, Math.round((Date.now() - Date.parse(at)) / 60000));
         return m < 1 ? "just now" : m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; };
-      for (const c of clients) console.log((kind[c.kind] || "Browser") + "|" + (c.build || "older build") + " · " + since(c.connectedAt));
+      for (const c of clients) console.log((kind[c.kind] || "Browser") + "|" + (c.build ? c.build.replace(/\.\d{14}\./, " · ") : "Older build") + " · " + since(c.connectedAt));
     } catch {}' 2>/dev/null
 }
 

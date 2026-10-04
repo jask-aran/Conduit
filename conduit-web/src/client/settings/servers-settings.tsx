@@ -54,6 +54,8 @@ export function ServersSettingsTile() {
   refresh();
   const timer = setInterval(refresh, 10_000);
   onCleanup(() => clearInterval(timer));
+  // A dev build's stamp carries its build time; the version and commit say which.
+  const shortBuild = (build: string) => build ? build.replace(/\.\d{14}\./, " · ") : "Older build";
   const kindLabel = (kind: string) => kind === "android" ? "Android" : kind === "desktop" ? "Desktop" : "Browser";
   const since = (at: string) => {
     const minutes = Math.max(0, Math.round((now() - Date.parse(at)) / 60_000));
@@ -81,26 +83,29 @@ export function ServersSettingsTile() {
     entry.origin === activeOrigin() && path.origin === (activePath() || activeOrigin());
 
   return <div class="settings-list">
-    <For each={servers()}>{(entry) => <section class="settings-group" aria-label={entry.name}>
-      <h3>{entry.name}</h3>
-      <Show when={entry.id}>
-        <div class="settings-line"><span>Identity</span><span class="settings-line-value"><code>{entry.id?.slice(0, 8)}</code></span></div>
-      </Show>
-      <Show when={entry.origin === activeOrigin() && connected().length}>
-        <For each={connected()}>{(client) => <div class="settings-line">
-          <span>{kindLabel(client.kind)}{client.id && client.id === connectionId() ? " · this client" : ""}</span>
-          <span class="settings-line-value">{client.build || "older build"} · {since(client.connectedAt)}</span>
-        </div>}</For>
-      </Show>
-      <Show when={entry.origin === activeOrigin()} fallback={
-        <div class="settings-line"><span>Name</span><span class="settings-line-value">Rename it while connected to it</span></div>}>
-        <label class="settings-line" title="The server's name, for every client and on the network."><span>Name</span>
-          <Input aria-label={`Name of ${entry.name}`} value={entry.name}
-            onChange={(event) => void rename(entry.origin, event.currentTarget.value)} /></label>
-        <Show when={renameError()}><div class="settings-line"><span class="settings-line-value">{renameError()}</span></div></Show>
-      </Show>
-      <div class="settings-line"><span>Share with other clients</span>
-        <Switch label={`Share ${entry.name} with other clients`} checked={entry.shared} onChange={(shared) => void share(entry.origin, shared)} /></div>
+    <For each={servers()}>{(entry) => <>
+      <section class="settings-group" aria-label={entry.name}>
+        <h3>{entry.name}</h3>
+        <Show when={entry.origin === activeOrigin()} fallback={
+          <div class="settings-line" title="A server is renamed from a client connected to it."><span>Name</span><span class="settings-line-value">{entry.name}</span></div>}>
+          <label class="settings-line" title="The server's name, for every client and on the network."><span>Name</span>
+            <Input aria-label={`Name of ${entry.name}`} value={entry.name}
+              onChange={(event) => void rename(entry.origin, event.currentTarget.value)} /></label>
+          <Show when={renameError()}><p class="settings-line-note">{renameError()}</p></Show>
+        </Show>
+        <div class="settings-line"><span>Share with other clients</span>
+          <Switch label={`Share ${entry.name} with other clients`} checked={entry.shared} onChange={(shared) => void share(entry.origin, shared)} /></div>
+        <Show when={entry.id}>
+          <div class="settings-line" title="The server's identity key, which vouches for its TLS certificate."><span>Identity</span><span class="settings-line-value"><code>{entry.id?.slice(0, 8)}</code></span></div>
+        </Show>
+        {/* The one in use withholds only the button that would break it. */}
+        <Show when={entry.origin !== activeOrigin()}>
+          <div class="settings-line"><span>Forget this server</span>
+            <Button variant="ghost" size="sm" aria-label={`Forget ${entry.name}`} onClick={() => void forget(entry.origin)}>
+              <Trash2Icon /> Forget
+            </Button></div>
+        </Show>
+      </section>
       {/*
         * Listed even when there is only one, because one address is still the
         * answer to "how does this client reach it" -- and a server that later
@@ -108,18 +113,24 @@ export function ServersSettingsTile() {
         * having changed shape. The row says which one is in use, about the
         * address rather than about the server.
         */}
-      <For each={pathsOf(entry)}>{(path) => <div class="settings-line" data-current={inUse(entry, path) || undefined}>
-        <span><code>{path.origin}</code><em>{serverPathLabel(path)}</em></span>
-        <span class="settings-line-value">{inUse(entry, path) ? "In use" : ""}</span>
-      </div>}</For>
-      {/* The one in use withholds only the button that would break it. */}
-      <Show when={entry.origin !== activeOrigin()}>
-        <div class="settings-line"><span>Forget this server</span>
-          <Button variant="ghost" size="sm" aria-label={`Forget ${entry.name}`} onClick={() => void forget(entry.origin)}>
-            <Trash2Icon /> Forget
-          </Button></div>
+      <section class="settings-group" aria-label={`Routes to ${entry.name}`}>
+        <h3>Routes to {entry.name}</h3>
+        <For each={pathsOf(entry)}>{(path) => <div class="settings-line" data-current={inUse(entry, path) || undefined}>
+          <span>{serverPathLabel(path)}<em><code>{path.origin.replace(/^https?:\/\//, "")}</code></em></span>
+          <span class="settings-line-value">{inUse(entry, path) ? "In use" : ""}</span>
+        </div>}</For>
+      </section>
+      {/* Live connections, so only the server this client is on can say. */}
+      <Show when={entry.origin === activeOrigin() && connected().length}>
+        <section class="settings-group" aria-label={`Connected to ${entry.name}`}>
+          <h3>Connected to {entry.name}</h3>
+          <For each={connected()}>{(client) => <div class="settings-line" data-current={(client.id && client.id === connectionId()) || undefined}>
+            <span>{kindLabel(client.kind)}<em>{client.id && client.id === connectionId() ? "This client" : ""}</em></span>
+            <span class="settings-line-value">{shortBuild(client.build)} · {since(client.connectedAt)}</span>
+          </div>}</For>
+        </section>
       </Show>
-    </section>}</For>
+    </>}</For>
     <Show when={!servers().length}><p class="settings-line-note" data-tone="quiet">No servers yet.</p></Show>
     {/*
       * A standalone window is one origin and cannot be sent to another, so the

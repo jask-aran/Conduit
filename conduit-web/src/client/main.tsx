@@ -15,7 +15,7 @@ import "solid-sonner/styles.css";
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
 import { phoneLayerOpen } from "@/components/phone-overlays";
-import { Button, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/primitives";
+import { Button, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Spinner } from "@/components/primitives";
 import { ContextBar, ContextBreakdown } from "./chat/context-gauge";
 import { contextUsagePercent } from "./chat/context-metrics";
 import { api, apiWhenServed, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./api/client";
@@ -341,9 +341,13 @@ function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) =
 
   return <form class="native-server-card" onSubmit={submit}>
     <Show when={!props.adding}><HarnessMark id="conduit" class="native-server-mark" /><h1>Connect to your server</h1></Show>
-    <p class="native-server-lede">{recordOnly ? "This browser can only be signed in to the server that served it, so Conduit remembers the address and opens it in place."
-      : verifiedOrigin() ? "Server confirmed. Enter your Conduit password."
-        : "Enter the address of your Conduit server. HTTPS, unless it is on this machine or this network."}</p>
+    {/* One line, and in the dialog only when it says something the title
+        and the fields do not (DESIGN.md: a dialog is the title and the choice). */}
+    <Show when={verifiedOrigin() || recordOnly || !props.adding}>
+      <p class="native-server-lede">{verifiedOrigin() ? "Server confirmed. Enter your Conduit password."
+        : recordOnly ? "A browser opens another server in place of this one."
+          : "HTTPS, unless the server is on this machine or this network."}</p>
+    </Show>
 
     {/*
       * What is on this network, offered before the address field rather than
@@ -363,10 +367,8 @@ function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) =
     </Show>
     <Show when={!verifiedOrigin()}>
       <Show when={canDiscoverServers()} fallback={<p class="native-server-hint">Finding servers on this network needs the Conduit app.</p>}>
-        <Show when={found().length} fallback={
-          <p class="native-server-hint">{searching() ? "Looking for servers on this network…" : "No servers found on this network."}</p>
-        }>
-          <p class="native-server-group">On this network</p>
+        <p class="native-server-group">On this network<Show when={searching()}><Spinner class="native-server-searching" /></Show></p>
+        <Show when={found().length} fallback={<Show when={!searching()}><p class="native-server-hint">Nothing here yet.</p></Show>}>
           <ul class="native-server-found">
             <For each={found()}>{(server) => <li>
               <button type="button" onClick={() => void chooseFound(server)} disabled={submitting()}>
