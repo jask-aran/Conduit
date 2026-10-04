@@ -1,6 +1,5 @@
-import { Portal } from "solid-js/web";
-import { createFullscreenPortalMount } from "@/components/primitives";
-import { For, Show, createSignal, createUniqueId, onCleanup, onMount, type ParentProps } from "solid-js";
+import { For, Show, createSignal, createUniqueId, onCleanup } from "solid-js";
+import { createPhoneMenuPanels, PhoneMenuSubmenu } from "@/components/phone-menu-panels";
 // Kobalte's public dropdown-menu entrypoint does not expose this hook, but its
 // menu content uses the same context. The compiled chunk keeps the context
 // identity shared with the public component.
@@ -53,70 +52,18 @@ export function MobileComposerOptions(props: {
   const selectedPermissionLabel = () => composer.permissions?.profiles().find((profile) => profile.id === composer.permissions?.selected())?.label || "Default";
   const levels = () => selectedModel()?.thinkingLevels?.length ? selectedModel()!.thinkingLevels! : ["off"];
   const profileLocked = () => composer.chat.status() !== "draft";
-  const [panel, setPanel] = createSignal<MobileOptionsPanel>("root");
+  const [open, setOpen] = createSignal(false);
+  const { panel, go, settling, returnToRoot, keepForChild, reset } = createPhoneMenuPanels<MobileOptionsPanel>("root", open);
   const context = () => contextUsagePercent(composer.chat.contextUsage());
   /* A choice in a submenu returns to the options rather than closing them:
      the next thing is often beside it -- a new model's effort. */
   const chosen = (apply: () => void) => { apply(); go("root"); };
-  /* A tap that changes the panel lands on pointerup, and the panel changes
-     under the finger -- but the same tap's compatibility mouse events follow,
-     onto whatever is now beneath it: the effort slider took them as a second
-     choice, a submenu row as a highlight that read as a second pick. The
-     whole menu stays inert until that tap is over.
-     A timer alone lost the race on a slow re-render, so the tap's mouse events
-     are dropped outright until the next finger comes down; the timer only
-     keeps the new panel from being hit-tested in the meantime. */
-  const go = (next: MobileOptionsPanel) => { setPanel(next); settle(); };
-  const [settling, setSettling] = createSignal(false);
-  let settleTimer: number | undefined;
-  let ghostTimer: number | undefined;
-  let dropGhosts = false;
-  const settle = () => {
-    setSettling(true);
-    dropGhosts = true;
-    window.clearTimeout(settleTimer);
-    window.clearTimeout(ghostTimer);
-    settleTimer = window.setTimeout(() => setSettling(false), 400);
-    ghostTimer = window.setTimeout(() => { dropGhosts = false; }, 1500);
-  };
-  const dropGhost = (event: Event) => {
-    if (!dropGhosts) return;
-    event.preventDefault();
-    event.stopPropagation();
-  };
-  const nextTap = () => { dropGhosts = false; };
-  const ghostEvents = ["mousedown", "mouseup", "click"] as const;
-  window.addEventListener("pointerdown", nextTap, true);
-  for (const type of ghostEvents) window.addEventListener(type, dropGhost, true);
-  onCleanup(() => {
-    window.clearTimeout(settleTimer);
-    window.clearTimeout(ghostTimer);
-    window.removeEventListener("pointerdown", nextTap, true);
-    for (const type of ghostEvents) window.removeEventListener(type, dropGhost, true);
-  });
-  const [open, setOpen] = createSignal(false);
   const preserveFocus = (event: Event) => event.preventDefault();
-  const back = (event: KeyboardEvent) => {
-    if (!open() || panel() === "root" || event.key !== "Escape") return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    go("root");
-  };
-  document.addEventListener("keydown", back, true);
-  onCleanup(() => document.removeEventListener("keydown", back, true));
-  const returnToRoot = (event: PointerEvent) => {
-    if (panel() === "root") return;
-    event.preventDefault();
-    event.stopPropagation();
-    go("root");
-  };
 
   return <div class="composer-mobile-plus">
-    <Menu modal={false} open={open()} onOpenChange={(value) => { setOpen(value); if (!value) setPanel("root"); }}>
+    <Menu modal={false} open={open()} onOpenChange={(value) => { setOpen(value); if (!value) reset(); }}>
       <MobileComposerPlusTrigger serverOnline={composer.serverOnline} />
-      <MenuContent class="composer-options-menu" data-settling={settling()} onOpenAutoFocus={preserveFocus} onCloseAutoFocus={preserveFocus} onFocusOutside={preserveFocus} onPointerDownOutside={(event) => {
-        if (event.target instanceof Element && event.target.closest(".composer-options-submenu")) event.preventDefault();
-      }}>
+      <MenuContent class="composer-options-menu" data-settling={settling()} onOpenAutoFocus={preserveFocus} onCloseAutoFocus={preserveFocus} onFocusOutside={preserveFocus} onPointerDownOutside={keepForChild}>
         <div class="composer-options-parent" data-panel-open={panel() !== "root"} onPointerDown={returnToRoot}>
          <MenuGroup>
           <MenuLabel class="composer-options-label composer-options-header"><span>{composer.profiles.length ? "Profile" : "Model"}</span>
@@ -160,7 +107,7 @@ export function MobileComposerOptions(props: {
          </MenuGroup>
         </div>
         <Show when={panel() === "models"}>
-          <MobileOptionsSubmenu settling={settling()} class="composer-model-menu">
+          <PhoneMenuSubmenu parent=".composer-options-menu" settling={settling()} class="composer-model-menu">
             <MenuGroup>
               <Show when={composer.onOpenModelSelector}>
                 <MenuItem onSelect={() => composer.onOpenModelSelector?.()}><SearchIcon /><span>Search all models…</span></MenuItem>
@@ -171,20 +118,20 @@ export function MobileComposerOptions(props: {
                 <For each={composer.models.models()}>{(item) => <MenuRadioItem onSelect={() => go("root")} class="composer-model-option" value={item.spec} closeOnSelect={false}><span>{item.label}</span><small>{item.provider}</small></MenuRadioItem>}</For>
               </MenuRadioGroup>
             </MenuGroup>
-          </MobileOptionsSubmenu>
+          </PhoneMenuSubmenu>
         </Show>
         <Show when={panel() === "effort"}>
-          <MobileOptionsSubmenu settling={settling()} class="composer-effort-menu">
+          <PhoneMenuSubmenu parent=".composer-options-menu" settling={settling()} class="composer-effort-menu">
             <MenuGroup>
               <MenuLabel class="composer-options-label">Effort</MenuLabel>
               <MenuRadioGroup value={composer.models.effort()} onChange={(value) => chosen(() => void composer.models.chooseEffort(value))}>
                 <For each={levels()}>{(level) => <MenuRadioItem onSelect={() => go("root")} value={level} closeOnSelect={false}>{thinkingLabel(level)}</MenuRadioItem>}</For>
               </MenuRadioGroup>
             </MenuGroup>
-          </MobileOptionsSubmenu>
+          </PhoneMenuSubmenu>
         </Show>
         <Show when={panel() === "profiles"}>
-          <MobileOptionsSubmenu settling={settling()} class="composer-profile-menu">
+          <PhoneMenuSubmenu parent=".composer-options-menu" settling={settling()} class="composer-profile-menu">
             <MenuGroup>
               <MenuLabel class="composer-options-label">Profile</MenuLabel>
               <MenuRadioGroup value={composer.activeProfile?.id || ""} onChange={(value) => chosen(() => composer.onChooseProfile(value))}>
@@ -192,14 +139,14 @@ export function MobileComposerOptions(props: {
                   <HarnessMark id={item.implementation || "conduit"} class="size-4" /><span class="composer-profile-copy"><span>{item.label}</span><small>{item.implementation || "conduit"}</small></span></MenuRadioItem>}</For>
               </MenuRadioGroup>
             </MenuGroup>
-          </MobileOptionsSubmenu>
+          </PhoneMenuSubmenu>
         </Show>
         <Show when={panel() === "places" && composer.place}>{(_) => {
           const place = composer.place!;
           const root = () => place.projects.find((project) => project.slug === "chat");
           const places = () => place.projects.filter((project) => project.slug !== "chat" && project.state !== "cloning")
             .sort((left, right) => Number(isWorkspace(left)) - Number(isWorkspace(right)) || left.name.localeCompare(right.name));
-          return <MobileOptionsSubmenu settling={settling()} class="composer-places-menu">
+          return <PhoneMenuSubmenu parent=".composer-options-menu" settling={settling()} class="composer-places-menu">
             <MenuGroup>
               <MenuLabel class="composer-options-label">Project</MenuLabel>
               <Show when={place.current && place.current.slug !== "chat" && root()}>
@@ -211,10 +158,10 @@ export function MobileComposerOptions(props: {
                 </MenuItem>}
               </For>
             </MenuGroup>
-          </MobileOptionsSubmenu>;
+          </PhoneMenuSubmenu>;
         }}</Show>
         <Show when={panel() === "permissions"}>
-          <MobileOptionsSubmenu settling={settling()} class="composer-permissions-menu">
+          <PhoneMenuSubmenu parent=".composer-options-menu" settling={settling()} class="composer-permissions-menu">
             <MenuGroup>
               <MenuLabel class="composer-options-label">Permissions</MenuLabel>
               <MenuRadioGroup value={composer.permissions?.selected() || ""} onChange={(value) => chosen(() => void composer.permissions?.choose(value))}>
@@ -230,7 +177,7 @@ export function MobileComposerOptions(props: {
                 </MenuRadioGroup>
               </MenuGroup>
             </Show>
-          </MobileOptionsSubmenu>
+          </PhoneMenuSubmenu>
         </Show>
       </MenuContent>
     </Menu>
@@ -261,32 +208,3 @@ function MobileComposerPlusTrigger(props: {
 }
 
 export default MobileComposerOptions;
-
-/** Portal the child beside its parent: nested backdrop filters cannot sample
- * the transcript through the parent's backdrop root on Android Chromium. */
-function MobileOptionsSubmenu(props: ParentProps<{ class: string; settling: boolean }>) {
-  const mount = createFullscreenPortalMount();
-  const [position, setPosition] = createSignal({ left: "0px", bottom: "0px" });
-  let panel: HTMLDivElement | undefined;
-  onMount(() => {
-    const parent = document.querySelector<HTMLElement>(".composer-options-menu");
-    if (!parent) return;
-    const place = () => {
-      const box = parent.getBoundingClientRect();
-      const width = panel?.getBoundingClientRect().width ?? 258;
-      const inset = panel ? parseFloat(getComputedStyle(panel).getPropertyValue("--composer-submenu-offset")) : 64;
-      setPosition({ left: `${Math.max(8, Math.min(box.left + inset, innerWidth - width - 8))}px`, bottom: `${innerHeight - box.bottom}px` });
-    };
-    const observer = new ResizeObserver(place);
-    observer.observe(parent);
-    place();
-    window.addEventListener("resize", place);
-    window.visualViewport?.addEventListener("resize", place);
-    onCleanup(() => {
-      observer.disconnect();
-      window.removeEventListener("resize", place);
-      window.visualViewport?.removeEventListener("resize", place);
-    });
-  });
-  return <Portal mount={mount()}><div ref={panel} data-settling={props.settling} data-slot="menu-sub-content" class={`composer-options-submenu ${props.class}`} style={{ position: "fixed", ...position() }}>{props.children}</div></Portal>;
-}

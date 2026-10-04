@@ -872,7 +872,7 @@ svg.lucide { stroke-width: 2.4; }
   .composer-options-parent { transition: opacity .16s ease, filter .16s ease; }
   .composer-options-parent[data-panel-open="true"] { opacity: .38; filter: saturate(.6); }
   .composer-options-parent[data-panel-open="true"] > *, :is(.composer-options-menu, .composer-options-submenu)[data-settling="true"] * { pointer-events: none; }
-  .composer-options-submenu { --composer-submenu-offset: 51.2px; position: absolute; bottom: 0; left: 51.2px; z-index: 1; width: min(206.4px, calc(100vw - 25.6px)); max-height: min(60dvh, 336px); overflow-y: auto; }
+  .composer-options-submenu { --phone-submenu-offset: 51.2px; position: absolute; bottom: 0; left: 51.2px; z-index: 1; width: min(206.4px, calc(100vw - 25.6px)); max-height: min(60dvh, 336px); overflow-y: auto; }
   [data-slot="menu-content"].composer-options-menu [role="menuitem"],
   [data-slot="menu-sub-content"].composer-options-submenu [role="menuitem"],
   [data-slot="menu-sub-content"].composer-options-submenu [role="menuitemradio"] {
@@ -1650,7 +1650,7 @@ svg.lucide { stroke-width: 2.4; }
   .composer-options-parent { transition: opacity .16s ease, filter .16s ease; }
   .composer-options-parent[data-panel-open="true"] { opacity: .38; filter: saturate(.6); }
   .composer-options-parent[data-panel-open="true"] > *, :is(.composer-options-menu, .composer-options-submenu)[data-settling="true"] * { pointer-events: none; }
-  .composer-options-submenu { --composer-submenu-offset: 64px; position: absolute; bottom: 0; left: 64px; z-index: 1; width: min(258px, calc(100vw - 32px)); max-height: min(60dvh, 420px); overflow-y: auto; }
+  .composer-options-submenu { --phone-submenu-offset: 64px; position: absolute; bottom: 0; left: 64px; z-index: 1; width: min(258px, calc(100vw - 32px)); max-height: min(60dvh, 420px); overflow-y: auto; }
   [data-slot="menu-content"].composer-options-menu [role="menuitem"],
   [data-slot="menu-sub-content"].composer-options-submenu [role="menuitem"],
   [data-slot="menu-sub-content"].composer-options-submenu [role="menuitemradio"] {
@@ -1693,6 +1693,15 @@ svg.lucide { stroke-width: 2.4; }
      secondary text (latency, route kind) steps down so the names lead. */
   :is([data-slot="menu-content"], [data-slot="menu-sub-content"]).server-switcher-menu [role^="menuitem"] { min-height: 38px; padding: 8px 9px; gap: 8px; border-radius: 9px; font-size: 13px; }
   .server-switcher-menu .server-row-latency { font-size: 11px; }
+  /* Phone child panels (components/phone-menu-panels.tsx): the parent dims and
+     only returns to itself while a child is open, and neither takes the tap
+     that changed panels. */
+  .phone-menu-parent { transition: opacity .16s ease, filter .16s ease; }
+  .phone-menu-parent[data-panel-open="true"] { opacity: .38; filter: saturate(.6); }
+  .phone-menu-parent[data-panel-open="true"] > *, [data-settling="true"] :is(.phone-menu-parent, .phone-menu-parent *), .phone-menu-submenu[data-settling="true"] * { pointer-events: none; }
+  .phone-menu-submenu.server-route-menu { --phone-submenu-offset: 48px; width: min(258px, calc(100vw - 32px)); max-height: min(60dvh, 420px); overflow-y: auto; padding: 4px; border-radius: 14px; }
+  .phone-menu-submenu.server-route-menu [role^="menuitem"] { min-height: 38px; padding: 8px 9px; gap: 8px; border-radius: 9px; font-size: 13px; }
+  .phone-menu-submenu.server-route-menu .server-row-latency { font-size: 11px; }
   .server-switcher-menu .server-route-label code { font-size: 10px; }
   .settings-shell { width: calc(100vw - 24px); height: calc(100dvh - 24px); }
   .settings-rail { width: 132px; }
@@ -2827,4 +2836,4 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .pair-details dd { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
 
 /* Child panels are portaled above their parent and use the shared frost. */
-.composer-options-submenu[data-slot="menu-sub-content"] { z-index: 101; }
+.phone-menu-submenu[data-slot="menu-sub-content"] { z-index: 101; }

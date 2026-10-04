@@ -1,6 +1,8 @@
 import { createSignal, For, lazy, onCleanup, Show } from "solid-js";
-import { ExternalLinkIcon, PlusIcon, QrCodeIcon, RefreshCwIcon } from "lucide-solid";
+import { ChevronRightIcon, ExternalLinkIcon, PlusIcon, QrCodeIcon, RefreshCwIcon } from "lucide-solid";
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, Spinner } from "@/components/primitives";
+import { createPhoneMenuPanels, PhoneMenuSubmenu } from "@/components/phone-menu-panels";
+import { isMobileLayout } from "./mobile-layout";
 import { buildHttpUrl } from "../api/transport";
 import { proveServer } from "../platform/server-proof";
 const PairDialog = lazy(() => import("./pair-dialog").then((module) => ({ default: module.PairDialog })));
@@ -174,7 +176,51 @@ export function ServerSwitcher(props: {
   // elsewhere to open, so it is not offered the move and not shown the mark.
   const away = (entry: ServerEntry) => !isInstalledClient() && !isStandaloneBrowser() && entry.origin !== location.origin;
 
-  return <><Menu onOpenChange={onOpenChange}>
+  // Read as the menu opens; its content mounts afresh each time.
+  const phone = () => isMobileLayout();
+  const [menuOpen, setMenuOpen] = createSignal(false);
+  const { panel, go, settling, returnToRoot, keepForChild, reset } = createPhoneMenuPanels<"root" | "routes">("root", menuOpen);
+  const RouteChoices = () => <>
+    <MenuLabel>Route to {serverName()}</MenuLabel>
+    {/*
+      * An installed-to-home-screen browser is shown the routes and
+      * offered none of them: it is one origin, and the only way it could
+      * take another is to navigate, which would put the person in a
+      * browser instead of the app they opened. The rows say so by being
+      * unselectable; why they are is a fact about this client rather
+      * than about this server, so it is stated once in Settings ->
+      * Appearance -> About and not on top of the route list.
+      */}
+    <MenuRadioGroup value={pathIsPinned() ? activePath() || "" : AUTOMATIC} onChange={(origin) => void chooseRoute(origin)}>
+      {/*
+        * Left to itself, the client takes the nearest route that answers
+        * and proves itself. Picking one by hand says otherwise, and is
+        * respected until this is chosen again -- a route someone chose
+        * should not be quietly overruled by something measuring in the
+        * background.
+        */}
+      <Show when={isInstalledClient()}>
+        <MenuRadioItem class="server-route-choice" value={AUTOMATIC}>
+          <span class="server-route-label"><span>Automatic</span>
+            <Show when={inUse()}>{(path) => <code title={path().origin}>{serverPathLabel(path())} · {shortOrigin(path().origin)}</code>}</Show>
+          </span>
+          <span class="server-row-latency ml-auto text-xs text-muted-foreground">
+            {inUse() ? latencyLabel(inUse()!.origin) : ""}
+          </span>
+        </MenuRadioItem>
+      </Show>
+      <For each={activeServerPaths()}>{(path) =>
+        <MenuRadioItem class="server-route-choice" value={path.origin} disabled={(!canReachOtherOrigins() && path.origin !== location.origin) || unreachable(path.origin)}>
+          <span class="server-route-label"><span>{serverPathLabel(path)}</span><code title={path.origin}>{shortOrigin(path.origin)}</code></span>
+          <Show when={!isInstalledClient() && !isStandaloneBrowser() && path.origin !== location.origin}><ExternalLinkIcon class="size-3 text-muted-foreground" /></Show>
+          <span class="server-row-latency ml-auto text-xs text-muted-foreground">
+            {checking() === path.origin ? "Checking…" : latencyLabel(path.origin)}
+          </span>
+        </MenuRadioItem>}</For>
+    </MenuRadioGroup>
+  </>;
+
+  return <><Menu onOpenChange={(open) => { setMenuOpen(open); if (!open) reset(); onOpenChange(open); }}>
     <MenuTrigger class="sidebar-user" tabIndex={-1} onPointerDown={() => { focusBefore = document.activeElement; }} onFocus={(event: FocusEvent) => {
       if (giveBack === undefined) return;
       const before = giveBack;
@@ -187,7 +233,8 @@ export function ServerSwitcher(props: {
         <Show when={props.connectivity === "connecting" || props.connectivity === "reconnecting"} fallback={<span class="runtime-indicator-dot" />}><Spinner class="size-3" /></Show>
       </span>
     </MenuTrigger>
-    <MenuContent class="server-switcher-menu" onCloseAutoFocus={(event) => event.preventDefault()}>
+    <MenuContent class="server-switcher-menu" data-settling={settling()} onPointerDownOutside={keepForChild} onCloseAutoFocus={(event) => event.preventDefault()}>
+      <div class="phone-menu-parent" data-panel-open={panel() !== "root"} onPointerDown={returnToRoot}>
       <Show when={servers().length > 0}>
         <MenuGroup>
           <MenuLabel>Servers</MenuLabel>
@@ -214,52 +261,23 @@ export function ServerSwitcher(props: {
             * is a rarer question than which server, so it does not take a
             * group's worth of the menu to ask.
             */}
-          <MenuSub>
-          <MenuSubTrigger class="server-route-choice">
+          {/* On a phone the routes open as the + menu's panels do: beside the
+              dimmed parent, inside the screen, with the opening tap spent. */}
+          <Show when={phone()} fallback={<MenuSub>
+            <MenuSubTrigger class="server-route-choice">
             <span class="server-route-label"><span>Route</span>
               <Show when={inUse()}>{(path) => <code title={path().origin}>{serverPathLabel(path())} · {shortOrigin(path().origin)}</code>}</Show>
             </span>
-          </MenuSubTrigger>
-          <MenuSubContent class="server-switcher-menu server-route-menu">
-          <MenuLabel>Route to {serverName()}</MenuLabel>
-          {/*
-            * An installed-to-home-screen browser is shown the routes and
-            * offered none of them: it is one origin, and the only way it could
-            * take another is to navigate, which would put the person in a
-            * browser instead of the app they opened. The rows say so by being
-            * unselectable; why they are is a fact about this client rather
-            * than about this server, so it is stated once in Settings ->
-            * Appearance -> About and not on top of the route list.
-            */}
-          <MenuRadioGroup value={pathIsPinned() ? activePath() || "" : AUTOMATIC} onChange={(origin) => void chooseRoute(origin)}>
-            {/*
-              * Left to itself, the client takes the nearest route that answers
-              * and proves itself. Picking one by hand says otherwise, and is
-              * respected until this is chosen again -- a route someone chose
-              * should not be quietly overruled by something measuring in the
-              * background.
-              */}
-            <Show when={isInstalledClient()}>
-              <MenuRadioItem class="server-route-choice" value={AUTOMATIC}>
-                <span class="server-route-label"><span>Automatic</span>
-                  <Show when={inUse()}>{(path) => <code title={path().origin}>{serverPathLabel(path())} · {shortOrigin(path().origin)}</code>}</Show>
-                </span>
-                <span class="server-row-latency ml-auto text-xs text-muted-foreground">
-                  {inUse() ? latencyLabel(inUse()!.origin) : ""}
-                </span>
-              </MenuRadioItem>
-            </Show>
-            <For each={activeServerPaths()}>{(path) =>
-              <MenuRadioItem class="server-route-choice" value={path.origin} disabled={(!canReachOtherOrigins() && path.origin !== location.origin) || unreachable(path.origin)}>
-                <span class="server-route-label"><span>{serverPathLabel(path)}</span><code title={path.origin}>{shortOrigin(path.origin)}</code></span>
-                <Show when={!isInstalledClient() && !isStandaloneBrowser() && path.origin !== location.origin}><ExternalLinkIcon class="size-3 text-muted-foreground" /></Show>
-                <span class="server-row-latency ml-auto text-xs text-muted-foreground">
-                  {checking() === path.origin ? "Checking…" : latencyLabel(path.origin)}
-                </span>
-              </MenuRadioItem>}</For>
-          </MenuRadioGroup>
-          </MenuSubContent>
-          </MenuSub>
+            </MenuSubTrigger>
+            <MenuSubContent class="server-switcher-menu server-route-menu"><RouteChoices /></MenuSubContent>
+          </MenuSub>}>
+            <MenuItem class="server-route-choice" closeOnSelect={false} onSelect={() => go("routes")}>
+            <span class="server-route-label"><span>Route</span>
+              <Show when={inUse()}>{(path) => <code title={path().origin}>{serverPathLabel(path())} · {shortOrigin(path().origin)}</code>}</Show>
+            </span>
+              <ChevronRightIcon class="menu-chevron" />
+            </MenuItem>
+          </Show>
           <Show when={routeError()}><MenuLabel class="server-route-error">{routeError()}</MenuLabel></Show>
         </MenuGroup>
         <MenuSeparator />
@@ -273,6 +291,10 @@ export function ServerSwitcher(props: {
         {props.pwaUpdating ? "Checking for updates…" : "Check for updates"}
       </MenuItem>
       <MenuItem onSelect={props.onLogout}>{servers().length > 1 ? `Sign out of ${serverName()}` : "Sign out"}</MenuItem>
+      </div>
+      <Show when={panel() === "routes"}>
+        <PhoneMenuSubmenu parent=".server-switcher-menu[data-slot='menu-content']" class="server-route-menu" settling={settling()}><RouteChoices /></PhoneMenuSubmenu>
+      </Show>
     </MenuContent>
   </Menu>
   <Show when={pairing()}><PairDialog open={pairing()} onOpenChange={setPairing} /></Show></>;
