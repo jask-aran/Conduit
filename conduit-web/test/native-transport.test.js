@@ -13,7 +13,7 @@ import {
   learnIdentity,
   pathIsPinned,
   pathsOf,
-  pinnedFingerprints,
+  trustedIdentities,
   scopeOf,
   servers,
   pathGeneration,
@@ -299,7 +299,8 @@ test("a verified certificate is kept with its server, and a tampered one is not 
   assert.deepEqual(list[0].secure, { port: 4319, fingerprint });
   assert.equal(list[1].secure, undefined, "a fingerprint of the wrong shape is not a fingerprint");
   assert.equal(list[2].secure, undefined, "nor is a port that is not one");
-  assert.deepEqual(pinnedFingerprints(list), [fingerprint]);
+  assert.deepEqual(trustedIdentities([...list, { origin: "https://four.example", name: "Four", shared: true, id, publicKey: "key" }]),
+    [{ id, publicKey: "key" }], "only a server whose identity key is held can vouch");
 });
 
 test("a signature is checked without asking the platform for the curve", async () => {
