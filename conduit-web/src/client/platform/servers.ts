@@ -449,10 +449,11 @@ export function setServerShared(origin: string, shared: boolean) {
 /*
  * Take what a server said about itself, and fold the list around it.
  *
- * Two addresses the user added separately turn out to be one machine. The
- * entry that answered keeps its name and its place; the other is removed and
- * survives as a path underneath it, so a server registered twice stops looking
- * like two servers without anyone having to notice and tidy up.
+ * Two addresses are one server only once both have answered with the same
+ * id. A shared path is not that: every machine advertises 127.0.0.1, and
+ * that address on a server reached from somewhere else is not this machine.
+ * The entry that answered keeps its name and its place; another entry with
+ * this id is removed and survives as a path underneath it.
  *
  * The addresses the server offers are recorded, not trusted. Every one of them
  * is a claim made by something that could be wrong about its own network -- a
@@ -477,16 +478,22 @@ export function learnIdentity(
   // after this server learned to publish a name. Clearing a label resets it.
   const name = serverName && (self.name === defaultServerName(origin) || self.name === self.serverName)
     ? serverName : self.name;
-  const offered = readPaths(identity?.paths, origin);
-  // An address the user already added, which this server now says is itself.
-  const absorbed = list.filter((entry) => entry.origin !== origin
-    && (entry.id === id || offered.some((path) => path.origin === entry.origin)));
+  // Only an entry that has already answered as this server. A path match is
+  // not an identity: the other row may be a different machine that happens
+  // to use the same address.
+  const absorbed = list.filter((entry) => entry.origin !== origin && entry.id === id);
+  const reachedHere = scopeOf(origin) === "loopback"
+    || self.paths?.some((path) => scopeOf(path.origin) === "loopback")
+    || absorbed.some((entry) => scopeOf(entry.origin) === "loopback");
+  const advertised = readPaths(identity?.paths, origin);
+  const offered = advertised
+    .filter((path) => scopeOf(path.origin) !== "loopback" || reachedHere);
 
   const paths = readPaths([
     ...offered,
     ...(self.paths ?? []),
     ...absorbed.map((entry) => ({ origin: entry.origin, scope: scopeOf(entry.origin) })),
-  ], origin);
+  ], origin).filter((path) => scopeOf(path.origin) !== "loopback" || reachedHere);
 
   const next = list
     .filter((entry) => !absorbed.includes(entry))
@@ -494,11 +501,28 @@ export function learnIdentity(
       ? { ...entry, name, ...(serverName ? { serverName } : {}), id, paths, ...(publicKey ? { publicKey } : {}), ...(secure ? { secure } : {}) }
       : entry);
 
+  if (!reachedHere && publicKey && isInstalledClient()) {
+    void discoverLoopback(origin, id, publicKey, advertised).catch(() => {});
+  }
   if (sameList(next, list)) return;
   // The active server may have been one of the absorbed rows, in which case it
   // is now reached as a path of the survivor rather than as itself.
   const stillActive = next.some((entry) => entry.origin === active()) ? active() : origin;
   persist(next, stillActive);
+}
+
+/** A remote server's loopback is a candidate until it proves the same identity. */
+async function discoverLoopback(origin: string, id: string, publicKey: string, paths: ServerPath[]) {
+  const { proveServer } = await import("./server-proof.ts");
+  for (const path of paths.filter((path) => scopeOf(path.origin) === "loopback")) {
+    if (!(await proveServer(path.origin, id, publicKey)).ok) continue;
+    const list = serverList();
+    const entry = list.find((entry) => entry.origin === origin && entry.id === id && entry.publicKey === publicKey);
+    if (!entry) return;
+    const next = list.map((item) => item === entry
+      ? { ...item, paths: readPaths([...(item.paths ?? []), path], origin) } : item);
+    if (!sameList(next, list)) persist(next, active());
+  }
 }
 
 function sameList(left: ServerEntry[], right: ServerEntry[]) {

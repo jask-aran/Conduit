@@ -162,17 +162,34 @@ test("a path is chosen underneath the server, and changing server drops it", () 
   assert.equal(activePath(), "http://10.0.0.5:4310", "not the route to the server we left");
 });
 
-test("two addresses that answer with the same id become one server", () => {
-  const id = "a".repeat(32);
+test("servers stay apart unless they have answered as the same id", () => {
+  const home = "a".repeat(32);
+  const vps = "b".repeat(32);
   // The list is module state shared with the test above, so this asserts on
   // the rows it touches rather than on the length of the whole list.
   addServer("https://conduit.tailnet.ts.net", "Home");
   addServer("http://127.0.0.1:4310", "Loopback");
   addServer("http://192.168.0.128:4310", "Desk");
+  addServer("https://conduit.example.com", "Away");
   setActiveServer("https://conduit.tailnet.ts.net");
 
+  // A remote server advertising 127.0.0.1 does not swallow the server already
+  // held at that address, and that address is not a route to the remote one.
+  learnIdentity("https://conduit.example.com", {
+    id: vps,
+    paths: [
+      { origin: "http://127.0.0.1:4310", scope: "loopback" },
+      { origin: "https://conduit.example.com", scope: "public" },
+    ],
+  });
+  assert.equal(servers().find((item) => item.origin === "http://127.0.0.1:4310")?.name, "Loopback");
+  const remote = servers().find((item) => item.origin === "https://conduit.example.com");
+  assert.equal(remote.paths.some((path) => path.origin === "http://127.0.0.1:4310"), false);
+
+  // The loopback row answers as Home. Now it is a route, not a second server.
+  learnIdentity("http://127.0.0.1:4310", { id: home });
   learnIdentity("https://conduit.tailnet.ts.net", {
-    id,
+    id: home,
     paths: [
       { origin: "http://127.0.0.1:4310", scope: "loopback" },
       { origin: "http://192.168.0.128:4310", scope: "private" },
@@ -180,16 +197,14 @@ test("two addresses that answer with the same id become one server", () => {
     ],
   });
 
-  // Three rows the person added separately are one server with three routes.
   const entry = servers().find((item) => item.origin === "https://conduit.tailnet.ts.net");
-  for (const absorbed of ["http://127.0.0.1:4310", "http://192.168.0.128:4310"]) {
-    assert.equal(servers().some((item) => item.origin === absorbed), false,
-      `${absorbed} is no longer a server of its own`);
-  }
+  assert.equal(servers().some((item) => item.origin === "http://127.0.0.1:4310"), false,
+    "the address that answered as this id is no longer a server of its own");
+  assert.equal(servers().find((item) => item.origin === "http://192.168.0.128:4310")?.name, "Desk",
+    "a shared LAN address is not an identity");
   assert.equal(entry.name, "Home", "the entry that answered keeps its name");
-  assert.equal(entry.id, id);
+  assert.equal(entry.id, home);
   assert.deepEqual(pathsOf(entry).map((path) => path.origin), [
-    // Nearest first, so the menu reads in the order the paths cost.
     "http://127.0.0.1:4310",
     "http://192.168.0.128:4310",
     "https://conduit.tailnet.ts.net",
