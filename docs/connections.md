@@ -181,14 +181,14 @@ public address the link opened with.
 
 Local-only setup still offers pairing, labelled "This machine only".
 
-Built: setup (and `conduit-server connect`, to change it later) asks between
-**This machine only** and **This machine and network**. The first binds
-loopback; such a server publishes no network routes and does not advertise on
-the LAN, so a VPS no longer offers its private addresses as routes. Tailscale,
-proxies and SSH are configured separately and coexist with either choice.
-
-Still to do: CLI status and pairing output use the same server name and route
-terms as the clients.
+Built: setup (and `conduit-server connect`, to change it later) says this
+computer always reaches the server and asks who else does, in one checklist
+with the current choices ticked: **Devices on this network** ("leave off on a
+VPS"), Tailscale, a tunnel or reverse proxy, SSH. Without the network the
+server binds loopback, publishes no network routes and does not advertise on
+the LAN. CLI status, the ready box and `pair` name the server and use the
+clients' route terms. Clients list a loopback route only while it answers
+from them.
 
 ## 3. Knowing who is connected at restart
 
