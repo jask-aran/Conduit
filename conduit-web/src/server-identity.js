@@ -3,7 +3,6 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { attestLeaf, leafFingerprint } from "./server-tls.js";
 import { PRIVATE_HOST } from "./network-hosts.js";
 
 /*
@@ -202,34 +201,12 @@ export class ServerIdentity {
     return rows;
   }
 
-  /*
-   * Vouch for the certificate this server answers on over TLS.
-   *
-   * The attestation is what turns a self-signed leaf into something a paired
-   * client can check: it already holds the public half below, so it can
-   * decide whether a certificate offered mid-handshake belongs to the server
-   * it knows, without trusting a word the certificate says about itself.
-   *
-   * Kept apart from `paths()` deliberately. A path is an address a client may
-   * dial, and no shell can pin a certificate yet -- an `https` origin in that
-   * list today would be a route every client refuses. This is the material
-   * for when they can, reported beside the paths rather than among them.
-   */
-  attestLeaf(spki, port) {
-    this.leaf = {
-      port,
-      fingerprint: leafFingerprint(spki).toString("base64"),
-      attestation: attestLeaf(this.id, spki, this.privateKey),
-    };
-  }
-
   describe() {
     return {
       id: this.id,
       name: this.name,
       publicKey: this.publicKeyValue(),
       paths: this.paths(),
-      ...(this.leaf ? { secure: this.leaf } : {}),
     };
   }
 

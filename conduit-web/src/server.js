@@ -1,5 +1,6 @@
 import http from "node:http";
 import https from "node:https";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -111,15 +112,14 @@ const serverIdentity = await new ServerIdentity(config.identityFile, { port: con
  * the identity key can accept it on any address. See `docs/connections.md`
  * for why the connection has to carry the proof at all.
  */
-const leafStore = config.tlsPort ? new ServerLeaf(config.leafFile) : null;
+const leafStore = new ServerLeaf(config.leafFile);
 const leafFor = () => ({
   commonName: `Conduit ${serverIdentity.id}`,
   hosts: localPaths(config.port).map((origin) => new URL(origin).hostname),
   identityId: serverIdentity.id,
   attest: (spki) => attestLeaf(serverIdentity.id, spki, serverIdentity.privateKey),
 });
-let serverLeaf = leafStore ? await leafStore.ensure(leafFor()) : null;
-if (serverLeaf) serverIdentity.attestLeaf(serverLeaf.spki, config.tlsPort);
+let serverLeaf = await leafStore.ensure(leafFor());
 const lanAdvertisement = new LanAdvertisement({
   identity: serverIdentity,
   enabled: config.advertiseOnLan,
@@ -888,21 +888,37 @@ const handleUpgrade = async (request, socket, head) => {
 server.on("upgrade", handleUpgrade);
 
 /*
- * The same server, over a connection that can prove whose it is.
+ * The same server, over a connection that can prove whose it is, on the same
+ * port.
  *
- * On a port of its own rather than sharing 4310: telling TLS from HTTP on one
- * socket means reading the first bytes of every connection and guessing, and
- * the guess is in front of everything.
+ * Neither server listens. `front` reads the first byte of each connection and
+ * hands the socket to one of them: a TLS ClientHello always opens with a
+ * handshake record (0x16), and no HTTP request starts with that byte, so the
+ * choice is exact rather than a guess. One port means one firewall rule, one
+ * address per route, and nothing extra to forward through a tunnel.
  *
- * Nothing is told about this address yet. `paths()` still offers only `http`
- * origins until both shells accept a leaf by its embedded attestation, in
- * `onReceivedSslError` and `ServerCertificateErrorDetected`. Until then this
- * listens so the attestation can be checked against something real.
+ * Nothing is told about the https scheme yet. `paths()` still offers only
+ * `http` origins until both shells accept a leaf by its embedded attestation,
+ * in `onReceivedSslError` and `ServerCertificateErrorDetected`.
  */
 const secureServer = serverLeaf
   ? https.createServer({ cert: serverLeaf.certificate, key: serverLeaf.privateKey }, app)
   : null;
 secureServer?.on("upgrade", handleUpgrade);
+const TLS_HANDSHAKE = 0x16;
+// A connection that never says anything is held only this long before the
+// byte that decides where it goes.
+const FIRST_BYTE_TIMEOUT_MS = 30_000;
+const front = net.createServer((socket) => {
+  socket.setTimeout(FIRST_BYTE_TIMEOUT_MS, () => socket.destroy());
+  socket.once("readable", () => {
+    const first = socket.read(1);
+    if (!first) return socket.destroy();
+    socket.setTimeout(0);
+    socket.unshift(first);
+    (first[0] === TLS_HANDSHAKE && secureServer ? secureServer : server).emit("connection", socket);
+  });
+});
 /*
  * Checked again for expiry: `ensure` hands back the same leaf until it is
  * near the end of its life, and only then is a new one attested and swapped
@@ -914,9 +930,8 @@ const leafTimer = secureServer ? setInterval(async () => {
     const next = await leafStore.ensure(leafFor());
     if (next === serverLeaf) return;
     serverLeaf = next;
-    serverIdentity.attestLeaf(next.spki, config.tlsPort);
     secureServer.setSecureContext({ cert: next.certificate, key: next.privateKey });
-    console.log(JSON.stringify({ type: "conduit.tls-leaf", state: "reissued", hosts: next.hosts, fingerprint: serverIdentity.leaf.fingerprint }));
+    console.log(JSON.stringify({ type: "conduit.tls-leaf", state: "reissued", notAfter: new Date(next.notAfter).toISOString() }));
   } catch (error) {
     console.warn("Conduit could not re-issue its TLS leaf", error.message);
   }
@@ -933,7 +948,7 @@ async function shutdown(signal) {
   await terminalStream.shutdown?.({ timeoutMs: 1_000 });
   for (const socket of wss.clients) socket.close(1012, "Conduit is restarting");
   const archiveDrain = voiceRecordingStore.drain({ timeoutMs: VOICE_ARCHIVE_SHUTDOWN_TIMEOUT_MS });
-  const closed = new Promise((resolve) => server.close(resolve));
+  const closed = new Promise((resolve) => front.close(resolve));
   server.closeIdleConnections?.();
   server.closeAllConnections?.();
   clearInterval(leafTimer);
@@ -991,26 +1006,15 @@ const warmModelCatalogue = () => catalogFor(runtimeFor({ runtimeKind: "conduit_p
   .list(process.cwd())
   .catch((error) => console.warn("Model catalogue could not be warmed", error.message));
 
-server.listen(config.port, config.host, () => {
+front.listen(config.port, config.host, () => {
   console.log(
     // The bound port, not the requested one: with CONDUIT_PORT=0 the kernel picks
     // it, and announcing the request would announce a zero.
-    `Conduit ${config.release} listening on http://${config.host}:${server.address().port}`,
+    `Conduit ${config.release} listening on http://${config.host}:${front.address().port}${secureServer ? " (and https)" : ""}`,
   );
   // Started here rather than at construction because the port is the one the
   // kernel handed over: with CONDUIT_PORT=0 the requested port is a zero, and
   // an address nothing listens on is worse than no advertisement at all.
-  lanAdvertisement.start(server.address().port);
+  lanAdvertisement.start(front.address().port);
   void warmModelCatalogue();
 });
-
-if (secureServer) {
-  secureServer.listen(config.tlsPort, config.host, () => {
-    console.log(`Conduit also listening on https://${config.host}:${secureServer.address().port} (leaf ${serverIdentity.leaf.fingerprint})`);
-  });
-  // A port already in use is not worth refusing to start over: the plain
-  // listener is what every client uses today, and a server that will not come
-  // up because something else holds 4311 is a worse failure than one whose
-  // certificate nobody can reach yet.
-  secureServer.on("error", (error) => console.warn("Conduit could not listen over TLS", error.message));
-}

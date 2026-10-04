@@ -25,7 +25,6 @@ import { canDiscoverServers, discoverServers, type FoundServer } from "./platfor
 import { proveServer } from "./platform/server-proof";
 import { activeOrigin, addServer, forgetServer, learnIdentity, mergeServerDirectory, servers, trustedIdentities, setActiveServer, switchToServer } from "./platform/servers";
 import { publishTrustedIdentities } from "./platform/certificate-pins.ts";
-import { verifyLeaf } from "./platform/server-proof.ts";
 import { publishServerDirectory } from "./platform/server-directory";
 import { canScanQr, parsePairingLink, QrScanner, redeemPairing } from "./platform/pairing";
 import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
@@ -4783,18 +4782,13 @@ function App() {
       // may be believed about identity: an open endpoint saying "I am the
       // server you hold a token for" is the thing worth being unable to say.
       // A server too old to answer leaves the list exactly as it was.
-      void api<{ id?: string; name?: string; publicKey?: string; paths?: unknown; secure?: unknown }>("/v0/server")
-        .then(async (identity) => {
+      void api<{ id?: string; name?: string; publicKey?: string; paths?: unknown }>("/v0/server")
+        .then((identity) => {
           const origin = activeOrigin();
           if (!origin) return;
-          /*
-           * The certificate claim is checked before it is kept, against the
-           * key this connection just authenticated with. An unverified
-           * fingerprint would be worse than none: it is what the shell then
-           * accepts on every network it meets that certificate on.
-           */
-          const secure = await verifyLeaf(String(identity.id || ""), String(identity.publicKey || ""), identity.secure);
-          learnIdentity(origin, identity, secure ?? undefined);
+          // The identity key learned over this authenticated connection is
+          // what the shell will let vouch for this server's TLS certificate.
+          learnIdentity(origin, identity);
           void publishTrustedIdentities(trustedIdentities());
         })
         .catch(() => { /* an older server has no identity, and needs none */ });
