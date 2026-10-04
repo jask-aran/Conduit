@@ -1692,7 +1692,9 @@ svg.lucide { stroke-width: 2.4; }
   /* The server switcher's rows take the chat menu's touch size; their
      secondary text (latency, route kind) steps down so the names lead. */
   :is([data-slot="menu-content"], [data-slot="menu-sub-content"]).server-switcher-menu [role^="menuitem"] { min-height: 38px; padding: 8px 9px; gap: 8px; border-radius: 9px; font-size: 13px; }
-  .server-switcher-menu .server-row-latency { font-size: 11px; }
+  /* Outranks the menus' rule that sizes every span in a row to the row. */
+  .server-switcher-menu[data-slot] [role^="menuitem"] span.server-row-latency { font-size: 11px; }
+  .server-switcher-menu[data-slot="menu-content"] { max-width: min(280px, calc(100vw - 32px)); }
   /* Phone child panels (components/phone-menu-panels.tsx): the parent dims and
      only returns to itself while a child is open, and neither takes the tap
      that changed panels. */
@@ -1701,7 +1703,7 @@ svg.lucide { stroke-width: 2.4; }
   .phone-menu-parent[data-panel-open="true"] > *, [data-settling="true"] :is(.phone-menu-parent, .phone-menu-parent *), .phone-menu-submenu[data-settling="true"] * { pointer-events: none; }
   .phone-menu-submenu.server-route-menu { --phone-submenu-offset: 48px; width: min(258px, calc(100vw - 32px)); max-height: min(60dvh, 420px); overflow-y: auto; padding: 4px; border-radius: 14px; }
   .phone-menu-submenu.server-route-menu [role^="menuitem"] { min-height: 38px; padding: 8px 9px; gap: 8px; border-radius: 9px; font-size: 13px; }
-  .phone-menu-submenu.server-route-menu .server-row-latency { font-size: 11px; }
+  .phone-menu-submenu.server-route-menu[data-slot] [role^="menuitem"] span.server-row-latency { font-size: 11px; }
   .server-switcher-menu .server-route-label code { font-size: 10px; }
   .settings-shell { width: calc(100vw - 24px); height: calc(100dvh - 24px); }
   .settings-rail { width: 132px; }
