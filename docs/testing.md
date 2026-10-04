@@ -217,8 +217,16 @@ two connection aliases. Read connection values from the current session.
 Keep phone addresses, connection ports, pairing codes and device identifiers
 out of this document.
 
+An empty device list does not mean the phone is gone. `adb.exe mdns services`
+lists its `_adb-tls-connect` port, and stale entries linger beside the current
+one. If `adb.exe connect` to the newest port fails with no reason, the pairing
+was lost: on the phone open Wireless debugging → Pair device with pairing code,
+then `adb.exe pair <ip:port> <code>` using the `_adb-tls-pairing` address, and
+connect again. This happened on 2026-10-04.
+
 The verified update command, with `PHONE_SERIAL` set from that device list,
-is:
+is below. Called from WSL, `adb.exe` needs the APK's Windows path
+(`wslpath -w ~/conduit-dev.apk`):
 
 ```bash
 adb -s "$PHONE_SERIAL" install -r ~/conduit-dev.apk
@@ -226,7 +234,7 @@ adb -s "$PHONE_SERIAL" install -r ~/conduit-dev.apk
 
 This updates Conduit Dev and keeps its app data. Check for `Success`, then
 reopen Conduit Dev. The latest successful install of this artifact was on
-2026-10-03.
+2026-10-04.
 
 Measured on this connection: five shell commands took 19–40 ms, median
 30 ms; a screenshot took 958 ms. Scripted input is fast enough for short
