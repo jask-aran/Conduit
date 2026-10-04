@@ -162,6 +162,20 @@ test("a path is chosen underneath the server, and changing server drops it", () 
   assert.equal(activePath(), "http://10.0.0.5:4310", "not the route to the server we left");
 });
 
+test("a route the server no longer offers is dropped the next time it is asked", () => {
+  const id = "f".repeat(32);
+  addServer("https://purge.example", "Purge");
+  setActiveServer("https://purge.example");
+  learnIdentity("https://purge.example", { id, paths: [
+    { origin: "http://10.1.1.1:4310", scope: "private" },
+    // Reached from elsewhere, so this loopback is the other machine's.
+    { origin: "http://127.0.0.1:4310", scope: "loopback" },
+  ] });
+  learnIdentity("https://purge.example", { id, paths: [{ origin: "http://10.1.1.2:4310", scope: "private" }] });
+  const entry = servers().find((item) => item.origin === "https://purge.example");
+  assert.deepEqual(pathsOf(entry).map((path) => path.origin), ["http://10.1.1.2:4310", "https://purge.example"]);
+});
+
 test("servers stay apart unless they have answered as the same id", () => {
   const home = "a".repeat(32);
   const vps = "b".repeat(32);
