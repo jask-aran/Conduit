@@ -1,11 +1,105 @@
-# Connections: what is still to build
+# Connections: unified server connections and lifecycle
 
-Two pieces of unbuilt work about how clients connect to a server: proving that
-an address really is your server, and knowing which clients are connected when
-the server restarts. Both rest on the same idea: a connection should carry its
-own identity rather than be taken on trust.
+The remaining connection work covers one shared connection experience,
+server discovery and route trust, and client readiness when the server restarts.
+This document separates the current implementation from the agreed work.
+[`servers.md`](servers.md) describes the existing server identity, route list,
+and shared directory.
 
-## 1. Proving the server by its connection
+## Terms
+
+One vocabulary in the clients, the CLI and setup output:
+
+| Term | Means |
+| --- | --- |
+| **Loopback** | a route on `127.0.0.0/8` or `[::1]` that proved this server's identity |
+| **Network** | a private-range route (`10/8`, `172.16/12`, `192.168/16`) |
+| **Tailscale** | a `.ts.net` route; a provider label, public scope |
+| **Internet** | any other public route |
+| **This machine only / This machine and network** | the two setup choices |
+
+"On this machine" is deferred (see Identity, discovery, and routes).
+
+## 1. Connection experience, discovery, and routes
+
+### Connection experience
+
+One connection component, shown in three places:
+
+- **First connection screen**: a full page in the pane.
+- **Settings → Servers**: the Settings list (DESIGN.md, Components → Settings list).
+- **Sidebar server switcher**: a dropdown menu. "Add server" is its single
+  footer action under a hairline, and it opens the component in a
+  `FrostDialog` (a full-screen bubble on a phone).
+
+Behaviour:
+
+- **QR pairing comes first**, then discovered servers, then an entered address.
+- In installed clients, opening the component starts a bounded search for
+  servers on this machine and network. Results append as they arrive and never
+  reorder under the cursor. A small spinner beside the heading shows while
+  searching; an empty search reads "Nothing here yet." Discovery stops when the
+  component closes. Both shells stream results; `discoverServers()` currently
+  returns them all once at the timeout.
+- A discovered server whose identity ID is already saved shows as that saved
+  server, not as a second row.
+- Selecting a discovered server opens the normal password screen. Successful
+  login saves it. Unpaired discoveries remain temporary.
+- Browsers keep address-based connections: the address field, a line saying
+  discovery needs the app, and a record rather than a sign-in.
+- Settings and the switcher show saved servers, connection state, active route,
+  and "Add server", from the same rows and route controls.
+- Connection state is the runtime dot: a healthy server shows the dot alone, a
+  label only when there is something to say, one indicator per row, worst
+  state first.
+- The switcher shows available routes. A pinned route that has failed stays in
+  the list, dimmer and struck through, with Automatic as the next choice. That
+  row is the fallback offer; there is no toast or modal. Settings lists every
+  candidate, available or not.
+- Support any number of servers.
+
+**Naming.** The server owns one canonical name. `CONDUIT_SERVER_NAME` seeds it
+at first start only. Today it overrides the saved name on every start
+(`server-identity.js`), which would undo a rename. Renaming from any client
+updates the server's name for every client and republishes the mDNS instance
+name. Per-client labels go away.
+
+**First contact.** First contact through discovery accepts the advertised
+identity and uses normal password login. A LAN impostor that answers first
+receives **the password**, not just a session token, and that password works
+against the real server over any route. This risk is accepted, which is why QR
+pairing comes first: it supplies the identity from trusted setup output. No
+comparison codes or new password protocol.
+
+### Identity, discovery, and routes
+
+Keep the existing server ID and identity key authoritative. Addresses find a
+server; they do not define it. Merge routes only after verifying the same
+identity.
+
+- Reuse mDNS for network discovery. Return route candidates rather than
+  discarding all but one address.
+- Show available routes first; keep unavailable candidates in Settings. Keep
+  local availability evidence on the client, separate from the shared server
+  directory.
+
+Automatic selection prefers a verified Loopback route, then Network, then
+Tailscale or Internet. Probe candidates concurrently with bounded timeouts;
+`path-selector.ts` probes them one at a time today. Wait for a quiet moment
+before upgrading a working connection; recover immediately when an automatic
+route fails. Preserve manual pins.
+
+Route selection for a saved server can reuse its known candidates during
+connection and recovery. It does not start a new network discovery scan.
+
+**Deferred: "On this machine".** A loopback response alone cannot tell this
+machine's server from an SSH forward of a remote one, and routing does not
+need to: a verified Loopback route already ranks first. The label needs a
+host-local registration file (identity, name, candidates, no secrets) visible to
+Windows, WSL and the development container. That is deferred until there is a
+concrete shared path and a named writer. Until then the route reads Loopback.
+
+## 2. Proving the server by its connection
 
 ### Why
 
@@ -21,8 +115,10 @@ channel to bind the proof to.
 
 ### The answer
 
-TLS with a pinned leaf. The handshake becomes the proof: a relay cannot
-complete it without the leaf's private key.
+TLS whose certificate the identity key vouches for. The handshake becomes the
+proof: a relay cannot complete it without the certificate's private key, and
+only the identity key can vouch for that certificate. This protects route
+changes after pairing; it does not remove the first-contact risk accepted above.
 
 ### Built
 
@@ -37,40 +133,75 @@ complete it without the leaf's private key.
 - **Android.** `ConduitWebViewClient` checks the leaf in
   `onReceivedSslError`, which also fires for `wss://` (measured). The page
   verifies the attestation with WebCrypto, falling back to `@noble/ed25519` on
-  WebViews older than 137 (`client/platform/signatures.ts`), and hands the pin
-  to `ConduitTlsPlugin` (`client/platform/certificate-pins.ts`).
+  WebViews older than 137 (`client/platform/signatures.ts`), and hands the
+  SPKI fingerprint to `ConduitTlsPlugin` (`client/platform/certificate-pins.ts`).
 
-### To build, in order
+### To build
 
-1. **Windows.** Handle WebView2's `ServerCertificateErrorDetected` in the Tauri
-   shell. It is not yet known whether that event fires for WebSockets, and the
-   only way to find out is to write the handler and run a debug build.
-2. **Tests.** Both shells need a test that a *wrong* attestation is refused,
-   not only that a right one is accepted. "Accept any certificate" is the
-   natural bug, and it is worse than today.
-3. **`https` origins in `paths()`.** Only once both shells can pin.
-4. **Addresses as candidates.** With proof in the handshake, a wrong address
-   just fails, so `paths()` becomes a list of candidates that the path
-   selector races (like Tailscale, Syncthing or ICE). At the same time, revert
-   `disableIPv6` in `lan-advertisement.js` and decide whether the attestation
-   also travels in mDNS.
+**Trust the identity key, not each leaf.** Today a pin is a leaf fingerprint,
+so every re-issue needs a new attestation delivered before the TLS route
+works again. `/v0/server` needs a session, and the TLS port fails until the
+pin is updated, so neither can deliver it. Instead:
 
-### Open
+- Carry the attestation inside the leaf as a non-critical X.509 extension.
+- Each shell accepts a self-signed leaf whose embedded attestation verifies
+  against an identity public key the client holds. The shell holds identity
+  keys, not leaf fingerprints.
+- Stop re-issuing on address changes. Re-issue only near expiry; an attested
+  leaf needs no client-side change. Android's `getPrimaryError()` reports
+  `SSL_UNTRUSTED` over `SSL_IDMISMATCH`, so SANs are not what is checked anyway.
+- Discovery already advertises the identity key, so a discovered server can be
+  connected over TLS before login without a temporary pin or an advertised
+  attestation. Save the identity only after successful authentication.
+- Forgetting a server removes its key from the shell and clears cached
+  certificate approvals.
 
-- A pinned leaf that legitimately changed, re-issued after the server moved
-  networks: how a client re-trusts it without opening the relay again.
-  Re-checking the identity attestation is the likely answer.
-- Whether loopback needs a certificate at all.
-- First contact. Before pairing there is nothing to pin, and an mDNS-advertised
-  key vouches for itself. That needs a check a person can do, such as showing
-  the identity id to match against the server's.
+The cost: shells verify Ed25519 natively. Rust has `ed25519-dalek`; Android
+needs API 33+ `Signature.getInstance("Ed25519")` or a small dependency.
 
-Browsers cannot pin, so they stay on what they have.
+**Android.** Move verification from the fingerprint set to the embedded
+attestation. Check each error flag with `error.hasError(...)` rather than
+`getPrimaryError()`: an expired self-signed leaf currently reports
+`SSL_UNTRUSTED` as its primary error and is accepted, contrary to the class
+comment.
 
-Until this lands, treat a cleartext route as checked against a passive
-impostor and not against an active one.
+**Windows.** Handle WebView2's `ServerCertificateErrorDetected` in the Tauri
+shell with the same rule, for both Network and Loopback. Verify in a debug
+build:
 
-## 2. Knowing who is connected at restart
+- HTTPS and WSS both raise the event (WebSocket coverage is not documented).
+- Whether an `AlwaysAllow` approval is cached by host alone or by host and
+  certificate. If by host alone, a `192.168.0.x` approved on one network stays
+  approved where another machine holds that address. Clear approvals on every
+  route change in that case.
+  [WebView2 reference](https://learn.microsoft.com/en-us/dotnet/api/microsoft.web.webview2.core.corewebview2.servercertificateerrordetected)
+
+With proof in the handshake, addresses become candidates rather than trusted
+instructions. Enable `https` origins in `paths()` only after both shells
+verify. Restore IPv6 support in `lan-advertisement.js` as part of candidate
+handling. Decide then whether `/v0/server/prove` still has a caller; browsers
+cannot reach it across origins, so it may only serve cleartext routes.
+
+Browsers cannot pin, so their existing browser connections remain separate.
+Until native verification and secure route selection land, treat a cleartext
+route as checked against a passive impostor, not an active one.
+
+### Pairing and setup
+
+- Extend the existing pairing link with an identity-and-route bundle in the URL
+  fragment. Keep one-use, five-minute redemption. Apps select a usable verified
+  route; ordinary cameras retain a browser-compatible sign-in link where
+  reachable.
+- When the bundle carries the identity, redeem the pairing code over TLS
+  verified against it, so the code never crosses cleartext.
+- Local-only setup still offers pairing, labelled "This machine only".
+
+Setup offers an explicit choice between **This machine only** and **This
+machine and network**. Configure Tailscale, proxies, and SSH separately so they
+can coexist with either choice. CLI setup, status, and pairing output use the
+same server name and route terms as the clients.
+
+## 3. Knowing who is connected at restart
 
 ### Today
 
@@ -83,33 +214,35 @@ are not warned.
 
 ### To build
 
-1. **Connection identity.** A short-lived ID per live connection, with the
-   client's kind (browser, Windows, Android) and build. This is not a device
-   registry, and it is scoped to the server.
-2. **Readiness.** A restart attempt names the build it is moving to. A browser
-   replies "ready" only once that build's service worker is installed and
-   waiting, or it already runs that build. The reply is authenticated and tied
-   to the attempt, and a stale reply does not count. The restart goes ahead
-   when every eligible connected browser is ready, or at the timeout. Specify
-   how late arrivals, reconnects and several tabs sharing one worker affect
-   the waiting set. A tab with unsent work still does not reload.
-3. **Native clients never hold a restart.** Desktop and Android report their
-   build so the server can explain, or refuse, an incompatible protocol, but
-   their own updates are separate and never delay the server.
-4. **The same handoff in `conduit-server restart`.** Released servers then get
-   it too, not only the dev script.
-5. **Visibility.** Show which clients and builds a server sees, and why a
-   restart waited.
+Extend the existing runtime stream rather than replacing its transport.
 
-### Decide first
+- Give each live connection a short-lived ID and report client kind and build.
+  Remove it when the connection closes.
+- Identify browser service-worker registrations separately from tabs. Browsers
+  expose no stable registration ID, so the client generates one and stores it
+  in IndexedDB, where the worker and every page of that registration read the
+  same value. Show tabs individually, but count each registration once for
+  restart readiness, so a frozen background tab cannot hold a restart that
+  another tab of the same registration has already acknowledged.
+- A restart attempt carries a unique attempt ID and target worker hash. An
+  authenticated HTTP acknowledgement counts only for that attempt and target.
+- Snapshot the eligible registrations when preparation starts. Reconnects
+  retain their registration membership; late arrivals receive preparation
+  without extending the waiting set. Disconnected registrations stop holding
+  the restart.
+- A browser is ready when the target worker is installed and waiting, or
+  already active. Preserve the current update and draft behaviour.
+- Native clients report builds but never delay restart. Keep the existing
+  active-turn drain and force-restart behaviour.
+- Both server launch scripts use the same preparation and readiness mechanism.
+  Proceed when all eligible registrations are ready, or after 20 seconds.
+- Show connected clients, builds, and waiting reasons in Settings → Servers and
+  CLI status. In Settings these are muted state after the server's name, per
+  the Settings list rules, not a new row type.
 
-- Is a participant one tab, or one service-worker registration shared by
-  every tab in a browser profile?
-- Should readiness be an HTTP reply alongside the one-way runtime stream, or
-  should tracking move to a two-way transport?
-- Does the 20-second cap stay fixed, or can the operator set it?
-- What compatibility promise holds between an app build and a server release,
-  when one app visits several servers?
+Connection identity is scoped to the server and lasts only for a live
+connection. It is not a device registry. Client application updates remain
+separate from server restarts.
 
 ### Related, separate
 
@@ -121,3 +254,33 @@ are not warned.
   server happens to be selected. Serving updates from a server is only worth
   doing if GitHub delivery proves inadequate, and then from an explicitly
   chosen source.
+
+## Verification and delivery
+
+Order:
+
+1. Identity-key TLS: embedded attestation, then Android, then Windows.
+2. Discovery and route selection.
+3. Setup and pairing.
+4. Restart readiness.
+
+The shared connection component (§1, Connection experience) does not depend on
+TLS and can land alongside step 1. Update `docs/servers.md` and
+`docs/connections.md` to describe the resulting behaviour.
+
+Use one surgical verification seam per change. Specifically prove:
+
+- wrong-certificate and expired-certificate rejection on both shells
+- Windows HTTPS/WSS verification, and the scope of WebView2's approval cache
+- that a re-issued leaf is accepted with no client change
+- pairing through the network without public-route access, with the code
+  redeemed over TLS
+- that a rename survives a server restart and reaches mDNS
+- stale restart acknowledgement rejection
+- that two tabs sharing one worker count once and native clients never hold
+  restart
+
+No broad test sweeps or legacy migration layer. Assume clients and servers
+update together. Restart the development server after each implemented change
+set for user testing. No implementation or runtime verification has occurred
+during this planning session.
