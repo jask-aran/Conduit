@@ -19,8 +19,21 @@ import { installedClientKind } from "./installed-client.ts";
 export type TrustedIdentity = { id: string; publicKey: string };
 
 let last = "";
+let pending: Promise<void> = Promise.resolve();
 
-export async function publishTrustedIdentities(identities: TrustedIdentity[]): Promise<void> {
+/**
+ * Settles once the shell holds the latest identities. A request dialled as
+ * https before then would meet a shell that does not yet know the server and
+ * refuses its leaf, so the first requests of a cold start wait for this.
+ */
+export const trustSettled = () => pending;
+
+export function publishTrustedIdentities(identities: TrustedIdentity[]): Promise<void> {
+  pending = publish(identities);
+  return pending;
+}
+
+async function publish(identities: TrustedIdentity[]): Promise<void> {
   // Sorted so the same set in another order is the same set, and an identical
   // set costs nothing: this is called whenever the server list changes, which
   // includes changes that have nothing to do with certificates.

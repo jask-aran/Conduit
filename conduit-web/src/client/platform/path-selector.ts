@@ -1,7 +1,7 @@
 import { createEffect, createSignal, onCleanup } from "solid-js";
 import { isInstalledClient } from "./installed-client.ts";
 import { proveServer } from "./server-proof.ts";
-import { activePath, activeServer, clearActivePath, pathIsPinned, pathsOf, setActivePath, type ServerPath } from "./servers.ts";
+import { activePath, activeServer, clearActivePath, dialOrigin, pathIsPinned, pathsOf, setActivePath, type ServerEntry, type ServerPath } from "./servers.ts";
 
 /*
  * Which route to take, decided rather than raced.
@@ -89,13 +89,24 @@ export function startPathSelection(deps: PathSelectorDeps) {
   };
 
   /** Reachable, and able to prove it is the server this client paired with. */
-  const usable = async (path: ServerPath, id: string, publicKey: string) => {
-    if (!await reachable(path.origin)) return false;
+  const usable = async (path: ServerPath, entry: ServerEntry) => {
+    // Probed exactly as it would be dialled, https included, so a route is
+    // only adopted if the connection it will really use works.
+    const origin = dialOrigin(path.origin, entry);
+    if (!await reachable(origin)) return false;
     // Reach is not identity. Something else answering at this address would
     // pass the first check and fail this one, which is the whole reason a
     // route may be adopted without anybody looking at it.
-    return (await proveServer(path.origin, id, publicKey)).ok;
+    return (await proveServer(origin, entry.id!, entry.publicKey!)).ok;
   };
+
+  /**
+   * Every route asked at once, answered in the order given. Probing one at a
+   * time made a client with an unreachable LAN address wait out its timeout
+   * before even asking about the next route.
+   */
+  const probeAll = (paths: ServerPath[], entry: ServerEntry) =>
+    Promise.all(paths.map((path) => usable(path, entry)));
 
   const pass = async () => {
     if (running) return;
@@ -115,9 +126,14 @@ export function startPathSelection(deps: PathSelectorDeps) {
       const currentIndex = routes.findIndex((path) => path.origin === current);
 
       const candidates = nearerThan(routes, current);
+      const currentPath = current ? { origin: current, scope: routes[currentIndex]?.scope ?? "public" as const } : null;
+      const [answers, holding] = await Promise.all([
+        probeAll(candidates, entry),
+        currentPath ? usable(currentPath, entry) : Promise.resolve(false),
+      ]);
 
-      for (const path of candidates) {
-        if (await usable(path, entry.id, entry.publicKey)) {
+      for (const [index, path] of candidates.entries()) {
+        if (answers[index]) {
           if (count(path.origin, true) < ADOPT_AFTER) break;
           // An upgrade is not urgent enough to interrupt anything.
           if (deps.busy()) break;
@@ -130,7 +146,6 @@ export function startPathSelection(deps: PathSelectorDeps) {
       }
 
       if (!current) return;
-      const holding = await usable({ origin: current, scope: routes[currentIndex]?.scope ?? "public" }, entry.id, entry.publicKey);
       if (holding) {
         agree.set(current, Math.max(0, agree.get(current) ?? 0) + 1);
         setSearching(false);
@@ -142,9 +157,10 @@ export function startPathSelection(deps: PathSelectorDeps) {
       // than staying, including one further out, and this does not wait for a
       // quiet moment -- there is nothing left to protect.
       setSearching(true);
-      for (const path of routes) {
-        if (path.origin === current) continue;
-        if (!await usable(path, entry.id, entry.publicKey)) continue;
+      const others = routes.filter((path) => path.origin !== current);
+      const reachableOthers = await probeAll(others, entry);
+      for (const [index, path] of others.entries()) {
+        if (!reachableOthers[index]) continue;
         agree.clear();
         if (path.origin === entry.origin) clearActivePath();
         else setActivePath(path.origin);

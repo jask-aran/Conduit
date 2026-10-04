@@ -1,5 +1,5 @@
 import { createEffect, createSignal, on } from "solid-js";
-import { isInstalledClient } from "./installed-client.ts";
+import { installedClientKind, isInstalledClient } from "./installed-client.ts";
 import { publishTrustedIdentities, type TrustedIdentity } from "./certificate-pins.ts";
 import { LOOPBACK_HOST, PRIVATE_HOST } from "../../network-hosts.js";
 
@@ -47,6 +47,12 @@ export interface ServerEntry {
    * is always a path and is not repeated here.
    */
   paths?: ServerPath[];
+  /**
+   * Whether this server answers TLS on its local routes with a leaf its
+   * identity attests. Learned with the identity, over an authenticated
+   * connection; see `dialOrigin`.
+   */
+  tls?: boolean;
   /**
    * Whether this address travels. The directory is kept by the servers, which
    * is the only channel two origins on one device share -- and it is a channel
@@ -185,7 +191,8 @@ export function readServers(storage: Storageish | null): ServerEntry[] {
     const id = typeof item?.id === "string" && /^[0-9a-f]{32}$/.test(item.id) ? item.id : undefined;
     const publicKey = typeof item?.publicKey === "string" && item.publicKey.length <= 128 ? item.publicKey : undefined;
     const paths = readPaths(item?.paths, origin);
-    list.push({ origin, name, shared, ...(serverName ? { serverName } : {}), ...(id ? { id } : {}), ...(publicKey ? { publicKey } : {}), ...(paths.length ? { paths } : {}) });
+    const tls = item?.tls === true && !!publicKey;
+    list.push({ origin, name, shared, ...(serverName ? { serverName } : {}), ...(id ? { id } : {}), ...(publicKey ? { publicKey } : {}), ...(paths.length ? { paths } : {}), ...(tls ? { tls } : {}) });
   }
   return list;
 }
@@ -338,6 +345,29 @@ export function clearActivePath({ manual = false } = {}) {
 
 export const activeServer = (): ServerEntry | null => serverList().find((entry) => entry.origin === active()) ?? null;
 
+/**
+ * Whether this shell accepts a leaf by its embedded attestation
+ * (`certificate-pins.ts`). Android needs platform Ed25519, which arrived in
+ * Android 13; below that the shell refuses every leaf, so it stays on HTTP.
+ */
+const shellVerifiesTls = installedClientKind === "desktop" || (installedClientKind === "android"
+  && Number(/Android (\d+)/.exec(typeof navigator === "undefined" ? "" : navigator.userAgent)?.[1] ?? 0) >= 13);
+
+/**
+ * The origin to actually dial for a route of `entry`.
+ *
+ * A route is an address; the scheme is how this client reaches it. A local
+ * route (loopback or private, the only ones allowed plain HTTP) is dialled as
+ * https once the server has said it answers TLS and this shell can verify its
+ * leaf -- so the token and everything else stop crossing the network in the
+ * clear. There is no falling back to http for such a server: something able
+ * to block the TLS connection could otherwise choose cleartext for us.
+ */
+export function dialOrigin(origin: string, entry: ServerEntry | null = activeServer()): string {
+  if (!shellVerifiesTls || !entry?.tls || !origin.startsWith("http:") || scopeOf(origin) === "public") return origin;
+  return `https:${origin.slice("http:".length)}`;
+}
+
 function persist(list: ServerEntry[], nextActive: string | null) {
   // A path belongs to the server it reaches, so changing server drops it
   // rather than carrying an address that now names somewhere else.
@@ -433,7 +463,7 @@ export function setServerShared(origin: string, shared: boolean) {
  */
 export function learnIdentity(
   origin: string,
-  identity: { id?: unknown; name?: unknown; publicKey?: unknown; paths?: unknown },
+  identity: { id?: unknown; name?: unknown; publicKey?: unknown; paths?: unknown; tls?: unknown },
 ) {
   const id = typeof identity?.id === "string" && /^[0-9a-f]{32}$/.test(identity.id) ? identity.id : "";
   if (!id) return;
@@ -468,7 +498,7 @@ export function learnIdentity(
   const next = list
     .filter((entry) => !absorbed.includes(entry))
     .map((entry) => entry.origin === origin
-      ? { ...entry, name, ...(serverName ? { serverName } : {}), id, paths, ...(publicKey ? { publicKey } : {}) }
+      ? { ...entry, name, ...(serverName ? { serverName } : {}), id, paths, ...(publicKey ? { publicKey } : {}), tls: identity.tls === true && !!publicKey }
       : entry);
 
   if (!reachedHere && publicKey && isInstalledClient()) {

@@ -8,7 +8,7 @@ const PairDialog = lazy(() => import("./pair-dialog").then((module) => ({ defaul
 /** Not an address: the row that hands the choice back to the client. */
 const AUTOMATIC = "automatic";
 import { canReachOtherOrigins, isInstalledClient, isStandaloneBrowser } from "../platform/installed-client.ts";
-import { activePath, activeOrigin, activeServer, clearActivePath, pathIsPinned, pathsOf, serverPathLabel, servers, setActivePath, switchToServer, type ServerEntry } from "../platform/servers.ts";
+import { activePath, activeOrigin, activeServer, clearActivePath, dialOrigin, pathIsPinned, pathsOf, serverPathLabel, servers, setActivePath, switchToServer, type ServerEntry } from "../platform/servers.ts";
 
 /** An origin as somebody would say it aloud: no scheme, no default port. */
 export const shortOrigin = (origin: string) => origin.replace(/^https?:\/\//, "");
@@ -61,12 +61,13 @@ export function ServerSwitcher(props: {
   // Every address of every server, not just the one each is filed under: the
   // question the menu answers is "which of these is quickest from here", and a
   // path that cannot be reached from this network has to be able to say so.
-  const allPaths = () => servers().flatMap((entry) => pathsOf(entry).map((path) => path.origin));
+  const allPaths = () => servers().flatMap((entry) => pathsOf(entry).map((path) => ({ origin: path.origin, entry })));
 
   const measure = async () => {
     setProbing(true);
-    const measured = await Promise.all(allPaths().map(async (origin) =>
-      [origin, canProbe(origin) ? await probe(origin) : undefined] as const));
+    // Timed as each route is really dialled, https included.
+    const measured = await Promise.all(allPaths().map(async ({ origin, entry }) =>
+      [origin, canProbe(origin) ? await probe(dialOrigin(origin, entry)) : undefined] as const));
     setLatency(Object.fromEntries(measured.filter(([, value]) => value !== undefined)) as Record<string, number | null>);
     setProbing(false);
   };
@@ -152,7 +153,7 @@ export function ServerSwitcher(props: {
 
     setChecking(origin);
     setRouteError("");
-    const proof = await proveServer(origin, entry.id || "", entry.publicKey || "");
+    const proof = await proveServer(dialOrigin(origin, entry), entry.id || "", entry.publicKey || "");
     setChecking("");
     if (proof.ok) return setActivePath(origin, { manual: true });
     setRouteError(proof.reason === "unreachable" ? "That address did not answer."
