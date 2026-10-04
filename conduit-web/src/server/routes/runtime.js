@@ -21,6 +21,7 @@ export function registerRuntimeRoutes(app, {
   projects,
   promptStore,
   serverIdentity,
+  onServerRenamed,
 }) {
   /*
    * Who this server is, and where else it answers.
@@ -50,6 +51,15 @@ export function registerRuntimeRoutes(app, {
   // Cheap to answer but free to ask, so each address gets a small budget.
   // Real clients probe a handful of paths now and then; nothing needs more.
   const proofWindows = new Map();
+  // A rename is the server's, so every client and the LAN see it.
+  app.put("/v0/server/name", async (request, response) => {
+    if (!await serverIdentity.rename(request.body?.name)) {
+      return response.status(400).json({ error: "invalid_name", message: "A server name is 1–63 characters with no control characters." });
+    }
+    onServerRenamed?.(serverIdentity.name);
+    response.json(serverIdentity.describe());
+  });
+
   app.post("/v0/server/prove", (request, response) => {
     const now = Date.now();
     let window = proofWindows.get(request.ip);

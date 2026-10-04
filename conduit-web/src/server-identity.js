@@ -118,7 +118,10 @@ export class ServerIdentity {
     // A file that will not parse is treated like a missing one: a new identity
     // costs a re-pair, a server that cannot start costs everything.
     try { saved = text == null ? null : JSON.parse(text); } catch { saved = null; }
-    this.name = String(this.configuredName || saved?.name || os.hostname() || "Conduit").trim().slice(0, 63) || "Conduit";
+    // The server owns its name. The configured one (setup's
+    // CONDUIT_SERVER_NAME) only seeds it; afterwards a rename from any client,
+    // saved here, is what every client and the LAN see.
+    this.name = String(saved?.name || this.configuredName || os.hostname() || "Conduit").trim().slice(0, 63) || "Conduit";
     this.id = typeof saved?.id === "string" && /^[0-9a-f]{32}$/.test(saved.id) ? saved.id : crypto.randomBytes(16).toString("hex");
     for (const entry of Array.isArray(saved?.observed) ? saved.observed : []) {
       if (typeof entry?.origin === "string" && Number.isFinite(entry.seenAt)) this.observed.set(entry.origin, entry.seenAt);
@@ -140,6 +143,15 @@ export class ServerIdentity {
       // that refuses to start over a file it can regenerate.
       return null;
     }
+  }
+
+  /** Rename for every client. Returns false for a name that cannot be one. */
+  async rename(value) {
+    const name = String(value ?? "").trim();
+    if (!name || name.length > 63 || /[\u0000-\u001f\u007f]/.test(name)) return false;
+    this.name = name;
+    await this.save();
+    return true;
   }
 
   /** The public half, as a client stores it. */

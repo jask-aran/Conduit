@@ -58,11 +58,13 @@ Behaviour:
   candidate, available or not.
 - Support any number of servers.
 
-**Naming.** The server owns one canonical name. `CONDUIT_SERVER_NAME` seeds it
-at first start only. Today it overrides the saved name on every start
-(`server-identity.js`), which would undo a rename. Renaming from any client
-updates the server's name for every client and republishes the mDNS instance
-name. Per-client labels go away.
+**Naming.** Built: the server owns one canonical name. Setup's
+`CONDUIT_SERVER_NAME` seeds it on first start only; afterwards the name saved
+in `identity.json` wins. Renaming in Settings → Servers (for the server this
+client is connected to) or with `conduit-server name` calls
+`PUT /v0/server/name`, which saves it and republishes the mDNS instance name;
+every client takes the server's name on its next identity fetch. Per-client
+labels are gone.
 
 **First contact.** First contact through discovery accepts the advertised
 identity and uses normal password login. A LAN impostor that answers first

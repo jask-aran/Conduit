@@ -392,11 +392,6 @@ export function addServer(value: string, name?: string): ServerEntry {
   return list.find((entry) => entry.origin === origin)!;
 }
 
-export function renameServer(origin: string, name: string) {
-  persist(serverList().map((entry) => entry.origin === origin
-    ? { ...entry, name: name.trim() || entry.serverName || defaultServerName(origin) } : entry), active());
-}
-
 /**
  * Forgetting an address does not discard its token; the caller does that,
  * because only the caller knows whether the secure store answered.
@@ -473,10 +468,8 @@ export function learnIdentity(
 
   const serverName = typeof identity.name === "string" && identity.name.trim()
     ? identity.name.trim().slice(0, 63) : "";
-  // Follow canonical renames, but preserve labels explicitly chosen before or
-  // after this server learned to publish a name. Clearing a label resets it.
-  const name = serverName && (self.name === defaultServerName(origin) || self.name === self.serverName)
-    ? serverName : self.name;
+  // The server owns its name; a client shows it rather than a label of its own.
+  const name = serverName || self.name;
   // Only an entry that has already answered as this server. A path match is
   // not an identity: the other row may be a different machine that happens
   // to use the same address.
