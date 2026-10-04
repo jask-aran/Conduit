@@ -4,6 +4,7 @@
 //! of the interface, and it reaches the same HTTPS and WebSocket endpoints the
 //! Android client does.
 
+mod certificate_trust;
 mod desktop_settings;
 mod dev_update;
 mod discovery;
@@ -49,6 +50,8 @@ pub fn run() {
             update_window::restore(handle);
             if let Some(window) = app.get_webview_window("main") {
                 window_chrome::paint_caption(&window);
+                #[cfg(windows)]
+                certificate_trust::install(&window);
             }
             let asked_to_hide = std::env::args().any(|argument| argument == HIDDEN_LAUNCH_ARG);
             if asked_to_hide && settings.start_hidden {
@@ -81,6 +84,7 @@ pub fn run() {
             dev_update::check_dev_update,
             global_shortcuts::set_global_shortcuts,
             discovery::discover_servers,
+            certificate_trust::trust_identities,
             update_window::remember_update_window
         ])
         .build(tauri::generate_context!())

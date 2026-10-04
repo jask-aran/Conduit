@@ -33,10 +33,10 @@ export async function publishTrustedIdentities(identities: TrustedIdentity[]): P
       const { registerPlugin } = await import("@capacitor/core");
       const plugin = registerPlugin<{ trust(options: { identities: TrustedIdentity[] }): Promise<void> }>("ConduitTls");
       await plugin.trust({ identities: wanted });
+    } else if (installedClientKind === "desktop") {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("trust_identities", { identities: wanted });
     } else {
-      // The desktop shell has no equivalent yet. Until it is written a
-      // desktop client never reaches an https origin, which is the same
-      // position a browser is in.
       return;
     }
     last = key;
