@@ -16,13 +16,14 @@ use std::time::Duration;
 
 use mdns_sd::{ServiceDaemon, ServiceEvent};
 use serde::Serialize;
+use tauri::ipc::Channel;
 
 const SERVICE_TYPE: &str = "_conduit._tcp.local.";
 const MIN_TIMEOUT_MS: u64 = 500;
 const MAX_TIMEOUT_MS: u64 = 10_000;
 
 /// Exactly what was advertised. Shaped into a server by the client.
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct Advertisement {
     name: String,
     addresses: Vec<String>,
@@ -32,15 +33,20 @@ pub struct Advertisement {
     public_key: String,
 }
 
+/// Each server is also sent down `on_found` as it resolves, so a list can
+/// show it without waiting out the whole browse.
 #[tauri::command]
-pub async fn discover_servers(timeout_ms: Option<u64>) -> Result<Vec<Advertisement>, String> {
+pub async fn discover_servers(
+    timeout_ms: Option<u64>,
+    on_found: Channel<Advertisement>,
+) -> Result<Vec<Advertisement>, String> {
     let window = Duration::from_millis(timeout_ms.unwrap_or(3_000).clamp(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS));
-    tauri::async_runtime::spawn_blocking(move || browse(window))
+    tauri::async_runtime::spawn_blocking(move || browse(window, on_found))
         .await
         .map_err(|error| error.to_string())?
 }
 
-fn browse(window: Duration) -> Result<Vec<Advertisement>, String> {
+fn browse(window: Duration, on_found: Channel<Advertisement>) -> Result<Vec<Advertisement>, String> {
     let daemon = ServiceDaemon::new().map_err(|error| error.to_string())?;
     let receiver = daemon.browse(SERVICE_TYPE).map_err(|error| error.to_string())?;
     let deadline = std::time::Instant::now() + window;
@@ -55,9 +61,7 @@ fn browse(window: Duration) -> Result<Vec<Advertisement>, String> {
         match receiver.recv_timeout(left) {
             Ok(ServiceEvent::ServiceResolved(info)) => {
                 let properties = info.get_properties();
-                found.insert(
-                    info.get_fullname().to_string(),
-                    Advertisement {
+                let advertisement = Advertisement {
                         // The instance name, not the DNS name: it is what the
                         // machine calls itself, and what a person picks from.
                         name: info.get_fullname().split('.').next().unwrap_or("").replace("\\032", " "),
@@ -65,8 +69,11 @@ fn browse(window: Duration) -> Result<Vec<Advertisement>, String> {
                         port: info.get_port(),
                         id: properties.get_property_val_str("id").unwrap_or("").to_string(),
                         public_key: properties.get_property_val_str("key").unwrap_or("").to_string(),
-                    },
-                );
+                };
+                // A closed channel is a list that stopped looking; the browse
+                // finishes anyway and returns everything.
+                let _ = on_found.send(advertisement.clone());
+                found.insert(info.get_fullname().to_string(), advertisement);
             }
             Ok(_) => {}
             Err(_) => break,
