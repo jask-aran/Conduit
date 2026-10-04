@@ -236,6 +236,7 @@ status() {
   [[ "${1:-}" == --json ]] && { status_json; return; }
   title "$(code_label)"
   if running; then printf '%s%s%s  %sRunning%s\n' "$G" "$S_ON" "$N" "$B" "$N"; else printf '%s%s%s  %sStopped%s %s· %s start%s\n' "$R" "$S_ERR" "$N" "$B" "$N" "$D" "$NAME" "$N"; fi
+  row name "$(server_name)"
   local url how cmd; while IFS='|' read -r url how cmd; do row open "${C}$url${N} ${D}$how${N}"; [[ -n "$cmd" ]] && row "" "$cmd"; done < <(access_urls)
   row service "$(service_kind) ${D}$NAME${N}"
   row data "${CONDUIT_DATA_ROOT/#$HOME/$TILDE}"
@@ -371,6 +372,8 @@ checklist() { # checklist "Question" "one" "two" … -> REPLY: chosen numbers, s
   local q="$1"; shift
   local -a opts=("$@") on=(); local n=$# sel=0 i key rest
   for i in "${!opts[@]}"; do on[i]=0; done
+  # CHECKLIST_ON="1 3" starts those ticked: the current choices, so enter keeps them.
+  for i in ${CHECKLIST_ON:-}; do (( i >= 1 && i <= n )) && on[i-1]=1; done
   trap 'printf "\e[?25h" >/dev/tty 2>/dev/null || true' EXIT
   printf '%s%s%s  %s\n\e[?25l' "$C" "$S_ASK" "$N" "$q" >$TTY
   _draw() {
@@ -517,39 +520,32 @@ ts_name() { tailscale status --json 2>/dev/null | sed -n 's/.*"DNSName": *"\([^"
 public_ip() { curl -fsS --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}'; }
 lan_ip() { (hostname -I 2>/dev/null || ipconfig getifaddr en0 2>/dev/null) | tr ' ' '\n' | grep -E '^(192\.168|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)' | head -1; }
 
-# Who reaches Conduit directly, then which further ways in to set up as well.
-#
-# "This machine only" binds loopback: the server then publishes no network
-# routes and does not advertise itself on the LAN, which is right for a VPS
-# whose private addresses are not anybody's network. Tailscale, a tunnel and
-# SSH all reach it through loopback, so they work with either choice.
-choose_reach() {
-  local machine="This machine only ${D}— a VPS, or only through Tailscale, a tunnel or SSH${N}"
-  local network="This machine and network ${D}— phones and laptops on the same Wi-Fi${N}"
-  # The current choice is listed first, so pressing enter keeps it.
-  if [[ "${CONDUIT_HOST:-}" == 127.0.0.1 && -f "$ENV_FILE" ]] && grep -q '^CONDUIT_HOST=' "$ENV_FILE"; then
-    choose "Reach it directly from" "$machine" "$network"; [[ "$REPLY" == 1 ]] && REPLY=machine || REPLY=network
-  else
-    choose "Reach it directly from" "$network" "$machine"; [[ "$REPLY" == 1 ]] && REPLY=network || REPLY=machine
-  fi
-  if [[ "$REPLY" == machine ]]; then set_env CONDUIT_HOST 127.0.0.1; else set_env CONDUIT_HOST 0.0.0.0; fi
-}
-
+# This computer always reaches Conduit, so it is not offered. What is asked is
+# who else does: devices on this network (which binds 0.0.0.0, publishes the
+# server's LAN routes and advertises it on mDNS -- wrong for a VPS, whose
+# private addresses are not anybody's Wi-Fi), and the ways in from anywhere.
+# Tailscale, a tunnel and SSH all land on loopback, so they need no network.
 choose_access() {
-  choose_reach
   local ts; ts="$(ts_state)" ts_hint="${D}— your devices, anywhere${N}"
   [[ "$ts" == running ]] && ts_hint="${D}— $(ts_name)${N}"
   [[ "$ts" == missing ]] && ts_hint="${D}— installs it${N}"
   local tunnel_hint="${D}— Cloudflare Tunnel, Caddy, nginx…${N}"
   command -v cloudflared >/dev/null 2>&1 && tunnel_hint="${D}— cloudflared found${N}"
-  checklist "Also reach it from" \
+  # Ticked to begin with: what is set now, and on a first setup the network.
+  local current=""
+  if [[ "${CONDUIT_HOST:-}" != 127.0.0.1 ]] || ! grep -q '^CONDUIT_HOST=' "$ENV_FILE" 2>/dev/null; then current+="1 "; fi
+  has_access tailscale && current+="2 "; has_access proxy && current+="3 "; has_access ssh && current+="4 "
+  note "This computer always reaches it. Choose who else does:"
+  CHECKLIST_ON="$current" checklist "Also reach it from" \
+    "Devices on this network ${D}— phones and laptops on your Wi-Fi; leave off on a VPS${N}" \
     "Tailscale $ts_hint" \
     "A tunnel or reverse proxy $tunnel_hint" \
     "An SSH tunnel ${D}— for a server you SSH into${N}"
+  if [[ " $REPLY " == *" 1 "* ]]; then set_env CONDUIT_HOST 0.0.0.0; else set_env CONDUIT_HOST 127.0.0.1; fi
   local extras=()
-  [[ " $REPLY " == *" 1 "* ]] && extras+=(tailscale)
-  [[ " $REPLY " == *" 2 "* ]] && extras+=(proxy)
-  [[ " $REPLY " == *" 3 "* ]] && extras+=(ssh)
+  [[ " $REPLY " == *" 2 "* ]] && extras+=(tailscale)
+  [[ " $REPLY " == *" 3 "* ]] && extras+=(proxy)
+  [[ " $REPLY " == *" 4 "* ]] && extras+=(ssh)
   local IFS=","; set_env CONDUIT_ACCESS "${extras[*]}"; unset IFS
   if [[ " ${extras[*]} " == *" proxy "* ]]; then
     note "Point it at ${N}${C}http://127.0.0.1:$CONDUIT_PORT${N}${D} and let it do HTTPS · e.g. cloudflared tunnel --url http://127.0.0.1:$CONDUIT_PORT"
@@ -596,13 +592,21 @@ connect_access() {
 }
 connect() { load_env; title "How Conduit is reached"; choose_access; healthy && restart >/dev/null; connect_access; ready_box; outro ""; }
 
-access_urls() { # url|where from|a command to run, if any
-  echo "http://localhost:$CONDUIT_PORT|this computer"
-  [[ "$CONDUIT_HOST" == 0.0.0.0 && -n "$(lan_ip)" ]] && echo "http://$(lan_ip):$CONDUIT_PORT|your network"
-  if has_access tailscale; then local n; n="$(ts_name)"; [[ -n "$n" ]] && echo "https://$n|your tailnet"; fi
-  has_access proxy && [[ -n "${CONDUIT_PUBLIC_URL:-}" ]] && echo "$CONDUIT_PUBLIC_URL|your tunnel"
-  has_access ssh && echo "http://localhost:$CONDUIT_PORT|over SSH, after:|ssh -NL $CONDUIT_PORT:localhost:$CONDUIT_PORT $USER@$(public_ip)"
+# The route words are the apps' (This machine / This network / Tailscale /
+# Internet), so the same route reads the same in the terminal and the menu.
+access_urls() { # url|route|a command to run, if any
+  echo "http://localhost:$CONDUIT_PORT|This machine"
+  [[ "$CONDUIT_HOST" == 0.0.0.0 && -n "$(lan_ip)" ]] && echo "http://$(lan_ip):$CONDUIT_PORT|This network"
+  if has_access tailscale; then local n; n="$(ts_name)"; [[ -n "$n" ]] && echo "https://$n|Tailscale"; fi
+  has_access proxy && [[ -n "${CONDUIT_PUBLIC_URL:-}" ]] && echo "$CONDUIT_PUBLIC_URL|Internet"
+  has_access ssh && echo "http://localhost:$CONDUIT_PORT|This machine, over SSH after:|ssh -NL $CONDUIT_PORT:localhost:$CONDUIT_PORT $USER@$(public_ip)"
   return 0
+}
+# The server's own name, as every client shows it.
+server_name() {
+  local file="${CONDUIT_IDENTITY_FILE:-$CONDUIT_DATA_ROOT/identity.json}"
+  [[ -f "$file" ]] && "$(node_bin)" -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).name || "")' "$file" 2>/dev/null && return
+  printf '%s\n' "${CONDUIT_SERVER_NAME:-$(hostname)}"
 }
 ready_box() {
   local -a lines=(); local url how cmd
@@ -610,7 +614,7 @@ ready_box() {
     lines+=("${C}${B}$url${N}  ${D}$how${N}")
     [[ -n "$cmd" ]] && lines+=("  ${B}$cmd${N}")
   done < <(access_urls)
-  box "Conduit is ready" "${lines[@]}"
+  box "$(server_name) is ready" "${lines[@]}"
 }
 
 # ---------------------------------------------------------------- releases
@@ -710,12 +714,12 @@ pair() {
   fi
   local code; code="$(auth handoff 300)"
   local url="$base/v0/auth/handoff?code=$code&after=%2F$bundle"
-  title "Pair a phone or computer"
+  title "Pair a device with $(server_name)"
   auth qr "$url" 2>/dev/null | sed "s/^/${D}${S_BAR}${N}  /"
   bar
   note "Scan with the Conduit app (Add server ${ARROW} Scan QR code) or a camera."
   note "Or paste into the app's address field: ${N}${C}$url${N}"
-  note "Works once, for five minutes, from ${N}${B}$base${N}"
+  note "Works once, for five minutes. A camera opens ${N}${B}$base${N}${D}; the app takes the nearest route that proves it is this server."
   bar
   local frames="$FRAMES" i=0 waited=0
   while (( waited < 300 )); do

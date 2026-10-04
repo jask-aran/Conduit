@@ -129,7 +129,11 @@ export function ServerSwitcher(props: {
 
   const activeServerPaths = () => {
     const entry = activeServer();
-    return entry ? pathsOf(entry) : [];
+    // "This machine" is offered only while it answers from here: unlike a
+    // network or internet route, one that does not is not a route this
+    // client could have, so it is left out rather than struck through.
+    return entry ? pathsOf(entry).filter((path) => path.scope !== "loopback"
+      || path.origin === activePath() || typeof latency()[path.origin] === "number") : [];
   };
 
   /*
