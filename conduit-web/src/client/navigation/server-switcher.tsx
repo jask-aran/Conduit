@@ -113,8 +113,17 @@ export function ServerSwitcher(props: {
     if (!canProbe(origin)) return "";
     const value = latency()[origin];
     if (value === undefined) return probing() ? "…" : "";
-    return value === null ? "Unreachable" : `${value} ms`;
+    // An unreachable row says so by being struck through (`unreachable`).
+    return value === null ? "" : `${value} ms`;
   };
+
+  /*
+   * Measured from here and found not to answer: a choice that cannot be
+   * picked from this client, dimmed and struck through like any other. A
+   * pinned route that has stopped answering reads the same way, with
+   * Automatic above it as the way out.
+   */
+  const unreachable = (origin: string) => latency()[origin] === null;
 
   const activeServerPaths = () => {
     const entry = activeServer();
@@ -184,7 +193,8 @@ export function ServerSwitcher(props: {
           <MenuLabel>Servers</MenuLabel>
           <MenuRadioGroup value={activeOrigin() || ""} onChange={(origin) => switchToServer(origin, isInstalledClient())}>
             <For each={servers()}>{(entry) =>
-              <MenuRadioItem value={entry.origin} disabled={!canReachOtherOrigins() && entry.origin !== location.origin}>
+              <MenuRadioItem value={entry.origin} disabled={(!canReachOtherOrigins() && entry.origin !== location.origin)
+                || (entry.origin !== activeOrigin() && pathsOf(entry).every((path) => unreachable(path.origin)))}>
                 <span class="truncate">{entry.name}</span>
                 <Show when={away(entry)}><ExternalLinkIcon class="size-3 text-muted-foreground" /></Show>
                 <span class="server-row-latency ml-auto text-xs text-muted-foreground">{latencyLabel(entry.origin)}</span>
@@ -228,7 +238,7 @@ export function ServerSwitcher(props: {
               </MenuRadioItem>
             </Show>
             <For each={activeServerPaths()}>{(path) =>
-              <MenuRadioItem class="server-route-choice" value={path.origin} disabled={!canReachOtherOrigins() && path.origin !== location.origin}>
+              <MenuRadioItem class="server-route-choice" value={path.origin} disabled={(!canReachOtherOrigins() && path.origin !== location.origin) || unreachable(path.origin)}>
                 <span class="server-route-label"><span>{serverPathLabel(path)}</span><code title={path.origin}>{shortOrigin(path.origin)}</code></span>
                 <Show when={!isInstalledClient() && !isStandaloneBrowser() && path.origin !== location.origin}><ExternalLinkIcon class="size-3 text-muted-foreground" /></Show>
                 <span class="server-row-latency ml-auto text-xs text-muted-foreground">

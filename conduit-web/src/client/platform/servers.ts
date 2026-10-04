@@ -482,18 +482,24 @@ export function learnIdentity(
   // not an identity: the other row may be a different machine that happens
   // to use the same address.
   const absorbed = list.filter((entry) => entry.origin !== origin && entry.id === id);
+  // A loopback route already held is not evidence on its own: one recorded in
+  // error would vouch for itself forever. It is re-proved below instead.
   const reachedHere = scopeOf(origin) === "loopback"
-    || self.paths?.some((path) => scopeOf(path.origin) === "loopback")
     || absorbed.some((entry) => scopeOf(entry.origin) === "loopback");
   const advertised = readPaths(identity?.paths, origin);
-  const offered = advertised
-    .filter((path) => scopeOf(path.origin) !== "loopback" || reachedHere);
+  const advertisedOrigins = new Set(advertised.map((path) => path.origin));
+  const local = (path: ServerPath) => scopeOf(path.origin) !== "loopback" || reachedHere;
+  // The route in use stays while the server still offers it, so a purge never
+  // pulls the connection out from under the client.
+  const inUse = (self.paths ?? []).filter((path) => path.origin === activePath() && advertisedOrigins.has(path.origin));
 
+  // What the server says now, not everything it ever said: an address it no
+  // longer holds is gone from every client's list the next time it is asked.
   const paths = readPaths([
-    ...offered,
-    ...(self.paths ?? []),
+    ...advertised.filter(local),
+    ...inUse,
     ...absorbed.map((entry) => ({ origin: entry.origin, scope: scopeOf(entry.origin) })),
-  ], origin).filter((path) => scopeOf(path.origin) !== "loopback" || reachedHere);
+  ], origin);
 
   const next = list
     .filter((entry) => !absorbed.includes(entry))
