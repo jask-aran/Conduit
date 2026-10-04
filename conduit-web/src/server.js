@@ -21,7 +21,7 @@ import { AttachmentStore } from "./attachment-store.js";
 import { RuntimeHub } from "./runtime-hub.js";
 import { defaultsFromEnv, RuntimeSettingsStore } from "./runtime-settings.js";
 import { localPaths, ServerIdentity } from "./server-identity.js";
-import { ServerLeaf } from "./server-tls.js";
+import { attestLeaf, ServerLeaf } from "./server-tls.js";
 import { LanAdvertisement } from "./lan-advertisement.js";
 import { DraftStore } from "./draft-store.js";
 import { PreferencesStore } from "./preferences-store.js";
@@ -107,16 +107,16 @@ const serverIdentity = await new ServerIdentity(config.identityFile, { port: con
  * The certificate this server answers on over TLS, and the identity's word
  * that it is this server's.
  *
- * Issued for the addresses the machine holds right now, because a client's own
- * TLS stack refuses a certificate that does not name the address it dialled
- * before any of our code is consulted -- a laptop changing networks does this
- * routinely. See `docs/pinned-tls-plan.md` for why the connection has to carry
- * the proof at all.
+ * The leaf carries the identity's attestation of its key, so a shell holding
+ * the identity key can accept it on any address. See `docs/connections.md`
+ * for why the connection has to carry the proof at all.
  */
 const leafStore = config.tlsPort ? new ServerLeaf(config.leafFile) : null;
 const leafFor = () => ({
   commonName: `Conduit ${serverIdentity.id}`,
   hosts: localPaths(config.port).map((origin) => new URL(origin).hostname),
+  identityId: serverIdentity.id,
+  attest: (spki) => attestLeaf(serverIdentity.id, spki, serverIdentity.privateKey),
 });
 let serverLeaf = leafStore ? await leafStore.ensure(leafFor()) : null;
 if (serverLeaf) serverIdentity.attestLeaf(serverLeaf.spki, config.tlsPort);
@@ -895,21 +895,20 @@ server.on("upgrade", handleUpgrade);
  * the guess is in front of everything.
  *
  * Nothing is told about this address yet. `paths()` still offers only `http`
- * origins, because a shell that cannot pin a certificate would meet a
- * self-signed one and refuse it -- the pinning lives in `onReceivedSslError`
- * and `ServerCertificateErrorDetected`, neither of which is written. Until
- * then this listens so the attestation can be checked against something real.
+ * origins until both shells accept a leaf by its embedded attestation, in
+ * `onReceivedSslError` and `ServerCertificateErrorDetected`. Until then this
+ * listens so the attestation can be checked against something real.
  */
 const secureServer = serverLeaf
   ? https.createServer({ cert: serverLeaf.certificate, key: serverLeaf.privateKey }, app)
   : null;
 secureServer?.on("upgrade", handleUpgrade);
 /*
- * Checked again as the machine's addresses move, and near expiry: `ensure`
- * hands back the same leaf until one of those makes it unfit, and only then
- * is a new one attested and swapped in under the listener.
+ * Checked again for expiry: `ensure` hands back the same leaf until it is
+ * near the end of its life, and only then is a new one attested and swapped
+ * in under the listener. Address changes no longer matter to it.
  */
-const LEAF_CHECK_MS = 15_000;
+const LEAF_CHECK_MS = 60 * 60 * 1000;
 const leafTimer = secureServer ? setInterval(async () => {
   try {
     const next = await leafStore.ensure(leafFor());

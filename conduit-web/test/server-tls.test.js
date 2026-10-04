@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import tls from "node:tls";
-import { attestLeaf, issueLeafCertificate, leafFingerprint, ServerLeaf, verifyLeafAttestation } from "../src/server-tls.js";
+import { attestLeaf, embeddedAttestation, issueLeafCertificate, leafFingerprint, ServerLeaf, verifyLeafAttestation } from "../src/server-tls.js";
 
 const temporaryFile = async () => path.join(await fs.mkdtemp(path.join(os.tmpdir(), "conduit-leaf-")), "leaf.json");
 const identityKeys = () => {
@@ -55,26 +55,52 @@ test("an attestation says this leaf is that identity's, and refuses one that is 
   assert.ok(leafFingerprint(leaf.spki).length === 32);
 });
 
-test("a stored leaf is reused, and replaced when the addresses change", async () => {
+const attested = (id, keys) => ({ identityId: id, attest: (spki) => attestLeaf(id, spki, keys.privateKey) });
+
+test("a leaf carries its identity's attestation, so the certificate alone can be checked", () => {
+  const identity = identityKeys();
+  const id = crypto.randomBytes(16).toString("hex");
+  const leaf = issueLeafCertificate({ commonName: "Conduit test", hosts: ["127.0.0.1"], ...attested(id, identity) });
+  const parsed = new crypto.X509Certificate(leaf.certificate);
+  assert.ok(parsed.verify(parsed.publicKey), "the extension is inside what the leaf signs");
+
+  const carried = embeddedAttestation(leaf.certificate);
+  assert.ok(verifyLeafAttestation(id, leaf.spki, carried, identity.publicKey));
+  assert.equal(embeddedAttestation(issueLeafCertificate({ commonName: "Conduit test", hosts: ["127.0.0.1"] }).certificate), null);
+});
+
+test("a stored leaf is kept across restarts and address changes", async () => {
   const file = await temporaryFile();
-  const store = new ServerLeaf(file);
-  const first = await store.ensure({ commonName: "Conduit test", hosts: ["127.0.0.1", "192.168.0.128"] });
+  const identity = identityKeys();
+  const id = crypto.randomBytes(16).toString("hex");
+  const first = await new ServerLeaf(file).ensure({ commonName: "Conduit test", hosts: ["127.0.0.1", "192.168.0.128"], ...attested(id, identity) });
 
-  // A client pins the key it was attested, so a restart that mints a new one
-  // asks every paired client to re-check, every boot.
-  const reopened = await new ServerLeaf(file).ensure({ commonName: "Conduit test", hosts: ["192.168.0.128", "127.0.0.1"] });
-  assert.ok(reopened.spki.equals(first.spki), "the same addresses in another order are the same addresses");
-
-  const moved = await new ServerLeaf(file).ensure({ commonName: "Conduit test", hosts: ["127.0.0.1", "10.0.0.4"] });
-  assert.ok(!moved.spki.equals(first.spki), "a leaf that does not name the address it is reached on is refused before our code sees it");
+  // Trust comes from the attestation, not the names, so a laptop moving
+  // networks keeps the leaf every paired client already accepts.
+  const moved = await new ServerLeaf(file).ensure({ commonName: "Conduit test", hosts: ["127.0.0.1", "10.0.0.4"], ...attested(id, identity) });
+  assert.ok(moved.spki.equals(first.spki));
   assert.equal((await fs.stat(file)).mode & 0o777, 0o600);
+
+  // A leaf another identity attested is not this server's.
+  const other = crypto.randomBytes(16).toString("hex");
+  const reissued = await new ServerLeaf(file).ensure({ commonName: "Conduit test", hosts: ["127.0.0.1"], ...attested(other, identity) });
+  assert.ok(!reissued.spki.equals(first.spki));
+});
+
+test("a leaf without an embedded attestation is replaced", async () => {
+  const file = await temporaryFile();
+  const legacy = issueLeafCertificate({ commonName: "Conduit test", hosts: ["127.0.0.1"] });
+  await fs.writeFile(file, JSON.stringify({ ...legacy, attestedBy: "x".repeat(32) }));
+  const replaced = await new ServerLeaf(file).ensure({ commonName: "Conduit test", hosts: ["127.0.0.1"], ...attested("x".repeat(32), identityKeys()) });
+  assert.ok(!replaced.spki.equals(legacy.spki));
+  assert.ok(embeddedAttestation(replaced.certificate));
 });
 
 test("a leaf near its expiry is replaced before it stops working", async () => {
   const file = await temporaryFile();
-  const hosts = ["127.0.0.1"];
-  const first = await new ServerLeaf(file).ensure({ commonName: "Conduit test", hosts });
+  const options = { commonName: "Conduit test", hosts: ["127.0.0.1"], ...attested("a".repeat(32), identityKeys()) };
+  const first = await new ServerLeaf(file).ensure(options);
   const later = new ServerLeaf(file, { now: () => first.notAfter - 24 * 60 * 60 * 1000 });
-  const renewed = await later.ensure({ commonName: "Conduit test", hosts });
+  const renewed = await later.ensure(options);
   assert.ok(!renewed.spki.equals(first.spki));
 });
