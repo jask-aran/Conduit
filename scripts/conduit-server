@@ -689,12 +689,18 @@ pair() {
   healthy || fail "Conduit is not running. $NAME start"
   # The address another device is likeliest to reach, from the routes the
   # server has seen (a tunnel shows up there), before the one setup chose.
-  local base; base="$(auth api GET /v0/server 2>/dev/null | "$(node_bin)" -e '
-    try { const { paths = [] } = JSON.parse(require("fs").readFileSync(0, "utf8"));
+  # The fragment (never sent by a browser) carries the server's identity and
+  # network routes, so the app redeems the code over TLS it vouches for.
+  local described base bundle
+  described="$(auth api GET /v0/server 2>/dev/null | "$(node_bin)" -e '
+    try { const { id, publicKey, paths = [] } = JSON.parse(require("fs").readFileSync(0, "utf8"));
       const rank = { public: 2, private: 1 };
-      const best = paths.filter((p) => rank[p.scope]).sort((a, b) => rank[b.scope] - rank[a.scope])[0];
-      if (best) console.log(best.origin);
+      const routes = paths.filter((p) => rank[p.scope]);
+      const best = [...routes].sort((a, b) => rank[b.scope] - rank[a.scope])[0];
+      const bundle = id && publicKey ? "#conduit=" + Buffer.from(JSON.stringify({ id, key: publicKey, routes: routes.map((p) => p.origin) })).toString("base64url") : "";
+      console.log((best?.origin || "") + "\t" + bundle);
     } catch {}' 2>/dev/null)"
+  base="${described%%$'\t'*}"; bundle="${described#*$'\t'}"; [[ "$described" == *$'\t'* ]] || bundle=""
   [[ -n "$base" ]] || base="$(access_urls | cut -d'|' -f1 | grep -v -E '//(localhost|127\.0\.0\.1)[:/]' | head -1)"
   if [[ -z "$base" ]]; then
     title "Pair a device"
@@ -703,7 +709,7 @@ pair() {
     outro ""; return 1
   fi
   local code; code="$(auth handoff 300)"
-  local url="$base/v0/auth/handoff?code=$code&after=%2F"
+  local url="$base/v0/auth/handoff?code=$code&after=%2F$bundle"
   title "Pair a phone or computer"
   auth qr "$url" 2>/dev/null | sed "s/^/${D}${S_BAR}${N}  /"
   bar

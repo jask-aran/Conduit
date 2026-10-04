@@ -5,6 +5,7 @@ import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
 import { activeServer, pathsOf, type ServerPath } from "../platform/servers.ts";
 import { shortOrigin } from "./server-switcher";
+import { pairingFragment } from "../platform/pairing";
 
 /*
  * Pair a device from a client that is already signed in: the same one-time,
@@ -40,7 +41,12 @@ export function PairDialog(props: { open: boolean; onOpenChange: (open: boolean)
       const response = await authorizedFetch(httpUrl("/v0/auth/pairing"), { method: "POST", headers: { accept: "application/json" } });
       const body = await response.json() as { code?: string; expiresAt?: string; message?: string };
       if (!response.ok || !body.code) throw new Error(body.message || "The server would not make a pairing code.");
-      const url = `${path.origin}/v0/auth/handoff?code=${encodeURIComponent(body.code)}&after=%2F`;
+      // The address a camera opens, plus (in the fragment, which no browser
+      // sends) who the server is and its other ways in, for the app.
+      const entry = activeServer();
+      const routes = entry ? pathsOf(entry).filter((item) => item.scope !== "loopback").map((item) => item.origin) : [];
+      const bundle = entry?.id && entry.publicKey ? pairingFragment({ id: entry.id, publicKey: entry.publicKey }, routes) : "";
+      const url = `${path.origin}/v0/auth/handoff?code=${encodeURIComponent(body.code)}&after=%2F${bundle}`;
       setLink(url);
       setExpiresAt(Date.parse(body.expiresAt || "") || Date.now() + 300_000);
       // Loaded on first use: the dialog is rare and the encoder is not small.
