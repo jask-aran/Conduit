@@ -11,12 +11,10 @@ import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeWebViewClient;
 
 import java.nio.charset.StandardCharsets;
-import java.security.KeyFactory;
+import com.google.crypto.tink.subtle.Ed25519Verify;
+import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
-import java.security.PublicKey;
-import java.security.Signature;
 import java.security.cert.X509Certificate;
-import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -44,8 +42,8 @@ import java.util.Map;
  * did not verify a signature, and it is worse than having no TLS at all,
  * because it accepts every certificate on every network.
  *
- * Ed25519 is in the platform from API 33. Below that this refuses everything,
- * so an older phone stays on its plain-HTTP routes rather than trusting less.
+ * The signature is checked with Tink, so this works on every supported API
+ * level and whatever security providers the image ships.
  */
 public class ConduitWebViewClient extends BridgeWebViewClient {
 
@@ -103,7 +101,7 @@ public class ConduitWebViewClient extends BridgeWebViewClient {
 
     /** The id of the paired identity whose attestation this leaf carries, or null. */
     private static String vouchingIdentity(SslError error) {
-        if (Build.VERSION.SDK_INT < 33 || error.getCertificate() == null) return null;
+        if (error.getCertificate() == null) return null;
         try {
             X509Certificate x509 = error.getCertificate().getX509Certificate();
             if (x509 == null) return null;
@@ -111,20 +109,35 @@ public class ConduitWebViewClient extends BridgeWebViewClient {
             if (signature == null) return null;
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(x509.getPublicKey().getEncoded());
             String hash = Base64.encodeToString(digest, Base64.NO_WRAP);
-            KeyFactory keys = KeyFactory.getInstance("Ed25519");
             for (Map.Entry<String, String> identity : identities.entrySet()) {
                 byte[] payload = (ATTESTATION_PREFIX + "." + identity.getKey() + "." + hash).getBytes(StandardCharsets.UTF_8);
-                PublicKey key = keys.generatePublic(new X509EncodedKeySpec(Base64.decode(identity.getValue(), Base64.DEFAULT)));
-                Signature verifier = Signature.getInstance("Ed25519");
-                verifier.initVerify(key);
-                verifier.update(payload);
-                if (verifier.verify(signature)) return identity.getKey();
+                if (ed25519Verify(Base64.decode(identity.getValue(), Base64.DEFAULT), payload, signature)) return identity.getKey();
             }
             return null;
         } catch (Exception failure) {
             // A certificate or key that cannot be read cannot vouch for anything.
             Log.w(TAG, "certificate could not be checked", failure);
             return null;
+        }
+    }
+
+    /** Ed25519 SubjectPublicKeyInfo: this fixed prefix, then the 32-byte key. */
+    private static final byte[] ED25519_SPKI_PREFIX = { 0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00 };
+
+    /**
+     * Verified with Tink rather than the platform: on some images the only
+     * Ed25519 provider is the keystore wrapper, which accepts nothing but its
+     * own keys (the emulator's; the SM-S936B's happens to have another), and
+     * before API 33 there is none at all.
+     */
+    private static boolean ed25519Verify(byte[] spki, byte[] payload, byte[] signature) {
+        if (spki.length != ED25519_SPKI_PREFIX.length + 32) return false;
+        for (int index = 0; index < ED25519_SPKI_PREFIX.length; index++) if (spki[index] != ED25519_SPKI_PREFIX[index]) return false;
+        try {
+            new Ed25519Verify(Arrays.copyOfRange(spki, ED25519_SPKI_PREFIX.length, spki.length)).verify(signature, payload);
+            return true;
+        } catch (GeneralSecurityException mismatch) {
+            return false;
         }
     }
 
