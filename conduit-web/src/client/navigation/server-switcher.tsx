@@ -1,6 +1,6 @@
 import { createSignal, For, lazy, onCleanup, Show } from "solid-js";
 import { ExternalLinkIcon, PlusIcon, QrCodeIcon, RefreshCwIcon } from "lucide-solid";
-import { Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger, Spinner } from "@/components/primitives";
+import { Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, Spinner } from "@/components/primitives";
 import { buildHttpUrl } from "../api/transport";
 import { proveServer } from "../platform/server-proof";
 const PairDialog = lazy(() => import("./pair-dialog").then((module) => ({ default: module.PairDialog })));
@@ -209,6 +209,18 @@ export function ServerSwitcher(props: {
         */}
       <Show when={activeServerPaths().length > 0}>
         <MenuGroup>
+          {/*
+            * One row for the route in use; every route behind it. Which route
+            * is a rarer question than which server, so it does not take a
+            * group's worth of the menu to ask.
+            */}
+          <MenuSub>
+          <MenuSubTrigger class="server-route-choice">
+            <span class="server-route-label"><span>Route</span>
+              <Show when={inUse()}>{(path) => <code title={path().origin}>{serverPathLabel(path())} · {shortOrigin(path().origin)}</code>}</Show>
+            </span>
+          </MenuSubTrigger>
+          <MenuSubContent class="server-switcher-menu server-route-menu">
           <MenuLabel>Route to {serverName()}</MenuLabel>
           {/*
             * An installed-to-home-screen browser is shown the routes and
@@ -230,10 +242,10 @@ export function ServerSwitcher(props: {
             <Show when={isInstalledClient()}>
               <MenuRadioItem class="server-route-choice" value={AUTOMATIC}>
                 <span class="server-route-label"><span>Automatic</span>
-                  <Show when={inUse()}>{(path) => <code title={path().origin}>{shortOrigin(path().origin)}</code>}</Show>
+                  <Show when={inUse()}>{(path) => <code title={path().origin}>{serverPathLabel(path())} · {shortOrigin(path().origin)}</code>}</Show>
                 </span>
                 <span class="server-row-latency ml-auto text-xs text-muted-foreground">
-                  {inUse() ? serverPathLabel(inUse()!) : ""}
+                  {inUse() ? latencyLabel(inUse()!.origin) : ""}
                 </span>
               </MenuRadioItem>
             </Show>
@@ -246,6 +258,8 @@ export function ServerSwitcher(props: {
                 </span>
               </MenuRadioItem>}</For>
           </MenuRadioGroup>
+          </MenuSubContent>
+          </MenuSub>
           <Show when={routeError()}><MenuLabel class="server-route-error">{routeError()}</MenuLabel></Show>
         </MenuGroup>
         <MenuSeparator />

@@ -1689,6 +1689,11 @@ svg.lucide { stroke-width: 2.4; }
     overflow-y: auto;
   }
   [data-slot="menu-content"].chat-header-menu [role="menuitem"] { min-height: 38px; padding: 8px 9px; gap: 8px; border-radius: 9px; font-size: 13px; }
+  /* The server switcher's rows take the chat menu's touch size; their
+     secondary text (latency, route kind) steps down so the names lead. */
+  :is([data-slot="menu-content"], [data-slot="menu-sub-content"]).server-switcher-menu [role^="menuitem"] { min-height: 38px; padding: 8px 9px; gap: 8px; border-radius: 9px; font-size: 13px; }
+  .server-switcher-menu .server-row-latency { font-size: 11px; }
+  .server-switcher-menu .server-route-label code { font-size: 10px; }
   .settings-shell { width: calc(100vw - 24px); height: calc(100dvh - 24px); }
   .settings-rail { width: 132px; }
   /* The mobile palette fills the visual viewport while keeping the inset frame
