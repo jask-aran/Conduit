@@ -1,4 +1,5 @@
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For, onCleanup, Show } from "solid-js";
+import { connectionId } from "../state/runtime.ts";
 import { api } from "../api/client.ts";
 import { Trash2Icon } from "lucide-solid";
 import { Button, Input } from "@/components/primitives";
@@ -43,17 +44,21 @@ export function ServersSettingsTile() {
   // client from there. Only the server this client is connected to can be
   // asked; the others are renamed from a client connected to them.
   const [renameError, setRenameError] = createSignal("");
-  // Who is connected to the server this client is on, and on which build:
-  // live connections only, read once as the page opens.
-  const [connected, setConnected] = createSignal("");
-  void api<{ clients?: { kind: string; build: string }[] }>("/v0/runtime/clients").then(({ clients = [] }) => {
-    const groups = new Map<string, number>();
-    for (const client of clients) {
-      const key = `${client.kind === "android" ? "Android" : client.kind === "desktop" ? "Desktop" : "Browser"}${client.build ? ` ${client.build}` : ""}`;
-      groups.set(key, (groups.get(key) ?? 0) + 1);
-    }
-    setConnected([...groups].map(([key, count]) => count > 1 ? `${count}× ${key}` : key).join(" · "));
-  }).catch(() => {});
+  // Every live connection to the server this client is on: each tab, app and
+  // desktop client on its own line, refreshed while this page is open.
+  type Connection = { id?: string; kind: string; build: string; connectedAt: string };
+  const [connected, setConnected] = createSignal<Connection[]>([]);
+  const [now, setNow] = createSignal(Date.now());
+  const refresh = () => void api<{ clients?: Connection[] }>("/v0/runtime/clients")
+    .then(({ clients = [] }) => { setConnected(clients); setNow(Date.now()); }).catch(() => {});
+  refresh();
+  const timer = setInterval(refresh, 10_000);
+  onCleanup(() => clearInterval(timer));
+  const kindLabel = (kind: string) => kind === "android" ? "Android" : kind === "desktop" ? "Desktop" : "Browser";
+  const since = (at: string) => {
+    const minutes = Math.max(0, Math.round((now() - Date.parse(at)) / 60_000));
+    return minutes < 1 ? "just now" : minutes < 60 ? `${minutes}m` : minutes < 1440 ? `${Math.round(minutes / 60)}h` : `${Math.round(minutes / 1440)}d`;
+  };
   const rename = async (origin: string, name: string) => {
     setRenameError("");
     try {
@@ -81,8 +86,11 @@ export function ServersSettingsTile() {
       <Show when={entry.id}>
         <div class="settings-line"><span>Identity</span><span class="settings-line-value"><code>{entry.id?.slice(0, 8)}</code></span></div>
       </Show>
-      <Show when={entry.origin === activeOrigin() && connected()}>
-        <div class="settings-line"><span>Connected</span><span class="settings-line-value">{connected()}</span></div>
+      <Show when={entry.origin === activeOrigin() && connected().length}>
+        <For each={connected()}>{(client) => <div class="settings-line">
+          <span>{kindLabel(client.kind)}{client.id && client.id === connectionId() ? " · this client" : ""}</span>
+          <span class="settings-line-value">{client.build || "older build"} · {since(client.connectedAt)}</span>
+        </div>}</For>
       </Show>
       <Show when={entry.origin === activeOrigin()} fallback={
         <div class="settings-line"><span>Name</span><span class="settings-line-value">Rename it while connected to it</span></div>}>

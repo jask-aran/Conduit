@@ -248,13 +248,14 @@ prepare_browsers() {
   return 0
 }
 
-# Who is connected right now, by kind and build. Live connections only.
+# Every live connection, one per line: kind, build, how long. Live only.
 connected_clients() {
   auth api GET /v0/runtime/clients 2>/dev/null | "$(node_bin)" -e '
     try { const { clients = [] } = JSON.parse(require("fs").readFileSync(0, "utf8"));
-      const groups = new Map();
-      for (const c of clients) { const key = c.kind + (c.build ? " " + c.build : ""); groups.set(key, (groups.get(key) || 0) + 1); }
-      console.log([...groups].map(([key, n]) => (n > 1 ? n + "× " : "") + key).join(", ") || "none");
+      const kind = { android: "Android", desktop: "Desktop" };
+      const since = (at) => { const m = Math.max(0, Math.round((Date.now() - Date.parse(at)) / 60000));
+        return m < 1 ? "just now" : m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; };
+      for (const c of clients) console.log((kind[c.kind] || "Browser") + "|" + (c.build || "older build") + " · " + since(c.connectedAt));
     } catch {}' 2>/dev/null
 }
 
@@ -265,7 +266,11 @@ status() {
   title "$(code_label)"
   if running; then printf '%s%s%s  %sRunning%s\n' "$G" "$S_ON" "$N" "$B" "$N"; else printf '%s%s%s  %sStopped%s %s· %s start%s\n' "$R" "$S_ERR" "$N" "$B" "$N" "$D" "$NAME" "$N"; fi
   row name "$(server_name)"
-  running && row clients "$(connected_clients)"
+  if running; then
+    local kind detail any=""
+    while IFS='|' read -r kind detail; do row "${any:+}${any:-clients}" "$kind ${D}$detail${N}"; any=" "; done < <(connected_clients)
+    [[ -n "$any" ]] || row clients "${D}none${N}"
+  fi
   local url how cmd; while IFS='|' read -r url how cmd; do row open "${C}$url${N} ${D}$how${N}"; [[ -n "$cmd" ]] && row "" "$cmd"; done < <(access_urls)
   row service "$(service_kind) ${D}$NAME${N}"
   row data "${CONDUIT_DATA_ROOT/#$HOME/$TILDE}"

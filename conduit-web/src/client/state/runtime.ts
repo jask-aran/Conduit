@@ -8,6 +8,10 @@ import { browserRegistrationId, finishPwaRestart, preparePwaRestart } from "../p
 import { api } from "../api/client";
 import { buildLabel, clientBuild } from "../platform/build-info";
 
+/** This client's runtime stream, as the server lists it in /v0/runtime/clients. */
+const [connectionId, setConnectionId] = createSignal("");
+export { connectionId };
+
 export type Connectivity = "connecting" | "online" | "reconnecting" | "offline";
 
 export function createRuntimeStore() {
@@ -91,6 +95,7 @@ export function createRuntimeStore() {
           setStale(false);
         } else if (event.type === "runtime_global_snapshot") {
           replaceAll((event.processes || []) as RuntimeProcess[]);
+          if (typeof event.connection === "string") setConnectionId(event.connection);
           restartPrepared = event.restartPrepared === true;
           if (restartPrepared) prepare(event.restartAttempt, event.restartTarget);
           attempts = 0;
