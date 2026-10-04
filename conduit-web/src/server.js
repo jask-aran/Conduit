@@ -618,6 +618,7 @@ registerRuntimeRoutes(app, {
   projects,
   promptStore,
   serverIdentity,
+  onServerRenamed: (name) => lanAdvertisement.rename(name),
 });
 
 registerPiAuthRoutes(app, {

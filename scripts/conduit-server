@@ -467,6 +467,21 @@ set_server_name() {
     }
     console.log(name);
   ' "$value")" || fail "Invalid server name"
+  # The server owns its name: a running one is renamed in place (clients and
+  # the LAN follow); a stopped one has it written where it reads it, and the
+  # env var seeds a server that has never started.
+  local body; body="$("$(node_bin)" -e 'console.log(JSON.stringify({ name: process.argv[1] }))' "$value")"
+  if healthy && auth api PUT /v0/server/name "$body" >/dev/null 2>&1; then
+    ok "Server name: $value"; return
+  fi
+  local file="${CONDUIT_IDENTITY_FILE:-$CONDUIT_DATA_ROOT/identity.json}"
+  if [[ -f "$file" ]]; then
+    "$(node_bin)" -e '
+      const fs = require("fs"); const [file, name] = process.argv.slice(1);
+      const saved = JSON.parse(fs.readFileSync(file, "utf8")); saved.name = name;
+      fs.writeFileSync(file, JSON.stringify(saved, null, 2) + "\n", { mode: 0o600 });
+    ' "$file" "$value" || warn "Could not write the name to $file"
+  fi
   local quoted; printf -v quoted '%q' "$value"
   set_env CONDUIT_SERVER_NAME "$quoted"
   ok "Server name: $value"
@@ -969,7 +984,7 @@ usage() {
 command="${1:-help}"; shift || true
 case "$command" in
   setup) setup ;;
-  name) title "Server name"; set_server_name "${1:-}"; if healthy; then restart; fi; outro "" ;;
+  name) title "Server name"; set_server_name "${1:-}"; outro "" ;;
   connect) connect ;;
   start) start ;;
   stop) stop ;;

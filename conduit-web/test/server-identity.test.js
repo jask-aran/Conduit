@@ -19,8 +19,11 @@ test("a server keeps the same identity and key across restarts", async () => {
 
   assert.equal(second.name, "Home workstation");
   assert.equal(second.describe().name, "Home workstation");
-  const renamed = await new ServerIdentity(file, { name: "Development" }).load();
+  // The configured name only seeds: a saved name, renamed from a client, wins.
+  assert.equal(await second.rename("Development"), true);
+  const renamed = await new ServerIdentity(file, { name: "Home workstation" }).load();
   assert.equal(renamed.describe().name, "Development");
+  assert.equal(await renamed.rename("\u0007"), false, "a control character is not a name");
   assert.equal(renamed.id, first.id, "renaming does not change identity");
   assert.equal(renamed.publicKeyValue(), first.publicKeyValue(), "renaming preserves pairing");
 

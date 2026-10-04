@@ -114,6 +114,14 @@ export class LanAdvertisement {
     this.log({ type: "conduit.lan-advertisement", state: "published", instance: this.instance, port: this.port, reachableOn: addresses });
   }
 
+  /** The instance name follows the server's: republished under the new one. */
+  rename(name) {
+    this.instance = String(name || "conduit").slice(0, 63) || "conduit";
+    if (!this.timer) return;
+    this.addresses = [];
+    this.sync();
+  }
+
   unpublish() {
     if (!this.service) return;
     try { this.service.stop?.(); } catch { /* the socket is going away regardless */ }

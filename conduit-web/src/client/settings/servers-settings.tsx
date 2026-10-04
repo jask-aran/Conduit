@@ -1,4 +1,5 @@
-import { For, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
+import { api } from "../api/client.ts";
 import { Trash2Icon } from "lucide-solid";
 import { Button, Input } from "@/components/primitives";
 import { Switch } from "./settings-controls";
@@ -6,7 +7,7 @@ import { clearNativeBearerToken } from "../api/native-auth-client.ts";
 import { isInstalledClient, isStandaloneBrowser } from "../platform/installed-client.ts";
 import { saveServerDirectory } from "../platform/server-directory.ts";
 import {
-  activeOrigin, activePath, forgetServer, pathsOf, renameServer, serverPathLabel, servers, setServerShared,
+  activeOrigin, activePath, forgetServer, learnIdentity, pathsOf, serverPathLabel, servers, setServerShared,
   type ServerEntry, type ServerPath,
 } from "../platform/servers.ts";
 
@@ -38,9 +39,21 @@ export function ServersSettingsTile() {
     if (isInstalledClient()) await clearNativeBearerToken(origin);
   };
 
+  // The server owns its name, so a rename goes to it and comes back to every
+  // client from there. Only the server this client is connected to can be
+  // asked; the others are renamed from a client connected to them.
+  const [renameError, setRenameError] = createSignal("");
   const rename = async (origin: string, name: string) => {
-    renameServer(origin, name);
-    await saveServerDirectory();
+    setRenameError("");
+    try {
+      const identity = await api<{ id?: string; name?: string; publicKey?: string; paths?: unknown }>("/v0/server/name", {
+        method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ name }),
+      });
+      learnIdentity(origin, identity);
+      await saveServerDirectory();
+    } catch (error) {
+      setRenameError(error instanceof Error ? error.message : "The server did not take that name.");
+    }
   };
 
   const share = async (origin: string, shared: boolean) => {
@@ -54,15 +67,16 @@ export function ServersSettingsTile() {
   return <div class="settings-list">
     <For each={servers()}>{(entry) => <section class="settings-group" aria-label={entry.name}>
       <h3>{entry.name}</h3>
-      <Show when={entry.serverName}>
-        <div class="settings-line"><span>Server name</span><span class="settings-line-value">{entry.serverName}</span></div>
-      </Show>
       <Show when={entry.id}>
         <div class="settings-line"><span>Identity</span><span class="settings-line-value"><code>{entry.id?.slice(0, 8)}</code></span></div>
       </Show>
-      <label class="settings-line" title="A list label, shared when this entry is shared. Clear it to use the server's name. Change the server's own name with conduit-server name."><span>List label</span>
-        <Input aria-label={`List label for ${entry.name}`} value={entry.name}
-          onChange={(event) => void rename(entry.origin, event.currentTarget.value)} /></label>
+      <Show when={entry.origin === activeOrigin()} fallback={
+        <div class="settings-line"><span>Name</span><span class="settings-line-value">Rename it while connected to it</span></div>}>
+        <label class="settings-line" title="The server's name, for every client and on the network."><span>Name</span>
+          <Input aria-label={`Name of ${entry.name}`} value={entry.name}
+            onChange={(event) => void rename(entry.origin, event.currentTarget.value)} /></label>
+        <Show when={renameError()}><div class="settings-line"><span class="settings-line-value">{renameError()}</span></div></Show>
+      </Show>
       <div class="settings-line"><span>Share with other clients</span>
         <Switch label={`Share ${entry.name} with other clients`} checked={entry.shared} onChange={(shared) => void share(entry.origin, shared)} /></div>
       {/*
