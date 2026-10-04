@@ -22,6 +22,10 @@ tauri-plugin-global-shortcut = "2"
 mdns-sd = { version = "0.21", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Verifying a server's identity signature inside its TLS certificate.
+base64 = "0.22"
+ed25519-dalek = "2"
+sha2 = "0.10"
 
 # The token is held by the OS credential store for the signed-in user: on
 # Windows that is Credential Manager, which encrypts it under the user's own
@@ -30,6 +34,8 @@ serde_json = "1"
 keyring = { version = "3", features = ["windows-native"] }
 # Only for the caption colour: the title bar is native, and stays native.
 windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell"] }
+# WebView2's certificate-error event, at the version wry already links.
+webview2-com = "0.38"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }
