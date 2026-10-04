@@ -1,3 +1,4 @@
+import { trustSettled } from "../platform/certificate-pins.ts";
 import { isInstalledClient, secureTokenStore } from "../platform/installed-client.ts";
 import { activeOrigin, LEGACY_ORIGIN_STORAGE_KEY } from "../platform/servers.ts";
 
@@ -57,6 +58,7 @@ export async function clearNativeBearerToken(origin = activeOrigin()) {
 }
 
 export async function authorizedFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  if (isInstalledClient()) await trustSettled();
   const headers = new Headers(init.headers);
   const token = await nativeBearerToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);

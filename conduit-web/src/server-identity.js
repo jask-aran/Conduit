@@ -207,6 +207,10 @@ export class ServerIdentity {
       name: this.name,
       publicKey: this.publicKeyValue(),
       paths: this.paths(),
+      // Every path also answers TLS on the same port, with a leaf this
+      // identity attests (`server-tls.js`). A shell that can verify that dials
+      // its local routes as https; the paths themselves stay addresses.
+      tls: true,
     };
   }
 

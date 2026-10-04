@@ -1,5 +1,6 @@
 import { isInstalledClient } from "../platform/installed-client.ts";
-import { activePath, normalizeServerOrigin } from "../platform/servers.ts";
+import { trustSettled } from "../platform/certificate-pins.ts";
+import { activePath, dialOrigin, normalizeServerOrigin } from "../platform/servers.ts";
 import { authorizedFetch } from "./native-auth-client.ts";
 
 // Re-exported so every caller still asks one module how to reach a server,
@@ -21,7 +22,7 @@ function nativeOrigin() {
   // address, and this is the one chosen to reach it right now.
   const origin = activePath();
   if (!origin) throw new Error("Choose a Conduit server first.");
-  return origin;
+  return dialOrigin(origin);
 }
 
 export function httpUrl(path) {
@@ -30,6 +31,7 @@ export function httpUrl(path) {
 
 export async function webSocketUrl(path) {
   if (!isInstalledClient()) return buildWebSocketUrl(path, location.origin);
+  await trustSettled();
   const origin = nativeOrigin();
   const response = await authorizedFetch(buildHttpUrl("/v0/auth/socket-ticket", origin), { method: "POST" });
   if (!response.ok) throw new Error("Could not authorize the live connection.");
