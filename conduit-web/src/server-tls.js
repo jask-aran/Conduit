@@ -8,9 +8,9 @@ import path from "node:path";
  * `ServerIdentity.prove()` signs a nonce and nothing about the channel it
  * travelled over, which means a relay on a hostile network can forward the
  * nonce to the real server and hand back a signature it did not produce. The
- * answer, set out in `docs/pinned-tls-plan.md`, is to give the connection an
- * identity: a self-signed leaf with the server's own addresses in it, and a
- * client that refuses any leaf but the one its server attested. A relay has no
+ * answer, set out in `docs/connections.md`, is to give the connection an
+ * identity: a self-signed leaf carrying the identity's attestation of its key,
+ * and a client that refuses any leaf its server did not attest. A relay has no
  * key for that leaf, so it fails to complete a handshake rather than
  * succeeding at a question it was never asked.
  *
@@ -62,12 +62,13 @@ function integer(value) {
   return tagged(0x02, (trimmed[0] & 0x80) === 0 ? trimmed : Buffer.concat([Buffer.from([0]), trimmed]));
 }
 
+// BigInt because a `2.25` arc carries a whole UUID as one 128-bit arc.
 function oid(dotted) {
-  const parts = dotted.split(".").map(Number);
-  const bytes = [parts[0] * 40 + parts[1]];
+  const parts = dotted.split(".").map(BigInt);
+  const bytes = [Number(parts[0] * 40n + parts[1])];
   for (const part of parts.slice(2)) {
-    const chunk = [part & 0x7f];
-    for (let rest = part >>> 7; rest > 0; rest >>>= 7) chunk.unshift((rest & 0x7f) | 0x80);
+    const chunk = [Number(part & 0x7fn)];
+    for (let rest = part >> 7n; rest > 0n; rest >>= 7n) chunk.unshift(Number(rest & 0x7fn) | 0x80);
     bytes.push(...chunk);
   }
   return tagged(0x06, Buffer.from(bytes));
@@ -95,6 +96,19 @@ const OIDS = {
   subjectAltName: "2.5.29.17",
   serverAuth: "1.3.6.1.5.5.7.3.1",
 };
+
+/*
+ * Where the leaf carries the identity's attestation of its own key: a private
+ * extension under the `2.25` arc, which takes a UUID and needs no registration.
+ * Non-critical, so a TLS stack that does not know it ignores it. Its value is
+ * an OCTET STRING holding the raw 64-byte Ed25519 signature from `attestLeaf`.
+ *
+ * Carried in the certificate so a shell can decide mid-handshake from the
+ * certificate and the identity key it already holds. A pin on the leaf's own
+ * hash would need every re-issued leaf's attestation delivered, before the TLS
+ * route works again, over some route that is not that one.
+ */
+export const ATTESTATION_EXTENSION_OID = "2.25.3346790509059223890722535119545092606";
 
 function extension(id, critical, value) {
   return sequence(oid(id), ...(critical ? [boolTrue] : []), octetString(value));
@@ -131,7 +145,7 @@ function pem(label, der) {
  * the subject, the validity window, the key usages -- is there because a TLS
  * stack refuses a certificate that omits it, not because anybody reads it.
  */
-export function issueLeafCertificate({ commonName, hosts, notBefore = Date.now(), days = 398 }) {
+export function issueLeafCertificate({ commonName, hosts, attest, notBefore = Date.now(), days = 398 }) {
   const names = [...new Set(hosts)].filter(Boolean);
   if (!names.length) throw new Error("a leaf certificate needs at least one address");
   const { privateKey, publicKey } = crypto.generateKeyPairSync("ec", { namedCurve: CURVE });
@@ -156,6 +170,7 @@ export function issueLeafCertificate({ commonName, hosts, notBefore = Date.now()
       extension(OIDS.keyUsage, true, Buffer.from([0x03, 0x02, 0x07, 0x80])),
       extension(OIDS.extKeyUsage, false, sequence(oid(OIDS.serverAuth))),
       extension(OIDS.subjectAltName, false, sequence(...names.map(generalName))),
+      ...(attest ? [extension(ATTESTATION_EXTENSION_OID, false, octetString(Buffer.from(attest(spki), "base64")))] : []),
     )),
   );
   const signature = crypto.sign("sha256", tbs, privateKey);
@@ -176,6 +191,26 @@ export function leafFingerprint(spki) {
 
 function attestationPayload(identityId, spki) {
   return Buffer.from(`${ATTESTATION_PREFIX}.${identityId}.${leafFingerprint(spki).toString("base64")}`, "utf8");
+}
+
+/**
+ * The attestation a certificate carries, base64, or null.
+ *
+ * Found by its OID's encoding rather than by walking the whole structure: the
+ * bytes are this file's own output. The shells read it with their platform's
+ * X.509 parser instead.
+ */
+export function embeddedAttestation(certificate) {
+  const der = Buffer.isBuffer(certificate) ? certificate : new crypto.X509Certificate(certificate).raw;
+  const marker = oid(ATTESTATION_EXTENSION_OID);
+  let at = der.indexOf(marker);
+  if (at < 0) return null;
+  at += marker.length;
+  // The OCTET STRING every extension value is wrapped in, then ours.
+  if (der[at] !== 0x04 || der[at + 1] !== 66) return null;
+  at += 2;
+  if (der[at] !== 0x04 || der[at + 1] !== 64) return null;
+  return der.subarray(at + 2, at + 2 + 64).toString("base64");
 }
 
 /** The identity's word that this leaf is its own. */
@@ -201,15 +236,12 @@ export function verifyLeafAttestation(identityId, spki, attestation, ed25519Publ
 /**
  * The leaf this server is currently offering, kept across restarts.
  *
- * Re-issued when the set of addresses changes, because a certificate that does
- * not name the address it is reached on is refused by the client's own TLS
- * stack before any of our code sees it -- a laptop moving between networks
- * does this routinely. Re-issued near expiry for the same reason.
- *
- * Restarting with the same leaf matters more than it looks: a client pins the
- * key it was attested, so a server that minted a fresh one every boot would
- * ask every paired client to re-check its attestation every boot, and an event
- * that happens constantly is one nobody can read as a warning.
+ * Re-issued near expiry, or when it does not carry this identity's attestation
+ * (a leaf from before the extension, or another identity's). Not when the
+ * addresses change: a shell trusts a leaf because the identity attested it,
+ * not because it names the address dialled, so a laptop moving between
+ * networks keeps its leaf. Addresses are still written into it, since TLS
+ * stacks expect some, but nothing relies on them.
  */
 export class ServerLeaf {
   constructor(filePath, { now = Date.now, renewWithinMs = 30 * 24 * 60 * 60 * 1000 } = {}) {
@@ -219,23 +251,21 @@ export class ServerLeaf {
     this.material = null;
   }
 
-  /** The leaf for these addresses, minting one only if the stored one will not do. */
-  async ensure({ commonName, hosts }) {
-    const wanted = [...new Set(hosts)].filter(Boolean).sort();
+  /** The held leaf, minting one only if it will not do for this identity. */
+  async ensure({ commonName, hosts, identityId, attest }) {
     if (!this.material) this.material = await this.read();
-    if (!this.suits(wanted)) {
-      this.material = issueLeafCertificate({ commonName, hosts: wanted, notBefore: this.now() });
+    if (!this.suits(identityId)) {
+      const wanted = [...new Set(hosts)].filter(Boolean).sort();
+      this.material = { ...issueLeafCertificate({ commonName, hosts: wanted, attest, notBefore: this.now() }), attestedBy: identityId };
       await this.write();
     }
     return this.material;
   }
 
-  suits(wanted) {
+  suits(identityId) {
     const held = this.material;
-    if (!held) return false;
-    if (held.notAfter - this.now() < this.renewWithinMs) return false;
-    const have = [...held.hosts].sort();
-    return have.length === wanted.length && have.every((host, index) => host === wanted[index]);
+    if (!held || held.attestedBy !== identityId) return false;
+    return held.notAfter - this.now() >= this.renewWithinMs;
   }
 
   async read() {
@@ -256,6 +286,8 @@ export class ServerLeaf {
         spki,
         hosts: Array.isArray(saved.hosts) ? saved.hosts.map(String) : [],
         notAfter: Number(saved.notAfter),
+        // Only a leaf that really carries an attestation counts as attested.
+        attestedBy: embeddedAttestation(certificate) ? String(saved.attestedBy || "") : "",
       };
     } catch {
       return null;
@@ -263,10 +295,10 @@ export class ServerLeaf {
   }
 
   async write() {
-    const { certificate, privateKey, hosts, notAfter } = this.material;
+    const { certificate, privateKey, hosts, notAfter, attestedBy } = this.material;
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
     // The private half of a key that proves this machine's identity on the
     // wire. Same footing as `identity.json`, and for the same reason.
-    await fs.writeFile(this.filePath, `${JSON.stringify({ certificate, privateKey, hosts, notAfter }, null, 2)}\n`, { mode: 0o600 });
+    await fs.writeFile(this.filePath, `${JSON.stringify({ certificate, privateKey, hosts, notAfter, attestedBy }, null, 2)}\n`, { mode: 0o600 });
   }
 }
