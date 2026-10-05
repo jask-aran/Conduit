@@ -74,6 +74,7 @@ export function registerRuntimeRoutes(app, {
     response.json(proof);
   });
 
+  const STARTED_AT = new Date(Date.now() - process.uptime() * 1000).toISOString();
   app.get("/healthz", (request, response) => {
     // "2": prepares restarts through /v0/runtime/restart/*. The launcher does
     // not try that against a server that does not say so.
@@ -85,6 +86,7 @@ export function registerRuntimeRoutes(app, {
       ok: !isShuttingDown(),
       status: isShuttingDown() ? "stopping" : "ready",
       release: config.release,
+      startedAt: STARTED_AT,
       activeGenerations,
     });
   });

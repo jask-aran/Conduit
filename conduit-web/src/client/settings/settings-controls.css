@@ -263,3 +263,24 @@
   .settings-rail-about dt, .settings-rail-about dd { font-size: 12.5px; }
 }
 .settings-line em.settings-route-address { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+/* Servers: one block per server, its name the heading, and the hairline
+   between groups only between servers. Inside, routes and clients are
+   labels over rows with space above, no rule. */
+.settings-list > .server-block ~ .server-block { padding-top: 18px; }
+.server-block { gap: 1px; }
+.server-block-head { display: flex; min-width: 0; align-items: center; gap: 8px; padding: 2px 4px 0 6.4px; }
+.server-block-head > h3 { min-width: 0; margin: 0; overflow: hidden; color: var(--foreground); font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.server-block-status { margin-left: auto; color: var(--muted-foreground); font-size: 10.4px; white-space: nowrap; }
+.server-block-meta { margin: 0 0 6px; padding: 0 6.4px 0 20.8px; color: var(--muted-foreground); font-size: 9.6px; }
+.server-block > h4 { margin: 10px 0 2px; padding: 3.2px 6.4px; color: color-mix(in oklch, var(--sidebar-foreground), transparent 52%); font-size: 9.6px; font-weight: 700; letter-spacing: .02em; }
+.server-block .settings-line[data-unreachable] > span:first-child { opacity: .5; text-decoration: line-through; }
+.server-block-actions { display: flex; justify-content: flex-end; gap: 4px; margin-top: 8px; }
+.settings-dialog .server-block-actions [data-slot="button"] { height: 24px; border-radius: 6px; padding: 0 8px; font-size: 10.4px; }
+.settings-dialog .server-block-actions [data-slot="button"] svg { width: 12px; height: 12px; }
+@media (max-width: 760px) {
+  .server-block-head > h3 { font-size: 17px; }
+  .server-block-status { font-size: 13px; }
+  .server-block-meta { padding-left: 25px; font-size: 12.5px; }
+  .server-block > h4 { padding: 5px 9px; font-size: 13px; }
+  .settings-dialog .server-block-actions [data-slot="button"] { height: 36px; font-size: 14px; }
+}

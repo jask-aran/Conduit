@@ -112,9 +112,19 @@ export const secureTokenStore: SecureTokenStore = installedClientKind === "deskt
  * Android replaces its shell by handing the APK to the system, which asks
  * before installing anything. That confirmation cannot be suppressed for an
  * app installed outside the Play Store, and should not be: it is the only
- * thing standing between a download and code running on the phone. So this
- * finds the release and opens it, and Android takes it from there.
+ * thing standing between a download and code running on the phone. So the
+ * APK is downloaded ahead of time (`ConduitUpdaterPlugin`), and taking the
+ * update only opens the installer on it.
  */
+interface UpdaterPlugin {
+  download(options: { url: string; version: string; unmeteredOnly: boolean }): Promise<{ ready: boolean }>;
+  install(options: { version: string }): Promise<{ needsPermission?: boolean }>;
+  addListener(event: "progress", listener: (progress: { downloaded: number; total: number }) => void): Promise<{ remove(): Promise<void> }>;
+}
+let androidUpdater: Promise<UpdaterPlugin> | null = null;
+const updater = () => androidUpdater ??= import("@capacitor/core").then(({ registerPlugin }) => registerPlugin<UpdaterPlugin>("ConduitUpdater"));
+let readyAndroidVersion: string | null = null;
+
 export const androidShell = installedClientKind !== "android" ? null : {
   async version(): Promise<string | null> {
     try {
@@ -125,21 +135,34 @@ export const androidShell = installedClientKind !== "android" ? null : {
     }
   },
   /**
-   * Returns the version it sent to the installer, or null when the running
-   * build is already the latest. The download leaves the app, so nothing
-   * after this reports back.
+   * Download the newer release now; install only when the person takes it.
+   * A quiet (background) check waits for an unmetered network.
    */
-  async update(): Promise<string | null> {
+  async prepareUpdate(onProgress?: (update: UpdateProgress) => void, quiet = false): Promise<PreparedDesktopUpdate> {
+    if (readyAndroidVersion) return { kind: "ready", version: readyAndroidVersion };
     const { isNewerVersion, latestRelease } = await import("./github-release.ts");
     const release = await latestRelease();
-    if (!release?.apkUrl) return null;
+    if (!release?.apkUrl) return { kind: "current" };
     const { App } = await import("@capacitor/app");
-    const current = (await App.getInfo()).version;
-    if (!isNewerVersion(release.version, current)) return null;
-    // Opened outside the webview, so the browser downloads it and Android's
-    // package installer is what the person confirms.
-    window.open(release.apkUrl, "_blank");
-    return release.version;
+    if (!isNewerVersion(release.version, (await App.getInfo()).version)) return { kind: "current" };
+    const plugin = await updater();
+    const listener = await plugin.addListener("progress", (progress) => onProgress?.({ version: release.version, ...progress }));
+    try {
+      const { ready } = await plugin.download({ url: release.apkUrl, version: release.version, unmeteredOnly: quiet });
+      if (!ready) return { kind: "current" };
+      readyAndroidVersion = release.version;
+      return { kind: "ready", version: release.version };
+    } finally {
+      void listener.remove();
+    }
+  },
+  /** Opens the system installer, which asks before replacing the app. */
+  async installPreparedUpdate(): Promise<boolean> {
+    if (!readyAndroidVersion) return false;
+    const { needsPermission } = await (await updater()).install({ version: readyAndroidVersion });
+    // Sent to the "install unknown apps" grant; the update stays ready.
+    if (needsPermission) throw new Error("Allow Conduit to install updates, then take the update again.");
+    return true;
   },
 };
 
@@ -185,7 +208,7 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
     return invoke<DesktopShellSettings>("set_desktop_settings", { settings });
   },
   /** Download and verify now; install only after the person takes the update. */
-  async prepareUpdate(onProgress?: (update: UpdateProgress) => void): Promise<PreparedDesktopUpdate> {
+  async prepareUpdate(onProgress?: (update: UpdateProgress) => void, _quiet = false): Promise<PreparedDesktopUpdate> {
     if (readyDesktopUpdate) return { kind: "ready", version: readyDesktopUpdate.version };
     if (desktopUpdatePreparation) return desktopUpdatePreparation;
     desktopUpdatePreparation = (async (): Promise<PreparedDesktopUpdate> => {
