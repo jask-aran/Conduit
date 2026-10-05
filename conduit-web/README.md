@@ -29,8 +29,8 @@ launcher.
 The production container sets `CONDUIT_DATA_ROOT=/data`, serves the compiled
 client from its read-only image, and mounts durable data and the portable
 `/workspaces` namespace from the host. See
-[`../docs/operations/deployment.md`](../docs/operations/deployment.md)
-for the Compose, release, ownership, backup, and Native Pi boundary contracts.
+[`../docs/DEPLOYMENT.md`](../docs/DEPLOYMENT.md)
+for installation, backup and release guidance.
 
 ## Runtime model
 
@@ -431,11 +431,10 @@ wildcard origins, cross-origin cookies, or headers other than `Authorization`
 and `Content-Type`. WebSockets use a random 30-second ticket that expires after
 one upgrade; the bearer token never enters a URL.
 
-The server need not be HTTPS. `normalizeServerOrigin` accepts plain `http://`
-for loopback and the private ranges, because no public authority issues a
-certificate for a LAN address and requiring one would mean a server on the
-network in front of you could not be reached at all. That is the whole reason
-the Android shell sets `allowMixedContent` — see `docs/servers.md`.
+`normalizeServerOrigin` accepts HTTP for loopback and private addresses.
+Installed clients upgrade direct routes to identity-verified TLS when the
+server advertises support, without falling back to HTTP on failure. See
+[connection constraints](../docs/DEPLOYMENT.md#install-and-connect).
 
 Enforcement is a single `requireAuth` middleware mounted before every other
 route and static handler, plus the WebSocket upgrade validator. The allowlist
@@ -444,7 +443,7 @@ is `GET /login`, `POST /v0/auth/login`, `POST /v0/auth/native-login`,
 before the application session exists. `/v0/server/prove` is open on purpose:
 its whole job is to be checkable *before* a credential is sent, and it reveals
 only a signature over a nonce the caller chose. `GET /v0/server`, which lists
-the routes, is authenticated. See `docs/servers.md`. Logout
+the routes, is authenticated. See `docs/DEPLOYMENT.md`. Logout
 (`POST /v0/auth/logout`) requires a valid session like any other route. Loopback
 binding without a configured password stays open for local dev; non-loopback
 binding refuses to start without a password or `CONDUIT_ALLOW_INSECURE=1`.
@@ -1064,15 +1063,8 @@ rather than inheriting one, and never redirect to `/login`.
 `src/client/platform/installed-client.ts` is the single place that asks which
 client is running; nothing else tests for Capacitor or Tauri.
 
-Holding several servers at once, moving between them, and the directory they
-share is documented in [`../docs/servers.md`](../docs/servers.md). It covers
-browsers too: a browser can only navigate between servers, and the reason is a
-property of this server's CORS and cookie rules rather than of the client.
-
-The Windows desktop client -- how it is built from WSL, how a development
-client installs beside the released one, how updates are signed and how to test
-one without publishing it -- is documented in
-[`../docs/desktop-client.md`](../docs/desktop-client.md).
+Installation, client builds, server switching and release constraints are in
+[install, clients and operations](../docs/DEPLOYMENT.md).
 
 ### Android
 
@@ -1117,14 +1109,14 @@ with the local debug key, not the release keystore, and has no update channel
 of its own — it reports version `0.0.0-dev`, so `Check for updates` always
 offers the latest published release, and taking that offer installs the
 released app alongside rather than updating this one. Sideload a new build to
-replace it. `docs/testing.md` has the four builds side by side.
+replace it. `docs/TESTING.md` has the four builds side by side.
 
 Capacitor 8 requires Node 22 or newer, Android Studio 2025.2.1 or newer, and an
 installed Android SDK.
 
 ## Verification
 
-Use [`../docs/testing.md`](../docs/testing.md) as the
+Use [`../docs/TESTING.md`](../docs/TESTING.md) as the
 single source of truth for fast checks, deterministic harnesses, browser QA,
 live transport measurements, and deployment proof.
 # Managed-scope Git discovery

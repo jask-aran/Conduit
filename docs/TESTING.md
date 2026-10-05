@@ -492,10 +492,11 @@ looks like it did not land.
 
 **The Windows dev client is the one that can test an update**. It uses the
 active server route for the manifest and archive, then its built-in HTTPS
-endpoint if that route has no update. Build a baseline, install it, and build
-again -- `start-conduit.sh` finds the build directory by itself and serves it
-at `/desktop-updates`. The full sequence is in
-`docs/desktop-client.md`.
+endpoint if that route has no update. Use the commands in
+[the operations guide](DEPLOYMENT.md#build-installed-clients): build and install
+a baseline, run `bash .devcontainer/start-conduit.sh restart`, then build a newer
+dev installer. The server finds the output directory and serves `/desktop-updates`.
+Use the client's **Restart** action after its download completes.
 
 **The Android dev APK cannot test an update at all.** It is a debug-signed
 local file at `conduit-web/android/app/build/outputs/apk/debug/app-debug.apk`,
@@ -582,7 +583,7 @@ npm run perf:live -- --target local --origin http://127.0.0.1:4310 --chat-id <id
 
 # repository root: this checkout's installer against this checkout, packaged as a
 # thin release -- no push, no tag. --sandbox keeps it off the real daemon.
-# Read docs/deployment.md "Changing the installer" first: the live installer is
+# Read docs/DEPLOYMENT.md "Development" and "Release" first: the live installer is
 # main's install.sh, and a sandbox still shares the tailnet and, without
 # CONDUIT_DATA_ROOT, the password.
 scripts/try-install.sh --sandbox            # --build rebuilds the client first

@@ -113,8 +113,8 @@ const serverIdentity = await new ServerIdentity(config.identityFile, { port: con
  * that it is this server's.
  *
  * The leaf carries the identity's attestation of its key, so a shell holding
- * the identity key can accept it on any address. See `docs/connections.md`
- * for why the connection has to carry the proof at all.
+ * the identity key can accept it on any address. See `server-tls.js` for
+ * why the connection has to carry the proof at all.
  */
 const leafStore = new ServerLeaf(config.leafFile);
 const leafFor = () => ({
