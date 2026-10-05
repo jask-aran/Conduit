@@ -61,7 +61,7 @@ curl -fsSL https://get.jask-aran.com/conduit | bash
 It installs Conduit and the Node it runs on into `~/.local/share/conduit`, then
 asks for a login password and who may reach it, and starts it as a service.
 Nothing needs root. Manage it with `conduit-server status`, `logs` and
-`update`; see [install and operations](docs/deployment.md).
+`update`; see [install and operations](docs/DEPLOYMENT.md).
 
 ## Start locally
 
@@ -84,6 +84,6 @@ Open <http://127.0.0.1:4310>. Connect a model provider in **Settings > Auth**.
 | `scripts/` | Authentication, deployment and release tools |
 | `docs/` | Product, operations and release documentation |
 
-Start with the [web runtime and API](conduit-web/README.md), [desktop and Android clients](docs/desktop-client.md), [several servers](docs/servers.md), [testing](docs/testing.md) and [contributing](CONTRIBUTING.md).
+Start with the [web runtime and API](conduit-web/README.md), [install, clients and operations](docs/DEPLOYMENT.md), [testing](docs/TESTING.md) and [contributing](CONTRIBUTING.md).
 
 See what shipped recently in [release notes](docs/releases/) and [GitHub Releases](https://github.com/jask-aran/Conduit/releases).

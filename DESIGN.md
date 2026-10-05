@@ -507,7 +507,7 @@ Don't:
 - Center a hero of metric boxes. Conduit leads with a composer and lists.
 - Introduce a second font, icon set, or chart library for chrome.
 - Write specs here: per-component sizes, timings, exact copy, counts and fold orders belong to the code. Write the rule they follow.
-- Encode implementation gotchas (density-duplicate CSS, `-webkit-backdrop-filter` pairing, content-visibility) as visual rules; how to verify a rule goes in `docs/testing.md`.
+- Encode implementation gotchas (density-duplicate CSS, `-webkit-backdrop-filter` pairing, content-visibility) as visual rules; how to verify a rule goes in `docs/TESTING.md`.
 
 # References
 
@@ -516,4 +516,4 @@ Visual companions to the rules above; the rules win where they differ.
 - `docs/design/palette-sketch/palette-sketch.html` -- chat search, the command palette and their states (serve the repository root to open it).
 - `docs/design/orb-catalogue/contact-sheet.html` -- every thinking-orb frame and which state uses it.
 - `docs/design/dashboard-layout/`, `docs/design/conduit-home-dashboard/` -- the dashboard sketches.
-- `conduit-web/test/file-tabs.test.js` and `npm run smoke:panes` (`docs/testing.md`) -- the current pane, tab, drag and focus behaviour, asserted. A change to a rule under Panes and windows changes its test.
+- `conduit-web/test/file-tabs.test.js` and `npm run smoke:panes` (`docs/TESTING.md`) -- the current pane, tab, drag and focus behaviour, asserted. A change to a rule under Panes and windows changes its test.

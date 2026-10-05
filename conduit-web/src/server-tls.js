@@ -8,7 +8,7 @@ import path from "node:path";
  * `ServerIdentity.prove()` signs a nonce and nothing about the channel it
  * travelled over, which means a relay on a hostile network can forward the
  * nonce to the real server and hand back a signature it did not produce. The
- * answer, set out in `docs/connections.md`, is to give the connection an
+ * answer is to give the connection an
  * identity: a self-signed leaf carrying the identity's attestation of its key,
  * and a client that refuses any leaf its server did not attest. A relay has no
  * key for that leaf, so it fails to complete a handshake rather than

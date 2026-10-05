@@ -15,7 +15,7 @@ finish inside it at full speed. Measure it per task from a trace (CDP
 Chromium paints at 60Hz, so a 12ms frame looks the same as a 5ms one.
 
 Before and after each change, run the regression cover for the panes
-(`docs/testing.md`, "Panes smoke"): `node --test test/file-tabs.test.js` and
+(`docs/TESTING.md`, "Panes smoke"): `node --test test/file-tabs.test.js` and
 `npm run smoke:panes -- --project <a place whose page lists files>`.
 
 ## 1. The server's event loop stalls for ~3.5s
