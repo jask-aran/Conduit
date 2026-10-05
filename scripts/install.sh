@@ -51,9 +51,12 @@ step() {
   local log; log="$(mktemp)"; local started=$SECONDS
   "$@" >"$log" 2>&1 &
   local pid=$! i=0
+  local width="$(tput cols 2>/dev/null || printf '%s' "${COLUMNS:-80}")" progress="$(sed 's/\x1b\[[0-9;]*m//g' <<<"$message")"
+  (( width > 20 )) || width=80
+  progress="${progress:0:width-20}"
   if [[ -t 1 ]]; then
     while kill -0 "$pid" 2>/dev/null; do
-      printf '\r\e[K%s%s%s  %s %s%ss%s' "$M" "${FRAMES:i++%${#FRAMES}:1}" "$N" "$message" "$D" "$((SECONDS - started))" "$N"
+      printf '\r\e[K%s%s%s  %s %s%ss%s' "$M" "${FRAMES:i++%${#FRAMES}:1}" "$N" "$progress" "$D" "$((SECONDS - started))" "$N"
       sleep 0.12
     done
     printf '\r\e[K'
