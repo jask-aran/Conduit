@@ -9,7 +9,10 @@ test("health identifies the release and SIGTERM drains resident Pi", async () =>
   const harness = await startConduitHarness({ env: { CONDUIT_RELEASE: release } });
   try {
     const health = await (await harness.request("/healthz")).json();
-    assert.deepEqual(health, { ok: true, status: "ready", release, activeGenerations: 0 });
+    const { startedAt, ...healthState } = health;
+    assert.equal(typeof startedAt, "string");
+    assert.equal(new Date(startedAt).toISOString(), startedAt);
+    assert.deepEqual(healthState, { ok: true, status: "ready", release, activeGenerations: 0 });
 
     const chat = await harness.createChat();
     const sessionFile = path.join(harness.root, "pi", "sessions", `${chat.id}.jsonl`);

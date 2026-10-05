@@ -61,7 +61,7 @@ import {
 } from "@/components/primitives";
 import type { ChatSummary, ComputerLocation, HarnessSummary, Project, RuntimeProcess, WorkspacePolicy, WorkspaceSuggestion } from "../api/contracts";
 import type { UpdateState } from "../main";
-import { installedClientKind } from "../platform/installed-client";
+import { androidShell, installedClientKind } from "../platform/installed-client";
 import { latestRelease, type PublishedRelease } from "../platform/github-release";
 import { api } from "../api/client";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
@@ -127,7 +127,7 @@ function UpdateNotice(props: { state?: UpdateState; onTake?: () => void }) {
       }><Spinner class="size-3" /></Show>
       <span>{words()}</span>
       <Show when={state().kind === "ready"}>
-        <button type="button" onClick={() => props.onTake?.()}>Restart</button>
+        <button type="button" onClick={() => props.onTake?.()}>{androidShell ? "Install" : "Restart"}</button>
       </Show>
     </div>
   </Show>;

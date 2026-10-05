@@ -6,6 +6,8 @@ import type { ComputerLocation, ComputerPrefetchPayload } from "./api/contracts"
 import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, For, lazy, on, onCleanup, onMount, Show, untrack, type JSX } from "solid-js";
 import { Portal, render } from "solid-js/web";
 import { androidShell, desktopShell, isInstalledClient } from "./platform/installed-client.ts";
+// The clients that stage a downloaded update and install it on request.
+const updateShell = desktopShell ?? androidShell;
 import {
   ArrowLeftRightIcon, Columns2Icon, PanelTopIcon, EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ServerIcon, QrCodeIcon, MonitorIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon, XIcon,
   ChevronRightIcon,
@@ -859,11 +861,13 @@ function App() {
    * the one state that has no timer and no button.
    */
   const takePwaUpdate = async () => {
-    if (desktopShell) {
+    if (updateShell) {
       setUpdateState({ kind: "working", label: "Installing Conduit…" });
       try {
-        localStorage.setItem(DESKTOP_UPDATE_ROUTE_KEY, location.pathname + location.search + location.hash);
-        if (!await desktopShell.installPreparedUpdate()) setUpdateState({ kind: "idle" });
+        if (desktopShell) localStorage.setItem(DESKTOP_UPDATE_ROUTE_KEY, location.pathname + location.search + location.hash);
+        if (!await updateShell.installPreparedUpdate()) setUpdateState({ kind: "idle" });
+        // Android's installer can be cancelled, and the APK is still there.
+        else if (androidShell) setUpdateState({ kind: "ready" });
       } catch (error) {
         setUpdateState({ kind: "ready" });
         showError(error);
@@ -878,7 +882,7 @@ function App() {
   };
   const setPwaUpdating = (busy: boolean) => setUpdateState(busy ? { kind: "checking" } : { kind: "idle" });
   const prepareDesktopUpdate = async (quiet: boolean) => {
-    const shell = desktopShell;
+    const shell = updateShell;
     if (!shell || pwaUpdating()) return;
     setPwaUpdating(true);
     const notice = quiet ? null : toast.loading("Checking for updates…");
@@ -888,10 +892,10 @@ function App() {
         const label = `Downloading ${progress.version}… ${share}%`;
         setUpdateState({ kind: "working", label });
         if (notice) toast.loading(label, { id: notice });
-      });
+      }, quiet);
       if (result.kind === "ready") {
         setUpdateState({ kind: "ready" });
-        if (notice) toast.success(`Conduit ${result.version} is ready to restart`, { id: notice });
+        if (notice) toast.success(`Conduit ${result.version} is ready to ${androidShell ? "install" : "restart"}`, { id: notice });
       } else if (quiet) {
         setUpdateState({ kind: "idle" });
       } else {
@@ -906,25 +910,12 @@ function App() {
   const [addingServer, setAddingServer] = createSignal(false);
   const runPwaUpdate = async () => {
     if (pwaUpdating()) return;
-    if (desktopShell) {
+    if (updateShell) {
       await prepareDesktopUpdate(false);
       return;
     }
     setPwaUpdating(true);
     try {
-      // A new APK replaces the shell, which a service worker cannot do, so on
-      // Android this is a question about releases rather than about caches.
-      if (androidShell) {
-        const version = await androidShell.update();
-        if (version) {
-          setUpdateState({ kind: "working", label: `Conduit ${version} is downloading` });
-          toast.success(`Conduit ${version} is downloading. Open it to install.`);
-        } else {
-          sayUpToDate();
-          toast.success("Conduit is up to date");
-        }
-        return;
-      }
       // Stays "checking" until it resolves: a true return is followed by the
       // reload, so there is no install to narrate.
       if (!await forcePwaUpdate()) {
@@ -3389,16 +3380,16 @@ function App() {
     return ghost;
   };
   // The panes' last frames stay up while the documents move and load under
-  // them, then the two crossfade (~100ms).
+  // them, then the ghosts fade off them (~100ms).
   const crossfadeUnder = async (elements: HTMLElement[], place: () => Promise<void>) => {
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const ghosts = elements.map(ghostOf);
     for (const element of elements) element.style.opacity = "0";
     try { await place(); } finally {
-      await Promise.all([
-        ...elements.map(async (element) => { if (!still) await element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SWAP_FADE_MS, easing: "ease-out" }).finished.catch(() => undefined); element.style.opacity = ""; }),
-        ...ghosts.map(async (ghost) => { if (!still) await ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_FADE_MS, easing: "ease-out", fill: "forwards" }).finished.catch(() => undefined); ghost.remove(); }),
-      ]);
+      // The panes come back whole under their ghosts, and only the ghosts
+      // fade: both layers at half opacity let the background through.
+      for (const element of elements) element.style.opacity = "";
+      await Promise.all(ghosts.map(async (ghost) => { if (!still) await ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_FADE_MS, easing: "ease-out", fill: "forwards" }).finished.catch(() => undefined); ghost.remove(); }));
     }
   };
   const crossfadeSwap = (left: HTMLElement, right: HTMLElement, place: () => Promise<void>) => crossfadeUnder([left, right], place);
@@ -4026,10 +4017,9 @@ function App() {
             setWeightOverride(null);
             setPaneMotion(null);
           });
-          await Promise.all([
-            element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SWAP_FADE_MS, easing: "ease-out" }).finished,
-            ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_FADE_MS, easing: "ease-out", fill: "forwards" }).finished,
-          ]).catch(() => undefined);
+          // Pane A is whole under the ghost, which alone fades: two layers
+          // crossfading each at half opacity let the background through.
+          await ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_FADE_MS, easing: "ease-out", fill: "forwards" }).finished.catch(() => undefined);
           ghost.remove();
         } finally {
           swappingPanes = false;
@@ -4620,11 +4610,13 @@ function App() {
   // The shell dispatches it rather than opening anything itself, so there is
   // one new-chat path however it was asked for.
   onMount(() => {
-    if (!desktopShell) return;
+    if (!updateShell) return;
     // Stage a signed update while the window remains usable. The button and
     // tray command can still ask for an immediate check at any time.
     const firstCheck = window.setTimeout(() => void prepareDesktopUpdate(true), 10_000);
     const laterChecks = window.setInterval(() => void prepareDesktopUpdate(true), 60 * 60_000);
+    onCleanup(() => { clearTimeout(firstCheck); clearInterval(laterChecks); });
+    if (!desktopShell) return;
     const stops: Array<() => void> = [];
     const remember = (unlisten: () => void) => stops.push(unlisten);
     void desktopShell.onNewChat(() => { void createChat(); }).then(remember);
@@ -4633,8 +4625,6 @@ function App() {
       if (commandId === COMMAND_IDS.newChatGlobally) void startNewChat();
     }).then(remember);
     onCleanup(() => {
-      clearTimeout(firstCheck);
-      clearInterval(laterChecks);
       for (const stop of stops) stop();
     });
   });
