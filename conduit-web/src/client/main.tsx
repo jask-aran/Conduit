@@ -826,6 +826,12 @@ function App() {
       action: { label: "Ask Runtime", onClick: () => void askRuntimeForError(diagnostic) },
     });
   };
+  // An unsent draft is deleted when its page is left, which can be while it is
+  // still loading; the load then finds no chat, and that is not an error.
+  const showDraftError = (error: unknown) => {
+    if ((error as { error?: unknown } | null)?.error === "chat_not_found") return;
+    showError(error);
+  };
   /*
    * What the app is doing about its own version, said out loud.
    *
@@ -1405,7 +1411,7 @@ function App() {
         return;
       }
       await activateCreatedChat(created, project, templateId);
-    }).catch((error) => { showError(error); }).finally(() => {
+    }).catch(showDraftError).finally(() => {
       dashboardDraftRequest = null;
       if (scopeChanged) ensureDashboardDraft();
     });
@@ -1597,7 +1603,7 @@ function App() {
         if (typed && !side.chat.draft()) side.chat.setDraft(typed);
         typed = "";
         if (current && current.chatId !== opened.chat.id) drop(current.chatId);
-      }).catch((error) => { showError(error); }).finally(() => { request = null; });
+      }).catch(showDraftError).finally(() => { request = null; });
       request = pending;
       return pending;
     };
@@ -3219,7 +3225,7 @@ function App() {
         }
         pane.draft = { id: created.id, projectId: project.id };
         await side.chat.initialize({ ...created, templateId: created.templateId || templateId || undefined }, project);
-      }).catch(showError);
+      }).catch(showDraftError);
     }));
   }
   function discardPaneDraft(pane: PaneSlot) {
