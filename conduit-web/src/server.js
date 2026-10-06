@@ -666,6 +666,7 @@ const launchLiveSession = registerLiveSessionRoutes(app, {
   backends,
   catalogFor,
   config,
+  concurrency,
   findChatContext,
   lifecycle,
   manager,
