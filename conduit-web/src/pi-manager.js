@@ -26,6 +26,7 @@ import { emptyCacheStats, finishCacheStats, promptTokenParts } from "./cache-sta
 import { piPlanUsage } from "./plan-usage.js";
 import { messageIsInterim } from "./active-generation.js";
 import { terminate } from "./server/effect-process.js";
+import { SessionScope, rejectPending } from "./server/session-scope.js";
 
 export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = "", models, template }) {
   const args = [
@@ -493,7 +494,7 @@ export class PiManager extends EventEmitter {
       pendingQueuedPrompts: [],
       // Names claimed for queued messages, spent in order as Pi writes them.
       queuedMessageIds: [],
-      statsTimer: null,
+      scope: new SessionScope(),
       // Pi is "running" the moment the OS spawns it, which is not the moment it
       // can answer. Restoring a large session takes it seconds, and an RPC sent
       // into that gap sat in its stdin while a five second clock ran out --
@@ -508,6 +509,18 @@ export class PiManager extends EventEmitter {
     this.processes.set(id, record);
     if (chatId) this.byChatId.set(chatId, id);
     if (resolvedFile) this.bySessionFile.set(resolvedFile, id);
+    // Released newest first when the process exits: unanswered requests, then
+    // the browsers watching it, then its place in the indexes.
+    record.scope.defer(() => {
+      this.emit("process_removed", { id: record.id, chatId: record.chatId });
+      this.processes.delete(record.id);
+      if (this.byChatId.get(record.chatId) === record.id) this.byChatId.delete(record.chatId);
+      if (record.sessionFile && this.bySessionFile.get(record.sessionFile) === record.id) this.bySessionFile.delete(record.sessionFile);
+    });
+    record.scope.defer(() => {
+      for (const socket of [...record.clients]) socket.close?.(1012, "Pi process exited");
+    });
+    record.scope.defer(() => rejectPending(record.pendingRequests, new Error("The agent process exited before replying")));
 
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
@@ -532,8 +545,7 @@ export class PiManager extends EventEmitter {
     // unhandled stream error.
     child.stdin?.on?.("error", (error) => {
       if (record.stopping || record.status === "stopped") return;
-      for (const pending of record.pendingRequests.values()) pending.reject(error);
-      record.pendingRequests.clear();
+      rejectPending(record.pendingRequests, error);
       this.publish(record, { type: "runtime_error", message: error.message });
     });
     // Spawning is not readiness: the process is alive here, which is what
@@ -551,8 +563,7 @@ export class PiManager extends EventEmitter {
       record.active = false;
       record.activity = "failed";
       record.activityDetail = error.message;
-      for (const pending of record.pendingRequests.values()) pending.reject(error);
-      record.pendingRequests.clear();
+      rejectPending(record.pendingRequests, error);
       this.ingestGenerationEvent(record, { type: "runtime_error", message: error.message });
       this.publish(record, { type: "runtime_error", message: error.message });
       this.publishState(record);
@@ -567,10 +578,6 @@ export class PiManager extends EventEmitter {
       record.stopping = false;
       record.activity = "idle";
       record.hostUiRequests = [];
-      if (record.sessionFile) this.bySessionFile.delete(record.sessionFile);
-      for (const pending of record.pendingRequests.values()) pending.reject(new Error("The agent process exited before replying"));
-      record.pendingRequests.clear();
-      if (record.statsTimer) clearTimeout(record.statsTimer);
       // A deliberate stop is process lifecycle, not a failed model request.
       // Publishing a normalized generation failure first made the client
       // freeze a synthetic error turn and show a crash toast before the
@@ -589,12 +596,7 @@ export class PiManager extends EventEmitter {
         });
       }
       this.publish(record, { type: "runtime_exit", code, signal, deliberate });
-      for (const socket of [...record.clients]) {
-        socket.close?.(1012, "Pi process exited");
-      }
-      this.emit("process_removed", { id: record.id, chatId: record.chatId });
-      this.processes.delete(record.id);
-      if (this.byChatId.get(record.chatId) === record.id) this.byChatId.delete(record.chatId);
+      record.scope.close();
     });
     this.emit("process_changed", { record, reason: "created" });
     return record;
@@ -818,12 +820,9 @@ export class PiManager extends EventEmitter {
         cacheStats: record.cacheStats || null,
       });
     }
-    if (record.statsTimer) clearTimeout(record.statsTimer);
-    record.statsTimer = setTimeout(() => {
-      record.statsTimer = null;
+    record.scope.timeout("stats", afterCompaction ? 50 : 100, () => {
       this.refreshContextUsage(record.id).catch(() => {});
-    }, afterCompaction ? 50 : 100);
-    record.statsTimer.unref?.();
+    });
   }
 
   async refreshContextUsage(id) {
@@ -1894,7 +1893,7 @@ export class PiManager extends EventEmitter {
   view(record) {
     const {
       child, clients, stdoutBuffer, events, stream, activeGeneration, generationNormalizer,
-      pendingRequests, generation, statsTimer,
+      pendingRequests, generation, scope,
       cwd, sessionDir, createdAtMs, lastActivityAt, lastClientAt, lastTurnAt, ...safe
     } = record;
     return {
