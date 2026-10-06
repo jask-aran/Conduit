@@ -1089,12 +1089,6 @@ export class ClaudeCodeAdapter extends EventEmitter {
     return true;
   }
 
-  async shutdown() {
-    const records = this.rawRecords();
-    await Promise.all(records.map((record) => this.close(record.id)));
-    return records.length;
-  }
-
   async listThreads({ cwd, limit = 60 } = {}) {
     const sessions = await this.sdk.listSessions({ ...(cwd ? { dir: cwd } : {}), limit: Math.min(Math.max(limit, 1), 100) });
     const iso = (ms) => (ms ? new Date(ms).toISOString() : null);
