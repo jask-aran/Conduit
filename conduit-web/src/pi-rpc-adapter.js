@@ -300,8 +300,8 @@ export const serializePiV0 = (event) => {
 export class PiRpcAdapter {
   constructor(manager) { this.manager = manager; }
   launch(context, request, services) { return launchConduitPi(this, context, request, services); }
-  create(options) { return this.manager.createWithCapacity({ ...options, sessionFile: null }); }
-  restore(opaqueSession, options) { return this.manager.createWithCapacity({ ...options, sessionFile: opaqueSession }); }
+  create(options) { return this.manager.create({ ...options, sessionFile: null }); }
+  restore(opaqueSession, options) { return this.manager.create({ ...options, sessionFile: opaqueSession }); }
   prompt(id, message, options) { return this.manager.promptAccepted(id, message, options); }
   cancel(id, generationId) { return this.manager.abortGeneration(id, generationId); }
   close(id) { return this.manager.stopAndWait(id); }
