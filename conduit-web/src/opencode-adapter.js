@@ -826,15 +826,12 @@ export class OpenCodeAdapter extends EventEmitter {
     return true;
   }
 
-  async shutdown() {
-    const records = this.rawRecords();
-    await Promise.all(records.map((record) => this.close(record.id)));
+  shutdownResources() {
     const stream = this.stream;
     this.stream = null;
     stream?.controller.abort();
     // The background service belongs to OpenCode and may serve its TUI and
     // other clients. Conduit never stops it.
-    return records.length;
   }
 
   async listThreads({ cwd, limit = 60 } = {}) {
