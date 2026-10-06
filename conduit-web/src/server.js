@@ -59,6 +59,7 @@ import { registerTerminalPasteRoutes } from "./server/routes/terminal-paste.js";
 import { registerDraftRoutes } from "./server/routes/drafts.js";
 import { registerRuntimeRoutes } from "./server/routes/runtime.js";
 import { registerChatRoutes } from "./server/routes/chats.js";
+import { createWarmDrafts } from "./server/warm-drafts.js";
 import { registerHarnessRoutes } from "./server/routes/harnesses.js";
 import { createHarnessModelCatalogue } from "./harnesses/model-catalogue.js";
 import { rememberedModel } from "./profile-model-memory.js";
@@ -695,6 +696,8 @@ const launchLiveSession = registerLiveSessionRoutes(app, {
 });
 registerChatRoutes(app, {
   backends,
+  composerDraft: (chatId) => drafts.draft(chatId),
+  warmDrafts: createWarmDrafts({ backends, registry, projects }),
   catalogFor,
   chatModelView,
   lifecycle,

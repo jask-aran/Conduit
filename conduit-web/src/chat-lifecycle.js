@@ -29,6 +29,11 @@ export class ChatLifecycle {
     if (this.deletingChats.has(chatId)) throw conflict("chat_deleting", "This chat is being deleted.");
     const existing = this.launches.get(chatId);
     if (existing) {
+      // A spare start is somebody's in advance: whatever is actually asked
+      // for waits for it, then gets its own settings on the agent it made.
+      if (existing.request?.spare && !request?.spare) {
+        return existing.promise.catch(() => {}).then(() => this.runLaunch(chatId, work, request));
+      }
       // A passive browser attach may join a launch that already selected its
       // model. A later model-bearing request cannot join a passive launch,
       // because that would silently discard the requested model.
