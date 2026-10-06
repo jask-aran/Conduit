@@ -4480,10 +4480,10 @@ function App() {
   });
   const lastUserEntryId = createMemo(() => {
     const list = focusedChat().messages();
-    // An optimistic id is one the backend never persisted - a message sent and
-    // then interrupted before it was written. Forking one fails, so it cannot
-    // be the target of regenerate or edit.
-    for (let index = list.length - 1; index >= 0; index -= 1) { const message = list[index]!; if (message.role === "user" && !message.pending) return message.id; }
+    // A message the server has not stated yet -- sent, and interrupted before
+    // it was written -- cannot be forked, so it cannot be the target of
+    // regenerate or edit.
+    for (let index = list.length - 1; index >= 0; index -= 1) { const message = list[index]!; if (message.role === "user" && !message.local) return message.id; }
     return null;
   });
   const thinkingLevels = createMemo(() => focusedModels().models().find((item) => item.spec === focusedModels().model())?.thinkingLevels ?? []);

@@ -752,13 +752,6 @@ export function createActiveChat(options: ActiveChatOptions) {
           setLive(null);
           resetLiveFlags();
           setGeneration("idle");
-          // The process is gone, so nothing is going to close the rows it left
-          // open. A row with text keeps it -- it is what the reader watched
-          // arrive -- and an empty one goes rather than sitting there as an
-          // answer that never comes.
-          setMessages((current) => current
-            .filter((message) => !(message.streaming && !message.content))
-            .map((message) => (message.streaming ? { ...message, streaming: false } : message)));
           generationStore.clear();
           setActiveGeneration(null);
           setActiveGenerationChange(null);
@@ -1119,7 +1112,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (!prepared.hasContent) return;
     const busy = streaming();
     const messageId = newMessageId();
-    const local: Message = { id: messageId, role: "user", content: prepared.message, timestamp: new Date().toISOString(), attachments: prepared.sentAttachments };
+    const local: Message = { id: messageId, role: "user", content: prepared.message, timestamp: new Date().toISOString(), attachments: prepared.sentAttachments, local: true };
 
     if (busy) {
       // Sending while the agent works queues: the message reaches the model as
@@ -1189,13 +1182,25 @@ export function createActiveChat(options: ActiveChatOptions) {
     // Show the answers going before the round trip. The prompt itself stays:
     // regenerate re-asks it, and the server restates it under the name this row
     // already has, so there is nothing here to take away and put back.
+    const cut = previous.slice(previous.findIndex((message) => message.id === entryId) + 1);
     setMessages(truncateAt(previous, entryId, { inclusive: false }));
     try {
       await requireAgent("regenerate");
+      // Again: a snapshot taken while the agent started still holds them.
       setMessages((current) => truncateAt(current, entryId, { inclusive: false }));
       setGeneration("active");
       session.send({ type: "regenerate", entryId, model: models.model(), thinkingLevel: models.effort() });
-    } catch (error) { setMessages(previous); setGeneration("idle"); onError(error); }
+    } catch (error) {
+      // Put back only what was cut, so anything stated meanwhile stands.
+      setMessages((current) => {
+        const at = current.findIndex((message) => message.id === entryId);
+        if (at < 0) return current;
+        const missing = cut.filter((message) => !current.some((held) => held.id === message.id));
+        return [...current.slice(0, at + 1), ...missing, ...current.slice(at + 1)];
+      });
+      setGeneration("idle");
+      onError(error);
+    }
   };
 
   const continueResponse = async () => {
@@ -1320,7 +1325,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     // for the whole of the response it asked for.
     const interruptId = newMessageId();
     const local: Message = { id: interruptId, role: "user", content: interrupting,
-      timestamp: new Date().toISOString(), attachments: prepared.sentAttachments };
+      timestamp: new Date().toISOString(), attachments: prepared.sentAttachments, local: true };
     const previous = messages();
     setQueue({ steering: [], followUp: [] });
     setDraft("");
