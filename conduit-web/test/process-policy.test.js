@@ -163,10 +163,14 @@ test("createWithCapacity serializes concurrent creates under the cap", async () 
   ]);
   const fulfilled = results.filter((result) => result.status === "fulfilled");
   const rejected = results.filter((result) => result.status === "rejected");
-  // First create wins; second hits the cap while the first is still starting (non-reclaimable).
+  // Registration order is part of the old promise-tail behavior: the first
+  // create wins; the second hits the cap while it is still starting.
   assert.equal(fulfilled.length, 1);
   assert.equal(rejected.length, 1);
-  assert.equal(rejected[0].reason.code, "live_process_limit");
+  assert.equal(results[0].status, "fulfilled");
+  assert.equal(results[0].value.chatId, "chat-a");
+  assert.equal(results[1].status, "rejected");
+  assert.equal(results[1].reason.code, "live_process_limit");
   assert.equal(manager.list().length, 1);
   children[0]?.emit("spawn");
 });
@@ -344,6 +348,35 @@ test("a deliberate stop tells clients not to reconnect", async () => {
   const exit = events.find((event) => event.type === "runtime_exit");
   assert.ok(exit, "an exit event is published");
   assert.equal(exit.deliberate, true);
+});
+
+test("stopAndWait escalates to SIGKILL when the graceful deadline expires", async () => {
+  const signals = [];
+  const concurrency = {
+    runCapacity: (work) => work(),
+    waitFor: async () => { throw new Error("deadline"); },
+  };
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = { write() {} };
+  child.kill = (signal) => {
+    signals.push(signal);
+    if (signal === "SIGKILL") queueMicrotask(() => child.emit("exit", 0, signal));
+    return true;
+  };
+  const manager = new PiManager({
+    agentDir: "/tmp/conduit-stop-escalation",
+    concurrency,
+    reaperIntervalMs: 0,
+    spawnImpl: () => child,
+    template: { id: "test", version: "1", models: [], tools: [], extensions: [], skills: [], promptTemplates: [] },
+  });
+  const record = manager.create({ project: project("stop-escalation"), chatId: "chat-stop-escalation" });
+  child.emit("spawn");
+
+  assert.equal(await manager.stopAndWait(record.id), true);
+  assert.deepEqual(signals, ["SIGTERM", "SIGKILL"]);
 });
 
 test("a crash is not reported as a deliberate stop", async () => {
