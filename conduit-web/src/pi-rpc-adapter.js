@@ -358,6 +358,16 @@ export class PiRpcAdapter {
   }
 }
 
+export function isGeneratingRecord(record) {
+  if (!record || !["starting", "running"].includes(record.status)) return false;
+  // Most adapters claim a turn by setting active. Codex has to wait for the
+  // app-server's turn/started notification, so its prompt identity is the
+  // reservation between turn/start being sent and that notification arriving.
+  if (record.active || record.stopping || record.compacting || record.retrying || record.answering) return true;
+  if ((record.hostUiRequests || []).length) return true;
+  return Boolean(record.generation && !record.generation.closed && !record.generation.settled);
+}
+
 export class ChatBackendRegistry {
   // Backends used to be named positionally here. They are now built from the
   // harness manifests via `fromManifests`; the bare `manager` form remains for
@@ -462,6 +472,9 @@ export class ChatBackendRegistry {
   }
   rawRecords() {
     return this.instances().flatMap((adapter) => [...adapter.rawRecords()]);
+  }
+  generatingRecords() {
+    return this.rawRecords().filter(isGeneratingRecord);
   }
   async shutdown() {
     const stopped = new Map();
