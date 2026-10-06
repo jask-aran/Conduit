@@ -2,6 +2,7 @@ import { WebSocketServer } from "ws";
 import { PtyOutputBatcher } from "../pty-output-batcher.js";
 import { PTY_MAX_INPUT_BYTES } from "../pty-manager.js";
 import { startWebSocketKeepalive } from "./ws-keepalive.js";
+import { within } from "./effect-concurrency.js";
 
 const TERMINAL_PENDING_LIMIT = 1024 * 1024;
 const PTY_IN_USE_CLOSE_CODE = 4009;
@@ -198,10 +199,7 @@ export function createTerminalStream({ terminals }) {
       try { ws.close(1012, "Conduit is restarting"); }
       catch { ws.terminate?.(); }
     }
-    await Promise.race([
-      Promise.all(closed),
-      new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(timeoutMs) || 0))),
-    ]);
+    await within(Promise.all(closed), timeoutMs);
     for (const ws of wss.clients) ws.terminate?.();
     return { closed: wss.clients.size === 0 };
   };

@@ -12,6 +12,7 @@ import { countCacheRequest, usageFromRequests } from "./cache-stats.js";
 import { conduitCategories } from "./context-categories.js";
 import { claudePlanUsage, declarePlan } from "./plan-usage.js";
 import { unsupported } from "./harnesses/unsupported.js";
+import { within } from "./server/effect-concurrency.js";
 
 // Claude Code's tools, by what they do.
 const CLAUDE_TOOL_KINDS = Object.freeze({
@@ -1251,7 +1252,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     } finally {
       input.end();
       try { query.close(); } catch { /* already gone */ }
-      await Promise.race([drained, new Promise((resolve) => setTimeout(resolve, 2000))]);
+      await within(drained, 2000);
       const root = path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"), "projects");
       for (const dir of await fs.promises.readdir(root).catch(() => [])) {
         await fs.promises.rm(path.join(root, dir, `${scratch}.jsonl`), { force: true }).catch(() => {});

@@ -12,6 +12,18 @@ const fromPromise = (work) => Effect.tryPromise({
   catch: (error) => error,
 });
 
+/**
+ * `promise`, or after `ms` whatever `fallback` gives: a value, or a function
+ * that returns one or throws. Unlike a race against a timer, the timer goes
+ * when the promise wins, so a settled wait does not hold the process open.
+ */
+export const within = (promise, ms, fallback) => Effect.runPromise(fromPromise(() => promise).pipe(
+  Effect.timeoutOrElse({
+    duration: Math.max(0, Math.trunc(Number(ms) || 0)),
+    orElse: () => (typeof fallback === "function" ? fromPromise(fallback) : Effect.succeed(fallback)),
+  }),
+));
+
 const mutex = () => Semaphore.makeUnsafe(1);
 const withMutex = (semaphore, work) => Effect.runPromise(semaphore.withPermit(fromPromise(work)));
 const startWithMutex = (semaphore, work) =>
@@ -57,14 +69,6 @@ export class ServerConcurrency {
   }
 
   waitFor(work, timeoutMs, timeoutError) {
-    const duration = Math.max(0, Math.trunc(Number(timeoutMs) || 0));
-    return Effect.runPromise(
-      fromPromise(work).pipe(
-        Effect.timeoutOrElse({
-          duration,
-          orElse: () => Effect.fail(timeoutError()),
-        }),
-      ),
-    );
+    return within(Promise.resolve().then(work), timeoutMs, () => { throw timeoutError(); });
   }
 }
