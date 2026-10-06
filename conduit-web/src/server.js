@@ -176,7 +176,6 @@ const manager = new PiManager({
   command: config.piCommand,
   agentDir: config.piAgentDir,
   template: config.piTemplate,
-  maxLiveProcesses: runtimeSettings.get().maxLiveProcesses,
   maxGeneratingProcesses: runtimeSettings.get().maxGeneratingProcesses,
   idleProcessTtlMs: runtimeSettings.get().idleProcessTtlMs,
 });
