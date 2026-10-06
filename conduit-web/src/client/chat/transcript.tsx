@@ -1124,7 +1124,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
           if (item.type === "pending") {
             // A turn before anything of it shows is the header its trace will
             // be, starting -- replaced in place when the first step arrives.
-            return <div data-slot="message-scroller-item"><TraceStarting startedAt={item.startedAt} /></div>;
+            // Only a booting agent is Conduit's wait; after that it is the model's.
+            return <div data-slot="message-scroller-item"><TraceStarting startedAt={item.startedAt} label={props.chat.activity()?.kind === "starting" ? "Starting agent" : "Waiting for model"} /></div>;
           }
           const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");
