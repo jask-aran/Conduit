@@ -77,6 +77,7 @@ import { detect } from "./harnesses/probe.js";
 import { TurnCheckpointStore } from "./turn-checkpoint-store.js";
 import { conduitPiSessionFile } from "./backend-session.js";
 import { ServerConcurrency } from "./server/effect-concurrency.js";
+import { ServerLifetime } from "./server/server-lifetime.js";
 
 const config = loadConfig();
 const turnCheckpoints = new TurnCheckpointStore(path.join(config.dataRoot, "turn-checkpoints"));
@@ -86,7 +87,13 @@ for (const project of await projects.list()) {
   const normalized = normalizeTemplateId(project.defaultTemplateId);
   if (normalized && normalized !== project.defaultTemplateId) await projects.update(project.id, { defaultTemplateId: normalized });
 }
-const terminals = new PtyManager({ filePath: config.remotesFile, terminalTeardown: config.terminalTeardown });
+// Everything below that has to be let go when the server stops is handed to
+// this as it is made, and let go in reverse.
+const lifetime = new ServerLifetime();
+const terminals = lifetime.own("terminals", new PtyManager({ filePath: config.remotesFile, terminalTeardown: config.terminalTeardown }), async (owned) => {
+  const stopped = await owned.stopAll();
+  console.log(`Conduit ${config.terminalTeardown ? "stopped" : "preserved"} ${stopped} terminal session${stopped === 1 ? "" : "s"}`);
+});
 await terminals.load();
 const pinnedInstallation = config.installations.get("conduit-pinned");
 const registry = new ChatStore(config.sessionRegistryFile, {
@@ -125,17 +132,20 @@ const leafFor = () => ({
   attest: (spki) => attestLeaf(serverIdentity.id, spki, serverIdentity.privateKey),
 });
 let serverLeaf = await leafStore.ensure(leafFor());
-const lanAdvertisement = new LanAdvertisement({
+const lanAdvertisement = lifetime.own("LAN advertisement", new LanAdvertisement({
   identity: serverIdentity,
   enabled: config.advertiseOnLan && reachableOnNetwork,
   log: (event) => console.log(JSON.stringify(event)),
-});
+}), (owned) => owned.stop());
 const searchSettings = new SearchSettingsStore({ filePath: config.searchConfigFile, environment: process.env });
 await searchSettings.initialize();
 const voiceSettings = new VoiceSettingsStore({ filePath: config.voiceConfigFile, catalog: VOICE_EXECUTION_CATALOG });
 await voiceSettings.initialize();
-const voiceModel = new VoiceModelManager({ root: config.voiceModelRoot, catalog: VOICE_EXECUTION_CATALOG });
-const voiceRecordingStore = new VoiceRecordingStore({ root: config.voiceRecordingsRoot });
+const voiceModel = lifetime.own("voice model", new VoiceModelManager({ root: config.voiceModelRoot, catalog: VOICE_EXECUTION_CATALOG }), (owned) => owned.stop());
+const voiceRecordingStore = lifetime.own("voice archive", new VoiceRecordingStore({ root: config.voiceRecordingsRoot }), async (owned) => {
+  const result = await owned.drain({ timeoutMs: VOICE_ARCHIVE_SHUTDOWN_TIMEOUT_MS });
+  console.log(JSON.stringify({ type: "conduit.voice-archive-drain", ...result }));
+}, { timeoutMs: VOICE_ARCHIVE_SHUTDOWN_TIMEOUT_MS + 1_000 });
 const voiceRuntime = new VoiceRuntime({ settings: voiceSettings, modelManager: voiceModel, catalog: VOICE_EXECUTION_CATALOG });
 const promptStore = new PromptStore({
   root: config.promptOverridesRoot,
@@ -197,7 +207,13 @@ const harnessConfig = {
   chatgptWebDataDir: path.join(config.dataRoot, "chatgpt-web"),
   testStreamDataDir: path.join(config.dataRoot, "test-stream"),
 };
-const backends = ChatBackendRegistry.fromManifests(MANIFESTS, await detect(MANIFESTS, harnessConfig), harnessConfig);
+const backends = lifetime.own("agents", ChatBackendRegistry.fromManifests(MANIFESTS, await detect(MANIFESTS, harnessConfig), harnessConfig), async (owned) => {
+  const stopped = await owned.shutdown();
+  for (const [name, key] of [["Pi", "conduit_pi"], ["Codex", "codex"]]) {
+    const count = stopped.get(owned.adapters.get(key)) || 0;
+    console.log(`Conduit stopped ${count} ${name} process${count === 1 ? "" : "es"}`);
+  }
+}, { timeoutMs: 30_000 });
 const chatgptWeb = backends.adapters.get("chatgpt-web") || null;
 const requireChatgptWeb = () => {
   if (!chatgptWeb) throw Object.assign(new Error("ChatGPT Web is not installed"), { code: "backend_unavailable", status: 409 });
@@ -213,7 +229,7 @@ async function recycleIdleIsolatedPiProcesses() {
 }
 // Conduit's message identity for Pi, which has none to give until it writes.
 const messageIds = new MessageIds();
-const runtimeHub = new RuntimeHub({ listViews: () => backends.list() });
+const runtimeHub = lifetime.own("runtime hub", new RuntimeHub({ listViews: () => backends.list() }), (owned) => owned.close());
 // The snapshot hides records that are stopped or on their way out; so must
 // every incremental update, or a teardown emit re-advertises a process the
 // removal already retired and the pill comes back to life.
@@ -805,8 +821,10 @@ app.use((error, _request, response, _next) => {
 });
 
 const server = http.createServer(app);
-const wss = new WebSocketServer({ noServer: true });
-const terminalStream = createTerminalStream({ terminals, wss });
+const wss = lifetime.own("browser sockets", new WebSocketServer({ noServer: true }), (owned) => {
+  for (const socket of owned.clients) socket.close(1012, "Conduit is restarting");
+});
+const terminalStream = lifetime.own("terminal streams", createTerminalStream({ terminals, wss }), (owned) => owned.shutdown?.({ timeoutMs: 1_000 }));
 const dictationStream = createDictationStream({
   wss,
   voiceRuntime,
@@ -817,6 +835,7 @@ const dictationStream = createDictationStream({
     finalizationDefaultMultiplier: config.voiceFinalizationDefaultMultiplier,
   },
 });
+lifetime.own("dictation streams", dictationStream, (owned) => owned.shutdown?.({ timeoutMs: 1_000 }));
 const liveSessionStream = createLiveSessionStream({
   backends,
   concurrency,
@@ -930,13 +949,24 @@ const front = net.createServer((socket) => {
     (first[0] === TLS_HANDSHAKE && secureServer ? secureServer : server).emit("connection", socket);
   });
 });
+// The listener and the two servers it hands connections to close together:
+// the listener counts every connection it handed over, so it closes only once
+// they do.
+lifetime.own("listener", front, async (owned) => {
+  const closed = new Promise((resolve) => owned.close(resolve));
+  server.closeIdleConnections?.();
+  server.closeAllConnections?.();
+  secureServer?.close();
+  secureServer?.closeAllConnections?.();
+  await closed;
+});
 /*
  * Checked again for expiry: `ensure` hands back the same leaf until it is
  * near the end of its life, and only then is a new one attested and swapped
  * in under the listener. Address changes no longer matter to it.
  */
 const LEAF_CHECK_MS = 60 * 60 * 1000;
-const leafTimer = secureServer ? setInterval(async () => {
+if (secureServer) lifetime.interval("TLS leaf check", async () => {
   try {
     const next = await leafStore.ensure(leafFor());
     if (next === serverLeaf) return;
@@ -946,36 +976,13 @@ const leafTimer = secureServer ? setInterval(async () => {
   } catch (error) {
     console.warn("Conduit could not re-issue its TLS leaf", error.message);
   }
-}, LEAF_CHECK_MS) : null;
-leafTimer?.unref?.();
+}, LEAF_CHECK_MS);
 
 async function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`Conduit received ${signal}; stopping`);
-  runtimeHub.close();
-  await lanAdvertisement.stop();
-  await dictationStream.shutdown?.({ timeoutMs: 1_000 });
-  await terminalStream.shutdown?.({ timeoutMs: 1_000 });
-  for (const socket of wss.clients) socket.close(1012, "Conduit is restarting");
-  const archiveDrain = voiceRecordingStore.drain({ timeoutMs: VOICE_ARCHIVE_SHUTDOWN_TIMEOUT_MS });
-  const closed = new Promise((resolve) => front.close(resolve));
-  server.closeIdleConnections?.();
-  server.closeAllConnections?.();
-  clearInterval(leafTimer);
-  secureServer?.close();
-  secureServer?.closeAllConnections?.();
-  const stoppedByBackend = await backends.shutdown();
-  const stoppedProcesses = stoppedByBackend.get(backends.adapters.get("conduit_pi")) || 0;
-  const stoppedCodexProcesses = stoppedByBackend.get(backends.adapters.get("codex")) || 0;
-  const stoppedTerminals = await terminals.stopAll();
-  await voiceModel.stop();
-  await closed;
-  const archiveResult = await archiveDrain;
-  console.log(JSON.stringify({ type: "conduit.voice-archive-drain", ...archiveResult }));
-  console.log(`Conduit stopped ${stoppedProcesses} Pi process${stoppedProcesses === 1 ? "" : "es"}`);
-  console.log(`Conduit stopped ${stoppedCodexProcesses} Codex process${stoppedCodexProcesses === 1 ? "" : "es"}`);
-  console.log(`Conduit ${config.terminalTeardown ? "stopped" : "preserved"} ${stoppedTerminals} terminal session${stoppedTerminals === 1 ? "" : "s"}`);
+  await lifetime.close();
 }
 
 for (const signal of ["SIGTERM", "SIGINT"]) {
@@ -994,12 +1001,11 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
 // whatever else was holding the loop. Without this that shows up only as "it
 // randomly slows to a crawl", and the phase timings blame whoever was waiting.
 let loopCheckAt = Date.now();
-const loopLag = setInterval(() => {
+lifetime.interval("event-loop check", () => {
   const drift = Date.now() - loopCheckAt - 500;
   loopCheckAt = Date.now();
   if (drift > 250) console.warn("Event loop stalled", { ms: drift });
 }, 500);
-loopLag.unref?.();
 
 // Pay the model catalogue's cold start at boot, not on somebody's first click.
 // Building it costs seconds the first time, and starting an agent validates its
