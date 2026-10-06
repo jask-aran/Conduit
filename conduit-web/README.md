@@ -512,7 +512,8 @@ starting, and browser-attached processes remain resident.
   `lost` while its transcript remains in the chat.
   A run's `requests` lists the approvals and questions it waits on; one left
   unanswered for `hostUiTimeoutMs` (given at creation, default ten minutes) is
-  cancelled, as a dismissed card would be.
+  cancelled, as a dismissed card would be. Runs are not auto-named unless
+  created with `autoName: true`.
 - `GET /v0/host-ui` lists every approval or question any live agent is waiting
   on, with its chat, project and whether it belongs to a run;
   `POST /v0/chats/:chatId/host-ui/:requestId` answers one with

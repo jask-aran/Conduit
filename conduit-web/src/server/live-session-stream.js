@@ -223,8 +223,11 @@ export function createLiveSessionStream({
   async function sendPrompt(record, prepared, options) {
     const { sourceCheckpointId = null, messageId = null, ...promptOptions } = options || {};
     const namingOwner = manifestForImplementation(record.adapterImplementation)?.nameGeneration;
+    // A headless run is not named unless it asked to be: nobody reads a list
+    // it is not in, and naming costs a model call.
+    const run = prepared.context.chat.run;
     const needsName = namingOwner === "conduit" && !prepared.context.chat.title
-      && !namingChats.has(prepared.context.chat.id);
+      && !namingChats.has(prepared.context.chat.id) && (!run || run.autoName === true);
     const adapter = adapterFor(record);
     if (prepared.attachments.length && !adapter.getCapabilities().attachments) {
       throw Object.assign(new Error("This agent does not support attachments"), { code: "attachments_unsupported", status: 400 });

@@ -54,7 +54,9 @@ export function registerRunRoutes(app, {
       const profileId = request.body?.profileId || project.defaultTemplateId || null;
       // How long an approval or question may wait before it is cancelled.
       const hostUiTimeoutMs = Math.trunc(Number(request.body?.hostUiTimeoutMs) || 0);
-      const run = hostUiTimeoutMs > 0 ? { hostUiTimeoutMs } : {};
+      const run = { ...(hostUiTimeoutMs > 0 ? { hostUiTimeoutMs } : {}),
+        // Off unless asked: a run is named only with { autoName: true }.
+        ...(request.body?.autoName === true ? { autoName: true } : {}) };
       // Any profile a chat can be made with: a harness's own, or a Conduit Pi one.
       const harness = profileId && agentProfiles(config.piTemplates, { available: new Set(backends.adapters.keys()) })
         .find((profile) => profile.id === profileId && profile.management === "agent");
