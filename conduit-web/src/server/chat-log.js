@@ -19,6 +19,11 @@
  * every merged frame look like a hole to a client counting statements.
  */
 import crypto from "node:crypto";
+import { applyTranscriptOps } from "../transcript-fold.js";
+
+// How many of the latest stated messages are kept to reconcile against.
+const STATED_LIMIT = 200;
+const sameText = (left, right) => String(left ?? "").replace(/\s+/g, " ").trim() === String(right ?? "").replace(/\s+/g, " ").trim();
 
 /**
  * Events whose loss actually changes what the transcript says, in Conduit's
@@ -83,6 +88,10 @@ export class ChatLog {
     // Every message this log has already placed. A restatement of one of them
     // says nothing new about where the transcript ends.
     this.placed = new Set();
+    // The transcript as this log has stated it, folded exactly as the browser
+    // folds it, so a settled turn can be checked against the record without
+    // telling the browser anything when the two agree.
+    this.stated = { messages: [], tools: [] };
   }
 
   state() {
@@ -137,11 +146,55 @@ export class ChatLog {
   }
 
   record(event) {
+    if (event?.type === "transcript_op") this.stated = applyTranscriptOps(this.stated, [event]);
+    else if (event?.type === "transcript_sync" && event.replace) {
+      this.stated = { messages: [...(event.messages || [])], tools: [...(event.tools || [])] };
+    }
+    if (this.stated.messages.length > STATED_LIMIT) this.stated.messages = this.stated.messages.slice(-STATED_LIMIT);
     this.seq += 1;
     const stamped = { ...event, log: { id: this.id, seq: this.seq } };
     this.entries.push(stamped);
     if (this.entries.length > this.limit) this.entries.splice(0, this.entries.length - this.limit);
     return stamped;
+  }
+
+  /**
+   * The statements that would make what was said match the record, for the
+   * messages of a turn the harness has just written down.
+   *
+   * Empty when they agree, which is the ordinary case and costs the browser
+   * nothing. A message stated with other text is restated; one never stated is
+   * opened and closed after the message before it. A stated message the record
+   * does not hold is reported, not dropped: that is a bug to find, and a reload
+   * already shows the record.
+   */
+  reconcile(messages = []) {
+    const stated = new Map(this.stated.messages.map((message) => [message.id, message]));
+    const ops = [];
+    const differences = [];
+    let previous = null;
+    let prompt = null;
+    for (const message of messages) {
+      if (!message?.id) continue;
+      if (message.role === "user") prompt = message.id;
+      const said = stated.get(message.id);
+      const close = message.role === "assistant" ? {
+        type: "transcript_op", op: "message.close", messageId: message.id, stopReason: message.stopReason || null,
+        interim: message.interim === true, content: String(message.content ?? ""), blocks: message.blocks || [],
+        ...(message.model ? { model: message.model } : {}), ...(message.timestamp ? { timestamp: message.timestamp } : {}),
+      } : null;
+      if (!said) {
+        differences.push({ id: message.id, kind: "missing" });
+        ops.push({ type: "transcript_op", op: "message.open", message: { ...message, streaming: false },
+          answers: message.role === "assistant" ? prompt : null, after: previous });
+        if (close) ops.push(close);
+      } else if (said.role !== message.role || (close && !sameText(said.content, message.content))) {
+        differences.push({ id: message.id, kind: "changed" });
+        if (close) ops.push(close);
+      }
+      previous = message.id;
+    }
+    return { ops, differences };
   }
 
   /**

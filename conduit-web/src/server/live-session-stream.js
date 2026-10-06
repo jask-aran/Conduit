@@ -168,6 +168,9 @@ export function createLiveSessionStream({
         if (!replace && !projection.messages?.length) return;
         projection.messages ||= [];
         projection.tools ||= [];
+        // Only a replacing sync reaches the browser. A window is read for the
+        // ids it lets this server bind, and for nothing else.
+        if (!replace) { await messageIds.bind(context.project, context.chat, projection.messages); return; }
         // A window is often the first sight of entries Pi has only just
         // written, so the ids claimed for them are bound here rather than left
         // until the turn checkpoints. Without this the sync an interrupt
@@ -455,11 +458,8 @@ export function createLiveSessionStream({
         await syncTranscript(record, 1, cancelledGenerationId);
         return null;
       }
-      // Before the replacement, not only after it: the interrupted turn is
-      // already written by the time cancel resolves, and syncing it now settles
-      // it while the client still has nothing else arriving. Leaving it until
-      // after the replacement prompt meant the client carried an unreconciled
-      // interrupted turn for the whole of the next response.
+      // Before the replacement: the interrupted turn is already written by the
+      // time cancel resolves, so its prompt's id can be bound now.
       await syncTranscript(record, 1, cancelledGenerationId);
       await applyComposerModel(record, command);
       const prepared = await promptForChat(record, {
@@ -468,8 +468,8 @@ export function createLiveSessionStream({
       }, interrupted.message);
       const generationId = await sendPrompt(record, prepared, { messageId: offeredMessageId(command.messageId) });
       // Pi can write the aborted tool result just after cancel resolves, and
-      // the steered message has no id until Pi writes it, so a two-turn sync
-      // once the replacement is accepted is what names both turns.
+      // the steered message has no id until Pi writes it, so both turns are
+      // read again once the replacement is accepted to bind their ids.
       await syncTranscript(record, 2, generationId);
       return generationId;
     }

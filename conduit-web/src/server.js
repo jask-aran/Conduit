@@ -556,7 +556,13 @@ manager.on("event", ({ record, event }) => {
         const latest = projectSessionEntries(pageSessionEntries(session.entries, { turnLimit: 1 }).entries);
         latest.messages = applyMessageIds(
           await attachments.decorateMessages(project, record.chatId, latest.messages, { fromStart: false }), idFor);
-        manager.publish(record, { type: "transcript_sync", generationId: checkpoint.id, ...latest });
+        // The record and what was stated should agree; when they do, the browser
+        // is told nothing and the settled turn stays exactly as drawn.
+        const { ops, differences } = chatLogs.get(record.chatId).reconcile(latest.messages);
+        if (differences.length) {
+          console.warn("Transcript diverged from the record at settle", record.chatId, JSON.stringify(differences));
+          for (const op of ops) manager.publish(record, { ...op, generationId: checkpoint.id });
+        }
         manager.publish(record, record.lastCheckpoint);
         runtimeHub.publish({ type: "chat_changed", chat: record.lastCheckpoint.chat, at: new Date().toISOString() });
         return session;
