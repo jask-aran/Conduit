@@ -1,5 +1,6 @@
 import { isChatId } from "../chat-store.js";
 import { ChatBackendRegistry } from "../pi-rpc-adapter.js";
+import { ServerConcurrency } from "./effect-concurrency.js";
 
 function launchError(code, message, status = 400) {
   return Object.assign(new Error(message), { code, status });
@@ -42,6 +43,7 @@ const isIdleProcess = (view) => Boolean(view)
 export function createLiveSessionLauncher({
   catalogFor,
   config,
+  concurrency = new ServerConcurrency(),
   findChatContext,
   lifecycle,
   manager,
@@ -72,12 +74,17 @@ export function createLiveSessionLauncher({
     // message with "chat switched before the agent was ready".
     if (attachOnly) throw launchError("no_live_process", "This chat has no live agent process", 409);
 
-    await reclaimForNewProcess(context.chat.id);
-    const result = await adapter.launch(context, { model, thinkingLevel, forceModel }, {
-      catalogFor, config, lifecycle, runtimeFor, templateForChat,
+    return concurrency.runCapacity(async () => {
+      // Admission and creation are one machine-wide critical section. Before
+      // this boundary only Pi serialized its own creates, so two different
+      // backends could both observe the final free slot and overshoot the cap.
+      await reclaimForNewProcess(context.chat.id);
+      const result = await adapter.launch(context, { model, thinkingLevel, forceModel }, {
+        catalogFor, config, lifecycle, runtimeFor, templateForChat,
+      });
+      await registry.update(context.chat.id, result.mapping);
+      return { live: result.live, modelRecovery: result.modelRecovery };
     });
-    await registry.update(context.chat.id, result.mapping);
-    return { live: result.live, modelRecovery: result.modelRecovery };
   }
 
   /**
