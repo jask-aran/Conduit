@@ -23,7 +23,7 @@ const typingIn = (target: EventTarget | null) => target instanceof HTMLInputElem
  * keyboard while it is up -- arrows move, a number or Enter chooses, Tab turns
  * the page, Esc dismisses -- and touch has the same through taps and Next.
  */
-export function QuestionCard(props: { request: HostUiRequest; dismissLabel?: string; onRespond: (response: QuestionResponse) => void }) {
+export function QuestionCard(props: { request: HostUiRequest; dismissLabel?: string; onStop?: () => void; onRespond: (response: QuestionResponse) => void }) {
   const questions = () => props.request.questions || [];
   const [drafts, setDrafts] = createStore<Record<string, Draft>>(
     Object.fromEntries(questions().map((question) => [question.id, { ...EMPTY, freeform: (question.freeform && question.freeform.initial) || "" }])));
@@ -200,7 +200,10 @@ export function QuestionCard(props: { request: HostUiRequest; dismissLabel?: str
       <div class="question-hints" aria-hidden="true">
         <For each={hints()}>{([key, label]) => <span><kbd class="command-hint-key">{key}</kbd>{label}</span>}</For>
       </div>
-      <Button size="sm" tabIndex={-1} disabled={!current() && !ready()} onClick={() => current() ? advance() : submit()}>
+      <Show when={props.onStop}>
+        <Button variant="ghost" size="sm" class="question-stop" tabIndex={-1} onClick={() => props.onStop?.()}>Stop</Button>
+      </Show>
+      <Button size="sm" class="question-submit" tabIndex={-1} disabled={!current() && !ready()} onClick={() => current() ? advance() : submit()}>
         {!current() || (lastQuestion() && !review()) ? "Submit" : "Next"}
       </Button>
     </div>

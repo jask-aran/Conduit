@@ -602,7 +602,7 @@ function Conversation(props: { chat: ActiveChatStore; busy?: boolean; transcript
     <section class="work-area-conversation" aria-label="Conversation" aria-busy={props.busy}>
       {props.transcript}
       <div ref={(element) => props.stackRef?.(element)} class="composer-stack" data-question={props.chat.hostUiRequests().length ? "true" : undefined}>
-        <HostUiRequests requests={props.chat.hostUiRequests()} onRespond={props.chat.respondHostUi} />
+        <HostUiRequests requests={props.chat.hostUiRequests()} onRespond={props.chat.respondHostUi} onStop={() => props.chat.stop()} />
         {props.composer}
       </div>
     </section>

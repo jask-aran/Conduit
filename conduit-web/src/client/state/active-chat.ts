@@ -568,6 +568,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     else if (next.status === "stopped") {
       stopPending = false;
       setGeneration("idle");
+      // A stopped turn asks nothing more; not every harness withdraws what it asked.
+      setHostUiRequests([]);
       if (event.type === "status" && event.phase === "stopped" && Boolean(event.processTerminated)) {
         setLive(null);
         session.detach();
