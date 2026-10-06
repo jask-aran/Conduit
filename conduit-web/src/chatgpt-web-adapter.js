@@ -289,8 +289,7 @@ export class ChatGptWebAdapter extends EventEmitter {
     return true;
   }
 
-  async shutdown() {
-    for (const record of [...this.records.values()]) await this.close(record.id);
+  shutdownResources() {
     // `this.child?.exitCode` is undefined when no sidecar ever started, and
     // `undefined == null` is true - so the optional chain guarded the read and
     // the comparison threw it away, killing null on every ordinary shutdown.
