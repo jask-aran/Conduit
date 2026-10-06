@@ -34,7 +34,7 @@ export function registerLiveSessionRoutes(app, {
 
   const runtimeView = () => ({
     ...runtimeSettings.get(),
-    liveCount: backends.rawRecords().length,
+    liveCount: backends.rawRecords().filter((record) => backends.view(record).status !== "stopped").length,
     generatingCount: backends.generatingRecords().length,
   });
 
