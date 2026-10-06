@@ -60,9 +60,9 @@ Ordered by risk, smallest first. Each lists its regression gate.
    generation view the only live source of the in-flight message's body; the
    `messages()` row carries identity and placement only, and takes its body
    from `message.close`.
-   The probe's `queued` scenario fails here today: a message steered into a
-   running turn has its answer drawn above it for ~90 frames, then the turn
-   is rebuilt into place at settle (the record, and a reload, are right).
+   Fixed with it: a steered message's answer drawn above it, and (Pi) a
+   finished turn shown as still writing after Pi took the queued message,
+   because Pi stated the old prompt's outcome only when the next answer opened.
    *Gate:* `turn-rows` (notably "keeps the answer display key across live and
    persisted projections"), `timeline-projection`, settle-stability probe.
 
@@ -100,8 +100,9 @@ scenario:
   row.
 - `stop-answer` -- the same across a stop mid-answer.
 - `deny-tool` -- the same across a dismissed approval.
-- `queued` -- a steered follow-up: no answer above its prompt in any frame,
-  and the settled shape equals a reload's.
+- `queued`, `queued-tool` -- a message queued mid-answer (next turn) and mid-tools (joins the turn): no answer above its prompt, never queued and sent at once, no earlier turn still working, and the settled shape equals a reload's.
 
 The word-fade unwrapping its spans and the action row replacing its
-placeholder are expected after settle and are not counted.
+placeholder are expected after settle and are not counted, nor is the queued
+card while it leaves. The Test profile ends a turn before taking a late
+message, so the Pi-only stale-turn case is checked against a live Pi turn.

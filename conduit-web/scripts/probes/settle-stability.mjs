@@ -9,11 +9,14 @@
  * - a trace opened mid-stream is still open;
  * - the answer's text was not rewritten, only extended;
  * - once settled, nothing in the turn is added, removed or moved for two
- *   seconds, and its action row shows once.
+ *   seconds, and its action row shows once;
+ * - a queued message never shows queued and sent at once, no answer is drawn
+ *   above its prompt, no earlier turn still says it is working once a later
+ *   prompt is taken, and what settles is what a reload shows.
  *
  * Prints ok/FAIL per scenario and exits 1 on any failure.
  *
- *   node scripts/probes/settle-stability.mjs [--only settle,stop-answer,deny-tool,queued]
+ *   node scripts/probes/settle-stability.mjs [--only settle,stop-answer,deny-tool,queued,queued-tool]
  */
 import { arg, open, origin } from "./lib.mjs";
 
@@ -78,6 +81,57 @@ const inspect = () => page.evaluate(() => new Promise((finish) => {
     });
   }, 2000);
 }));
+
+const waitForAnswer = () => page.waitForFunction(() => ([...document.querySelectorAll(".bubble-assistant")].at(-1)?.textContent || "").length > 200);
+
+/**
+ * Every frame from a queued send until the chat is quiet: no answer above its
+ * prompt, never the message in both the queue and the transcript, and once a
+ * later prompt is taken no earlier turn still says it is working.
+ */
+async function watchQueue(text) {
+  const counts = await page.evaluate((text) => new Promise((finish) => {
+    const bad = { above: 0, both: 0, stale: 0 };
+    const started = performance.now();
+    let quiet = null;
+    let aboveFirst = null;
+    const frame = () => {
+      const nodes = [...document.querySelectorAll(".thread .bubble, .thread .turn-trace")];
+      const users = nodes.filter((node) => node.classList.contains("bubble-user"));
+      const sent = users.find((node) => node.textContent.trim().startsWith(text));
+      if (sent) {
+        const at = nodes.indexOf(sent);
+        // Answers above the sent message may only shrink (one closing into the
+        // trace); a new one there is an answer drawn above its prompt.
+        const above = nodes.slice(0, at).filter((node) => node.classList.contains("bubble-assistant")).length;
+        if (aboveFirst == null) aboveFirst = above;
+        else if (above > aboveFirst) bad.above += 1;
+        const queued = document.querySelector(".queued-float:not([data-leaving])")?.textContent || "";
+        if (queued.includes(text)) bad.both += 1;
+        if (nodes.slice(0, at).some((node) => node.classList.contains("turn-trace") && node.dataset.active === "true")) bad.stale += 1;
+      }
+      if (!document.querySelector("[aria-label='Stop response']")) quiet ??= performance.now(); else quiet = null;
+      if ((quiet && performance.now() - quiet > 1500) || performance.now() - started > 60_000) finish(bad);
+      else requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }), text);
+  return [
+    ["no answer above its prompt", counts.above === 0, `${counts.above} frames`],
+    ["never queued and sent at once", counts.both === 0, `${counts.both} frames`],
+    ["no earlier turn still working", counts.stale === 0, `${counts.stale} frames`],
+  ];
+}
+
+async function settledShape() {
+  const shape = () => page.evaluate(() => [...document.querySelectorAll(".thread .bubble, .thread .turn-trace")]
+    .map((node) => node.classList.contains("bubble-user") ? "U" : node.classList.contains("turn-trace") ? "T" : "A").join(""));
+  const live = await shape();
+  await page.reload();
+  await composer().waitFor();
+  await page.waitForTimeout(2000);
+  return { live, reloaded: await shape() };
+}
 
 async function chat(model) {
   const created = await api("/v0/chats", "POST", { projectId: "test", profileId: "test-stream" });
@@ -144,44 +198,32 @@ const scenarios = {
     ];
   },
   /**
-   * A message sent mid-answer is steered into the turn. In no frame may an
-   * answer sit above the prompt it answers, and what settles is what a reload
-   * shows.
+   * A message sent mid-answer waits for the answer to end and starts the next
+   * turn. The answer it waited for stays an answer.
    */
   async queued() {
-    await send("think 1500t");
-    await page.waitForFunction(() => ([...document.querySelectorAll(".bubble-assistant")].at(-1)?.textContent || "").length > 200);
-    await tag();
-    await send("200t");
-    const misordered = await page.evaluate(() => new Promise((finish) => {
-      let bad = 0;
-      const started = performance.now();
-      let quiet = null;
-      const frame = () => {
-        const nodes = [...document.querySelectorAll(".thread .bubble")];
-        const second = nodes.filter((node) => node.classList.contains("bubble-user"))[1];
-        if (second) {
-          const at = nodes.indexOf(second);
-          if (nodes.slice(0, at).some((node) => node.classList.contains("bubble-assistant") && node.dataset.probe !== "answer")) bad += 1;
-        }
-        const live = document.querySelector("[aria-label='Stop response']");
-        if (!live) quiet ??= performance.now(); else quiet = null;
-        if ((quiet && performance.now() - quiet > 1500) || performance.now() - started > 60_000) finish(bad);
-        else requestAnimationFrame(frame);
-      };
-      requestAnimationFrame(frame);
-    }));
-    const shape = () => page.evaluate(() => [...document.querySelectorAll(".thread .bubble, .thread .turn-trace")]
-      .map((node) => node.classList.contains("bubble-user") ? "U" : node.classList.contains("turn-trace") ? "T" : "A").join(""));
-    const live = await shape();
-    await page.reload();
-    await composer().waitFor();
-    await page.waitForTimeout(2000);
-    const reloaded = await shape();
+    await send("think 200 1500t");
+    await waitForAnswer();
+    const live = await tag();
+    await send("hmm");
+    const frames = await watchQueue("hmm");
+    const after = await inspect();
+    const shapes = await settledShape();
     return [
-      ["no answer above its prompt", misordered === 0, `${misordered} frames`],
-      ["settled as a reload shows it", live === reloaded, `${live} vs ${reloaded}`],
+      ["first answer kept its node", after.answerMounted],
+      ["first answer only extended", after.text.startsWith(live.text.trimEnd())],
+      ...frames,
+      ["settled as a reload shows it", shapes.live === shapes.reloaded, `${shapes.live} vs ${shapes.reloaded}`],
     ];
+  },
+  /** A message sent while a turn runs tools joins that turn after the tool. */
+  async "queued-tool"() {
+    await send("think 200 2 tools 1500t");
+    await page.locator(".turn-trace:not(.turn-trace-starting)").last().waitFor();
+    await send("hmm");
+    const frames = await watchQueue("hmm");
+    const shapes = await settledShape();
+    return [...frames, ["settled as a reload shows it", shapes.live === shapes.reloaded, `${shapes.live} vs ${shapes.reloaded}`]];
   },
 };
 
