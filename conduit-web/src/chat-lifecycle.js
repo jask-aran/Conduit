@@ -1,3 +1,5 @@
+import { ServerConcurrency } from "./server/effect-concurrency.js";
+
 function conflict(code, message) {
   return Object.assign(new Error(message), { code, status: 409 });
 }
@@ -6,16 +8,12 @@ function conflict(code, message) {
 // owning project. Project guards are shared locks: deletion marks a project as
 // closing before waiting for active launch/move work to drain.
 export class ChatLifecycle {
-  constructor({ projectDrainTimeoutMs = 30_000 } = {}) {
-    this.chatTails = new Map();
+  constructor({ projectDrainTimeoutMs = 30_000, concurrency = new ServerConcurrency() } = {}) {
+    this.concurrency = concurrency;
     this.launches = new Map();
     this.deletingChats = new Set();
     this.projects = new Map();
     this.projectDrainTimeoutMs = projectDrainTimeoutMs;
-  }
-
-  isBusy(chatId) {
-    return this.chatTails.has(chatId);
   }
 
   assertAvailable(chatId, projectId) {
@@ -23,18 +21,8 @@ export class ChatLifecycle {
     if (this.projectState(projectId).deleting) throw conflict("project_deleting", "This project is being deleted.");
   }
 
-  async run(chatId, work) {
-    const previous = this.chatTails.get(chatId) || Promise.resolve();
-    let release;
-    const current = new Promise((resolve) => { release = resolve; });
-    this.chatTails.set(chatId, current);
-    await previous.catch(() => {});
-    try {
-      return await work();
-    } finally {
-      release();
-      if (this.chatTails.get(chatId) === current) this.chatTails.delete(chatId);
-    }
+  run(chatId, work) {
+    return this.concurrency.runChat(chatId, work);
   }
 
   async runLaunch(chatId, work, request = null) {
@@ -53,7 +41,7 @@ export class ChatLifecycle {
       }
       return existing.promise;
     }
-    if (this.isBusy(chatId)) throw conflict("live_session_starting", "This chat is already starting or changing.");
+    if (this.concurrency.isChatBusy(chatId)) throw conflict("live_session_starting", "This chat is already starting or changing.");
     const launch = this.run(chatId, work);
     const entry = { request, promise: launch };
     this.launches.set(chatId, entry);
@@ -81,14 +69,18 @@ export class ChatLifecycle {
     for (const [, state] of states) {
       if (state.deleting) throw conflict("project_deleting", "This project is being deleted.");
     }
-    for (const [, state] of states) state.active += 1;
+    for (const [, state] of states) {
+      if (state.active === 0) state.drain = Promise.withResolvers();
+      state.active += 1;
+    }
     try {
       return await work();
     } finally {
       for (const [, state] of states) {
         state.active -= 1;
         if (state.active === 0) {
-          for (const resolve of state.waiters.splice(0)) resolve();
+          state.drain?.resolve();
+          state.drain = null;
         }
       }
     }
@@ -99,32 +91,31 @@ export class ChatLifecycle {
     if (state.deleting) throw conflict("project_deleting", "This project is already being deleted.");
     state.deleting = true;
     if (state.active > 0) {
-      let timer;
-      let drain;
+      // Capture the active period's latch before yielding into Effect. The
+      // final project operation may resolve it and clear state.drain in the
+      // same turn; the captured promise still represents exactly that drain.
+      const drain = state.drain.promise;
       try {
-        await Promise.race([
-          new Promise((resolve) => { drain = resolve; state.waiters.push(resolve); }),
-          new Promise((_, reject) => { timer = setTimeout(() => reject(conflict("project_busy", "Project operations did not stop in time.")), this.projectDrainTimeoutMs); }),
-        ]);
+        await this.concurrency.waitFor(
+          () => drain,
+          this.projectDrainTimeoutMs,
+          () => conflict("project_busy", "Project operations did not stop in time."),
+        );
       } catch (error) {
         state.deleting = false;
         throw error;
-      } finally {
-        clearTimeout(timer);
-        const index = state.waiters.indexOf(drain);
-        if (index >= 0) state.waiters.splice(index, 1);
       }
     }
     return () => {
       state.deleting = false;
-      if (state.active === 0 && state.waiters.length === 0) this.projects.delete(projectId);
+      if (state.active === 0) this.projects.delete(projectId);
     };
   }
 
   projectState(projectId) {
     let state = this.projects.get(projectId);
     if (!state) {
-      state = { active: 0, deleting: false, waiters: [] };
+      state = { active: 0, deleting: false, drain: null };
       this.projects.set(projectId, state);
     }
     return state;

@@ -8,6 +8,8 @@ import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
+import { terminate } from "./server/effect-process.js";
+import { within } from "./server/effect-concurrency.js";
 
 const execFile = promisify(execFileCallback);
 
@@ -153,7 +155,7 @@ class AcpClient {
   }
 
   close() {
-    if (this.child.exitCode == null && this.child.signalCode == null) this.child.kill("SIGTERM");
+    return terminate(this.child);
   }
 }
 
@@ -591,10 +593,7 @@ export class FxAcpAdapter extends EventEmitter {
     const record = this.get(id);
     if (!record) return false;
     try {
-      if (record.sessionId) await Promise.race([
-        record.client.request("session/close", { sessionId: record.sessionId }),
-        new Promise((resolve) => setTimeout(resolve, 500)),
-      ]);
+      if (record.sessionId) await within(record.client.request("session/close", { sessionId: record.sessionId }), 500);
     } catch { /* The process is closed below. */ }
     record.client?.close();
     record.status = "stopped";
@@ -602,12 +601,6 @@ export class FxAcpAdapter extends EventEmitter {
     this.sessions.remove(id);
     this.emit("removed", { id, chatId: record.chatId });
     return true;
-  }
-
-  async shutdown() {
-    const records = this.rawRecords();
-    await Promise.all(records.map((record) => this.close(record.id)));
-    return records.length;
   }
 
   async listThreads({ cwd, limit = 60 } = {}) {

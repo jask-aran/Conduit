@@ -27,6 +27,65 @@ test("chat lifecycle serializes a move behind launch work", async () => {
   assert.deepEqual(order, ["launch", "launch-complete", "move"]);
 });
 
+test("different chats do not share a serialization permit", { timeout: 5_000 }, async () => {
+  const lifecycle = new ChatLifecycle();
+  const firstReady = deferred();
+  const releaseFirst = deferred();
+  const first = lifecycle.run("chat-a", async () => {
+    firstReady.resolve();
+    await releaseFirst.promise;
+  });
+  await firstReady.promise;
+
+  // If chat keys accidentally collapse onto one global semaphore this await
+  // cannot finish until chat-a is released, and the test times out.
+  assert.equal(await lifecycle.run("chat-b", async () => "chat-b"), "chat-b");
+
+  releaseFirst.resolve();
+  await first;
+});
+
+test("registered chat work is busy before its callback starts", async () => {
+  const lifecycle = new ChatLifecycle();
+  const release = deferred();
+  const running = lifecycle.run("chat-a", () => release.promise);
+
+  await assert.rejects(
+    lifecycle.runLaunch("chat-a", async () => assert.fail("launch must not start")),
+    { code: "live_session_starting" },
+  );
+
+  release.resolve();
+  await running;
+});
+
+test("chat serialization releases the mutex when earlier work fails", async () => {
+  const lifecycle = new ChatLifecycle();
+  const ready = deferred();
+  const release = deferred();
+  const failure = Object.assign(new Error("failed"), { code: "expected_failure" });
+  const order = [];
+  const first = lifecycle.run("chat-a", async () => {
+    order.push("first");
+    ready.resolve();
+    await release.promise;
+    throw failure;
+  });
+  await ready.promise;
+  const second = lifecycle.run("chat-a", async () => {
+    order.push("second");
+    return "ok";
+  });
+
+  release.resolve();
+  await assert.rejects(first, (error) => {
+    assert.equal(error, failure, "Effect preserves the original rejected Error");
+    return true;
+  });
+  assert.equal(await second, "ok");
+  assert.deepEqual(order, ["first", "second"]);
+});
+
 test("concurrent launch requests join the chat creation launch", async () => {
   const lifecycle = new ChatLifecycle();
   const ready = deferred();
@@ -117,6 +176,21 @@ test("project deletion blocks new launches and waits for an in-flight mapping co
   const finish = await deletion;
   finish();
   await launch;
+});
+
+test("project deletion captures the active drain before work can finish in the same turn", async () => {
+  const lifecycle = new ChatLifecycle();
+  const held = deferred();
+  const work = lifecycle.withProjects(["project-a"], () => held.promise);
+
+  // Resolve before Effect evaluates the timeout thunk. Deletion must keep the
+  // active period's latch rather than re-reading state after the worker clears it.
+  queueMicrotask(() => held.resolve());
+  const finish = await lifecycle.beginProjectDeletion("project-a");
+  finish();
+  await work;
+
+  assert.doesNotThrow(() => lifecycle.assertAvailable("chat-a", "project-a"));
 });
 
 test("project deletion releases its guard when active work does not drain", async () => {

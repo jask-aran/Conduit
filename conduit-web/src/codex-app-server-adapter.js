@@ -1292,9 +1292,11 @@ export class CodexAppServerAdapter extends EventEmitter {
     }
     return true;
   }
-  async shutdown() {
+  shutdownResources() {
     clearTimeout(this.discoveryTimer);
-    this.discoveryId = null; const records = [...this.records.values()].filter((record) => record.status !== "stopped"); await Promise.all(records.map((record) => this.close(record.id))); return records.length; }
+    this.discoveryTimer = null;
+    this.discoveryId = null;
+  }
 
   async setModel(id, model) {
     const record = this.get(id);

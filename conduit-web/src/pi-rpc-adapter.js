@@ -300,11 +300,12 @@ export const serializePiV0 = (event) => {
 export class PiRpcAdapter {
   constructor(manager) { this.manager = manager; }
   launch(context, request, services) { return launchConduitPi(this, context, request, services); }
-  create(options) { return this.manager.createWithCapacity({ ...options, sessionFile: null }); }
-  restore(opaqueSession, options) { return this.manager.createWithCapacity({ ...options, sessionFile: opaqueSession }); }
+  create(options) { return this.manager.create({ ...options, sessionFile: null }); }
+  restore(opaqueSession, options) { return this.manager.create({ ...options, sessionFile: opaqueSession }); }
   prompt(id, message, options) { return this.manager.promptAccepted(id, message, options); }
   cancel(id, generationId) { return this.manager.abortGeneration(id, generationId); }
   close(id) { return this.manager.stopAndWait(id); }
+  shutdownResources() { return this.manager.shutdownResources(); }
   respondHostUi(id, response) { return this.manager.respondHostUi(id, response); }
   replay(id) {
     const record = this.manager.get(id);
@@ -355,6 +356,16 @@ export class PiRpcAdapter {
   view(record) {
     return { ...this.manager.view(record), capabilities: PI_CAPABILITIES };
   }
+}
+
+export function isGeneratingRecord(record) {
+  if (!record || !["starting", "running"].includes(record.status)) return false;
+  // Most adapters claim a turn by setting active. Codex has to wait for the
+  // app-server's turn/started notification, so its prompt identity is the
+  // reservation between turn/start being sent and that notification arriving.
+  if (record.active || record.stopping || record.compacting || record.retrying || record.answering) return true;
+  if ((record.hostUiRequests || []).length) return true;
+  return Boolean(record.generation && !record.generation.closed && !record.generation.settled);
 }
 
 export class ChatBackendRegistry {
@@ -455,11 +466,25 @@ export class ChatBackendRegistry {
     }
     return null;
   }
+  instances() { return [...new Set(this.adapters.values())]; }
   list() {
-    return [...new Set(this.adapters.values())].flatMap((adapter) => adapter.list());
+    return this.instances().flatMap((adapter) => adapter.list());
   }
   rawRecords() {
-    return [...new Set(this.adapters.values())].flatMap((adapter) => [...adapter.rawRecords()]);
+    return this.instances().flatMap((adapter) => [...adapter.rawRecords()]);
+  }
+  generatingRecords() {
+    return this.rawRecords().filter(isGeneratingRecord);
+  }
+  async shutdown() {
+    const stopped = new Map();
+    for (const adapter of this.instances()) {
+      const records = [...adapter.rawRecords()];
+      await Promise.all(records.map((record) => adapter.close(record.id)));
+      await adapter.shutdownResources?.();
+      stopped.set(adapter, records.length);
+    }
+    return stopped;
   }
   view(record) { return this.adapterForRecord(record).view(record); }
   async stop(id) {

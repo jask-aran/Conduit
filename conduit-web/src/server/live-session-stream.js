@@ -2,9 +2,9 @@ import { CONTINUE_PROMPT } from "../continuation.js";
 import { messageDrop, messageOpen } from "../harnesses/transcript-ops.js";
 import { messagesFromEntries } from "../session-store.js";
 import { parseAttachmentEnvelope } from "../attachment-envelope.js";
-import { ChatBackendRegistry } from "../pi-rpc-adapter.js";
 import { manifestForImplementation } from "../harnesses/index.js";
 import { startWebSocketKeepalive } from "./ws-keepalive.js";
+import { ServerConcurrency } from "./effect-concurrency.js";
 import { applyMessageIds, isConduitMessageId } from "../message-ids.js";
 
 /**
@@ -59,7 +59,6 @@ export function sendClientEvent(ws, adapter, event) {
 }
 
 export function createLiveSessionStream({
-  manager,
   wss,
   attachments,
   registry,
@@ -70,12 +69,30 @@ export function createLiveSessionStream({
   chatModelView,
   messageIds,
   chatLogs,
-  backends = new ChatBackendRegistry(manager),
+  backends,
+  concurrency = new ServerConcurrency(),
+  maxGeneratingProcesses = () => 0,
   lifecycle,
   autoNameSession = async () => {},
 }) {
   if (!lifecycle) throw new TypeError("Live session stream requires a chat lifecycle");
+  if (!backends) throw new TypeError("Live session stream requires a backend registry");
   const namingChats = new Set();
+
+  const startGeneration = (record, work, { reuseSlot = false } = {}) =>
+    concurrency.runGenerationStart(() => {
+      const max = Math.trunc(Number(maxGeneratingProcesses()) || 0);
+      if (!reuseSlot && max > 0) {
+        const generating = backends.generatingRecords();
+        if (!generating.includes(record) && generating.length >= max) {
+          throw Object.assign(
+            new Error(`Too many concurrent generations (max ${max}). Wait for another chat to finish.`),
+            { code: "generation_limit", status: 429, maxGeneratingProcesses: max, generatingCount: generating.length },
+          );
+        }
+      }
+      return work();
+    });
 
   /**
    * The chat's order.
@@ -262,14 +279,15 @@ export function createLiveSessionStream({
     }
     let accepted;
     try {
-      accepted = await adapter.prompt(record.id, prepared.prompt,
+      accepted = await startGeneration(record, () => adapter.prompt(record.id, prepared.prompt,
         { ...promptOptions, attachments: prepared.attachments,
           // A harness that names its own messages still has to name this one
           // what the browser already calls it. The row is on screen before the
           // prompt is sent, so an adapter that invents an id here states a
           // second row for a message that is already drawn -- the same prompt,
           // twice, which is what claiming an id prevents for everyone else.
-          ...(claimed ? { messageIds: claimed } : messageId ? { clientUserMessageId: messageId } : {}) });
+          ...(claimed ? { messageIds: claimed } : messageId ? { clientUserMessageId: messageId } : {}) }),
+        { reuseSlot: promptOptions.streamingBehavior === "steer" || promptOptions.streamingBehavior === "followUp" });
     } catch (error) {
       // A prompt the harness refused writes nothing, so its names go back
       // rather than waiting for messages that will never be written -- and the
@@ -394,7 +412,8 @@ export function createLiveSessionStream({
   async function handleClientCommand(record, command) {
     const adapter = adapterFor(record);
     if (command.type === "prompt") {
-      if (record.ephemeral) return adapter.prompt(record.id, String(command.message || ""));
+      if (record.ephemeral) return startGeneration(record,
+        () => adapter.prompt(record.id, String(command.message || "")));
       const prepared = await promptForChat(record, command, String(command.message || ""));
       const streamingBehavior = command.streamingBehavior === "steer" || command.streamingBehavior === "followUp"
         ? command.streamingBehavior
@@ -529,7 +548,8 @@ export function createLiveSessionStream({
       const previous = persisted ? messagesFromEntries(persisted.entries).findLast((message) => message.role === "assistant") : null;
       const partial = previous?.content || record.generation?.partial || "";
       if (!partial || (!previous?.stopped && !record.generation?.closed)) throw new Error("There is no stopped response to continue");
-      return adapter.prompt(record.id, CONTINUE_PROMPT, { continuationBase: partial });
+      return startGeneration(record,
+        () => adapter.prompt(record.id, CONTINUE_PROMPT, { continuationBase: partial }));
     }
     if (command.type === "extension_ui_response" || command.type === "host_ui_response") {
       // Awaited: a harness that answers over the network can refuse, and a

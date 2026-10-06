@@ -1,5 +1,5 @@
 import { isChatId } from "../chat-store.js";
-import { ChatBackendRegistry } from "../pi-rpc-adapter.js";
+import { ServerConcurrency } from "./effect-concurrency.js";
 
 function launchError(code, message, status = 400) {
   return Object.assign(new Error(message), { code, status });
@@ -39,17 +39,68 @@ const isIdleProcess = (view) => Boolean(view)
   && !view.waiting
   && ["idle", "failed"].includes(typeof view.activity === "string" ? view.activity : view.activity?.kind);
 
+const liveProcessEntries = (backends, exceptChatId = null) => backends.rawRecords()
+  .map((record) => ({ record, view: backends.view(record) }))
+  .filter(({ view }) => view.status !== "stopped" && view.chatId !== exceptChatId);
+
+const processAge = ({ view }) => new Date(view.updatedAt || view.createdAt || Date.now()).getTime();
+
+/**
+ * Reclaim idle live sessions until the machine has the requested headroom.
+ * reserve=1 is launch admission; reserve=0 is enforcement after a settings
+ * change. One policy serves every harness.
+ */
+async function reclaimLiveProcesses(backends, maxLiveProcesses, {
+  exceptChatId = null,
+  reserve = 0,
+  failIfBlocked = false,
+  starting = new Set(),
+} = {}) {
+  const max = Math.trunc(Number(maxLiveProcesses) || 0);
+  if (max <= 0) return 0;
+  const target = Math.max(0, max - reserve);
+
+  const attempted = new Set();
+  let stopped = 0;
+  for (;;) {
+    const current = liveProcessEntries(backends, exceptChatId);
+    // A launch admitted but not yet resident holds its slot all the same.
+    const resident = new Set(current.map(({ view }) => view.chatId));
+    const pending = [...starting].filter((chatId) => chatId !== exceptChatId && !resident.has(chatId)).length;
+    if (current.length + pending <= target) return stopped;
+    const oldest = current
+      .filter(({ view }) => isIdleProcess(view) && !attempted.has(view.id))
+      .sort((left, right) => processAge(left) - processAge(right))[0];
+    if (!oldest) {
+      if (failIfBlocked) {
+        throw launchError("live_process_limit",
+          `Too many live agents (max ${max}). Wait for a chat to finish or stop an idle one.`, 429);
+      }
+      return stopped;
+    }
+    attempted.add(oldest.view.id);
+    const closed = await backends.adapterForRecord(oldest.record).close(oldest.view.id);
+    if (closed !== false) stopped += 1;
+  }
+}
+
+export const enforceLiveProcessLimit = (backends, maxLiveProcesses) =>
+  reclaimLiveProcesses(backends, maxLiveProcesses);
+
 export function createLiveSessionLauncher({
   catalogFor,
   config,
+  concurrency = new ServerConcurrency(),
   findChatContext,
   lifecycle,
-  manager,
+  maxLiveProcesses = () => 0,
   registry,
   runtimeFor,
   templateForChat,
-  backends = new ChatBackendRegistry(manager),
+  backends,
 }) {
+  // Chats admitted and still starting: each holds a slot of the budget.
+  const starting = new Set();
   async function launchFromContext(context, {
     requestedProject = "",
     model = "",
@@ -72,43 +123,23 @@ export function createLiveSessionLauncher({
     // message with "chat switched before the agent was ready".
     if (attachOnly) throw launchError("no_live_process", "This chat has no live agent process", 409);
 
-    await reclaimForNewProcess(context.chat.id);
-    const result = await adapter.launch(context, { model, thinkingLevel, forceModel }, {
-      catalogFor, config, lifecycle, runtimeFor, templateForChat,
-    });
-    await registry.update(context.chat.id, result.mapping);
-    return { live: result.live, modelRecovery: result.modelRecovery };
-  }
-
-  /**
-   * Make room for one more agent, across every harness.
-   *
-   * The cap is a budget for this machine, so it counts processes rather than
-   * Pi processes: warming a chat on one harness has to be able to reclaim an
-   * idle agent on another, or the budget means nothing the moment two backends
-   * are in use. The oldest idle one goes first -- the one nobody has come back
-   * to -- and if every process is busy the launch is refused rather than
-   * quietly stopping work somebody is waiting on.
-   */
-  async function reclaimForNewProcess(exceptChatId) {
-    const max = Number(manager?.policy?.().maxLiveProcesses) || 0;
-    if (!max) return;
-    // Raw records rather than views: the same pass needs both what the process
-    // is doing and which adapter owns it.
-    const others = () => backends.rawRecords()
-      .map((record) => ({ record, view: backends.view(record) }))
-      .filter(({ view }) => view.chatId !== exceptChatId && view.status !== "stopped");
-    for (let attempt = 0; others().length >= max; attempt += 1) {
-      // A record that does not report its age is not therefore the oldest:
-      // treating a missing timestamp as the epoch would evict harnesses that
-      // keep less bookkeeping first, every time. Undated processes go last.
-      const age = ({ view }) => new Date(view.updatedAt || view.createdAt || Date.now()).getTime();
-      const oldest = others().filter(({ view }) => isIdleProcess(view)).sort((left, right) => age(left) - age(right))[0];
-      if (!oldest || attempt >= max) {
-        throw launchError("live_process_limit",
-          `Too many live agents (max ${max}). Wait for a chat to finish or stop an idle one.`, 429);
-      }
-      await backends.adapterForRecord(oldest.record).close(oldest.view.id);
+    // Only admission is machine-wide: reclaiming room and reserving a slot.
+    // Starting the process holds its slot, not the lock, so one cold start does
+    // not hold up every other chat's.
+    await concurrency.runCapacity(() => reclaimLiveProcesses(backends, maxLiveProcesses(), {
+      exceptChatId: context.chat.id,
+      reserve: 1,
+      failIfBlocked: true,
+      starting,
+    }).then(() => { starting.add(context.chat.id); }));
+    try {
+      const result = await adapter.launch(context, { model, thinkingLevel, forceModel }, {
+        catalogFor, config, lifecycle, runtimeFor, templateForChat,
+      });
+      await registry.update(context.chat.id, result.mapping);
+      return { live: result.live, modelRecovery: result.modelRecovery };
+    } finally {
+      starting.delete(context.chat.id);
     }
   }
 

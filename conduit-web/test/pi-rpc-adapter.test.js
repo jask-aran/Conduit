@@ -92,7 +92,7 @@ test("a neutral Pi log replay is not translated a second time", () => {
 test("Pi adapter delegates the neutral lifecycle to the existing manager", async () => {
   const calls = [];
   const manager = {
-    createWithCapacity: async (options) => (calls.push(["create", options]), { id: "live" }),
+    create: (options) => (calls.push(["create", options]), { id: "live" }),
     promptAccepted: async (...args) => (calls.push(["prompt", ...args]), "generation"),
     abortGeneration: async (...args) => calls.push(["cancel", ...args]),
     stopAndWait: async (...args) => calls.push(["close", ...args]),
@@ -114,6 +114,29 @@ test("Pi adapter delegates the neutral lifecycle to the existing manager", async
     ["create", { chatId: "chat", sessionFile: "session.jsonl" }],
   ]);
   assert.deepEqual(calls.slice(2).map(([name]) => name), ["prompt", "cancel", "close", "host"]);
+});
+
+test("backend registry owns close-all and runs resource cleanup once per adapter", async () => {
+  const events = [];
+  const adapter = {
+    records: [{ id: "one" }, { id: "two" }],
+    rawRecords() { return this.records; },
+    async close(id) {
+      events.push(`close:${id}`);
+      this.records = this.records.filter((record) => record.id !== id);
+      return true;
+    },
+    shutdownResources() { events.push("cleanup"); },
+  };
+  const registry = new ChatBackendRegistry();
+  registry.adapters.set("primary", adapter);
+  registry.adapters.set("alias", adapter);
+
+  const stopped = await registry.shutdown();
+
+  assert.deepEqual(events, ["close:one", "close:two", "cleanup"]);
+  assert.equal(stopped.get(adapter), 2);
+  assert.equal(adapter.records.length, 0);
 });
 
 test("backend registry resolves persisted Pi identity without compatibility shims", () => {

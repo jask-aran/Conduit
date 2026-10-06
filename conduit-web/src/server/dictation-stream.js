@@ -5,6 +5,7 @@ import { OPENAI_LIVE_ADAPTER, OPENAI_LIVE_MODEL } from "../voice-settings.js";
 import { createSegmentationProvider, segmentationObservationMetadata } from "./voice-segmentation.js";
 import { selectSileroVadRanges } from "./voice-vad.js";
 import { startWebSocketKeepalive } from "./ws-keepalive.js";
+import { within } from "./effect-concurrency.js";
 
 const DEFAULT_LIMITS = Object.freeze({
   maxSessions: 2,
@@ -1413,10 +1414,9 @@ export function openOpenaiRealtimeStream({ url, headers, model = OPENAI_LIVE_MOD
     }));
   });
 
-  const waitReady = Promise.race([
-    readyPromise,
-    new Promise((_, reject) => setTimeout(() => reject(dictationError("voice_stream_failed", "OpenAI live transcription did not become ready", 504)), openTimeoutMs)),
-  ]);
+  const waitReady = within(readyPromise, openTimeoutMs, () => {
+    throw dictationError("voice_stream_failed", "OpenAI live transcription did not become ready", 504);
+  });
 
   return waitReady.then(() => ({
     onDelta(handler) { deltaHandler = handler; },
@@ -1434,10 +1434,7 @@ export function openOpenaiRealtimeStream({ url, headers, model = OPENAI_LIVE_MOD
         pendingCompletions.push({ resolve, reject });
       });
       socket.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
-      return Promise.race([
-        completed,
-        new Promise((resolve) => setTimeout(() => resolve(lastCompleted), commitTimeoutMs)),
-      ]);
+      return within(completed, commitTimeoutMs, () => lastCompleted);
     },
     close() {
       closed = true;
@@ -2920,16 +2917,10 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       catch { client.terminate?.(); }
     }
     const waitForClose = Promise.all(waiters);
-    await Promise.race([
-      waitForClose,
-      new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(timeoutMs) || 0))),
-    ]);
+    await within(waitForClose, timeoutMs);
     for (const client of dictationClients) client.terminate?.();
     if (dictationClients.size) {
-      await Promise.race([
-        Promise.all([...sessionCloseWaiters]),
-        new Promise((resolve) => setTimeout(resolve, 100)),
-      ]);
+      await within(Promise.all([...sessionCloseWaiters]), 100);
     }
     return { closed: dictationClients.size === 0, activeSessions };
   };
