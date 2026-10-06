@@ -594,6 +594,8 @@ export function createActiveChat(options: ActiveChatOptions) {
       if (detail.profileId || detail.templateId) setTemplateId(detail.profileId || detail.templateId || null);
       if (detail.runtime) setRuntimeIdentity(detail.runtime);
       setBackendImplementation(detail.backend?.implementation || null);
+      // The load holds the log up to here, so this is where the order stands.
+      if (detail.log?.id && (detail.log.id !== logId || detail.log.seq > logSeq)) { logId = detail.log.id; logSeq = detail.log.seq; }
       // The socket says how the turn is going once it attaches; until then the
       // transcript holds a running turn's finished steps, and this is what
       // keeps them from reading as a turn that ended without saying how.
