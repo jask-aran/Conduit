@@ -602,7 +602,7 @@ function Conversation(props: { chat: ActiveChatStore; busy?: boolean; transcript
     <section class="work-area-conversation" aria-label="Conversation" aria-busy={props.busy}>
       {props.transcript}
       <div ref={(element) => props.stackRef?.(element)} class="composer-stack" data-question={props.chat.hostUiRequests().length ? "true" : undefined}>
-        <HostUiRequests requests={props.chat.hostUiRequests()} onRespond={props.chat.respondHostUi} />
+        <HostUiRequests requests={props.chat.hostUiRequests()} onRespond={props.chat.respondHostUi} onStop={() => props.chat.stop()} />
         {props.composer}
       </div>
     </section>
@@ -825,6 +825,12 @@ function App() {
       duration: 12_000,
       action: { label: "Ask Runtime", onClick: () => void askRuntimeForError(diagnostic) },
     });
+  };
+  // An unsent draft is deleted when its page is left, which can be while it is
+  // still loading; the load then finds no chat, and that is not an error.
+  const showDraftError = (error: unknown) => {
+    if ((error as { error?: unknown } | null)?.error === "chat_not_found") return;
+    showError(error);
   };
   /*
    * What the app is doing about its own version, said out loud.
@@ -1271,11 +1277,17 @@ function App() {
 
   const currentDraftId = () => chat.status() === "draft" ? catalogue.selectedId() : null;
 
+  // A draft is still selected after it is discarded until something else is,
+  // so leaving page after page asks to discard it again: once is enough, and a
+  // draft already gone is discarded.
+  const discarded = new Set<string>();
   const discardDraft = async (id = currentDraftId()) => {
-    if (id) {
-      await api(`/v0/chats/${encodeURIComponent(id)}?ifEmpty=true`, { method: "DELETE" });
-      dropScope(id);
-    }
+    if (!id || discarded.has(id)) return;
+    discarded.add(id);
+    await api(`/v0/chats/${encodeURIComponent(id)}?ifEmpty=true`, { method: "DELETE" }).catch((error) => {
+      if ((error as { error?: unknown }).error !== "chat_not_found") { discarded.delete(id); throw error; }
+    });
+    dropScope(id);
   };
 
   // Remove an abandoned draft from the local UI and begin stopping its process
@@ -1405,7 +1417,7 @@ function App() {
         return;
       }
       await activateCreatedChat(created, project, templateId);
-    }).catch((error) => { showError(error); }).finally(() => {
+    }).catch(showDraftError).finally(() => {
       dashboardDraftRequest = null;
       if (scopeChanged) ensureDashboardDraft();
     });
@@ -1597,7 +1609,7 @@ function App() {
         if (typed && !side.chat.draft()) side.chat.setDraft(typed);
         typed = "";
         if (current && current.chatId !== opened.chat.id) drop(current.chatId);
-      }).catch((error) => { showError(error); }).finally(() => { request = null; });
+      }).catch(showDraftError).finally(() => { request = null; });
       request = pending;
       return pending;
     };
@@ -3219,7 +3231,7 @@ function App() {
         }
         pane.draft = { id: created.id, projectId: project.id };
         await side.chat.initialize({ ...created, templateId: created.templateId || templateId || undefined }, project);
-      }).catch(showError);
+      }).catch(showDraftError);
     }));
   }
   function discardPaneDraft(pane: PaneSlot) {
@@ -4480,10 +4492,10 @@ function App() {
   });
   const lastUserEntryId = createMemo(() => {
     const list = focusedChat().messages();
-    // An optimistic id is one the backend never persisted - a message sent and
-    // then interrupted before it was written. Forking one fails, so it cannot
-    // be the target of regenerate or edit.
-    for (let index = list.length - 1; index >= 0; index -= 1) { const message = list[index]!; if (message.role === "user" && !message.pending) return message.id; }
+    // A message the server has not stated yet -- sent, and interrupted before
+    // it was written -- cannot be forked, so it cannot be the target of
+    // regenerate or edit.
+    for (let index = list.length - 1; index >= 0; index -= 1) { const message = list[index]!; if (message.role === "user" && !message.local) return message.id; }
     return null;
   });
   const thinkingLevels = createMemo(() => focusedModels().models().find((item) => item.spec === focusedModels().model())?.thinkingLevels ?? []);

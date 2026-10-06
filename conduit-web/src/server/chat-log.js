@@ -19,6 +19,11 @@
  * every merged frame look like a hole to a client counting statements.
  */
 import crypto from "node:crypto";
+import { applyTranscriptOps } from "../transcript-fold.js";
+
+// How many of the latest stated messages are kept to reconcile against.
+const STATED_LIMIT = 200;
+const sameText = (left, right) => String(left ?? "").replace(/\s+/g, " ").trim() === String(right ?? "").replace(/\s+/g, " ").trim();
 
 /**
  * Events whose loss actually changes what the transcript says, in Conduit's
@@ -83,6 +88,10 @@ export class ChatLog {
     // Every message this log has already placed. A restatement of one of them
     // says nothing new about where the transcript ends.
     this.placed = new Set();
+    // The transcript as this log has stated it, folded exactly as the browser
+    // folds it, so a settled turn can be checked against the record without
+    // telling the browser anything when the two agree.
+    this.stated = { messages: [], tools: [] };
   }
 
   state() {
@@ -137,11 +146,46 @@ export class ChatLog {
   }
 
   record(event) {
+    if (event?.type === "transcript_op") this.stated = applyTranscriptOps(this.stated, [event]);
+    else if (event?.type === "transcript_sync" && event.replace) {
+      this.stated = { messages: [...(event.messages || [])], tools: [...(event.tools || [])] };
+    }
+    if (this.stated.messages.length > STATED_LIMIT) this.stated.messages = this.stated.messages.slice(-STATED_LIMIT);
     this.seq += 1;
     const stamped = { ...event, log: { id: this.id, seq: this.seq } };
     this.entries.push(stamped);
     if (this.entries.length > this.limit) this.entries.splice(0, this.entries.length - this.limit);
     return stamped;
+  }
+
+  /**
+   * Where a turn the harness has just written down disagrees with what this
+   * log stated about it, and the statements that correct the text.
+   *
+   * Empty when they agree, which is the ordinary case and costs the browser
+   * nothing. Only an answer's text is corrected, restated on the row it
+   * already has with everything else as stated. A message stated and not
+   * recorded, or recorded and never stated, is reported and left alone:
+   * placing or removing a row on a guess is how a repair becomes a bug, and a
+   * reload already shows the record.
+   */
+  reconcile(messages = []) {
+    const stated = new Map(this.stated.messages.map((message) => [message.id, message]));
+    const ops = [];
+    const differences = [];
+    for (const message of messages) {
+      if (!message?.id) continue;
+      const said = stated.get(message.id);
+      if (!said) differences.push({ id: message.id, kind: "unstated" });
+      else if (said.role !== message.role) differences.push({ id: message.id, kind: "role" });
+      else if (message.role === "assistant" && !sameText(said.content, message.content)) {
+        differences.push({ id: message.id, kind: "text" });
+        ops.push({ type: "transcript_op", op: "message.close", messageId: message.id, stopReason: said.stopReason || null,
+          interim: said.interim === true, ...(said.discarded ? { discarded: true } : {}),
+          content: String(message.content ?? ""), blocks: said.blocks || [] });
+      }
+    }
+    return { ops, differences };
   }
 
   /**

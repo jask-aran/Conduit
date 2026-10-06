@@ -577,6 +577,13 @@ export class PiManager extends EventEmitter {
       // Publishing a normalized generation failure first made the client
       // freeze a synthetic error turn and show a crash toast before the
       // deliberate runtime_exit arrived and detached it.
+      // A stop asked for still leaves the turn's rows to say so: what was
+      // written is closed with it, what never was is dropped, and the prompt
+      // says it was interrupted -- the browser no longer decides any of it.
+      if (deliberate) {
+        this.dropUnwrittenMessages(record);
+        this.settleTurn(record, "generation_stopped");
+      }
       if (!deliberate) {
         this.ingestGenerationEvent(record, {
           type: "runtime_exit",
@@ -1457,6 +1464,13 @@ export class PiManager extends EventEmitter {
         // the prompt that opened the turn: that prompt has been answered, and
         // this is what the model is replying to now.
         if (claims) claims.answersAfter = queued;
+        // The prompts this run answered until now are over the moment Pi takes
+        // the next one, not when its answer first opens: until they say so the
+        // browser can only draw the finished turn as still writing.
+        if (record.generation) {
+          this.settlePrompts(record, "complete", queued);
+          (record.generation.prompts ||= new Set()).add(queued);
+        }
         // The message now has a row of its own, so it is no longer waiting.
         this.takeQueuedMessage(record, queued);
         this.publishState(record);
@@ -1776,7 +1790,10 @@ export class PiManager extends EventEmitter {
       // final paint frame surviving the socket.
       provider: written?.provider || null,
       model: written?.model || null,
-      timestamp: written?.timestamp || null,
+      // When it was finished, which is the time Pi's session file gives the
+      // entry. Pi's own stamp on the message is when it started, so a turn's
+      // time read to the first token of its last message until a reload.
+      timestamp: new Date().toISOString(),
       errorMessage: written?.errorMessage || null,
     }));
     return id;

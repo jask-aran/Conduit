@@ -138,6 +138,7 @@ only place display scaling and frame cost are real.
 | `placeholder-heights.mjs` | Do off-screen blocks hold their real height? |
 | `motion-rules.mjs` | Which loaded CSS rules set containment, `will-change`, transforms or `content-visibility`, and which only apply under an interaction state? |
 | `dock-layer-frames.mjs` | Does the dock hold still when it switches between beside the panes and over them? |
+| `settle-stability.mjs` | Does a turn hold still as it settles, stops (also from an approval) or takes a steered message, and does it state every outcome? Asserted, `ok`/`FAIL` per scenario, no model call (Test profile below). Gate for transcript live/settle changes. |
 | `stream-budget.mjs` | While an answer streams: tasks over 6.94ms, what ran inside them, and how evenly the text appeared. It makes a live model call. |
 
 A probe killed mid-run leaves its page open in Windows Chrome. Close it before
@@ -514,6 +515,27 @@ Run in parallel, they delete each other's assets, and the build fails with
 Both dev builds carry whatever is in the working tree. Neither is a release
 candidate: a candidate is a CI artifact from a tag, and only CI holds the
 signing keys that let it install over a previous release.
+
+## The Test profile
+
+A chat on the `test-stream` profile (`src/test-stream-adapter.js`) answers
+instantly and deterministically, with no model call. The model picks the pace
+(`paced-60` about a real model, `fast-250`, `fast-1000`, `flood-4000`); the
+thinking level picks how many tokens. The prompt is not a question; words in it
+shape the turn, and the same prompt always produces the same turn:
+
+| In the prompt | Turn |
+| --- | --- |
+| `1500t` | stream exactly 1500 tokens, whatever the level says |
+| `tool`, `3 tools` | text, a tool call, text, ... with that many calls |
+| `approve` | each tool asks for approval first |
+| `think`, `think 900` | open with a thinking block, 400 tokens or the number given (a number ending in `t` is the answer's: `think 900 1500t`) |
+
+Sending while it answers steers, read where a real harness reads its queue:
+after a tool call the message joins the turn and what is left answers it;
+once the answer has ended it starts the next turn, the finished answer staying
+an answer. Never between thinking and its answer.
+Stopping keeps the partial answer.
 
 ## Deterministic harnesses
 

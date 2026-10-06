@@ -266,6 +266,8 @@ export interface Message {
   status?: string | null;
   continuing?: boolean;
   pending?: boolean;
+  /** Added by this client and not yet stated by the server. */
+  local?: boolean;
   /**
    * An answer that is still arriving. It takes its place in the transcript the
    * moment the harness names it, so everything sent afterwards lands after it,
@@ -357,6 +359,8 @@ export interface ToolItem {
 }
 
 export interface TranscriptDetail extends ChatSummary {
+  /** How far into the chat's log this transcript reaches. */
+  log?: { id: string; seq: number };
   model?: string;
   thinkingLevel?: string;
   messages: Message[];
