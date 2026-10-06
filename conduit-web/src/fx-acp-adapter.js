@@ -604,12 +604,6 @@ export class FxAcpAdapter extends EventEmitter {
     return true;
   }
 
-  async shutdown() {
-    const records = this.rawRecords();
-    await Promise.all(records.map((record) => this.close(record.id)));
-    return records.length;
-  }
-
   async listThreads({ cwd, limit = 60 } = {}) {
     const result = await this.json(["sessions", "--all", "--limit", String(Math.min(Math.max(limit, 1), 100)), "--json"]);
     return (result.sessions || []).map((session) => ({
