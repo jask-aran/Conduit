@@ -30,18 +30,18 @@ The PR pins `effect@4.0.1` and introduces one small server-only substrate, `src/
 5. Pi no longer owns a second reclaim-and-create admission path. `PiRpcAdapter` creates/restores directly through `PiManager` after the backend-neutral launcher has admitted the launch.
 6. Pi process shutdown uses the same timeout primitive for the SIGTERM grace period before escalating to SIGKILL, removing another one-off lifecycle timer from `PiManager`.
 
-The production composition root creates one `ServerConcurrency` and supplies it to `PiManager` and `ChatLifecycle`. Their public APIs and policy decisions stay where they are. Both classes still construct a private default when used independently in tests or tooling.
+The production composition root creates one `ServerConcurrency` and supplies it to `ChatLifecycle`, the backend-neutral live-session launcher, and `PiManager`. `ChatLifecycle` and `PiManager` still construct a private default when used independently in tests or tooling.
 
 At this boundary the intended ownership is now literal:
 
 ```text
 ServerConcurrency
-  ├─ keyed chat mutex
-  ├─ capacity mutex
-  └─ timeout primitive
-        ↓
-ChatLifecycle     PiManager
-(domain policy)  (Pi policy)
+  ├─ keyed chat mutex ─────→ ChatLifecycle
+  ├─ capacity mutex ───────→ LiveSessionLauncher
+  └─ timeout primitive ────→ ChatLifecycle / PiManager
+
+ChatLifecycle        LiveSessionLauncher       PiManager
+chat/project policy  machine admission policy  Pi-specific runtime policy
 ```
 
 `ChatLifecycle` still owns launch coalescing, deletion state and project activity because those are Conduit lifecycle rules. The backend-neutral launcher owns machine-wide admission because the live-process budget spans every harness. `PiManager` owns Pi RPC correlation, generation policy, idle reaping and socket delivery, but no longer owns a second admission algorithm.
@@ -53,8 +53,8 @@ The conversion from Promise work to Effect deliberately maps a rejected value ba
 This work is intentionally below the domain contract. In particular:
 
 - A full generation limit is still rejected immediately with `generation_limit`; it does not become a semaphore queue.
-- The live-process cap still reclaims only processes that `PiManager` considers reclaimable, and still rejects with `live_process_limit` when it cannot make room.
-- Concurrent `createWithCapacity` calls are still serialized so they cannot overshoot the cap.
+- The live-process cap is enforced once across all backend adapters, reclaiming only backend-neutral idle sessions and rejecting with `live_process_limit` when it cannot make room.
+- Concurrent launches across different backends are serialized at admission so they cannot both consume the final machine slot.
 - A second compatible launch still joins the in-flight launch. A launch with incompatible settings still receives `live_session_start_mismatch`.
 - Chat move/delete/start transitions retain their existing per-chat order.
 - Project deletion still marks the project deleting before waiting for existing guarded work, rejects new guarded work, waits up to the configured drain timeout, and clears the deleting guard after `project_busy`.
@@ -62,7 +62,7 @@ This work is intentionally below the domain contract. In particular:
 - Browser disconnect still does not imply process shutdown.
 - Transcript authority, adapter session identity and persistence remain unchanged.
 
-The existing `chat-lifecycle.test.js` and `process-policy.test.js` tests exercise these invariants directly.
+The existing `chat-lifecycle.test.js` and `process-policy.test.js` suites plus the live-session launcher regressions exercise these invariants directly.
 
 ## What deliberately remains outside Effect
 
@@ -98,9 +98,9 @@ Starting by converting every store into a `Context.Service`, every error into a 
 
 This slice is negative architectural mass by ownership and duplicated algorithms, not by raw line count.
 
-Before it, chat serialization and Pi capacity each carried their own promise-tail mutex; project deletion carried a waiter registry plus a timer race; and Pi graceful stop carried another one-off deadline. After it, generic serialization and deadlines have one mechanical owner, while `ChatLifecycle` and `PiManager` retain only the policy that decides when those mechanics apply.
+Before it, chat serialization and Pi capacity each carried their own promise-tail mutex; project deletion carried a waiter registry plus a timer race; Pi graceful stop carried another one-off deadline; and the machine-wide live-process limit was duplicated between the backend-neutral launcher and PiManager. After it, generic serialization and deadlines have one mechanical owner, and the live-process budget has one policy owner outside every individual backend.
 
-The production JavaScript diff is still net positive because `ServerConcurrency` is a new boundary. Effect is also a new dependency and therefore a new concept for a maintainer who does not already know it. This PR is justified by reducing the number of places that implement concurrency mechanics and by establishing a reusable boundary, not by claiming fewer source lines.
+Effect is a new dependency and therefore a new concept for a maintainer who does not already know it. The standard for this migration is therefore stricter than line-count neutrality: each slice must delete an existing owner or duplicated algorithm rather than wrapping it. This PR now removes Pi's live-process admission, reclaim, enforcement and max-live configuration entirely.
 
 That creates a constraint on follow-on work: Effect adoption must continue to delete bespoke lifecycle/concurrency/resource machinery. If later slices leave the old managers and shutdown systems intact while adding Layers, services and scopes beside them, the migration has become positive architectural mass and should stop or be reworked.
 
