@@ -821,6 +821,19 @@ app.use((error, _request, response, _next) => {
 });
 
 const server = http.createServer(app);
+// Owned here, before the sockets and streams it carries, so it is released
+// after them: a browser socket gets its "restarting" close before the
+// connection under it goes. The listener and the two servers it hands
+// connections to close together, as the listener counts every connection it
+// handed over and closes only once they do.
+lifetime.own("listener", null, async () => {
+  const closed = new Promise((resolve) => front.close(resolve));
+  server.closeIdleConnections?.();
+  server.closeAllConnections?.();
+  secureServer?.close();
+  secureServer?.closeAllConnections?.();
+  await closed;
+});
 const wss = lifetime.own("browser sockets", new WebSocketServer({ noServer: true }), (owned) => {
   for (const socket of owned.clients) socket.close(1012, "Conduit is restarting");
 });
@@ -948,17 +961,6 @@ const front = net.createServer((socket) => {
     socket.unshift(first);
     (first[0] === TLS_HANDSHAKE && secureServer ? secureServer : server).emit("connection", socket);
   });
-});
-// The listener and the two servers it hands connections to close together:
-// the listener counts every connection it handed over, so it closes only once
-// they do.
-lifetime.own("listener", front, async (owned) => {
-  const closed = new Promise((resolve) => owned.close(resolve));
-  server.closeIdleConnections?.();
-  server.closeAllConnections?.();
-  secureServer?.close();
-  secureServer?.closeAllConnections?.();
-  await closed;
 });
 /*
  * Checked again for expiry: `ensure` hands back the same leaf until it is

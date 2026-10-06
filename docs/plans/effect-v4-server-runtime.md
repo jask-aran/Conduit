@@ -36,7 +36,7 @@ Each was a choice; the defaults chosen are listed.
 
 1. **Both caps apply to every harness.** The generation cap and the live-process cap were enforced for Pi only; Codex, Claude Code, OpenCode, fx and ChatGPT Web ran uncapped. They are now counted together. A turn waiting on an approval, compacting or retrying counts as generating.
 2. **Every child process is escalated to SIGKILL.** fx and the ChatGPT Web sidecar were sent SIGTERM only and could outlive the server. A Pi `stop()` (not `stopAndWait`) now also escalates after 3s.
-3. **Shutdown order follows creation in reverse:** listeners first, then sockets and streams, the runtime hub, agents, the voice archive drain, the voice model, LAN advertisement, terminals last. The archive drain now runs after the agents stop rather than beside them. One failing or hanging release no longer stops the rest. Shutdown with nothing running takes ~50ms instead of ~1.1s.
+3. **Shutdown order follows creation in reverse:** browser sockets and streams first (each told the server is restarting), then the listener and its connections, the runtime hub, agents, the voice archive drain, the voice model, LAN advertisement, terminals last. The archive drain now runs after the agents stop rather than beside them. One failing or hanging release no longer stops the rest. Shutdown with nothing running takes ~50ms instead of ~1.1s.
 4. **Launches no longer queue behind one another.** Only the slot check is serialized.
 
 Unchanged: error codes and statuses, `generation_limit` is still an immediate rejection, compatible launches still join, project deletion and its drain, transcript authority, delivery and persistence.
