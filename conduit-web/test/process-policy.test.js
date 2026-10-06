@@ -18,7 +18,6 @@ function fakeChild() {
 }
 
 function makeManager({
-  maxLiveProcesses = 2,
   maxGeneratingProcesses = 2,
   idleProcessTtlMs = 120_000,
   nowValue = { t: 1_000 },
@@ -26,7 +25,6 @@ function makeManager({
   const children = [];
   const manager = new PiManager({
     agentDir: "/tmp/conduit-process-policy",
-    maxLiveProcesses,
     maxGeneratingProcesses,
     idleProcessTtlMs,
     reaperIntervalMs: 0,
@@ -63,18 +61,14 @@ test("normalizeRuntimeSettings clamps warm pool, generating cap, and idle TTL", 
   assert.equal(normalizeRuntimeSettings({}).maxGeneratingProcesses, 2);
 });
 
-test("create reuses the same chat and retains a Pi-local hard cap", () => {
-  const { manager, children } = makeManager({ maxLiveProcesses: 2 });
+test("create reuses the same chat", () => {
+  const { manager, children } = makeManager();
   const a = manager.create({ project: project("a"), chatId: "chat-a" });
   children[0].emit("spawn");
   manager.create({ project: project("b"), chatId: "chat-b" });
   children[1].emit("spawn");
   assert.equal(manager.list().length, 2);
   assert.equal(manager.create({ project: project("a"), chatId: "chat-a" }), a);
-  assert.throws(
-    () => manager.create({ project: project("c"), chatId: "chat-c" }),
-    (error) => error.code === "live_process_limit",
-  );
 });
 
 test("an intentional stop absorbs a late Pi stdin error", () => {
@@ -119,7 +113,7 @@ test("a Pi process exit closes attached clients so they reconnect to its replace
 });
 
 test("starting processes are not reclaimable", () => {
-  const { manager, children } = makeManager({ maxLiveProcesses: 1 });
+  const { manager, children } = makeManager();
   const starting = manager.create({ project: project("boot"), chatId: "chat-boot" });
   assert.equal(starting.status, "starting");
   assert.equal(manager.isBusy(starting), true);
@@ -132,7 +126,7 @@ test("starting processes are not reclaimable", () => {
 });
 
 test("get_state does not settle an open generation", () => {
-  const { manager, children } = makeManager({ maxLiveProcesses: 2 });
+  const { manager, children } = makeManager();
   const record = manager.create({ project: project("g"), chatId: "chat-g" });
   children[0].emit("spawn");
   record.generation = { id: "g1", closed: false, settled: false };
@@ -147,7 +141,7 @@ test("get_state does not settle an open generation", () => {
 });
 
 test("setSessionName uses the live process RPC and leaves the process running", async () => {
-  const { manager, children } = makeManager({ maxLiveProcesses: 4 });
+  const { manager, children } = makeManager();
   const writes = [];
   const record = manager.create({ project: project("rename"), chatId: "chat-rename" });
   children[0].emit("spawn");
@@ -171,7 +165,7 @@ test("setSessionName uses the live process RPC and leaves the process running", 
 });
 
 test("assertCanStartGeneration limits concurrent agent loops without reclaiming warms", () => {
-  const { manager, children } = makeManager({ maxLiveProcesses: 8, maxGeneratingProcesses: 2 });
+  const { manager, children } = makeManager({ maxGeneratingProcesses: 2 });
   const a = manager.create({ project: project("a"), chatId: "chat-a" });
   const b = manager.create({ project: project("b"), chatId: "chat-b" });
   const c = manager.create({ project: project("c"), chatId: "chat-c" });
@@ -195,7 +189,7 @@ test("assertCanStartGeneration limits concurrent agent loops without reclaiming 
 });
 
 test("prompt rejects when the generating cap is full", () => {
-  const { manager, children } = makeManager({ maxLiveProcesses: 4, maxGeneratingProcesses: 1 });
+  const { manager, children } = makeManager({ maxGeneratingProcesses: 1 });
   const busy = manager.create({ project: project("busy"), chatId: "chat-busy" });
   const idle = manager.create({ project: project("idle"), chatId: "chat-idle" });
   children[0].emit("spawn");
@@ -210,7 +204,7 @@ test("prompt rejects when the generating cap is full", () => {
 });
 
 test("reaper stops unattached idle processes after the TTL", async () => {
-  const { manager, children, nowValue } = makeManager({ maxLiveProcesses: 4, idleProcessTtlMs: 120_000 });
+  const { manager, children, nowValue } = makeManager({ idleProcessTtlMs: 120_000 });
   const record = manager.create({ project: project("idle"), chatId: "chat-idle" });
   children[0].emit("spawn");
   record.clients.clear();
@@ -309,7 +303,6 @@ test("a deliberate stop tells clients not to reconnect", async () => {
 test("stopAndWait escalates to SIGKILL when the graceful deadline expires", async () => {
   const signals = [];
   const concurrency = {
-    runCapacity: (work) => work(),
     waitFor: async () => { throw new Error("deadline"); },
   };
   const child = new EventEmitter();
@@ -348,23 +341,6 @@ test("a crash is not reported as a deliberate stop", async () => {
   const exit = events.find((event) => event.type === "runtime_exit");
   assert.ok(exit, "an exit event is published");
   assert.equal(exit.deliberate, false);
-});
-
-test("enforceLimit stops excess idle processes after max is lowered", async () => {
-  const { manager, children, nowValue } = makeManager({ maxLiveProcesses: 4 });
-  for (let index = 0; index < 4; index += 1) {
-    const record = manager.create({ project: project(`p${index}`), chatId: `chat-${index}` });
-    children[index].emit("spawn");
-    record.clients.clear();
-    record.active = false;
-    record.activity = "idle";
-    record.lastClientAt = nowValue.t - (100 - index);
-  }
-  assert.equal(manager.list().length, 4);
-  manager.configure({ maxLiveProcesses: 2 });
-  assert.equal(await manager.enforceLimit(), 2);
-  assert.equal(manager.list().length, 2);
-  assert.equal(manager.policy().maxLiveProcesses, 2);
 });
 
 test("a process stops being offered the moment its stop is accepted", async () => {
