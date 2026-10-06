@@ -189,7 +189,7 @@ const statedAnswers = (message: Message): string | null =>
  * error -- and Pi's stop under a running tool files an empty entry that says
  * `error`, so the trace called that turn complete while the tool said error and
  * the composer said interrupted. A finished turn that did not say how it ended
- * is a harness that forgot to, and it stops here rather than being drawn as a
+ * is a harness that forgot to; it is reported here rather than drawn as a
  * clean finish. A turn still running has not ended, so its rows are the live
  * overlay's and are checked once they are not.
  */
@@ -200,12 +200,18 @@ const lastStatedIndex = (rows: TurnRow[]) => {
   }
   return -1;
 };
+const reportedUnstated = new Set<string>();
 export function assertStatedOutcomes(rows: TurnRow[], turnOpen = false): TurnRow[] {
   // A chat whose turn is still running has not ended it: the unstated traces
   // after the last prompt that did state how it ended are that turn's.
   const checked = turnOpen ? rows.slice(0, lastStatedIndex(rows) + 1) : rows;
-  const unstated = checked.find((row) => row.type === "trace" && row.unstated);
-  if (unstated) throw new Error(`transcript contract: the turn after prompt ${unstated.precedingUserId} ended without stating how. A backend must state \`turn.settle\` when a turn ends.`);
+  // A breach is a bug to report, not a reason to lose the chat: the turn is
+  // drawn without an outcome and the breach is logged once per prompt.
+  for (const row of checked) {
+    if (row.type !== "trace" || !row.unstated || reportedUnstated.has(row.precedingUserId ?? "")) continue;
+    reportedUnstated.add(row.precedingUserId ?? "");
+    console.error(`transcript contract: the turn after prompt ${row.precedingUserId} ended without stating how. A backend must state \`turn.settle\` when a turn ends.`);
+  }
   return rows;
 }
 

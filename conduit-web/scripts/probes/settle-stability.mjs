@@ -16,7 +16,7 @@
  *
  * Prints ok/FAIL per scenario and exits 1 on any failure.
  *
- *   node scripts/probes/settle-stability.mjs [--only settle,stop-answer,deny-tool,queued,queued-tool,history]
+ *   node scripts/probes/settle-stability.mjs [--only settle,stop-answer,deny-tool,stop-approval,queued,queued-tool,history]
  */
 import { arg, open, origin } from "./lib.mjs";
 
@@ -197,6 +197,23 @@ const scenarios = {
       ["nothing moved after settle", !after.moved],
     ];
   },
+  /** Stop is on the approval card: it ends the turn and takes the card away. */
+  async "stop-approval"() {
+    await send("think 1 tool approve 300t");
+    await page.waitForFunction(() => document.querySelector(".question-card"), null, { timeout: 30_000 });
+    const live = await tag();
+    await page.locator(".question-card .question-stop").click();
+    await settled();
+    await page.waitForTimeout(500);
+    const after = await inspect();
+    const card = await page.locator(".question-card").count();
+    return [
+      ["trace tagged", live.trace],
+      ["card gone", card === 0, card],
+      ["trace kept its node", after.traceMounted],
+      ["nothing churned after settle", !after.churn, after.churn],
+    ];
+  },
   /**
    * A message sent mid-answer waits for the answer to end and starts the next
    * turn. The answer it waited for stays an answer.
@@ -260,12 +277,16 @@ const scenarios = {
 
 const only = arg("--only", "")?.split(",").filter(Boolean);
 let failed = 0;
+// A breach of the transcript contract is logged, not thrown, so it is caught here.
+let breaches = [];
+page.on("console", (message) => { if (message.type() === "error" && message.text().startsWith("transcript contract")) breaches.push(message.text()); });
 for (const [name, run] of Object.entries(scenarios)) {
   if (only?.length && !only.includes(name)) continue;
   let id = null;
   try {
     id = await chat("fast-250");
-    const checks = await run();
+    breaches = [];
+    const checks = [...await run(), ["no contract breach", !breaches.length, breaches[0]]];
     const bad = checks.filter(([, ok]) => !ok);
     failed += bad.length ? 1 : 0;
     console.log(`${bad.length ? "FAIL" : "ok  "} ${name}${bad.length ? `: ${bad.map(([label, , detail]) => detail === undefined ? label : `${label} (${detail})`).join(", ")}` : ""}`);

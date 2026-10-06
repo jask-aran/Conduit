@@ -138,7 +138,7 @@ only place display scaling and frame cost are real.
 | `placeholder-heights.mjs` | Do off-screen blocks hold their real height? |
 | `motion-rules.mjs` | Which loaded CSS rules set containment, `will-change`, transforms or `content-visibility`, and which only apply under an interaction state? |
 | `dock-layer-frames.mjs` | Does the dock hold still when it switches between beside the panes and over them? |
-| `settle-stability.mjs` | Does a turn hold still as it settles, stops or takes a steered message? Asserted, `ok`/`FAIL` per scenario, no model call (Test profile below). Gate for transcript live/settle changes. |
+| `settle-stability.mjs` | Does a turn hold still as it settles, stops (also from an approval) or takes a steered message, and does it state every outcome? Asserted, `ok`/`FAIL` per scenario, no model call (Test profile below). Gate for transcript live/settle changes. |
 | `stream-budget.mjs` | While an answer streams: tasks over 6.94ms, what ran inside them, and how evenly the text appeared. It makes a live model call. |
 
 A probe killed mid-run leaves its page open in Windows Chrome. Close it before

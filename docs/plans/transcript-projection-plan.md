@@ -105,12 +105,12 @@ scenario:
 - `history` -- two turns, regenerate, edit, stop, process recycled, edit the
   stopped prompt: after each, no error screen and live equals reload.
 
-Known gap: the crash fixed in `cf1518d0` (stop, reload, edit on Pi: the
-attach replayed the whole log over the loaded transcript and tripped the
-stated-outcome contract) does not reproduce on the Test profile even with the
-process recycled; it was found and verified with a live Pi script. The
-contract itself still takes the whole app to its error screen on any
-violation, which turns a transient fold state into a crash.
+- `stop-approval` -- Stop on the approval card ends the turn and takes the card away.
+
+Every scenario also fails on a logged contract breach: a turn that ended
+without stating how is drawn without an outcome and reported in the console,
+not thrown to the error screen. With the `cf1518d0` fix disabled, `history`
+fails on the Test profile.
 
 The word-fade unwrapping its spans and the action row replacing its
 placeholder are expected after settle and are not counted, nor is the queued
