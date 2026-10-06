@@ -35,7 +35,7 @@ export function registerLiveSessionRoutes(app, {
   const runtimeView = () => ({
     ...runtimeSettings.get(),
     liveCount: backends.rawRecords().length,
-    generatingCount: manager.generatingRecords().length,
+    generatingCount: backends.generatingRecords().length,
   });
 
   app.get("/v0/runtime/settings", (_request, response) => {
