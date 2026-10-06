@@ -359,6 +359,8 @@ export interface ToolItem {
 }
 
 export interface TranscriptDetail extends ChatSummary {
+  /** How far into the chat's log this transcript reaches. */
+  log?: { id: string; seq: number };
   model?: string;
   thinkingLevel?: string;
   messages: Message[];
