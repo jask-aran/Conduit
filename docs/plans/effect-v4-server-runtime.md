@@ -23,11 +23,11 @@ The PR pins `effect@4.0.1` and introduces one small server-only substrate, `src/
 
 `ServerConcurrency` is intentionally flat: it directly owns three mechanics, without local mutex wrapper classes:
 
-1. A one-permit Effect semaphore serializes Pi capacity mutations. This replaces `PiManager.capacityQueue`.
+1. A one-permit Effect semaphore serializes machine-wide live-session admission across every backend. This replaces `PiManager.capacityQueue` and moves capacity ownership to the backend-neutral launcher where the global cap is already enforced.
 2. Keyed one-permit Effect semaphores serialize chat lifecycle mutations. This replaces `ChatLifecycle.chatTails`.
 3. Effect timeout/interruption owns the project-drain deadline. This replaces the explicit `Promise.race` and timer bookkeeping in `beginProjectDeletion`.
 4. Project activity now has one drain latch per active period instead of a waiter array. Because deletion is exclusive, only one deletion can wait for that latch; the array was concurrency machinery without a second consumer.
-5. Pi capacity policy calls the shared capacity mutex directly rather than retaining a pass-through `runExclusive` abstraction.
+5. Pi no longer owns a second reclaim-and-create admission path. `PiRpcAdapter` creates/restores directly through `PiManager` after the backend-neutral launcher has admitted the launch.
 6. Pi process shutdown uses the same timeout primitive for the SIGTERM grace period before escalating to SIGKILL, removing another one-off lifecycle timer from `PiManager`.
 
 The production composition root creates one `ServerConcurrency` and supplies it to `PiManager` and `ChatLifecycle`. Their public APIs and policy decisions stay where they are. Both classes still construct a private default when used independently in tests or tooling.
@@ -44,7 +44,7 @@ ChatLifecycle     PiManager
 (domain policy)  (Pi policy)
 ```
 
-`ChatLifecycle` still owns launch coalescing, deletion state and project activity because those are Conduit lifecycle rules. `PiManager` still owns RPC correlation, generation/process policy, reaping and socket delivery because those are Pi/runtime rules. Neither owns another generic mutex or deadline implementation.
+`ChatLifecycle` still owns launch coalescing, deletion state and project activity because those are Conduit lifecycle rules. The backend-neutral launcher owns machine-wide admission because the live-process budget spans every harness. `PiManager` owns Pi RPC correlation, generation policy, idle reaping and socket delivery, but no longer owns a second admission algorithm.
 
 The conversion from Promise work to Effect deliberately maps a rejected value back to that exact value. Existing `Error` instances and their `code`, `status` and other fields therefore cross the Promise/Effect boundary unchanged.
 
@@ -151,6 +151,6 @@ Conduit's release installer/package path already records and enforces `NODE_MIN=
 
 The thin server release path copies `package.json` and `package-lock.json` and installs production dependencies with `release-deps.mjs`, so Effect is included by the existing release mechanism without a packaging special case.
 
-No pre-existing server behavior bug was identified that needed to be fixed as part of these slices, so product behavior remains unchanged.
+Continued review found one pre-existing capacity race and fixes it here: the backend-neutral launcher already enforced the live-process budget across all harnesses, but only Pi had a serialized create path. Two different backends could therefore concurrently observe the final free slot and both launch. Admission and launch are now serialized at the machine-wide boundary, and the redundant Pi-only reclaim/create path has been deleted.
 
 Review of the refactor itself found one timing bug before merge: project deletion originally re-read the active-period drain latch from state after crossing the Promise/Effect boundary. The final guarded operation could resolve and clear that state in the intervening microtask, turning a successful drain into an internal failure. The implementation now captures the drain promise synchronously before yielding, and a regression test forces that ordering.
