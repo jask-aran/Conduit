@@ -1561,6 +1561,13 @@ export class PiManager extends EventEmitter {
         // the prompt that opened the turn: that prompt has been answered, and
         // this is what the model is replying to now.
         if (claims) claims.answersAfter = queued;
+        // The prompts this run answered until now are over the moment Pi takes
+        // the next one, not when its answer first opens: until they say so the
+        // browser can only draw the finished turn as still writing.
+        if (record.generation) {
+          this.settlePrompts(record, "complete", queued);
+          (record.generation.prompts ||= new Set()).add(queued);
+        }
         // The message now has a row of its own, so it is no longer waiting.
         this.takeQueuedMessage(record, queued);
         this.publishState(record);
