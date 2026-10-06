@@ -92,6 +92,14 @@ export class ChatLog {
     // folds it, so a settled turn can be checked against the record without
     // telling the browser anything when the two agree.
     this.stated = { messages: [], tools: [] };
+    // Readers that follow the chat as it is written, without a browser socket.
+    this.followers = new Set();
+  }
+
+  /** Call `follow` with each event as it is numbered; returns how to stop. */
+  follow(follow) {
+    this.followers.add(follow);
+    return () => this.followers.delete(follow);
   }
 
   state() {
@@ -175,6 +183,9 @@ export class ChatLog {
     const stamped = { ...event, log: { id: this.id, seq: this.seq } };
     this.entries.push(stamped);
     if (this.entries.length > this.limit) this.entries.splice(0, this.entries.length - this.limit);
+    for (const follow of this.followers) {
+      try { follow(stamped); } catch (error) { console.error("A chat log reader failed", error); }
+    }
     return stamped;
   }
 

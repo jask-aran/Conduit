@@ -59,6 +59,7 @@ import { registerTerminalPasteRoutes } from "./server/routes/terminal-paste.js";
 import { registerDraftRoutes } from "./server/routes/drafts.js";
 import { registerRuntimeRoutes } from "./server/routes/runtime.js";
 import { registerChatRoutes } from "./server/routes/chats.js";
+import { registerRunRoutes } from "./server/routes/runs.js";
 import { createWarmDrafts } from "./server/warm-drafts.js";
 import { registerHarnessRoutes } from "./server/routes/harnesses.js";
 import { createHarnessModelCatalogue } from "./harnesses/model-catalogue.js";
@@ -713,6 +714,12 @@ registerChatRoutes(app, {
   templateForChat,
 });
 registerHarnessRoutes(app, { backends, harnessModels, preferences, projects, registry });
+// Bound late: the live-session stream that sends a run's prompt is made below.
+registerRunRoutes(app, {
+  backends, chatLogs, config, defaultTemplate, launchLiveSession, projects, registry, runtimeFor,
+  submitPrompt: (...args) => liveSessionStream.submitPrompt(...args),
+  stopGeneration: (...args) => liveSessionStream.stopGeneration(...args),
+});
 registerSessionRoutes(app, {
   piCompactReserve: () => piCompactionReserve(config.piAgentDir),
   piModelWindow: async (spec, cwd) => (await catalogFor({}, config.piTemplate).list(cwd)).models.find((model) => model.spec === spec)?.contextWindow || null,

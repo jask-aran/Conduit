@@ -496,7 +496,20 @@ starting, and browser-attached processes remain resident.
 - `GET /v0/share-origin` resolves the current host's MagicDNS HTTPS origin from
   the local Tailscale CLI; the client appends the selected chat path before
   copying it.
-- `POST /v0/chats`
+- `POST /v0/chats`; `{ warm: true }` starts a Pi draft's agent with it and may
+  hand back an untouched draft the server kept warm for that project and profile
+- `POST /v0/runs` `{ prompt, projectId?, profileId?, model?, thinkingLevel? }`
+  starts a headless agent run: an untracked chat (no chat list shows it) on any
+  profile, launched and prompted with no page attached. `GET /v0/runs/:id`
+  returns `status` (`running`, `settled`, or `lost` when no process or log is
+  left), the stated `outcome`, the final `answer`, and `waiting` when it is
+  held on an approval or question. `GET /v0/runs/:id/events` (SSE) replays the
+  chat log from `?since=` / `Last-Event-ID` and follows it until the turn
+  settles: transcript ops and statuses, with each message stated in full on
+  `message.close` (no deltas). `POST /v0/runs/:id/messages` prompts a settled
+  run again; `POST /v0/runs/:id/stop` stops it like the composer's Stop. A
+  run's state lives in the server's chat log, so after a restart it reads as
+  `lost` while its transcript remains in the chat.
 - `GET /v0/profiles` lists profile identity and backend metadata
 - `GET|DELETE /v0/chats/:id` (draft cleanup requires `?ifEmpty=true`)
 - `PUT|GET /v0/chats/:id/attachments/:attachment-id` uploads raw bytes or downloads;

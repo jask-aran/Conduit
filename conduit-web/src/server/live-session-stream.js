@@ -566,6 +566,26 @@ export function createLiveSessionStream({
     });
   }
 
+  /**
+   * Send a prompt to a chat's live agent from the server itself.
+   *
+   * The same path a browser's prompt takes -- the chat's lock, its model, the
+   * names claimed for the message and its answer, the generation cap -- for a
+   * caller with no socket: a headless run.
+   */
+  async function submitPrompt(chatId, message, { model = "", thinkingLevel = "" } = {}) {
+    return lifecycle.run(chatId, async () => {
+      const context = await findChatContext(chatId);
+      if (!context) throw Object.assign(new Error("Chat not found"), { code: "chat_not_found", status: 404 });
+      lifecycle.assertAvailable(chatId, context.project.id);
+      const record = backends.getByChatId(chatId);
+      if (!record) throw Object.assign(new Error("This chat has no live agent process"), { code: "no_live_process", status: 409 });
+      await applyComposerModel(record, { model, thinkingLevel });
+      const prepared = await promptForChat(record, { attachmentIds: [] }, String(message || ""));
+      return sendPrompt(record, prepared, {});
+    });
+  }
+
   const handleUpgrade = (id, request, socket, head) => wss.handleUpgrade(request, socket, head, (ws) => {
     startWebSocketKeepalive(ws);
     const record = backends.get(id);
@@ -671,5 +691,12 @@ export function createLiveSessionStream({
     });
   });
 
-  return { handleUpgrade };
+  /** Stop a chat's running turn, as the browser's Stop does. */
+  async function stopGeneration(chatId) {
+    const record = backends.getByChatId(chatId);
+    if (!record) return null;
+    return handleClientCommand(record, { type: "stop_generation" });
+  }
+
+  return { handleUpgrade, submitPrompt, stopGeneration };
 }
