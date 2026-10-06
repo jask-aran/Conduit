@@ -68,13 +68,14 @@ test("a ledger read back from disk does not re-queue what it already bound", asy
   assert.equal((await reader.resolver(root, chat))("e3"), "pi:e3");
 });
 
-test("entryMessageRows keeps only what a message wrote, in order", () => {
+test("entryMessageRows names user and assistant messages, in order, among every entry", () => {
   assert.deepEqual(entryMessageRows([
     { type: "message", id: "e1", message: { role: "user" } },
     { type: "tool_call", id: "t1" },
     { type: "message", id: "e2", message: { role: "system" } },
     { type: "message", id: "e3", parentId: "e2", message: { role: "assistant" } },
-  ]), [{ id: "e1", role: "user", parentId: null }, { id: "e3", role: "assistant", parentId: "e2" }]);
+  ]), [{ id: "e1", role: "user", parentId: null }, { id: "t1", role: null, parentId: null },
+    { id: "e2", role: null, parentId: null }, { id: "e3", role: "assistant", parentId: "e2" }]);
 });
 
 /**
@@ -92,7 +93,9 @@ test("an anchored prompt takes the entry written under its parent", async () => 
   await ledger.bind(workspace, chat, [
     { id: "u0", role: "user", parentId: null },
     { id: "a1", role: "assistant", parentId: "u0" },
-    { id: "u2", role: "user", parentId: "a1" },
+    // Pi writes the system prompt between the leaf and the prompt.
+    { id: "s1", role: null, parentId: "a1" },
+    { id: "u2", role: "user", parentId: "s1" },
   ]);
   const idFor = await ledger.resolver(workspace, chat);
   assert.equal(idFor("u2"), sent);
