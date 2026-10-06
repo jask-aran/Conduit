@@ -415,31 +415,6 @@ export class PiManager extends EventEmitter {
       .sort((left, right) => (left.lastClientAt || left.lastActivityAt || 0) - (right.lastClientAt || right.lastActivityAt || 0));
   }
 
-  async ensureCapacity({ excludeChatId = null } = {}) {
-    return this.concurrency.runCapacity(() => this.makeRoomForProcess({ excludeChatId }));
-  }
-
-  async makeRoomForProcess({ excludeChatId = null } = {}) {
-    while (this.liveRecords().filter((record) => record.chatId !== excludeChatId).length >= this.maxLiveProcesses) {
-      const victim = this.reclaimCandidates({ excludeChatId })[0];
-      if (!victim) {
-        const error = new Error(`Too many live Pi processes (max ${this.maxLiveProcesses}). Wait for a chat to finish or free an idle agent.`);
-        error.code = "live_process_limit";
-        error.status = 429;
-        throw error;
-      }
-      await this.stopAndWait(victim.id);
-    }
-  }
-
-  /** Capacity check + create under one lock so concurrent POSTs cannot exceed the cap. */
-  async createWithCapacity(options = {}) {
-    return this.concurrency.runCapacity(async () => {
-      await this.makeRoomForProcess({ excludeChatId: options.chatId || null });
-      return this.create(options);
-    });
-  }
-
   /** Trim down to maxLiveProcesses after a settings change (idle unattached first). */
   async enforceLimit() {
     let stopped = 0;
