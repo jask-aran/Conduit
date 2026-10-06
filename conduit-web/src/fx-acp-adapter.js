@@ -9,6 +9,7 @@ import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
 import { terminate } from "./server/effect-process.js";
+import { within } from "./server/effect-concurrency.js";
 
 const execFile = promisify(execFileCallback);
 
@@ -592,10 +593,7 @@ export class FxAcpAdapter extends EventEmitter {
     const record = this.get(id);
     if (!record) return false;
     try {
-      if (record.sessionId) await Promise.race([
-        record.client.request("session/close", { sessionId: record.sessionId }),
-        new Promise((resolve) => setTimeout(resolve, 500)),
-      ]);
+      if (record.sessionId) await within(record.client.request("session/close", { sessionId: record.sessionId }), 500);
     } catch { /* The process is closed below. */ }
     record.client?.close();
     record.status = "stopped";
