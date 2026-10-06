@@ -138,6 +138,7 @@ export class ChatGptWebAdapter extends EventEmitter {
     };
     record.events = this.readJournal(chatId).slice(-500);
     this.sessions.add(record);
+    record.scope.defer(() => record.abortController?.abort());
     return record;
   }
 
@@ -282,9 +283,6 @@ export class ChatGptWebAdapter extends EventEmitter {
   async close(id) {
     const record = this.get(id);
     if (!record) return false;
-    record.abortController?.abort();
-    record.status = "stopped";
-    record.active = false;
     this.sessions.remove(id);
     this.emit("removed", { id, chatId: record.chatId });
     return true;
