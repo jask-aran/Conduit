@@ -19,50 +19,27 @@ This is an architecture consolidation, not an Effect rewrite.
 
 ## What this PR changes
 
-The PR pins `effect@4.0.1` and introduces one small server-only substrate, `src/server/effect-concurrency.js`. The server imports `effect/Effect` and `effect/Semaphore` directly rather than the package's broad root barrel, keeping this slice's runtime module surface limited to the primitives it actually uses.
+Effect `4.0.1` is pinned and used through four small server modules. Each replaces machinery that existed in several places:
 
-`ServerConcurrency` is intentionally flat: it directly owns three mechanics, without local mutex wrapper classes:
+| Module | Owns | Replaced |
+|---|---|---|
+| `server/effect-concurrency.js` | keyed chat mutex, machine-wide admission mutex, generation-start mutex, `within` (a bounded wait that releases its timer) | `ChatLifecycle`'s promise-tail lock, Pi's capacity queue, the project-drain `Promise.race`, seven `Promise.race`-against-`setTimeout` waits |
+| `server/effect-process.js` | `terminate(child)`: SIGTERM, grace, SIGKILL, resolve on exit | separate escalations in Pi, the voice model, project clone, workspace git and the transcribe worker; fx and ChatGPT Web had none |
+| `server/server-lifetime.js` | the server's Scope: each resource is owned where it is made and released in reverse, each release bounded and isolated | the hand-ordered `shutdown()` |
+| `live-session-launcher.js` / `live-session-stream.js` | the live-process cap and the generation cap for every harness | Pi's own admission, reclaim, cap enforcement and generation limit |
 
-1. A one-permit Effect semaphore serializes machine-wide live-session admission across every backend. This replaces `PiManager.capacityQueue` and moves capacity ownership to the backend-neutral launcher where the global cap is already enforced.
-2. Keyed one-permit Effect semaphores serialize chat lifecycle mutations. This replaces `ChatLifecycle.chatTails`.
-3. Effect timeout/interruption owns the project-drain deadline. This replaces the explicit `Promise.race` and timer bookkeeping in `beginProjectDeletion`.
-4. Project activity now has one drain latch per active period instead of a waiter array. Because deletion is exclusive, only one deletion can wait for that latch; the array was concurrency machinery without a second consumer.
-5. Pi no longer owns a second reclaim-and-create admission path. `PiRpcAdapter` creates/restores directly through `PiManager` after the backend-neutral launcher has admitted the launch.
-6. Pi process shutdown uses the same timeout primitive for the SIGTERM grace period before escalating to SIGKILL, removing another one-off lifecycle timer from `PiManager`.
+Admission holds the machine-wide lock only while it reclaims room and reserves a slot. A launch then starts outside the lock holding its reservation, so one cold start does not hold up another chat's.
 
-The production composition root creates one `ServerConcurrency` and supplies it to `ChatLifecycle`, the backend-neutral live-session launcher, and `PiManager`. `ChatLifecycle` and `PiManager` still construct a private default when used independently in tests or tooling.
+## Behaviour changes
 
-At this boundary the intended ownership is now literal:
+Each was a choice; the defaults chosen are listed.
 
-```text
-ServerConcurrency
-  ├─ keyed chat mutex ─────→ ChatLifecycle
-  ├─ capacity mutex ───────→ LiveSessionLauncher
-  └─ timeout primitive ────→ ChatLifecycle / PiManager
+1. **Both caps apply to every harness.** The generation cap and the live-process cap were enforced for Pi only; Codex, Claude Code, OpenCode, fx and ChatGPT Web ran uncapped. They are now counted together. A turn waiting on an approval, compacting or retrying counts as generating.
+2. **Every child process is escalated to SIGKILL.** fx and the ChatGPT Web sidecar were sent SIGTERM only and could outlive the server. A Pi `stop()` (not `stopAndWait`) now also escalates after 3s.
+3. **Shutdown order follows creation in reverse:** listeners first, then sockets and streams, the runtime hub, agents, the voice archive drain, the voice model, LAN advertisement, terminals last. The archive drain now runs after the agents stop rather than beside them. One failing or hanging release no longer stops the rest. Shutdown with nothing running takes ~50ms instead of ~1.1s.
+4. **Launches no longer queue behind one another.** Only the slot check is serialized.
 
-ChatLifecycle        LiveSessionLauncher       PiManager
-chat/project policy  machine admission policy  Pi-specific runtime policy
-```
-
-`ChatLifecycle` still owns launch coalescing, deletion state and project activity because those are Conduit lifecycle rules. The backend-neutral launcher owns machine-wide admission because the live-process budget spans every harness. `PiManager` owns Pi RPC correlation, generation policy, idle reaping and socket delivery, but no longer owns a second admission algorithm.
-
-The conversion from Promise work to Effect deliberately maps a rejected value back to that exact value. Existing `Error` instances and their `code`, `status` and other fields therefore cross the Promise/Effect boundary unchanged.
-
-## Behaviour that must not change
-
-This work is intentionally below the domain contract. In particular:
-
-- A full generation limit is still rejected immediately with `generation_limit`; it does not become a semaphore queue.
-- The live-process cap is enforced once across all backend adapters, reclaiming only backend-neutral idle sessions and rejecting with `live_process_limit` when it cannot make room.
-- Concurrent launches across different backends are serialized at admission so they cannot both consume the final machine slot.
-- A second compatible launch still joins the in-flight launch. A launch with incompatible settings still receives `live_session_start_mismatch`.
-- Chat move/delete/start transitions retain their existing per-chat order.
-- Project deletion still marks the project deleting before waiting for existing guarded work, rejects new guarded work, waits up to the configured drain timeout, and clears the deleting guard after `project_busy`.
-- Existing HTTP status codes and WebSocket error vocabulary remain unchanged.
-- Browser disconnect still does not imply process shutdown.
-- Transcript authority, adapter session identity and persistence remain unchanged.
-
-The existing `chat-lifecycle.test.js` and `process-policy.test.js` suites plus the live-session launcher regressions exercise these invariants directly.
+Unchanged: error codes and statuses, `generation_limit` is still an immediate rejection, compatible launches still join, project deletion and its drain, transcript authority, delivery and persistence.
 
 ## What deliberately remains outside Effect
 
@@ -134,7 +111,7 @@ This matters for issue #29. The older unified-registry/broker sketch was written
 
 The migration should remain incremental and behavior-preserving.
 
-1. **Resource ownership.** Move subprocesses, external streams, recurring timers and similar long-lived resources behind Effect scopes/acquire-release boundaries. A parent server/session scope should eventually make cleanup ownership structural rather than something every adapter and top-level shutdown path must remember independently.
+1. **Session resource ownership.** The server scope and process termination are done. Next is a scope per live session, owning its child, timers and pending requests, so an adapter's `close` is closing that scope.
 2. **Application services.** As lifetime ownership stabilizes, expose narrower `ChatService`, `WorkspaceService`, `RuntimeService` and `VoiceService` boundaries. Route files should translate HTTP to application operations rather than receive large bags of stores/managers.
 3. **Typed operational failures.** Replace ad-hoc `Object.assign(new Error(...), { code, status })` construction behind a common domain-error layer. Preserve the current external codes/statuses and translate domain failures to HTTP or WebSocket form at one boundary.
 4. **Schema at trust boundaries.** Define persisted and wire shapes such as client commands, backend events, runtime state and persisted backend identity once, deriving runtime validation and TypeScript types from those definitions. Do this at browser/harness/disk boundaries rather than converting internal deterministic data merely for consistency.
