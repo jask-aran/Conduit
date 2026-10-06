@@ -63,38 +63,18 @@ test("normalizeRuntimeSettings clamps warm pool, generating cap, and idle TTL", 
   assert.equal(normalizeRuntimeSettings({}).maxGeneratingProcesses, 2);
 });
 
-test("create reuses the same chat and enforces max live processes", async () => {
-  const { manager, children, nowValue } = makeManager({ maxLiveProcesses: 2 });
+test("create reuses the same chat and retains a Pi-local hard cap", () => {
+  const { manager, children } = makeManager({ maxLiveProcesses: 2 });
   const a = manager.create({ project: project("a"), chatId: "chat-a" });
   children[0].emit("spawn");
-  const b = manager.create({ project: project("b"), chatId: "chat-b" });
+  manager.create({ project: project("b"), chatId: "chat-b" });
   children[1].emit("spawn");
   assert.equal(manager.list().length, 2);
   assert.equal(manager.create({ project: project("a"), chatId: "chat-a" }), a);
-
-  // Busy / attached processes cannot be reclaimed for a new chat.
-  a.clients.add({});
-  b.active = true;
-  b.activity = "working";
-  await assert.rejects(
-    () => manager.ensureCapacity({ excludeChatId: "chat-c" }),
+  assert.throws(
+    () => manager.create({ project: project("c"), chatId: "chat-c" }),
     (error) => error.code === "live_process_limit",
   );
-
-  // Detach and idle so ensureCapacity can reclaim the oldest.
-  a.clients.clear();
-  b.active = false;
-  b.activity = "idle";
-  a.active = false;
-  a.activity = "idle";
-  a.lastClientAt = nowValue.t - 10;
-  b.lastClientAt = nowValue.t - 5;
-
-  await manager.ensureCapacity({ excludeChatId: "chat-c" });
-  assert.equal(manager.list().length, 1);
-  const c = manager.create({ project: project("c"), chatId: "chat-c" });
-  assert.equal(c.chatId, "chat-c");
-  assert.equal(manager.list().length, 2);
 });
 
 test("an intentional stop absorbs a late Pi stdin error", () => {
@@ -138,41 +118,17 @@ test("a Pi process exit closes attached clients so they reconnect to its replace
   assert.equal(record.clients.size, 0);
 });
 
-test("starting processes are not reclaimable", async () => {
+test("starting processes are not reclaimable", () => {
   const { manager, children } = makeManager({ maxLiveProcesses: 1 });
   const starting = manager.create({ project: project("boot"), chatId: "chat-boot" });
   assert.equal(starting.status, "starting");
   assert.equal(manager.isBusy(starting), true);
   assert.equal(manager.isReclaimable(starting), false);
-  await assert.rejects(
-    () => manager.ensureCapacity({ excludeChatId: "chat-other" }),
-    (error) => error.code === "live_process_limit",
-  );
   children[0].emit("spawn");
   starting.clients.clear();
   starting.active = false;
   starting.activity = "idle";
   assert.equal(manager.isReclaimable(starting), true);
-});
-
-test("createWithCapacity serializes concurrent creates under the cap", async () => {
-  const { manager, children } = makeManager({ maxLiveProcesses: 1 });
-  const results = await Promise.allSettled([
-    manager.createWithCapacity({ project: project("a"), chatId: "chat-a" }),
-    manager.createWithCapacity({ project: project("b"), chatId: "chat-b" }),
-  ]);
-  const fulfilled = results.filter((result) => result.status === "fulfilled");
-  const rejected = results.filter((result) => result.status === "rejected");
-  // Registration order is part of the old promise-tail behavior: the first
-  // create wins; the second hits the cap while it is still starting.
-  assert.equal(fulfilled.length, 1);
-  assert.equal(rejected.length, 1);
-  assert.equal(results[0].status, "fulfilled");
-  assert.equal(results[0].value.chatId, "chat-a");
-  assert.equal(results[1].status, "rejected");
-  assert.equal(results[1].reason.code, "live_process_limit");
-  assert.equal(manager.list().length, 1);
-  children[0]?.emit("spawn");
 });
 
 test("get_state does not settle an open generation", () => {
