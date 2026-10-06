@@ -167,6 +167,10 @@ export function toolRunsFromPrompt(message) {
   return /\btools?\b/i.test(String(message || "")) ? 1 : 0;
 }
 
+/** "think" opens the turn with a thinking block, so a trace has something to fold. */
+export const THINKING_TOKENS = 80;
+export const thinkingFromPrompt = (message) => /\bthink(ing)?\b/i.test(String(message || ""));
+
 export const approvalFromPrompt = (message) => /\bapprove|approval\b/i.test(String(message || ""));
 
 /** The tool a run calls, and what it returns. Fixed, like everything else. */
@@ -200,11 +204,11 @@ export function tokenAt(index) {
  * it up front is what makes a run repeatable: the same prompt produces the same
  * turn, down to which token the call lands on.
  */
-export function planTurn(tokens, toolRuns) {
+export function planTurn(tokens, toolRuns, thinking = false) {
   const total = Math.max(1, tokens);
-  if (!toolRuns) return [{ kind: "text", tokens: total }];
+  const steps = thinking ? [{ kind: "thinking", tokens: THINKING_TOKENS }] : [];
+  if (!toolRuns) return [...steps, { kind: "text", tokens: total }];
   const share = Math.max(1, Math.floor(total / (toolRuns + 1)));
-  const steps = [];
   let left = total;
   for (let run = 0; run < toolRuns; run += 1) {
     steps.push({ kind: "text", tokens: share });
@@ -324,7 +328,7 @@ export class TestStreamAdapter extends EventEmitter {
       // A tool's id is the turn's as well as its place in it: tool records are
       // keyed by id for the whole chat, so a second turn's call_1 would be
       // folded over the first's.
-      steps: planTurn(record.tokens, toolRunsFromPrompt(message))
+      steps: planTurn(record.tokens, toolRunsFromPrompt(message), thinkingFromPrompt(message))
         .map((step) => (step.toolCallId ? { ...step, toolCallId: `${step.toolCallId}_${generationId.slice(0, 8)}` } : step)),
       step: 0,
       approvals: approvalFromPrompt(message),
@@ -358,6 +362,8 @@ export class TestStreamAdapter extends EventEmitter {
     const turn = record.turn;
     turn.messageId = `assistant-${turn.generationId}-${turn.messages = (turn.messages || 0) + 1}`;
     turn.text = "";
+    turn.thinking = "";
+    turn.textIndex = 0;
     turn.blocks = [];
     turn.contentIndex = 0;
     this.publish(record, messageOpen({ id: turn.messageId, role: "assistant",
@@ -385,6 +391,7 @@ export class TestStreamAdapter extends EventEmitter {
     const from = turn.sent;
     const { messageId, generationId } = turn;
     const contentIndex = turn.contentIndex;
+    const blockKind = step.kind === "thinking" ? "thinking" : "text";
     let gap = 0;
     const nextDelay = () => speed.gapsMs ? speed.gapsMs[gap++ % speed.gapsMs.length] : intervalMs;
 
@@ -393,19 +400,25 @@ export class TestStreamAdapter extends EventEmitter {
       if (!record.turn || record.stopping || record.turn !== turn) return;
       const due = Math.min(target, from + Math.ceil(((Date.now() - startedAt) / 1000) * speed.tokensPerSecond));
       const emit = (delta) => this.publish(record, { type: "assistant_content", generationId, phase: "delta",
-        seq: ++record.generationSeq, messageId, contentIndex, blockKind: "text", delta });
+        seq: ++record.generationSeq, messageId, contentIndex, blockKind, delta });
       // Bursts arrive as one delta, the way a provider's chunk does.
       let burst = "";
       while (turn.sent < due) {
         const delta = speed.replay ? replayTokens(speed.replay)[turn.sent] ?? "" : tokenAt(turn.sent);
-        turn.text += delta;
+        if (blockKind === "thinking") turn.thinking += delta;
+        else turn.text += delta;
         turn.sent += 1;
         record.streamed += 1;
         if (speed.gapsMs) burst += delta;
         else emit(delta);
       }
       if (burst) emit(burst);
-      if (turn.sent >= target) { this.advance(record); return; }
+      if (turn.sent >= target) {
+        // The answer's text is the block after the thinking that preceded it.
+        if (blockKind === "thinking") turn.textIndex = turn.contentIndex += 1;
+        this.advance(record);
+        return;
+      }
       record.timer = setTimeout(tick, nextDelay());
     };
     record.timer = setTimeout(tick, nextDelay());
@@ -421,8 +434,11 @@ export class TestStreamAdapter extends EventEmitter {
   advance(record) {
     const turn = record.turn;
     if (!turn) return;
+    const finished = turn.steps[turn.step];
     turn.step += 1;
-    if (this.takeQueued(record)) return;
+    // A harness reads its queue between requests -- after a tool, or when the
+    // answer ends -- never between thinking and the answer it leads to.
+    if (finished?.kind !== "thinking" && this.takeQueued(record)) return;
     const next = turn.steps[turn.step];
     if (!next) return this.finish(record, "stop");
     if (next.kind === "tool") return this.runTool(record, next);
@@ -607,7 +623,11 @@ export class TestStreamAdapter extends EventEmitter {
   closeAnswer(record, stopReason) {
     const turn = record.turn;
     if (!turn?.messageId) return;
-    const blocks = [{ kind: "text", contentIndex: 0, text: turn.text }, ...turn.blocks];
+    const blocks = [
+      ...(turn.thinking ? [{ kind: "thinking", contentIndex: 0, text: turn.thinking, redacted: false }] : []),
+      { kind: "text", contentIndex: turn.textIndex || 0, text: turn.text },
+      ...turn.blocks,
+    ];
     this.publish(record, { type: "assistant_content", generationId: turn.generationId, phase: "final",
       seq: ++record.generationSeq, messageId: turn.messageId, stopReason, errorMessage: null, blocks });
     this.publish(record, messageClose({ messageId: turn.messageId, stopReason,
