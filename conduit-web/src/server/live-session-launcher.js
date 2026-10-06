@@ -54,15 +54,20 @@ async function reclaimLiveProcesses(backends, maxLiveProcesses, {
   exceptChatId = null,
   reserve = 0,
   failIfBlocked = false,
+  starting = new Set(),
 } = {}) {
   const max = Math.trunc(Number(maxLiveProcesses) || 0);
   if (max <= 0) return 0;
   const target = Math.max(0, max - reserve);
+
   const attempted = new Set();
   let stopped = 0;
   for (;;) {
     const current = liveProcessEntries(backends, exceptChatId);
-    if (current.length <= target) return stopped;
+    // A launch admitted but not yet resident holds its slot all the same.
+    const resident = new Set(current.map(({ view }) => view.chatId));
+    const pending = [...starting].filter((chatId) => chatId !== exceptChatId && !resident.has(chatId)).length;
+    if (current.length + pending <= target) return stopped;
     const oldest = current
       .filter(({ view }) => isIdleProcess(view) && !attempted.has(view.id))
       .sort((left, right) => processAge(left) - processAge(right))[0];
@@ -94,6 +99,8 @@ export function createLiveSessionLauncher({
   templateForChat,
   backends,
 }) {
+  // Chats admitted and still starting: each holds a slot of the budget.
+  const starting = new Set();
   async function launchFromContext(context, {
     requestedProject = "",
     model = "",
@@ -116,21 +123,24 @@ export function createLiveSessionLauncher({
     // message with "chat switched before the agent was ready".
     if (attachOnly) throw launchError("no_live_process", "This chat has no live agent process", 409);
 
-    return concurrency.runCapacity(async () => {
-      // Admission and creation are one machine-wide critical section. Before
-      // this boundary only Pi serialized its own creates, so two different
-      // backends could both observe the final free slot and overshoot the cap.
-      await reclaimLiveProcesses(backends, maxLiveProcesses(), {
-        exceptChatId: context.chat.id,
-        reserve: 1,
-        failIfBlocked: true,
-      });
+    // Only admission is machine-wide: reclaiming room and reserving a slot.
+    // Starting the process holds its slot, not the lock, so one cold start does
+    // not hold up every other chat's.
+    await concurrency.runCapacity(() => reclaimLiveProcesses(backends, maxLiveProcesses(), {
+      exceptChatId: context.chat.id,
+      reserve: 1,
+      failIfBlocked: true,
+      starting,
+    }).then(() => { starting.add(context.chat.id); }));
+    try {
       const result = await adapter.launch(context, { model, thinkingLevel, forceModel }, {
         catalogFor, config, lifecycle, runtimeFor, templateForChat,
       });
       await registry.update(context.chat.id, result.mapping);
       return { live: result.live, modelRecovery: result.modelRecovery };
-    });
+    } finally {
+      starting.delete(context.chat.id);
+    }
   }
 
   return async function launchLiveSession({
