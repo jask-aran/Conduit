@@ -14,15 +14,27 @@ const fromPromise = (work) => Effect.tryPromise({
 
 const mutex = () => Semaphore.makeUnsafe(1);
 const withMutex = (semaphore, work) => Effect.runPromise(semaphore.withPermit(fromPromise(work)));
+const startWithMutex = (semaphore, work) =>
+  withMutex(semaphore, () => ({ pending: work() })).then(({ pending }) => pending);
 
 export class ServerConcurrency {
   constructor() {
     this.capacityMutex = mutex();
+    this.generationMutex = mutex();
     this.chatMutexes = new Map();
   }
 
   runCapacity(work) {
     return withMutex(this.capacityMutex, work);
+  }
+
+  /**
+   * Serialize only admission and synchronous kickoff. Every adapter claims its
+   * generation slot before its first await; the backend RPC itself must not
+   * hold a global mutex.
+   */
+  runGenerationStart(work) {
+    return startWithMutex(this.generationMutex, work);
   }
 
   runChat(chatId, work) {
