@@ -149,6 +149,8 @@ Effect 4.0.1 is the v4 release pinned here and the package has zero runtime depe
 
 Conduit's release installer/package path already records and enforces `NODE_MIN=22.19.0`, so the supported packaged runtime is already above Effect's floor and this PR does not need to raise the release requirement. `conduit-web/package.json` still declares Node `>=22`; that existing source-package metadata is looser than both the release floor and Effect's documented support floor. It is recorded here rather than silently changing install policy in this behavior-preserving PR.
 
+The thin server release path copies `package.json` and `package-lock.json` and installs production dependencies with `release-deps.mjs`, so Effect is included by the existing release mechanism without a packaging special case.
+
 No pre-existing server behavior bug was identified that needed to be fixed as part of these slices, so product behavior remains unchanged.
 
 Review of the refactor itself found one timing bug before merge: project deletion originally re-read the active-period drain latch from state after crossing the Promise/Effect boundary. The final guarded operation could resolve and clear that state in the intervening microtask, turning a successful drain into an internal failure. The implementation now captures the drain promise synchronously before yielding, and a regression test forces that ordering.
