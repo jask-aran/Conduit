@@ -4,7 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { createLiveSessionLauncher } from "../src/server/live-session-launcher.js";
+import { createLiveSessionLauncher, enforceLiveProcessLimit } from "../src/server/live-session-launcher.js";
+import { ChatBackendRegistry } from "../src/pi-rpc-adapter.js";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -117,7 +118,7 @@ test("live session launcher repairs an obsolete persisted thinking level", async
     },
     findChatContext: async () => ({ chat, project }),
     lifecycle: { assertAvailable: () => {}, runLaunch: (_id, work) => work(), withProjects: (_ids, work) => work() },
-    manager,
+    backends: new ChatBackendRegistry(manager),
     nativePreflight: async () => ({ available: true }),
     registry: { update: async (id, mapping) => registryUpdates.push({ id, mapping }) },
     runtimeFor: () => chat.runtime,
@@ -313,7 +314,7 @@ test("machine-wide admission serializes concurrent launches across backends", as
     backends,
     findChatContext: async (chatId) => ({ chat: chats.get(chatId), project }),
     lifecycle: { assertAvailable: () => {}, runLaunch: (_id, work) => work(), withProjects: (_ids, work) => work() },
-    manager: { policy: () => ({ maxLiveProcesses: 1 }) },
+    maxLiveProcesses: () => 1,
     registry: { update: async () => {} },
   });
 
@@ -327,4 +328,30 @@ test("machine-wide admission serializes concurrent launches across backends", as
   await first;
   await assert.rejects(second, { code: "live_process_limit" });
   assert.equal(records.length, 1);
+});
+
+
+test("live-process limit enforcement trims idle sessions across backends", async () => {
+  const closed = [];
+  const records = [
+    { id: "old-a", chatId: "chat-a", adapterImplementation: "backend-a", status: "running", activity: "idle",
+      active: false, stopping: false, waiting: false, createdAt: "2026-01-01T00:00:00.000Z" },
+    { id: "old-b", chatId: "chat-b", adapterImplementation: "backend-b", status: "running", activity: "idle",
+      active: false, stopping: false, waiting: false, createdAt: "2026-01-02T00:00:00.000Z" },
+    { id: "new-c", chatId: "chat-c", adapterImplementation: "backend-a", status: "running", activity: "idle",
+      active: false, stopping: false, waiting: false, createdAt: "2026-01-03T00:00:00.000Z" },
+  ];
+  const adapters = {
+    "backend-a": { close: async (id) => { records.find((record) => record.id === id).status = "stopped"; closed.push(id); return true; } },
+    "backend-b": { close: async (id) => { records.find((record) => record.id === id).status = "stopped"; closed.push(id); return true; } },
+  };
+  const backends = {
+    rawRecords: () => records.filter((record) => record.status !== "stopped"),
+    view: (record) => record,
+    adapterForRecord: (record) => adapters[record.adapterImplementation],
+  };
+
+  assert.equal(await enforceLiveProcessLimit(backends, 1), 2);
+  assert.deepEqual(closed, ["old-a", "old-b"]);
+  assert.deepEqual(backends.rawRecords().map((record) => record.id), ["new-c"]);
 });
