@@ -379,14 +379,15 @@ export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sess
    connecting and its time counting, one line of space held under it for the
    step that will fill it. The trace takes its place when its first step
    arrives, in the same spot, at the same height. */
-export function TraceStarting(props: { startedAt?: string }) {
+export function TraceStarting(props: { startedAt?: string; label?: string }) {
   const time = turnTime(() => ({ active: true, startedAt: props.startedAt }));
-  return <div class="turn-trace turn-trace-starting" data-active="true" role="status" aria-label="Starting">
+  const label = () => props.label || "Starting";
+  return <div class="turn-trace turn-trace-starting" data-active="true" role="status" aria-label={label()}>
     <div class="turn-trace-header">
       <span class="turn-trace-mark"><ThinkingOrb state="connecting" /></span>
       <div class="turn-trace-preview">
         <div class="turn-trace-line">
-          <span class="turn-trace-status">Starting</span>
+          <span class="turn-trace-status">{label()}</span>
           <Show when={time()}>{(text) => <span class="turn-trace-time">{"\u00a0· "}{text()}</span>}</Show>
         </div>
         <div class="turn-trace-summary">{"\u00a0"}</div>
