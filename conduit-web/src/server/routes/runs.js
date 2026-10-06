@@ -27,11 +27,14 @@ export function registerRunRoutes(app, {
       : stated.messages.slice(promptIndex + 1).findLast((message) => message.role === "assistant" && !message.interim);
     const live = backends.getByChatId(chat.id);
     const status = prompt?.outcome ? "settled" : live ? "running" : "lost";
+    const requests = live ? [...(backends.view(live).hostUiRequests || [])] : [];
     return {
       id: chat.id, chatId: chat.id, projectId: chat.projectId, status,
       outcome: prompt?.outcome || null,
       answer: answer ? text(answer.content) : null,
-      waiting: Boolean(live?.hostUiRequests?.length),
+      waiting: requests.length > 0,
+      // What it waits on, answered at POST /v0/chats/:chatId/host-ui/:requestId.
+      requests,
       createdAt: chat.createdAt, updatedAt: chat.updatedAt,
     };
   };
@@ -49,13 +52,16 @@ export function registerRunRoutes(app, {
       if (!project) throw failure("project_not_found", "Project not found", 404);
       await projects.validate(project);
       const profileId = request.body?.profileId || project.defaultTemplateId || null;
+      // How long an approval or question may wait before it is cancelled.
+      const hostUiTimeoutMs = Math.trunc(Number(request.body?.hostUiTimeoutMs) || 0);
+      const run = hostUiTimeoutMs > 0 ? { hostUiTimeoutMs } : {};
       // Any profile a chat can be made with: a harness's own, or a Conduit Pi one.
       const harness = profileId && agentProfiles(config.piTemplates, { available: new Set(backends.adapters.keys()) })
         .find((profile) => profile.id === profileId && profile.management === "agent");
       let chat;
       if (harness) {
         if (harness.disabled || !backends.adapters.has(harness.agent.implementation)) throw failure(`${profileId}_unavailable`, `${profileId} is unavailable`, 409);
-        chat = await registry.create(project, { untracked: true, run: true, backend: {
+        chat = await registry.create(project, { untracked: true, run, backend: {
           profileId, profileRevision: null, management: harness.management, ...harness.agent, opaqueSession: null,
         } });
       } else {
@@ -63,7 +69,7 @@ export function registerRunRoutes(app, {
         if (!template || template.defaultable === false) throw failure("unknown_profile", `Unknown profile: ${profileId}`, 400);
         chat = await registry.create(project, {
           templateId: template.id, templateVersion: template.version,
-          runtime: runtimeFor({ runtimeKind: "conduit_profile", template }), untracked: true, run: true,
+          runtime: runtimeFor({ runtimeKind: "conduit_profile", template }), untracked: true, run,
         });
       }
       const model = String(request.body?.model || "");

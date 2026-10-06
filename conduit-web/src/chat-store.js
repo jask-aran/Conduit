@@ -404,7 +404,7 @@ export class ChatStore {
       lastReadAt: null,
       ...(untracked ? { untracked: true } : {}),
       // Started by a headless run rather than from a chat page.
-      ...(run ? { run: true } : {}),
+      ...(run ? { run } : {}),
     };
     await this.ensureDirectories(project, chat.id);
     this.chats.push(chat);

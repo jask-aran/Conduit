@@ -60,6 +60,7 @@ import { registerDraftRoutes } from "./server/routes/drafts.js";
 import { registerRuntimeRoutes } from "./server/routes/runtime.js";
 import { registerChatRoutes } from "./server/routes/chats.js";
 import { registerRunRoutes } from "./server/routes/runs.js";
+import { createHostUi } from "./server/host-ui.js";
 import { createWarmDrafts } from "./server/warm-drafts.js";
 import { registerHarnessRoutes } from "./server/routes/harnesses.js";
 import { createHarnessModelCatalogue } from "./harnesses/model-catalogue.js";
@@ -714,6 +715,10 @@ registerChatRoutes(app, {
   templateForChat,
 });
 registerHarnessRoutes(app, { backends, harnessModels, preferences, projects, registry });
+const hostUi = createHostUi({ backends, registry,
+  respondHostUi: (...args) => liveSessionStream.respondHostUi(...args) });
+hostUi.registerRoutes(app);
+lifetime.interval("host UI deadlines", () => hostUi.sweep(), 1000);
 // Bound late: the live-session stream that sends a run's prompt is made below.
 registerRunRoutes(app, {
   backends, chatLogs, config, defaultTemplate, launchLiveSession, projects, registry, runtimeFor,
