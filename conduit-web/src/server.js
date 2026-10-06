@@ -176,7 +176,6 @@ const manager = new PiManager({
   command: config.piCommand,
   agentDir: config.piAgentDir,
   template: config.piTemplate,
-  maxGeneratingProcesses: runtimeSettings.get().maxGeneratingProcesses,
   idleProcessTtlMs: runtimeSettings.get().idleProcessTtlMs,
 });
 // Everything a harness manifest needs to probe and build itself. Backends are
