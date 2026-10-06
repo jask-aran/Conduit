@@ -613,6 +613,8 @@ export class CodexAppServerAdapter extends EventEmitter {
       ready: false,
     };
     this.sessions.add(record);
+    // A request still waiting when the session ends is answered with that.
+    record.scope.defer(() => this.fail(record, new Error("The Codex session closed")));
     // Announce the process the moment it exists, as a native one does, so the
     // chat can show that its agent is coming up instead of showing nothing
     // until it is already there.

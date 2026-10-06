@@ -111,7 +111,7 @@ This matters for issue #29. The older unified-registry/broker sketch was written
 
 The migration should remain incremental and behavior-preserving.
 
-1. **Session resource ownership.** The server scope and process termination are done. Next is a scope per live session, owning its child, timers and pending requests, so an adapter's `close` is closing that scope.
+1. **Session resource ownership.** Done. Every live session owns a `SessionScope` (`conduit-web/src/server/session-scope.js`): PiManager records and every `SessionRecords` record hand their requests, sockets, timers, SDK streams and clients to it as they take them, and the session ending, by stop, crash or reap, closes it. This fixed Codex and Claude Code sessions that crashed leaving requests and permission prompts unanswered, and Pi request timers outliving their process.
 2. **Application services.** As lifetime ownership stabilizes, expose narrower `ChatService`, `WorkspaceService`, `RuntimeService` and `VoiceService` boundaries. Route files should translate HTTP to application operations rather than receive large bags of stores/managers.
 3. **Typed operational failures.** Replace ad-hoc `Object.assign(new Error(...), { code, status })` construction behind a common domain-error layer. Preserve the current external codes/statuses and translate domain failures to HTTP or WebSocket form at one boundary.
 4. **Schema at trust boundaries.** Define persisted and wire shapes such as client commands, backend events, runtime state and persisted backend identity once, deriving runtime validation and TypeScript types from those definitions. Do this at browser/harness/disk boundaries rather than converting internal deterministic data merely for consistency.

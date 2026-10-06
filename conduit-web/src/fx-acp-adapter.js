@@ -220,6 +220,7 @@ export class FxAcpAdapter extends EventEmitter {
       permissionMode: "", generation: null, generationSeq: 0, clients: new Set(), events: [],
       hostUiRequests: [], requests: new Map(), steps: [], tools: new Map(), loading: true,
     });
+    record.scope.defer(() => record.client?.close());
     record.client = new AcpClient(this.command, record.cwd,
       (message) => this.notification(record, message),
       (message) => this.requestFromAgent(record, message),
@@ -594,10 +595,7 @@ export class FxAcpAdapter extends EventEmitter {
     if (!record) return false;
     try {
       if (record.sessionId) await within(record.client.request("session/close", { sessionId: record.sessionId }), 500);
-    } catch { /* The process is closed below. */ }
-    record.client?.close();
-    record.status = "stopped";
-    record.active = false;
+    } catch { /* The process is closed with the session. */ }
     this.sessions.remove(id);
     this.emit("removed", { id, chatId: record.chatId });
     return true;

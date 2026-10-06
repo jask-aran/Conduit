@@ -693,8 +693,6 @@ export class TestStreamAdapter extends EventEmitter {
     if (!record) return null;
     if (record.timer) { clearTimeout(record.timer); record.timer = null; }
     record.turn = null;
-    record.status = "stopped";
-    record.active = false;
     this.sessions.remove(id);
     return null;
   }

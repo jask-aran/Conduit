@@ -1,4 +1,5 @@
 import { isLoggedEvent } from "../server/chat-log.js";
+import { SessionScope } from "../server/session-scope.js";
 import { SocketDelivery, deliveryKey, isPaint, mergeDelivery } from "./socket-delivery.js";
 
 // The live-record store every non-Pi adapter needs: the id and chat indexes, the
@@ -112,6 +113,10 @@ export class SessionRecords {
     // says otherwise, exactly as a native process does.
     record.createdAt ||= new Date().toISOString();
     record.updatedAt ||= record.createdAt;
+    // What the session holds is handed to its scope by the adapter as it is
+    // taken; removing the record ends it, however the session ended.
+    record.scope = new SessionScope();
+    record.scope.defer(() => { record.status = "stopped"; record.active = false; });
     this.records.set(record.id, record);
     this.byChatId.set(record.chatId, record.id);
     return record;
@@ -134,6 +139,7 @@ export class SessionRecords {
     if (!record) return null;
     this.records.delete(id);
     if (this.byChatId.get(record.chatId) === id) this.byChatId.delete(record.chatId);
+    record.scope?.close();
     return record;
   }
 

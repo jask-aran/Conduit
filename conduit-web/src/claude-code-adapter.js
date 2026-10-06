@@ -437,6 +437,12 @@ export class ClaudeCodeAdapter extends EventEmitter {
       steering: [], followUp: [], compacting: false, contextUsage: null, sessionStats: null,
       counts: { userMessages: 0, assistantMessages: 0, toolCalls: 0, toolResults: 0 },
     });
+    record.scope.defer(() => {
+      record.input?.end();
+      try { record.query?.close(); } catch { /* already gone */ }
+    });
+    // A permission still being asked is answered no, so the SDK is not left waiting.
+    record.scope.defer(() => this.cancelRequests(record));
     record.settings = await this.settingsFor(record.cwd);
     // Only what the chat chose is passed, and the rest is left to the user's
     // own Claude Code settings and read back once it is up. The starting mode is
@@ -1079,13 +1085,8 @@ export class ClaudeCodeAdapter extends EventEmitter {
   async close(id) {
     const record = this.get(id);
     if (!record) return false;
-    // Removed first, so the stream ending below reads as asked for.
+    // Removed first, so the stream ending as its scope closes reads as asked for.
     this.sessions.remove(id);
-    this.cancelRequests(record);
-    record.status = "stopped";
-    record.active = false;
-    record.input?.end();
-    try { record.query?.close(); } catch { /* already gone */ }
     this.emit("removed", { id, chatId: record.chatId });
     return true;
   }
