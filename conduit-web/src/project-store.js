@@ -5,6 +5,7 @@ import path from "node:path";
 import { sessionDirectoryFor } from "./session-store.js";
 import { assertAllowedPath, assertSafeWorkspaceRoot, isPathInside, resolveExistingDirectory, resolveNewWorkspaceDirectory } from "./workspace-paths.js";
 import { ensureConduitRoot } from "./owned-paths.js";
+import { terminate } from "./server/effect-process.js";
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
 const ORIGINS = new Set(["managed", "linked", "created", "cloned"]);
@@ -56,17 +57,7 @@ function cloneError(code, message) {
 }
 
 function terminateProcess(child) {
-  if (!child.pid) return;
-  if (process.platform !== "win32") {
-    try { process.kill(-child.pid, "SIGTERM"); }
-    catch { child.kill("SIGTERM"); }
-    setTimeout(() => {
-      try { process.kill(-child.pid, "SIGKILL"); }
-      catch {}
-    }, 500).unref();
-    return;
-  }
-  child.kill("SIGTERM");
+  if (child.pid) void terminate(child, { graceMs: 500, group: true });
 }
 
 function appendTail(current, chunk, limit) {

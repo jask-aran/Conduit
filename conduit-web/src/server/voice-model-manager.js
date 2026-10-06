@@ -10,6 +10,7 @@ import { LEGACY_LOCAL_VOICE_MODELS, VOICE_EXECUTION_CATALOG, publicVoiceExecutio
 import { SileroVad, VoiceVadObservationQueue } from "./voice-vad.js";
 import { defaultTranscribeRsWorkerCommand, TranscribeRsWorkerClient } from "./transcribe-rs-worker.js";
 import { ensureVoicePackages, importVoicePackage } from "./voice-packages.js";
+import { terminate } from "./effect-process.js";
 
 const MIB = 1024 * 1024;
 export const LOCAL_VOICE_MODELS = LEGACY_LOCAL_VOICE_MODELS;
@@ -702,11 +703,7 @@ export class VoiceModelManager {
     if (typeof transcriber?.dispose === "function") await Promise.resolve().then(() => transcriber.dispose()).catch(() => {});
     if (transcribeRsWorker) await Promise.resolve().then(() => transcribeRsWorker.close?.()).catch(() => {});
     if (!child || child.exitCode != null) return;
-    child.kill("SIGTERM");
-    await new Promise((resolve) => {
-      const timeout = setTimeout(() => { child.kill("SIGKILL"); resolve(); }, 5_000);
-      child.once("exit", () => { clearTimeout(timeout); resolve(); });
-    });
+    await terminate(child, { graceMs: 5_000 });
   }
 
   async uninstall(modelId) {
