@@ -1277,11 +1277,17 @@ function App() {
 
   const currentDraftId = () => chat.status() === "draft" ? catalogue.selectedId() : null;
 
+  // A draft is still selected after it is discarded until something else is,
+  // so leaving page after page asks to discard it again: once is enough, and a
+  // draft already gone is discarded.
+  const discarded = new Set<string>();
   const discardDraft = async (id = currentDraftId()) => {
-    if (id) {
-      await api(`/v0/chats/${encodeURIComponent(id)}?ifEmpty=true`, { method: "DELETE" });
-      dropScope(id);
-    }
+    if (!id || discarded.has(id)) return;
+    discarded.add(id);
+    await api(`/v0/chats/${encodeURIComponent(id)}?ifEmpty=true`, { method: "DELETE" }).catch((error) => {
+      if ((error as { error?: unknown }).error !== "chat_not_found") { discarded.delete(id); throw error; }
+    });
+    dropScope(id);
   };
 
   // Remove an abandoned draft from the local UI and begin stopping its process
