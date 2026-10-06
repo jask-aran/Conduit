@@ -706,10 +706,21 @@ export function createActiveChat(options: ActiveChatOptions) {
       // already told, message by message, as it happened.
       case "transcript_sync":
         if (!event.replace) break;
-        batch(() => {
-          setMessages((current) => replaceMessages(current, asList<Message>(event.messages)));
-          setTools(assignToolSeq(event.tools as ToolItem[]));
-        });
+        {
+          // The snapshot is the latest turns. What this client holds before the
+          // first of them stands -- unless that message is gone too, when the
+          // history itself changed and the snapshot is all there is.
+          const incoming = asList<Message>(event.messages);
+          const current = messages();
+          const from = incoming.length ? current.findIndex((message) => message.id === incoming[0]!.id) : -1;
+          const before = from > 0 ? current.slice(0, from) : [];
+          const incomingTools = event.tools as ToolItem[];
+          const keptTools = before.length ? tools().filter((tool) => !incomingTools.some((item) => item.toolCallId === tool.toolCallId)) : [];
+          batch(() => {
+            setMessages(replaceMessages(current.slice(before.length), incoming, before));
+            setTools(assignToolSeq([...keptTools, ...incomingTools]));
+          });
+        }
         break;
       // The server saying what the transcript is: a message exists and where,
       // a message is finished, a message is gone. This is the whole of how a

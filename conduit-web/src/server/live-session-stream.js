@@ -159,30 +159,27 @@ export function createLiveSessionStream({
    * turn it assembled from deltas. Reading the backend's own transcript and
    * publishing that is how the client stops having to be right on its own.
    */
-  // The generation the sync closes: the client's copy of that turn is frozen
-  // out of a live generation and carries the same id, which is the only handle
-  // an unwritten turn has. Without it the client has to guess where the range
-  // belongs.
-  // `replace` says the window is the whole of what the client should hold: it
-  // is the answer to a client that has lost its place in the chat's order and
-  // cannot be replayed back into it.
-  // A replacing read that races the log must not spin: `resume_log` has already
-  // sent `log_reset`, so a snapshot has to follow. Three attempts cover a
-  // quiet moment; the last publishes even if the log moved, rather than leaving
-  // the client with a reset and nothing to fold.
-  const REPLACE_SYNC_ATTEMPTS = 3;
+  // The answer to a client that has lost its place in the chat's order and
+  // cannot be replayed back into it: the latest turns, as the record has them,
+  // replacing what it holds from the first of them on.
+  // A read that races the log must not spin: `resume_log` has already sent
+  // `log_reset`, so a snapshot has to follow. Three attempts cover a quiet
+  // moment; the last publishes even if the log moved, rather than leaving the
+  // client with a reset and nothing to fold.
+  const SNAPSHOT_TURNS = 10;
+  const SNAPSHOT_ATTEMPTS = 3;
 
-  async function syncTranscript(record, turns = 1, generationId = null, { replace = false } = {}) {
+  async function publishSnapshot(record) {
     const adapter = adapterFor(record);
     if (record.ephemeral) return;
     try {
-      for (let attempt = 0; attempt < REPLACE_SYNC_ATTEMPTS; attempt += 1) {
-        const log = replace ? logFor(record) : null;
+      for (let attempt = 0; attempt < SNAPSHOT_ATTEMPTS; attempt += 1) {
+        const log = logFor(record);
         const logSeq = log?.state().seq;
         const context = await findChatContext(record.chatId);
         if (!context) return;
         const projection = await adapter.readTranscript({
-          liveSessionId: record.id, chatId: record.chatId, project: context.project, turns,
+          liveSessionId: record.id, chatId: record.chatId, project: context.project, turns: SNAPSHOT_TURNS,
         });
         projection.messages ||= [];
         projection.tools ||= [];
@@ -191,14 +188,13 @@ export function createLiveSessionStream({
         // otherwise it names a prompt `pi:<entryId>` while the client holds the
         // id it was handed, and the same message arrives a second time.
         await messageIds.bind(context.project, context.chat, projection.messages);
-        projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages, { fromStart: !turns });
+        projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages, { fromStart: false });
         projection.messages = applyMessageIds(projection.messages,
           await messageIds.resolver(context.project, context.chat));
-        // A replacement read outside the event loop can straddle a numbered
-        // transcript change. Retry while attempts remain; the last publish
-        // stands, because `log_reset` already told the client to take a snapshot.
-        if (log && log.state().seq !== logSeq && attempt < REPLACE_SYNC_ATTEMPTS - 1) continue;
-        adapter.publish(record, { type: "transcript_sync", generationId, ...(replace ? { replace: true } : {}), ...projection });
+        // A read outside the event loop can straddle a numbered transcript
+        // change. Retry while attempts remain; the last publish stands.
+        if (log && log.state().seq !== logSeq && attempt < SNAPSHOT_ATTEMPTS - 1) continue;
+        adapter.publish(record, { type: "transcript_sync", generationId: null, replace: true, ...projection });
         return;
       }
     } catch (error) {
@@ -631,7 +627,7 @@ export function createLiveSessionStream({
           return;
         }
         send({ type: "log_reset", log: chatLog?.state() || null });
-        void syncTranscript(record, 10, null, { replace: true });
+        void publishSnapshot(record);
         return;
       }
       const bypassLifecycle = record.ephemeral || command.type === "stop_generation" || command.type === "abort";
