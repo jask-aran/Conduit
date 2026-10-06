@@ -510,6 +510,15 @@ starting, and browser-attached processes remain resident.
   run again; `POST /v0/runs/:id/stop` stops it like the composer's Stop. A
   run's state lives in the server's chat log, so after a restart it reads as
   `lost` while its transcript remains in the chat.
+  A run's `requests` lists the approvals and questions it waits on; one left
+  unanswered for `hostUiTimeoutMs` (given at creation, default ten minutes) is
+  cancelled, as a dismissed card would be.
+- `GET /v0/host-ui` lists every approval or question any live agent is waiting
+  on, with its chat, project and whether it belongs to a run;
+  `POST /v0/chats/:chatId/host-ui/:requestId` answers one with
+  `{ confirmed }`, `{ value }` or `{ cancelled: true }`, through the same path
+  as the composer's card. Pending requests also reach every page in each
+  process view on the global runtime channel.
 - `GET /v0/profiles` lists profile identity and backend metadata
 - `GET|DELETE /v0/chats/:id` (draft cleanup requires `?ifEmpty=true`)
 - `PUT|GET /v0/chats/:id/attachments/:attachment-id` uploads raw bytes or downloads;

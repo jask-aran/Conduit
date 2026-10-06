@@ -698,5 +698,17 @@ export function createLiveSessionStream({
     return handleClientCommand(record, { type: "stop_generation" });
   }
 
-  return { handleUpgrade, submitPrompt, stopGeneration };
+  /**
+   * Answer a harness's question or approval request from anywhere: the same
+   * chat lock and adapter mapping the composer's card goes through.
+   */
+  async function respondHostUi(chatId, response) {
+    return lifecycle.run(chatId, async () => {
+      const record = backends.getByChatId(chatId);
+      if (!record) throw Object.assign(new Error("This chat has no live agent process"), { code: "no_live_process", status: 409 });
+      return handleClientCommand(record, { type: "host_ui_response", ...response });
+    });
+  }
+
+  return { handleUpgrade, submitPrompt, stopGeneration, respondHostUi };
 }
