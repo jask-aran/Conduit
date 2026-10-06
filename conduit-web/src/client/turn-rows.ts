@@ -232,12 +232,22 @@ export function assertStatedOutcomes(rows: TurnRow[], turnOpen = false): TurnRow
  * the message, then moved it at settle.
  */
 export function currentSegment(generation: ActiveGenerationView, messages: Message[]): ActiveGenerationView {
-  if (generation.assistantMessages.length < 2) return generation;
+  if (!generation.assistantMessages.length) return generation;
   const rows = new Map(messages.map((message) => [message.id, message]));
   const ownerOf = (id: string) => { const row = rows.get(id); return row ? statedAnswers(row) : undefined; };
   const latest = generation.assistantMessages.map((assistant) => ownerOf(assistant.id)).findLast((owner) => owner != null);
   if (latest == null) return generation;
-  const kept = generation.assistantMessages.filter((assistant) => { const owner = ownerOf(assistant.id); return owner == null || owner === latest; });
+  // A prompt taken after the latest answer, once that answer's turn has said
+  // how it ended, is the one now being answered, though nothing answers it yet:
+  // the turn before it is finished and drawn as stated, not as still writing.
+  const ownerIndex = messages.findIndex((message) => message.id === latest);
+  const moved = ownerIndex >= 0 && lastPromptIndex(messages) > ownerIndex && Boolean(messages[ownerIndex]!.outcome)
+    // An answer still arriving is drawn from paint until it closes.
+    && !generation.assistantMessages.some((assistant) => rows.get(assistant.id)?.streaming);
+  const kept = generation.assistantMessages.filter((assistant) => {
+    const owner = ownerOf(assistant.id);
+    return owner == null || (!moved && owner === latest);
+  });
   return kept.length === generation.assistantMessages.length ? generation : { ...generation, assistantMessages: kept };
 }
 
