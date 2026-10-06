@@ -174,6 +174,13 @@ test("live session launcher recovers an out-of-scope persisted model", async () 
   const launchCalls = [];
   const modelChanges = [];
   const live = { id: "live-recovery", status: "running", sessionFile, sessionId: "session-recovery" };
+  const manager = {
+    getByChatId: () => null,
+    create: async (options) => { launchCalls.push(options); return live; },
+    waitForSession: async () => {},
+    setModel: async (id, spec) => modelChanges.push({ id, spec }),
+    stopAndWait: async () => {},
+  };
   const launcher = createLiveSessionLauncher({
     catalogFor: () => ({
       list: async () => ({
@@ -190,13 +197,7 @@ test("live session launcher recovers an out-of-scope persisted model", async () 
     },
     findChatContext: async () => ({ chat, project }),
     lifecycle: { assertAvailable: () => {}, runLaunch: (_id, work) => work(), withProjects: (_ids, work) => work() },
-    manager: {
-      getByChatId: () => null,
-      create: async (options) => { launchCalls.push(options); return live; },
-      waitForSession: async () => {},
-      setModel: async (id, spec) => modelChanges.push({ id, spec }),
-      stopAndWait: async () => {},
-    },
+    backends: new ChatBackendRegistry(manager),
     nativePreflight: async () => ({ available: true }),
     registry: { update: async () => {} },
     runtimeFor: () => chat.runtime,
