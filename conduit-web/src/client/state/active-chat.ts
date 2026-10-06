@@ -254,9 +254,6 @@ export function createActiveChat(options: ActiveChatOptions) {
 
   let currentGeneration: string | null = null;
   let stopPending = false;
-  // The prompt this client last put in the transcript itself, so a refusal
-  // that arrives before the server states it can take back exactly that row.
-  let lastSentId: string | null = null;
   let selectionToken = 0;
   let navigationToken = 0;
   let liveOpening: LiveOpening | null = null;
@@ -776,7 +773,7 @@ export function createActiveChat(options: ActiveChatOptions) {
         if (errorCode === "generation_limit") {
           setMessages((current) => {
             const last = current.at(-1);
-            if (last?.role === "user" && last.id === lastSentId) { setDraft((value) => value || last.content || ""); return current.slice(0, -1); }
+            if (last?.role === "user" && last.local) { setDraft((value) => value || last.content || ""); return current.slice(0, -1); }
             return current;
           });
         }
@@ -1141,7 +1138,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     const previous = messages();
     const editId = editingEntryId();
     setDraft("");
-    lastSentId = messageId;
     setMessages((current) => {
       if (!editId) return [...current, local];
       const index = current.findIndex((item) => item.id === editId);
@@ -1334,7 +1330,6 @@ export function createActiveChat(options: ActiveChatOptions) {
       session.send({ type: "interrupt_and_send", messageId: interruptId, message: prepared.message, attachmentIds: prepared.attachmentIds,
         model: models.model(), thinkingLevel: models.effort() });
       setMessages((current) => [...current, local]);
-      lastSentId = interruptId;
       acceptOutboundMessage(prepared);
       setStatus("active");
       setGeneration("active");
