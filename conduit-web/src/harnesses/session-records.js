@@ -197,6 +197,8 @@ export class SessionRecords {
     // Numbered before it is buffered or sent, so the replay a reconnecting
     // browser reads carries the same sequence the live stream did.
     const log = this.logFor(record);
+    const owed = log?.owedSettle(event);
+    if (owed) this.publish(record, owed);
     const stamped = log && isLoggedEvent(event) ? log.stamp(event) : event;
     this.remember(record, stamped);
     this.onPublish?.(record, stamped);

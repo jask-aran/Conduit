@@ -15,7 +15,6 @@ import {
   buildLiveProjectionIndex,
   buildLiveToolItem,
   buildLiveToolSegment,
-  assertStatedOutcomes,
   projectLiveTurn,
   projectPersistedTurns,
 } from "../turn-rows";
@@ -87,7 +86,6 @@ export function createTimelineStore(
   tools: Accessor<ToolItem[]>,
   activeGeneration: Accessor<ActiveGenerationView | null>,
   activeGenerationChange: Accessor<LiveGenerationChange | null> = () => null,
-  turnOpen: Accessor<boolean> = () => false,
 ) {
   const [rows, setRows] = createStore<TimelineRow[]>([]);
   /*
@@ -273,9 +271,11 @@ export function createTimelineStore(
       persistedMessages = inputMessages;
       persistedTools = inputTools;
     }
-    const projected = stableProjection(previousProjectedRows, assertStatedOutcomes(inputGeneration
+    // A turn that ended without saying how is stated by the server, so every
+    // finished turn arrives here with its outcome.
+    const projected = stableProjection(previousProjectedRows, inputGeneration
       ? projectLiveTurn(persistedRows, inputMessages, inputGeneration, inputTools)
-      : persistedRows, turnOpen()));
+      : persistedRows);
     // Diffing the row sets allocates a Map and a Set the size of the whole
     // transcript, and the result is only ever a metric field. Every other
     // measurement here is already gated on the recorder; this one was not.

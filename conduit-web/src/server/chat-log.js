@@ -99,6 +99,26 @@ export class ChatLog {
   }
 
   /**
+   * The statement a harness owed and did not make.
+   *
+   * Every turn ends by saying how: `turn.settle` with an outcome. A harness
+   * that ends one without saying so is a bug in its adapter, and the browser
+   * used to be the one to notice -- after it had already drawn the turn. The
+   * server notices instead, at the moment the turn ends, says so in its own
+   * log, and states the outcome the ending implies, so what every client folds
+   * is complete whichever harness answered.
+   */
+  owedSettle(event) {
+    if (event?.type !== "status" || !["settled", "stopped"].includes(event.phase)) return null;
+    const prompt = this.stated.messages.findLast((message) => message.role === "user");
+    if (!prompt?.id || prompt.outcome) return null;
+    console.error(`transcript contract: the turn after prompt ${prompt.id} ended without stating how; stating it for the harness`);
+    return { type: "transcript_op", op: "turn.settle", promptId: prompt.id,
+      outcome: event.phase === "stopped" ? "interrupted" : "complete",
+      ...(event.generationId ? { generationId: event.generationId } : {}) };
+  }
+
+  /**
    * Number an event and keep it, so a client that missed it can be caught up.
    *
    * A message being opened is also where its position is decided, and it is

@@ -309,7 +309,6 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     props.chat.tools,
     props.chat.activeGeneration,
     props.chat.activeGenerationChange,
-    props.chat.streaming,
   );
   const empty = createMemo(() => !timeline.length && !isChatContentActivity(props.chat.activity()));
 
