@@ -1,98 +1,107 @@
-# Making the backend's transcript authoritative
+# One transcript, held once
 
-> **Status (2026-09-22): not started.** Conduit still keeps the two transcripts
-> this describes: `buildTurnRows` is live in `client/turn-rows.ts` and
-> `pendingMessages` in `client/state/active-chat.ts`. Individual bugs in the
-> table below have been fixed one at a time, which is the pattern the plan
-> exists to stop. `promotePendingUser` is gone; nothing else here has moved.
+> **Status (2026-10-06): mostly built; the remaining duplication is listed below.**
 
-## The problem
+## Target
 
-Conduit keeps two transcripts. The backend's — Pi's JSONL, correct by
-construction — and a live model the client assembles from a stream of deltas:
-`record.generation`, `activeGeneration`, and on the client `messages()`,
-`buildTurnRows`, optimistic `user_*` entries, `pendingMessages`,
-`promotePendingUser`. The second is a speculative reconstruction of the first.
+- The server states the transcript (`transcript_op`, numbered by the chat log)
+  and both ends fold it with `src/transcript-fold.js`. Nothing else decides
+  message identity, order, outcome or placement.
+- Paint (`assistant_content`, `tool_activity`) draws the message in flight and
+  owns nothing that has been stated.
+- Each turn, live or settled, is held in one place per side, and nothing is read
+  from disk that the reader will not use.
 
-Every transcript bug this work has hit is a divergence between the two, not a
-bug in the backend:
+## What already holds
 
-| Symptom | Divergence |
-| --- | --- |
-| Interrupted turn goes blank until reload | Assistant text lived only in the live structure; the next turn replaced it |
-| "Invalid Date" on a live message | Pi timestamps messages in epoch ms; the session file timestamps entries in ISO |
-| Queue bubble always empty | Pi reported `steering`/`followUp` as top-level arrays; the mapping read `event.queue` |
-| Output rendered above its own user message | `buildTurnRows` re-derives turn ownership from message order |
-| Interrupt raced the stop | The client inferred when the abort landed from derived signals |
+`readTranscript` on every adapter. Browser-minted `m_<uuid>` ids bound to
+harness entries (`src/message-ids.js`). Ordered, numbered ops with resume and
+reset (`src/server/chat-log.js`). Stated `answers`, `interim` and `turn.settle`
+consumed by `client/turn-rows.ts` without inference.
 
-The tell is consistent: **it is always right after a reload.** `messagesFromEntries`
-projects the session file and is correct every time. The live path computes what
-should be the same answer by another route, and drifts.
+## Rule for settle reconciliation
 
-Slice 1 (commit `a1952b8`) closed the worst instance by publishing assistant
-messages as transcript entries. It did not remove the duplication — it made the
-mirror more faithful. This document is the plan to remove it.
+Settle must not re-render. A settled turn keeps its DOM: the same answer node,
+the same disclosure open/closed state, no re-run of fades, no layout shift.
+Reconciliation exists only to catch a genuine divergence, and it costs nothing
+when there is none:
 
-## The target
+- The server compares the record against what its log stated for that turn and
+  publishes **only** when they differ, as targeted ops for the rows that
+  differ, never a window that replaces rows.
+- A clean turn produces no message to the client and no extra disk read beyond
+  the one the checkpoint already does.
+- A divergence is logged server side, so it is a bug report, not a silent heal.
 
-One projection, two triggers.
+## Remaining work
 
-- The backend's transcript is the only source of message identity, order,
-  timestamps, stop reasons and attachments.
-- Live events are *notifications that the session changed*, plus deltas for the
-  tail of the message currently in flight.
-- The streaming structure renders only that tail. It never owns committed text.
+Ordered by risk, smallest first. Each lists its regression gate.
 
-Concretely: `messagesFromEntries` becomes the single projection, fed both by the
-initial load and by live updates, instead of being one of two readers.
+1. **Done.** **Refused prompt keeps its bubble.** `active-chat.ts` `generation_limit`
+   checks for the retired `user_` prefix; match the id the send minted instead.
+   Remove the dead `message.pending` filter in `clearQueue`.
+   *Gate:* none needed; confirm by hand.
 
-## Why this is not simply "reload more often"
+2. **Done:** `ChatLog.reconcile` compares; windows only bind ids. **Settle sync is read and thrown away.** `server.js` publishes a
+   `transcript_sync` window on every Pi checkpoint; the client drops any sync
+   without `replace`. Replace it with the diff described above (server-side
+   compare of the projection against the folded log, emitting ops only on
+   mismatch). Stops logging non-replacing syncs. The stop and interrupt paths
+   in `live-session-stream.js` also publish four non-replacing windows the
+   client drops; their comments describe a heal that no longer happens. Their
+   real effect is `messageIds.bind` inside `syncTranscript`, which must be kept
+   (or moved into step 5) when the publish goes.
+   *Gate:* `transcript-pipeline`, `transcript-sync`, `chat-log` tests, plus the
+   settle-stability probe below.
 
-A full re-read per event is too expensive, and a reload drops the streaming tail.
-The design has to keep three properties the current live path provides: sub-frame
-delta rendering, no flicker on commit, and no round trip on an ordinary send.
+3. **Done:** `currentSegment` in `turn-rows.ts`; paint never wrote into `messages()`, so the overlap was only the projection drawing a whole steered generation under its first prompt. **The client holds the live turn twice.** `message.open` adds a streaming row
+   to `messages()` while `generationStore` builds the same message from paint,
+   and `projectLiveTurn` swaps one for the other via `liveOwner`. Make the
+   generation view the only live source of the in-flight message's body; the
+   `messages()` row carries identity and placement only, and takes its body
+   from `message.close`.
+   The probe's `queued` scenario fails here today: a message steered into a
+   running turn has its answer drawn above it for ~90 frames, then the turn
+   is rebuilt into place at settle (the record, and a reload, are right).
+   *Gate:* `turn-rows` (notably "keeps the answer display key across live and
+   persisted projections"), `timeline-projection`, settle-stability probe.
 
-## Slices
+4. **Client-side transcript decisions.** `runtime_exit` prunes streaming rows
+   locally; send / interrupt / regenerate / fork roll back with
+   `setMessages(previous)`, which can overwrite ops that arrived meanwhile, and
+   regenerate cuts twice. The server states the exit as `message.close` /
+   `message.drop`; failures remove only the row the client added, by id.
+   `replaceMessages` keeps only rows the client itself added and not yet stated.
+   *Gate:* `transcript-sync`, `transcript-pipeline`.
 
-### 2a. A transcript read on the adaptor contract
+5. **Pi's id binding happens late.** `m_` ↔ `pi:<entryId>` is joined at
+   checkpoint or sync time. Bind when Pi accepts the prompt where it says so,
+   and keep the checkpoint join only as the fallback.
+   *Gate:* `transcript-pipeline` queued and interrupt cases.
 
-Add to `ChatBackendAdapter`:
+## Regression coverage
 
-```
-readTranscript(id, { sinceEntryId }) -> { entries, nextEntryId }
-```
+What is covered today is the data: the per-harness pipeline tests assert the
+rows and their order, `turn-rows` asserts projection and display-key
+stability, `transcript-fold` / `transcript-sync` / `chat-log` the ops and the
+log. None of them sees the DOM, so none would catch a settle that rebuilds a
+node, closes an open disclosure, replays the answer fade, or makes the action
+row arrive twice.
 
-Pi implements it by reading its session file from the last known entry —
-`readHeadRecords` in `src/harnesses/session-store.js` already shows the shape,
-and needs a tail-read counterpart. Codex and chatgpt-web implement it from their
-own stores. This is a better contract than today's, where every backend is
-obliged to *simulate* a transcript through events.
+`scripts/probes/settle-stability.mjs` (run from `conduit-web/` against the
+served checkout, ~1 min, no model call) is the gate for every step that touches
+the live or settle path. It drives the Test profile (`think`, `N tools`,
+`approve`, `Nt` in the prompt) in headless Chromium and prints `ok`/`FAIL` per
+scenario:
 
-This is the load-bearing slice. Nothing else can land first.
+- `settle` -- thinking, two tools, long answer, trace opened mid-stream: the
+  answer and trace keep their nodes, the trace stays open, the text is only
+  extended, nothing is added, removed or moved for 2s after settle, one action
+  row.
+- `stop-answer` -- the same across a stop mid-answer.
+- `deny-tool` -- the same across a dismissed approval.
+- `queued` -- a steered follow-up: no answer above its prompt in any frame,
+  and the settled shape equals a reload's.
 
-### 2b. Reconcile on settle
-
-On `agent_settled`, read the tail and replace the turn wholesale. Any residual
-live drift becomes self-healing within one turn rather than surviving until F5.
-Cheap, independently valuable, and it can ship before 2c — at which point most
-remaining divergences stop being user-visible even though the duplication
-remains.
-
-### 2c. Collapse the client's second model
-
-Delete `promotePendingUser`, the optimistic `user_*` ids, and the
-timestamp-and-fallback-index sort in `buildTimeline`. `buildTurnRows` consumes
-projected entries and stops inferring turn ownership from message order.
-
-The care needed here is the optimistic send: a user message must still appear
-instantly. It becomes a *pending tail* the projection replaces on the next read,
-rather than an entry the client invents and later reconciles by content match.
-
-Do this last, and behind the harness metrics in `createTimelineStore`, so a
-regression in perceived latency is measurable rather than felt.
-
-## What stays
-
-Streaming deltas, the structured generation view, and `activeGeneration` all
-stay. The change is what they *own*: the tail of the message in flight, and
-nothing that has already been written down.
+The word-fade unwrapping its spans and the action row replacing its
+placeholder are expected after settle and are not counted.
