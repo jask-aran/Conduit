@@ -1887,7 +1887,10 @@ export class PiManager extends EventEmitter {
       // final paint frame surviving the socket.
       provider: written?.provider || null,
       model: written?.model || null,
-      timestamp: written?.timestamp || null,
+      // When it was finished, which is the time Pi's session file gives the
+      // entry. Pi's own stamp on the message is when it started, so a turn's
+      // time read to the first token of its last message until a reload.
+      timestamp: new Date().toISOString(),
       errorMessage: written?.errorMessage || null,
     }));
     return id;

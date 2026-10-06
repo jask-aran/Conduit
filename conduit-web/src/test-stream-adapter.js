@@ -642,7 +642,7 @@ export class TestStreamAdapter extends EventEmitter {
     this.publish(record, messageClose({ messageId: turn.messageId, stopReason,
       interim: stopReason === "toolUse",
       generationId: turn.generationId, keepsPartial: TEST_STREAM_CAPABILITIES.interruptKeepsPartial, blocks,
-      model: record.model || null }));
+      model: record.model || null, timestamp: new Date().toISOString() }));
   }
 
   finish(record, stopReason) {
