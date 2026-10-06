@@ -8,6 +8,13 @@ import { createLiveSessionLauncher } from "../src/server/live-session-launcher.j
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
+const deferred = () => {
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+};
+
 test("native adapter restores its saved model unless a prompt changes it", async () => {
   const chatId = "n".repeat(24);
   const project = { id: "project_native", slug: "native", workingRoot: "/tmp/native" };
@@ -90,7 +97,7 @@ test("live session launcher repairs an obsolete persisted thinking level", async
   const live = { id: "live-recovery", status: "running", sessionFile, sessionId: "session-recovery" };
   const manager = {
     getByChatId: () => null,
-    createWithCapacity: async (options) => { launchCalls.push(options); return live; },
+    create: async (options) => { launchCalls.push(options); return live; },
     waitForSession: async () => {},
     stopAndWait: async () => {},
   };
@@ -184,7 +191,7 @@ test("live session launcher recovers an out-of-scope persisted model", async () 
     lifecycle: { assertAvailable: () => {}, runLaunch: (_id, work) => work(), withProjects: (_ids, work) => work() },
     manager: {
       getByChatId: () => null,
-      createWithCapacity: async (options) => { launchCalls.push(options); return live; },
+      create: async (options) => { launchCalls.push(options); return live; },
       waitForSession: async () => {},
       setModel: async (id, spec) => modelChanges.push({ id, spec }),
       stopAndWait: async () => {},
@@ -249,4 +256,75 @@ test("a backend that pre-warms nothing still starts when a message is sent", asy
   const result = await launcher({ chatId });
   assert.equal(result.live, live);
   assert.equal(launched, 1);
+});
+
+
+test("machine-wide admission serializes concurrent launches across backends", async () => {
+  const firstChatId = "a".repeat(24);
+  const secondChatId = "b".repeat(24);
+  const firstStarted = deferred();
+  const releaseFirst = deferred();
+  const records = [];
+  const chats = new Map([
+    [firstChatId, { id: firstChatId, status: "draft", backend: { implementation: "backend-a" }, modelThinkingLevels: {} }],
+    [secondChatId, { id: secondChatId, status: "draft", backend: { implementation: "backend-b" }, modelThinkingLevels: {} }],
+  ]);
+  const project = { id: "project-cap", slug: "cap", workingRoot: "/tmp/cap" };
+
+  const makeAdapter = (implementation, hold = false) => ({
+    async launch(context) {
+      const record = {
+        id: `live-${context.chat.id}`,
+        chatId: context.chat.id,
+        adapterImplementation: implementation,
+        status: "starting",
+        activity: "working",
+        active: true,
+        stopping: false,
+        waiting: false,
+        createdAt: new Date().toISOString(),
+      };
+      records.push(record);
+      if (hold) {
+        firstStarted.resolve();
+        await releaseFirst.promise;
+      }
+      record.status = "running";
+      return { live: record, mapping: { backend: context.chat.backend }, modelRecovery: null };
+    },
+    async close(id) {
+      const record = records.find((item) => item.id === id);
+      if (record) record.status = "stopped";
+      return Boolean(record);
+    },
+  });
+  const adapters = {
+    "backend-a": makeAdapter("backend-a", true),
+    "backend-b": makeAdapter("backend-b"),
+  };
+  const backends = {
+    forChat: (chat) => adapters[chat.backend.implementation],
+    getByChatId: (chatId) => records.find((record) => record.chatId === chatId && record.status !== "stopped") || null,
+    rawRecords: () => records.filter((record) => record.status !== "stopped"),
+    view: (record) => record,
+    adapterForRecord: (record) => adapters[record.adapterImplementation],
+  };
+  const launcher = createLiveSessionLauncher({
+    backends,
+    findChatContext: async (chatId) => ({ chat: chats.get(chatId), project }),
+    lifecycle: { assertAvailable: () => {}, runLaunch: (_id, work) => work(), withProjects: (_ids, work) => work() },
+    manager: { policy: () => ({ maxLiveProcesses: 1 }) },
+    registry: { update: async () => {} },
+  });
+
+  const first = launcher({ chatId: firstChatId });
+  await firstStarted.promise;
+  const second = launcher({ chatId: secondChatId });
+  await Promise.resolve();
+  assert.equal(records.length, 1, "second backend cannot pass admission while the first launch owns the final slot");
+
+  releaseFirst.resolve();
+  await first;
+  await assert.rejects(second, { code: "live_process_limit" });
+  assert.equal(records.length, 1);
 });
