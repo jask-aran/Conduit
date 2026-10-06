@@ -1,4 +1,4 @@
-import { createLiveSessionLauncher, maySpawnProcess } from "../live-session-launcher.js";
+import { createLiveSessionLauncher, enforceLiveProcessLimit, maySpawnProcess } from "../live-session-launcher.js";
 import { applyMessageIds } from "../../message-ids.js";
 import { rememberModel } from "../../profile-model-memory.js";
 
@@ -8,6 +8,7 @@ export function registerLiveSessionRoutes(app, {
   backends,
   catalogFor,
   config,
+  concurrency,
   findChatContext,
   lifecycle,
   manager,
@@ -21,17 +22,24 @@ export function registerLiveSessionRoutes(app, {
     backends,
     catalogFor,
     config,
+    concurrency,
     findChatContext,
     lifecycle,
-    manager,
+    maxLiveProcesses: () => runtimeSettings.get().maxLiveProcesses,
     registry,
     runtimeFor,
     templateForChat,
   });
   app.get("/v0/live-sessions", (_request, response) => response.json({ sessions: backends.list() }));
 
+  const runtimeView = () => ({
+    ...runtimeSettings.get(),
+    liveCount: backends.rawRecords().filter((record) => backends.view(record).status !== "stopped").length,
+    generatingCount: backends.generatingRecords().length,
+  });
+
   app.get("/v0/runtime/settings", (_request, response) => {
-    response.json({ ...runtimeSettings.get(), ...manager.policy() });
+    response.json(runtimeView());
   });
 
   app.patch("/v0/runtime/settings", async (request, response, next) => {
@@ -42,8 +50,8 @@ export function registerLiveSessionRoutes(app, {
         idleProcessTtlMs: request.body?.idleProcessTtlMs,
       });
       manager.configure(saved);
-      await manager.enforceLimit();
-      response.json({ ...saved, ...manager.policy() });
+      await enforceLiveProcessLimit(backends, saved.maxLiveProcesses);
+      response.json(runtimeView());
     } catch (error) { next(error); }
   });
 

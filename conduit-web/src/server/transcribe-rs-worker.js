@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { terminate } from "./effect-process.js";
 
 export const TRANSCRIBE_RS_PROTOCOL_VERSION = 1;
 export const TRANSCRIBE_RS_MAX_JSON_BYTES = 64 * 1024;
@@ -242,13 +243,9 @@ export class TranscribeRsWorkerClient {
     try {
       await this.request("shutdown");
     } catch {}
-    if (this.exitPromise) {
-      await Promise.race([
-        this.exitPromise,
-        new Promise((resolve) => setTimeout(resolve, this.shutdownTimeoutMs)),
-      ]);
-    }
-    if (this.child === child && child.exitCode == null) child.kill?.("SIGTERM");
+    // Asked to shut down, it gets the shutdown timeout to do so before the
+    // usual escalation.
+    if (this.child === child) await terminate(child, { waitMs: this.shutdownTimeoutMs });
     this.failPending(workerError("voice_worker_closed", "The transcribe-rs worker was closed"));
     this.child = null;
     this.sessionId = null;

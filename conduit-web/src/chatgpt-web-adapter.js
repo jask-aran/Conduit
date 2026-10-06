@@ -10,6 +10,7 @@ import { SessionRecords } from "./harnesses/session-records.js";
 import { applyTranscriptOp } from "./transcript-fold.js";
 import { messageClose, messageDrop, messageOpen, turnSettle } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
+import { terminate } from "./server/effect-process.js";
 
 export const CHATGPT_WEB_CAPABILITIES = Object.freeze({
   history: "linear", fork: false, regenerate: false,
@@ -289,12 +290,8 @@ export class ChatGptWebAdapter extends EventEmitter {
     return true;
   }
 
-  async shutdown() {
-    for (const record of [...this.records.values()]) await this.close(record.id);
-    // `this.child?.exitCode` is undefined when no sidecar ever started, and
-    // `undefined == null` is true - so the optional chain guarded the read and
-    // the comparison threw it away, killing null on every ordinary shutdown.
-    if (this.child && this.child.exitCode == null) this.child.kill("SIGTERM");
+  shutdownResources() {
+    return terminate(this.child);
   }
 
   async listAvailableModels() {

@@ -25,6 +25,7 @@ import { DELIVERY_FLUSH_MS, clampFrameMs, deliveryKey } from "./harnesses/socket
 import { emptyCacheStats, finishCacheStats, promptTokenParts } from "./cache-stats.js";
 import { piPlanUsage } from "./plan-usage.js";
 import { messageIsInterim } from "./active-generation.js";
+import { terminate } from "./server/effect-process.js";
 
 export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = "", models, template }) {
   const args = [
@@ -254,8 +255,6 @@ export class PiManager extends EventEmitter {
     agentDir,
     template,
     spawnImpl = spawn,
-    maxLiveProcesses = 12,
-    maxGeneratingProcesses = 2,
     idleProcessTtlMs = 300_000,
     reaperIntervalMs = 15_000,
     socketHighWaterMark = 256 * 1024,
@@ -283,8 +282,6 @@ export class PiManager extends EventEmitter {
     this.requestSequence = 0;
     this.now = now;
     this.serializeEvent = serializeEvent;
-    this.maxLiveProcesses = Math.max(1, Math.trunc(Number(maxLiveProcesses) || 12));
-    this.maxGeneratingProcesses = Math.max(1, Math.trunc(Number(maxGeneratingProcesses) || 2));
     this.idleProcessTtlMs = Math.max(30_000, Math.trunc(Number(idleProcessTtlMs) || 300_000));
     this.socketHighWaterMark = Math.max(1024, Math.trunc(Number(socketHighWaterMark) || 256 * 1024));
     this.socketLowWaterMark = Math.floor(this.socketHighWaterMark / 2);
@@ -292,7 +289,6 @@ export class PiManager extends EventEmitter {
     this.socketRecoveryPollMs = Math.max(10, Math.trunc(Number(socketRecoveryPollMs) || 50));
     this.deliveryMaxNotifications = Math.max(1, Math.trunc(Number(deliveryMaxNotifications) || 32));
     this.deliveryMaxNotificationBytes = Math.max(1024, Math.trunc(Number(deliveryMaxNotificationBytes) || 64 * 1024));
-    this.capacityQueue = Promise.resolve();
     this.reaperTimer = null;
     if (reaperIntervalMs > 0) {
       this.reaperTimer = setInterval(() => {
@@ -306,30 +302,8 @@ export class PiManager extends EventEmitter {
     return this.commandCatalog.list({ cwd, template });
   }
 
-  /** Serialize capacity checks and creates so concurrent requests cannot overshoot the cap. */
-  runExclusive(work) {
-    const run = this.capacityQueue.then(work, work);
-    this.capacityQueue = run.then(() => {}, () => {});
-    return run;
-  }
-
-  configure({ maxLiveProcesses, maxGeneratingProcesses, idleProcessTtlMs } = {}) {
-    if (maxLiveProcesses != null) this.maxLiveProcesses = Math.max(1, Math.trunc(Number(maxLiveProcesses) || 1));
-    if (maxGeneratingProcesses != null) {
-      this.maxGeneratingProcesses = Math.max(1, Math.trunc(Number(maxGeneratingProcesses) || 1));
-    }
+  configure({ idleProcessTtlMs } = {}) {
     if (idleProcessTtlMs != null) this.idleProcessTtlMs = Math.max(30_000, Math.trunc(Number(idleProcessTtlMs) || 30_000));
-    return this.policy();
-  }
-
-  policy() {
-    return {
-      maxLiveProcesses: this.maxLiveProcesses,
-      maxGeneratingProcesses: this.maxGeneratingProcesses,
-      idleProcessTtlMs: this.idleProcessTtlMs,
-      liveCount: this.liveRecords().length,
-      generatingCount: this.generatingRecords().length,
-    };
   }
 
   liveRecords() {
@@ -343,30 +317,6 @@ export class PiManager extends EventEmitter {
     if ((record.hostUiRequests || []).length) return true;
     if (record.generation && !record.generation.closed && !record.generation.settled) return true;
     return false;
-  }
-
-  generatingRecords() {
-    return this.liveRecords().filter((record) => this.isGenerating(record));
-  }
-
-  /**
-   * Hard limit on concurrent agent loops. Warm idle processes do not count.
-   * A process that already holds a generating slot may continue (steer/retry path).
-   */
-  assertCanStartGeneration(record) {
-    if (!record) throw new Error("Unknown live session");
-    if (this.isGenerating(record)) return;
-    const generatingCount = this.generatingRecords().length;
-    if (generatingCount >= this.maxGeneratingProcesses) {
-      const error = new Error(
-        `Too many concurrent generations (max ${this.maxGeneratingProcesses}). Wait for another chat to finish.`,
-      );
-      error.code = "generation_limit";
-      error.status = 429;
-      error.maxGeneratingProcesses = this.maxGeneratingProcesses;
-      error.generatingCount = generatingCount;
-      throw error;
-    }
   }
 
   isBusy(record) {
@@ -412,49 +362,6 @@ export class PiManager extends EventEmitter {
     if (!record) return;
     record.lastTurnAt = this.now();
     this.touchActivity(record);
-  }
-
-  reclaimCandidates({ excludeChatId = null } = {}) {
-    return this.liveRecords()
-      .filter((record) => record.chatId !== excludeChatId && this.isReclaimable(record))
-      .sort((left, right) => (left.lastClientAt || left.lastActivityAt || 0) - (right.lastClientAt || right.lastActivityAt || 0));
-  }
-
-  async ensureCapacity({ excludeChatId = null } = {}) {
-    return this.runExclusive(() => this.ensureCapacityUnlocked({ excludeChatId }));
-  }
-
-  async ensureCapacityUnlocked({ excludeChatId = null } = {}) {
-    while (this.liveRecords().filter((record) => record.chatId !== excludeChatId).length >= this.maxLiveProcesses) {
-      const victim = this.reclaimCandidates({ excludeChatId })[0];
-      if (!victim) {
-        const error = new Error(`Too many live Pi processes (max ${this.maxLiveProcesses}). Wait for a chat to finish or free an idle agent.`);
-        error.code = "live_process_limit";
-        error.status = 429;
-        throw error;
-      }
-      await this.stopAndWait(victim.id);
-    }
-  }
-
-  /** Capacity check + create under one lock so concurrent POSTs cannot exceed the cap. */
-  async createWithCapacity(options = {}) {
-    return this.runExclusive(async () => {
-      await this.ensureCapacityUnlocked({ excludeChatId: options.chatId || null });
-      return this.create(options);
-    });
-  }
-
-  /** Trim down to maxLiveProcesses after a settings change (idle unattached first). */
-  async enforceLimit() {
-    let stopped = 0;
-    while (this.liveRecords().length > this.maxLiveProcesses) {
-      const victim = this.reclaimCandidates()[0];
-      if (!victim) break;
-      await this.stopAndWait(victim.id);
-      stopped += 1;
-    }
-    return stopped;
   }
 
   async reapIdleProcesses() {
@@ -513,14 +420,6 @@ export class PiManager extends EventEmitter {
       this.bySessionFile.delete(resolvedFile);
       this.processes.delete(existingId);
       if (this.byChatId.get(existing?.chatId) === existingId) this.byChatId.delete(existing.chatId);
-    }
-
-    const liveOthers = this.liveRecords().filter((record) => record.chatId !== chatId);
-    if (liveOthers.length >= this.maxLiveProcesses) {
-      const error = new Error(`Too many live Pi processes (max ${this.maxLiveProcesses}). Wait for a chat to finish or free an idle agent.`);
-      error.code = "live_process_limit";
-      error.status = 429;
-      throw error;
     }
 
     const id = resolvedFile
@@ -1218,10 +1117,6 @@ export class PiManager extends EventEmitter {
     const record = this.processes.get(id);
     if (!record) throw new Error("Unknown live session");
     if (record.stopping) throw Object.assign(new Error("Pi is still stopping the previous response"), { code: "generation_stopping" });
-    // Steer/follow-up into an open turn keeps the existing generating slot.
-    if (streamingBehavior !== "steer" && streamingBehavior !== "followUp") {
-      this.assertCanStartGeneration(record);
-    }
     const generationId = `g${++record.generationSequence}`;
     const claims = messageIds ? { ...messageIds, userUsed: false, assistantUsed: false } : null;
     const previousGeneration = record.generation;
@@ -1249,7 +1144,6 @@ export class PiManager extends EventEmitter {
     const record = this.processes.get(id);
     if (!record) throw new Error("Unknown live session");
     if (record.stopping) throw Object.assign(new Error("Pi is still stopping the previous response"), { code: "generation_stopping" });
-    if (streamingBehavior !== "steer" && streamingBehavior !== "followUp") this.assertCanStartGeneration(record);
     const generationId = `g${++record.generationSequence}`;
     // A turn's ids belong to the turn: they live and die with the generation,
     // so nothing else can consume them. Pi emits user messages Conduit never
@@ -1979,7 +1873,7 @@ export class PiManager extends EventEmitter {
     // that window still advertised the process as running, so a client would
     // attach to a corpse, get no process out of it, and have to ask twice.
     this.emit("process_removed", { id: record.id, chatId: record.chatId });
-    record.child.kill("SIGTERM");
+    void terminate(record.child);
     return true;
   }
 
@@ -1988,25 +1882,13 @@ export class PiManager extends EventEmitter {
     if (!record || !["starting", "running"].includes(record.status)) return false;
     record.stopping = true;
     record.terminating = true;
-    return new Promise((resolve) => {
-      const timeout = setTimeout(() => record.child.kill("SIGKILL"), 3000);
-      timeout.unref();
-      record.child.once("exit", () => {
-        clearTimeout(timeout);
-        resolve(true);
-      });
-      record.child.kill("SIGTERM");
-    });
+    return terminate(record.child);
   }
 
-  async shutdown() {
-    if (this.reaperTimer) {
-      clearInterval(this.reaperTimer);
-      this.reaperTimer = null;
-    }
-    const records = this.liveRecords();
-    await Promise.all(records.map((record) => this.stopAndWait(record.id)));
-    return records.length;
+  shutdownResources() {
+    if (!this.reaperTimer) return;
+    clearInterval(this.reaperTimer);
+    this.reaperTimer = null;
   }
 
   view(record) {
