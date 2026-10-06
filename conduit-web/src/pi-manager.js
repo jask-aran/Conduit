@@ -255,7 +255,6 @@ export class PiManager extends EventEmitter {
     agentDir,
     template,
     spawnImpl = spawn,
-    maxLiveProcesses = 12,
     maxGeneratingProcesses = 2,
     idleProcessTtlMs = 300_000,
     reaperIntervalMs = 15_000,
@@ -286,7 +285,6 @@ export class PiManager extends EventEmitter {
     this.requestSequence = 0;
     this.now = now;
     this.serializeEvent = serializeEvent;
-    this.maxLiveProcesses = Math.max(1, Math.trunc(Number(maxLiveProcesses) || 12));
     this.maxGeneratingProcesses = Math.max(1, Math.trunc(Number(maxGeneratingProcesses) || 2));
     this.idleProcessTtlMs = Math.max(30_000, Math.trunc(Number(idleProcessTtlMs) || 300_000));
     this.socketHighWaterMark = Math.max(1024, Math.trunc(Number(socketHighWaterMark) || 256 * 1024));
@@ -308,23 +306,11 @@ export class PiManager extends EventEmitter {
     return this.commandCatalog.list({ cwd, template });
   }
 
-  configure({ maxLiveProcesses, maxGeneratingProcesses, idleProcessTtlMs } = {}) {
-    if (maxLiveProcesses != null) this.maxLiveProcesses = Math.max(1, Math.trunc(Number(maxLiveProcesses) || 1));
+  configure({ maxGeneratingProcesses, idleProcessTtlMs } = {}) {
     if (maxGeneratingProcesses != null) {
       this.maxGeneratingProcesses = Math.max(1, Math.trunc(Number(maxGeneratingProcesses) || 1));
     }
     if (idleProcessTtlMs != null) this.idleProcessTtlMs = Math.max(30_000, Math.trunc(Number(idleProcessTtlMs) || 30_000));
-    return this.policy();
-  }
-
-  policy() {
-    return {
-      maxLiveProcesses: this.maxLiveProcesses,
-      maxGeneratingProcesses: this.maxGeneratingProcesses,
-      idleProcessTtlMs: this.idleProcessTtlMs,
-      liveCount: this.liveRecords().length,
-      generatingCount: this.generatingRecords().length,
-    };
   }
 
   liveRecords() {
@@ -409,24 +395,6 @@ export class PiManager extends EventEmitter {
     this.touchActivity(record);
   }
 
-  reclaimCandidates({ excludeChatId = null } = {}) {
-    return this.liveRecords()
-      .filter((record) => record.chatId !== excludeChatId && this.isReclaimable(record))
-      .sort((left, right) => (left.lastClientAt || left.lastActivityAt || 0) - (right.lastClientAt || right.lastActivityAt || 0));
-  }
-
-  /** Trim down to maxLiveProcesses after a settings change (idle unattached first). */
-  async enforceLimit() {
-    let stopped = 0;
-    while (this.liveRecords().length > this.maxLiveProcesses) {
-      const victim = this.reclaimCandidates()[0];
-      if (!victim) break;
-      await this.stopAndWait(victim.id);
-      stopped += 1;
-    }
-    return stopped;
-  }
-
   async reapIdleProcesses() {
     const cutoff = this.now() - this.idleProcessTtlMs;
     const victims = this.liveRecords().filter((record) => {
@@ -483,14 +451,6 @@ export class PiManager extends EventEmitter {
       this.bySessionFile.delete(resolvedFile);
       this.processes.delete(existingId);
       if (this.byChatId.get(existing?.chatId) === existingId) this.byChatId.delete(existing.chatId);
-    }
-
-    const liveOthers = this.liveRecords().filter((record) => record.chatId !== chatId);
-    if (liveOthers.length >= this.maxLiveProcesses) {
-      const error = new Error(`Too many live Pi processes (max ${this.maxLiveProcesses}). Wait for a chat to finish or free an idle agent.`);
-      error.code = "live_process_limit";
-      error.status = 429;
-      throw error;
     }
 
     const id = resolvedFile
