@@ -159,40 +159,31 @@ export class ChatLog {
   }
 
   /**
-   * The statements that would make what was said match the record, for the
-   * messages of a turn the harness has just written down.
+   * Where a turn the harness has just written down disagrees with what this
+   * log stated about it, and the statements that correct the text.
    *
    * Empty when they agree, which is the ordinary case and costs the browser
-   * nothing. A message stated with other text is restated; one never stated is
-   * opened and closed after the message before it. A stated message the record
-   * does not hold is reported, not dropped: that is a bug to find, and a reload
-   * already shows the record.
+   * nothing. Only an answer's text is corrected, restated on the row it
+   * already has with everything else as stated. A message stated and not
+   * recorded, or recorded and never stated, is reported and left alone:
+   * placing or removing a row on a guess is how a repair becomes a bug, and a
+   * reload already shows the record.
    */
   reconcile(messages = []) {
     const stated = new Map(this.stated.messages.map((message) => [message.id, message]));
     const ops = [];
     const differences = [];
-    let previous = null;
-    let prompt = null;
     for (const message of messages) {
       if (!message?.id) continue;
-      if (message.role === "user") prompt = message.id;
       const said = stated.get(message.id);
-      const close = message.role === "assistant" ? {
-        type: "transcript_op", op: "message.close", messageId: message.id, stopReason: message.stopReason || null,
-        interim: message.interim === true, content: String(message.content ?? ""), blocks: message.blocks || [],
-        ...(message.model ? { model: message.model } : {}), ...(message.timestamp ? { timestamp: message.timestamp } : {}),
-      } : null;
-      if (!said) {
-        differences.push({ id: message.id, kind: "missing" });
-        ops.push({ type: "transcript_op", op: "message.open", message: { ...message, streaming: false },
-          answers: message.role === "assistant" ? prompt : null, after: previous });
-        if (close) ops.push(close);
-      } else if (said.role !== message.role || (close && !sameText(said.content, message.content))) {
-        differences.push({ id: message.id, kind: "changed" });
-        if (close) ops.push(close);
+      if (!said) differences.push({ id: message.id, kind: "unstated" });
+      else if (said.role !== message.role) differences.push({ id: message.id, kind: "role" });
+      else if (message.role === "assistant" && !sameText(said.content, message.content)) {
+        differences.push({ id: message.id, kind: "text" });
+        ops.push({ type: "transcript_op", op: "message.close", messageId: message.id, stopReason: said.stopReason || null,
+          interim: said.interim === true, ...(said.discarded ? { discarded: true } : {}),
+          content: String(message.content ?? ""), blocks: said.blocks || [] });
       }
-      previous = message.id;
     }
     return { ops, differences };
   }
