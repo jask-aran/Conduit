@@ -815,7 +815,6 @@ const dictationStream = createDictationStream({
 });
 const liveSessionStream = createLiveSessionStream({
   backends,
-  manager,
   wss,
   attachments,
   registry,
